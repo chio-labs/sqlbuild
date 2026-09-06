@@ -82,7 +82,7 @@ jobs:
           unzip -l dist/*.whl | grep 'scripts/dupscore/dupscore.toml'
           python -m venv /tmp/sqlbuild-wheel-smoke
           /tmp/sqlbuild-wheel-smoke/bin/python -m pip install dist/*.whl
-          /tmp/sqlbuild-wheel-smoke/bin/python -c "import sqlbuild._kata_native as native; assert native.catalogue_json()"
+          /tmp/sqlbuild-wheel-smoke/bin/python -c "import sqlbuild._native as native; assert native.catalogue_json()"
           /tmp/sqlbuild-wheel-smoke/bin/sqb --help
           /tmp/sqlbuild-wheel-smoke/bin/sqlbuild --help
           mkdir -p /tmp/sqlbuild-scope-smoke/models

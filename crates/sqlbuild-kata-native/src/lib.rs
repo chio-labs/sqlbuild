@@ -7,3 +7,4 @@ mod engine;
 mod models;
 mod rules;
 mod scope_metadata;
+mod sql_lint;

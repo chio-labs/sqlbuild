@@ -253,10 +253,14 @@ def _add_quality_parsers(
     _ = add_dbt_config_args(parser=audit_parser)
 
     lint_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.LINT)
-    lint_parser.add_argument("--no-sqruff", dest="no_sqruff", action="store_true", default=False)
+    lint_parser.add_argument("--json", action="store_true", default=False)
+    _ = add_select_args(lint_parser)
 
     format_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.FORMAT)
-    format_parser.add_argument("--no-sqruff", dest="no_sqruff", action="store_true", default=False)
+    format_parser.add_argument("--json", action="store_true", default=False)
+    format_parser.add_argument("--check", dest="format_check", action="store_true")
+    format_parser.add_argument("--diff", dest="format_diff", action="store_true")
+    _ = add_select_args(format_parser)
 
 
 def _add_data_parsers(

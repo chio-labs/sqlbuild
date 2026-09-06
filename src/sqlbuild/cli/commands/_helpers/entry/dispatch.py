@@ -493,7 +493,12 @@ def _dispatch_local_command(
             select=select,
         )
     if args.command == CliCommand.LINT or args.command == CliCommand.FORMAT:
-        return _dispatch_lint_format_command(args=args, handlers=handlers, project_dir=project_dir)
+        return _dispatch_lint_format_command(
+            args=args,
+            handlers=handlers,
+            project_dir=project_dir,
+            select=select,
+        )
     if args.command == CliCommand.KATA:
         return _dispatch_kata_command(args=args, handlers=handlers, project_dir=project_dir)
     return 0
@@ -520,13 +525,27 @@ def _dispatch_lint_format_command(
     args: CliNamespace,
     handlers: CliEntrypointHandlers,
     project_dir: Path | None,
+    select: tuple[str, ...],
 ) -> int:
     """Route lint and format commands to their handlers."""
 
-    no_sqruff: bool = getattr(args, "no_sqruff", False)
     if args.command == CliCommand.LINT:
-        return handlers.run_lint(project_dir, no_sqruff=no_sqruff)
-    return handlers.run_format(project_dir, no_sqruff=no_sqruff)
+        return handlers.run_lint(
+            project_dir,
+            select=select,
+            exclude=tuple(args.exclude),
+            json_output=args.json,
+        )
+    if args.format_diff and args.json:
+        raise CliUserError("format --diff cannot be combined with --json", code="C112")
+    return handlers.run_format(
+        project_dir,
+        select=select,
+        exclude=tuple(args.exclude),
+        check=args.format_check,
+        diff=args.format_diff,
+        json_output=args.json,
+    )
 
 
 def _dispatch_dbt_command(

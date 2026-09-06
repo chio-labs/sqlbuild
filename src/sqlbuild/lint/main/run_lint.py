@@ -9,8 +9,9 @@ from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.lint._helpers.expansion import build_lint_expansion_context, prepare_lint_body
 from sqlbuild.lint._helpers.headers import scan_headers, sql_body_ranges
 from sqlbuild.lint._helpers.native import lint_native_headers
+from sqlbuild.lint._helpers.native_sql import run_native_sql_lint
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
-from sqlbuild.lint._helpers.sqruff_engine import run_sqruff_lint
+from sqlbuild.lint._helpers.suppressions import apply_suppressions
 from sqlbuild.lint.models import HeaderSpan, LintBody, LintConfig, LintRunResult, LintViolation
 
 
@@ -19,15 +20,18 @@ def run_lint(
     project_dir: Path,
     config: LintConfig,
     value_renderer: TypedSqlValueRenderer | None = None,
+    selected_paths: frozenset[Path] | None = None,
 ) -> LintRunResult:
     """Lint all DSL files in the project without modifying anything."""
 
-    files: dict[Path, str] = collect_project_files(project_dir=project_dir)
+    files: dict[Path, str] = collect_project_files(
+        project_dir=project_dir, selected_paths=selected_paths
+    )
     violations: list[LintViolation] = []
     bodies: list[LintBody] = []
     context: SqlExpansionContext | None = _expansion_context(
         project_dir=project_dir,
-        sqruff_enabled=config.sqruff_enabled,
+        native_enabled=config.native_enabled,
         value_renderer=value_renderer,
     )
     file_path: Path
@@ -52,20 +56,20 @@ def run_lint(
                 )
             )
 
-    if bodies:
-        sqruff_violations: dict[Path, tuple[LintViolation, ...]] = run_sqruff_lint(
+    if bodies and config.native_enabled:
+        native_violations: dict[Path, tuple[LintViolation, ...]] = run_native_sql_lint(
             bodies=tuple(bodies),
             contents_by_path=files,
             config=config,
-            project_dir=project_dir,
         )
-        entries: tuple[LintViolation, ...]
-        for entries in sqruff_violations.values():
+        for entries in native_violations.values():
             violations.extend(entries)
 
     return LintRunResult(
         files_checked=len(files),
-        violations=sort_violations(violations),
+        violations=sort_violations(
+            apply_suppressions(violations=violations, contents_by_path=files)
+        ),
         formatted_files=(),
     )
 
@@ -73,10 +77,10 @@ def run_lint(
 def _expansion_context(
     *,
     project_dir: Path,
-    sqruff_enabled: bool,
+    native_enabled: bool,
     value_renderer: TypedSqlValueRenderer | None,
 ) -> SqlExpansionContext | None:
-    if not sqruff_enabled:
+    if not native_enabled:
         return None
     return build_lint_expansion_context(
         project_dir=project_dir,

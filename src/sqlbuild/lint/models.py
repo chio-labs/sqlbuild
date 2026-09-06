@@ -56,12 +56,22 @@ class LintViolation:
 
 
 @dataclass(frozen=True)
+class FormatChange:
+    """One deterministic file-formatting change."""
+
+    file_path: Path
+    before: str
+    after: str
+
+
+@dataclass(frozen=True)
 class LintConfig:
     """Resolved lint and format configuration for one run."""
 
-    sqruff_enabled: bool = True
-    sqruff_config_path: str = ".sqruff"
+    native_enabled: bool = True
     max_description_lines: int = 10
+    dialect: str = "generic"
+    enabled_native_rules: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -71,6 +81,7 @@ class LintRunResult:
     files_checked: int
     violations: tuple[LintViolation, ...]
     formatted_files: tuple[Path, ...]
+    format_changes: tuple[FormatChange, ...] = ()
 
     @property
     def faults(self) -> tuple[LintViolation, ...]:

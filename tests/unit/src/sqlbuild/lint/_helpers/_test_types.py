@@ -53,43 +53,20 @@ class FormatNativeTestCase:
 
 
 @dataclass(frozen=True)
-class SqruffEngineLintTestCase:
-    """Test case for the sqruff lint wrapper with a canned engine response."""
+class InvalidNativeSqlResponseTestCase:
+    """Test case for rejecting malformed native SQL lint responses."""
 
     description: str
-    contents: str
-    stdout: str
-    expected_lines: tuple[int, ...]
-    expected_columns: tuple[int, ...]
-    expected_codes: tuple[str, ...]
+    response: str
+    expected_message: str
 
 
 @dataclass(frozen=True)
-class SqruffUnknownPathTestCase:
-    """Test case for diagnostics reported against a path the engine never wrote."""
+class NativeSqlReuseTestCase:
+    """Identity for native SQL reuse behavior."""
 
     description: str
-    contents: str
-    stdout: str
-    expected_message_fragment: str
-
-
-@dataclass(frozen=True)
-class SqruffEngineFixTestCase:
-    """Test case for the sqruff fix wrapper with a canned engine response."""
-
-    description: str
-    contents: str
-    fixed_body: str
-    expected_contents: str
-
-
-@dataclass(frozen=True)
-class SqruffNoBodiesTestCase:
-    """Test case for the sqruff wrapper invoked with no SQL bodies."""
-
-    description: str
-    expected_violation_files: tuple[str, ...] = ()
+    expected_call_count: int
 
 
 @dataclass(frozen=True)
@@ -114,30 +91,12 @@ class MapOffsetTestCase:
 
 @dataclass(frozen=True)
 class RestoreInterpolationTestCase:
-    """Test case for restoring sentinels after sqruff fixes."""
+    """Test case for restoring sentinels after native formatting."""
 
     description: str
     body: str
     fixed_neutralized: str
     expected_restored: str
-
-
-@dataclass(frozen=True)
-class UnsupportedDialectTestCase:
-    """Test case for rejecting an unsupported dialect in the sqruff config."""
-
-    description: str
-    sqruff_config: str
-    expected_message_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class SupportedDialectTestCase:
-    """Test case for accepting a dialect the engine recognises."""
-
-    description: str
-    sqruff_config: str
-    expected_violation_count: int
 
 
 @dataclass(frozen=True)
