@@ -170,7 +170,22 @@ class LintCommandHandler(Protocol):
         self,
         project_dir: Path | None,
         *,
-        no_sqruff: bool,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+        json_output: bool,
+    ) -> int: ...
+
+
+class FormatCommandHandler(Protocol):
+    def __call__(
+        self,
+        project_dir: Path | None,
+        *,
+        select: tuple[str, ...],
+        exclude: tuple[str, ...],
+        check: bool,
+        diff: bool,
+        json_output: bool,
     ) -> int: ...
 
 

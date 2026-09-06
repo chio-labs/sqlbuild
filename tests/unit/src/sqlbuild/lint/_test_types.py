@@ -6,16 +6,22 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
+class LintBehaviorTestCase:
+    """Identity for one non-tabular lint behavior test."""
+
+    description: str
+    expected_value: object
+
+
+@dataclass(frozen=True)
 class LintProjectTestCase:
     """Test case for run_lint over a synthetic project."""
 
     description: str
     files: dict[str, str]
-    sqruff_enabled: bool = False
     extra_files: dict[str, str] = field(default_factory=dict)
     expected_fault_codes: tuple[tuple[str, str], ...] = ()
     expected_files_checked: int = 1
-    expected_sqruff_engine_fault: bool = False
 
 
 @dataclass(frozen=True)
@@ -45,7 +51,7 @@ class LintCliTestCase:
     description: str
     files: dict[str, str]
     expected_exit_code: int
-    extra_arguments: tuple[str, ...] = ("--no-sqruff",)
+    extra_arguments: tuple[str, ...] = ()
     expected_output_fragments: tuple[str, ...] = ()
     expected_file_fragments: dict[str, str] = field(default_factory=dict)
 
@@ -57,47 +63,9 @@ class FormatCliTestCase:
     description: str
     files: dict[str, str]
     expected_exit_code: int
-    extra_arguments: tuple[str, ...] = ("--no-sqruff",)
+    extra_arguments: tuple[str, ...] = ()
     expected_output_fragments: tuple[str, ...] = ()
     expected_file_fragments: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class TranslateDialectTestCase:
-    """Test case for adapter-to-sqruff dialect translation."""
-
-    description: str
-    adapter: str
-    expected_dialect: str | None
-
-
-@dataclass(frozen=True)
-class SqruffScaffoldCreateTestCase:
-    """Test case for scaffolding a sqruff config that does not yet exist."""
-
-    description: str
-    project_adapter: str
-    expected_final_config: str
-
-
-@dataclass(frozen=True)
-class SqruffScaffoldExistingTestCase:
-    """Test case for leaving an existing sqruff config untouched."""
-
-    description: str
-    project_adapter: str
-    existing_config: str
-    expected_warning: str | None
-
-
-@dataclass(frozen=True)
-class SqruffScaffoldDisabledTestCase:
-    """Test case for scaffolding suppressed by disabled sqruff."""
-
-    description: str
-    project_adapter: str
-    expected_config_exists: bool
-    expected_warning: str | None
 
 
 @dataclass(frozen=True)

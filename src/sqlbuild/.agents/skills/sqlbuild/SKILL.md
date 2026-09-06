@@ -11600,12 +11600,11 @@ No flags. Run in the directory where you want to create the project.
 
 ### Project layout
 
-`sqb init` creates the configuration, linter settings, and empty resource directories needed for a standalone project:
+`sqb init` creates the configuration and empty resource directories needed for a standalone project:
 
 ```text
 my-project/
   sqlbuild_project.toml
-  .sqruff
   models/
     staging/
     marts/

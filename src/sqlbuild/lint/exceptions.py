@@ -15,22 +15,16 @@ class LintError(Exception):
         self.help = help
 
 
-class InterpolationRestorationError(LintError):
-    """A formatted SQL body no longer contains exactly one of each sentinel."""
-
-    code: str = "L002"
-
-
-class SqruffOutputError(LintError):
-    """The sqruff engine produced output that could not be interpreted."""
+class NativeLintError(LintError):
+    """The SQLBuild-owned native lint engine rejected a request or response."""
 
     code: str = "L003"
 
 
-class UnsupportedDialectError(LintError):
-    """The configured sqruff dialect is not one the engine recognises."""
+class InterpolationRestorationError(LintError):
+    """A formatted SQL body no longer contains exactly one of each sentinel."""
 
-    code: str = "L004"
+    code: str = "L002"
 
 
 class ProjectCompileError(LintError):

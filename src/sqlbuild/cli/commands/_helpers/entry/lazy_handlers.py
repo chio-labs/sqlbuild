@@ -258,13 +258,19 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
             targets=targets,
             force=force,
         ),
-        run_lint=lambda project_dir, no_sqruff: lazy["lint"](
+        run_lint=lambda project_dir, select, exclude, json_output: lazy["lint"](
             project_dir=project_dir,
-            no_sqruff=no_sqruff,
+            select=select,
+            exclude=exclude,
+            json_output=json_output,
         ),
-        run_format=lambda project_dir, no_sqruff: lazy["format"](
+        run_format=lambda project_dir, select, exclude, check, diff, json_output: lazy["format"](
             project_dir=project_dir,
-            no_sqruff=no_sqruff,
+            select=select,
+            exclude=exclude,
+            check=check,
+            diff=diff,
+            json_output=json_output,
         ),
         run_scenario=lazy["scenario"],
         run_scenario_capture=lazy["scenario_capture"],
