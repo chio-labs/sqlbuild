@@ -4,22 +4,26 @@ import json
 import os
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.cli.commands._helpers.compile import target_writer as target_writer_module
 from sqlbuild.cli.commands._helpers.compile.target_writer import (
     write_compile_target,
     write_static_compile_target,
 )
 from sqlbuild.cli.commands.models import WrittenTarget
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompiledSqlTest
 from sqlbuild.compiler.planner.models import ChainStep, PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
+    TargetWriterCacheTestCase,
     TargetWriterTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
+    build_cached_target_writer_project,
     build_static_target_writer_project,
     build_target_writer_plan_output,
     read_target_files,
@@ -231,3 +235,238 @@ def test_given_compiled_project_when_writing_static_target_then_expected_files_a
 
     assert model_path.read_text(encoding="utf-8") == "SELECT 3 AS order_id\n"
     assert model_path.stat().st_mtime_ns != unchanged_mtime_ns
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (TargetWriterCacheTestCase(description="unchanged artifact reuse", expected_builder_calls=0),),
+    ids=lambda case: case.description,
+)
+def test_given_unchanged_test_artifact_when_writing_again_then_skips_test_plan_reconstruction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    test_case: TargetWriterCacheTestCase,
+) -> None:
+    target_dir: Path = tmp_path / "target"
+    project: CompiledProject = build_cached_target_writer_project(target_dir=target_dir)
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+    artifact_path: Path = next((target_dir / "compiled" / "tests").rglob("*.sql"))
+    original_mtime_ns: int = artifact_path.stat().st_mtime_ns
+    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
+    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+
+    assert artifact_path.stat().st_mtime_ns == original_mtime_ns
+    assert builder_spy.call_count == test_case.expected_builder_calls
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        TargetWriterCacheTestCase(
+            description="model closure invalidation", expected_builder_calls=1
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_changed_model_in_test_closure_when_writing_then_rebuilds_test_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    test_case: TargetWriterCacheTestCase,
+) -> None:
+    target_dir: Path = tmp_path / "target"
+    project: CompiledProject = build_cached_target_writer_project(target_dir=target_dir)
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
+    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+    changed_project: CompiledProject = replace(
+        project,
+        models=(replace(project.models[0], query_sql="SELECT 3 AS order_id"),),
+    )
+
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=changed_project,
+    )
+
+    assert builder_spy.call_count == test_case.expected_builder_calls
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (TargetWriterCacheTestCase(description="unrelated model reuse", expected_builder_calls=0),),
+    ids=lambda case: case.description,
+)
+def test_given_changed_unrelated_model_when_writing_then_reuses_test_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    test_case: TargetWriterCacheTestCase,
+) -> None:
+    target_dir: Path = tmp_path / "target"
+    project: CompiledProject = build_cached_target_writer_project(target_dir=target_dir)
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+    unrelated_model: CompiledModel = replace(
+        project.models[0],
+        key=replace(project.models[0].key, name="unrelated"),
+        name="unrelated",
+        relative_path=Path("models/unrelated.sql"),
+        query_sql="SELECT 9 AS unrelated_id",
+    )
+    changed_project: CompiledProject = replace(
+        project,
+        models=(*project.models, unrelated_model),
+    )
+    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
+    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=changed_project,
+    )
+    assert builder_spy.call_count == test_case.expected_builder_calls
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (TargetWriterCacheTestCase(description="test SQL invalidation", expected_builder_calls=1),),
+    ids=lambda case: case.description,
+)
+def test_given_changed_test_sql_when_writing_then_rebuilds_test_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    test_case: TargetWriterCacheTestCase,
+) -> None:
+    target_dir: Path = tmp_path / "target"
+    project: CompiledProject = build_cached_target_writer_project(target_dir=target_dir)
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
+    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+    changed_test: CompiledSqlTest = replace(
+        project.sql_tests[0], sql_body=project.sql_tests[0].sql_body + "\n-- edit"
+    )
+
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=replace(project, sql_tests=(changed_test,)),
+    )
+
+    assert builder_spy.call_count == test_case.expected_builder_calls
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        TargetWriterCacheTestCase(
+            description="compile target invalidation", expected_builder_calls=1
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_changed_compile_target_when_writing_then_rebuilds_test_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    test_case: TargetWriterCacheTestCase,
+) -> None:
+    target_dir: Path = tmp_path / "target"
+    project: CompiledProject = build_cached_target_writer_project(target_dir=target_dir)
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
+    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=replace(project, effective_target_schema="changed_schema"),
+    )
+
+    assert builder_spy.call_count == test_case.expected_builder_calls
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (TargetWriterCacheTestCase(description="disabled cache rebuild", expected_builder_calls=2),),
+    ids=lambda case: case.description,
+)
+def test_given_compile_cache_disabled_when_writing_twice_then_rebuilds_test_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    test_case: TargetWriterCacheTestCase,
+) -> None:
+    target_dir: Path = tmp_path / "target"
+    project: CompiledProject = replace(
+        build_cached_target_writer_project(target_dir=target_dir),
+        compile_cache_dir=None,
+    )
+    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
+    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+
+    for _ in range(2):
+        _ = write_static_compile_target(
+            target_dir=target_dir,
+            adapter=DuckDbAdapter(),
+            project=project,
+        )
+
+    assert builder_spy.call_count == test_case.expected_builder_calls
+    assert not (target_dir / "cache" / "compiler" / "sql-test-artifacts.json").exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (TargetWriterCacheTestCase(description="tampered artifact repair", expected_builder_calls=1),),
+    ids=lambda case: case.description,
+)
+def test_given_modified_test_artifact_when_writing_then_rebuilds_expected_sql(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    test_case: TargetWriterCacheTestCase,
+) -> None:
+    target_dir: Path = tmp_path / "target"
+    project: CompiledProject = build_cached_target_writer_project(target_dir=target_dir)
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+    artifact_path: Path = next((target_dir / "compiled" / "tests").rglob("*.sql"))
+    expected_sql: str = artifact_path.read_text(encoding="utf-8")
+    artifact_path.write_text("SELECT 'tampered'\n", encoding="utf-8")
+    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
+    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+
+    assert builder_spy.call_count == test_case.expected_builder_calls
+    assert artifact_path.read_text(encoding="utf-8") == expected_sql

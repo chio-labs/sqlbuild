@@ -67,6 +67,18 @@ def extract_sql_test_ctes(
 ) -> CompileSqlTestCtes:
     """Extract top-level SQL-native test mock and expected CTEs."""
 
+    ctes: tuple[CompileSqlTestCte, ...] = extract_unclassified_sql_test_ctes(
+        sql=sql,
+        file_label=file_label,
+    )
+    return classify_sql_test_ctes(ctes=ctes, file_label=file_label, mode=mode)
+
+
+def extract_unclassified_sql_test_ctes(
+    *, sql: str, file_label: str
+) -> tuple[CompileSqlTestCte, ...]:
+    """Extract raw top-level CTEs before mode-specific classification."""
+
     try:
         ctes: tuple[CompileSqlTestCte, ...] = _extract_sql_test_ctes_with_scanner(
             sql=sql,
@@ -81,6 +93,14 @@ def extract_sql_test_ctes(
         if cte_values is None:
             raise scanner_error from None
         ctes = tuple(CompileSqlTestCte(name=name, sql_body=body) for name, body in cte_values)
+    return ctes
+
+
+def classify_sql_test_ctes(
+    *, ctes: tuple[CompileSqlTestCte, ...], file_label: str, mode: SqlTestMode
+) -> CompileSqlTestCtes:
+    """Apply mode-specific validation to extracted SQL test CTEs."""
+
     return _classify_sql_test_ctes(ctes=ctes, file_label=file_label, mode=mode)
 
 

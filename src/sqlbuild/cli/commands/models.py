@@ -546,6 +546,24 @@ class CompileWriteResult:
 
 
 @dataclass(frozen=True)
+class SqlTestArtifactCacheRecord:
+    """Validated metadata for one previously written SQL test artifact."""
+
+    identity: str
+    relative_path: Path
+    size: int
+    mtime_ns: int
+
+
+@dataclass(frozen=True)
+class SqlTestArtifactIdentityContext:
+    """Project-wide identity fragments shared by every SQL test."""
+
+    common_identity: str
+    model_identities: dict[str, str]
+
+
+@dataclass(frozen=True)
 class WrittenTarget:
     """Result of writing compiled output to target/."""
 

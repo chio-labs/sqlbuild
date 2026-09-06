@@ -32,7 +32,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                 "target/run/functions/python/is_completed_order_py.sql",
             ),
             expected_exit_code=0,
-            expected_compiler_cache_count=2,
+            expected_compiler_cache_count=3,
             expected_local_history=False,
             expected_compiled_paths=(
                 "target/compiled/models/marts/fact_orders.sql",
