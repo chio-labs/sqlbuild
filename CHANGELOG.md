@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.83.0](https://github.com/chio-labs/sqlbuild/compare/v0.82.6...v0.83.0) (2026-09-06)
+
+
+### Features
+
+* add measurement audits, audit factories, result history, and audit lifecycle events ([#532](https://github.com/chio-labs/sqlbuild/issues/532)) ([3028406](https://github.com/chio-labs/sqlbuild/commit/3028406c634694dd0aefcc7df01bf873c681557e))
+
 ## [0.82.6](https://github.com/chio-labs/sqlbuild/compare/v0.82.5...v0.82.6) (2026-09-05)
 
 
