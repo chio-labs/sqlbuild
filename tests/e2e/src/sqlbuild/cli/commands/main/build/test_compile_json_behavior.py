@@ -60,7 +60,23 @@ def test_given_waffle_shop_when_running_compile_json_then_it_reports_offline_que
         test_case.expected_diagnostic_codes
     )
     timings: dict[str, object] = payload["compile_timings"]
-    assert "total_ms" in timings
+    assert set(timings) == {
+        "discover_ms",
+        "graph_ms",
+        "lineage_ms",
+        "contracts_ms",
+        "write_ms",
+        "attachment_ms",
+        "model_analysis_ms",
+        "test_input_compile_ms",
+        "test_planning_ms",
+        "comparison_render_ms",
+        "cache_publication_ms",
+        "physical_write_ms",
+        "stale_traversal_ms",
+        "total_ms",
+    }
+    assert all(isinstance(value, int) and value >= 0 for value in timings.values())
     artifacts: dict[str, object] = payload["artifacts"]
     assert artifacts["compiled_sql_dir"] == "target/compiled/"
     assert artifacts["manifest"] is None
