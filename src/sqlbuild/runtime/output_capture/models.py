@@ -19,7 +19,7 @@ from sqlbuild.runtime.output_capture.types import CommandOutputStream, OutputRec
 
 @dataclass(frozen=True)
 class CommandOutputRecord:
-    """One ANSI-free line chunk ready for destination serialization."""
+    """One ANSI-free bounded text chunk ready for destination serialization."""
 
     invocation_id: str
     sequence: int

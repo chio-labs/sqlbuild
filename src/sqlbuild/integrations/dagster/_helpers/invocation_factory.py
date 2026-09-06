@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from collections.abc import Mapping, Sequence
@@ -15,7 +16,11 @@ from sqlbuild.integrations.dagster._helpers.invocation import (
     _with_json_output_args,
     _with_selected_asset_args,
 )
+from sqlbuild.integrations.dagster._helpers.invocation_context import (
+    dagster_invocation_context,
+)
 from sqlbuild.integrations.dagster.classes.sqlbuild_cli_invocation import SqlBuildCliInvocation
+from sqlbuild.runtime.output_capture.constants import INVOCATION_CONTEXT_ENV
 
 
 def start_sqlbuild_cli_invocation(
@@ -56,6 +61,14 @@ def start_sqlbuild_cli_invocation(
     command: tuple[str, ...] = (*tuple(sqb_command), *event_args)
     process_environment: dict[str, str] = dict(os.environ)
     process_environment["PYTHONUNBUFFERED"] = "1"
+    process_environment.pop(INVOCATION_CONTEXT_ENV, None)
+    if context is not None:
+        process_environment[INVOCATION_CONTEXT_ENV] = json.dumps(
+            dagster_invocation_context(context),
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
     if event_jsonl_path is not None:
         process_environment[INTEGRATION_RESULT_PATH_ENV] = str(event_jsonl_path)
     process: subprocess.Popen[str] = subprocess.Popen(
