@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import tomllib
 from pathlib import Path
 
@@ -8,6 +9,7 @@ import pytest
 from tests.unit.src.sqlbuild.cli.project_metadata._test_types import ProjectDependencyTestCase
 
 REPO_ROOT: Path = Path(__file__).resolve().parents[6]
+DEPENDENCY_SPECIFIER_PATTERN: re.Pattern[str] = re.compile(r"[\[<>=!~]")
 
 
 @pytest.mark.parametrize(
@@ -33,8 +35,7 @@ def test_given_project_metadata_when_reading_dependencies_then_required_packages
     optional_dependencies: dict[str, list[str]] = project.get("optional-dependencies", {})  # type: ignore[assignment]
 
     dependency_names: set[str] = {
-        dependency.split("[", maxsplit=1)[0].split(">", maxsplit=1)[0]
-        for dependency in dependencies
+        DEPENDENCY_SPECIFIER_PATTERN.split(dependency, maxsplit=1)[0] for dependency in dependencies
     }
 
     assert (

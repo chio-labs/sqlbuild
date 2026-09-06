@@ -867,19 +867,19 @@ fn forward_refs(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &FaultCol
         if reference.ref_kind != REFERENCE_KIND {
             continue;
         }
-        if let Some(upstream) = parse_name(&reference.ref_name) {
-            if layer_order(&upstream.layer) > layer_order(&current.layer) {
-                faults.push(custom_fault!(
-                    parsed.model,
-                    rule,
-                    None,
-                    format!(
-                        "{} reaches forward from {} to {} via {}",
-                        parsed.model.name, current.layer, upstream.layer, reference.ref_name
-                    ),
-                    None,
-                ));
-            }
+        if let Some(upstream) = parse_name(&reference.ref_name)
+            && layer_order(&upstream.layer) > layer_order(&current.layer)
+        {
+            faults.push(custom_fault!(
+                parsed.model,
+                rule,
+                None,
+                format!(
+                    "{} reaches forward from {} to {} via {}",
+                    parsed.model.name, current.layer, upstream.layer, reference.ref_name
+                ),
+                None,
+            ));
         }
     }
 }
@@ -1031,12 +1031,12 @@ fn source_token_policy(
                 "Rename the model's source token to {replacement:?}; update references at the same model path."
             )),
         ));
-    } else if !config.approved_source_tokens.is_empty() {
-        if let Some(token) = tokens
+    } else if !config.approved_source_tokens.is_empty()
+        && let Some(token) = tokens
             .iter()
             .find(|token| !config.approved_source_tokens.contains(token))
-        {
-            faults.push(custom_fault!(
+    {
+        faults.push(custom_fault!(
                 parsed.model,
                 rule,
                 None,
@@ -1046,7 +1046,6 @@ fn source_token_policy(
                 ),
                 Some("Rename the source suffix to a token listed in kata.approved_source_tokens at this model path.".into()),
             ));
-        }
     }
 }
 
@@ -1086,10 +1085,10 @@ fn evaluate_join_rules(
 ) {
     let facts = select_facts(&parsed.query);
     for select in facts {
-        if select.from_count > 1 {
-            if let Some(rule) = selected.get("SQBKJ001") {
-                faults.push(fault(parsed.model, rule, select.position.as_ref()));
-            }
+        if select.from_count > 1
+            && let Some(rule) = selected.get("SQBKJ001")
+        {
+            faults.push(fault(parsed.model, rule, select.position.as_ref()));
         }
         for join in select.joins {
             match join {
@@ -1155,10 +1154,10 @@ fn evaluate_naming_rules(
         } else {
             None
         };
-        if let Some((code, message)) = rule_and_message {
-            if let Some(rule) = selected.get(code) {
-                faults.push(custom_fault!(parsed.model, rule, None, message, None));
-            }
+        if let Some((code, message)) = rule_and_message
+            && let Some(rule) = selected.get(code)
+        {
+            faults.push(custom_fault!(parsed.model, rule, None, message, None));
         }
     }
 }
@@ -1252,10 +1251,10 @@ fn effective_threshold(evaluation: &TestRuleEvaluation<'_>, name: &str, default:
         .copied()
         .unwrap_or(default);
     for entry in evaluation.threshold_overrides {
-        if entry.matches(&evaluation.parsed.model.relative_path) {
-            if let Some(overridden) = entry.threshold(name) {
-                value = overridden;
-            }
+        if entry.matches(&evaluation.parsed.model.relative_path)
+            && let Some(overridden) = entry.threshold(name)
+        {
+            value = overridden;
         }
     }
     value
@@ -1700,8 +1699,8 @@ fn comparison_facts(root: &Expr, source_context: &SourceContext, output: &mut Ve
     impl Visitor for Comparisons<'_> {
         type Break = ();
         fn pre_visit_expr(&mut self, expression: &Expr) -> ControlFlow<Self::Break> {
-            if let Expr::BinaryOp { op, .. } = expression {
-                if matches!(
+            if let Expr::BinaryOp { op, .. } = expression
+                && matches!(
                     op,
                     BinaryOperator::Eq
                         | BinaryOperator::NotEq
@@ -1709,10 +1708,10 @@ fn comparison_facts(root: &Expr, source_context: &SourceContext, output: &mut Ve
                         | BinaryOperator::GtEq
                         | BinaryOperator::Lt
                         | BinaryOperator::LtEq
-                ) {
-                    self.output
-                        .push(comparison_fact(expression, self.source_context));
-                }
+                )
+            {
+                self.output
+                    .push(comparison_fact(expression, self.source_context));
             }
             ControlFlow::Continue(())
         }

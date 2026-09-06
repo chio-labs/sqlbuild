@@ -61,7 +61,7 @@ def captured_native_request(
             }
         )
 
-    monkeypatch.setattr(native._kata_native, "evaluate_json", evaluate_json)
+    monkeypatch.setattr(native._native, "evaluate_json", evaluate_json)
     native.evaluate_native(
         project=project,
         config=KataConfig(),

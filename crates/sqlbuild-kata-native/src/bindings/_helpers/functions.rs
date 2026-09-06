@@ -1,7 +1,7 @@
 //! Register the versioned Python boundary for the native kata engine.
 
 use pyo3::exceptions::PyValueError;
-use pyo3::prelude::{Bound, PyErr, PyModule, PyModuleMethods, PyResult};
+use pyo3::prelude::{Bound, PyErr, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::configuration::main::load;
@@ -20,6 +20,18 @@ fn value_error(error: impl std::fmt::Display) -> PyErr {
 #[pyfunction]
 fn evaluate_json(request_json: &str) -> PyResult<String> {
     evaluate::evaluate_json(request_json).map_err(value_error)
+}
+
+#[pyfunction]
+fn lint_sql_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.detach(|| crate::sql_lint::main::engine::lint_json(request_json))
+        .map_err(value_error)
+}
+
+#[pyfunction]
+fn format_sql_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.detach(|| crate::sql_lint::main::formatter::format_json(request_json))
+        .map_err(value_error)
 }
 
 #[pyfunction]
@@ -66,6 +78,8 @@ fn skill_freshness(content: Option<&str>, input_fingerprint: &str) -> String {
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(evaluate_json, module)?)?;
+    module.add_function(wrap_pyfunction!(lint_sql_json, module)?)?;
+    module.add_function(wrap_pyfunction!(format_sql_json, module)?)?;
     module.add_function(wrap_pyfunction!(load_config_json, module)?)?;
     module.add_function(wrap_pyfunction!(catalogue_json, module)?)?;
     module.add_function(wrap_pyfunction!(selected_codes_json, module)?)?;

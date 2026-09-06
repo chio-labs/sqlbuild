@@ -7,7 +7,7 @@ publish.workspace = true
 rust-version.workspace = true
 
 [lib]
-name = "_kata_native"
+name = "_native"
 crate-type = ["cdylib", "rlib"]
 
 [features]
@@ -17,6 +17,7 @@ extension-module = ["pyo3/extension-module"]
 [dependencies]
 fensu-policy.workspace = true
 globset.workspace = true
+polyglot-sql.workspace = true
 pyo3.workspace = true
 serde.workspace = true
 serde_json.workspace = true

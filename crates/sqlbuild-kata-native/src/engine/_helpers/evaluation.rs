@@ -88,12 +88,12 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
                 model_cache_identity(model, &ruleset_fingerprint, project_fingerprint.as_deref())
             })
             .transpose()?;
-        if let (Some(store), Some(identity)) = (&cache, &fingerprint) {
-            if let Some(cached) = store.get(&model.relative_path, identity)? {
-                raw_faults.extend(cached);
-                cache_hits += 1;
-                continue;
-            }
+        if let (Some(store), Some(identity)) = (&cache, &fingerprint)
+            && let Some(cached) = store.get(&model.relative_path, identity)?
+        {
+            raw_faults.extend(cached);
+            cache_hits += 1;
+            continue;
         }
         cache_misses += 1;
         let model_faults = rules::evaluate_model(ModelEvaluationRequest {
