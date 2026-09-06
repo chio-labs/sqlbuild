@@ -1,11 +1,13 @@
-"""Model selector index implementations."""
+"""Project resource selector index implementations."""
 
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models import (
+    CompiledFunction,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
+    CompiledSeed,
 )
 from sqlbuild.compiler.planner.constants import MODEL_SELECTOR_ROOT, MODEL_SELECTOR_ROOT_PREFIX
 
@@ -13,7 +15,7 @@ from sqlbuild.compiler.planner.constants import MODEL_SELECTOR_ROOT, MODEL_SELEC
 def build_model_tag_index_impl(
     project: CompiledProject,
 ) -> dict[str, frozenset[CompiledObjectKey]]:
-    """Build a tag-to-keys lookup from compiled model configs."""
+    """Build a tag-to-keys lookup from compiled models, seeds, and functions."""
 
     index: dict[str, set[CompiledObjectKey]] = {}
     model: CompiledModel
@@ -21,6 +23,14 @@ def build_model_tag_index_impl(
         tag: str
         for tag in _as_string_list(model.config.values.get("tags")):
             index.setdefault(tag, set()).add(model.key)
+    seed: CompiledSeed
+    for seed in project.seeds:
+        for tag in seed.schema_entry.tags:
+            index.setdefault(tag, set()).add(seed.key)
+    function: CompiledFunction
+    for function in project.functions:
+        for tag in function.tags:
+            index.setdefault(tag, set()).add(function.key)
     return {tag: frozenset(keys) for tag, keys in index.items()}
 
 

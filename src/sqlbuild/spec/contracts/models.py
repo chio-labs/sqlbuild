@@ -485,6 +485,7 @@ class SchemaSeedEntry:
     meta: dict[str, object] = field(default_factory=dict)
     csv_settings: SeedCsvSettings = field(default_factory=SeedCsvSettings)
     columns: tuple[SchemaColumn, ...] = field(default_factory=tuple)
+    tags: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

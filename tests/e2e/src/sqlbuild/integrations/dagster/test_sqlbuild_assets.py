@@ -5,7 +5,7 @@ import runpy
 import subprocess
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +24,9 @@ from sqlbuild.cli.commands.main.workspace._playground import run_playground
 from sqlbuild.cli.commands.models import PlaygroundCommandRequest
 from sqlbuild.integrations.dagster import (
     SqlBuildCliResource,
+    SqlBuildDagsterTranslator,
     SqlBuildProject,
+    build_sqlbuild_asset_selection,
     sqlbuild_assets,
     sqlbuild_scenario_checks,
 )
@@ -45,6 +47,7 @@ from tests.e2e.src.sqlbuild.integrations.dagster._test_types import (
     DagsterSqlBuildScenarioE2ETestCase,
     DagsterSqlBuildSelectionE2ETestCase,
     DagsterSqlBuildStreamingE2ETestCase,
+    DagsterTranslatorE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.integrations.dagster.helpers import (
     add_failing_daily_revenue_audits,
@@ -57,6 +60,11 @@ from tests.e2e.src.sqlbuild.integrations.dagster.helpers import (
     write_sqb_capture_command,
     write_sqb_streaming_command,
 )
+
+
+class _NamespacedDagsterTranslator(SqlBuildDagsterTranslator):
+    def get_asset_key(self, node: Mapping[str, Any]) -> AssetKey:
+        return AssetKey(["translated", str(node["name"])])
 
 
 @pytest.mark.parametrize(
@@ -287,6 +295,76 @@ def test_given_dagster_asset_selection_when_executing_sqlbuild_then_uses_select_
     assert test_case.expected_selector_log_line in rendered_logs
     for table_name in test_case.expected_table_names:
         assert table_exists(db_path=project_dir / "waffle_shop.duckdb", table_name=table_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagsterTranslatorE2ETestCase(
+            description="custom translator controls selection and materialization identity",
+            selected_asset_key=("translated", "waffle_types"),
+            expected_selector_file_contents="waffle_types\n",
+            expected_table_name="waffle_types",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_custom_translator_when_materializing_real_project_then_selection_and_events_share_keys(
+    test_case: DagsterTranslatorE2ETestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+    command_log_path: Path = tmp_path / "sqb_command_log.txt"
+    selector_log_path: Path = tmp_path / "sqb_selector_log.txt"
+    translator: SqlBuildDagsterTranslator = _NamespacedDagsterTranslator()
+    sqlbuild_project: SqlBuildProject = SqlBuildProject(
+        project_dir=project_dir,
+        sqb_command=write_sqb_capture_command(
+            root=tmp_path,
+            command_log_path=command_log_path,
+            selector_log_path=selector_log_path,
+        ),
+    )
+    monkeypatch.setenv("DAGSTER_IS_DEV_CLI", "1")
+    sqlbuild_project.prepare_if_dev()
+
+    @sqlbuild_assets(
+        project=sqlbuild_project,
+        translator=translator,
+        required_resource_keys={"sqb"},
+    )
+    def sqlbuild_waffle_shop(context: AssetExecutionContext) -> Iterator[object]:
+        yield from context.resources.sqb.cli(["build"], context=context).stream()
+
+    selection: Any = build_sqlbuild_asset_selection(
+        sqlbuild_assets=[sqlbuild_waffle_shop],
+        dag=sqlbuild_project.dag_path,
+        sqlbuild_select="waffle_types",
+        translator=translator,
+    )
+    result: ExecuteInProcessResult = materialize(
+        [sqlbuild_waffle_shop],
+        resources={
+            "sqb": SqlBuildCliResource(
+                project_dir=sqlbuild_project,
+                translator=translator,
+            )
+        },
+        selection=selection.resolve([sqlbuild_waffle_shop]),
+    )
+
+    assert result.success
+    assert (
+        selector_log_path.read_text(encoding="utf-8") == test_case.expected_selector_file_contents
+    )
+    assert {event.asset_key for event in result.get_asset_materialization_events()} == {
+        AssetKey(test_case.selected_asset_key)
+    }
+    assert table_exists(
+        db_path=project_dir / "waffle_shop.duckdb",
+        table_name=test_case.expected_table_name,
+    )
 
 
 @pytest.mark.parametrize(

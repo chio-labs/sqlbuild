@@ -10,12 +10,19 @@ import pytest
 
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
-from sqlbuild.compiler.compile.models import CompiledProject, CompileProjectInputs
+from sqlbuild.compiler.compile.models import (
+    CompiledObjectKey,
+    CompiledProject,
+    CompileProjectInputs,
+)
 from sqlbuild.compiler.dag.main.build import build_dag_json
 from sqlbuild.compiler.dag.types import NodeKind
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.planner._helpers.graph.selector_indexes import (
+    build_model_tag_index_impl,
+)
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,
 )
@@ -57,6 +64,8 @@ from tests.unit.src.sqlbuild.compiler.dag.main.helpers import build_dag_artifact
             expected_seed_asset_key=("analytics", "country_codes"),
             expected_source_asset_key=("raw", "orders"),
             expected_loader_asset_key=("shared_order_feed",),
+            expected_seed_tags=("reference",),
+            expected_function_tags=("normalization",),
         )
     ],
     ids=lambda case: case.description,
@@ -64,9 +73,8 @@ from tests.unit.src.sqlbuild.compiler.dag.main.helpers import build_dag_artifact
 def test_given_project_graph_when_building_dag_artifact_then_includes_assets_edges_and_checks(
     test_case: DagArtifactTestCase,
 ) -> None:
-    payload: dict[str, object] = json.loads(
-        build_dag_json(graph=build_dag_artifact_test_graph(), project_name="dag_project")
-    )
+    graph: ProjectGraph = build_dag_artifact_test_graph()
+    payload: dict[str, object] = json.loads(build_dag_json(graph=graph, project_name="dag_project"))
     nodes: list[dict[str, object]] = payload["nodes"]
     edges: list[dict[str, object]] = payload["edges"]
     checks: list[dict[str, object]] = payload["checks"]
@@ -82,6 +90,9 @@ def test_given_project_graph_when_building_dag_artifact_then_includes_assets_edg
     )
     assert tuple(cast(list[str], nodes_by_id["seed:country_codes"]["asset_key"])) == (
         test_case.expected_seed_asset_key
+    )
+    assert tuple(cast(list[str], nodes_by_id["seed:country_codes"]["tags"])) == (
+        test_case.expected_seed_tags
     )
     function_target: dict[str, object] = cast(
         dict[str, object], nodes_by_id["udf:normalize_email"]["target"]
@@ -99,9 +110,15 @@ def test_given_project_graph_when_building_dag_artifact_then_includes_assets_edg
         "MODEL (materialized table);\n\nSELECT 1 AS order_id"
     )
     assert nodes_by_id["udf:normalize_email"]["sql"] == "lower(email)"
+    assert tuple(cast(list[str], nodes_by_id["udf:normalize_email"]["tags"])) == (
+        test_case.expected_function_tags
+    )
     assert nodes_by_id["loader:shared_order_feed"]["kind"] == "loader"
     assert tuple(checks[0]["checked_asset_ids"]) == ("model:orders",)
     assert checks[0]["severity"] == "warn"
+    tag_index: dict[str, frozenset[CompiledObjectKey]] = build_model_tag_index_impl(graph.project)
+    assert tag_index["reference"] == frozenset({graph.project.seeds[0].key})
+    assert tag_index["normalization"] == frozenset({graph.project.functions[0].key})
 
 
 @pytest.mark.parametrize(

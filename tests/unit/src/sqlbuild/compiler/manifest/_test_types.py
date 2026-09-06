@@ -75,6 +75,7 @@ class ManifestSeedNodeTestCase:
     expected_unique_id: str
     expected_resource_type: str
     expected_materialized: str
+    expected_tags: tuple[str, ...]
 
 
 @dataclass(frozen=True)
