@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.87.3](https://github.com/chio-labs/sqlbuild/compare/v0.87.2...v0.87.3) (2026-09-06)
+
+
+### Bug Fixes
+
+* lint generic audits and accelerate large projects ([#558](https://github.com/chio-labs/sqlbuild/issues/558)) ([b8dca63](https://github.com/chio-labs/sqlbuild/commit/b8dca635e3788c3fe73b7be493141d69a99e7327))
+
 ## [0.87.2](https://github.com/chio-labs/sqlbuild/compare/v0.87.1...v0.87.2) (2026-09-06)
 
 
