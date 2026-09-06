@@ -85,6 +85,7 @@ def build_check_integration_envelope(
         checks=(
             IntegrationCheckResult(
                 kind="audit",
+                audit_definition_name="test_audit",
                 name=name,
                 check_id=check_id,
                 dag_check_id=check_id,

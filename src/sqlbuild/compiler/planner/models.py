@@ -1059,6 +1059,7 @@ class AuditPlanEntry:
 
     key: CompiledObjectKey
     name: str
+    definition_name: str
     resolved_sql: str
     unresolved_sql: str
     attachment_kind: AuditAttachmentKind
@@ -1079,6 +1080,7 @@ class AuditPlanEntry:
     attached_target_name: str | None = None
     attached_column_name: str | None = None
     always_run: bool = False
+    description: str | None = None
 
 
 @dataclass(frozen=True)

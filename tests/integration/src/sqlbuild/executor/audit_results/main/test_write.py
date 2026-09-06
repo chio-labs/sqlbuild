@@ -61,6 +61,8 @@ def test_given_repeated_result_records_when_writing_then_auto_creates_and_append
         record.invocation_id,
         record.run_id,
         record.audit_name,
+        record.audit_definition_name,
+        record.audit_description,
         record.binding_key,
         record.definition_fingerprint,
         record.execution_fingerprint,

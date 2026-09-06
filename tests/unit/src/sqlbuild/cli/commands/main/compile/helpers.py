@@ -234,6 +234,7 @@ def build_target_writer_plan_output() -> PlanOutput:
             AuditPlanEntry(
                 key=audit_key,
                 name="not_null",
+                definition_name="test_audit",
                 resolved_sql="SELECT order_id FROM analytics.orders WHERE order_id IS NULL",
                 unresolved_sql='SELECT order_id FROM __ref("orders") WHERE order_id IS NULL',
                 attachment_kind=AuditAttachmentKind.MODEL,

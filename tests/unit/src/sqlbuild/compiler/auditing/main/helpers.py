@@ -103,6 +103,7 @@ def build_audit_plan_entry(
     return AuditPlanEntry(
         key=_audit_key(name),
         name=name,
+        definition_name="test_audit",
         resolved_sql=resolved_sql,
         unresolved_sql=unresolved_sql,
         attachment_kind=attachment_kind,

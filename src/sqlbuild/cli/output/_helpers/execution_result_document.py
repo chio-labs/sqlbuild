@@ -974,6 +974,8 @@ def _format_audit_checks(
             {
                 "kind": "audit",
                 "name": result.audit_name,
+                "audit_definition_name": result.audit_definition_name,
+                "audit_description": result.audit_description,
                 "check_id": _audit_check_id(result),
                 "passed": result.outcome in {AuditOutcome.PASS, AuditOutcome.INSUFFICIENT},
                 "status": result.outcome.value,

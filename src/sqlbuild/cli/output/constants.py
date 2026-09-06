@@ -11,6 +11,7 @@ INTEGRATION_CHECK_NON_FAIL_STATUSES: frozenset[str] = frozenset({"insufficient",
 INTEGRATION_FAILED_STATUS: str = "failed"
 INTEGRATION_SKIPPED_STATUS: str = "skipped"
 INTEGRATION_LOADER_KIND: str = "loader"
+INTEGRATION_AUDIT_KIND: str = "audit"
 MAX_INTEGRATION_RECORD_BYTES: int = 65_536
 MAX_INTEGRATION_STRING_CHARS: int = 2_048
 MAX_INTEGRATION_IDENTIFIER_CHARS: int = 512
@@ -33,7 +34,9 @@ INTEGRATION_ASSET_KINDS: frozenset[str] = frozenset(
         "view",
     }
 )
-INTEGRATION_CHECK_KINDS: frozenset[str] = frozenset({"audit", "python_check", "sql_test"})
+INTEGRATION_CHECK_KINDS: frozenset[str] = frozenset(
+    {INTEGRATION_AUDIT_KIND, "python_check", "sql_test"}
+)
 INTEGRATION_RESOURCE_KINDS: frozenset[str] = INTEGRATION_ASSET_KINDS | frozenset(
     {"audit", "check", "test"}
 )

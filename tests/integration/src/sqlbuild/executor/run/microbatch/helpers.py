@@ -416,6 +416,7 @@ def _build_model_audits(
     audit: tuple[AuditPlanEntry, ...] = (
         AuditPlanEntry(
             key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name="test_audit"),
+            definition_name="test_audit",
             name="test_audit",
             resolved_sql=(test_case.audit_sql or "").replace(
                 '__ref("orders")', resolved_target_name

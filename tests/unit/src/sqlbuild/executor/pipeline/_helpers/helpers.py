@@ -74,6 +74,7 @@ def audit_entry(
 ) -> AuditPlanEntry:
     return AuditPlanEntry(
         key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=name),
+        definition_name="test_audit",
         name=name,
         resolved_sql=sql,
         unresolved_sql=sql,
@@ -87,6 +88,7 @@ def audit_entry(
 def audit_result(name: str) -> AuditExecutionResult:
     return AuditExecutionResult(
         audit_name=name,
+        audit_definition_name="test_audit",
         attachment_kind=AuditAttachmentKind.END,
         severity=AuditSeverity.ERROR,
         outcome=AuditOutcome.PASS,
