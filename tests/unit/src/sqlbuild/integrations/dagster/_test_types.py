@@ -45,6 +45,21 @@ class DagsterDescriptionTestCase:
 
 
 @dataclass(frozen=True)
+class DagsterSourceAssetKeyTestCase:
+    description: str
+    node: dict[str, object]
+    expected_asset_key: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DagsterExternalAssetOwnershipTestCase:
+    description: str
+    external_asset_key: tuple[str, ...]
+    dependent_asset_key: tuple[str, ...]
+    expected_check_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DagsterPythonArtifactCompatibilityTestCase:
     description: str
     expected_asset_keys: tuple[tuple[str, ...], ...]
@@ -61,6 +76,24 @@ class DagsterPythonArtifactCompatibilityTestCase:
 class DagsterDecoratorTestCase:
     description: str
     expected_asset_keys: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class DagsterAssetSelectionTestCase:
+    description: str
+    select: str
+    exclude: str | None
+    expected_asset_keys: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class DagsterTranslatorRuntimeTestCase:
+    description: str
+    payload: str
+    selected_asset_key: tuple[str, ...]
+    expected_selection: tuple[str, ...]
+    expected_asset_keys: tuple[tuple[str, ...], ...]
+    expected_check_names: tuple[str, ...]
 
 
 @dataclass(frozen=True)

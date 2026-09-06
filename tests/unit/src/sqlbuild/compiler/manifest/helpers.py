@@ -175,6 +175,7 @@ def build_test_seed(
     name: str,
     database: str | None = None,
     schema: str | None = "public",
+    tags: tuple[str, ...] = (),
 ) -> CompiledSeed:
     """Build a minimal CompiledSeed for manifest tests."""
 
@@ -186,7 +187,7 @@ def build_test_seed(
             file_path=Path(f"seeds/{name}.csv"),
             relative_path=Path(f"seeds/{name}.csv"),
         ),
-        schema_entry=SchemaSeedEntry(name=name, columns=()),
+        schema_entry=SchemaSeedEntry(name=name, columns=(), tags=tags),
         schema_file=DiscoveredSchemaFile(
             file_path=Path("seeds/schema.yml"),
             relative_path=Path("seeds/schema.yml"),

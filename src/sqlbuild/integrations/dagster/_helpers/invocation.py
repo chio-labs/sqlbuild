@@ -11,6 +11,10 @@ from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any, TextIO
 
 from sqlbuild.cli.output.models import IntegrationAssetResult, IntegrationResultEnvelope
+from sqlbuild.integrations.dagster._helpers.translation import (
+    is_dagster_asset_enabled,
+    is_dagster_check_enabled,
+)
 from sqlbuild.integrations.dagster.constants import (
     ASSET_SELECTION_COMMANDS,
     CHECK_COMMAND,
@@ -18,6 +22,7 @@ from sqlbuild.integrations.dagster.constants import (
     CHECK_NAME_SEPARATOR_CHARACTER,
     CLONE_COMMAND,
     COMPLETED_EXECUTION_STATUSES,
+    DAGSTER_CHECK_NAME_FIELD,
     DEFAULT_SELECTABLE_NODE_KINDS,
     EVENT_OUTPUT_FLAG,
     EXPLICIT_SELECTION_FLAGS,
@@ -152,6 +157,8 @@ def _with_selected_scenario_args(
     selectors: list[str] = []
     check: Mapping[str, Any]
     for check in dag.get("checks", ()):  # type: ignore[assignment]
+        if not is_dagster_check_enabled(check):
+            continue
         if str(check.get("kind")) != SCENARIO_CHECK_KIND:
             continue
         if not selected_asset_ids.intersection(
@@ -361,6 +368,8 @@ def _build_results_for_selected_assets(
         nodes = selected_nodes
     results: list[Any] = []
     for node in nodes:
+        if not is_dagster_asset_enabled(node):
+            continue
         if not _is_materializable_node_kind(str(node.get("kind"))):
             continue
         asset_path = []
@@ -460,6 +469,8 @@ def _build_results_from_execution_payload(
         execution_asset: Mapping[str, Any] | None = asset_results_by_id.get(node_id)
         if execution_asset is None:
             continue
+        if not is_dagster_asset_enabled(node):
+            continue
         asset_key: Any = dg.AssetKey([str(part) for part in node["asset_key"]])
         if selected_paths and tuple(asset_key.path) not in selected_paths:
             continue
@@ -556,6 +567,8 @@ def _build_results_from_integration_result(
             if projected is None:
                 continue
             projected_node, projected_asset = projected
+            if not is_dagster_asset_enabled(candidate):
+                continue
             asset_key: Any = dg.AssetKey([str(part) for part in candidate["asset_key"]])
             if selected_paths and tuple(asset_key.path) not in selected_paths:
                 continue
@@ -629,6 +642,8 @@ def _build_check_results_from_execution_check(
     seen_check_outputs: set[tuple[tuple[str, ...], str]],
 ) -> tuple[tuple[Any, ...], set[tuple[tuple[str, ...], str]]]:
     dag_check: Mapping[str, Any] | None = _dag_check_for_execution_check(dag=dag, check=check)
+    if dag_check is not None and not is_dagster_check_enabled(dag_check):
+        return (), seen_check_outputs
     asset_ids: tuple[str, ...]
     check_name: str
     if dag_check is not None:
@@ -642,6 +657,8 @@ def _build_check_results_from_execution_check(
     for asset_id in asset_ids:
         node: Mapping[str, Any] | None = nodes_by_id.get(asset_id)
         if node is None:
+            continue
+        if not is_dagster_asset_enabled(node):
             continue
         asset_key: Any = dg.AssetKey([str(part) for part in node["asset_key"]])
         output_key: tuple[tuple[str, ...], str] = (tuple(asset_key.path), check_name)
@@ -744,6 +761,8 @@ def _selected_check_asset_paths(
     }
     paths: set[tuple[str, ...]] = set()
     for check in dag.get("checks", ()):  # type: ignore[assignment]
+        if not is_dagster_check_enabled(check):
+            continue
         check_name: str = _dagster_check_name(check)
         if not _check_is_selected(
             check=check,
@@ -769,6 +788,8 @@ def _selected_check_selectors(
     }
     selectors: list[str] = []
     for check in dag.get("checks", ()):  # type: ignore[assignment]
+        if not is_dagster_check_enabled(check):
+            continue
         if _check_is_selected(
             check=check,
             check_name=_dagster_check_name(check),
@@ -810,6 +831,9 @@ def _asset_ids_for_execution_check(
 
 
 def _dagster_check_name(check: Mapping[str, Any]) -> str:
+    translated_name: object = check.get(DAGSTER_CHECK_NAME_FIELD)
+    if translated_name is not None:
+        return str(translated_name)
     parts: list[str] = [str(check.get("kind", "check")), str(check.get("name", "check"))]
     if check.get("attached_column_name") is not None:
         parts.append(str(check["attached_column_name"]))

@@ -13,6 +13,8 @@ class DagArtifactTestCase:
     expected_seed_asset_key: tuple[str, ...]
     expected_source_asset_key: tuple[str, ...]
     expected_loader_asset_key: tuple[str, ...]
+    expected_seed_tags: tuple[str, ...]
+    expected_function_tags: tuple[str, ...]
 
 
 @dataclass(frozen=True)

@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from sqlbuild.integrations.dagster._helpers.imports import load_dagster
+from sqlbuild.integrations.dagster.constants import SOURCE_NODE_KIND
 
 
 class SqlBuildDagsterTranslator:
@@ -14,7 +15,20 @@ class SqlBuildDagsterTranslator:
 
     def get_asset_key(self, node: Mapping[str, Any]) -> Any:
         dg: Any = load_dagster()
+        authored_asset_key: Sequence[object] | None = _authored_dagster_asset_key(node)
+        if authored_asset_key is not None:
+            return dg.AssetKey([str(part) for part in authored_asset_key])
         return dg.AssetKey([str(part) for part in node["asset_key"]])
+
+    def is_asset_node(self, node: Mapping[str, Any]) -> bool:
+        """Return whether SQLBuild owns this node as a Dagster asset."""
+
+        return True
+
+    def is_asset_check(self, check: Mapping[str, Any]) -> bool:
+        """Return whether SQLBuild exposes this check through the multi-asset definition."""
+
+        return True
 
     def get_group_name(self, node: Mapping[str, Any]) -> str | None:
         group_name: str = str(node.get("group") or node.get("project_name") or "sqlbuild")
@@ -83,6 +97,21 @@ class SqlBuildDagsterTranslator:
 def _normalize_tag_key(value: str) -> str:
     normalized: str = re.sub(r"[^A-Za-z0-9_.\-/]+", "_", value).strip("_")
     return normalized
+
+
+def _authored_dagster_asset_key(node: Mapping[str, Any]) -> Sequence[object] | None:
+    if str(node.get("kind")) != SOURCE_NODE_KIND:
+        return None
+    meta: object = node.get("meta")
+    if not isinstance(meta, Mapping):
+        return None
+    dagster_meta: object = meta.get("dagster")
+    if not isinstance(dagster_meta, Mapping):
+        return None
+    asset_key: object = dagster_meta.get("asset_key")
+    if not isinstance(asset_key, Sequence) or isinstance(asset_key, (str, bytes)) or not asset_key:
+        return None
+    return asset_key
 
 
 def _normalize_name(value: str) -> str:
