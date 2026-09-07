@@ -36,7 +36,6 @@ from sqlbuild.cli.commands.constants import (
     SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
     SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
     SQL_ANALYSIS_CONFIG_KEY,
-    SQL_VALIDATION_CONFIG_KEY,
     SUCCESS_STATUS,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
@@ -277,11 +276,11 @@ def _validate_local_scenario_sql_analysis_enabled(
         discovered_inputs=discovered_inputs
     ):
         raise CliUserError(
-            "scenario test --local requires SQL analysis and SQL validation",
+            "scenario test --local requires SQL analysis",
             code=SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
             help=(
-                "Enable settings.sql_analysis and settings.sql_validation when running local "
-                "scenario replay, snapshot sync, or snapshot refresh."
+                "Enable settings.sql_analysis when running local scenario replay, "
+                "snapshot sync, or snapshot refresh."
             ),
         )
 
@@ -295,12 +294,7 @@ def _effective_sql_analysis_and_validation_enabled(
         if SQL_ANALYSIS_CONFIG_KEY in setting_overrides
         else discovered_inputs.project_config.settings.sql_analysis
     )
-    sql_validation_enabled: bool = (
-        discovered_inputs.local_config.settings.sql_validation
-        if SQL_VALIDATION_CONFIG_KEY in setting_overrides
-        else discovered_inputs.project_config.settings.sql_validation
-    )
-    return sql_analysis_enabled and sql_validation_enabled
+    return sql_analysis_enabled
 
 
 def _sync_local_snapshots(

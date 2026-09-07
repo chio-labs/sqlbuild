@@ -25,12 +25,14 @@ from sqlbuild.cli.commands.models import (
     CloneCommandRequest,
     CompileCommandRequest,
     CompileProfileFlags,
+    ContractCommandRequest,
     CostCommandRequest,
     DbtInitCommandRequest,
     DiffCommandRequest,
     FreshnessCommandRequest,
     JanitorCommandRequest,
     KataCommandRequest,
+    LineageCommandRequest,
     LoadCommandRequest,
     PlanCommandRequest,
     PlaygroundCommandRequest,
@@ -57,6 +59,25 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     selector_inputs: SelectorInputs = read_selector_file_inputs(args.select_file)
     select: tuple[str, ...] = (*tuple(args.select), *selector_inputs.selectors)
+    if args.command == CliCommand.CONTRACT:
+        if handlers.run_contract is None:
+            raise CliUserError("contract command handler is unavailable", code="C470")
+        if args.contract_command is None or args.contract_from is None:
+            raise CliUserError("contract requires an action and --from target", code="C474")
+        return handlers.run_contract(
+            ContractCommandRequest(
+                action=args.contract_command,
+                from_target=args.contract_from,
+                project_dir=project_dir,
+                select=select,
+                exclude=tuple(args.exclude),
+                write=args.contract_write,
+                overwrite=args.overwrite,
+                json_output=args.json,
+                no_color=args.no_color,
+                cli_vars=args.vars,
+            )
+        )
     if args.command == CliCommand.COMPILE:
         return handlers.run_compile(
             CompileCommandRequest(
@@ -296,16 +317,19 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
         )
     if args.command == CliCommand.LINEAGE:
         return handlers.run_lineage(
-            project_dir=project_dir,
-            no_sql_validation=args.no_sql_validation,
-            target=args.lineage_target,
-            output_format=args.lineage_format,
-            direction=args.lineage_direction,
-            depth=args.lineage_depth,
-            select=select,
-            exclude=tuple(args.exclude),
-            lineage_mode=ColumnLineageMode(args.lineage_mode),
-            cli_vars=args.vars,
+            LineageCommandRequest(
+                project_dir=project_dir,
+                no_sql_validation=args.no_sql_validation,
+                target=args.lineage_target,
+                output_format=args.lineage_format,
+                direction=args.lineage_direction,
+                depth=args.lineage_depth,
+                select=select,
+                exclude=tuple(args.exclude),
+                lineage_mode=ColumnLineageMode(args.lineage_mode),
+                include_uses=args.lineage_include_uses,
+                cli_vars=args.vars,
+            )
         )
     if args.command == CliCommand.CLONE:
         if args.from_target is None:

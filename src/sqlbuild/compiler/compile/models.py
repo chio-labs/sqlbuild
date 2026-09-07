@@ -56,6 +56,7 @@ from sqlbuild.compiler.scopes.models import (
     UsageRecord,
     VisibilityRecord,
 )
+from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,
@@ -415,6 +416,8 @@ class PolyglotAnalysisResult:
     columns: tuple[InferredColumn, ...] | None = None
     lineage_columns: tuple[CompiledLineageColumnFact, ...] = field(default_factory=tuple)
     has_star: bool = False
+    binding_diagnostics: tuple[SqlBindingDiagnostic, ...] = field(default_factory=tuple)
+    binding_validated: bool = False
 
 
 @dataclass(frozen=True)
@@ -669,6 +672,8 @@ class CompiledModel:
     enum_declarations: tuple[EnumDeclaration, ...] = field(default_factory=tuple)
     constant_declarations: tuple[ConstantDeclaration, ...] = field(default_factory=tuple)
     enum_columns: dict[str, EnumDeclaration] = field(default_factory=dict)
+    binding_diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
+    binding_validated: bool = False
 
 
 @dataclass(frozen=True)

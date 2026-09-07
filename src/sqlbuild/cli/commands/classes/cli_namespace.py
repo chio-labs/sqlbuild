@@ -93,6 +93,7 @@ _DEFAULT_VALUES: dict[str, object] = {
     "lineage_direction": "upstream",
     "lineage_depth": "all",
     "lineage_mode": ColumnLineageMode.RICH,
+    "lineage_include_uses": False,
     "no_connection": False,
     "fail_on_error": False,
     "fail_on_stale": False,
@@ -138,6 +139,9 @@ _DEFAULT_VALUES: dict[str, object] = {
     "scope_as_path": None,
     "scope_browse": None,
     "scope_list": None,
+    "contract_command": None,
+    "contract_from": None,
+    "contract_write": False,
     "scope_defined_under": None,
     "scope_kind": [],
     "scope_match": None,
@@ -243,6 +247,7 @@ class CliNamespace:
     lineage_direction: str
     lineage_depth: str
     lineage_mode: ColumnLineageMode
+    lineage_include_uses: bool
     no_connection: bool
     fail_on_error: bool
     fail_on_stale: bool
@@ -288,6 +293,9 @@ class CliNamespace:
     scope_as_path: str | None
     scope_browse: str | None
     scope_list: str | None
+    contract_command: str | None
+    contract_from: str | None
+    contract_write: bool
     scope_defined_under: str | None
     scope_kind: list[str]
     scope_match: str | None

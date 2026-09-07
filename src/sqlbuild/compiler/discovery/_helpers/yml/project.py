@@ -23,9 +23,11 @@ from sqlbuild.compiler.discovery.constants import (
     LEGACY_CONFIG_CONCURRENCY_KEY,
     LEGACY_LOCAL_CONFIG_FILENAME,
     LEGACY_PROJECT_CONFIG_FILENAME,
+    LEGACY_SQL_VALIDATION_CONFIG_KEY,
     LOCAL_CONFIG_FILENAME,
     MODELS_DIRECTORY_NAME,
     PROJECT_CONFIG_FILENAME,
+    SQL_ANALYSIS_CONFIG_KEY,
     TOML_FILE_SUFFIX,
 )
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
@@ -411,7 +413,8 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
     )
     _validate_allowed_keys(
         mapping=mapping,
-        allowed_keys=canonical_setting_names | {LEGACY_CONFIG_CONCURRENCY_KEY},
+        allowed_keys=canonical_setting_names
+        | {LEGACY_CONFIG_CONCURRENCY_KEY, LEGACY_SQL_VALIDATION_CONFIG_KEY},
         label="settings",
         file_path=file_path,
     )
@@ -419,13 +422,25 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         raise ProjectConfigError(
             "settings cannot define both 'concurrency' and legacy 'max_concurrency'"
         )
-    sql_analysis: bool = _optional_bool(mapping=mapping, key="sql_analysis", default=True)
+    if (
+        SQL_ANALYSIS_CONFIG_KEY in mapping
+        and LEGACY_SQL_VALIDATION_CONFIG_KEY in mapping
+        and mapping[SQL_ANALYSIS_CONFIG_KEY] != mapping[LEGACY_SQL_VALIDATION_CONFIG_KEY]
+    ):
+        raise ProjectConfigError(
+            "settings.sql_analysis conflicts with legacy settings.sql_validation"
+        )
+    analysis_key: str = (
+        SQL_ANALYSIS_CONFIG_KEY
+        if SQL_ANALYSIS_CONFIG_KEY in mapping
+        else LEGACY_SQL_VALIDATION_CONFIG_KEY
+    )
+    sql_analysis: bool = _optional_bool(mapping=mapping, key=analysis_key, default=True)
     query_change_tracking: bool = _optional_bool(
         mapping=mapping,
         key="query_change_tracking",
         default=True,
     )
-    sql_validation: bool = _optional_bool(mapping=mapping, key="sql_validation", default=True)
     raw_column_contract_mode: object = mapping.get(
         "column_contract_mode", ColumnContractMode.IMPLICIT.value
     )
@@ -484,7 +499,6 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
     return SettingsConfig(
         sql_analysis=sql_analysis,
         query_change_tracking=query_change_tracking,
-        sql_validation=sql_validation,
         column_contract_mode=column_contract_mode,
         concurrency=concurrency,
         auto_load_sources=auto_load_sources,
@@ -670,6 +684,8 @@ def _load_local_settings(
     for key in mapping:
         if key == LEGACY_CONFIG_CONCURRENCY_KEY:
             normalized_overrides.add(CONFIG_CONCURRENCY_KEY)
+        elif key == LEGACY_SQL_VALIDATION_CONFIG_KEY:
+            normalized_overrides.add(SQL_ANALYSIS_CONFIG_KEY)
         elif key in setting_names:
             normalized_overrides.add(key)
     return (

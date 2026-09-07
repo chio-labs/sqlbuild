@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from polyglot_sql import PolyglotError
 
 import sqlbuild.adapter.type_system._helpers.type_normalization as type_normalization
 from sqlbuild.adapter.contract.models import NormalizedType
@@ -13,6 +14,15 @@ from tests.unit.src.sqlbuild.adapter.type_system._test_types import (
     TypeEqualityTestCase,
     TypeNormalizationTestCase,
 )
+
+
+class _UnsupportedTypePolyglot:
+    PolyglotError: type[PolyglotError] = PolyglotError
+
+    @staticmethod
+    def parse_data_type(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        raise PolyglotError("unsupported test type")
 
 
 @pytest.mark.parametrize(
@@ -79,7 +89,7 @@ def test_given_type_string_when_normalizing_without_polyglot_then_it_returns_exp
     test_case: TypeNormalizationTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(type_normalization, "import_polyglot", lambda: None)
+    monkeypatch.setattr(type_normalization, "import_polyglot", _UnsupportedTypePolyglot)
 
     result: NormalizedType = normalize_type(type_sql=test_case.raw_type, dialect=test_case.dialect)
 
@@ -170,7 +180,7 @@ def test_given_type_strings_when_comparing_without_polyglot_then_it_returns_expe
     test_case: TypeEqualityTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(type_normalization, "import_polyglot", lambda: None)
+    monkeypatch.setattr(type_normalization, "import_polyglot", _UnsupportedTypePolyglot)
 
     result: bool = types_equal(
         left=test_case.left_type,
@@ -232,7 +242,7 @@ def test_given_type_string_without_polyglot_when_resolving_numeric_family_then_i
     test_case: NumericFamilyTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(type_normalization, "import_polyglot", lambda: None)
+    monkeypatch.setattr(type_normalization, "import_polyglot", _UnsupportedTypePolyglot)
 
     result: str | None = normalize_numeric_family(
         type_sql=test_case.raw_type,

@@ -46,12 +46,10 @@ def extract_top_level_ctes_with_sql_analysis(
 ) -> tuple[tuple[str, str], ...] | None:
     """Extract top-level CTE aliases and rendered bodies with Polyglot when available."""
 
-    polyglot_module: Any | None = import_polyglot_sql()
-    if polyglot_module is None:
-        return None
+    polyglot_module: Any = import_polyglot_sql()
     try:
         analysis: Any = polyglot_module.analyze_query(sql, {"dialect": "generic"})
-    except Exception as error:
+    except polyglot_module.PolyglotError as error:
         log_debug_event(
             logger=_DEBUG_LOGGER,
             message="top-level CTE compact extraction failed; falling back",

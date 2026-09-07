@@ -1,4 +1,4 @@
-"""Optional Polyglot-backed SQL syntax validation."""
+"""Polyglot-backed SQL syntax validation."""
 
 from __future__ import annotations
 
@@ -35,21 +35,19 @@ def validate_sql_syntax(
         return
     raise CompileInputError(
         f"SQL syntax error in model '{model_name}' ({file_path}): {error_message}\n\n"
-        f"To skip SQL validation for this model, add `sql_validation: false` "
+        f"To skip SQL analysis for this model, add `sql_analysis: false` "
         f"to the MODEL header.\n"
-        f"To disable project-wide, set `settings.sql_validation: false` "
+        f"To disable project-wide, set `settings.sql_analysis: false` "
         f"in sqlbuild_project.toml.\n"
-        f"To skip for this run, use `--no-sql-validation`."
+        f"To skip for this run, use `--no-sql-analysis`."
     ) from None
 
 
 def _validate_sql_with_polyglot(*, sql: str, dialect: str | None) -> str | None:
-    polyglot_module: Any | None = import_polyglot_sql()
-    if polyglot_module is None:
-        return "Polyglot SQL is not installed"
+    polyglot_module: Any = import_polyglot_sql()
     try:
         result: Any = polyglot_module.validate(sql, dialect=dialect or "generic")
-    except Exception as error:
+    except polyglot_module.PolyglotError as error:
         return str(error)
     if result:
         return None
@@ -174,15 +172,12 @@ def _validate_sql_syntax_with_message(
         query_sql=query_sql,
         placeholders=placeholders,
     )
-    polyglot_module: Any | None = import_polyglot_sql()
-    if polyglot_module is None:
-        error_message: str | None = "Polyglot SQL is not installed"
-    else:
-        try:
-            polyglot_module.parse_one(cleaned_sql, dialect=dialect or "generic")
-            error_message = None
-        except Exception as error:
-            error_message = str(error)
+    polyglot_module: Any = import_polyglot_sql()
+    try:
+        polyglot_module.parse_one(cleaned_sql, dialect=dialect or "generic")
+        error_message: str | None = None
+    except polyglot_module.PolyglotError as error:
+        error_message = str(error)
     if error_message is not None:
         _raise_sql_validation_error(error_prefix=error_prefix, error_message=error_message)
 
@@ -218,9 +213,9 @@ def _clean_sql_for_validation(*, query_sql: str, placeholders: dict[str, str] | 
 def _raise_sql_validation_error(*, error_prefix: str, error_message: str) -> None:
     raise CompileInputError(
         f"{error_prefix}: {error_message}\n\n"
-        f"To skip SQL validation for this model, add `sql_validation: false` "
+        f"To skip SQL analysis for this model, add `sql_analysis: false` "
         f"to the MODEL header.\n"
-        f"To disable project-wide, set `settings.sql_validation: false` "
+        f"To disable project-wide, set `settings.sql_analysis: false` "
         f"in sqlbuild_project.toml.\n"
-        f"To skip for this run, use `--no-sql-validation`."
+        f"To skip for this run, use `--no-sql-analysis`."
     ) from None

@@ -1,10 +1,9 @@
-"""Optional SQL analysis-backed output column inference from model query SQL."""
+"""Required SQL analysis-backed output inference, binding, and lineage facts."""
 
 from __future__ import annotations
 
 import logging
 import re
-from functools import lru_cache
 from typing import Any, cast
 
 from sqlbuild.adapter.contract.constants import POLYGLOT_CUSTOM_TYPE_NAME
@@ -214,7 +213,12 @@ from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_SET_OPERATION_KINDS as _POLYGLOT_SET_OPERATION_KINDS,
 )
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
+from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
+from sqlbuild.compiler.sql_analysis.models import (
+    SqlBindingDiagnostic,
+    SqlSchemaValidationRequest,
+)
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
@@ -231,16 +235,6 @@ _TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
     r'"([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()'
 )
 _PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(r"@@@(\w+)")
-
-
-@lru_cache(maxsize=1)
-def _warn_once_polyglot_module_missing() -> None:
-    """Warn once per process when the Polyglot module cannot be imported."""
-
-    _DEBUG_LOGGER.warning(
-        "Polyglot SQL module is not importable; SQL validation, column inference, "
-        "and column lineage are disabled for this run"
-    )
 
 
 def infer_columns_with_sql_analysis(
@@ -303,13 +297,11 @@ def analyze_columns_and_lineage_with_polyglot(
     column_types_by_table: dict[str, dict[str, str]] | None = None,
     inference_profile: ExpressionInferenceProfile | None = None,
     allow_compact_analysis: bool = False,
+    binding_schema: dict[str, dict[str, str]] | None = None,
 ) -> PolyglotAnalysisResult:
     """Infer columns and compact lineage facts from one Polyglot parse."""
 
-    polyglot_module: Any | None = import_polyglot_sql()
-    if polyglot_module is None:
-        _warn_once_polyglot_module_missing()
-        return PolyglotAnalysisResult(analysis_succeeded=False)
+    polyglot_module: Any = import_polyglot_sql()
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)
     if placeholders:
@@ -334,13 +326,19 @@ def analyze_columns_and_lineage_with_polyglot(
             columns=compact_analysis[0],
             lineage_columns=compact_analysis[1],
             has_star=compact_analysis[2],
+            binding_diagnostics=_validate_complete_binding_schema(
+                cleaned_sql=cleaned_sql,
+                dialect=profile.sql_analysis_dialect,
+                binding_schema=binding_schema,
+            ),
+            binding_validated=binding_schema is not None,
         )
     try:
         parsed: Any = polyglot_module.parse_one(
             cleaned_sql,
             dialect=profile.sql_analysis_dialect or "generic",
         )
-    except Exception as error:
+    except polyglot_module.PolyglotError as error:
         log_debug_event(
             logger=_DEBUG_LOGGER,
             message="column and lineage analysis parse failed; falling back",
@@ -358,7 +356,54 @@ def analyze_columns_and_lineage_with_polyglot(
         columns=columns,
         lineage_columns=lineage_columns,
         has_star=has_star,
+        binding_diagnostics=_validate_complete_binding_schema(
+            cleaned_sql=cleaned_sql,
+            dialect=profile.sql_analysis_dialect,
+            binding_schema=binding_schema,
+        ),
+        binding_validated=binding_schema is not None,
     )
+
+
+def get_complete_schema_binding_request(
+    *,
+    query_sql: str,
+    placeholders: dict[str, str] | None,
+    dialect: str | None,
+    binding_schema: dict[str, dict[str, str]],
+) -> SqlSchemaValidationRequest:
+    """Build one stable native schema-validation request."""
+
+    cleaned_sql: str = _replace_refs_with_stubs(query_sql)
+    if placeholders:
+        cleaned_sql = substitute_placeholder_defaults(
+            query_sql=cleaned_sql,
+            placeholders=placeholders,
+        )
+    return SqlSchemaValidationRequest(
+        sql=cleaned_sql,
+        dialect=dialect,
+        schema=binding_schema,
+    )
+
+
+def _validate_complete_binding_schema(
+    *,
+    cleaned_sql: str,
+    dialect: str | None,
+    binding_schema: dict[str, dict[str, str]] | None,
+) -> tuple[SqlBindingDiagnostic, ...]:
+    if binding_schema is None:
+        return ()
+    return get_schema_validations(
+        requests=(
+            SqlSchemaValidationRequest(
+                sql=cleaned_sql,
+                dialect=dialect,
+                schema=binding_schema,
+            ),
+        )
+    )[0].diagnostics
 
 
 def _analyze_columns_and_lineage_with_compact_polyglot(
@@ -384,7 +429,7 @@ def _analyze_columns_and_lineage_with_compact_polyglot(
         if schema is not None:
             options["schema"] = schema
         analysis: Any = polyglot_module.analyze_query(cleaned_sql, options)
-    except Exception as error:
+    except polyglot_module.PolyglotError as error:
         log_debug_event(
             logger=_DEBUG_LOGGER,
             message="compact query analysis failed; falling back",
@@ -679,13 +724,10 @@ def _infer_columns_with_polyglot(
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     inference_profile: ExpressionInferenceProfile,
 ) -> tuple[InferredColumn, ...] | None | bool:
-    polyglot_module: Any | None = import_polyglot_sql()
-    if polyglot_module is None:
-        _warn_once_polyglot_module_missing()
-        return False
+    polyglot_module: Any = import_polyglot_sql()
     try:
         parsed: Any = polyglot_module.parse_one(cleaned_sql, dialect=dialect or "generic")
-    except Exception as error:
+    except polyglot_module.PolyglotError as error:
         log_debug_event(
             logger=_DEBUG_LOGGER,
             message="column inference parse failed; falling back",
@@ -708,15 +750,7 @@ def _infer_columns_from_polyglot_ast(
     infer_nullability: bool = str(getattr(parsed, "kind", "")) not in _POLYGLOT_SET_OPERATION_KINDS
     select: Any | None = parsed
     if str(getattr(select, "kind", "")) != _POLYGLOT_KIND_SELECT:
-        try:
-            select = parsed.find(_POLYGLOT_KIND_SELECT)
-        except Exception as error:
-            log_debug_event(
-                logger=_DEBUG_LOGGER,
-                message="column inference select lookup failed; falling back",
-                sqlbuild_error=str(error),
-            )
-            return None
+        select = parsed.find(_POLYGLOT_KIND_SELECT)
     if select is None or str(getattr(select, "kind", "")) != _POLYGLOT_KIND_SELECT:
         return None
 
@@ -765,15 +799,7 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
     infer_nullability: bool = str(getattr(parsed, "kind", "")) not in _POLYGLOT_SET_OPERATION_KINDS
     select: Any | None = parsed
     if str(getattr(select, "kind", "")) != _POLYGLOT_KIND_SELECT:
-        try:
-            select = parsed.find(_POLYGLOT_KIND_SELECT)
-        except Exception as error:
-            log_debug_event(
-                logger=_DEBUG_LOGGER,
-                message="column lineage select lookup failed; falling back",
-                sqlbuild_error=str(error),
-            )
-            return None, (), False
+        select = parsed.find(_POLYGLOT_KIND_SELECT)
     if select is None or str(getattr(select, "kind", "")) != _POLYGLOT_KIND_SELECT:
         return None, (), False
 
@@ -922,15 +948,7 @@ def _polyglot_reference_alias_map(
             reference.ref_name,
         )
     alias_map: dict[str, tuple[CompiledResourceType, str]] = {}
-    try:
-        tables: tuple[Any, ...] = tuple(parsed.find_all(_POLYGLOT_KIND_TABLE))
-    except Exception as error:
-        log_debug_event(
-            logger=_DEBUG_LOGGER,
-            message="column lineage table discovery failed; falling back",
-            sqlbuild_error=str(error),
-        )
-        return alias_map
+    tables: tuple[Any, ...] = tuple(parsed.find_all(_POLYGLOT_KIND_TABLE))
     table: Any
     for table in tables:
         table_name: str = str(getattr(table, "name", "") or "")
@@ -1024,15 +1042,7 @@ def _polyglot_column_refs_in_expression(expression: Any) -> tuple[tuple[str, str
         return (
             (str(getattr(expression, "name", "") or ""), _polyglot_column_table_name(expression)),
         )
-    try:
-        payload: object = expression.to_dict()
-    except Exception as error:
-        log_debug_event(
-            logger=_DEBUG_LOGGER,
-            message="column lineage expression payload extraction failed; falling back",
-            sqlbuild_error=str(error),
-        )
-        return ()
+    payload: object = expression.to_dict()
     refs: list[tuple[str, str]] = []
 
     def visit(*, node: object, collected_refs: list[tuple[str, str]]) -> list[tuple[str, str]]:
@@ -1089,15 +1099,7 @@ def _polyglot_lineage_transform_kind(*, expression: Any, has_upstream: bool) -> 
 
 
 def _polyglot_has_aggregation(expression: Any) -> bool:
-    try:
-        nodes: tuple[Any, ...] = tuple(expression.walk())
-    except Exception as error:
-        log_debug_event(
-            logger=_DEBUG_LOGGER,
-            message="column lineage aggregation detection failed; falling back",
-            sqlbuild_error=str(error),
-        )
-        return False
+    nodes: tuple[Any, ...] = tuple(expression.walk())
     return any(str(getattr(node, "kind", "")) in _POLYGLOT_AGGREGATE_KINDS for node in nodes)
 
 
@@ -1112,15 +1114,7 @@ def _polyglot_expression_type(
         return function_type
     if kind not in _POLYGLOT_CAST_KINDS:
         return None
-    try:
-        payload: object = expression.to_dict().get(kind, {})
-    except Exception as error:
-        log_debug_event(
-            logger=_DEBUG_LOGGER,
-            message="column inference cast type extraction failed; falling back",
-            sqlbuild_error=str(error),
-        )
-        return None
+    payload: object = expression.to_dict().get(kind, {})
     if not isinstance(payload, dict):
         return None
     target: object = payload.get(_POLYGLOT_PAYLOAD_TO)
@@ -1287,10 +1281,7 @@ def _infer_polyglot_column_nullability(
     column_name: str = str(getattr(expression, "name", "") or "")
     if not column_name:
         return InferredNullability.UNKNOWN
-    try:
-        payload: object = expression.to_dict().get(_POLYGLOT_PAYLOAD_COLUMN, {})
-    except Exception:
-        payload = {}
+    payload: object = expression.to_dict().get(_POLYGLOT_PAYLOAD_COLUMN, {})
     table_name: str = ""
     if isinstance(payload, dict):
         table_payload: object = payload.get(_POLYGLOT_PAYLOAD_TABLE)
@@ -1339,10 +1330,7 @@ def _polyglot_columns_in_expression(expression: Any) -> tuple[Any, ...]:
 
 
 def _polyglot_column_table_name(column: Any) -> str:
-    try:
-        payload: object = column.to_dict().get(_POLYGLOT_PAYLOAD_COLUMN, {})
-    except Exception:
-        return ""
+    payload: object = column.to_dict().get(_POLYGLOT_PAYLOAD_COLUMN, {})
     if not isinstance(payload, dict):
         return ""
     table_payload: object = payload.get(_POLYGLOT_PAYLOAD_TABLE)
@@ -1381,10 +1369,7 @@ def _polyglot_alias_nullability_from_select(
     alias_nullability: dict[str, InferredNullability] = {}
     current_aliases: set[str] = set()
 
-    try:
-        select_payload: object = select.to_dict().get(_POLYGLOT_PAYLOAD_SELECT, {})
-    except Exception:
-        select_payload = {}
+    select_payload: object = select.to_dict().get(_POLYGLOT_PAYLOAD_SELECT, {})
     if not isinstance(select_payload, dict):
         return alias_nullability
 

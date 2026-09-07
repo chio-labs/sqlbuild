@@ -19,21 +19,14 @@ def transpile_sql_for_local_duckdb(
 ) -> str:
     """Parse SQL in the source dialect and render DuckDB SQL for local execution."""
 
-    polyglot_module: Any | None = import_polyglot_sql()
-    if polyglot_module is None:
-        _raise_transpile_error(
-            scenario_name=scenario_name,
-            resource_kind=resource_kind,
-            resource_name=resource_name,
-            reason="Polyglot SQL is not installed",
-        )
+    polyglot_module: Any = import_polyglot_sql()
     try:
         transpiled: list[str] = polyglot_module.transpile(
             sql,
             read=source_dialect,
             write="duckdb",
         )
-    except Exception as exc:
+    except (polyglot_module.PolyglotError, ValueError) as exc:
         _raise_transpile_error(
             scenario_name=scenario_name,
             resource_kind=resource_kind,

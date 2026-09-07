@@ -65,6 +65,7 @@ def test_given_schema_drift_when_sync_blocks_then_start_is_already_dispatched(
     dispatcher: EventDispatcher = EventDispatcher()
     dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
     adapter: Mock = Mock()
+    adapter.sql_analysis_dialect_name = None
     adapter.add_columns.side_effect = lambda **_: barrier_events.append(events[-1])
 
     with dispatcher_scope(dispatcher):
@@ -230,6 +231,7 @@ def test_given_partial_schema_mutation_when_later_call_fails_then_operation_fail
     dispatcher: EventDispatcher = EventDispatcher()
     dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
     adapter: Mock = Mock()
+    adapter.sql_analysis_dialect_name = None
     adapter.drop_columns.side_effect = RuntimeError("reconciliation failed")
 
     with dispatcher_scope(dispatcher), pytest.raises(RuntimeError, match="reconciliation failed"):

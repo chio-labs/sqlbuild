@@ -63,9 +63,7 @@ def format_sql(
         SQL_TEST_BACKTICK_IDENTIFIER_QUOTE in sql
     ):
         protected_sql, protected_identifiers = _protect_backtick_identifiers(sql)
-    polyglot_module: Any | None = import_polyglot_sql()
-    if polyglot_module is None:
-        return sql
+    polyglot_module: Any = import_polyglot_sql()
     try:
         formatted_sql: str = str(
             polyglot_module.format(
@@ -81,7 +79,7 @@ def format_sql(
             sql=restored_sql,
             dialect=sql_analysis_dialect,
         )
-    except Exception:
+    except polyglot_module.PolyglotError:
         return sql
 
 
@@ -160,9 +158,7 @@ def build_chain_comparison_parts(
 def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] | None:
     """Split top-level WITH CTEs from a SQL statement with Polyglot if available."""
 
-    polyglot_module: Any | None = import_polyglot_sql()
-    if polyglot_module is None:
-        return None
+    polyglot_module: Any = import_polyglot_sql()
     protected_sql: str = sql
     protected_identifiers: dict[str, str] = {}
     if SQL_TEST_BACKTICK_IDENTIFIER_QUOTE in sql:
@@ -170,7 +166,7 @@ def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] |
 
     try:
         parsed: Any = polyglot_module.parse_one(protected_sql, dialect="generic")
-    except Exception as error:
+    except polyglot_module.PolyglotError as error:
         log_debug_event(
             logger=_DEBUG_LOGGER,
             message="comparison SQL top-level WITH parse failed; falling back",

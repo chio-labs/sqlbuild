@@ -21,6 +21,7 @@ from sqlbuild.cli.commands.models import (
     FreshnessCommandRequest,
     JanitorCommandRequest,
     KataCommandRequest,
+    LineageCommandRequest,
     LoadCommandRequest,
     PlanCommandRequest,
     PlaygroundCommandRequest,
@@ -1510,6 +1511,7 @@ def test_given_debug_command_arguments_when_running_with_dependencies_then_it_di
                 "json",
                 "--mode",
                 "fast",
+                "--include-uses",
             ],
             expected_exit_code=11,
             expected_column_lineage_mode=ColumnLineageMode.FAST,
@@ -1520,46 +1522,10 @@ def test_given_debug_command_arguments_when_running_with_dependencies_then_it_di
 def test_given_lineage_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[
-        tuple[
-            Path | None,
-            bool,
-            str | None,
-            str,
-            str,
-            str,
-            tuple[str, ...],
-            tuple[str, ...],
-            ColumnLineageMode,
-        ]
-    ] = []
+    received_args: list[LineageCommandRequest] = []
 
-    def run_lineage(
-        project_dir: Path | None,
-        no_sql_validation: bool,
-        target: str | None,
-        output_format: str,
-        direction: str,
-        depth: str,
-        select: tuple[str, ...],
-        exclude: tuple[str, ...],
-        lineage_mode: ColumnLineageMode,
-        cli_vars: dict[str, object],
-    ) -> int:
-        del cli_vars
-        received_args.append(
-            (
-                project_dir,
-                no_sql_validation,
-                target,
-                output_format,
-                direction,
-                depth,
-                select,
-                exclude,
-                lineage_mode,
-            )
-        )
+    def run_lineage(request: LineageCommandRequest) -> int:
+        received_args.append(request)
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
@@ -1569,16 +1535,15 @@ def test_given_lineage_command_arguments_when_running_with_dependencies_then_it_
 
     assert exit_code == test_case.expected_exit_code
     assert received_args == [
-        (
-            None,
-            False,
-            "fact_orders",
-            "json",
-            "both",
-            "2",
-            (),
-            (),
-            test_case.expected_column_lineage_mode,
+        LineageCommandRequest(
+            project_dir=None,
+            target="fact_orders",
+            output_format="json",
+            direction="both",
+            depth="2",
+            lineage_mode=test_case.expected_column_lineage_mode,
+            include_uses=True,
+            cli_vars={},
         )
     ]
 

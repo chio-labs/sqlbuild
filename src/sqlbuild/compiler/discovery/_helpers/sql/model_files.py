@@ -13,7 +13,12 @@ from sqlbuild.compiler.discovery.exceptions import (
     ModelHeaderSyntaxError,
     ModelSqlParseError,
 )
-from sqlbuild.compiler.discovery.models import NamedSqlHookEntry, PythonHookEntry, SqlHookEntry
+from sqlbuild.compiler.discovery.models import (
+    ModelHeaderColumnSpan,
+    NamedSqlHookEntry,
+    PythonHookEntry,
+    SqlHookEntry,
+)
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SourceLocation
 from sqlbuild.sql_values.models import AuthoredSqlSet, AuthoredSqlValueCall
@@ -116,6 +121,88 @@ def model_header_column_locations(
         header_start=header_match.start("header"),
         relative_path=relative_path,
     )
+
+
+def model_header_columns_span(
+    *, contents: str
+) -> tuple[int, int, dict[str, ModelHeaderColumnSpan]] | None:
+    """Return the columns body and column entry spans from the native header tokenizer."""
+
+    header_match: re.Match[str] | None = _MODEL_HEADER_PATTERN.match(contents)
+    if header_match is None:
+        return None
+    header: str = header_match.group("header")
+    header_start: int = header_match.start("header")
+    tokens: list[_ModelHeaderToken] = _tokenize_model_header(header)
+    columns_open_index: int | None = None
+    depth: int = 0
+    for index, token in enumerate(tokens):
+        if (
+            token.kind == _MODEL_HEADER_WORD_TOKEN
+            and token.value == _MODEL_HEADER_COLUMNS_KEY
+            and depth == 0
+            and tokens[index + 1].value == _MODEL_HEADER_OPEN_PAREN
+        ):
+            columns_open_index = index + 1
+            break
+        if token.kind == _MODEL_HEADER_SYMBOL_TOKEN and token.value == _MODEL_HEADER_OPEN_PAREN:
+            depth += 1
+        elif token.kind == _MODEL_HEADER_SYMBOL_TOKEN and token.value == _MODEL_HEADER_CLOSE_PAREN:
+            depth -= 1
+    if columns_open_index is None:
+        return None
+    open_token: _ModelHeaderToken = tokens[columns_open_index]
+    spans: dict[str, ModelHeaderColumnSpan] = {}
+    depth = 1
+    index: int = columns_open_index + 1
+    close_token: _ModelHeaderToken | None = None
+    while index < len(tokens):
+        token: _ModelHeaderToken = tokens[index]
+        if token.kind == _MODEL_HEADER_SYMBOL_TOKEN and token.value == _MODEL_HEADER_OPEN_PAREN:
+            depth += 1
+        elif token.kind == _MODEL_HEADER_SYMBOL_TOKEN and token.value == _MODEL_HEADER_CLOSE_PAREN:
+            depth -= 1
+            if depth == 0:
+                close_token = token
+                break
+        elif token.kind == _MODEL_HEADER_WORD_TOKEN and depth == 1:
+            metadata_open: _ModelHeaderToken = tokens[index + 1]
+            if metadata_open.value == _MODEL_HEADER_OPEN_PAREN:
+                metadata_depth: int = 1
+                end_index: int = index + 2
+                while end_index < len(tokens):
+                    candidate: _ModelHeaderToken = tokens[end_index]
+                    if candidate.value == _MODEL_HEADER_OPEN_PAREN:
+                        metadata_depth += 1
+                    elif candidate.value == _MODEL_HEADER_CLOSE_PAREN:
+                        metadata_depth -= 1
+                        if metadata_depth == 0:
+                            spans[token.value] = ModelHeaderColumnSpan(
+                                entry_start=header_start + token.position,
+                                entry_end=header_start + candidate.position + 1,
+                                metadata_start=header_start + metadata_open.position + 1,
+                                metadata_end=header_start + candidate.position,
+                            )
+                            index = end_index
+                            break
+                    end_index += 1
+        index += 1
+    if close_token is None:
+        return None
+    return (
+        header_start + open_token.position + 1,
+        header_start + close_token.position,
+        spans,
+    )
+
+
+def model_header_body_span(*, contents: str) -> tuple[int, int] | None:
+    """Return authored byte offsets for the MODEL header body."""
+
+    header_match: re.Match[str] | None = _MODEL_HEADER_PATTERN.match(contents)
+    if header_match is None:
+        return None
+    return header_match.start("header"), header_match.end("header")
 
 
 def header_column_locations(

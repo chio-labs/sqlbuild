@@ -34,6 +34,8 @@ DLT_WRITE_DISPOSITION_MERGE: str = "merge"
 
 CONFIG_CONCURRENCY_KEY: str = "concurrency"
 LEGACY_CONFIG_CONCURRENCY_KEY: str = "max_concurrency"
+SQL_ANALYSIS_CONFIG_KEY: str = "sql_analysis"
+LEGACY_SQL_VALIDATION_CONFIG_KEY: str = "sql_validation"
 SQL_ANALYSIS_SETTING_KEY: str = "sql_analysis"
 DBT_LEGACY_REUSE_FROM_CONFIG_KEY: str = "reuse_from"
 DBT_PRODUCTION_REF_CONFIG_KEY: str = "production_ref"

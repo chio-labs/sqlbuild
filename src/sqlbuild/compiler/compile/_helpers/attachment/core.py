@@ -1777,9 +1777,16 @@ def _bool_from_dict(*, values: dict[str, object], key: str) -> bool:
 
 
 def _is_sql_validation_enabled(*, project_setting: bool, model_config: CompileModelConfig) -> bool:
-    """Apply the per-model MODEL(sql_validation) override to the project setting."""
+    """Apply the per-model unified SQL analysis override to the project setting."""
 
-    raw: object | None = model_config.values.get("sql_validation")
+    raw_analysis: object | None = model_config.values.get("sql_analysis")
+    raw_legacy: object | None = model_config.values.get("sql_validation")
+    if raw_analysis is not None and raw_legacy is not None and raw_analysis != raw_legacy:
+        raise CompileInputError(
+            "MODEL sql_analysis conflicts with legacy sql_validation",
+            code="P003",
+        )
+    raw: object | None = raw_analysis if raw_analysis is not None else raw_legacy
     if isinstance(raw, bool):
         return raw
     return project_setting
@@ -1791,13 +1798,13 @@ def _model_sql_validation_gate(
     no_sql_validation: bool,
     model_config: CompileModelConfig,
 ) -> bool:
-    """Gate validation on sql_analysis, --no-sql-validation, and project/model sql_validation."""
+    """Apply the unified project/model/CLI SQL analysis gate."""
 
     return (
         effective_settings.sql_analysis
         and not no_sql_validation
         and _is_sql_validation_enabled(
-            project_setting=effective_settings.sql_validation,
+            project_setting=effective_settings.sql_analysis,
             model_config=model_config,
         )
     )
