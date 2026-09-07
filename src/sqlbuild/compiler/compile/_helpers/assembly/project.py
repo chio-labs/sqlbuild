@@ -36,6 +36,9 @@ from sqlbuild.compiler.compile._helpers.deps.dependencies import (
     model_build_deps,
     sql_test_scope_deps,
 )
+from sqlbuild.compiler.compile._helpers.render.context_templates import (
+    resolve_early_model_templates,
+)
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
     get_validated_model_cursor_intrinsics,
@@ -212,19 +215,28 @@ def assemble_compiled_project(
         validate_scope_index(index=scope_index)
     except ScopeValidationError as error:
         raise CompileInputError(str(error)) from error
+    effective_target_values: dict[str, object] = resolve_early_model_templates(
+        values={
+            "database": (
+                (inputs.effective_target.database if inputs.effective_target is not None else None)
+                or _connection_database_fallback(inputs=inputs)
+            ),
+            "schema": (
+                (inputs.effective_target.schema if inputs.effective_target is not None else None)
+                or _str_or_none(inputs.effective_connection.get("schema"))
+            ),
+        },
+        effective_vars=inputs.effective_vars,
+        effective_target_name=inputs.effective_target_name,
+        run_id=inputs.run_id,
+    )
     return CompiledProject(
         run_id=inputs.run_id,
         effective_target_name=inputs.effective_target_name,
         effective_connection=inputs.effective_connection,
         effective_vars=inputs.effective_vars,
-        effective_target_database=(
-            (inputs.effective_target.database if inputs.effective_target is not None else None)
-            or _connection_database_fallback(inputs=inputs)
-        ),
-        effective_target_schema=(
-            (inputs.effective_target.schema if inputs.effective_target is not None else None)
-            or _str_or_none(inputs.effective_connection.get("schema"))
-        ),
+        effective_target_database=_str_or_none(effective_target_values.get("database")),
+        effective_target_schema=_str_or_none(effective_target_values.get("schema")),
         compile_cache_dir=inputs.compile_cache_dir,
         settings=inputs.effective_settings,
         scenario=resolve_effective_scenario_config(

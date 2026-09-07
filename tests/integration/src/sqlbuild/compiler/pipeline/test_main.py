@@ -412,6 +412,8 @@ def test_given_snowflake_local_target_namespace_when_compiling_then_targets_reso
 
     assert project.models[0].destination.database == test_case.expected_database
     assert project.models[0].destination.schema == test_case.expected_schema
+    assert project.effective_target_database == test_case.expected_database
+    assert project.effective_target_schema == test_case.expected_schema
 
 
 @pytest.mark.parametrize(
