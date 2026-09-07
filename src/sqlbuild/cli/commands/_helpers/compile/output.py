@@ -50,19 +50,24 @@ def format_compile_text(
     diagnostics: tuple[CompilerDiagnostic, ...],
     lineage_mode: CompileLineageMode = CompileLineageMode.FAST,
     use_color: bool,
+    selected_keys: frozenset[CompiledObjectKey] | None = None,
 ) -> str:
     """Format human-readable compile output."""
 
     style: CliStyle = CliStyle(use_color=use_color)
+    visible_project_models: tuple[CompiledModel, ...] = _selected_models(
+        graph=graph,
+        selected_keys=selected_keys,
+    )
     lines: list[str] = [
         format_surface_header(
             style=style,
             title="Compile ready",
-            context=_count_label(count=len(graph.project.models), singular="model"),
+            context=_count_label(count=len(visible_project_models), singular="model"),
         ),
         "",
     ]
-    visible_models: tuple[CompiledModel, ...] = graph.project.models[:_HUMAN_MODEL_LIMIT]
+    visible_models: tuple[CompiledModel, ...] = visible_project_models[:_HUMAN_MODEL_LIMIT]
     model_name_width: int = _model_name_width(visible_models)
     error_models: frozenset[str] = _models_with_error_diagnostics(diagnostics)
     model_index: int
@@ -75,12 +80,12 @@ def format_compile_text(
             f"{format_status_cell(style=style, status=status, width=4)} "
             f"{style.muted(f'{_column_count(model)} columns')}"
         )
-    hidden_model_count: int = len(graph.project.models) - len(visible_models)
+    hidden_model_count: int = len(visible_project_models) - len(visible_models)
     if hidden_model_count > 0:
         lines.append("")
         lines.append(
             "  "
-            + style.muted(f"Showing {len(visible_models)} of {len(graph.project.models)} models.")
+            + style.muted(f"Showing {len(visible_models)} of {len(visible_project_models)} models.")
         )
         lines.append("  " + style.muted("Use --json for the full compile report."))
     lines.append("")
@@ -97,10 +102,20 @@ def format_compile_text(
     warning_count: int = _diagnostic_count(
         diagnostics=diagnostics, severity=DiagnosticSeverity.WARNING
     )
+    selected_seed_count: int = _selected_resource_count(
+        graph=graph,
+        selected_keys=selected_keys,
+        resource_types={CompiledResourceType.SEED},
+    )
+    selected_function_count: int = _selected_resource_count(
+        graph=graph,
+        selected_keys=selected_keys,
+        resource_types={CompiledResourceType.UDF, CompiledResourceType.TABLE_FN},
+    )
     compiled_summary: str = (
-        f"{_count_label(count=len(graph.project.models), singular='model')}, "
-        f"{_count_label(count=len(graph.project.seeds), singular='seed')}, "
-        f"{_count_label(count=len(graph.project.functions), singular='function')}, "
+        f"{_count_label(count=len(visible_project_models), singular='model')}, "
+        f"{_count_label(count=selected_seed_count, singular='seed')}, "
+        f"{_count_label(count=selected_function_count, singular='function')}, "
         f"{_count_label(count=error_count, singular='error')}, "
         f"{_count_label(count=warning_count, singular='warning')}"
     )
@@ -138,6 +153,7 @@ def format_compile_json(
     lineage: ProjectColumnLineage | None,
     diagnostics: tuple[CompilerDiagnostic, ...],
     lineage_mode: CompileLineageMode = CompileLineageMode.FAST,
+    selected_keys: frozenset[CompiledObjectKey] | None = None,
 ) -> str:
     """Serialize the offline compile report as JSON."""
 
@@ -146,7 +162,11 @@ def format_compile_json(
         "command": "compile",
         "offline": True,
         "has_errors": any(diagnostic.is_error for diagnostic in diagnostics),
-        "summary": _summary(graph=graph, diagnostics=diagnostics),
+        "summary": _summary(
+            graph=graph,
+            diagnostics=diagnostics,
+            selected_keys=selected_keys,
+        ),
         "diagnostics": [_diagnostic_to_json(diagnostic) for diagnostic in diagnostics],
         "compile_timings": timings_ms,
         "lineage_mode": lineage_mode.value,
@@ -156,14 +176,29 @@ def format_compile_json(
     return json.dumps(result, indent=2)
 
 
-def _summary(*, graph: ProjectGraph, diagnostics: tuple[CompilerDiagnostic, ...]) -> dict[str, int]:
+def _summary(
+    *,
+    graph: ProjectGraph,
+    diagnostics: tuple[CompilerDiagnostic, ...],
+    selected_keys: frozenset[CompiledObjectKey] | None = None,
+) -> dict[str, int]:
     project: CompiledProject = graph.project
     return {
         "models": len(project.models),
-        "selected_models": len(project.models),
+        "selected_models": len(_selected_models(graph=graph, selected_keys=selected_keys)),
         "sources": len(project.sources),
         "seeds": len(project.seeds),
+        "selected_seeds": _selected_resource_count(
+            graph=graph,
+            selected_keys=selected_keys,
+            resource_types={CompiledResourceType.SEED},
+        ),
         "functions": len(project.functions),
+        "selected_functions": _selected_resource_count(
+            graph=graph,
+            selected_keys=selected_keys,
+            resource_types={CompiledResourceType.UDF, CompiledResourceType.TABLE_FN},
+        ),
         "audits": len(project.audits),
         "tests": len(project.sql_tests),
         "hooks": len(project.sql_hook_files) + len(project.hook_functions),
@@ -171,6 +206,31 @@ def _summary(*, graph: ProjectGraph, diagnostics: tuple[CompilerDiagnostic, ...]
         "errors": _diagnostic_count(diagnostics=diagnostics, severity=DiagnosticSeverity.ERROR),
         "warnings": _diagnostic_count(diagnostics=diagnostics, severity=DiagnosticSeverity.WARNING),
     }
+
+
+def _selected_models(
+    *,
+    graph: ProjectGraph,
+    selected_keys: frozenset[CompiledObjectKey] | None,
+) -> tuple[CompiledModel, ...]:
+    if selected_keys is None:
+        return graph.project.models
+    selected_names: frozenset[str] = frozenset(
+        key.name for key in selected_keys if key.resource_type == CompiledResourceType.MODEL
+    )
+    return tuple(model for model in graph.project.models if model.name in selected_names)
+
+
+def _selected_resource_count(
+    *,
+    graph: ProjectGraph,
+    selected_keys: frozenset[CompiledObjectKey] | None,
+    resource_types: set[CompiledResourceType],
+) -> int:
+    effective_keys: frozenset[CompiledObjectKey] = (
+        frozenset(graph.all_keys.values()) if selected_keys is None else selected_keys
+    )
+    return sum(key.resource_type in resource_types for key in effective_keys)
 
 
 def _resources(*, graph: ProjectGraph, lineage: ProjectColumnLineage | None) -> dict[str, object]:

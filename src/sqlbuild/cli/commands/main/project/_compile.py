@@ -75,6 +75,8 @@ def _run_compile_with_status(
         lineage_mode=lineage_mode,
         cli_vars=request.cli_vars,
         profile_flags=request.profile_flags,
+        select=request.select,
+        exclude=request.exclude,
         status=status,
     )
     manifest_payload: dict[str, object] | None = build_compile_manifest_payload(
@@ -119,6 +121,7 @@ def _run_compile_with_status(
                 lineage=analysis.lineage,
                 lineage_mode=lineage_mode,
                 diagnostics=analysis.diagnostics,
+                selected_keys=analysis.selected_keys,
             )
         )
         return exit_code
@@ -131,6 +134,7 @@ def _run_compile_with_status(
             lineage=analysis.lineage,
             lineage_mode=lineage_mode,
             diagnostics=analysis.diagnostics,
+            selected_keys=analysis.selected_keys,
             use_color=(not no_color) and supports_color(),
         )
     )

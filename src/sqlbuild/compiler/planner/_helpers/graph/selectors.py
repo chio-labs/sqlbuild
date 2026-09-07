@@ -114,10 +114,10 @@ def resolve_selectors(
     effective_tag_index: dict[str, frozenset[CompiledObjectKey]] = tag_index or {}
     effective_path_index: dict[CompiledObjectKey, str] = path_index or {}
 
-    if not select:
+    if not select and not exclude:
         return frozenset(all_keys.values())
 
-    selected: set[CompiledObjectKey] = set()
+    selected: set[CompiledObjectKey] = set(all_keys.values()) if not select else set()
     raw_select: str
     for raw_select in select:
         tokens: list[str] = raw_select.split()

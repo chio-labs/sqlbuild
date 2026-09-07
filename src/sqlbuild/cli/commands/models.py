@@ -519,6 +519,8 @@ class CompileCommandRequest:
     dag_path: str | None = None
     no_color: bool = False
     lineage_mode: CompileLineageMode = CompileLineageMode.FAST
+    select: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
     cli_vars: dict[str, object] | None = None
     profile_flags: CompileProfileFlags = CompileProfileFlags()
     no_cache: bool = False
@@ -531,6 +533,7 @@ class CompileAnalysis:
     discovered_inputs: DiscoveredProjectInputs
     adapter: BaseAdapter
     graph: ProjectGraph
+    selected_keys: frozenset[CompiledObjectKey]
     lineage: ProjectColumnLineage | None
     diagnostics: tuple[CompilerDiagnostic, ...]
     discover_ms: int
