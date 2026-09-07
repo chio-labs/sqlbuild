@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledSource
 from sqlbuild.compiler.contract_adoption.exceptions import ContractAdoptionError
@@ -18,9 +20,13 @@ _GENERATED_MARKER: str = "generated"
 _YAML_COLUMNS_KEY: str = "columns"
 _YAML_TYPE_KEY: str = "type"
 _YAML_KEY_SEPARATOR: str = ":"
+_MODEL_HEADER_ENTRY_SEPARATOR: str = ","
+_MODEL_HEADER_ESCAPE_CHARACTER: str = "\\"
+_MODEL_HEADER_WORD_EXTRA_CHARACTERS: frozenset[str] = frozenset({"_", "$"})
 _SINGLE_QUOTE: str = "'"
 _DOUBLE_QUOTE: str = '"'
 _MINIMUM_QUOTED_LENGTH: int = 2
+_BARE_MODEL_TYPE_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
 
 
 def edit_model(
@@ -69,7 +75,7 @@ def edit_model(
                 (
                     column_span.metadata_start,
                     column_span.metadata_start,
-                    f"type {physical.type}{separator}",
+                    f"type {_render_model_type(physical.type)}{separator}",
                 )
             )
         elif overwrite and declared.type.casefold() != physical.type.casefold():
@@ -80,22 +86,32 @@ def edit_model(
             )
             if replacement_span is None:
                 return None, f"column '{declared.name}' type span could not be edited safely"
-            edits.append((*replacement_span, physical.type))
+            edits.append((*replacement_span, _render_model_type(physical.type)))
     additions: tuple[ColumnInfo, ...] = tuple(
         column for column in physical_columns if column.name.casefold() not in declared_by_name
     )
     if additions:
         indentation: str = _column_indentation(contents=contents, body_start=body_start)
         rendered: str = "".join(
-            f"\n{indentation}{column.name} (type {column.type})" for column in additions
+            f"\n{indentation}{column.name} (type {_render_model_type(column.type)})"
+            for column in additions
         )
         edits.append((body_end, body_end, rendered + "\n  "))
     return _apply_text_edits(contents=contents, edits=edits), None
 
 
 def _render_model_columns(columns: tuple[ColumnInfo, ...]) -> str:
-    body: str = "".join(f"\n    {column.name} (type {column.type})" for column in columns)
+    body: str = "".join(
+        f"\n    {column.name} (type {_render_model_type(column.type)})" for column in columns
+    )
     return f"columns ({body}\n  )"
+
+
+def _render_model_type(value: str) -> str:
+    if _BARE_MODEL_TYPE_PATTERN.fullmatch(value):
+        return value
+    escaped: str = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
 
 
 def _column_indentation(*, contents: str, body_start: int) -> str:
@@ -111,16 +127,64 @@ def _column_indentation(*, contents: str, body_start: int) -> str:
 def _declared_type_span(
     *, contents: str, column_span: ModelHeaderColumnSpan, declared_type: str
 ) -> tuple[int, int] | None:
-    metadata: str = contents[column_span.metadata_start : column_span.metadata_end]
-    lowered: str = metadata.casefold()
-    type_key: int = lowered.find("type")
-    if type_key < 0:
-        return None
-    value_start: int = lowered.find(declared_type.casefold(), type_key + len("type"))
-    if value_start < 0:
-        return None
-    absolute_start: int = column_span.metadata_start + value_start
-    return absolute_start, absolute_start + len(declared_type)
+    index: int = column_span.metadata_start
+    while index < column_span.metadata_end:
+        character: str = contents[index]
+        if character in {_SINGLE_QUOTE, _DOUBLE_QUOTE}:
+            index = _quoted_value_end(contents=contents, start=index, end=column_span.metadata_end)
+            continue
+        if not contents[index : index + len(_YAML_TYPE_KEY)].casefold() == _YAML_TYPE_KEY:
+            index += 1
+            continue
+        key_end: int = index + len(_YAML_TYPE_KEY)
+        if (
+            index > column_span.metadata_start and _is_header_word_character(contents[index - 1])
+        ) or (key_end < column_span.metadata_end and _is_header_word_character(contents[key_end])):
+            index = key_end
+            continue
+        value_start: int = key_end
+        while value_start < column_span.metadata_end and contents[value_start].isspace():
+            value_start += 1
+        value_end: int
+        if contents[value_start : value_start + 1] in {_SINGLE_QUOTE, _DOUBLE_QUOTE}:
+            value_end = _quoted_value_end(
+                contents=contents,
+                start=value_start,
+                end=column_span.metadata_end,
+            )
+            authored_value: str = contents[value_start + 1 : value_end - 1]
+            authored_value = authored_value.replace(
+                f"\\{contents[value_start]}", contents[value_start]
+            ).replace("\\\\", "\\")
+        else:
+            value_end = value_start
+            while value_end < column_span.metadata_end and not (
+                contents[value_end].isspace()
+                or contents[value_end] == _MODEL_HEADER_ENTRY_SEPARATOR
+            ):
+                value_end += 1
+            authored_value = contents[value_start:value_end]
+        if authored_value.casefold() == declared_type.casefold():
+            return value_start, value_end
+        index = value_end
+    return None
+
+
+def _quoted_value_end(*, contents: str, start: int, end: int) -> int:
+    quote: str = contents[start]
+    index: int = start + 1
+    while index < end:
+        if contents[index] == _MODEL_HEADER_ESCAPE_CHARACTER:
+            index += 2
+            continue
+        if contents[index] == quote:
+            return index + 1
+        index += 1
+    return end
+
+
+def _is_header_word_character(character: str) -> bool:
+    return character.isalnum() or character in _MODEL_HEADER_WORD_EXTRA_CHARACTERS
 
 
 def edit_source(
