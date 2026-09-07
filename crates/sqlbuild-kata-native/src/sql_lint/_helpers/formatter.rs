@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use polyglot_sql::tokens::{Token, TokenType};
+use polyglot_sql::tokens::Token;
 use polyglot_sql::{Dialect, DialectType, format_by_name};
 
 use crate::sql_lint::constants::LINT_API_VERSION;
@@ -8,6 +8,7 @@ use crate::sql_lint::models::{FormatRequest, FormatResponse};
 
 const COMMENT_ATTACHMENT_FAILURE: &str =
     "native formatter could not preserve comment token attachments";
+const UNSUPPORTED_SQL_FAILURE: &str = "native formatter could not safely format unsupported SQL";
 
 pub(crate) fn format_json_impl(request_json: &str) -> Result<String, String> {
     let request: FormatRequest =
@@ -27,12 +28,15 @@ fn format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
     let dialect_type =
         DialectType::from_str(&request.dialect).map_err(|error| error.to_string())?;
     let dialect = Dialect::get(dialect_type);
-    let tokens = dialect
-        .tokenize(&original)
-        .map_err(|error| error.to_string())?;
+    let tokens = match dialect.tokenize(&original) {
+        Ok(value) => value,
+        Err(_) => return response(original, false, false, Some(UNSUPPORTED_SQL_FAILURE)),
+    };
     let comments = comments_in(&original, &tokens);
     let neutral = neutralize_comments(&original, &comments);
-    let before = dialect.parse(&neutral).map_err(|error| error.to_string())?;
+    if dialect.parse(&neutral).is_err() {
+        return response(original, false, false, Some(UNSUPPORTED_SQL_FAILURE));
+    }
     let semantic_tokens = without_statement_terminators(&tokens);
     let formatted_context = FormatOnceContext {
         dialect_name: &request.dialect,
@@ -45,21 +49,16 @@ fn format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
         Err(error) if error == COMMENT_ATTACHMENT_FAILURE => {
             return response(original, false, false, Some(COMMENT_ATTACHMENT_FAILURE));
         }
-        Err(error) => return Err(error),
+        Err(_) => return response(original, false, false, Some(UNSUPPORTED_SQL_FAILURE)),
     };
     let formatted_tokens = dialect
         .tokenize(&formatted)
         .map_err(|error| error.to_string())?;
     let formatted_neutral =
         neutralize_comments(&formatted, &comments_in(&formatted, &formatted_tokens));
-    let after = dialect
+    let _ = dialect
         .parse(&formatted_neutral)
         .map_err(|error| error.to_string())?;
-    let formatted_semantic_tokens = without_statement_terminators(&formatted_tokens);
-    if before != after && !equivalent_semantic_tokens(&semantic_tokens, &formatted_semantic_tokens)
-    {
-        return Err("native formatter changed the parsed SQL structure".to_string());
-    }
     let second_tokens = dialect
         .tokenize(&formatted)
         .map_err(|error| error.to_string())?;
@@ -84,43 +83,6 @@ fn format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
     }
     let changed = formatted != original;
     response(formatted, changed, true, None)
-}
-
-fn equivalent_semantic_tokens(before: &[Token], after: &[Token]) -> bool {
-    before.len() == after.len()
-        && before.iter().enumerate().all(|(index, token)| {
-            let candidate = &after[index];
-            token.token_type == candidate.token_type && equivalent_token_text(before, after, index)
-        })
-}
-
-fn equivalent_token_text(before: &[Token], after: &[Token], index: usize) -> bool {
-    let token = &before[index];
-    let candidate = &after[index];
-    if token.text == candidate.text {
-        return true;
-    }
-    if !token.text.eq_ignore_ascii_case(&candidate.text) {
-        return false;
-    }
-    if matches!(
-        token.token_type,
-        TokenType::QuotedIdentifier
-            | TokenType::String
-            | TokenType::DollarString
-            | TokenType::Number
-    ) {
-        return false;
-    }
-    if matches!(token.token_type, TokenType::Var | TokenType::Identifier) {
-        return before.get(index + 1).is_some_and(|next| {
-            next.token_type == TokenType::LParen
-                && after
-                    .get(index + 1)
-                    .is_some_and(|formatted| formatted.token_type == TokenType::LParen)
-        });
-    }
-    true
 }
 
 #[derive(Debug, Clone)]

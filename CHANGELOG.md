@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.89.1](https://github.com/chio-labs/sqlbuild/compare/v0.89.0...v0.89.1) (2026-09-07)
+
+
+### Bug Fixes
+
+* speed up selected lint and unblock formatting ([#565](https://github.com/chio-labs/sqlbuild/issues/565)) ([ab96142](https://github.com/chio-labs/sqlbuild/commit/ab96142e58373194ad43e2d5e44c468ead8d439b))
+
 ## [0.89.0](https://github.com/chio-labs/sqlbuild/compare/v0.88.0...v0.89.0) (2026-09-07)
 
 
