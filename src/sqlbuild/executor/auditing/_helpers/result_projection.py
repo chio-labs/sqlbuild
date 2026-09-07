@@ -20,6 +20,7 @@ from sqlbuild.executor.audit_results.constants import AUDIT_RESULT_SCHEMA_VERSIO
 from sqlbuild.executor.audit_results.exceptions import AuditResultStorageError
 from sqlbuild.executor.audit_results.main._write import write_audit_result_records
 from sqlbuild.executor.audit_results.models import AuditResultRecord, build_audit_result_id
+from sqlbuild.executor.auditing.exceptions import AuditResultProjectionError
 from sqlbuild.executor.auditing.models import AuditExecutionResult, AuditResultProjection
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.runtime.observability.main.current_execution_identity import (
@@ -145,10 +146,9 @@ def _build_records(
             None,
         )
         if entry is None:
-            _LOGGER.warning(
-                "Audit result projection skipped unknown audit result '%s'", result.audit_name
+            raise AuditResultProjectionError(
+                f"audit result '{result.audit_name}' does not match a planned audit entry"
             )
-            continue
         audit_id: AuditIdentity = build_audit_gate_identity(audits=(entry,)).audits[0]
         occurrence_key: tuple[str, str] = (audit_id.binding_key, result.run_scope_phase.value)
         ordinal: int = occurrence[occurrence_key]
