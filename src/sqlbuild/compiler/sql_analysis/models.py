@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 
@@ -22,3 +23,12 @@ class SqlBindingResult:
     """Stable result of schema-aware semantic SQL validation."""
 
     diagnostics: tuple[SqlBindingDiagnostic, ...] = ()
+
+
+@dataclass(frozen=True)
+class SqlSchemaValidationRequest:
+    """One expanded SQL query and its complete relation schemas."""
+
+    sql: str
+    dialect: str | None
+    schema: Mapping[str, Mapping[str, str]]

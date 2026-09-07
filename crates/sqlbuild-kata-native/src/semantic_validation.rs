@@ -2,10 +2,12 @@
 
 use polyglot_sql::{
     Dialect, DialectType, Expression, ExpressionWalk, Resolver, SchemaValidationOptions,
-    ValidationError, ValidationSchema, build_scope,
+    ValidationError, ValidationResult, ValidationSchema, build_scope,
     mapping_schema_from_validation_schema_with_dialect, validate_with_schema,
 };
 use serde::Deserialize;
+
+const MINIMUM_USING_SOURCE_COUNT: usize = 2;
 
 #[derive(Deserialize)]
 struct ValidationRequest {
@@ -17,13 +19,31 @@ struct ValidationRequest {
     options: SchemaValidationOptions,
 }
 
+struct ClauseResolver<'a, 'b> {
+    scope: &'a polyglot_sql::Scope,
+    resolver: Resolver<'b>,
+}
+
 fn default_dialect() -> String {
     "generic".to_string()
 }
 
-pub(crate) fn validate_json(request_json: &str) -> Result<String, String> {
+pub(crate) fn validation_json(request_json: &str) -> Result<String, String> {
     let request: ValidationRequest =
         serde_json::from_str(request_json).map_err(|error| error.to_string())?;
+    let result = validation_result(request)?;
+    serde_json::to_string(&result).map_err(|error| error.to_string())
+}
+
+pub(crate) fn validations_json(request_json: &str) -> Result<String, String> {
+    let requests: Vec<ValidationRequest> =
+        serde_json::from_str(request_json).map_err(|error| error.to_string())?;
+    let results: Result<Vec<ValidationResult>, String> =
+        requests.into_iter().map(validation_result).collect();
+    serde_json::to_string(&results?).map_err(|error| error.to_string())
+}
+
+fn validation_result(request: ValidationRequest) -> Result<ValidationResult, String> {
     let dialect: DialectType = request.dialect.parse().map_err(|error| {
         format!(
             "unsupported Polyglot dialect '{}': {error}",
@@ -43,22 +63,27 @@ pub(crate) fn validate_json(request_json: &str) -> Result<String, String> {
         let schema = mapping_schema_from_validation_schema_with_dialect(&request.schema, dialect);
         for statement in statements {
             let scope = build_scope(&statement);
-            collect_missing_clause_columns(&scope, &schema, &mut result.errors);
+            result
+                .errors
+                .extend(missing_clause_columns(&scope, &schema));
         }
         result.valid = !result
             .errors
             .iter()
             .any(|error| error.severity == polyglot_sql::ValidationSeverity::Error);
     }
-    serde_json::to_string(&result).map_err(|error| error.to_string())
+    Ok(result)
 }
 
-fn collect_missing_clause_columns(
+fn missing_clause_columns(
     scope: &polyglot_sql::Scope,
     schema: &polyglot_sql::MappingSchema,
-    errors: &mut Vec<ValidationError>,
-) {
-    let mut resolver = Resolver::new(scope, schema, false);
+) -> Vec<ValidationError> {
+    let mut errors: Vec<ValidationError> = Vec::new();
+    let mut clause_resolver = ClauseResolver {
+        scope,
+        resolver: Resolver::new(scope, schema, false),
+    };
     if let Expression::Select(select) = &scope.expression {
         let projection_aliases: std::collections::HashSet<String> = select
             .expressions
@@ -78,7 +103,7 @@ fn collect_missing_clause_columns(
                 {
                     continue;
                 }
-                if !column_exists(column, scope, &mut resolver) {
+                if !clause_resolver.column_exists(column) {
                     let mut error = ValidationError::error(
                         format!("Unknown column '{}' in QUALIFY", column.name),
                         "E201",
@@ -95,16 +120,13 @@ fn collect_missing_clause_columns(
         for join in &select.joins {
             for identifier in &join.using {
                 let column_name = identifier.to_string();
-                let matching_sources = scope
-                    .sources
-                    .keys()
-                    .filter(|source_name| {
-                        resolver
-                            .get_source_columns(source_name)
-                            .is_ok_and(|columns| columns.iter().any(|name| name == &column_name))
-                    })
-                    .count();
-                if matching_sources < 2 {
+                let mut matching_sources: usize = 0;
+                for source_name in scope.sources.keys() {
+                    if clause_resolver.source_has_column(source_name, &column_name) {
+                        matching_sources += 1;
+                    }
+                }
+                if matching_sources < MINIMUM_USING_SOURCE_COUNT {
                     errors.push(ValidationError::error(
                         format!("Unknown column '{column_name}' in JOIN USING"),
                         "E201",
@@ -121,46 +143,33 @@ fn collect_missing_clause_columns(
         .chain(scope.udtf_scopes.iter())
         .chain(scope.union_scopes.iter())
     {
-        collect_missing_clause_columns(child, schema, errors);
+        errors.extend(missing_clause_columns(child, schema));
     }
+    errors
 }
 
-fn column_exists(
-    column: &polyglot_sql::expressions::Column,
-    scope: &polyglot_sql::Scope,
-    resolver: &mut Resolver<'_>,
-) -> bool {
-    let column_name = column.name.to_string();
-    if let Some(table) = &column.table {
-        return resolver
-            .get_source_columns(&table.to_string())
-            .is_ok_and(|columns| columns.iter().any(|name| name == &column_name));
+impl ClauseResolver<'_, '_> {
+    fn column_exists(&mut self, column: &polyglot_sql::expressions::Column) -> bool {
+        let column_name = column.name.to_string();
+        if let Some(table) = &column.table {
+            return self.source_has_column(&table.to_string(), &column_name);
+        }
+        let source_names: Vec<String> = self.scope.sources.keys().cloned().collect();
+        for source_name in source_names {
+            if self.source_has_column(&source_name, &column_name) {
+                return true;
+            }
+        }
+        false
     }
-    scope.sources.keys().any(|source_name| {
-        resolver
-            .get_source_columns(source_name)
-            .is_ok_and(|columns| columns.iter().any(|name| name == &column_name))
-    })
+
+    fn source_has_column(&mut self, source_name: &str, column_name: &str) -> bool {
+        let Ok(columns) = self.resolver.get_source_columns(source_name) else {
+            return false;
+        };
+        columns.iter().any(|name| name == column_name)
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::validate_json;
-
-    #[test]
-    fn given_unknown_column_when_validating_then_returns_structured_error() {
-        let response = validate_json(
-            r#"{
-                "sql":"SELECT missing FROM upstream",
-                "dialect":"generic",
-                "schema":{"strict":true,"tables":[{"name":"upstream","columns":[{"name":"id","type":"INTEGER"}]}]},
-                "options":{}
-            }"#,
-        )
-        .expect("request should be valid");
-
-        assert!(response.contains("\"valid\":false"));
-        assert!(response.contains("\"code\":\"E201\""));
-        assert!(response.contains("missing"));
-    }
-}
+mod tests;

@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping
 from typing import Any, cast
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.sql_analysis.exceptions import SqlAnalysisBoundaryError
-from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic, SqlBindingResult
+from sqlbuild.compiler.sql_analysis.models import (
+    SqlBindingDiagnostic,
+    SqlBindingResult,
+    SqlSchemaValidationRequest,
+)
 from sqlbuild.compiler.sql_analysis.types import NativeValidationModule
 
 _SQLBUILD_CODE_BY_NATIVE_CODE: dict[str, str] = {
@@ -24,23 +27,38 @@ _ORDER_BY_CONTEXT: str = "ORDER BY"
 _WINDOW_ORDER_BY_CONTEXT: str = "WINDOW ORDER BY"
 
 
-def get_schema_validation(
-    *,
-    sql: str,
-    dialect: str | None,
-    schema: Mapping[str, Mapping[str, str]],
-) -> SqlBindingResult:
-    """Validate SQL against complete relation schemas without exposing Polyglot payloads."""
+def get_schema_validations(
+    *, requests: tuple[SqlSchemaValidationRequest, ...]
+) -> tuple[SqlBindingResult, ...]:
+    """Validate a SQL batch without exposing Polyglot payloads."""
+
+    payloads: list[dict[str, object]] = [_request_payload(request=request) for request in requests]
+    responses: Any = json.loads(
+        cast(NativeValidationModule, _native).validate_sql_with_schemas_json(
+            json.dumps(payloads, separators=(",", ":"), sort_keys=True)
+        )
+    )
+    if not isinstance(responses, list) or len(responses) != len(requests):
+        raise SqlAnalysisBoundaryError(
+            "native SQL schema validation returned an invalid batch response"
+        )
+    return tuple(
+        _binding_result(sql=request.sql, response=response)
+        for request, response in zip(requests, responses, strict=True)
+    )
+
+
+def _request_payload(*, request: SqlSchemaValidationRequest) -> dict[str, object]:
 
     tables: list[dict[str, object]] = []
-    for table_name, columns in sorted(schema.items()):
+    for table_name, columns in sorted(request.schema.items()):
         table_columns: list[dict[str, str]] = []
         for column_name, column_type in columns.items():
             table_columns.append({"name": column_name, "type": column_type or "UNKNOWN"})
         tables.append({"name": table_name, "columns": table_columns})
-    request: dict[str, object] = {
-        "sql": sql,
-        "dialect": dialect or "generic",
+    return {
+        "sql": request.sql,
+        "dialect": request.dialect or "generic",
         "schema": {
             "strict": True,
             "tables": tables,
@@ -53,29 +71,33 @@ def get_schema_validation(
             "strict_syntax": False,
         },
     }
-    response: Any = json.loads(
-        cast(NativeValidationModule, _native).validate_sql_with_schema_json(
-            json.dumps(request, separators=(",", ":"), sort_keys=True)
-        )
+
+
+def _binding_result(*, sql: str, response: object) -> SqlBindingResult:
+    response_dict: dict[str, object] | None = (
+        cast(dict[str, object], response) if isinstance(response, dict) else None
     )
-    errors: object = response.get("errors") if isinstance(response, dict) else None
+    errors: object = response_dict.get("errors") if response_dict is not None else None
     if not isinstance(errors, list):
         raise SqlAnalysisBoundaryError("native SQL schema validation returned an invalid response")
     diagnostics: list[SqlBindingDiagnostic] = []
     for value in errors:
-        if not isinstance(value, dict) or value.get("severity") != _ERROR_SEVERITY:
+        if not isinstance(value, dict):
             continue
-        native_code: object = value.get("code")
+        value_dict: dict[str, object] = cast(dict[str, object], value)
+        if value_dict.get("severity") != _ERROR_SEVERITY:
+            continue
+        native_code: object = value_dict.get("code")
         if not isinstance(native_code, str) or native_code not in _SQLBUILD_CODE_BY_NATIVE_CODE:
             continue
-        raw_message: str = str(value.get("message") or "SQL binding failed")
+        raw_message: str = str(value_dict.get("message") or "SQL binding failed")
         context: str | None = _diagnostic_context(sql=sql, message=raw_message)
         message: str = f"{raw_message} (context: {context})" if context is not None else raw_message
         line, column = _diagnostic_position(
             sql=sql,
             message=message,
-            line=_optional_int(value.get("line")),
-            column=_optional_int(value.get("column")),
+            line=_optional_int(value_dict.get("line")),
+            column=_optional_int(value_dict.get("column")),
         )
         diagnostics.append(
             SqlBindingDiagnostic(
@@ -83,8 +105,8 @@ def get_schema_validation(
                 message=message,
                 line=line,
                 column=column,
-                start=_optional_int(value.get("start")),
-                end=_optional_int(value.get("end")),
+                start=_optional_int(value_dict.get("start")),
+                end=_optional_int(value_dict.get("end")),
             )
         )
     return SqlBindingResult(diagnostics=tuple(diagnostics))

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -18,7 +19,7 @@ from sqlbuild.compiler.compile._helpers.analysis.cache import (
 )
 from sqlbuild.compiler.compile._helpers.analysis.columns import (
     analyze_columns_and_lineage_with_polyglot,
-    get_complete_schema_binding_diagnostics,
+    get_complete_schema_binding_request,
     infer_columns_with_sql_analysis,
     table_function_analysis_name,
 )
@@ -106,7 +107,12 @@ from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
 from sqlbuild.compiler.scopes.main._validate_scope_index import validate_scope_index
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.compiler.sql_analysis.constants import BINDING_UNKNOWN_TABLE_INTERNAL_CODE
-from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
+from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
+from sqlbuild.compiler.sql_analysis.models import (
+    SqlBindingDiagnostic,
+    SqlBindingResult,
+    SqlSchemaValidationRequest,
+)
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
@@ -641,45 +647,99 @@ def _complete_inferred_bindings(
 
     complete_schemas: dict[str, dict[str, str]] = dict(complete_binding_schemas)
     results: list[_ModelSqlAnalysis] = list(analyses)
-    pending: set[int] = set(range(len(requests)))
-    progressed: bool = True
-    while pending and progressed:
-        progressed = False
-        for index in tuple(pending):
-            request: _ModelSqlAnalysisRequest = requests[index]
-            current: _ModelSqlAnalysis = results[index]
-            analysis: PolyglotAnalysisResult = current.polyglot_analysis
-            if not analysis.binding_validated:
-                binding_schema: dict[str, dict[str, str]] | None = _binding_schema_for_model(
-                    model_input=request.model_input,
-                    complete_binding_schemas=complete_schemas,
-                )
-                if binding_schema is None:
-                    continue
-                analysis = replace(
-                    analysis,
-                    binding_diagnostics=get_complete_schema_binding_diagnostics(
+    required_names_by_index: dict[int, frozenset[str]] = {}
+    dependents_by_name: dict[str, list[int]] = defaultdict(list)
+    for index, request in enumerate(requests):
+        required_names: frozenset[str] | None = _binding_required_names(
+            model_input=request.model_input
+        )
+        if required_names is None:
+            continue
+        required_names_by_index[index] = required_names
+        for required_name in required_names:
+            dependents_by_name[required_name].append(index)
+    ready: deque[int] = deque(
+        index
+        for index, required_names in required_names_by_index.items()
+        if required_names <= complete_schemas.keys()
+    )
+    processed: set[int] = set()
+    deferred_validation_indices: list[int] = []
+    deferred_validation_requests: list[SqlSchemaValidationRequest] = []
+    while ready:
+        index: int = ready.popleft()
+        if index in processed:
+            continue
+        processed.add(index)
+        request: _ModelSqlAnalysisRequest = requests[index]
+        current: _ModelSqlAnalysis = results[index]
+        analysis: PolyglotAnalysisResult = current.polyglot_analysis
+        if not analysis.binding_validated:
+            binding_schema: dict[str, dict[str, str]] = {
+                name: complete_schemas[name] for name in required_names_by_index[index]
+            }
+            if binding_schema:
+                deferred_validation_indices.append(index)
+                deferred_validation_requests.append(
+                    get_complete_schema_binding_request(
                         query_sql=request.query_sql,
                         placeholders=request.placeholders,
                         dialect=inference_profile.sql_analysis_dialect,
                         binding_schema=binding_schema,
-                    ),
-                    binding_validated=True,
+                    )
                 )
-                current = replace(current, polyglot_analysis=analysis)
-                results[index] = current
-            pending.remove(index)
-            progressed = True
-            if (
-                analysis.analysis_succeeded
-                and analysis.columns is not None
-                and not analysis.has_star
-                and not analysis.binding_diagnostics
-            ):
-                complete_schemas[_model_name(request.model_input)] = {
-                    column.name: column.type or "UNKNOWN" for column in analysis.columns
-                }
+            else:
+                analysis = replace(analysis, binding_validated=True)
+                results[index] = replace(current, polyglot_analysis=analysis)
+        if not (
+            required_names_by_index[index]
+            and analysis.analysis_succeeded
+            and analysis.columns is not None
+            and not analysis.has_star
+        ):
+            continue
+        model_name: str = _model_name(request.model_input)
+        complete_schemas[model_name] = {
+            column.name: column.type or "UNKNOWN" for column in analysis.columns
+        }
+        for dependent_index in dependents_by_name.get(model_name, ()):
+            if required_names_by_index[dependent_index] <= complete_schemas.keys():
+                ready.append(dependent_index)
+    validation_results: tuple[SqlBindingResult, ...] = get_schema_validations(
+        requests=tuple(deferred_validation_requests)
+    )
+    for index, validation_result in zip(
+        deferred_validation_indices, validation_results, strict=True
+    ):
+        current = results[index]
+        results[index] = replace(
+            current,
+            polyglot_analysis=replace(
+                current.polyglot_analysis,
+                binding_diagnostics=validation_result.diagnostics,
+                binding_validated=True,
+            ),
+        )
     return tuple(results)
+
+
+def _binding_required_names(model_input: CompileModelInput) -> frozenset[str] | None:
+    if not model_input.sql_validation_enabled:
+        return None
+    names: set[str] = set()
+    for reference in model_input.references:
+        if reference.ref_kind == SqlReferenceKind.UDF:
+            continue
+        if reference.ref_kind == SqlReferenceKind.DBT_REF:
+            return None
+        names.add(
+            table_function_analysis_name(reference.ref_name)
+            if reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION
+            else reference.ref_name
+        )
+    if not names and re.search(r"\b(?:FROM|JOIN)\b", model_input.query_sql, re.IGNORECASE):
+        return None
+    return frozenset(names)
 
 
 def _downstream_model_names(
@@ -916,19 +976,11 @@ def _binding_schema_for_model(
     model_input: CompileModelInput,
     complete_binding_schemas: dict[str, dict[str, str]],
 ) -> dict[str, dict[str, str]] | None:
-    if not model_input.sql_validation_enabled:
+    required_names: frozenset[str] | None = _binding_required_names(model_input)
+    if not required_names:
         return None
     schema: dict[str, dict[str, str]] = {}
-    for reference in model_input.references:
-        if reference.ref_kind == SqlReferenceKind.UDF:
-            continue
-        if reference.ref_kind == SqlReferenceKind.DBT_REF:
-            return None
-        table_name: str = (
-            table_function_analysis_name(reference.ref_name)
-            if reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION
-            else reference.ref_name
-        )
+    for table_name in required_names:
         columns: dict[str, str] | None = complete_binding_schemas.get(table_name)
         if columns is None:
             return None

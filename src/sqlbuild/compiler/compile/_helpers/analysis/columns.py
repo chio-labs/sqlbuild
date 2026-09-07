@@ -213,9 +213,12 @@ from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_SET_OPERATION_KINDS as _POLYGLOT_SET_OPERATION_KINDS,
 )
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
-from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validation
+from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
-from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
+from sqlbuild.compiler.sql_analysis.models import (
+    SqlBindingDiagnostic,
+    SqlSchemaValidationRequest,
+)
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
@@ -362,14 +365,14 @@ def analyze_columns_and_lineage_with_polyglot(
     )
 
 
-def get_complete_schema_binding_diagnostics(
+def get_complete_schema_binding_request(
     *,
     query_sql: str,
     placeholders: dict[str, str] | None,
     dialect: str | None,
     binding_schema: dict[str, dict[str, str]],
-) -> tuple[SqlBindingDiagnostic, ...]:
-    """Validate one expanded query after all referenced schemas become complete."""
+) -> SqlSchemaValidationRequest:
+    """Build one stable native schema-validation request."""
 
     cleaned_sql: str = _replace_refs_with_stubs(query_sql)
     if placeholders:
@@ -377,10 +380,10 @@ def get_complete_schema_binding_diagnostics(
             query_sql=cleaned_sql,
             placeholders=placeholders,
         )
-    return _validate_complete_binding_schema(
-        cleaned_sql=cleaned_sql,
+    return SqlSchemaValidationRequest(
+        sql=cleaned_sql,
         dialect=dialect,
-        binding_schema=binding_schema,
+        schema=binding_schema,
     )
 
 
@@ -392,11 +395,15 @@ def _validate_complete_binding_schema(
 ) -> tuple[SqlBindingDiagnostic, ...]:
     if binding_schema is None:
         return ()
-    return get_schema_validation(
-        sql=cleaned_sql,
-        dialect=dialect,
-        schema=binding_schema,
-    ).diagnostics
+    return get_schema_validations(
+        requests=(
+            SqlSchemaValidationRequest(
+                sql=cleaned_sql,
+                dialect=dialect,
+                schema=binding_schema,
+            ),
+        )
+    )[0].diagnostics
 
 
 def _analyze_columns_and_lineage_with_compact_polyglot(

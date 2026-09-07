@@ -51,7 +51,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_stderr_fragments=(
                 "Polyglot could not parse model 'orders' pre_hooks[0] inline_sql(\"...\")",
                 "Invalid expression / Unexpected token",
-                "settings.sql_validation: false",
+                "settings.sql_analysis: false",
             ),
         ),
         CliFailureBuildE2ETestCase(
@@ -171,8 +171,8 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_exit_code=1,
             expected_stderr_fragments=(
                 "SQL syntax error in source expression 'raw_orders'",
-                "To disable project-wide, set `settings.sql_validation: false`",
-                "To skip for this run, use `--no-sql-validation`.",
+                "To disable project-wide, set `settings.sql_analysis: false`",
+                "To skip for this run, use `--no-sql-analysis`.",
             ),
         ),
     ],

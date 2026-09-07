@@ -26,7 +26,7 @@ def transpile_sql_for_local_duckdb(
             read=source_dialect,
             write="duckdb",
         )
-    except polyglot_module.PolyglotError as exc:
+    except (polyglot_module.PolyglotError, ValueError) as exc:
         _raise_transpile_error(
             scenario_name=scenario_name,
             resource_kind=resource_kind,

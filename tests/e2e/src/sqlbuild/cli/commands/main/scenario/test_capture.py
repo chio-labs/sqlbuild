@@ -32,9 +32,9 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
             ),
             expected_exit_code=1,
             expected_stderr_fragments=(
-                "error[C455]: scenario capture requires SQL analysis and SQL validation",
-                "= help: Enable settings.sql_analysis and settings.sql_validation when capturing "
-                "snapshots for local scenario replay.",
+                "error[C455]: scenario capture requires SQL analysis",
+                "= help: Enable settings.sql_analysis when capturing snapshots for local "
+                "scenario replay.",
             ),
         ),
     ],

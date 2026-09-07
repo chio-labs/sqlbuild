@@ -1648,14 +1648,14 @@ def test_given_unknown_scenario_selector_when_running_scenario_test_then_fails_c
             ),
             expected_exit_code=1,
             expected_stderr_fragments=(
-                "error[C455]: scenario test --local requires SQL analysis and SQL validation",
-                "= help: Enable settings.sql_analysis and settings.sql_validation when running local "
-                "scenario replay, snapshot sync, or snapshot refresh.",
+                "error[C455]: scenario test --local requires SQL analysis",
+                "= help: Enable settings.sql_analysis when running local scenario replay, "
+                "snapshot sync, or snapshot refresh.",
             ),
             disabled_setting="sql_analysis",
         ),
         ScenarioCliE2ETestCase(
-            description="local snapshot sync rejects disabled SQL validation",
+            description="local snapshot sync rejects disabled SQL analysis",
             command=(
                 "--no-color",
                 "scenario",
@@ -1666,9 +1666,9 @@ def test_given_unknown_scenario_selector_when_running_scenario_test_then_fails_c
             ),
             expected_exit_code=1,
             expected_stderr_fragments=(
-                "error[C455]: scenario test --local requires SQL analysis and SQL validation",
-                "= help: Enable settings.sql_analysis and settings.sql_validation when running local "
-                "scenario replay, snapshot sync, or snapshot refresh.",
+                "error[C455]: scenario test --local requires SQL analysis",
+                "= help: Enable settings.sql_analysis when running local scenario replay, "
+                "snapshot sync, or snapshot refresh.",
             ),
             disabled_setting="sql_validation",
         ),

@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-
 from sqlbuild.compiler.sql_analysis._helpers.schema_validation import (
-    get_schema_validation as _get_schema_validation,
+    get_schema_validations as _get_schema_validations,
 )
-from sqlbuild.compiler.sql_analysis.models import SqlBindingResult
+from sqlbuild.compiler.sql_analysis.models import (
+    SqlBindingResult,
+    SqlSchemaValidationRequest,
+)
 
 
-def get_schema_validation(
-    *, sql: str, dialect: str | None, schema: Mapping[str, Mapping[str, str]]
-) -> SqlBindingResult:
-    """Return stable SQLBuild binding diagnostics for one complete schema."""
+def get_schema_validations(
+    *, requests: tuple[SqlSchemaValidationRequest, ...]
+) -> tuple[SqlBindingResult, ...]:
+    """Return stable binding diagnostics for a batch of complete schemas."""
 
-    return _get_schema_validation(sql=sql, dialect=dialect, schema=schema)
+    return _get_schema_validations(requests=requests)
