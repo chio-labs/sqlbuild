@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import cast
 
 import pytest
 
@@ -10,11 +11,15 @@ from sqlbuild.cli.commands._helpers.compile.output import (
 )
 from sqlbuild.cli.commands.models import WrittenTarget
 from sqlbuild.cli.commands.types import CompileLineageMode
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileJsonExecutionLayersTestCase,
     CompileRichLineageOutputTestCase,
+    CompileSelectedJsonOutputTestCase,
+    CompileSelectedOutputTestCase,
     CompileTextColorTestCase,
     CompileTextOutputTestCase,
 )
@@ -80,6 +85,101 @@ def test_given_compiled_project_when_formatting_compile_text_then_matches_expect
     for fragment in test_case.unexpected_fragments:
         assert fragment not in output
     assert "\033[" not in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompileSelectedOutputTestCase(
+            description="shows only explicitly selected models",
+            selected_model_names=frozenset({"customers"}),
+            expected_fragments=(
+                "Compile ready  1 model",
+                "customers",
+                "Project compiled  1 model",
+            ),
+            unexpected_fragments=("orders", "joined"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_compile_selection_when_formatting_text_then_reports_only_selected_models(
+    test_case: CompileSelectedOutputTestCase,
+) -> None:
+    graph: ProjectGraph = build_compile_output_graph(model_names=("orders", "customers", "joined"))
+    selected_keys: frozenset[CompiledObjectKey] = frozenset(
+        CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name)
+        for name in test_case.selected_model_names
+    )
+
+    output: str = format_compile_text(
+        graph=graph,
+        written=WrittenTarget(
+            model_count=3,
+            seed_count=0,
+            function_count=0,
+            audit_count=0,
+            test_count=0,
+            target_dir=graph.project.models[0].relative_path.parent.parent / "target",
+        ),
+        manifest=False,
+        lineage=None,
+        diagnostics=(),
+        use_color=False,
+        selected_keys=selected_keys,
+    )
+
+    for fragment in test_case.expected_fragments:
+        assert fragment in output
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompileSelectedJsonOutputTestCase(
+            description="reports selected resource counts separately from project counts",
+            selected_model_names=frozenset({"customers"}),
+            expected_selected_models=1,
+            expected_selected_seeds=0,
+            expected_selected_functions=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_compile_selection_when_formatting_json_then_reports_selected_counts(
+    test_case: CompileSelectedJsonOutputTestCase,
+) -> None:
+    graph: ProjectGraph = build_compile_output_graph(model_names=("orders", "customers", "joined"))
+    selected_keys: frozenset[CompiledObjectKey] = frozenset(
+        CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name)
+        for name in test_case.selected_model_names
+    )
+
+    payload: dict[str, object] = json.loads(
+        format_compile_json(
+            graph=graph,
+            written=WrittenTarget(
+                model_count=3,
+                seed_count=0,
+                function_count=0,
+                audit_count=0,
+                test_count=0,
+                target_dir=graph.project.models[0].relative_path.parent.parent / "target",
+            ),
+            manifest=False,
+            timings_ms={},
+            lineage=None,
+            diagnostics=(),
+            selected_keys=selected_keys,
+        )
+    )
+    summary: dict[str, int] = cast(dict[str, int], payload["summary"])
+
+    assert summary["selected_models"] == test_case.expected_selected_models
+    assert summary["selected_seeds"] == test_case.expected_selected_seeds
+    assert summary["selected_functions"] == test_case.expected_selected_functions
 
 
 @pytest.mark.parametrize(

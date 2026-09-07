@@ -25,6 +25,7 @@ from sqlbuild.cli.commands.models import (
     WrittenTarget,
 )
 from sqlbuild.cli.commands.types import CompileLineageMode
+from sqlbuild.compiler.compile.models import CompileAnalysisSelection
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.dag.main.build import build_dag_json
@@ -32,8 +33,11 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.manifest.main.build import build_manifest
-from sqlbuild.compiler.pipeline.main.graph import build_project_graph
+from sqlbuild.compiler.pipeline.main.selected_graph import (
+    build_project_graph_with_analysis_selection,
+)
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
@@ -52,6 +56,8 @@ def analyze_compile_project(
     lineage_mode: CompileLineageMode,
     cli_vars: dict[str, object] | None,
     profile_flags: CompileProfileFlags,
+    select: tuple[str, ...],
+    exclude: tuple[str, ...],
     status: TransientStatusReporter | None,
 ) -> CompileAnalysis:
     """Discover, compile, and validate the project into one analysis result."""
@@ -79,7 +85,7 @@ def analyze_compile_project(
     graph_start: float = time.monotonic()
     _ = start_compile_phase(status=status, message="Compiling project graph...")
     with OperationLifecycle(operation_kind="project", operation_name="project_compile"):
-        graph: ProjectGraph = build_project_graph(
+        graph: ProjectGraph = build_project_graph_with_analysis_selection(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
             selected_target=selected_target,
@@ -87,7 +93,11 @@ def analyze_compile_project(
             skip_column_inference=profile_flags.skip_column_inference,
             column_lineage_mode=compile_analysis_lineage_mode(lineage_mode),
             cli_vars=cli_vars,
-            no_cache=no_cache,
+            analysis_selection=CompileAnalysisSelection(
+                select=select,
+                exclude=exclude,
+                no_cache=no_cache,
+            ),
         )
     graph_ms: int = elapsed_ms(graph_start)
     _ = complete_compile_phase(
@@ -123,6 +133,15 @@ def analyze_compile_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         graph=graph,
+        selected_keys=resolve_project_selectors(
+            select=select,
+            exclude=exclude,
+            all_keys=graph.all_keys,
+            upstream_deps=graph.upstream_deps,
+            downstream_deps=graph.downstream_deps,
+            tag_index=graph.tag_index,
+            path_index=graph.path_index,
+        ),
         lineage=lineage,
         diagnostics=(*graph.project.diagnostics, *contract_result.diagnostics),
         discover_ms=discover_ms,

@@ -233,6 +233,12 @@ def test_given_invalid_selector_when_parsing_then_raises(
             ),
         ),
         ResolveSelectorTestCase(
+            description="subtracts exclusions from all keys when select is empty",
+            select=(),
+            exclude=("customers",),
+            expected_names=frozenset({"orders", "joined", "raw_orders", "raw_customers", "codes"}),
+        ),
+        ResolveSelectorTestCase(
             description="selects seed by typed selector",
             select=("seed:codes",),
             exclude=(),
