@@ -20,6 +20,7 @@ class ContractValidationTestCase:
     declared_not_null_columns: tuple[str, ...] = ()
     declared_nullable_by_column: dict[str, bool | None] | None = None
     inferred_nullability_by_column: dict[str, InferredNullability] | None = None
+    fast_lineage_has_star: bool = False
 
 
 @dataclass(frozen=True)
