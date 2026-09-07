@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.90.4](https://github.com/chio-labs/sqlbuild/compare/v0.90.3...v0.90.4) (2026-09-07)
+
+
+### Bug Fixes
+
+* honor model SQL analysis opt-outs ([#574](https://github.com/chio-labs/sqlbuild/issues/574)) ([0dbbbda](https://github.com/chio-labs/sqlbuild/commit/0dbbbdaaaddd18243a3902d279e91aa1cdce928b))
+
 ## [0.90.3](https://github.com/chio-labs/sqlbuild/compare/v0.90.2...v0.90.3) (2026-09-07)
 
 
