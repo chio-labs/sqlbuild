@@ -58,9 +58,7 @@ def test_given_local_project_when_running_compile_then_it_does_not_connect(
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
 
-    exit_code: int = run_compile(
-        CompileCommandRequest(project_dir=project_dir, no_sql_validation=True)
-    )
+    exit_code: int = run_compile(CompileCommandRequest(project_dir=project_dir))
     rendered_stdout: str = capsys.readouterr().out
 
     assert exit_code == test_case.expected_exit_code
@@ -353,9 +351,7 @@ def test_given_contract_errors_when_running_compile_then_reports_diagnostics(
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
 
-    exit_code: int = run_compile(
-        CompileCommandRequest(project_dir=project_dir, no_sql_validation=True)
-    )
+    exit_code: int = run_compile(CompileCommandRequest(project_dir=project_dir))
     rendered_stdout: str = capsys.readouterr().out
 
     assert exit_code == test_case.expected_exit_code
@@ -413,7 +409,6 @@ def test_given_contract_errors_when_running_compile_json_then_serializes_diagnos
     exit_code: int = run_compile(
         CompileCommandRequest(
             project_dir=project_dir,
-            no_sql_validation=True,
             json_output=True,
         )
     )
