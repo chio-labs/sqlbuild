@@ -13,13 +13,13 @@ def dagster_invocation_context(context: Any) -> dict[str, object]:
     """Return bounded, non-sensitive identifiers for subprocess correlation."""
 
     integration: dict[str, object] = {"name": "dagster"}
-    run_id: str | None = _string_attribute(source=context, name="run_id")
+    run_id: str | None = _run_id(context=context)
     if run_id is not None:
         integration["run_id"] = run_id
     job_name: str | None = _string_attribute(source=context, name="job_name")
     if job_name is not None:
         integration["job_name"] = job_name
-    retry_number: int | None = _integer_attribute(source=context, name="retry_number")
+    retry_number: int | None = _retry_number(context=context)
     if retry_number is not None:
         integration["retry_number"] = retry_number
     step_key: str | None = _step_key(context=context)
@@ -37,12 +37,27 @@ def _step_key(*, context: Any) -> str | None:
     bounded_direct: str | None = _bounded_identifier(direct)
     if bounded_direct is not None:
         return bounded_direct
-    handle: object | None = _attribute(source=context, name="op_handle")
+    operation_context: object | None = _attribute(source=context, name="op_execution_context")
+    handle: object | None = _attribute(source=operation_context, name="op_handle")
+    if handle is None:
+        handle = _attribute(source=context, name="op_handle")
     formatter: object | None = _attribute(source=handle, name="to_string")
     if callable(formatter):
         value: object = cast(Callable[[], object], formatter)()
         return _bounded_identifier(value)
     return None
+
+
+def _run_id(*, context: Any) -> str | None:
+    run: object | None = _attribute(source=context, name="run")
+    nested: str | None = _string_attribute(source=run, name="run_id")
+    return nested if nested is not None else _string_attribute(source=context, name="run_id")
+
+
+def _retry_number(*, context: Any) -> int | None:
+    operation_context: object | None = _attribute(source=context, name="op_execution_context")
+    nested: int | None = _integer_attribute(source=operation_context, name="retry_number")
+    return nested if nested is not None else _integer_attribute(source=context, name="retry_number")
 
 
 def _string_attribute(*, source: Any, name: str) -> str | None:

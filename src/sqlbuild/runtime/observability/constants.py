@@ -5,7 +5,8 @@ from types import MappingProxyType
 
 from sqlbuild.runtime.observability.models import LifecycleEventDefinition
 
-CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION: int = 1
+CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION: int = 2
+LIFECYCLE_INVOCATION_METADATA_SCHEMA_VERSION: int = 2
 CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION: int = 1
 DURATION_MS_FIELD: str = "duration_ms"
 EXIT_CODE_FIELD: str = "exit_code"
@@ -296,7 +297,7 @@ FORBIDDEN_STATEMENT_PAYLOAD_FIELDS: frozenset[str] = frozenset(
         "statement_sql",
     }
 )
-LIFECYCLE_ENVELOPE_FIELDS: frozenset[str] = frozenset(
+LIFECYCLE_ENVELOPE_FIELDS_V1: frozenset[str] = frozenset(
     {
         "event_id",
         "event_type",
@@ -312,6 +313,12 @@ LIFECYCLE_ENVELOPE_FIELDS: frozenset[str] = frozenset(
         "statement_id",
         "payload",
     }
+)
+LIFECYCLE_ENVELOPE_FIELDS_V2: frozenset[str] = LIFECYCLE_ENVELOPE_FIELDS_V1 | frozenset(
+    {"invocation_sequence", "external_context"}
+)
+LIFECYCLE_ENVELOPE_FIELDS_BY_VERSION: Mapping[int, frozenset[str]] = MappingProxyType(
+    {1: LIFECYCLE_ENVELOPE_FIELDS_V1, 2: LIFECYCLE_ENVELOPE_FIELDS_V2}
 )
 DIAGNOSTIC_ENVELOPE_FIELDS: frozenset[str] = frozenset(
     {
@@ -517,6 +524,6 @@ LIFECYCLE_EVENT_CATALOG_V1: Mapping[str, LifecycleEventDefinition] = MappingProx
     }
 )
 LIFECYCLE_EVENT_CATALOGS: Mapping[int, Mapping[str, LifecycleEventDefinition]] = MappingProxyType(
-    {CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION: LIFECYCLE_EVENT_CATALOG_V1}
+    {1: LIFECYCLE_EVENT_CATALOG_V1, 2: LIFECYCLE_EVENT_CATALOG_V1}
 )
 LIFECYCLE_EVENT_CATALOG: Mapping[str, LifecycleEventDefinition] = LIFECYCLE_EVENT_CATALOG_V1

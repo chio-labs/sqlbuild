@@ -86,11 +86,13 @@ class LifecycleEvent:
     producer_version: str
     occurred_at: datetime
     invocation_id: str
+    invocation_sequence: int | None = None
     run_id: str | None = None
     resource_id: str | None = None
     resource_attempt_id: str | None = None
     operation_id: str | None = None
     statement_id: str | None = None
+    external_context: Mapping[str, JSONValue] = field(default_factory=dict)
     payload: Mapping[str, JSONValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -102,7 +104,10 @@ class LifecycleEvent:
             validate_schema_version,
             validate_timestamp,
         )
-        from sqlbuild.runtime.observability.constants import CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION
+        from sqlbuild.runtime.observability.constants import (
+            CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION,
+            LIFECYCLE_EVENT_CATALOGS,
+        )
 
         for field_name in (
             "event_id",
@@ -113,11 +118,24 @@ class LifecycleEvent:
         ):
             validate_required_text(value=getattr(self, field_name), field_name=field_name)
         validate_schema_version(value=self.schema_version)
-        if self.schema_version != CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION:
+        if self.schema_version not in LIFECYCLE_EVENT_CATALOGS:
             raise ObservabilityValidationError(
-                "LifecycleEvent only represents known schema version "
-                f"{CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION}; "
-                "decode other versions as OpaqueLifecycleEvent"
+                "LifecycleEvent only represents known schema versions through "
+                f"{CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION}; decode other versions as "
+                "OpaqueLifecycleEvent"
+            )
+        if self.schema_version == 1:
+            if self.invocation_sequence is not None or self.external_context:
+                raise ObservabilityValidationError(
+                    "schema version 1 lifecycle events cannot contain invocation metadata"
+                )
+        elif (
+            isinstance(self.invocation_sequence, bool)
+            or not isinstance(self.invocation_sequence, int)
+            or self.invocation_sequence < 0
+        ):
+            raise ObservabilityValidationError(
+                "invocation_sequence must be a non-negative integer excluding bool"
             )
         validate_timestamp(value=self.occurred_at)
         for field_name in (
@@ -128,6 +146,12 @@ class LifecycleEvent:
             "statement_id",
         ):
             validate_optional_text(value=getattr(self, field_name), field_name=field_name)
+        frozen_context: JSONValue = freeze_json(
+            value=self.external_context, path="external_context"
+        )
+        if not isinstance(frozen_context, Mapping):
+            raise ObservabilityValidationError("external_context must be a JSON object")
+        object.__setattr__(self, "external_context", frozen_context)
         frozen_payload: JSONValue = freeze_json(value=self.payload, path="payload")
         if not isinstance(frozen_payload, Mapping):
             raise ObservabilityValidationError("payload must be a JSON object")

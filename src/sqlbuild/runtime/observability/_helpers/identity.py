@@ -2,17 +2,26 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import asdict, replace
+from types import MappingProxyType
+from typing import cast
 from uuid import uuid4
 
+from sqlbuild.runtime.observability._helpers.validation import freeze_json
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import ExecutionIdentity
+from sqlbuild.runtime.observability.types import JSONValue
 
 _CURRENT_EXECUTION_IDENTITY: ContextVar[ExecutionIdentity | None] = ContextVar(
     "sqlbuild_execution_identity", default=None
+)
+
+
+_CURRENT_INVOCATION_EXTERNAL_CONTEXT: ContextVar[Mapping[str, JSONValue]] = ContextVar(
+    "sqlbuild_invocation_external_context", default=MappingProxyType({})
 )
 
 
@@ -22,11 +31,11 @@ def current_execution_identity() -> ExecutionIdentity | None:
 
 @contextmanager
 def identity_scope(identity: ExecutionIdentity) -> Iterator[ExecutionIdentity]:
-    token: Token[ExecutionIdentity | None] = _CURRENT_EXECUTION_IDENTITY.set(identity)
+    identity_token: Token[ExecutionIdentity | None] = _CURRENT_EXECUTION_IDENTITY.set(identity)
     try:
         yield identity
     finally:
-        _CURRENT_EXECUTION_IDENTITY.reset(token)
+        _CURRENT_EXECUTION_IDENTITY.reset(identity_token)
 
 
 def execution_identity_to_dict(identity: ExecutionIdentity) -> dict[str, str | None]:
@@ -47,6 +56,29 @@ def invocation_scope(invocation_id: str | None = None) -> Iterator[ExecutionIden
     )
     with identity_scope(identity) as installed:
         yield installed
+
+
+def current_invocation_external_context() -> Mapping[str, JSONValue]:
+    """Return validated external context for the active invocation."""
+
+    return _CURRENT_INVOCATION_EXTERNAL_CONTEXT.get()
+
+
+@contextmanager
+def invocation_external_context_scope(
+    *, external_context: Mapping[str, object]
+) -> Iterator[Mapping[str, JSONValue]]:
+    """Install validated integration context for lifecycle facts in one command."""
+
+    frozen: JSONValue = freeze_json(value=external_context, path="external_context")
+    if not isinstance(frozen, Mapping):
+        raise ObservabilityValidationError("external_context must be a JSON object")
+    context: Mapping[str, JSONValue] = cast(Mapping[str, JSONValue], frozen)
+    token: Token[Mapping[str, JSONValue]] = _CURRENT_INVOCATION_EXTERNAL_CONTEXT.set(context)
+    try:
+        yield context
+    finally:
+        _CURRENT_INVOCATION_EXTERNAL_CONTEXT.reset(token)
 
 
 @contextmanager

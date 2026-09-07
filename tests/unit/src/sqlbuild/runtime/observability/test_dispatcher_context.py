@@ -1,8 +1,8 @@
 """Tests for dispatcher context and identity-backed lifecycle construction."""
 
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
-from contextvars import copy_context
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextvars import Context, copy_context
 from datetime import UTC, datetime
 from importlib.metadata import version
 from typing import cast
@@ -11,11 +11,14 @@ import pytest
 
 from sqlbuild.observability import (
     EventDispatcher,
+    ExecutionIdentity,
     LifecycleEvent,
     ObservabilityValidationError,
     create_lifecycle_event,
     current_event_dispatcher,
     dispatcher_scope,
+    identity_scope,
+    invocation_external_context_scope,
     invocation_scope,
     log_stream_scope,
     operation_scope,
@@ -27,9 +30,14 @@ from tests.unit.src.sqlbuild.runtime.observability._test_types import (
     DispatchCountCase,
     DispatcherContextCase,
     FactoryCase,
+    InvocationMetadataCase,
     ProducerVersionCase,
+    PublicScopeSequenceCase,
 )
-from tests.unit.src.sqlbuild.runtime.observability.helpers import RecordingSubscriber
+from tests.unit.src.sqlbuild.runtime.observability.helpers import (
+    RecordingSubscriber,
+    publish_invocation_started,
+)
 
 
 @pytest.mark.parametrize(
@@ -135,9 +143,83 @@ def test_given_active_identity_when_factory_defaults_then_id_time_and_version_ar
     assert len(event.event_id) == test_case.expected_lifecycle_count
     assert before <= event.occurred_at <= after
     assert event.occurred_at.utcoffset() is not None
-    assert event.schema_version == test_case.expected_diagnostic_count
+    assert event.schema_version == 2
+    assert event.invocation_sequence == 0
     assert event.producer == "sqlbuild"
     assert event.producer_version == version("sqlbuild")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        InvocationMetadataCase(
+            description="concurrent lifecycle facts share ordered invocation metadata",
+            event_count=100,
+            expected_external_context={
+                "integration": {
+                    "name": "dagster",
+                    "run_id": "dagster-run-1",
+                    "step_key": "build_models",
+                }
+            },
+            expected_first_sequence=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_copied_concurrent_context_when_creating_events_then_sequence_is_unique_and_shared(
+    test_case: InvocationMetadataCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    _ = dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+    with (
+        invocation_scope("inv"),
+        invocation_external_context_scope(external_context=test_case.expected_external_context),
+    ):
+        with pytest.raises(ObservabilityValidationError, match="not allowed"):
+            _ = create_lifecycle_event(
+                event_type="invocation_started", payload={"full_sql": "select secret"}
+            )
+        contexts: list[Context] = [copy_context() for _ in range(test_case.event_count)]
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures: list[Future[object]] = [
+                pool.submit(
+                    context.run,
+                    publish_invocation_started,
+                    dispatcher=dispatcher,
+                )
+                for context in contexts
+            ]
+            for future in futures:
+                _ = future.result()
+
+    assert [event.invocation_sequence for event in events] == list(
+        range(test_case.expected_first_sequence, test_case.event_count)
+    )
+    assert all(event.external_context == test_case.expected_external_context for event in events)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [PublicScopeSequenceCase("standalone public scopes initialize sequence state", 0)],
+    ids=lambda case: case.description,
+)
+def test_given_standalone_public_identity_scopes_when_creating_events_then_each_invocation_is_sequenced(
+    test_case: PublicScopeSequenceCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    _ = dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+    with run_scope("run"):
+        dispatcher.publish_lifecycle(create_lifecycle_event(event_type="run_started"))
+    with identity_scope(ExecutionIdentity(invocation_id="explicit-invocation")):
+        dispatcher.publish_lifecycle(create_lifecycle_event(event_type="invocation_started"))
+
+    assert [event.invocation_sequence for event in events] == [
+        test_case.expected_sequence,
+        test_case.expected_sequence,
+    ]
 
 
 @pytest.mark.parametrize(

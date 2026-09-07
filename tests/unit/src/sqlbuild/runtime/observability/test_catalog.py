@@ -370,11 +370,11 @@ def test_given_only_started_and_submitted_facts_when_inspecting_then_no_terminal
     "test_case",
     [
         CatalogVersionCase(
-            description="v1 catalog is authoritative and v2 is unsupported",
-            schema_version=1,
+            description="v2 catalog is authoritative and v3 is unsupported",
+            schema_version=2,
             event_type="statement_completed",
             expected_terminal=True,
-            expected_unsupported_version=2,
+            expected_unsupported_version=3,
         ),
     ],
     ids=lambda case: case.description,

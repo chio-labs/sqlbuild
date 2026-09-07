@@ -20,6 +20,7 @@ from tests.unit.src.sqlbuild.runtime.observability._test_types import (
     EnvelopeFieldErrorCase,
     EventCase,
     ExactJsonCase,
+    InvocationMetadataCase,
     JsonErrorCase,
     MetadataBoundaryCase,
     OpaqueRoundTripCase,
@@ -151,6 +152,49 @@ def test_given_known_event_when_serializing_and_decoding_then_round_trips(
 @pytest.mark.parametrize(
     "test_case",
     [
+        InvocationMetadataCase(
+            description="v2 invocation ordering and integration context round trip",
+            event_count=1,
+            expected_external_context={
+                "integration": {
+                    "name": "dagster",
+                    "run_id": "dagster-run-1",
+                    "retry_number": 0,
+                }
+            },
+            expected_first_sequence=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_v2_lifecycle_event_when_round_tripping_then_invocation_metadata_is_preserved(
+    test_case: InvocationMetadataCase,
+) -> None:
+    event: LifecycleEvent = LifecycleEvent(
+        event_id="evt-v2",
+        event_type="invocation_started",
+        schema_version=2,
+        producer="sqlbuild",
+        producer_version="0.90.0",
+        occurred_at=OCCURRED_AT,
+        invocation_id="inv-1",
+        invocation_sequence=0,
+        external_context=test_case.expected_external_context,
+        payload={"command": "build"},
+    )
+
+    encoded: str = lifecycle_event_to_json(event)
+    decoded: LifecycleEvent | OpaqueLifecycleEvent = lifecycle_event_from_json(encoded)
+
+    assert decoded == event
+    assert isinstance(decoded, LifecycleEvent)
+    assert decoded.invocation_sequence == test_case.expected_first_sequence
+    assert decoded.external_context == test_case.expected_external_context
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         OpaqueRoundTripCase(
             description="unknown v1 event name remains opaque",
             raw={
@@ -171,14 +215,14 @@ def test_given_known_event_when_serializing_and_decoding_then_round_trips(
             raw={
                 "event_id": "future-2",
                 "event_type": "run_started",
-                "schema_version": 2,
+                "schema_version": 3,
                 "producer": {"identity": "future-producer"},
                 "future_field": None,
             },
             expected_raw={
                 "event_id": "future-2",
                 "event_type": "run_started",
-                "schema_version": 2,
+                "schema_version": 3,
                 "producer": {"identity": "future-producer"},
                 "future_field": None,
             },
