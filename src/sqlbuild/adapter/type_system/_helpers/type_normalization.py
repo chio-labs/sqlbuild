@@ -27,10 +27,14 @@ from sqlbuild.adapters.bigquery.constants import (
     INTEGER_PARSE_TYPE_NAMES,
 )
 from sqlbuild.adapters.snowflake.constants import (
+    DEFAULT_TEXT_LENGTH,
+    INTEGER_PRECISION,
+    INTEGER_SCALE,
     NORMALIZED_LTZ_INPUT_TYPE_NAME,
     NORMALIZED_NTZ_INPUT_TYPE_NAMES,
     NORMALIZED_TZ_INPUT_TYPE_NAME,
     TEXT_TYPE_NAME,
+    UNBOUNDED_TEXT_TYPE_NAMES,
 )
 from sqlbuild.compiler.sql_analysis.main.import_polyglot import import_polyglot
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
@@ -110,18 +114,33 @@ def _normalized_from_parsed_type(
             base_type, params = _split_type_and_params(decimal_name)
             precision: int | None = params[0] if len(params) >= 1 else None
             scale: int | None = params[1] if len(params) >= precision_and_scale_count else None
+            if precision is None:
+                precision = INTEGER_PRECISION
+                scale = INTEGER_SCALE
+                decimal_name = f"DECIMAL({precision},{scale})"
             return NormalizedType(
-                normalized_name=base_type if not params else decimal_name,
+                normalized_name=decimal_name,
                 family=TypeFamily.DECIMAL,
                 precision=precision,
                 scale=scale,
             )
         return _normalize_with_fallback(type_sql=raw_name, dialect=dialect)
     if dtype_name in INTEGER_TYPE_NAMES:
+        if normalized_dialect == TypeDialect.SNOWFLAKE:
+            return NormalizedType(
+                normalized_name=f"DECIMAL({INTEGER_PRECISION},{INTEGER_SCALE})",
+                family=TypeFamily.DECIMAL,
+                precision=INTEGER_PRECISION,
+                scale=INTEGER_SCALE,
+            )
         return NormalizedType(normalized_name=normalized_name, family=TypeFamily.INTEGER)
     if dtype_name in DECIMAL_TYPE_NAMES:
         precision: int | None = params[0] if len(params) >= 1 else None
         scale: int | None = params[1] if len(params) >= precision_and_scale_count else None
+        if normalized_dialect == TypeDialect.SNOWFLAKE and precision is None:
+            precision = INTEGER_PRECISION
+            scale = INTEGER_SCALE
+            normalized_name = f"DECIMAL({precision},{scale})"
         return NormalizedType(
             normalized_name=normalized_name,
             family=TypeFamily.DECIMAL,
@@ -132,6 +151,12 @@ def _normalized_from_parsed_type(
         return NormalizedType(normalized_name=normalized_name, family=TypeFamily.FLOAT)
     if dtype_name in STRING_TYPE_NAMES:
         length: int | None = params[0] if len(params) >= 1 else None
+        if (
+            normalized_dialect == TypeDialect.SNOWFLAKE
+            and _base_type_name(normalized_name) in UNBOUNDED_TEXT_TYPE_NAMES
+        ):
+            length = length or DEFAULT_TEXT_LENGTH
+            normalized_name = f"VARCHAR({length})"
         return NormalizedType(
             normalized_name=normalized_name,
             family=TypeFamily.STRING,
@@ -160,6 +185,13 @@ def _normalize_with_fallback(*, type_sql: str, dialect: TypeDialect | str | None
     precision_and_scale_count: int = 2
 
     if base_type in INTEGER_TYPE_NAMES:
+        if normalized_dialect == TypeDialect.SNOWFLAKE:
+            return NormalizedType(
+                normalized_name=f"DECIMAL({INTEGER_PRECISION},{INTEGER_SCALE})",
+                family=TypeFamily.DECIMAL,
+                precision=INTEGER_PRECISION,
+                scale=INTEGER_SCALE,
+            )
         normalized_name: str = _fallback_integer_normalized_name(
             base_type=base_type,
             dialect=normalized_dialect,
@@ -168,6 +200,9 @@ def _normalize_with_fallback(*, type_sql: str, dialect: TypeDialect | str | None
     if base_type in DECIMAL_TYPE_NAMES:
         precision: int | None = params[0] if len(params) >= 1 else None
         scale: int | None = params[1] if len(params) >= precision_and_scale_count else None
+        if normalized_dialect == TypeDialect.SNOWFLAKE and precision is None:
+            precision = INTEGER_PRECISION
+            scale = INTEGER_SCALE
         normalized_name = _fallback_decimal_normalized_name(
             base_type=base_type,
             dialect=normalized_dialect,
@@ -195,6 +230,9 @@ def _normalize_with_fallback(*, type_sql: str, dialect: TypeDialect | str | None
             dialect=normalized_dialect,
         )
         normalized_name = normalized_name if length is None else f"{normalized_name}({length})"
+        if normalized_dialect == TypeDialect.SNOWFLAKE and base_type in UNBOUNDED_TEXT_TYPE_NAMES:
+            length = length or DEFAULT_TEXT_LENGTH
+            normalized_name = f"VARCHAR({length})"
         return NormalizedType(
             normalized_name=normalized_name,
             family=TypeFamily.STRING,
@@ -239,6 +277,10 @@ def _split_type_and_params(type_sql: str) -> tuple[str, list[int]]:
     return match.group(1), params
 
 
+def _base_type_name(type_sql: str) -> str:
+    return type_sql.split("(", maxsplit=1)[0]
+
+
 def _fallback_integer_normalized_name(*, base_type: str, dialect: TypeDialect | None) -> str:
     if dialect == TypeDialect.BIGQUERY:
         return "INT64"
@@ -250,6 +292,8 @@ def _fallback_decimal_normalized_name(*, base_type: str, dialect: TypeDialect | 
         if base_type == BIGNUMERIC_TYPE_NAME:
             return "BIGNUMERIC"
         return "NUMERIC"
+    if dialect == TypeDialect.SNOWFLAKE:
+        return "DECIMAL"
     return base_type
 
 

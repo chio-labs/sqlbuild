@@ -55,7 +55,7 @@ def collect_model_column_contract_diagnostics(
     for declared_column in model.schema_entry.columns:
         inferred_column: InferredColumn | None = inferred_by_name.get(declared_column.name)
         if inferred_column is None:
-            if validate_declared_shape:
+            if validate_declared_shape and not model.fast_lineage_has_star:
                 diagnostics.append(
                     _missing_column_diagnostic(
                         model=model,
