@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.91.0](https://github.com/chio-labs/sqlbuild/compare/v0.90.5...v0.91.0) (2026-09-07)
+
+
+### Features
+
+* correlate lifecycle events with orchestrators ([#576](https://github.com/chio-labs/sqlbuild/issues/576)) ([6169cb7](https://github.com/chio-labs/sqlbuild/commit/6169cb73635816524486d912b0ffaa821c3e5f33))
+
 ## [0.90.5](https://github.com/chio-labs/sqlbuild/compare/v0.90.4...v0.90.5) (2026-09-07)
 
 
