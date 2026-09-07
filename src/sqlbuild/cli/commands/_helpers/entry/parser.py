@@ -122,6 +122,7 @@ def _add_compile_and_dag_parsers(
         default=False,
         help="Diagnostic: skip writing target/compiled artifacts",
     )
+    add_select_args(compile_parser)
     _ = add_vars_args(compile_parser)
     _ = add_dbt_config_args(parser=compile_parser)
 

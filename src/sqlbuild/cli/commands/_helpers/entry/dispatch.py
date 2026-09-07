@@ -70,6 +70,8 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 dag_path=args.dag,
                 no_color=args.no_color,
                 lineage_mode=CompileLineageMode(args.compile_lineage_mode),
+                select=select,
+                exclude=tuple(args.exclude),
                 cli_vars=args.vars,
                 profile_flags=CompileProfileFlags(
                     skip_discovery_sql_analysis=args.profile_skip_discovery_sql_analysis,

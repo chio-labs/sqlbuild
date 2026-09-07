@@ -76,6 +76,23 @@ class CompileTextColorTestCase:
 
 
 @dataclass(frozen=True)
+class CompileSelectedOutputTestCase:
+    description: str
+    selected_model_names: frozenset[str]
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CompileSelectedJsonOutputTestCase:
+    description: str
+    selected_model_names: frozenset[str]
+    expected_selected_models: int
+    expected_selected_seeds: int
+    expected_selected_functions: int
+
+
+@dataclass(frozen=True)
 class CompileJsonExecutionLayersTestCase:
     description: str
     model_count: int

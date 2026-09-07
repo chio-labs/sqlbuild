@@ -92,3 +92,11 @@ class PythonProjectLayoutCompileTestCase:
     repo_files: dict[str, str]
     expected_exit_code: int
     expected_stderr_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CompileSelectionTestCase:
+    description: str
+    selection_args: tuple[str, ...]
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...]
