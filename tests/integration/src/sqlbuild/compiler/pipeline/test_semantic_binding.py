@@ -431,5 +431,44 @@ def test_given_valid_using_and_qualify_alias_when_binding_then_compile_succeeds(
     assert "error[B" not in output
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SemanticBindingIntegrationTestCase(
+            description="given unresolved star when contract has additional column then absence is uncertain",
+            expected_exit_code=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unresolved_star_when_contract_has_additional_column_then_compile_succeeds(
+    test_case: SemanticBindingIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write_semantic_binding_project(
+        project_dir=tmp_path,
+        upstream_sql=_AUTHORITATIVE_MODEL,
+        downstream_sql=(
+            "MODEL (\n"
+            "  materialized view\n"
+            "  contract enforced\n"
+            "  columns (\n"
+            "    id (type INTEGER)\n"
+            "    category (type VARCHAR)\n"
+            "    runtime_column (type VARCHAR)\n"
+            "  )\n"
+            ");\n"
+            'SELECT * FROM __ref("upstream")\n'
+        ),
+    )
+
+    exit_code: int = main(["--no-color", "--project-dir", str(tmp_path), "compile", "--no-cache"])
+
+    output: str = capsys.readouterr().out
+    assert exit_code == test_case.expected_exit_code
+    assert "error[K001]" not in output
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-vv"])
