@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.90.2](https://github.com/chio-labs/sqlbuild/compare/v0.90.1...v0.90.2) (2026-09-07)
+
+
+### Bug Fixes
+
+* quote generated model contract types ([#570](https://github.com/chio-labs/sqlbuild/issues/570)) ([80a6110](https://github.com/chio-labs/sqlbuild/commit/80a6110462fb5acbca0a46c6e052571b99f782c2))
+
 ## [0.90.1](https://github.com/chio-labs/sqlbuild/compare/v0.90.0...v0.90.1) (2026-09-07)
 
 
