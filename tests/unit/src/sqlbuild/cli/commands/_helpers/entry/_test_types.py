@@ -16,3 +16,12 @@ class AuditConcurrencyParsingTestCase:
     environment_value: str | None
     expected_concurrency: int | None
     expected_exit_code: int | None
+
+
+@dataclass(frozen=True)
+class VersionFlagTestCase:
+    """One --version invocation shape."""
+
+    description: str
+    argv: tuple[str, ...]
+    expected_exit_code: int

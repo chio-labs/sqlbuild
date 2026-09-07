@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from sqlbuild.cli.commands._helpers.entry.errors import build_argument_parser_class
@@ -27,11 +28,26 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.virtual.state.types import StateCommand
 
 
+def _installed_version() -> str:
+    """Return the installed sqlbuild distribution version."""
+
+    try:
+        return version("sqlbuild")
+    except PackageNotFoundError:
+        return "unknown"
+
+
 def build_cli_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     """Build the root CLI parser."""
 
     parser_class: type[SqlbuildArgumentParser] = build_argument_parser_class(use_color=use_color)
     parser: argparse.ArgumentParser = parser_class(prog="sqb")
+    parser.add_argument(
+        "--version",
+        "-V",
+        action="version",
+        version=f"sqb {_installed_version()}",
+    )
     parser.add_argument("--project-dir", "--sqb-project-dir", dest="project_dir", default=None)
     parser.add_argument("--no-color", action="store_true", default=False)
     parser.add_argument(
