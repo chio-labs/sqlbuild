@@ -294,7 +294,15 @@ def test_given_model_analysis_disabled_when_column_is_missing_then_binding_is_sk
         project_dir=tmp_path,
         upstream_sql=_AUTHORITATIVE_MODEL,
         downstream_sql=(
-            "MODEL (materialized view, sql_analysis false);\n"
+            "MODEL (\n"
+            "  materialized view\n"
+            "  sql_analysis false\n"
+            "  contract enforced\n"
+            "  columns (\n"
+            "    missing_vendor_column (type VARCHAR)\n"
+            "    runtime_only_column (type VARCHAR)\n"
+            "  )\n"
+            ");\n"
             'SELECT missing_vendor_column FROM __ref("upstream")\n'
         ),
     )
@@ -304,6 +312,57 @@ def test_given_model_analysis_disabled_when_column_is_missing_then_binding_is_sk
     output: str = capsys.readouterr().out
     assert exit_code == test_case.expected_exit_code
     assert "error[B" not in output
+    assert "error[K" not in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SemanticBindingIntegrationTestCase(
+            description="given cached dependent error when upstream analysis is disabled then stale error clears",
+            expected_exit_code=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cached_dependent_error_when_upstream_analysis_disabled_then_stale_error_clears(
+    test_case: SemanticBindingIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write_semantic_binding_project(
+        project_dir=tmp_path,
+        upstream_sql=_AUTHORITATIVE_MODEL,
+        downstream_sql=(
+            'MODEL (materialized view);\nSELECT runtime_column FROM __ref("intermediate")\n'
+        ),
+    )
+    intermediate_path: Path = tmp_path / "models" / "intermediate.sql"
+    _ = intermediate_path.write_text(
+        'MODEL (materialized view);\nSELECT id FROM __ref("upstream")\n',
+        encoding="utf-8",
+    )
+
+    initial_exit_code: int = main(["--no-color", "--project-dir", str(tmp_path), "compile"])
+    initial_output: str = capsys.readouterr().out
+    assert initial_exit_code == 1
+    assert "error[B002]: Unknown column 'runtime_column'" in initial_output
+
+    _ = intermediate_path.write_text(
+        "MODEL (materialized view, sql_analysis false);\n"
+        'SELECT runtime_column FROM __ref("upstream")\n',
+        encoding="utf-8",
+    )
+    exit_code: int = main(["--no-color", "--project-dir", str(tmp_path), "compile"])
+    output: str = capsys.readouterr().out
+
+    assert exit_code == test_case.expected_exit_code
+    assert "error[B002]" not in output
+
+    cached_exit_code: int = main(["--no-color", "--project-dir", str(tmp_path), "compile"])
+    cached_output: str = capsys.readouterr().out
+    assert cached_exit_code == test_case.expected_exit_code
+    assert "error[B002]" not in cached_output
 
 
 @pytest.mark.parametrize(
