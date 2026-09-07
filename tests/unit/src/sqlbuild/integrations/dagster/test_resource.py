@@ -779,10 +779,18 @@ def test_given_dagster_context_when_starting_cli_then_generic_context_crosses_su
         "InvocationContext",
         (),
         {
-            "run_id": "dagster-run-1",
+            "run": type("DagsterRun", (), {"run_id": "dagster-run-1"})(),
             "job_name": "prices_job",
-            "op_handle": type("OpHandle", (), {"to_string": lambda self: "all_sqlbuild_assets"})(),
-            "retry_number": 1,
+            "op_execution_context": type(
+                "OpExecutionContext",
+                (),
+                {
+                    "op_handle": type(
+                        "OpHandle", (), {"to_string": lambda self: "all_sqlbuild_assets"}
+                    )(),
+                    "retry_number": 1,
+                },
+            )(),
             "has_partition_key": False,
         },
     )()

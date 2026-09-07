@@ -19,7 +19,13 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
 
 @pytest.mark.parametrize(
     "test_case",
-    (EventExporterE2ETestCase("redacted provider export", "invocation_started"),),
+    (
+        EventExporterE2ETestCase(
+            "redacted provider export",
+            "invocation_started",
+            {"integration": {"name": "test_orchestrator", "run_id": "external-run-1"}},
+        ),
+    ),
     ids=lambda case: case.description,
 )
 def test_given_provider_exporter_when_building_then_receives_redacted_events_before_teardown(
@@ -31,6 +37,7 @@ def test_given_provider_exporter_when_building_then_receives_redacted_events_bef
     import_path: Path = tmp_path / "exporter-imports"
     monkeypatch.setenv("EVENT_EXPORT_PATH", str(output_path))
     monkeypatch.setenv("EXPORTER_IMPORT_PATH", str(import_path))
+    monkeypatch.setenv("SQLBUILD_INVOCATION_CONTEXT_JSON", json.dumps(test_case.expected_context))
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
         project_name="lifecycle_event_sink_project",
@@ -121,6 +128,8 @@ def test_given_provider_exporter_when_building_then_receives_redacted_events_bef
     assert event_types[0] == test_case.expected_first_event
     assert event_types[-1] == "invocation_completed"
     assert "statement_completed" in event_types
+    assert sorted(event["invocation_sequence"] for event in events) == list(range(len(events)))
+    assert all(event["external_context"] == test_case.expected_context for event in events)
     assert "do-not-export-this-sql" not in "\n".join(lines)
     assert import_path.read_text(encoding="utf-8").splitlines() == ["imported"]
 

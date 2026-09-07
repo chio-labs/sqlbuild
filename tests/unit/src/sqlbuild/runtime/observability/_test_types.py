@@ -238,6 +238,20 @@ class ProducerVersionCase:
 
 
 @dataclass(frozen=True)
+class InvocationMetadataCase:
+    description: str
+    event_count: int
+    expected_external_context: Mapping[str, JSONValue]
+    expected_first_sequence: int
+
+
+@dataclass(frozen=True)
+class PublicScopeSequenceCase:
+    description: str
+    expected_sequence: int
+
+
+@dataclass(frozen=True)
 class BlockingDispatchCase:
     description: str
     expected_before_release: tuple[str, ...]

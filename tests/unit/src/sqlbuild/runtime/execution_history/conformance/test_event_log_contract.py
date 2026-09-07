@@ -246,7 +246,7 @@ def test_given_opaque_envelope_missing_filter_fields_when_querying_without_filte
     event_log: LifecycleEventLogStorage, test_case: ContractCase
 ) -> None:
     opaque: OpaqueLifecycleEvent = OpaqueLifecycleEvent(
-        raw={"event_id": "minimal-opaque", "schema_version": 2}
+        raw={"event_id": "minimal-opaque", "schema_version": 3}
     )
     _ = event_log.append_event(opaque)
 
@@ -456,7 +456,7 @@ def test_given_opaque_envelope_without_valid_event_id_when_appending_then_event_
     event_log: LifecycleEventLogStorage, test_case: OpaqueIdCase
 ) -> None:
     malformed: OpaqueLifecycleEvent = OpaqueLifecycleEvent(
-        raw={"schema_version": 2, "event_id": test_case.event_id}
+        raw={"schema_version": 3, "event_id": test_case.event_id}
     )
 
     with pytest.raises(InvalidEventError, match=test_case.expected_error):

@@ -9,6 +9,7 @@ from threading import Lock
 from types import MappingProxyType
 
 from sqlbuild.runtime.observability._helpers.dispatcher import dispatcher_scope
+from sqlbuild.runtime.observability._helpers.factory import create_lifecycle_event
 from sqlbuild.runtime.observability._helpers.identity import invocation_scope
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
@@ -73,6 +74,12 @@ def _thread_statement() -> None:
     with StatementLifecycle(adapter="thread", sql="SELECT thread", intent="execute") as lifecycle:
         lifecycle.submitted(query_id="query-thread")
         lifecycle.completed(query_id="query-thread")
+
+
+def publish_invocation_started(*, dispatcher: EventDispatcher) -> None:
+    """Create and publish one invocation event for concurrent sequencing tests."""
+
+    dispatcher.publish_lifecycle(create_lifecycle_event(event_type="invocation_started"))
 
 
 def statement_event_types_by_id(
