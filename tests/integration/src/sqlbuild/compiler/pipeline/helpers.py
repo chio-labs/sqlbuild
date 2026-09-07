@@ -20,6 +20,7 @@ from sqlbuild.sql_values.types import CollectionRendering
 _SCHEMA_FIXTURE_PATH: Path = (
     Path(__file__).resolve().parents[5] / "fixtures" / "dbt_manifest_v12_schema.json"
 )
+_SEMANTIC_BINDING_PROJECT_TOML: str = 'name = "semantic_binding"\nadapter = "duckdb"\n'
 _AUDIT_FACTORY_ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
     value_renderer=DuckDbAdapter(),
     collection_rendering=CollectionRendering.VALUE_LIST,
@@ -112,3 +113,15 @@ def validate_manifest_against_dbt_schema(manifest: dict[str, object]) -> None:
     validator: Any = Draft202012Validator(schema)
     errors: list[str] = [e.message for e in validator.iter_errors(manifest)]
     assert errors == [], f"Manifest schema validation errors: {errors}"
+
+
+def write_semantic_binding_project(
+    *, project_dir: Path, upstream_sql: str, downstream_sql: str
+) -> None:
+    _ = (project_dir / "sqlbuild_project.toml").write_text(
+        _SEMANTIC_BINDING_PROJECT_TOML, encoding="utf-8"
+    )
+    models_dir: Path = project_dir / "models"
+    models_dir.mkdir()
+    _ = (models_dir / "upstream.sql").write_text(upstream_sql, encoding="utf-8")
+    _ = (models_dir / "downstream.sql").write_text(downstream_sql, encoding="utf-8")

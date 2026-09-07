@@ -27,7 +27,6 @@ from sqlbuild.cli.commands._helpers.scenario_execution.selection import select_s
 from sqlbuild.cli.commands.constants import (
     SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
     SQL_ANALYSIS_CONFIG_KEY,
-    SQL_VALIDATION_CONFIG_KEY,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import (
@@ -69,11 +68,10 @@ def run_scenario_capture(request: ScenarioCaptureCommandRequest) -> int:
     force: bool = limit_inputs.force
     if no_sql_validation:
         raise CliUserError(
-            "scenario capture requires SQL analysis and SQL validation",
+            "scenario capture requires SQL analysis",
             code=SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
             help=(
-                "Enable settings.sql_analysis and settings.sql_validation when capturing snapshots "
-                "for local scenario replay."
+                "Enable settings.sql_analysis when capturing snapshots for local scenario replay."
             ),
         )
 
@@ -166,11 +164,10 @@ def run_scenario_capture(request: ScenarioCaptureCommandRequest) -> int:
 def _validate_capture_sql_analysis_enabled(*, discovered_inputs: DiscoveredProjectInputs) -> None:
     if not _effective_sql_analysis_and_validation_enabled(discovered_inputs=discovered_inputs):
         raise CliUserError(
-            "scenario capture requires SQL analysis and SQL validation",
+            "scenario capture requires SQL analysis",
             code=SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
             help=(
-                "Enable settings.sql_analysis and settings.sql_validation when capturing snapshots "
-                "for local scenario replay."
+                "Enable settings.sql_analysis when capturing snapshots for local scenario replay."
             ),
         )
 
@@ -184,9 +181,4 @@ def _effective_sql_analysis_and_validation_enabled(
         if SQL_ANALYSIS_CONFIG_KEY in setting_overrides
         else discovered_inputs.project_config.settings.sql_analysis
     )
-    sql_validation_enabled: bool = (
-        discovered_inputs.local_config.settings.sql_validation
-        if SQL_VALIDATION_CONFIG_KEY in setting_overrides
-        else discovered_inputs.project_config.settings.sql_validation
-    )
-    return sql_analysis_enabled and sql_validation_enabled
+    return sql_analysis_enabled

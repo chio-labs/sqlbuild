@@ -30,9 +30,10 @@ from sqlbuild.compiler.lineage.types import (
     InferredNullability,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 
-_ANALYSIS_CACHE_VERSION: int = 5
-_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v5"
+_ANALYSIS_CACHE_VERSION: int = 7
+_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v7-schema-binding"
 _MAX_CACHE_ENTRY_BYTES: int = 10_000_000
 _SHA256_HEX_LENGTH: int = 64
 _CACHE_ENTRY_SEPARATOR: str = "\n"
@@ -107,6 +108,7 @@ def model_analysis_cache_key(
     placeholders: dict[str, str] | None,
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     column_types_by_table: dict[str, dict[str, str]],
+    binding_schema: dict[str, dict[str, str]] | None = None,
 ) -> str:
     """Return the exact analysis identity for one expanded model query."""
 
@@ -132,6 +134,7 @@ def model_analysis_cache_key(
                 references=references,
                 column_types_by_table=column_types_by_table,
             ),
+            "binding_schema": binding_schema,
         }
     )
 
@@ -444,6 +447,18 @@ def _analysis_payload(*, cache_key: str, analysis: PolyglotAnalysisResult) -> di
         ),
         "l": [_lineage_column_payload(column) for column in analysis.lineage_columns],
         "h": analysis.has_star,
+        "b": [
+            [
+                diagnostic.code,
+                diagnostic.message,
+                diagnostic.line,
+                diagnostic.column,
+                diagnostic.start,
+                diagnostic.end,
+            ]
+            for diagnostic in analysis.binding_diagnostics
+        ],
+        "bv": analysis.binding_validated,
     }
 
 
@@ -496,14 +511,44 @@ def _analysis_from_payload(
     has_star: object = values["h"]
     if not isinstance(has_star, bool):
         raise AnalysisCacheEntryError("analysis cache has_star must be a boolean")
+    binding_diagnostics: tuple[SqlBindingDiagnostic, ...] = tuple(
+        _binding_diagnostic_from_payload(value) for value in _value_lists(values["b"])
+    )
+    binding_validated: object = values["bv"]
+    if not isinstance(binding_validated, bool):
+        raise AnalysisCacheEntryError("analysis cache binding validation flag must be a boolean")
     return (
         PolyglotAnalysisResult(
             analysis_succeeded=analysis_succeeded,
             columns=columns,
             lineage_columns=lineage_columns,
             has_star=has_star,
+            binding_diagnostics=binding_diagnostics,
+            binding_validated=binding_validated,
         ),
         output_signature,
+    )
+
+
+def _binding_diagnostic_from_payload(payload: list[object]) -> SqlBindingDiagnostic:
+    diagnostic_value_count: int = 6
+    if len(payload) != diagnostic_value_count:
+        raise AnalysisCacheEntryError("analysis cache binding diagnostic must contain six values")
+    code, message, line, column, start, end = payload
+    if not isinstance(code, str) or not isinstance(message, str):
+        raise AnalysisCacheEntryError(
+            "analysis cache binding diagnostic code/message must be strings"
+        )
+    positions: tuple[object, ...] = (line, column, start, end)
+    if any(value is not None and not isinstance(value, int) for value in positions):
+        raise AnalysisCacheEntryError("analysis cache binding diagnostic positions are invalid")
+    return SqlBindingDiagnostic(
+        code=code,
+        message=message,
+        line=cast(int | None, line),
+        column=cast(int | None, column),
+        start=cast(int | None, start),
+        end=cast(int | None, end),
     )
 
 

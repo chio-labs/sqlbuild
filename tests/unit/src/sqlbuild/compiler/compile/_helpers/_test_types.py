@@ -19,6 +19,12 @@ from sqlbuild.sql_values.models import SqlValue
 
 
 @dataclass(frozen=True)
+class UnexpectedAnalysisFailureTestCase:
+    description: str
+    expected_error: str
+
+
+@dataclass(frozen=True)
 class AuditFactoryAttachmentTestCase:
     description: str
     model_header: str

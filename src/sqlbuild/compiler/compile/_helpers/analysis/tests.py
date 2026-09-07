@@ -27,15 +27,13 @@ _POLYGLOT_VALUES_SET_ALIAS: str = "_values"
 def extract_expected_branch_column_names_with_sql_analysis(
     *, sql: str, file_label: str
 ) -> tuple[tuple[str, ...], ...] | None:
-    """Return expected SELECT branch names using Polyglot when it is installed."""
+    """Return expected SELECT branch names using required Polyglot analysis."""
 
-    polyglot_module: Any | None = import_polyglot_sql()
-    if polyglot_module is None:
-        return None
+    polyglot_module: Any = import_polyglot_sql()
 
     try:
         parsed_expression: Any = polyglot_module.parse_one(sql, dialect="generic")
-    except Exception:
+    except polyglot_module.PolyglotError:
         branches: tuple[str, ...] = _split_set_operation_branches(sql)
         if len(branches) > 1:
             return tuple(

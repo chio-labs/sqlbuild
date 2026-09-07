@@ -89,6 +89,19 @@ class ColumnLineageEdge:
 
 
 @dataclass(frozen=True)
+class DirectSemanticColumnUse:
+    """One direct non-projection use of a resolved resource column."""
+
+    consumer_model: str
+    context: str
+    expression_sql: str
+    source: QualifiedLineageColumn
+    confidence: ColumnLineageConfidence = ColumnLineageConfidence.UNKNOWN
+    line: int | None = None
+    column: int | None = None
+
+
+@dataclass(frozen=True)
 class ColumnLineage:
     """Lineage for one output column in one model."""
 

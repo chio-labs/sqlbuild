@@ -6,10 +6,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from sqlbuild.compiler.lineage.types import ColumnLineageMode
-
 if TYPE_CHECKING:
-    from sqlbuild.cli.commands.models import ScopeCommandRequest
+    from sqlbuild.cli.commands.models import LineageCommandRequest, ScopeCommandRequest
     from sqlbuild.compiler.scopes.models import ScopeIndex
 
 
@@ -60,6 +58,7 @@ class CliCommand(StrEnum):
     FORMAT = "format"
     KATA = "kata"
     SCOPE = "scope"
+    CONTRACT = "contract"
 
 
 class ScopeCommandHandler(Protocol):
@@ -123,20 +122,7 @@ class DebugCommandHandler(Protocol):
 
 
 class LineageCommandHandler(Protocol):
-    def __call__(
-        self,
-        project_dir: Path | None,
-        *,
-        no_sql_validation: bool,
-        target: str | None,
-        output_format: str,
-        direction: str,
-        depth: str,
-        select: tuple[str, ...],
-        exclude: tuple[str, ...],
-        lineage_mode: ColumnLineageMode,
-        cli_vars: dict[str, object] | None,
-    ) -> int: ...
+    def __call__(self, request: LineageCommandRequest) -> int: ...
 
 
 class StateCommandHandler(Protocol):

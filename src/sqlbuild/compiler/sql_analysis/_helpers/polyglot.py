@@ -1,27 +1,25 @@
-"""Optional Polyglot import helpers."""
+"""Required Polyglot import helpers."""
 
 from __future__ import annotations
 
-from importlib import import_module
 from typing import Any
 
-
-def import_polyglot() -> Any | None:
-    """Return the Polyglot SQL module when installed, otherwise None."""
-
-    try:
-        return import_module("polyglot_sql")
-    except ImportError:
-        return None
+import polyglot_sql
 
 
-def import_polyglot_sql() -> Any | None:
-    """Return the Polyglot SQL module when installed, otherwise None."""
+def import_polyglot() -> Any:
+    """Return SQLBuild's required Polyglot SQL module."""
+
+    return polyglot_sql
+
+
+def import_polyglot_sql() -> Any:
+    """Return SQLBuild's required Polyglot SQL module."""
 
     return import_polyglot()
 
 
 def is_polyglot_available() -> bool:
-    """Return whether Polyglot SQL can be imported."""
+    """Return true because Polyglot SQL is a required dependency."""
 
-    return import_polyglot() is not None
+    return True

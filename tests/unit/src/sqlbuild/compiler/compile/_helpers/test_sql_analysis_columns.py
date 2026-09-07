@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from polyglot_sql import ParseError
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.analysis.columns import (
@@ -27,6 +28,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     InferColumnsTestCase,
     PolyglotAnalysisTestCase,
     SubstitutePlaceholderDefaultsTestCase,
+    UnexpectedAnalysisFailureTestCase,
 )
 
 
@@ -922,7 +924,7 @@ def test_given_compact_query_analysis_safe_shape_when_analyzing_then_matches_ast
 
     def raise_compact_error(*args: object, **kwargs: object) -> object:
         del args, kwargs
-        raise ValueError("compact analysis disabled")
+        raise ParseError("compact analysis disabled")
 
     monkeypatch.setattr(polyglot_module, "analyze_query", raise_compact_error)
     fallback_result: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
@@ -947,6 +949,36 @@ def test_given_compact_query_analysis_safe_shape_when_analyzing_then_matches_ast
         assert compact_fact.output_column == fallback_fact.output_column
         assert compact_fact.upstream_columns == fallback_fact.upstream_columns
         assert compact_fact.transform_kind == fallback_fact.transform_kind
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        UnexpectedAnalysisFailureTestCase(
+            description="unexpected native integration failure",
+            expected_error="unexpected native integration failure",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unexpected_polyglot_failure_when_analyzing_then_failure_is_not_silenced(
+    test_case: UnexpectedAnalysisFailureTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    polyglot_module: object = import_polyglot_sql()
+
+    def raise_unexpected_failure(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        raise RuntimeError(test_case.expected_error)
+
+    monkeypatch.setattr(polyglot_module, "analyze_query", raise_unexpected_failure)
+
+    with pytest.raises(RuntimeError, match=test_case.expected_error):
+        analyze_columns_and_lineage_with_polyglot(
+            query_sql='SELECT id FROM __ref("orders")',
+            references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+            allow_compact_analysis=True,
+        )
 
 
 @pytest.mark.parametrize(

@@ -131,9 +131,7 @@ def _build_polyglot_model_column_lineage(
     resource_by_physical_name: dict[str, PhysicalResource] = {
         resource.physical_name: resource for resource in physical_resources
     }
-    polyglot_module: Any | None = import_polyglot_sql()
-    if polyglot_module is None:
-        return None
+    polyglot_module: Any = import_polyglot_sql()
     try:
         analysis: Any = polyglot_module.analyze_query(
             normalized_sql,
@@ -142,7 +140,7 @@ def _build_polyglot_model_column_lineage(
                 "schema": _polyglot_schema(schema),
             },
         )
-    except Exception as error:
+    except polyglot_module.PolyglotError as error:
         log_debug_event(
             logger=_DEBUG_LOGGER,
             message="rich column lineage analysis failed; skipping model",
