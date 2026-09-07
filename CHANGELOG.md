@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.89.0](https://github.com/chio-labs/sqlbuild/compare/v0.88.0...v0.89.0) (2026-09-07)
+
+
+### Features
+
+* support focused project compilation ([#562](https://github.com/chio-labs/sqlbuild/issues/562)) ([aed7170](https://github.com/chio-labs/sqlbuild/commit/aed717005d01ef15b8760021e7cc82db412cb567))
+
 ## [0.88.0](https://github.com/chio-labs/sqlbuild/compare/v0.87.3...v0.88.0) (2026-09-07)
 
 
