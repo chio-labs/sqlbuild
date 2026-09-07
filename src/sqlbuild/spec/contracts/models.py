@@ -162,7 +162,6 @@ class SettingsConfig:
 
     sql_analysis: bool = True
     query_change_tracking: bool = True
-    sql_validation: bool = True
     column_contract_mode: ColumnContractMode = ColumnContractMode.IMPLICIT
     concurrency: int = 1
     auto_load_sources: bool = True
@@ -173,6 +172,12 @@ class SettingsConfig:
     table_promotion_mode: str | None = None
     default_audit_severity: AuditSeverity | None = None
     default_audit_run_scope: str | None = None
+
+    @property
+    def sql_validation(self) -> bool:
+        """Compatibility alias for the unified SQL analysis gate."""
+
+        return self.sql_analysis
 
 
 @dataclass(frozen=True)

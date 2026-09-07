@@ -87,6 +87,10 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
             module_name="sqlbuild.cli.commands.main.inspection._scope",
             function_name="run_scope",
         ),
+        "contract": _lazy_handler(
+            module_name="sqlbuild.cli.commands.main.inspection._contract",
+            function_name="run_contract",
+        ),
         "compile": _lazy_handler(
             module_name="sqlbuild.cli.commands.main.project._compile",
             function_name="run_compile",
@@ -226,20 +230,7 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
             selected_target=selected_target,
             json_output=json_output,
         ),
-        run_lineage=lambda project_dir, no_sql_validation, target, output_format, direction, depth, select, exclude, lineage_mode, cli_vars: (  # noqa: E501
-            lazy["lineage"](
-                project_dir=project_dir,
-                no_sql_validation=no_sql_validation,
-                target=target,
-                output_format=output_format,
-                direction=direction,
-                depth=depth,
-                select=select,
-                exclude=exclude,
-                lineage_mode=lineage_mode,
-                cli_vars=cli_vars,
-            )
-        ),
+        run_lineage=lazy["lineage"],
         run_janitor=lazy["janitor"],
         run_state=lambda project_dir, state_command, backup_id, auto_approve, no_color, checkpoint_command, checkpoint_id, virtual_environment, allow_copy: (  # noqa: E501
             lazy["state"](
@@ -295,6 +286,7 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
         run_scenario_capture=lazy["scenario_capture"],
         run_kata=lazy["kata"],
         run_scope=lazy["scope"],
+        run_contract=lazy["contract"],
     )
 
 

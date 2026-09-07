@@ -57,11 +57,7 @@ def build_source_inputs(
     """Normalize discovered source declarations into one collection."""
 
     source_inputs: list[CompileSourceInput] = []
-    sql_validation_enabled: bool = (
-        effective_settings.sql_analysis
-        and effective_settings.sql_validation
-        and not no_sql_validation
-    )
+    sql_validation_enabled: bool = effective_settings.sql_analysis and not no_sql_validation
     source_file: DiscoveredSourceFile
     for source_file in discovered_inputs.source_files:
         source_entry: SourceEntry

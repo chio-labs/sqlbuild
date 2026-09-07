@@ -193,11 +193,7 @@ def build_sql_function_inputs(
             sql=expanded_body_sql,
             context=f"SQL function '{function_name}'",
         )
-        if (
-            effective_settings.sql_analysis
-            and not no_sql_validation
-            and effective_settings.sql_validation
-        ):
+        if effective_settings.sql_analysis and not no_sql_validation:
             argument: FunctionArgument
             for argument in arguments:
                 validate_native_type(
@@ -415,11 +411,7 @@ def _build_python_function_input(
     fingerprint_schema: str | None = (
         fingerprint_logical_schema if context.target_schema is None else context.target_schema
     )
-    if (
-        context.effective_settings.sql_analysis
-        and not context.no_sql_validation
-        and context.effective_settings.sql_validation
-    ):
+    if context.effective_settings.sql_analysis and not context.no_sql_validation:
         argument: FunctionArgument
         for argument in arguments:
             validate_native_type(
@@ -679,12 +671,10 @@ def validate_native_type(*, type_sql: str, adapter_name: str, context: str) -> N
     dialect: str | None = dialect_by_adapter.get(adapter_name)
     if dialect is None:
         return
-    polyglot_module: Any | None = import_polyglot()
-    if polyglot_module is None:
-        return
+    polyglot_module: Any = import_polyglot()
     try:
         polyglot_module.parse_data_type(type_sql, dialect=dialect)
-    except Exception as error:
+    except polyglot_module.PolyglotError as error:
         raise CompileInputError(
             f"{context} type '{type_sql}' is not valid for adapter '{adapter_name}' "
             f"SQL analysis dialect '{dialect}': {error}"

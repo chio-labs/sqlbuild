@@ -211,11 +211,8 @@ def try_resolve_test_model_sql_with_sql_analysis(
     file_label: str,
     sql_analysis_dialect: str | None,
 ) -> SqlAnalysisResolvedTestSql | None:
-    """Return Polyglot-backed readable test SQL or None on import/parse failure."""
+    """Return Polyglot-backed readable test SQL or None on parse failure."""
 
-    polyglot_module: Any | None = import_polyglot_sql()
-    if polyglot_module is None:
-        return None
     marker_targets: tuple[tuple[str, str, str], ...] = _test_marker_targets(
         mock_refs=mock_refs,
         mock_sources=mock_sources,
@@ -302,9 +299,7 @@ def _analyze_test_query_template(
     marker_targets: tuple[tuple[str, str, str], ...],
     sql_analysis_dialect: str | None,
 ) -> _TestSqlAnalysisTemplate | None:
-    polyglot_module: Any | None = import_polyglot_sql()
-    if polyglot_module is None:
-        return None
+    polyglot_module: Any = import_polyglot_sql()
     parsed_dict: dict[str, Any] | None = _try_parse_test_query(
         polyglot_module=polyglot_module,
         query_sql=query_sql,
@@ -340,7 +335,7 @@ def _try_parse_test_query(
         parsed: Any = polyglot_module.parse_one(
             query_sql, dialect=sql_analysis_dialect or "generic"
         )
-    except Exception as error:
+    except polyglot_module.PolyglotError as error:
         log_debug_event(
             logger=_DEBUG_LOGGER,
             message="sql test assembly parse failed; falling back",
@@ -449,7 +444,7 @@ def _generate_one(
         generated: list[str] = polyglot_module.generate(
             expression, dialect=sql_analysis_dialect or "generic"
         )
-    except Exception as error:
+    except polyglot_module.PolyglotError as error:
         log_debug_event(
             logger=_DEBUG_LOGGER,
             message="sql test assembly generation failed; falling back",

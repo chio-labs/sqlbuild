@@ -23,6 +23,21 @@ class MeasurementCompileErrorIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class SemanticBindingClauseIntegrationTestCase:
+    description: str
+    query_sql: str
+    missing_column: str
+    expected_error_code: str = "B002"
+    expected_exit_code: int = 1
+
+
+@dataclass(frozen=True)
+class SemanticBindingIntegrationTestCase:
+    description: str
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
 class ExpectedModelEntry:
     description: str
     expected_resolved_sql_fragment: str

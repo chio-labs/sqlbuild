@@ -82,6 +82,24 @@ class DiscoveredSqlModelFile:
 
 
 @dataclass(frozen=True)
+class ModelHeaderColumnSpan:
+    """Authored byte offsets for one MODEL(columns) entry and metadata body."""
+
+    entry_start: int
+    entry_end: int
+    metadata_start: int
+    metadata_end: int
+
+
+@dataclass(frozen=True)
+class ModelHeaderSpans:
+    """Authored MODEL header body and optional columns declaration spans."""
+
+    body: tuple[int, int] | None
+    columns: tuple[int, int, dict[str, ModelHeaderColumnSpan]] | None
+
+
+@dataclass(frozen=True)
 class DiscoveredSqlFunctionFile:
     """A discovered SQL function file and its raw contents."""
 

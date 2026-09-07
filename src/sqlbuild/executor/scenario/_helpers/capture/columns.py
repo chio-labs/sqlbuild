@@ -345,16 +345,14 @@ def _duckdb_pre_local_type(*, base: str, args: tuple[str, ...]) -> str | None:
 def _local_type_with_polyglot(
     *, warehouse_type: str, sql_analysis_dialect: str | None
 ) -> str | None:
-    polyglot_module: Any | None = import_polyglot()
-    if polyglot_module is None:
-        return None
+    polyglot_module: Any = import_polyglot()
 
     try:
         data_type: Any = polyglot_module.parse_data_type(
             warehouse_type,
             dialect=sql_analysis_dialect or "generic",
         )
-    except Exception as error:
+    except polyglot_module.PolyglotError as error:
         log_debug_event(
             logger=_DEBUG_LOGGER,
             message="scenario snapshot type polyglot conversion failed; falling back",

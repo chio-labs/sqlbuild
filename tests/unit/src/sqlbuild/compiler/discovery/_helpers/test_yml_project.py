@@ -848,7 +848,6 @@ max_total_bytes = 78
             expected_setting_overrides=frozenset(
                 {
                     "sql_analysis",
-                    "sql_validation",
                     "concurrency",
                     "auto_load_sources",
                     "changes_only",
@@ -1059,6 +1058,20 @@ adapter = "duckdb"
 sql_analysis = 123
 """.strip(),
             expected_error_fragment="Expected 'sql_analysis' to be a boolean when provided",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when canonical and legacy analysis settings conflict",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+sql_analysis = true
+sql_validation = false
+""".strip(),
+            expected_error_fragment=(
+                "settings.sql_analysis conflicts with legacy settings.sql_validation"
+            ),
         ),
         LoadProjectConfigErrorTestCase(
             description="raises when settings concurrency is not an integer",

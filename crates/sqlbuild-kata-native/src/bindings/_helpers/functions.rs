@@ -35,6 +35,18 @@ fn format_sql_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
+fn validate_sql_with_schema_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.detach(|| crate::semantic_validation::validate_json(request_json))
+        .map_err(value_error)
+}
+
+#[pyfunction]
+fn analyze_sql_uses_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.detach(|| crate::semantic_usage::analyze_json(request_json))
+        .map_err(value_error)
+}
+
+#[pyfunction]
 fn load_config_json(project_dir: &str) -> PyResult<String> {
     load::load_config_json(std::path::Path::new(project_dir)).map_err(value_error)
 }
@@ -80,6 +92,8 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(evaluate_json, module)?)?;
     module.add_function(wrap_pyfunction!(lint_sql_json, module)?)?;
     module.add_function(wrap_pyfunction!(format_sql_json, module)?)?;
+    module.add_function(wrap_pyfunction!(validate_sql_with_schema_json, module)?)?;
+    module.add_function(wrap_pyfunction!(analyze_sql_uses_json, module)?)?;
     module.add_function(wrap_pyfunction!(load_config_json, module)?)?;
     module.add_function(wrap_pyfunction!(catalogue_json, module)?)?;
     module.add_function(wrap_pyfunction!(selected_codes_json, module)?)?;

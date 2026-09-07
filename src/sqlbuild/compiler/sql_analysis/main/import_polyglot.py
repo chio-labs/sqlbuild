@@ -1,4 +1,4 @@
-"""Public optional Polyglot import entry."""
+"""Public required Polyglot import entry."""
 
 from typing import Any
 
@@ -7,7 +7,7 @@ from sqlbuild.compiler.sql_analysis._helpers.polyglot import (
 )
 
 
-def import_polyglot() -> Any | None:
-    """Return the Polyglot SQL module when installed, otherwise None."""
+def import_polyglot() -> Any:
+    """Return SQLBuild's required Polyglot SQL module."""
 
     return _import_polyglot()

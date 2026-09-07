@@ -24,6 +24,7 @@ from sqlbuild.cli.commands.constants import (
     PLAYGROUND_TEMPLATE_VALUES,
 )
 from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode
+from sqlbuild.compiler.contract_adoption.types import ContractAction
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.virtual.state.types import StateCommand
 
@@ -67,6 +68,7 @@ def build_cli_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     _add_data_parsers(subparsers)
     _add_virtual_parsers(subparsers)
     _add_inspection_parsers(subparsers)
+    _add_contract_parser(subparsers)
     _add_maintenance_parsers(subparsers)
     _add_workspace_parsers(subparsers)
     _add_dbt_parsers(subparsers)
@@ -75,11 +77,41 @@ def build_cli_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     return parser
 
 
+def _add_sql_analysis_override(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--no-sql-analysis",
+        "--no-sql-validation",
+        dest="no_sql_validation",
+        action="store_true",
+        default=False,
+        help="disable SQL syntax, binding, type inference, and semantic validation",
+    )
+
+
+def _add_contract_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    contract_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.CONTRACT)
+    actions: argparse._SubParsersAction[argparse.ArgumentParser] = contract_parser.add_subparsers(
+        dest="contract_command",
+        required=True,
+    )
+    for action in ContractAction:
+        action_parser: argparse.ArgumentParser = actions.add_parser(action)
+        action_parser.add_argument("--from", dest="contract_from", required=True)
+        action_parser.add_argument("--json", action="store_true", default=False)
+        _ = add_select_args(action_parser)
+        _ = add_vars_args(action_parser)
+        if action == ContractAction.GENERATE:
+            action_parser.add_argument("--write", dest="contract_write", action="store_true")
+            action_parser.add_argument("--overwrite", action="store_true")
+
+
 def _add_compile_and_dag_parsers(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
     compile_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.COMPILE)
-    compile_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    _add_sql_analysis_override(compile_parser)
     compile_parser.add_argument(
         "--no-cache",
         action="store_true",
@@ -127,7 +159,7 @@ def _add_compile_and_dag_parsers(
     _ = add_dbt_config_args(parser=compile_parser)
 
     dag_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DAG)
-    dag_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    _add_sql_analysis_override(dag_parser)
     dag_parser.add_argument("--json", action="store_true", default=False)
     _ = add_vars_args(dag_parser)
     _ = add_dbt_config_args(parser=dag_parser)
@@ -137,7 +169,7 @@ def _add_plan_and_build_parsers(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
     plan_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PLAN)
-    plan_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    _add_sql_analysis_override(plan_parser)
     plan_parser.add_argument(
         "--no-cache",
         action="store_true",
@@ -177,7 +209,7 @@ def _add_plan_and_build_parsers(
     _ = add_dbt_config_args(parser=plan_parser)
 
     build_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.BUILD)
-    build_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    _add_sql_analysis_override(build_parser)
     build_parser.add_argument(
         "--no-cache",
         action="store_true",
@@ -227,7 +259,7 @@ def _add_quality_parsers(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
     freshness_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.FRESHNESS)
-    freshness_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    _add_sql_analysis_override(freshness_parser)
     freshness_parser.add_argument("--json", action="store_true", default=False)
     freshness_parser.add_argument("--state", action="store_true", default=False)
     freshness_parser.add_argument("--target", default=None)
@@ -240,7 +272,7 @@ def _add_quality_parsers(
     _ = add_dbt_config_args(parser=freshness_parser)
 
     test_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.TEST)
-    test_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    _add_sql_analysis_override(test_parser)
     test_parser.add_argument("--json", action="store_true", default=False)
     test_parser.add_argument("--target", default=None)
     test_parser.add_argument("--concurrency", type=int, default=None)
@@ -250,7 +282,7 @@ def _add_quality_parsers(
     _ = add_dbt_config_args(parser=test_parser)
 
     check_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.CHECK)
-    check_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    _add_sql_analysis_override(check_parser)
     check_parser.add_argument("--json", action="store_true", default=False)
     check_parser.add_argument("--target", default=None)
     _ = add_execution_json_output_arg(check_parser)
@@ -259,7 +291,7 @@ def _add_quality_parsers(
     _ = add_dbt_config_args(parser=check_parser)
 
     audit_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.AUDIT)
-    audit_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    _add_sql_analysis_override(audit_parser)
     audit_parser.add_argument("--defer-to", default=None)
     audit_parser.add_argument("--target", default=None)
     audit_parser.add_argument("--concurrency", type=int, default=None)
@@ -308,7 +340,7 @@ def _add_data_parsers(
     _ = add_vars_args(seed_parser)
 
     clone_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.CLONE)
-    clone_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    _add_sql_analysis_override(clone_parser)
     clone_parser.add_argument("--from", dest="from_target", required=True)
     clone_parser.add_argument("--to", dest="to_target", default=None)
     clone_parser.add_argument("--hard-copy", action="store_true", default=False)
@@ -323,7 +355,7 @@ def _add_data_parsers(
 
     diff_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DIFF)
     diff_parser.add_argument("target_range", metavar="FROM:TO")
-    diff_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    _add_sql_analysis_override(diff_parser)
     diff_parser.add_argument("--full", action="store_true", default=False)
     diff_parser.add_argument("--schema-only", action="store_true", default=False)
     diff_parser.add_argument("--bounded", default=None)
@@ -359,7 +391,7 @@ def _add_virtual_parsers(
     reconcile_attach_parser.add_argument("--auto-approve", action="store_true", default=False)
 
     promote_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PROMOTE)
-    promote_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    _add_sql_analysis_override(promote_parser)
     promote_parser.add_argument("--from", dest="from_virtual_environment", required=True)
     promote_parser.add_argument("--to", dest="to_virtual_environment", required=True)
     promote_parser.add_argument("--allow-partial-promotion", action="store_true", default=False)
@@ -369,7 +401,7 @@ def _add_virtual_parsers(
     _ = add_vars_args(promote_parser)
 
     rollback_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.ROLLBACK)
-    rollback_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    _add_sql_analysis_override(rollback_parser)
     rollback_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
     rollback_parser.add_argument("--checkpoint-id", dest="rollback_checkpoint_id", default=None)
     rollback_parser.add_argument("--allow-partial-rollback", action="store_true", default=False)
@@ -485,12 +517,19 @@ def _add_inspection_parsers(
 
     lineage_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.LINEAGE)
     lineage_parser.add_argument("lineage_target", nargs="?", metavar="target")
-    lineage_parser.add_argument("--no-sql-validation", action="store_true", default=False)
+    _add_sql_analysis_override(lineage_parser)
     lineage_parser.add_argument(
         "--format",
         dest="lineage_format",
         choices=("tree", "json", "list"),
         default="tree",
+    )
+    lineage_parser.add_argument(
+        "--include-uses",
+        dest="lineage_include_uses",
+        action="store_true",
+        default=False,
+        help="include direct filter, join, grouping, window, and ordering column uses",
     )
     lineage_parser.add_argument(
         "--direction",
