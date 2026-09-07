@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import duckdb
 import pytest
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
@@ -104,6 +105,84 @@ def test_given_missing_declarations_when_generating_additively_then_preserves_me
     assert "type: 'BIGINT'" in source_yaml
     assert "- name: status" in source_yaml
     assert "type: 'VARCHAR'" in source_yaml
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ContractCommandIntegrationTestCase(
+            description="parameterized physical type is quoted in a generated model header",
+            expected_exit_code=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_parameterized_physical_type_when_generating_then_writes_valid_model_header(
+    test_case: ContractCommandIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    database: Path = prepare_contract_project(tmp_path)
+    model_path: Path = tmp_path / "models" / "orders.sql"
+    _ = model_path.write_text(
+        "MODEL (materialized table);\n"
+        "SELECT CAST(1 AS INTEGER) AS id, CAST(1 AS DECIMAL(10,2)) AS amount\n",
+        encoding="utf-8",
+    )
+    with duckdb.connect(str(database)) as connection:
+        connection.execute("DROP TABLE prod.orders")
+        connection.execute("CREATE TABLE prod.orders(id INTEGER, amount DECIMAL(10,2))")
+
+    exit_code: int = main(
+        [
+            "--no-color",
+            "--project-dir",
+            str(tmp_path),
+            "contract",
+            "generate",
+            "--from",
+            "prod",
+            "--select",
+            "orders",
+            "--write",
+        ]
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert "0 contract difference(s)" in capsys.readouterr().out
+    generated_sql: str = model_path.read_text(encoding="utf-8")
+    assert 'amount (type "DECIMAL(10,2)")' in generated_sql
+    _ = model_path.write_text(
+        generated_sql.replace(
+            'amount (type "DECIMAL(10,2)")',
+            'amount (description "type DECIMAL(10,2)", type "DECIMAL(10,2)")',
+        ),
+        encoding="utf-8",
+    )
+
+    with duckdb.connect(str(database)) as connection:
+        connection.execute("DROP TABLE prod.orders")
+        connection.execute("CREATE TABLE prod.orders(id INTEGER, amount DECIMAL(12,3))")
+    overwrite_exit_code: int = main(
+        [
+            "--no-color",
+            "--project-dir",
+            str(tmp_path),
+            "contract",
+            "generate",
+            "--from",
+            "prod",
+            "--select",
+            "orders",
+            "--write",
+            "--overwrite",
+        ]
+    )
+
+    assert overwrite_exit_code == test_case.expected_exit_code
+    assert "0 contract difference(s)" in capsys.readouterr().out
+    overwritten_sql: str = model_path.read_text(encoding="utf-8")
+    assert 'amount (description "type DECIMAL(10,2)", type "DECIMAL(12,3)")' in overwritten_sql
 
 
 @pytest.mark.parametrize(
