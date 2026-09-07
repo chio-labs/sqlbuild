@@ -124,10 +124,14 @@ def _declared_type_span(
 
 
 def edit_source(
-    *, source: CompiledSource, physical_columns: tuple[ColumnInfo, ...], overwrite: bool
+    *,
+    source: CompiledSource,
+    physical_columns: tuple[ColumnInfo, ...],
+    overwrite: bool,
+    contents: str | None = None,
 ) -> tuple[str | None, str | None]:
-    contents: str = source.source_file.contents
-    if _GENERATED_MARKER in "\n".join(contents.splitlines()[:5]).casefold():
+    contents = source.source_file.contents if contents is None else contents
+    if _GENERATED_MARKER in "\n".join(source.source_file.contents.splitlines()[:5]).casefold():
         return None, "source file is marked as generated"
     lines: list[str] = contents.splitlines(keepends=True)
     source_range: tuple[int, int, int] | None = _yaml_named_block(

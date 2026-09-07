@@ -11,7 +11,10 @@ from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     ContractCommandIntegrationTestCase,
 )
-from tests.integration.src.sqlbuild.cli.commands.main.helpers import prepare_contract_project
+from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
+    add_second_contract_source,
+    prepare_contract_project,
+)
 
 
 @pytest.mark.parametrize(
@@ -101,6 +104,50 @@ def test_given_missing_declarations_when_generating_additively_then_preserves_me
     assert "type: 'BIGINT'" in source_yaml
     assert "- name: status" in source_yaml
     assert "type: 'VARCHAR'" in source_yaml
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ContractCommandIntegrationTestCase(
+            description="multiple sources sharing one YAML file retain every generated edit",
+            expected_exit_code=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_multiple_sources_in_one_file_when_generating_then_all_edits_are_retained(
+    test_case: ContractCommandIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    database: Path = prepare_contract_project(tmp_path)
+    add_second_contract_source(project_dir=tmp_path, database=database)
+
+    exit_code: int = main(
+        [
+            "--no-color",
+            "--project-dir",
+            str(tmp_path),
+            "contract",
+            "generate",
+            "--from",
+            "prod",
+            "--select",
+            "source:raw_orders",
+            "source:raw_customers",
+            "--write",
+        ]
+    )
+
+    source_yaml: str = (tmp_path / "sources" / "raw.yml").read_text(encoding="utf-8")
+    assert exit_code == test_case.expected_exit_code
+    assert "0 contract difference(s)" in capsys.readouterr().out
+    assert "type: 'BIGINT'" in source_yaml
+    assert "- name: generated_at" in source_yaml
+    assert "- name: status" in source_yaml
+    assert "- name: customer_id" in source_yaml
+    assert "- name: email" in source_yaml
 
 
 @pytest.mark.parametrize(

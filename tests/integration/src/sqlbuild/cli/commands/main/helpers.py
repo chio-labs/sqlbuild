@@ -53,3 +53,21 @@ SELECT CAST(1 AS INTEGER) AS id, CAST('a' AS VARCHAR) AS name
         connection.execute("CREATE TABLE prod.orders(id INTEGER, name VARCHAR)")
         connection.execute("CREATE TABLE raw.orders(id BIGINT, status VARCHAR)")
     return database
+
+
+def add_second_contract_source(*, project_dir: Path, database: Path) -> None:
+    """Add another physical source declared in the existing source YAML file."""
+
+    source_path: Path = project_dir / "sources" / "raw.yml"
+    _ = source_path.write_text(
+        source_path.read_text(encoding="utf-8")
+        + """  - name: raw_customers
+    schema: raw
+    table: customers
+    description: keep second source
+""",
+        encoding="utf-8",
+    )
+    with duckdb.connect(str(database)) as connection:
+        connection.execute("ALTER TABLE raw.orders ADD COLUMN generated_at TIMESTAMP")
+        connection.execute("CREATE TABLE raw.customers(customer_id BIGINT, email VARCHAR)")
