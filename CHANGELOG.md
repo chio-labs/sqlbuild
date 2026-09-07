@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.90.0](https://github.com/chio-labs/sqlbuild/compare/v0.89.1...v0.90.0) (2026-09-07)
+
+
+### Features
+
+* bind SQL columns and adopt contracts ([#564](https://github.com/chio-labs/sqlbuild/issues/564)) ([e8e032f](https://github.com/chio-labs/sqlbuild/commit/e8e032f9df275554ed49b6b70fa49272dd61516e))
+
 ## [0.89.1](https://github.com/chio-labs/sqlbuild/compare/v0.89.0...v0.89.1) (2026-09-07)
 
 
