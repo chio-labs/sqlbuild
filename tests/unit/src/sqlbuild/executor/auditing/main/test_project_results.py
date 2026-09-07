@@ -220,6 +220,47 @@ def test_given_record_build_failure_when_projected_then_reports_degradation_with
 
 @pytest.mark.parametrize(
     "test_case",
+    [AuditExecutionCase("unmatched result batch", AuditOutcome.WARN)],
+    ids=lambda case: case.description,
+)
+def test_given_one_unmatched_result_when_projecting_batch_then_publishes_no_partial_batch(
+    test_case: AuditExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    writer_calls: list[object] = []
+    monkeypatch.setattr(
+        projection_module,
+        "write_audit_result_records",
+        lambda **kwargs: writer_calls.append(kwargs),
+    )
+    dispatcher: EventDispatcher = EventDispatcher()
+    events: list[LifecycleEvent] = []
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    with (
+        identity_scope(ExecutionIdentity(invocation_id="invocation", run_id="run")),
+        dispatcher_scope(dispatcher),
+    ):
+        projection: Any = project_audit_result_batch(
+            plan=PlanOutput(audit_entries=(build_projection_entry(),)),
+            results=(
+                build_projection_result(),
+                replace(build_projection_result(), audit_name="unplanned_audit"),
+            ),
+            adapter=cast(Any, object()),
+            connection=object(),
+            storage_schema="analytics",
+        )
+
+    assert projection.attempted_count == 2
+    assert projection.failed_count == 2
+    assert events == []
+    assert writer_calls == []
+    assert build_projection_result().outcome == test_case.expected_outcome
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [AuditExecutionCase("lifecycle validation failure", AuditOutcome.WARN)],
     ids=lambda case: case.description,
 )
