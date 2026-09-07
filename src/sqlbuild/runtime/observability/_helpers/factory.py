@@ -6,7 +6,10 @@ from importlib.metadata import version
 from types import MappingProxyType
 from uuid import uuid4
 
-from sqlbuild.runtime.observability._helpers.identity import current_execution_identity
+from sqlbuild.runtime.observability._helpers.identity import (
+    current_execution_identity,
+    current_invocation_external_context,
+)
 from sqlbuild.runtime.observability.constants import CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import ExecutionIdentity, LifecycleEvent
@@ -43,10 +46,12 @@ def create_lifecycle_event(
         ),
         occurred_at=datetime.now(UTC) if occurred_at is None else occurred_at,
         invocation_id=identity.invocation_id,
+        invocation_sequence=0,
         run_id=identity.run_id,
         resource_id=identity.resource_id,
         resource_attempt_id=identity.resource_attempt_id,
         operation_id=identity.operation_id,
         statement_id=identity.statement_id,
+        external_context=current_invocation_external_context(),
         payload=payload,
     )

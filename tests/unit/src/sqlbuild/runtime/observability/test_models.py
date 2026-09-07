@@ -67,9 +67,9 @@ def test_given_lifecycle_fact_when_mutating_envelope_or_payload_then_it_remains_
         ),
         SchemaVersionCase(
             description="unknown lifecycle version is rejected by the known event type",
-            schema_version=2,
+            schema_version=3,
             expected_error=(
-                "LifecycleEvent only represents known schema version 1; "
+                "LifecycleEvent only represents known schema versions through 2; "
                 "decode other versions as OpaqueLifecycleEvent"
             ),
         ),

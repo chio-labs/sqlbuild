@@ -11,8 +11,9 @@ from sqlbuild.runtime.observability._helpers.validation import validate_schema_v
 from sqlbuild.runtime.observability.constants import (
     CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION,
     DIAGNOSTIC_ENVELOPE_FIELDS,
-    LIFECYCLE_ENVELOPE_FIELDS,
+    LIFECYCLE_ENVELOPE_FIELDS_BY_VERSION,
     LIFECYCLE_EVENT_CATALOGS,
+    LIFECYCLE_INVOCATION_METADATA_SCHEMA_VERSION,
 )
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import (
@@ -68,27 +69,29 @@ def lifecycle_event_to_json(event: LifecycleEvent | OpaqueLifecycleEvent) -> str
 
     if isinstance(event, OpaqueLifecycleEvent):
         return _dumps(_json_data(event.raw))
-    return _dumps(
-        {
-            "event_id": event.event_id,
-            "event_type": event.event_type,
-            "schema_version": event.schema_version,
-            "producer": event.producer,
-            "producer_version": event.producer_version,
-            "occurred_at": _timestamp(event.occurred_at),
-            "invocation_id": event.invocation_id,
-            "run_id": event.run_id,
-            "resource_id": event.resource_id,
-            "resource_attempt_id": event.resource_attempt_id,
-            "operation_id": event.operation_id,
-            "statement_id": event.statement_id,
-            "payload": _json_data(event.payload),
-        }
-    )
+    data: dict[str, object] = {
+        "event_id": event.event_id,
+        "event_type": event.event_type,
+        "schema_version": event.schema_version,
+        "producer": event.producer,
+        "producer_version": event.producer_version,
+        "occurred_at": _timestamp(event.occurred_at),
+        "invocation_id": event.invocation_id,
+        "run_id": event.run_id,
+        "resource_id": event.resource_id,
+        "resource_attempt_id": event.resource_attempt_id,
+        "operation_id": event.operation_id,
+        "statement_id": event.statement_id,
+        "payload": _json_data(event.payload),
+    }
+    if event.schema_version >= LIFECYCLE_INVOCATION_METADATA_SCHEMA_VERSION:
+        data["invocation_sequence"] = event.invocation_sequence
+        data["external_context"] = _json_data(event.external_context)
+    return _dumps(data)
 
 
 def lifecycle_event_from_json(raw_json: str) -> LifecycleEvent | OpaqueLifecycleEvent:
-    """Decode known v1 events strictly and retain unknown envelopes opaquely."""
+    """Decode known events strictly and retain unknown envelopes opaquely."""
 
     data: dict[str, Any] = _loads_object(raw_json=raw_json, envelope_name="lifecycle event")
     event_type: object = data.get("event_type")
@@ -106,7 +109,7 @@ def lifecycle_event_from_json(raw_json: str) -> LifecycleEvent | OpaqueLifecycle
         return OpaqueLifecycleEvent(raw=data)
     _reject_unknown_fields(
         data=data,
-        allowed=LIFECYCLE_ENVELOPE_FIELDS,
+        allowed=LIFECYCLE_ENVELOPE_FIELDS_BY_VERSION[schema_version],
         envelope_name=f"v{schema_version} lifecycle event",
     )
     try:
@@ -122,11 +125,13 @@ def lifecycle_event_from_json(raw_json: str) -> LifecycleEvent | OpaqueLifecycle
             producer_version=data["producer_version"],
             occurred_at=occurred_at,
             invocation_id=data["invocation_id"],
+            invocation_sequence=data.get("invocation_sequence"),
             run_id=data.get("run_id"),
             resource_id=data.get("resource_id"),
             resource_attempt_id=data.get("resource_attempt_id"),
             operation_id=data.get("operation_id"),
             statement_id=data.get("statement_id"),
+            external_context=data.get("external_context", {}),
             payload=data.get("payload", {}),
         )
     except KeyError as error:

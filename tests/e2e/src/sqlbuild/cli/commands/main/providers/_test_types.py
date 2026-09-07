@@ -5,6 +5,7 @@ from dataclasses import dataclass
 class EventExporterE2ETestCase:
     description: str
     expected_first_event: str
+    expected_context: dict[str, object]
 
 
 @dataclass(frozen=True)

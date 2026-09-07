@@ -134,7 +134,7 @@ def test_given_first_plain_append_allocated_but_uncommitted_when_second_appends_
     first, second, allocated, release = paused_plain_append
     known: LifecycleEvent = lifecycle_event("known-first", run_id="cursor-run")
     opaque: OpaqueLifecycleEvent = OpaqueLifecycleEvent(
-        raw={"event_id": "opaque-second", "schema_version": 2, "nested": {"kind": "opaque"}}
+        raw={"event_id": "opaque-second", "schema_version": 3, "nested": {"kind": "opaque"}}
     )
 
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -252,7 +252,7 @@ def test_given_opaque_nested_nul_and_jsonb_oversized_number_when_roundtripping_t
     event: OpaqueLifecycleEvent = OpaqueLifecycleEvent(
         raw={
             "event_id": "opaque-text-only",
-            "schema_version": 2,
+            "schema_version": 3,
             "nested": {"nul": "before\u0000after", "huge": huge_number},
         }
     )

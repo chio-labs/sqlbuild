@@ -511,7 +511,7 @@ def run_cursor_key(
 def opaque_event(event_id: str) -> OpaqueLifecycleEvent:
     """Build an opaque canonical lifecycle envelope for storage tests."""
 
-    return OpaqueLifecycleEvent(raw={"event_id": event_id, "schema_version": 2})
+    return OpaqueLifecycleEvent(raw={"event_id": event_id, "schema_version": 3})
 
 
 def append_failing_event_log_factory() -> LifecycleEventLogStorage:

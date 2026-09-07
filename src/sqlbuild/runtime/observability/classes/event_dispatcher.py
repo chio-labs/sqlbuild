@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 from contextvars import ContextVar, Token
+from dataclasses import replace
 from functools import partial
 from threading import RLock
 from typing import Literal, cast, overload
@@ -14,6 +15,9 @@ from sqlbuild.runtime.observability._helpers.failure_formatting import (
     _safe_subscriber_name,
 )
 from sqlbuild.runtime.observability._helpers.validation import validate_known_lifecycle_event
+from sqlbuild.runtime.observability.constants import (
+    LIFECYCLE_INVOCATION_METADATA_SCHEMA_VERSION,
+)
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.models import (
     DiagnosticLog,
@@ -47,6 +51,7 @@ class EventDispatcher:
         self._publication_lock: RLock = RLock()
         self._lifecycle: tuple[LifecycleRegistration, ...] = ()
         self._diagnostics: tuple[DiagnosticRegistration, ...] = ()
+        self._lifecycle_sequences: dict[str, int] = {}
         self._pending_publications: deque[
             tuple[Literal["lifecycle"], LifecycleEvent | OpaqueLifecycleEvent, bool]
             | tuple[Literal["diagnostic"], DiagnosticLog, bool]
@@ -118,6 +123,14 @@ class EventDispatcher:
                 lifecycle_value: LifecycleEvent | OpaqueLifecycleEvent = cast(
                     LifecycleEvent | OpaqueLifecycleEvent, value
                 )
+                if (
+                    isinstance(lifecycle_value, LifecycleEvent)
+                    and lifecycle_value.schema_version
+                    >= LIFECYCLE_INVOCATION_METADATA_SCHEMA_VERSION
+                ):
+                    sequence: int = self._lifecycle_sequences.get(lifecycle_value.invocation_id, 0)
+                    self._lifecycle_sequences[lifecycle_value.invocation_id] = sequence + 1
+                    lifecycle_value = replace(lifecycle_value, invocation_sequence=sequence)
                 self._pending_publications.append((channel, lifecycle_value, suppress_health))
             else:
                 diagnostic_value: DiagnosticLog = cast(DiagnosticLog, value)
