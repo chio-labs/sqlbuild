@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.90.3](https://github.com/chio-labs/sqlbuild/compare/v0.90.2...v0.90.3) (2026-09-07)
+
+
+### Bug Fixes
+
+* preserve contract uncertainty and aliases ([#572](https://github.com/chio-labs/sqlbuild/issues/572)) ([8384308](https://github.com/chio-labs/sqlbuild/commit/8384308c390a76d6a4993612ab197f23ba691220))
+
 ## [0.90.2](https://github.com/chio-labs/sqlbuild/compare/v0.90.1...v0.90.2) (2026-09-07)
 
 
