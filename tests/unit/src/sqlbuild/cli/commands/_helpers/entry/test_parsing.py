@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from importlib.metadata import version as installed_version
+
 import pytest
 
 from sqlbuild.cli.commands._helpers.entry.parser import build_cli_parser
@@ -10,6 +12,7 @@ from sqlbuild.cli.commands.models import ParsedCliInvocation
 from tests.unit.src.sqlbuild.cli.commands._helpers.entry._test_types import (
     AuditConcurrencyParsingTestCase,
     VerboseCommandTestCase,
+    VersionFlagTestCase,
 )
 
 
@@ -118,3 +121,33 @@ def test_given_audit_concurrency_sources_when_parsing_then_precedence_and_valida
 
     assert parsed.exit_code == test_case.expected_exit_code
     assert getattr(parsed.args, "concurrency", None) == test_case.expected_concurrency
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VersionFlagTestCase(
+            description="long flag exits zero without a project",
+            argv=("--version",),
+            expected_exit_code=0,
+        ),
+        VersionFlagTestCase(
+            description="short flag exits zero without a project",
+            argv=("-V",),
+            expected_exit_code=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_version_flag_when_parsing_then_prints_version_and_exits_zero(
+    test_case: VersionFlagTestCase,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    invocation: ParsedCliInvocation = parse_cli_invocation(
+        argv=test_case.argv,
+        parser=build_cli_parser(),
+    )
+
+    assert invocation.args is None
+    assert invocation.exit_code == test_case.expected_exit_code
+    assert f"sqb {installed_version('sqlbuild')}" in capsys.readouterr().out
