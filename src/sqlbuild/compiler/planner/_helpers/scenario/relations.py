@@ -44,7 +44,6 @@ from sqlbuild.compiler.planner.constants import (
     SCENARIO_PLAN_MISSING_FIXTURE_SQL,
     SCENARIO_PLAN_MISSING_RELATION_TARGET,
     SCENARIO_PLAN_SQLGLOT_PARSE,
-    SCENARIO_PLAN_SQLGLOT_UNAVAILABLE,
     SCENARIO_PLAN_UNKNOWN_SEED,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -636,16 +635,10 @@ def _resolve_scenario_check_sql_with_sql_analysis(
     adapter: BaseAdapter,
     sql_analysis_dialect: str | None,
 ) -> str:
-    polyglot_module: Any | None = import_polyglot_sql()
-    if polyglot_module is None:
-        raise PlannerInputError(
-            "Scenario Polyglot resolution is enabled but Polyglot SQL is unavailable",
-            code=SCENARIO_PLAN_SQLGLOT_UNAVAILABLE,
-            help="Install SQLBuild with Polyglot SQL or run with SQL validation disabled.",
-        )
+    polyglot_module: Any = import_polyglot_sql()
     try:
         parsed: Any = polyglot_module.parse_one(sql, dialect=sql_analysis_dialect or "generic")
-    except Exception as error:
+    except polyglot_module.PolyglotError as error:
         raise PlannerInputError(
             f"Scenario SQL could not be parsed with Polyglot: {error}",
             code=SCENARIO_PLAN_SQLGLOT_PARSE,
@@ -772,12 +765,10 @@ def _try_resolve_project_source_refs_with_sql_analysis(
 ) -> str | None:
     if SqlReferenceKind.SOURCE.function_name not in sql.lower():
         return None
-    polyglot_module: Any | None = import_polyglot_sql()
-    if polyglot_module is None:
-        return None
+    polyglot_module: Any = import_polyglot_sql()
     try:
         parsed: Any = polyglot_module.parse_one(sql, dialect=sql_analysis_dialect or "generic")
-    except Exception as error:
+    except polyglot_module.PolyglotError as error:
         log_debug_event(
             logger=_DEBUG_LOGGER,
             message="scenario source ref resolution parse failed; falling back",
@@ -972,7 +963,7 @@ def _polyglot_relation_dict(
             f"SELECT * FROM {target_name}",
             dialect=sql_analysis_dialect or "generic",
         )
-    except Exception as error:
+    except polyglot_module.PolyglotError as error:
         log_debug_event(
             logger=_DEBUG_LOGGER,
             message="scenario relation dict parse failed; falling back",

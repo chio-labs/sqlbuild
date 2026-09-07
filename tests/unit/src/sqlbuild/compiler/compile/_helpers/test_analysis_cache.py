@@ -140,7 +140,7 @@ def test_given_corrupt_analysis_when_compiling_then_reanalyzes_and_repairs_the_e
 ) -> None:
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v5" / "model-analysis.sqlite3"
+    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v7" / "model-analysis.sqlite3"
     with sqlite3.connect(cache_path) as connection:
         persisted_contents: str = connection.execute(
             "SELECT payload FROM model_analysis"
@@ -163,7 +163,7 @@ def test_given_corrupt_analysis_when_compiling_then_reanalyzes_and_repairs_the_e
     _digest, _separator, serialized_payload = repaired_contents.partition("\n")
     repaired_payload: dict[str, object] = json.loads(serialized_payload)
     assert repaired_project.models == cold_project.models
-    assert repaired_payload["v"] == 5
+    assert repaired_payload["v"] == 7
     assert isinstance(repaired_payload["s"], str)
     assert analyzer.call_count == test_case.expected_count
 
@@ -181,7 +181,7 @@ def test_given_non_text_analysis_cache_when_compiling_then_reanalyzes_safely(
 ) -> None:
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     _ = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v5" / "model-analysis.sqlite3"
+    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v7" / "model-analysis.sqlite3"
     with sqlite3.connect(cache_path) as connection:
         _ = connection.execute(
             "UPDATE model_analysis SET payload = ?",
@@ -545,6 +545,7 @@ def test_given_changed_output_signature_when_reanalyzing_downstream_then_uses_pa
         column_types_by_table: dict[str, dict[str, str]] | None,
         inference_profile: ExpressionInferenceProfile | None,
         allow_compact_analysis: bool,
+        binding_schema: dict[str, dict[str, str]] | None = None,
     ) -> PolyglotAnalysisResult:
         worker_ids.add(threading.get_ident())
         _ = barrier.wait(timeout=5)
@@ -556,6 +557,7 @@ def test_given_changed_output_signature_when_reanalyzing_downstream_then_uses_pa
             column_types_by_table=column_types_by_table,
             inference_profile=inference_profile,
             allow_compact_analysis=allow_compact_analysis,
+            binding_schema=binding_schema,
         )
 
     monkeypatch.setattr(

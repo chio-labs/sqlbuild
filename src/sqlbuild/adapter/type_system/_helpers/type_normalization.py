@@ -71,12 +71,10 @@ def types_equal(*, left: str, right: str, dialect: TypeDialect | str | None) -> 
 def _normalize_with_polyglot(
     *, type_sql: str, dialect: TypeDialect | str | None
 ) -> NormalizedType | None:
-    polyglot_module: Any | None = import_polyglot()
-    if polyglot_module is None:
-        return None
+    polyglot_module: Any = import_polyglot()
     try:
         parsed: Any = polyglot_module.parse_data_type(type_sql, dialect=dialect or "generic")
-    except Exception as error:
+    except polyglot_module.PolyglotError as error:
         log_debug_event(
             logger=_DEBUG_LOGGER,
             message="type normalization polyglot parse failed; falling back",

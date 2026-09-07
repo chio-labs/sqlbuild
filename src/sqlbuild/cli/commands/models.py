@@ -1403,6 +1403,39 @@ class BuildCostFinalization:
 
 
 @dataclass(frozen=True)
+class ContractCommandRequest:
+    """CLI inputs for physical contract comparison and repository adoption."""
+
+    action: str
+    from_target: str
+    project_dir: Path | None = None
+    select: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
+    write: bool = False
+    overwrite: bool = False
+    json_output: bool = False
+    no_color: bool = False
+    cli_vars: dict[str, object] | None = None
+
+
+@dataclass(frozen=True)
+class LineageCommandRequest:
+    """CLI inputs for dependency and column lineage inspection."""
+
+    project_dir: Path | None
+    no_sql_validation: bool = False
+    target: str | None = None
+    output_format: str = "tree"
+    direction: str = "upstream"
+    depth: str = "all"
+    select: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
+    lineage_mode: ColumnLineageMode = ColumnLineageMode.RICH
+    include_uses: bool = False
+    cli_vars: dict[str, object] | None = None
+
+
+@dataclass(frozen=True)
 class CliEntrypointHandlers:
     """Injected command handlers for the CLI entrypoint."""
 
@@ -1442,6 +1475,7 @@ class CliEntrypointHandlers:
     run_scenario_capture: Callable[[ScenarioCaptureCommandRequest], int]
     run_kata: Callable[[KataCommandRequest], int]
     run_scope: ScopeCommandHandler
+    run_contract: Callable[[ContractCommandRequest], int] | None = None
 
 
 from sqlbuild.cli.commands.classes.build_progress_callbacks import (  # noqa: E402,F401

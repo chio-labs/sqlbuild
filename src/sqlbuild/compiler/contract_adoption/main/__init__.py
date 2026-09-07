@@ -1,0 +1,1 @@
+"""Public contract adoption operations."""

@@ -39,6 +39,14 @@ class FixCommandIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class ContractCommandIntegrationTestCase:
+    """One target-backed contract CLI expectation."""
+
+    description: str
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
 class LoadCommandIntegrationTestCase:
     description: str
     project_files: dict[str, str]
