@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from _pytest.capture import CaptureResult
 
+from sqlbuild.cli.commands._helpers.lint import selection as lint_selection
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.cli.commands.main.project import _lint
 from tests.unit.src.sqlbuild.lint._test_types import (
@@ -140,6 +142,44 @@ def test_given_project_when_running_lint_then_exit_code_and_output_match_expecte
             expected_output_fragments=("WARN=1", "SQBL004"),
             extra_arguments=(),
         ),
+        FormatCliTestCase(
+            description="format accepts dialect-equivalent canonical SQL",
+            files={
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "snowflake"\n[vars]\ncolumns = "a,b"\n'
+                ),
+                "models/canonical.sql": (
+                    'MODEL (description "ok");\n'
+                    "SELECT source.value::STRING result FROM items source "
+                    "WHERE source.value != ''\n"
+                ),
+            },
+            expected_exit_code=0,
+            expected_output_fragments=("Formatted files:",),
+            expected_file_fragments={
+                "models/canonical.sql": "CAST(source.value AS VARCHAR) AS result",
+            },
+        ),
+        FormatCliTestCase(
+            description="format preserves unsupported SQL and reports its file",
+            files={
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "snowflake"\n[vars]\ncolumns = "a,b"\n'
+                ),
+                "models/unsupported.sql": (
+                    'MODEL (description "ok");\n'
+                    "SELECT f.payload:values_by_key[TO_VARCHAR(f.payload:key)]::NUMBER AS value "
+                    "FROM items f\n"
+                ),
+            },
+            expected_exit_code=1,
+            expected_output_fragments=("models/unsupported.sql", "error[L003]"),
+            expected_file_fragments={
+                "models/unsupported.sql": (
+                    "f.payload:values_by_key[TO_VARCHAR(f.payload:key)]::NUMBER"
+                ),
+            },
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -188,7 +228,12 @@ def test_given_model_selector_when_linting_then_only_selected_file_is_checked(
             encoding="utf-8",
         )
 
-    exit_code: int = main(["--project-dir", str(tmp_path), "lint", "--select", "first"])
+    with patch.object(
+        lint_selection,
+        "build_project_graph",
+        side_effect=AssertionError("exact model selection must not compile the project graph"),
+    ):
+        exit_code: int = main(["--project-dir", str(tmp_path), "lint", "--select", "first"])
 
     assert exit_code == 1
     output: str = capsys.readouterr().out
