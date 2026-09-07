@@ -52,12 +52,13 @@ def write_contracts(
             )
             path: Path = project_dir / models[evidence.resource_name].relative_path
         else:
+            path = sources[evidence.resource_name].source_file.file_path
             contents, conflict = edit_source(
                 source=sources[evidence.resource_name],
                 physical_columns=evidence.physical_columns,
                 overwrite=overwrite,
+                contents=updates.get(path),
             )
-            path = sources[evidence.resource_name].source_file.file_path
         if contents is not None and contents != path.read_text(encoding="utf-8"):
             updates[path] = contents
         remaining: tuple[ContractFinding, ...] = remaining_findings(
