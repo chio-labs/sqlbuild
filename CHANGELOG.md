@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.88.0](https://github.com/chio-labs/sqlbuild/compare/v0.87.3...v0.88.0) (2026-09-07)
+
+
+### Features
+
+* add sqb --version flag ([#560](https://github.com/chio-labs/sqlbuild/issues/560)) ([dd3f0d7](https://github.com/chio-labs/sqlbuild/commit/dd3f0d7b1845ebf130ca785e143098bba0cf6314))
+
 ## [0.87.3](https://github.com/chio-labs/sqlbuild/compare/v0.87.2...v0.87.3) (2026-09-06)
 
 
