@@ -194,8 +194,11 @@ def assemble_compiled_project(
                 model_inputs=tuple(
                     model_input
                     for model_input in inputs.model_inputs
-                    if analysis_model_names is None
-                    or _model_name(model_input) in analysis_model_names
+                    if model_input.sql_validation_enabled
+                    and (
+                        analysis_model_names is None
+                        or _model_name(model_input) in analysis_model_names
+                    )
                 ),
                 column_nullability_by_table=column_nullability_by_table,
                 column_types_by_table=column_types_by_table,
@@ -233,6 +236,7 @@ def assemble_compiled_project(
                 model_input=model_input,
                 sql_analysis_enabled=(
                     sql_analysis_enabled
+                    and model_input.sql_validation_enabled
                     and (
                         analysis_model_names is None
                         or _model_name(model_input) in analysis_model_names
@@ -443,6 +447,9 @@ def _analyze_model_sql_in_parallel(
 ) -> dict[str, _ModelSqlAnalysis]:
     if not model_inputs:
         return {}
+    analyzed_model_names: frozenset[str] = frozenset(
+        _model_name(model_input) for model_input in model_inputs
+    )
     requests: tuple[_ModelSqlAnalysisRequest, ...] = tuple(
         _model_sql_analysis_request(
             model_input=model_input,
@@ -464,7 +471,10 @@ def _analyze_model_sql_in_parallel(
             ),
             model_names=tuple(_model_name(request.model_input) for request in requests),
             upstream_model_names_by_key={
-                request.cache_key: _referenced_model_names(request.model_input)
+                request.cache_key: _referenced_model_names(
+                    model_input=request.model_input,
+                    available_names=analyzed_model_names,
+                )
                 for request in requests
                 if request.cache_key is not None
             },
@@ -599,6 +609,7 @@ def _analyze_model_sql_in_parallel(
                     cached_analyses=cached_analyses,
                     invalidated_names=invalidated_names,
                     current_signatures_by_name=current_signatures_by_name,
+                    analyzed_model_names=analyzed_model_names,
                 ),
             )
     return {
@@ -763,13 +774,18 @@ def _downstream_model_names(
     return downstream_names
 
 
-def _referenced_model_names(model_input: CompileModelInput) -> tuple[str, ...]:
+def _referenced_model_names(
+    *,
+    model_input: CompileModelInput,
+    available_names: frozenset[str] | None = None,
+) -> tuple[str, ...]:
     return tuple(
         sorted(
             {
                 reference.ref_name
                 for reference in model_input.references
                 if reference.ref_kind == SqlReferenceKind.REF
+                and (available_names is None or reference.ref_name in available_names)
             }
         )
     )
@@ -781,6 +797,7 @@ def _dependency_signatures_by_key(
     cached_analyses: dict[str, PolyglotAnalysisResult],
     invalidated_names: set[str],
     current_signatures_by_name: dict[str, str],
+    analyzed_model_names: frozenset[str],
 ) -> dict[str, dict[str, str]]:
     dependencies_by_key: dict[str, dict[str, str]] = {}
     for request in requests:
@@ -792,7 +809,10 @@ def _dependency_signatures_by_key(
             continue
         dependencies_by_key[cache_key] = {
             upstream_name: current_signatures_by_name[upstream_name]
-            for upstream_name in _referenced_model_names(request.model_input)
+            for upstream_name in _referenced_model_names(
+                model_input=request.model_input,
+                available_names=analyzed_model_names,
+            )
             if upstream_name in current_signatures_by_name
         }
     return dependencies_by_key
