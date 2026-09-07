@@ -64,7 +64,7 @@ def opaque_event(
         raw={
             "event_id": event_id,
             "event_type": event_type,
-            "schema_version": 2,
+            "schema_version": 3,
             "producer": producer,
             "occurred_at": occurred_at,
             "invocation_id": invocation_id,

@@ -524,7 +524,7 @@ def test_given_opaque_nested_extra_fields_when_reopening_and_retrying_then_canon
     event: OpaqueLifecycleEvent = OpaqueLifecycleEvent(
         raw={
             "event_id": "opaque-nested",
-            "schema_version": 2,
+            "schema_version": 3,
             "event_type": "future_event",
             "occurred_at": "2026-01-01T00:00:00.123456Z",
             "nested": {"items": [1, {"extra": True}]},

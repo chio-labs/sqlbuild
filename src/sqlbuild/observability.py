@@ -37,6 +37,9 @@ from sqlbuild.runtime.observability.main.execution_identity_to_dict import (
     execution_identity_to_dict as _execution_identity_to_dict,
 )
 from sqlbuild.runtime.observability.main.identity_scope import identity_scope as _identity_scope
+from sqlbuild.runtime.observability.main.invocation_external_context_scope import (
+    invocation_external_context_scope as _invocation_external_context_scope,
+)
 from sqlbuild.runtime.observability.main.invocation_scope import (
     invocation_scope as _invocation_scope,
 )
@@ -103,6 +106,7 @@ __all__ = (
     "current_execution_identity",
     "execution_identity_to_dict",
     "identity_scope",
+    "invocation_external_context_scope",
     "invocation_scope",
     "is_terminal_event",
     "lifecycle_event_from_json",
@@ -177,6 +181,16 @@ def invocation_scope(invocation_id: str | None = None) -> Iterator[ExecutionIden
 
     with _invocation_scope(invocation_id) as identity:
         yield identity
+
+
+@contextmanager
+def invocation_external_context_scope(
+    *, external_context: Mapping[str, object]
+) -> Iterator[Mapping[str, JSONValue]]:
+    """Attach validated integration context to lifecycle facts in the current invocation."""
+
+    with _invocation_external_context_scope(external_context=external_context) as installed:
+        yield installed
 
 
 @contextmanager
