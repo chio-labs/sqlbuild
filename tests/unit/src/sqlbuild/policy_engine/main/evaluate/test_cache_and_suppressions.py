@@ -29,9 +29,9 @@ def test_given_unchanged_builtin_inputs_when_evaluating_twice_then_second_run_hi
     test_case: PolicyBehaviorTestCase,
 ) -> None:
     project: CompiledProject = build_project(
-        name="commerce__mart__prices",
-        relative_path="models/mart/commerce__mart__prices.sql",
-        sql="SELECT * FROM prices",
+        name="commerce__mart__orders",
+        relative_path="models/mart/commerce__mart__orders.sql",
+        sql="SELECT * FROM orders",
         config_values={},
     )
     config: PolicyConfig = PolicyConfig(select=("SQBPC101",))
@@ -64,8 +64,8 @@ def test_given_authored_sql_changes_when_compiled_sql_is_same_then_cache_is_inva
 ) -> None:
     compiled_sql: str = "WITH final AS (SELECT 1 AS id) SELECT id FROM final WHERE id > 7"
     project: CompiledProject = build_project(
-        name="commerce__mart__prices",
-        relative_path="models/mart/commerce__mart__prices.sql",
+        name="commerce__mart__orders",
+        relative_path="models/mart/commerce__mart__orders.sql",
         sql=compiled_sql,
         config_values={},
     )
@@ -102,14 +102,14 @@ def test_given_exact_exception_when_fault_exists_then_suppresses_fault(
     tmp_path: Path,
     test_case: PolicyBehaviorTestCase,
 ) -> None:
-    relative_path = "models/mart/commerce__mart__prices.sql"
+    relative_path = "models/mart/commerce__mart__orders.sql"
     target: Path = tmp_path / relative_path
     target.parent.mkdir(parents=True)
-    target.write_text("SELECT * FROM prices\n", encoding="utf-8")
+    target.write_text("SELECT * FROM orders\n", encoding="utf-8")
     project: CompiledProject = build_project(
-        name="commerce__mart__prices",
+        name="commerce__mart__orders",
         relative_path=relative_path,
-        sql="SELECT * FROM prices",
+        sql="SELECT * FROM orders",
         config_values={},
     )
     config: PolicyConfig = PolicyConfig(
@@ -142,12 +142,12 @@ def test_given_stale_exact_exception_when_evaluating_then_raises_error(
     tmp_path: Path,
     test_case: PolicyBehaviorTestCase,
 ) -> None:
-    relative_path = "models/mart/commerce__mart__prices.sql"
+    relative_path = "models/mart/commerce__mart__orders.sql"
     target: Path = tmp_path / relative_path
     target.parent.mkdir(parents=True)
     target.write_text("WITH final AS (SELECT 1 AS id) SELECT id FROM final\n", encoding="utf-8")
     project: CompiledProject = build_project(
-        name="commerce__mart__prices",
+        name="commerce__mart__orders",
         relative_path=relative_path,
         sql="WITH final AS (SELECT 1 AS id) SELECT id FROM final",
         config_values={},
@@ -177,11 +177,11 @@ def test_given_scoped_ignore_when_fault_exists_then_suppresses_fault(
     tmp_path: Path,
     test_case: PolicyBehaviorTestCase,
 ) -> None:
-    relative_path = "models/legacy/commerce__mart__prices.sql"
+    relative_path = "models/legacy/commerce__mart__orders.sql"
     project: CompiledProject = build_project(
-        name="commerce__mart__prices",
+        name="commerce__mart__orders",
         relative_path=relative_path,
-        sql="SELECT * FROM prices",
+        sql="SELECT * FROM orders",
         config_values={},
     )
     config: PolicyConfig = PolicyConfig(

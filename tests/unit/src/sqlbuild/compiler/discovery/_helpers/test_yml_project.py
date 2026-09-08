@@ -1393,7 +1393,7 @@ schema = "staging"
 name = "demo"
 adapter = "duckdb"
 
-[path_defaults."market/stag*"]
+[path_defaults."commerce/stag*"]
 schema = "staging"
 """.strip(),
             expected_error_fragment=r"Use '\*' or '\*\*' as complete path segments",

@@ -105,9 +105,9 @@ _FILE_PATH: Path = Path("models/test_model.sql")
             effective_vars={},
             context_values={
                 "destination.database": "analytics",
-                "destination.schema": "market",
+                "destination.schema": "commerce",
             },
-            expected_sql="CREATE FUNCTION analytics.market.reconstruct_book()",
+            expected_sql="CREATE FUNCTION analytics.commerce.reconstruct_book()",
         ),
         SubstituteSqlVarsTestCase(
             description="renders scalar json var values as SQL text",

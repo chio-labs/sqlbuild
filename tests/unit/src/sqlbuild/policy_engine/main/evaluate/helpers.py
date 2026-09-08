@@ -15,7 +15,7 @@ from sqlbuild.compiler.discovery.models import EnumDeclaration, EnumMember
 
 _ENUM_DECLARATION: EnumDeclaration = EnumDeclaration(
     name="status",
-    members=(EnumMember(name="DELIVERY", value="delivery"),),
+    members=(EnumMember(name="ACTIVE", value="active"),),
     scalar_type="VARCHAR",
     relative_path=Path("enums/status.sql"),
     model_name=None,

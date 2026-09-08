@@ -17,7 +17,7 @@ fn given_repeated_native_evaluation_when_faulting_then_returns_deterministic_com
         }),
         expected_faults: json!([{
             "code": "SQBPC101",
-            "path": "models/mart/commerce__mart__prices.sql",
+            "path": "models/mart/commerce__mart__orders.sql",
             "line": 1,
             "column": 1,
             "message": "models must declare an enforced output contract",
@@ -124,12 +124,12 @@ fn given_snowflake_parser_extensions_when_normalizing_then_preserves_source_posi
             "TRANSFORM(values, leg INT -> leg + 1),\n",
             "'__table_fn(\"quoted\")(7)', /* leg INT -> unchanged */ payload:key::STRING,\n",
             "CAST(amounts AS ARRAY(\n  NUMBER(38, 10)\n)) AS amounts\n",
-            "FROM __table_fn(\"prices)archive\")(42)"
+            "FROM __table_fn(\"orders)archive\")(42)"
         ),
         expected_typed_lambda: "leg     -> leg + 1",
         expected_quoted_call: "'__table_fn(\"quoted\")(7)'",
         expected_comment: "/* leg INT -> unchanged */",
-        expected_table_function: "__table_fn(\"prices)archive\", 42)",
+        expected_table_function: "__table_fn(\"orders)archive\", 42)",
         expected_other_dialect_lambda: "leg INT -> leg + 1",
     }];
 
@@ -224,7 +224,7 @@ fn given_path_threshold_overrides_when_evaluating_then_matches_in_authored_order
                 }],
                 "cache": {"enabled": false}
             }),
-            query_sql: "SELECT id + 1 AS id FROM prices",
+            query_sql: "SELECT id + 1 AS id FROM orders",
             references: json!([]),
             expected_codes: &["SQBPT201", "SQBPT202"],
         },
@@ -240,7 +240,7 @@ fn given_path_threshold_overrides_when_evaluating_then_matches_in_authored_order
                 }],
                 "cache": {"enabled": false}
             }),
-            query_sql: "SELECT id + 1 AS id FROM prices",
+            query_sql: "SELECT id + 1 AS id FROM orders",
             references: json!([]),
             expected_codes: &[],
         },
@@ -263,7 +263,7 @@ fn given_path_threshold_overrides_when_evaluating_then_matches_in_authored_order
                 ],
                 "cache": {"enabled": false}
             }),
-            query_sql: "SELECT id + 1 AS id FROM prices",
+            query_sql: "SELECT id + 1 AS id FROM orders",
             references: json!([]),
             expected_codes: &[],
         },
@@ -279,7 +279,7 @@ fn given_path_threshold_overrides_when_evaluating_then_matches_in_authored_order
                 }],
                 "cache": {"enabled": false}
             }),
-            query_sql: "SELECT id + 1 AS id FROM prices",
+            query_sql: "SELECT id + 1 AS id FROM orders",
             references: json!([]),
             expected_codes: &["SQBPT201"],
         },
@@ -294,8 +294,8 @@ fn given_path_threshold_overrides_when_evaluating_then_matches_in_authored_order
                 }],
                 "cache": {"enabled": false}
             }),
-            query_sql: "WITH upstream AS (SELECT * FROM __ref(\"commerce__stg__prices\")) SELECT id FROM upstream",
-            references: json!([{"ref_kind": "ref", "ref_name": "commerce__stg__prices"}]),
+            query_sql: "WITH upstream AS (SELECT * FROM __ref(\"commerce__stg__orders\")) SELECT id FROM upstream",
+            references: json!([{"ref_kind": "ref", "ref_name": "commerce__stg__orders"}]),
             expected_codes: &[],
         },
     ];
@@ -347,13 +347,13 @@ fn given_threshold_override_change_when_evaluating_then_ruleset_fingerprint_chan
         let base_request = helpers::threshold_request(
             &project_dir,
             &test_case.base_config,
-            "SELECT id + 1 AS id FROM prices",
+            "SELECT id + 1 AS id FROM orders",
             &references,
         );
         let overridden_request = helpers::threshold_request(
             &project_dir,
             &test_case.overridden_config,
-            "SELECT id + 1 AS id FROM prices",
+            "SELECT id + 1 AS id FROM orders",
             &references,
         );
         let base_result: Value = serde_json::from_str(&evaluate_json(&base_request)?)

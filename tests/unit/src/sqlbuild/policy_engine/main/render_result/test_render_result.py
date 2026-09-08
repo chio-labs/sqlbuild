@@ -22,7 +22,7 @@ from tests.unit.src.sqlbuild.policy_engine.main.render_result._test_types import
                 faults=(
                     PolicyFault(
                         code="SQBPC101",
-                        path=Path("models/mart/commerce__mart__prices.sql"),
+                        path=Path("models/mart/commerce__mart__orders.sql"),
                         line=3,
                         column=7,
                         message="model SQL must keep transformation logic in top-level CTEs",

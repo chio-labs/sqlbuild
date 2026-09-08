@@ -224,9 +224,9 @@ def test_given_minimum_test_rule_when_rendering_guidance_then_all_surfaces_have_
     rule: PolicyRule = rules_by_code["SQBPT202"]
     result: PolicyResult = evaluate(
         project=build_project(
-            name="commerce__mart__prices",
-            relative_path="models/mart/commerce__mart__prices.sql",
-            sql="SELECT id + 1 AS id FROM prices",
+            name="commerce__mart__orders",
+            relative_path="models/mart/commerce__mart__orders.sql",
+            sql="SELECT id + 1 AS id FROM orders",
             config_values={"materialized": "table"},
         ),
         config=config,

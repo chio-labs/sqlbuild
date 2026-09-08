@@ -29,7 +29,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
                     [connection]
                     database = ":memory:"
 
-                    [path_defaults."market/**/staging"]
+                    [path_defaults."commerce/**/staging"]
                     schema = "staging"
 
                     [targets.dev]
@@ -37,7 +37,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
                     """
                 ).strip()
                 + "\n",
-                "models/market/partner_feed/staging/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+                "models/commerce/partner_feed/staging/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
             },
             expected_exit_code=0,
             expected_stderr_fragment="",
@@ -53,19 +53,19 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
                     [connection]
                     database = ":memory:"
 
-                    [path_defaults."market/*/staging"]
+                    [path_defaults."commerce/*/staging"]
                     schema = "shared"
 
-                    [path_defaults."market/eu/*"]
+                    [path_defaults."commerce/eu/*"]
                     schema = "shared"
                     """
                 ).strip()
                 + "\n",
-                "models/market/eu/staging/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
+                "models/commerce/eu/staging/orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
             },
             expected_exit_code=1,
             expected_stderr_fragment=(
-                "error[D007]: Model path 'market/eu/staging/orders.sql' matches equally specific "
+                "error[D007]: Model path 'commerce/eu/staging/orders.sql' matches equally specific "
                 "path_defaults keys"
             ),
         ),

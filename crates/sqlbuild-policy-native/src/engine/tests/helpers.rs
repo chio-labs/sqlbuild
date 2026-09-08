@@ -9,10 +9,10 @@ pub(crate) fn request(project_dir: &TempDir, config: &Value) -> String {
         "project_dir": project_dir.path(),
         "config": config,
         "models": [{
-            "name": "commerce__mart__prices",
-            "relative_path": "models/mart/commerce__mart__prices.sql",
-            "query_sql": "SELECT * FROM prices",
-            "authored_sql": "SELECT * FROM prices"
+            "name": "commerce__mart__orders",
+            "relative_path": "models/mart/commerce__mart__orders.sql",
+            "query_sql": "SELECT * FROM orders",
+            "authored_sql": "SELECT * FROM orders"
         }]
     })
     .to_string()
@@ -102,8 +102,8 @@ pub(crate) fn threshold_request(
         "project_dir": project_dir.path(),
         "config": config,
         "models": [{
-            "name": "commerce__mart__prices",
-            "relative_path": "models/mart/commerce__mart__prices.sql",
+            "name": "commerce__mart__orders",
+            "relative_path": "models/mart/commerce__mart__orders.sql",
             "query_sql": query_sql,
             "authored_sql": query_sql,
             "references": references,

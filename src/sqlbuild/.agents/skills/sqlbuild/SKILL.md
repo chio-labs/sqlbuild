@@ -3450,7 +3450,7 @@ subdirectories can organize a large enum library without changing where the enum
 ```text
 my_project/
 ├── enums/
-│   ├── market/
+│   ├── commerce/
 │   │   └── fulfillment_method.sql
 │   └── order_status.sql
 ├── models/
@@ -3458,7 +3458,7 @@ my_project/
 ```
 
 ```sql
--- enums/market/fulfillment_method.sql
+-- enums/commerce/fulfillment_method.sql
 ENUM (
   name fulfillment_method,
   members [DELIVERY, PICKUP, SHIPPING],
@@ -3493,7 +3493,7 @@ Reference one member with `@enum("name").MEMBER`:
 
 ```sql
 SELECT *
-FROM prices
+FROM orders
 WHERE fulfillment_method = @enum("fulfillment_method").DELIVERY
   AND source = @enum("source").WEB
 ```
@@ -3541,7 +3541,7 @@ recursively, and one file may contain more than one declaration.
 ```text
 my_project/
 ├── constants/
-│   ├── market/
+│   ├── commerce/
 │   │   └── thresholds.sql
 │   └── reporting_day.sql
 ├── models/
@@ -3549,7 +3549,7 @@ my_project/
 ```
 
 ```sql
--- constants/market/thresholds.sql
+-- constants/commerce/thresholds.sql
 CONSTANT (name min_items, value 7);
 CONSTANT (name fallback_source, value "web");
 CONSTANT (name enabled, value true);
@@ -3566,7 +3566,7 @@ Reference a constant with `@const("name")`:
 
 ```sql
 SELECT *
-FROM prices
+FROM orders
 WHERE item_count >= @const("min_items")
   AND source = @const("fallback_source")
 ```
@@ -3822,7 +3822,7 @@ MODEL (
   ),
   constants (
     _min_items 7,
-    _supported_countries ["GB", "FR", "HK"],
+    _supported_countries ["US", "CA", "DE"],
   ),
 );
 
@@ -7806,7 +7806,7 @@ max_subdomain_depth = 2
 
 Policy detects ownership hidden in flattened underscore names with a compressed token trie. Unary
 token chains remain compound terms, so `order_status/` and `order_status_history/` identify
-`order_status` rather than `barrier`. Real branch points remain explicit: Partner annotation
+`order_status` rather than `order`. Real branch points remain explicit: partner annotation
 export, annotation validation, and events identify an outer `partner` owner and an inner
 `annotation` concern. Detection starts with two siblings by default:
 
@@ -7959,11 +7959,11 @@ Naming and layer rules can use a closed project vocabulary:
 
 ```toml
 [policy]
-domains = ["finance", "market"]
-approved_source_tokens = ["partner", "stripe"]
+domains = ["commerce", "support"]
+approved_source_tokens = ["web", "partner"]
 
 [policy.retired_source_tokens]
-old_crm = "partner"
+legacy_feed = "partner"
 ```
 
 Valid Policy layers are `stg`, `stg_v`, `int_clean`, `int_v`, `int_enriched`, `mart`, and

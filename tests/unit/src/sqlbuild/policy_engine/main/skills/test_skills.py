@@ -223,7 +223,7 @@ def test_given_exact_exception_when_installing_then_selected_guidance_is_retaine
         rule_exceptions=(
             RuleExemption(
                 rule="SQBPS101",
-                path="models/mart/commerce__mart__prices.sql",
+                path="models/mart/commerce__mart__orders.sql",
                 reason="Migration is tracked",
             ),
         ),
