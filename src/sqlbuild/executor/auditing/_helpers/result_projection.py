@@ -20,7 +20,6 @@ from sqlbuild.executor.audit_results.constants import AUDIT_RESULT_SCHEMA_VERSIO
 from sqlbuild.executor.audit_results.exceptions import AuditResultStorageError
 from sqlbuild.executor.audit_results.main._write import write_audit_result_records
 from sqlbuild.executor.audit_results.models import AuditResultRecord, build_audit_result_id
-from sqlbuild.executor.auditing.exceptions import AuditResultProjectionError
 from sqlbuild.executor.auditing.models import AuditExecutionResult, AuditResultProjection
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.runtime.observability.main.current_execution_identity import (
@@ -88,8 +87,6 @@ def project_audit_result_batch_impl(
             storage_database=database,
             storage_schema=schema,
         )
-        for record in records:
-            _ = _publish_audit_completed(record)
     except Exception as error:
         _LOGGER.warning(
             "Audit result projection degraded: attempted=%d written=0 failed=%d (%s)",
@@ -97,6 +94,22 @@ def project_audit_result_batch_impl(
             len(executed),
             error,
         )
+        projection = AuditResultProjection(
+            attempted_count=len(executed), failed_count=len(executed)
+        )
+        _LAST_AUDIT_RESULT_PROJECTION.set(projection)
+        return projection
+    unmatched_count: int = len(executed) - len(records)
+    for record in records:
+        try:
+            _publish_audit_completed(record)
+        except Exception as error:
+            _LOGGER.warning(
+                "Audit result lifecycle publication degraded for '%s' (%s)",
+                record.audit_name,
+                error,
+            )
+    if not records:
         projection = AuditResultProjection(
             attempted_count=len(executed), failed_count=len(executed)
         )
@@ -117,14 +130,20 @@ def project_audit_result_batch_impl(
     except AuditResultStorageError as error:
         _LOGGER.warning(
             "Audit result persistence degraded: attempted=%d written=0 failed=%d (%s)",
-            len(records),
-            len(records),
+            len(executed),
+            len(executed),
             error,
         )
-        projection = AuditResultProjection(attempted_count=len(records), failed_count=len(records))
+        projection = AuditResultProjection(
+            attempted_count=len(executed), failed_count=len(executed)
+        )
         _LAST_AUDIT_RESULT_PROJECTION.set(projection)
         return projection
-    projection = AuditResultProjection(attempted_count=len(records), written_count=len(records))
+    projection = AuditResultProjection(
+        attempted_count=len(executed),
+        written_count=len(records),
+        failed_count=unmatched_count,
+    )
     _LAST_AUDIT_RESULT_PROJECTION.set(projection)
     return projection
 
@@ -146,9 +165,10 @@ def _build_records(
             None,
         )
         if entry is None:
-            raise AuditResultProjectionError(
-                f"audit result '{result.audit_name}' does not match a planned audit entry"
+            _LOGGER.warning(
+                "Audit result projection skipped unknown audit result '%s'", result.audit_name
             )
+            continue
         audit_id: AuditIdentity = build_audit_gate_identity(audits=(entry,)).audits[0]
         occurrence_key: tuple[str, str] = (audit_id.binding_key, result.run_scope_phase.value)
         ordinal: int = occurrence[occurrence_key]

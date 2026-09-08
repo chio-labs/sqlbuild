@@ -172,7 +172,7 @@ def _with_audit_result_projection(*, payload: str, result: BuildExecutionResult)
         )
         reasons.append(
             {
-                "reason": "audit_result_persistence_failure",
+                "reason": "audit_result_projection_failure",
                 "attempted_count": attempted,
                 "written_count": written,
                 "failed_count": failed,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from types import SimpleNamespace
 from typing import Any, cast
 
 from sqlbuild.compiler.auditing.models import MeasurementThresholdBound, MeasurementThresholds
@@ -54,6 +55,21 @@ class Adapter:
         self.sql.append(sql)
         next_result: Cursor | ErrorResponse = self._cursors.pop(0)
         return next_result()
+
+
+def writer_adapter() -> Any:
+    """Return the adapter surface required by a replaced audit-result writer."""
+
+    return cast(
+        Any,
+        SimpleNamespace(
+            execute=lambda *args, **kwargs: None,
+            render_qualified_name=lambda *args, **kwargs: None,
+            render_framework_type=lambda *args, **kwargs: "",
+            render_create_audit_result_table_sql=lambda *args, **kwargs: "",
+            render_create_audit_result_index_sqls=lambda *args, **kwargs: (),
+        ),
+    )
 
 
 def build_projection_entry() -> AuditPlanEntry:
