@@ -61,7 +61,7 @@ def write_audit_completion_output(
             document["projection_degraded"] = True
             document["projection_degradation_reasons"] = [
                 {
-                    "reason": "audit_result_persistence_failure",
+                    "reason": "audit_result_projection_failure",
                     "attempted_count": projection.attempted_count,
                     "written_count": projection.written_count,
                     "failed_count": projection.failed_count,
