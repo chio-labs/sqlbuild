@@ -170,6 +170,28 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
             expected_query="SELECT 1",
         ),
         ParseModelSqlHeaderTestCase(
+            description="accepts an unquoted parameterized column type",
+            contents="""
+        MODEL (
+          columns (
+            amount (type DECIMAL(10,2), nullable false),
+            observed_at (type TIMESTAMP_NTZ(9)),
+            legacy_amount (type "DECIMAL(12,3)"),
+          ),
+        );
+
+        SELECT 1 AS amount, CURRENT_TIMESTAMP AS observed_at
+        """,
+            expected_header_values={
+                "columns": {
+                    "amount": {"type": "DECIMAL(10,2)", "nullable": False},
+                    "observed_at": {"type": "TIMESTAMP_NTZ(9)"},
+                    "legacy_amount": {"type": "DECIMAL(12,3)"},
+                }
+            },
+            expected_query="SELECT 1 AS amount, CURRENT_TIMESTAMP AS observed_at",
+        ),
+        ParseModelSqlHeaderTestCase(
             description="accepts effective batch size token",
             contents="""
         MODEL (
