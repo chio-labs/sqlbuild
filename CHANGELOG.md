@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.92.1](https://github.com/chio-labs/sqlbuild/compare/v0.92.0...v0.92.1) (2026-09-08)
+
+
+### Bug Fixes
+
+* quote enforced source identifiers ([#590](https://github.com/chio-labs/sqlbuild/issues/590)) ([9024406](https://github.com/chio-labs/sqlbuild/commit/902440679e6a253f598a36bf84f3cb03928a4b40))
+
 ## [0.92.0](https://github.com/chio-labs/sqlbuild/compare/v0.91.4...v0.92.0) (2026-09-08)
 
 
