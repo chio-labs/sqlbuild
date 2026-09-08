@@ -54,6 +54,20 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
             expected_columns=(InferredColumn(name="val", type="INT"),),
         ),
         InferColumnsTestCase(
+            description="preserves timezone metadata for Snowflake timestamp casts",
+            query_sql=(
+                "SELECT source_ts::TIMESTAMP_TZ AS message_timestamp, "
+                'NULL::NUMBER AS placeholder FROM __ref("orders")'
+            ),
+            expected_columns=(
+                InferredColumn(name="message_timestamp", type="TIMESTAMPTZ"),
+                InferredColumn(
+                    name="placeholder", type="DECIMAL", nullability=InferredNullability.NULLABLE
+                ),
+            ),
+            inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="snowflake"),
+        ),
+        InferColumnsTestCase(
             description="extracts Snowflake custom cast target names",
             query_sql=(
                 "SELECT "
