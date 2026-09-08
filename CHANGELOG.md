@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.91.2](https://github.com/chio-labs/sqlbuild/compare/v0.91.1...v0.91.2) (2026-09-08)
+
+
+### Bug Fixes
+
+* render parameterized model types without quotes ([#583](https://github.com/chio-labs/sqlbuild/issues/583)) ([ead4b60](https://github.com/chio-labs/sqlbuild/commit/ead4b60003a194dcd244d7f8dd8bb1e26c22b8da))
+
 ## [0.91.1](https://github.com/chio-labs/sqlbuild/compare/v0.91.0...v0.91.1) (2026-09-08)
 
 
