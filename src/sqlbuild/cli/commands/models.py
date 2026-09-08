@@ -1349,8 +1349,8 @@ class ParsedCliInvocation:
 
 
 @dataclass(frozen=True)
-class KataCommandRequest:
-    """Inputs for kata evaluation, inspection, or skill generation."""
+class PolicyCommandRequest:
+    """Inputs for policy evaluation, inspection, or skill generation."""
 
     project_dir: Path | None
     json_output: bool
@@ -1473,7 +1473,7 @@ class CliEntrypointHandlers:
     run_fix: FixCommandHandler
     run_scenario: Callable[[ScenarioTestCommandRequest], int]
     run_scenario_capture: Callable[[ScenarioCaptureCommandRequest], int]
-    run_kata: Callable[[KataCommandRequest], int]
+    run_policy: Callable[[PolicyCommandRequest], int]
     run_scope: ScopeCommandHandler
     run_contract: Callable[[ContractCommandRequest], int] | None = None
 

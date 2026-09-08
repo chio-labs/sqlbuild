@@ -10,10 +10,10 @@ runtime-forbidden-packages = [
 [raw-parser-boundary]
 packages = []
 remediation = "consume SQLBuild-owned SQL fact rows instead of raw parser types"
-restricted-paths = ["crates/sqlbuild-kata-native/src/rules"]
+restricted-paths = ["crates/sqlbuild-policy-native/src/rules"]
 
 [repository]
 crate-names = [
-  "sqlbuild-kata-native",
+  "sqlbuild-policy-native",
   "sqlbuild-structure-checker",
 ]

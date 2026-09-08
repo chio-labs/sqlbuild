@@ -21,11 +21,11 @@ from sqlbuild.cli.commands.models import (
     DiffCommandRequest,
     FreshnessCommandRequest,
     JanitorCommandRequest,
-    KataCommandRequest,
     LineageCommandRequest,
     LoadCommandRequest,
     PlanCommandRequest,
     PlaygroundCommandRequest,
+    PolicyCommandRequest,
     PromoteCommandRequest,
     RollbackCommandRequest,
     ScenarioCaptureCommandRequest,
@@ -271,11 +271,11 @@ def test_given_dbt_plan_arguments_when_running_with_dependencies_then_it_dispatc
     "test_case",
     [
         MainTestCase(
-            description="dispatches typed kata request",
+            description="dispatches typed policy request",
             argv=[
                 "--project-dir",
-                "/tmp/kata-project",
-                "kata",
+                "/tmp/policy-project",
+                "policy",
                 "--json",
                 "--select",
                 "commerce__mart__prices",
@@ -287,24 +287,24 @@ def test_given_dbt_plan_arguments_when_running_with_dependencies_then_it_dispatc
     ],
     ids=lambda case: case.description,
 )
-def test_given_kata_arguments_when_running_then_dispatches_typed_request(
+def test_given_policy_arguments_when_running_then_dispatches_typed_request(
     test_case: MainTestCase,
 ) -> None:
-    received: list[KataCommandRequest] = []
+    received: list[PolicyCommandRequest] = []
 
-    def run_kata(request: KataCommandRequest) -> int:
+    def run_policy(request: PolicyCommandRequest) -> int:
         received.append(request)
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
         argv=test_case.argv,
-        handlers=build_handlers(run_kata=run_kata),
+        handlers=build_handlers(run_policy=run_policy),
     )
 
     assert exit_code == test_case.expected_exit_code
     assert received == [
-        KataCommandRequest(
-            project_dir=Path("/tmp/kata-project"),
+        PolicyCommandRequest(
+            project_dir=Path("/tmp/policy-project"),
             json_output=True,
             rule_code=None,
             skills=False,

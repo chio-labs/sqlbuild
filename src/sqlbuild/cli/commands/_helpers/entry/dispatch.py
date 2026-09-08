@@ -9,7 +9,7 @@ from sqlbuild.cli.commands._helpers.entry.parsing import read_selector_file_inpu
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.constants import (
     DBT_INIT_COMMAND,
-    KATA_SKILLS_COMMAND,
+    POLICY_SKILLS_COMMAND,
     SCENARIO_CAPTURE_COMMAND,
     SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
     SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
@@ -31,11 +31,11 @@ from sqlbuild.cli.commands.models import (
     DiffCommandRequest,
     FreshnessCommandRequest,
     JanitorCommandRequest,
-    KataCommandRequest,
     LineageCommandRequest,
     LoadCommandRequest,
     PlanCommandRequest,
     PlaygroundCommandRequest,
+    PolicyCommandRequest,
     PromoteCommandRequest,
     RollbackCommandRequest,
     ScenarioCaptureCommandRequest,
@@ -525,21 +525,21 @@ def _dispatch_local_command(
             project_dir=project_dir,
             select=select,
         )
-    if args.command == CliCommand.KATA:
-        return _dispatch_kata_command(args=args, handlers=handlers, project_dir=project_dir)
+    if args.command == CliCommand.POLICY:
+        return _dispatch_policy_command(args=args, handlers=handlers, project_dir=project_dir)
     return 0
 
 
-def _dispatch_kata_command(
+def _dispatch_policy_command(
     *, args: CliNamespace, handlers: CliEntrypointHandlers, project_dir: Path | None
 ) -> int:
-    return handlers.run_kata(
-        KataCommandRequest(
+    return handlers.run_policy(
+        PolicyCommandRequest(
             project_dir=project_dir,
             json_output=args.json,
-            rule_code=args.kata_rule_code,
-            skills=args.kata_command == KATA_SKILLS_COMMAND,
-            skills_check=args.kata_skills_check,
+            rule_code=args.policy_rule_code,
+            skills=args.policy_command == POLICY_SKILLS_COMMAND,
+            skills_check=args.policy_skills_check,
             select=tuple(args.select),
             exclude=tuple(args.exclude),
         )

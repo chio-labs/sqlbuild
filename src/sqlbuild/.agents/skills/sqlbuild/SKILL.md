@@ -63,8 +63,8 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/declaration-scopes/visibility`
 - `concepts/declaration-scopes/placement`
 - `concepts/declaration-scopes/explorer`
-- `concepts/kata`
-- `concepts/kata/custom-rules`
+- `concepts/policy`
+- `concepts/policy/custom-rules`
 - `concepts/python-nodes/overview`
 - `concepts/python-nodes/loaders`
 - `concepts/python-nodes/tasks`
@@ -95,7 +95,7 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `cli/skills`
 - `cli/compile`
 - `cli/scope`
-- `cli/kata`
+- `cli/policy`
 - `cli/plan`
 - `cli/build`
 - `cli/load`
@@ -172,7 +172,7 @@ E2E replay.
 Before any model runs, SQLBuild does static analysis of your project - offline, no warehouse connection needed.
 
 - **Catch errors at compile.** SQL syntax, type inference, contract checks, and column lineage all run before execution. A bad reference or a type mismatch fails at compile, with an error that points at the line - not halfway through a warehouse run.
-- **Enforce architecture deliberately.** Opt into [Kata](/concepts/kata) to check model structure, dependency CTEs, layer boundaries, joins, naming, contracts, and test coverage with coded faults and remediations.
+- **Enforce architecture deliberately.** Opt into [Policy](/concepts/policy) to check model structure, dependency CTEs, layer boundaries, joins, naming, contracts, and test coverage with coded faults and remediations.
 - **Fast, because it's Rust where it counts.** Static analysis runs on [Polyglot](https://github.com/tobilg/polyglot), a Rust SQL engine (MIT, 32+ dialects), so compile stays quick even on large projects.
 - **Open, not paywalled.** The static analysis is part of the Apache-2.0 core - no proprietary engine, no separate login, and no paid tier gating the smart checks.
 
@@ -610,7 +610,7 @@ waffle-shop/
 ### Next steps
 
 - [Models](/concepts/models) - understand `MODEL()` headers and materialization types
-- [Kata](/concepts/kata) - opt into repository architecture and model-shape checks
+- [Policy](/concepts/policy) - opt into repository architecture and model-shape checks
 - [Functions](/concepts/functions) - SQL UDFs, Python UDFs, and table functions
 - [Incremental](/concepts/incremental) - learn about cursor-based incremental strategies
 - [Audits](/concepts/audits) - configure data quality checks
@@ -655,7 +655,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | SQL validation | Offline, compile-time (Polyglot) | dbt Core: none; dbt Fusion engine: compile-time (proprietary; built on Apache-2.0 dbt Core v2) | Compile-time (SQLGlot) |
 | Column-level lineage | Compile-time, fast and rich modes | dbt Core: post-hoc via docs; dbt Fusion engine: compile-time | Compile-time |
 | Column contract validation | Compile-time inference plus runtime enforcement with `contract enforced` | YAML schema contracts at runtime | Schema contracts via plan |
-| SQL architecture policy | Opt-in Kata rules over compiled models with coded faults, remediations, suppressions, and custom rules | Project conventions through packages and external tooling | Built-in audits and external linting |
+| SQL architecture policy | Opt-in Policy rules over compiled models with coded faults, remediations, suppressions, and custom rules | Project conventions through packages and external tooling | Built-in audits and external linting |
 | SQL transpilation | For local E2E replay into DuckDB | No | For cross-dialect model execution |
 | Python macros | `@macro()` syntax | No (Jinja only) | SQLMesh macro syntax |
 | Compiler-enforced declaration scopes | Project, descendant-public, exact-owner-private, and model-private tiers with offline `sqb scope` inspection | No lexical declaration scopes | No lexical declaration scopes |
@@ -730,7 +730,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Adapters | DuckDB, MotherDuck, Snowflake, BigQuery, Databricks, PostgreSQL, SQL Server | 30+ (community adapters) | DuckDB, Snowflake, BigQuery, Databricks, Spark, Redshift, Postgres, Trino, MySQL |
 | State requirements | Stateless by default | manifest.json + target/ | Requires state store (local database or PostgreSQL for production) |
 | Playground | `sqb playground` | Clone example repo | Example project |
-| AI agent skills | General guidance with `sqb skills`; policy-derived guidance with `sqb kata skills` | No | No |
+| AI agent skills | General guidance with `sqb skills`; policy-derived guidance with `sqb policy skills` | No | No |
 
 ### Where each tool fits
 
@@ -1329,20 +1329,20 @@ default_audit_run_scope = "final"
 - **`staged`** (default for most adapters): Materializes into a staging table, runs audits, then swaps into the target. If audits fail, the production table is untouched.
 - **`immediate`**: Creates the table directly at the target location. Audits run after materialization. Simpler but no pre-promotion safety net.
 
-### Kata
+### Policy
 
-Kata policy belongs in the shared `sqlbuild_project.toml` so local and CI evaluation use the same
+Project policy belongs in the shared `sqlbuild_project.toml` so local and CI evaluation use the same
 architecture rules:
 
 ```toml
-[kata]
-select = ["SQBK"]
+[policy]
+select = ["SQBP"]
 ```
 
-Kata is opt-in. `SQBK` activates every built-in rule; narrower prefixes activate a rule family, and
+Policy is opt-in. `SQBP` activates every built-in rule; narrower prefixes activate a rule family, and
 exact codes activate individual rules. Audit, SQL test, and custom-rule test-case minimums each
-default to one and can be overridden under `[kata.thresholds]`. See
-[Kata SQL Architecture Checks](/concepts/kata) for the complete rule, configuration, and suppression
+default to one and can be overridden under `[policy.thresholds]`. See
+[Project Policy](/concepts/policy) for the complete rule, configuration, and suppression
 reference.
 
 ### Project variables
@@ -2947,7 +2947,7 @@ Enum member references such as `@enum("fulfillment_method").DELIVERY` are a sepa
 
 ### Related policies
 
-The project default is implicit open-shape validation for models that omit `contract`. A repository can select explicit opt-in contracts with `settings.column_contract_mode = "explicit"` or enable [`SQBKR401`](/concepts/kata#layers-and-model-grammar) to require enforced contracts through Kata architecture policy.
+The project default is implicit open-shape validation for models that omit `contract`. A repository can select explicit opt-in contracts with `settings.column_contract_mode = "explicit"` or enable [`SQBPC101`](/concepts/policy#layers-and-model-grammar) to require enforced contracts through Policy architecture policy.
 
 Contracts also constrain schema-change behavior. For example, `snapshot_schema_change append_new_columns` is incompatible with `contract enforced` because an unannounced appended column would violate the exact declaration.
 
@@ -7651,56 +7651,85 @@ connection settings are not included.
     Review the directory rules behind the report.
     See all selectors, filters, pagination options, output sections, and JSON behavior.
 
-## Kata SQL Architecture Checks
+## Project Policy
 
-Source: `concepts/kata.mdx`
+Source: `concepts/policy.mdx`
 
-Enforce opt-in SQL architecture and model-shape policy over your compiled project.
+Enforce opt-in Project Policy over your compiled SQLBuild project.
 
-Kata is SQLBuild's opt-in SQL architecture policy. It compiles the project, then checks model
-structure, naming, dependency boundaries, joins, contracts, and test coverage. Built-in checks run
+Project Policy compiles the project, then checks resource structure, naming, dependency boundaries,
+contracts, declarations, and test coverage. Built-in checks run
 offline: they do not execute warehouse SQL or rewrite source files. Findings have stable codes and
 concrete remediations.
 
-Kata is error-only: every retained finding blocks the command. Use it for conventions that a team
+Policy is error-only: every retained finding blocks the command. Use it for conventions that a team
 has deliberately adopted, not as a collection of advisory style warnings.
 
-Tests codify behavioral expectations; Kata codifies architectural expectations for SQL models.
-For equivalent boundaries, repository structure, and code-shape checks in Python projects, see
-[Fensu](https://docs.fensu.dev/).
+SQL lint evaluates one plain SQL statement. Project Policy evaluates how SQLBuild resources are
+organised, configured, documented, tested, and connected. Tests codify behavioural expectations;
+Project Policy codifies deterministic project expectations.
 
-### Where Kata fits
+### Where Policy fits
 
 | Command | Responsibility |
 |---------|----------------|
 | `sqb compile` | SQL validity, references, inferred columns, contracts, and lineage |
-| `sqb lint` / `sqb format` | SQL presentation and formatting |
-| `sqb kata` | Repository architecture and model-shape conventions |
+| `sqb lint` | Statement-local SQL diagnostics, including joins, CTE shape, and comments |
+| `sqb format` | Canonical SQL presentation |
+| `sqb policy` | SQLBuild resource and repository conventions |
 | `sqb test` | Transformation behavior |
 | `sqb audit` | Data quality against materialized data |
 
-Kata is a separate command. It is not run automatically by `compile` or `build`.
+Policy is a separate command. It is not run automatically by `compile` or `build`.
 
-### Enable Kata
+### Custom SQL lint
+
+Use custom lint for checks that need only one SQL statement. Custom rules use
+`XSQBL<family><three digits>` and receive SQL source, dialect, AST, source spans, and declared
+options. Their context does not expose model identity, paths, project configuration, graph facts,
+declarations, filesystem, environment, process, network, or warehouse state.
+
+```python
+from sqlbuild.lint import LintRuleContext, lint_rule
+
+
+@lint_rule(
+    code="XSQBLS001",
+    family="shape",
+    slug="no-star",
+    message="Star projections are not allowed",
+    remediation="Enumerate the intended columns.",
+)
+def no_star(*, ctx: LintRuleContext):
+    if "*" not in ctx.source:
+        return ()
+    start = ctx.source.index("*")
+    return (ctx.finding(start=start, end=start + 1),)
+```
+
+Load repository-owned rules with `[lint].rule_paths` or `[lint].rule_modules`, select them through
+`[lint].select`, and test them without project discovery through `evaluate_lint_rule`.
+
+### Enable Policy
 
 Commit the shared policy to `sqlbuild_project.toml`:
 
 ```toml
-[kata]
-select = ["SQBK"]
+[policy]
+select = ["SQBP"]
 ```
 
 This activates the complete standard policy. Start here, then use `ignore` to switch off conventions
 the repository is not ready to enforce.
 
-Kata evaluates no rules when `[kata].select` is empty. Prefixes select matching rules that are
+Policy evaluates no rules when `[policy].select` is empty. Prefixes select matching rules that are
 enabled by default; exact codes also select individually opt-in rules. All current built-ins are
-enabled by default, so `SQBK` selects the complete built-in catalogue.
+enabled by default, so `SQBP` selects the complete built-in catalogue.
 
 Rule selectors are case-sensitive prefixes. They do not use `*` wildcards:
 
-- Built-in rules use `SQBK<family><three digits>`, such as `SQBKS101`.
-- Custom rules use `XSQBK<family><three digits>`, such as `XSQBKP001`.
+- Built-in rules use `SQBP<family><three digits>`, such as `SQBPS101`.
+- Custom rules use `XSQBP<family><three digits>`, such as `XSQBPP001`.
 - `select` activates rules; `ignore` removes matching rules from the active policy.
 - An exact code activates that rule even when it is opt-in.
 - The CLI `--select` and `--exclude` flags scope models, not rules.
@@ -7708,7 +7737,7 @@ Rule selectors are case-sensitive prefixes. They do not use `*` wildcards:
 Inspect any built-in or configured custom rule without enabling it:
 
 ```bash
-sqb kata rule SQBKS101
+sqb policy rule SQBPS101
 ```
 
 ### Built-in rules
@@ -7719,47 +7748,40 @@ All current built-ins form the standard policy and are enabled by matching prefi
 
 | Code | Check |
 |------|-------|
-| `SQBKS000` | Standalone comments belong on the first inner line of a CTE |
-| `SQBKS001` | Transformation logic belongs in top-level CTEs |
-| `SQBKS002` | The terminal SELECT reads plainly from the final top-level CTE |
-| `SQBKS101` | Each `__ref` and `__source` is isolated in one dependency import CTE |
-| `SQBKS201` | `SELECT *` is restricted to dependency import CTEs |
-| `SQBKS202` | Positional set-operation branches enumerate their columns |
-| `SQBKS301` | CTEs are top-level, not nested |
-| `SQBKS302` | Recursive CTEs are not permitted |
-| `SQBKS401` | View materialization agrees with the `stg_v`, `int_v`, or `mart_v` marker |
-| `SQBKS501` | CTE names describe their contents |
+| `SQBPS101` | Each `__ref` and `__source` is isolated in one dependency import CTE |
+| `SQBPS102` | `SELECT *` is restricted to dependency import CTEs |
+| `SQBPS103` | View materialization agrees with the `stg_v`, `int_v`, or `mart_v` marker |
 
 #### Layers and model grammar
 
 | Code | Check |
 |------|-------|
-| `SQBKL001` | Dependencies flow forward through the layer order |
-| `SQBKL101` | Qualified table dependencies use `__ref` or `__source` |
-| `SQBKR001` | Model names follow `<domain>__<layer>__<entity>[__<source>]` |
-| `SQBKR002` | Model layer names agree with their folders |
-| `SQBKR201` | Model source suffixes and source dependency names use approved, current tokens |
-| `SQBKR301` | Referenced model identifiers follow Kata model-name grammar |
-| `SQBKR401` | Models declare `contract enforced` |
-| `SQBKR500` | Every model resolves to one configured domain root and level |
-| `SQBKR501` | Every model owner is a leaf or a branch, never both |
-| `SQBKR502` | Ownership paths stay within `max_subdomain_depth` |
-| `SQBKR503` | Compressed underscore-token prefixes do not hide implicit owners |
+| `SQBPG101` | Dependencies flow forward through the layer order |
+| `SQBPG102` | Qualified table dependencies use `__ref` or `__source` |
+| `SQBPR101` | Model names follow `<domain>__<layer>__<entity>[__<source>]` |
+| `SQBPR102` | Model layer names agree with their folders |
+| `SQBPR103` | Model source suffixes and source dependency names use approved, current tokens |
+| `SQBPR104` | Referenced model identifiers follow Policy model-name grammar |
+| `SQBPC101` | Models declare `contract enforced` |
+| `SQBPR201` | Every model resolves to one configured domain root and level |
+| `SQBPR202` | Every model owner is a leaf or a branch, never both |
+| `SQBPR203` | Ownership paths stay within `max_subdomain_depth` |
+| `SQBPR204` | Compressed underscore-token prefixes do not hide implicit owners |
 
 #### Owner layout
 
-Kata treats warehouse levels as an axis beneath a genuine domain root. Levels are configurable and
+Policy treats warehouse levels as an axis beneath a genuine domain root. Levels are configurable and
 may contain more than one path component:
 
 ```toml
-[kata.layout]
+[policy.layout]
 levels = ["staging", "intermediate/clean", "intermediate/enriched", "mart"]
-domain_roots = ["commerce/orders", "support/tickets"]
+domain_roots = ["sales/partner", "inventory/forecasting"]
 ```
 
-`domain_roots` is optional. Without it, Kata infers the complete domain root as every path component
+`domain_roots` is optional. Without it, Policy infers the complete domain root as every path component
 between `models/` and the configured level. If more than one configured level can interpret a path,
-`SQBKR500` reports every candidate instead of guessing. Add explicit roots for those ambiguous
+`SQBPR201` reports every candidate instead of guessing. Add explicit roots for those ambiguous
 trees. Level paths and explicit domain roots must be normalized, unique, and non-overlapping.
 
 The standard owner shapes are:
@@ -7770,7 +7792,7 @@ models/<domain>/<level>/<subdomain>/<model>.sql
 ```
 
 At every ownership node, direct models make the node a leaf and child owners make it a branch. A
-directory may not contain both. Different branches may terminate at different depths; Kata does not
+directory may not contain both. Different branches may terminate at different depths; Policy does not
 require empty ceremonial folders merely to make paths the same length.
 
 `max_subdomain_depth` defaults to one and counts only owners after the configured level. Domain-root
@@ -7778,38 +7800,30 @@ components, composite-level components, declaration roles, and declaration-role 
 count. Projects can raise the non-negative threshold explicitly:
 
 ```toml
-[kata.thresholds]
+[policy.thresholds]
 max_subdomain_depth = 2
 ```
 
-Kata detects ownership hidden in flattened underscore names with a compressed token trie. Unary
+Policy detects ownership hidden in flattened underscore names with a compressed token trie. Unary
 token chains remain compound terms, so `order_status/` and `order_status_history/` identify
 `order_status` rather than `barrier`. Real branch points remain explicit: Partner annotation
 export, annotation validation, and events identify an outer `partner` owner and an inner
 `annotation` concern. Detection starts with two siblings by default:
 
 ```toml
-[kata.thresholds]
+[policy.thresholds]
 min_shared_owner_prefix_directories = 2
 ```
 
 Set this threshold to zero to disable the prefix-family check.
 
-#### Joins
-
-| Code | Check |
-|------|-------|
-| `SQBKJ001` | Implicit comma joins are not permitted |
-| `SQBKJ002` | Cross joins require an exact, reasoned exception |
-| `SQBKJ101` | Non-cross joins declare `ON` or `USING` keys |
-
 #### Column naming and types
 
 | Code | Check |
 |------|-------|
-| `SQBKN001` | `is_`, `has_`, and `can_` columns are BOOLEAN |
-| `SQBKN002` | `*_at`, `*_ts`, and `*_timestamp` columns use timestamp types |
-| `SQBKN003` | `*_date` columns are DATE |
+| `SQBPC102` | `is_`, `has_`, and `can_` columns are BOOLEAN |
+| `SQBPC103` | `*_at`, `*_ts`, and `*_timestamp` columns use timestamp types |
+| `SQBPC104` | `*_date` columns are DATE |
 
 These checks use declared contract columns, not inferred output columns.
 
@@ -7817,17 +7831,17 @@ These checks use declared contract columns, not inferred output columns.
 
 | Code | Check |
 |------|-------|
-| `SQBKH001` | Enum comparisons use declared members and normalized operands |
-| `SQBKH002` | Non-canonical numeric decisions use named constants |
-| `SQBKH101` | Identical enum domains are consolidated |
-| `SQBKH201` | Public enum and constant files live under domain folders |
-| `SQBKH301` | Declaration role containers are flat or fully grouped |
-| `SQBKH302` | Declaration role buckets stay within their configured depth |
-| `SQBKH303` | Flat roles and individual buckets stay within file-count caps |
-| `SQBKH304` | Buckets use specific concern names rather than generic role names |
-| `SQBKH305` | Shared filename prefixes become navigation buckets |
+| `SQBPD101` | Enum comparisons use declared members and normalized operands |
+| `SQBPD102` | Non-canonical numeric decisions use named constants |
+| `SQBPD201` | Identical enum domains are consolidated |
+| `SQBPD301` | Public enum and constant files live under domain folders |
+| `SQBPD302` | Declaration role containers are flat or fully grouped |
+| `SQBPD303` | Declaration role buckets stay within their configured depth |
+| `SQBPD304` | Flat roles and individual buckets stay within file-count caps |
+| `SQBPD305` | Buckets use specific concern names rather than generic role names |
+| `SQBPD306` | Shared filename prefixes become navigation buckets |
 
-`SQBKH001` requires direct comparisons to `@enum("<enum>").<MEMBER>`. Normalize controlled values
+`SQBPD101` requires direct comparisons to `@enum("<enum>").<MEMBER>`. Normalize controlled values
 upstream rather than wrapping either comparison operand. A direct source-side value may be
 normalized in the comparison because the project does not control source casing; the enum member
 must still remain unwrapped.
@@ -7847,7 +7861,7 @@ Buckets are navigation only. They never change the declaration owner or compiler
 Generic buckets such as `utils`, `common`, `shared`, and `misc` fault. Defaults are:
 
 ```toml
-[kata.thresholds]
+[policy.thresholds]
 max_role_container_depth = 1
 max_macro_container_files = 10
 max_constant_container_files = 10
@@ -7859,16 +7873,16 @@ min_shared_container_prefix_files = 2
 
 | Code | Check |
 |------|-------|
-| `SQBKX001` | Non-passthrough models meet the configured audit minimum |
-| `SQBKX002` | Non-passthrough models meet the configured SQL test minimum |
-| `SQBKX201` | Selected custom rules have statically discoverable public-harness test cases |
+| `SQBPT201` | Non-passthrough models meet the configured audit minimum |
+| `SQBPT202` | Non-passthrough models meet the configured SQL test minimum |
+| `SQBPT301` | Selected custom rules have statically discoverable public-harness test cases |
 
-Selecting a custom rule automatically adds `SQBKX201` unless the policy ignores it. This is a
+Selecting a custom rule automatically adds `SQBPT301` unless the policy ignores it. This is a
 static check for conventional `RuleCase` and `evaluate_rule` usage; it does not execute the tests.
 Thresholds default to one and can be set to zero to disable the corresponding minimum:
 
 ```toml
-[kata.thresholds]
+[policy.thresholds]
 min_audits_per_model = 1
 min_tests_per_model = 1
 min_custom_rule_test_cases = 1
@@ -7876,23 +7890,23 @@ min_custom_rule_test_cases = 1
 
 #### SQL tests and scenarios
 
-The `SQBKT` family governs SQL authored under `tests/unit/` and `tests/scenarios/`. It consumes
+The `SQBPT` family governs SQL authored under `tests/unit/` and `tests/scenarios/`. It consumes
 compiler-resolved test targets and resource ownership; it does not infer ownership from filenames
 or repeat compiler diagnostics for malformed tests.
 
 | Code | Check |
 |------|-------|
-| `SQBKT001` | Unit tests and scenarios use their compiler-owned canonical roots |
-| `SQBKT002` | Unit and scenario filenames identify their subject and behavior |
-| `SQBKT003` | Unit tests mirror resolved model, macro, UDF, or table-function ownership |
-| `SQBKT004` | Every `TEST` block has an explicit target-aware `subject__expected_behavior` name |
-| `SQBKT101` | Scenario descriptions identify a concrete business behavior rather than generic case numbering |
+| `SQBPT101` | Unit tests and scenarios use their compiler-owned canonical roots |
+| `SQBPT102` | Unit and scenario filenames identify their subject and behavior |
+| `SQBPT103` | Unit tests mirror resolved model, macro, UDF, or table-function ownership |
+| `SQBPT104` | Every `TEST` block has an explicit target-aware `subject__expected_behavior` name |
+| `SQBPT105` | Scenario descriptions identify a concrete business behavior rather than generic case numbering |
 
 Select the family independently when adopting these conventions:
 
 ```toml
-[kata]
-select = ["SQBKT"]
+[policy]
+select = ["SQBPT"]
 ```
 
 Every unit-test block, including the only block in a file, has an explicit name:
@@ -7926,13 +7940,13 @@ Mirroring uses compiled relationships:
 - A multi-model test mirrors the nearest common model-domain parent.
 - Models with no meaningful common parent use the configured pipeline directory.
 - Macro, UDF, and table-function tests mirror all resolved direct resource owners.
-- When ownership cannot be proven from compiler facts, Kata skips mirroring rather than guessing.
+- When ownership cannot be proven from compiler facts, Policy skips mirroring rather than guessing.
 
 The pipeline directory is relative to `tests/unit/`, normalized, and included in cache and generated
 guidance identity. The default is `pipelines`:
 
 ```toml
-[kata.sql_tests]
+[policy.sql_tests]
 pipeline_directory = "chains/commerce"
 ```
 
@@ -7944,19 +7958,17 @@ separators, and backslash paths are invalid configuration.
 Naming and layer rules can use a closed project vocabulary:
 
 ```toml
-[kata]
+[policy]
 domains = ["finance", "market"]
 approved_source_tokens = ["partner", "stripe"]
-cte_name_whitelist = ["finalized_rows"]
-cte_name_denylist = ["scratch_result"]
 
-[kata.retired_source_tokens]
+[policy.retired_source_tokens]
 old_crm = "partner"
 ```
 
-Valid Kata layers are `stg`, `stg_v`, `int_clean`, `int_v`, `int_enriched`, `mart`, and
+Valid Policy layers are `stg`, `stg_v`, `int_clean`, `int_v`, `int_enriched`, `mart`, and
 `mart_v`. Configuration supplies vocabulary to active rules; it does not activate them. When
-`SQBKR001` or `SQBKH201` is active, a non-empty `domains` list constrains model or declaration
+`SQBPR101` or `SQBPD301` is active, a non-empty `domains` list constrains model or declaration
 domains respectively.
 
 ### Exceptions and scoped ignores
@@ -7968,20 +7980,20 @@ Choose the narrowest mechanism that represents the policy:
 | `ignore` | Disable rules globally | No | No |
 | `rule_exceptions` | One exact rule and exact file | Yes | Yes |
 | `rule_ignores` | Rule prefixes or codes across path globs | Yes | No |
-| `select_star_allow` | Path-glob allowance for `SQBKS201` | Yes | No |
+| `select_star_allow` | Path-glob allowance for `SQBPS102` | Yes | No |
 
 ```toml
-[[kata.rule_exceptions]]
-rule = "SQBKJ002"
-path = "models/mart/commerce__mart__matrix.sql"
-reason = "Intentional Cartesian product over a bounded dimension"
+[[policy.rule_exceptions]]
+rule = "SQBPS103"
+path = "models/mart/sales__mart__legacy_view.sql"
+reason = "Tracked view-marker migration"
 
-[[kata.rule_ignores]]
-rules = ["SQBKS"]
+[[policy.rule_ignores]]
+rules = ["SQBPS"]
 paths = ["models/legacy/**"]
 reason = "Legacy migration boundary"
 
-[[kata.select_star_allow]]
+[[policy.select_star_allow]]
 paths = ["models/mart/*_export.sql"]
 reason = "Intentional passthrough export"
 ```
@@ -7992,101 +8004,105 @@ remain reasoned but are intentionally not stale-checked.
 
 ### Cache and CI
 
-Built-in policies use a persistent cache under `target/kata-cache`. Compiled model content, active
+Built-in policies use a persistent cache under `target/policy-cache`. Compiled model content, active
 rules, options, thresholds, naming vocabulary, and relevant project files participate in cache
 identity. Disable it when diagnosing cache behavior:
 
 ```toml
-[kata.cache]
+[policy.cache]
 enabled = false
 ```
 
-Run Kata directly in CI. It exits `1` when faults remain:
+Run Policy directly in CI. It exits `1` when faults remain:
 
 ```bash
-sqb kata
-sqb kata --json
+sqb policy
+sqb policy --json
 ```
 
 Generate agent guidance from the same resolved policy and verify that committed guidance remains
 fresh:
 
 ```bash
-sqb kata skills
-sqb kata skills --check
+sqb policy skills
+sqb policy skills --check
 ```
 
-Kata manages `.agents/skills/sqlbuild-kata/SKILL.md`,
-`.claude/skills/sqlbuild-kata/SKILL.md`, and `.opencode/skills/sqlbuild-kata/SKILL.md`. It refuses
+Policy manages `.agents/skills/sqlbuild-policy/SKILL.md`,
+`.claude/skills/sqlbuild-policy/SKILL.md`, and `.opencode/skills/sqlbuild-policy/SKILL.md`. It refuses
 to overwrite divergent or unowned files.
 
-See [Custom Kata Rules](/concepts/kata/custom-rules) to encode repository-specific policy and the
-[Kata CLI reference](/cli/kata) for command output and exit behavior.
+See [Custom Policy Rules](/concepts/policy/custom-rules) to encode repository-specific policy and the
+[Policy CLI reference](/cli/policy) for command output and exit behavior.
 
-## Custom Kata Rules
+## Custom Policy Rules
 
-Source: `concepts/kata/custom-rules.mdx`
+Source: `concepts/policy/custom-rules.mdx`
 
-Define and test repository-owned SQL architecture rules with the public Kata API.
+Define and test repository-owned SQL architecture rules with the public Policy API.
 
-Custom Kata rules extend the built-in policy when a repository has domain conventions that cannot
+Custom Policy rules extend the built-in policy when a repository has domain conventions that cannot
 be expressed by configuration alone. They use the same selection, suppression, deterministic
 ordering, and remediation output as built-ins.
 
-Custom rule codes use `XSQBK<family><three digits>`. Keep codes stable after adoption because they
+Custom rule codes use `XSQBP<family><three digits>`. Keep codes stable after adoption because they
 become part of configuration, CI output, and exceptions.
 
 ### Define a rule
 
 ```python
-from sqlbuild.kata import KataFault, RuleContext, kata
+from sqlbuild.policy import PolicyFault, RuleContext, policy
 
-@kata(
-    code="XSQBKP001",
+@policy(
+    code="XSQBPP001",
     family="prices",
     slug="typed-currency",
     message="price models must declare a currency column",
     remediation="Declare currency in the MODEL columns contract.",
 )
-def typed_currency(*, model, ctx: RuleContext) -> list[KataFault]:
+def typed_currency(*, model, ctx: RuleContext) -> list[PolicyFault]:
     if any(column.name == "currency" for column in ctx.declared_columns):
         return []
     return [ctx.path_fault()]
 ```
 
 The function signature is exactly two keyword-only arguments named `model` and `ctx`. Return an
-empty list when the model passes or one or more `KataFault` values when it fails.
+empty list when the model passes or one or more `PolicyFault` values when it fails.
 
 `RuleContext` exposes the compiled model, authored SQL, raw Polyglot AST, references, parsed model
 name, materialization, declared columns, audit and test counts, public declarations, active policy,
 and fault constructors. Repository files can be read safely through `project_read_text` and
-`project_glob`.
+`project_glob` when they use a tracked `.py`, `.sql`, `.toml`, `.yaml`, or `.yml` suffix.
+
+Rules are model-local by default. Add `project_wide=True` to `@policy` when a rule reads
+project-wide context, scans tracked repository files, or reports findings for paths other than the
+current model. Cacheability validation rejects those capabilities from model-local rules.
 
 ### Load and select rules
 
 Load repository-owned files or dotted modules from `sqlbuild_project.toml`:
 
 ```toml
-[kata]
-select = ["XSQBKP001"]
-rule_paths = ["kata/rules"]
-rule_modules = ["project_kata.rules"]
+[policy]
+select = ["XSQBPP001"]
+rule_paths = ["policy/rules"]
+rule_modules = ["project_policy.rules"]
 ```
 
-A directory in `rule_paths` is scanned recursively for Python files containing `@kata`. Dotted
+A directory in `rule_paths` is scanned recursively for Python files containing `@policy`. Dotted
 modules must resolve beneath the project root. Codes must be unique across built-in and custom
 rules.
 
 Custom rules require exact selectors by default. Set `enabled_by_default=True` on the decorator to
-include a rule in matching prefix selections. This does not activate Kata when
-`[kata].select` is empty.
+include a rule in matching prefix selections. This does not activate Policy when
+`[policy].select` is empty.
 
 ### Typed options
 
 Declare options with `RuleOption.boolean`, `integer`, `string`, `string_list`, or `integer_list`:
 
 ```python
-from sqlbuild.kata import KataFault, RuleContext, RuleOption, kata
+from sqlbuild.policy import PolicyFault, RuleContext, RuleOption, policy
 
 REQUIRED_DOMAIN = RuleOption.string(
     name="required_domain",
@@ -8094,15 +8110,15 @@ REQUIRED_DOMAIN = RuleOption.string(
     description="Domain that owns price models",
 )
 
-@kata(
-    code="XSQBKP002",
+@policy(
+    code="XSQBPP002",
     family="prices",
     slug="required-domain",
     message="price models must belong to the configured domain",
     remediation="Move or rename this model for the configured domain.",
     options=(REQUIRED_DOMAIN,),
 )
-def required_domain(*, model, ctx: RuleContext) -> list[KataFault]:
+def required_domain(*, model, ctx: RuleContext) -> list[PolicyFault]:
     parts = ctx.name_parts
     if parts is not None and parts.domain == ctx.option(REQUIRED_DOMAIN):
         return []
@@ -8113,7 +8129,7 @@ Configure options under the exact rule code. Unknown rules, option names, or inv
 configuration:
 
 ```toml
-[kata.rule_options.XSQBKP002]
+[policy.rule_options.XSQBPP002]
 required_domain = "finance"
 ```
 
@@ -8123,9 +8139,9 @@ Use the public harness so tests exercise normal SQLBuild discovery, compilation,
 structured fault evaluation:
 
 ```python
-from sqlbuild.kata import RuleCase, evaluate_rule
+from sqlbuild.policy import RuleCase, evaluate_rule
 
-from kata.rules.prices import typed_currency
+from policy.rules.prices import typed_currency
 
 def test_missing_currency_faults() -> None:
     result = evaluate_rule(
@@ -8146,7 +8162,7 @@ def test_missing_currency_faults() -> None:
 ```
 
 `RuleCase.files` can add supporting project files and `RuleCase.config` supplies the rule's option
-values. Keep conventional `RuleCase` and `evaluate_rule` calls under `tests/` so `SQBKX201` can
+values. Keep conventional `RuleCase` and `evaluate_rule` calls under `tests/` so `SQBPT301` can
 count statically discoverable harness cases. This coverage check does not execute the tests, so run
 the test suite separately in CI.
 
@@ -8156,23 +8172,22 @@ Selected custom rules execute in a bounded Python subprocess with a 30-second ti
 are reported with the rule code and model path, and returned faults rejoin normal suppressions and
 deterministic ordering.
 
-Selecting any custom rule disables the model cache by default. To keep the built-in cache available,
-require hermetic custom rules explicitly:
+Selecting any custom rule disables caching by default. Require hermetic custom rules explicitly to
+cache both built-in and custom findings:
 
 ```toml
-[kata.cache]
+[policy.cache]
 enabled = true
 require_cacheable = true
 ```
 
 Cacheable rules may import supported pure modules such as `collections`, `dataclasses`, `enum`,
-`math`, `re`, `typing`, and `sqlbuild.kata`. Use `RuleContext` rather than direct filesystem calls.
-SQLBuild validates these constraints before evaluation.
+`math`, `re`, `typing`, and `sqlbuild.policy`. SQLBuild validates these constraints before
+evaluation. Model-local custom rules use per-model cache entries, so a leaf edit evaluates only the
+changed model. Project-wide custom rules use a project cache keyed by rule implementation,
+configuration, compiler facts, and tracked repository evidence.
 
-Custom findings are still recomputed on each invocation. `require_cacheable` preserves the native
-model cache around them; it does not cache custom subprocess output.
-
-Return to [Kata SQL Architecture Checks](/concepts/kata) for built-in rules, selectors, and
+Return to [Project Policy](/concepts/policy) for built-in rules, selectors, and
 exceptions.
 
 ## Overview
@@ -11840,20 +11855,20 @@ cd waffle-shop
 # Agent skill files are already installed
 ```
 
-### Kata policy skills
+### Project policy skills
 
-`sqb skills` installs general SQLBuild framework guidance. `sqb kata skills` generates
-project-specific guidance from the active Kata rules, options, thresholds, naming vocabulary, and
+`sqb skills` installs general SQLBuild framework guidance. `sqb policy skills` generates
+project-specific guidance from the active Policy rules, options, thresholds, naming vocabulary, and
 scoped deviations:
 
 ```bash
-sqb kata skills
-sqb kata skills --check
+sqb policy skills
+sqb policy skills --check
 ```
 
-Use `--check` in CI to detect missing or stale policy guidance without rewriting files. Kata uses
-the separate `sqlbuild-kata` skill path and refuses to overwrite divergent or unowned content. See
-[Kata SQL Architecture Checks](/concepts/kata) and the [Kata CLI reference](/cli/kata).
+Use `--check` in CI to detect missing or stale policy guidance without rewriting files. Policy uses
+the separate `sqlbuild-policy` skill path and refuses to overwrite divergent or unowned content. See
+[Project Policy](/concepts/policy) and the [Policy CLI reference](/cli/policy).
 
 ## compile
 
@@ -11898,8 +11913,8 @@ When SQL analysis is enabled (default), compile performs static analysis on your
 - **Column contract validation**: Under the default `settings.column_contract_mode = "implicit"`, a model with declared columns and no model-level `contract` declaration checks that every declared column exists in the statically inferred query output. `explicit` mode requires `contract enforced` to activate shape checks. Explicit type enforcement remains independent and verifies inferred types when possible
 - **Column lineage**: Traces which source columns flow into each output column, including transform classification. See [Column Lineage](/concepts/column-lineage) for details
 
-`sqb compile` checks SQL correctness, contracts, and lineage. [`sqb kata`](/cli/kata) compiles the
-project and then applies its separately configured architecture policy. Kata is not run
+`sqb compile` checks SQL correctness, contracts, and lineage. [`sqb policy`](/cli/policy) compiles the
+project and then applies its separately configured architecture policy. Policy is not run
 automatically by `compile`.
 
 #### Contract diagnostics
@@ -12392,25 +12407,25 @@ There is no `--show-values` option.
 For declaration directory rules, placement checks, test access through expected output, and scoped
 macro imports, see [Declarations and Scopes](/concepts/declaration-scopes).
 
-## kata
+## policy
 
-Source: `cli/kata.mdx`
+Source: `cli/policy.mdx`
 
 Run configured SQL architecture checks, inspect rules, and generate policy guidance.
 
-## sqb kata
+## sqb policy
 
-Compiles the project and applies its configured [Kata architecture policy](/concepts/kata)
+Compiles the project and applies its configured [Policy architecture policy](/concepts/policy)
 to compiled models. Built-in checks run offline and never connect to the warehouse or rewrite SQL.
-Kata reports coded, error-only faults with source locations and remediations. Repository-defined
+Policy reports coded, error-only faults with source locations and remediations. Repository-defined
 custom rules run in a bounded Python subprocess.
 
 ### Usage
 
 ```bash
-sqb --project-dir <path> kata [flags]
-sqb kata rule <rule-code>
-sqb kata skills [--check]
+sqb --project-dir <path> policy [flags]
+sqb policy rule <rule-code>
+sqb policy skills [--check]
 ```
 
 ### Evaluation flags
@@ -12421,7 +12436,7 @@ sqb kata skills [--check]
 | `--select`, `-s` | Evaluate selected models using normal SQLBuild selector syntax |
 | `--exclude` | Exclude models from a non-empty `--select` scope |
 
-Rule policy comes from `[kata].select` in `sqlbuild_project.toml`; CLI `--select` and `--exclude`
+Rule policy comes from `[policy].select` in `sqlbuild_project.toml`; CLI `--select` and `--exclude`
 scope models within that policy. Model selectors support names, `tag:`, `path:`, graph `+`, and
 path-between syntax.
 
@@ -12433,34 +12448,34 @@ start with an explicit broad selector such as `--select path:models`.
 A clean policy prints its model and cache counts:
 
 ```text
-Kata passed: 42 models evaluated, 0 faults (40 cache hits, 2 misses)
+Project Policy passed: 42 models evaluated, 0 faults (40 cache hits, 2 misses)
 ```
 
 Faults include a source location, rule code, message, and remediation. Model-level checks use
 line 1, column 1:
 
 ```text
-models/mart/orders.sql:1:1 [SQBKS001] model SQL must keep transformation logic in top-level CTEs
-  Remediation: Move transformation logic into named top-level CTEs before the terminal SELECT.
-Found 1 kata faults
+models/mart/orders.sql:1:1 [SQBPC101] models must declare an enforced output contract
+  Remediation: Declare contract enforced and list the authoritative output columns in MODEL().
+Found 1 Project Policy faults
 ```
 
 Project-phase SQL test policy also reports the authored test or scenario path. A finding can name
 the compiler-resolved target and exact destination:
 
 ```text
-tests/unit/test_stg_orders.sql:1:1 [SQBKT003] unit test block 1 resolves to resources mirrored by tests/unit/staging/
+tests/unit/test_stg_orders.sql:1:1 [SQBPT103] unit test block 1 resolves to resources mirrored by tests/unit/staging/
   Remediation: Move this test file beneath tests/unit/staging/.
-Found 1 kata faults
+Found 1 Project Policy faults
 ```
 
-`SQBKT` rules run once per project, including projects with direct-resource tests but no models.
+`SQBPT` rules run once per project, including projects with direct-resource tests but no models.
 Path-scoped exceptions and ignores match the reported test or scenario path.
 
 ### JSON output
 
 ```bash
-sqb kata --json
+sqb policy --json
 ```
 
 ```json
@@ -12471,12 +12486,12 @@ sqb kata --json
   "fault_count": 1,
   "faults": [
     {
-      "code": "SQBKS001",
+      "code": "SQBPC101",
       "column": 1,
       "line": 1,
-      "message": "model SQL must keep transformation logic in top-level CTEs",
+      "message": "models must declare an enforced output contract",
       "path": "models/mart/orders.sql",
-      "remediation": "Move transformation logic into named top-level CTEs before the terminal SELECT."
+      "remediation": "Declare contract enforced and list the authoritative output columns in MODEL()."
     }
   ]
 }
@@ -12490,11 +12505,11 @@ Faults are ordered deterministically by path, position, code, and content.
 be active:
 
 ```bash
-sqb kata rule SQBKS101
+sqb policy rule SQBPS101
 ```
 
 ```text
-SQBKS101: dependency-import-ctes
+SQBPS101: dependency-import-ctes
 Family: structure
 Enabled by default: no
 Kind: built-in
@@ -12506,11 +12521,11 @@ Remediation: Move each __ref(...) or __source(...) into one named top-level impo
 
 Custom rules also show their source and declared option defaults.
 
-Inspecting an `SQBKT` rule also prints the effective canonical roots and configured cross-domain
+Inspecting an `SQBPT` rule also prints the effective canonical roots and configured cross-domain
 pipeline directory:
 
 ```bash
-sqb kata rule SQBKT003
+sqb policy rule SQBPT103
 ```
 
 ### Generate policy skills
@@ -12519,19 +12534,19 @@ Generate agent guidance from the active rules, options, thresholds, naming vocab
 paths, and scoped deviations:
 
 ```bash
-sqb kata skills
+sqb policy skills
 ```
 
-Kata writes the same policy-specific guidance to:
+Policy writes the same policy-specific guidance to:
 
-- `.agents/skills/sqlbuild-kata/SKILL.md`
-- `.claude/skills/sqlbuild-kata/SKILL.md`
-- `.opencode/skills/sqlbuild-kata/SKILL.md`
+- `.agents/skills/sqlbuild-policy/SKILL.md`
+- `.claude/skills/sqlbuild-policy/SKILL.md`
+- `.opencode/skills/sqlbuild-policy/SKILL.md`
 
 Check committed guidance in CI without rewriting it:
 
 ```bash
-sqb kata skills --check
+sqb policy skills --check
 ```
 
 Install mode refuses to overwrite divergent, malformed, or unowned files. See
@@ -12541,32 +12556,32 @@ Install mode refuses to overwrite divergent, malformed, or unowned files. See
 
 | Command | Code | Meaning |
 |---------|------|---------|
-| `sqb kata` | `0` | No retained faults |
-| `sqb kata` | `1` | Faults found or Kata could not evaluate the project |
-| `sqb kata rule` | `0` | Exact rule found |
-| `sqb kata rule` | `2` | Unknown rule code |
-| `sqb kata skills` | `0` | Guidance installed |
-| `sqb kata skills --check` | `0` | All guidance is fresh |
-| `sqb kata skills --check` | `1` | Guidance is not fresh: missing, stale, divergent, malformed, or unowned |
+| `sqb policy` | `0` | No retained faults |
+| `sqb policy` | `1` | Faults found or Policy could not evaluate the project |
+| `sqb policy rule` | `0` | Exact rule found |
+| `sqb policy rule` | `2` | Unknown rule code |
+| `sqb policy skills` | `0` | Guidance installed |
+| `sqb policy skills --check` | `0` | All guidance is fresh |
+| `sqb policy skills --check` | `1` | Guidance is not fresh: missing, stale, divergent, malformed, or unowned |
 
 ### Examples
 
 ```bash
 # Evaluate the configured policy
-sqb kata
+sqb policy
 
 # Emit machine-readable CI output
-sqb kata --json
+sqb policy --json
 
 # Scope evaluation to marts and their downstream models
-sqb kata --select tag:marts+
+sqb policy --select tag:marts+
 
 # Inspect an opt-in rule before adopting it
-sqb kata rule SQBKJ002
+sqb policy rule SQBPS103
 
 # Keep policy-derived agent guidance current
-sqb kata skills
-sqb kata skills --check
+sqb policy skills
+sqb policy skills --check
 ```
 
 ## plan

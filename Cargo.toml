@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "crates/sqlbuild-kata-native",
+    "crates/sqlbuild-policy-native",
     "crates/sqlbuild-structure-checker",
 ]
 resolver = "2"
@@ -33,6 +33,7 @@ quote = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
+stacker = "0.1"
 sqlparser = { version = "0.58", features = ["visitor"] }
 syn = { version = "2", features = ["full", "visit", "extra-traits"] }
 tempfile = "3"

@@ -9,9 +9,12 @@ from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.lint._helpers.expansion import build_lint_expansion_context, prepare_lint_body
 from sqlbuild.lint._helpers.headers import lint_body_ranges, scan_headers
 from sqlbuild.lint._helpers.native import format_native_headers, lint_native_headers
-from sqlbuild.lint._helpers.native_format import format_native_sql_bodies
+from sqlbuild.lint._helpers.native_format import (
+    format_native_sql_bodies,
+    newline_style,
+    with_newline_style,
+)
 from sqlbuild.lint._helpers.native_sql import run_native_sql_lint
-from sqlbuild.lint._helpers.newlines import newline_style, with_newline_style
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
 from sqlbuild.lint._helpers.suppressions import apply_suppressions
 from sqlbuild.lint.models import (
