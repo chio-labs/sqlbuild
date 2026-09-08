@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.91.4](https://github.com/chio-labs/sqlbuild/compare/v0.91.3...v0.91.4) (2026-09-08)
+
+
+### Bug Fixes
+
+* preserve best-effort audit projection ([#582](https://github.com/chio-labs/sqlbuild/issues/582)) ([6c663c1](https://github.com/chio-labs/sqlbuild/commit/6c663c18017dd80705a9ee713d1ea94aa4f3a500))
+
 ## [0.91.3](https://github.com/chio-labs/sqlbuild/compare/v0.91.2...v0.91.3) (2026-09-08)
 
 
