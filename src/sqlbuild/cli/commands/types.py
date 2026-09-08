@@ -56,7 +56,7 @@ class CliCommand(StrEnum):
     LINT = "lint"
     FIX = "fix"
     FORMAT = "format"
-    KATA = "kata"
+    POLICY = "policy"
     SCOPE = "scope"
     CONTRACT = "contract"
 

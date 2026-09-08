@@ -83,7 +83,7 @@ dev = [
 ]
 
 [tool.maturin]
-manifest-path = "crates/sqlbuild-kata-native/Cargo.toml"
+manifest-path = "crates/sqlbuild-policy-native/Cargo.toml"
 module-name = "sqlbuild._native"
 python-source = "src"
 features = ["extension-module"]
@@ -136,7 +136,7 @@ package = true
 cache-keys = [
   { file = "pyproject.toml" },
   { file = "Cargo.toml" },
-  { file = "crates/sqlbuild-kata-native/Cargo.toml" },
-  { file = "crates/sqlbuild-kata-native/src/**/*.rs" },
+  { file = "crates/sqlbuild-policy-native/Cargo.toml" },
+  { file = "crates/sqlbuild-policy-native/src/**/*.rs" },
   { file = "src/sqlbuild/_native.pyi" },
 ]

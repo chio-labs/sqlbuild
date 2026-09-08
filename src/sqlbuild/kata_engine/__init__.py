@@ -1,1 +1,0 @@
-"""SQLBuild kata engine."""

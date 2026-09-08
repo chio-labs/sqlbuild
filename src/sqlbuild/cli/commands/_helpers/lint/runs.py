@@ -15,11 +15,15 @@ from sqlbuild.lint.constants import (
     FIX_STATUS_APPLIED,
     FIX_STATUS_SKIPPED,
     LINT_RULE_IGNORE_KEY,
+    LINT_RULE_MODULES_KEY,
+    LINT_RULE_OPTIONS_KEY,
+    LINT_RULE_PATHS_KEY,
     LINT_RULE_SELECT_KEY,
     LINT_SECTION_KEY,
     MAX_DESCRIPTION_LINES_KEY,
     PROJECT_CONFIG_FILENAME_KEY,
 )
+from sqlbuild.lint.exceptions import NativeLintError
 from sqlbuild.lint.models import (
     FixRunResult,
     LintConfig,
@@ -37,6 +41,9 @@ def resolve_lint_config(*, project_dir: Path) -> LintConfig:
     dialect: str = "generic"
     selected_rules: tuple[str, ...] | None = None
     ignored_rules: tuple[str, ...] = ()
+    custom_rule_paths: tuple[str, ...] = ()
+    custom_rule_modules: tuple[str, ...] = ()
+    custom_rule_options: dict[str, dict[str, object]] = {}
     config_file: Path = project_dir / PROJECT_CONFIG_FILENAME_KEY
     if config_file.is_file():
         with config_file.open("rb") as handle:
@@ -53,6 +60,13 @@ def resolve_lint_config(*, project_dir: Path) -> LintConfig:
             )
             selected_rules = _resolve_strings(section=lint_section, key=LINT_RULE_SELECT_KEY)
             ignored_rules = _resolve_strings(section=lint_section, key=LINT_RULE_IGNORE_KEY) or ()
+            custom_rule_paths = (
+                _resolve_strings(section=lint_section, key=LINT_RULE_PATHS_KEY) or ()
+            )
+            custom_rule_modules = (
+                _resolve_strings(section=lint_section, key=LINT_RULE_MODULES_KEY) or ()
+            )
+            custom_rule_options = _resolve_rule_options(section=lint_section)
     local_config_file: Path = project_dir / LOCAL_CONFIG_FILENAME
     if local_config_file.is_file():
         with local_config_file.open("rb") as handle:
@@ -60,11 +74,24 @@ def resolve_lint_config(*, project_dir: Path) -> LintConfig:
         local_adapter: object = local_payload.get(ADAPTER_CONFIG_KEY)
         if isinstance(local_adapter, str):
             dialect = ADAPTER_DIALECT_TRANSLATIONS.get(local_adapter, local_adapter)
+    _validate_lint_selectors(selectors=selected_rules or ())
+    _validate_lint_selectors(selectors=ignored_rules)
     return LintConfig(
         max_description_lines=max_description_lines,
         dialect=dialect,
-        enabled_native_rules=selected_rules,
-        ignored_native_rules=ignored_rules,
+        enabled_native_rules=(
+            None
+            if selected_rules is None
+            else tuple(rule for rule in selected_rules if rule.startswith("SQBL"))
+        ),
+        ignored_native_rules=tuple(rule for rule in ignored_rules if rule.startswith("SQBL")),
+        selected_custom_rules=tuple(
+            rule for rule in (selected_rules or ()) if rule.startswith("XSQBL")
+        ),
+        ignored_custom_rules=tuple(rule for rule in ignored_rules if rule.startswith("XSQBL")),
+        custom_rule_paths=custom_rule_paths,
+        custom_rule_modules=custom_rule_modules,
+        custom_rule_options=custom_rule_options,
     )
 
 
@@ -237,3 +264,25 @@ def _resolve_strings(*, section: dict[str, object], key: str) -> tuple[str, ...]
     if not isinstance(raw_value, list) or not all(isinstance(item, str) for item in raw_value):
         return None
     return tuple(str(item) for item in raw_value)
+
+
+def _resolve_rule_options(*, section: dict[str, object]) -> dict[str, dict[str, object]]:
+    raw: object = section.get(LINT_RULE_OPTIONS_KEY)
+    if not isinstance(raw, dict):
+        return {}
+    resolved: dict[str, dict[str, object]] = {}
+    for code, options in raw.items():
+        if not isinstance(options, dict):
+            continue
+        resolved[str(code)] = {str(name): value for name, value in options.items()}
+    return resolved
+
+
+def _validate_lint_selectors(*, selectors: tuple[str, ...]) -> None:
+    unsupported: list[str] = [
+        selector
+        for selector in selectors
+        if not selector.startswith("SQBL") and not selector.startswith("XSQBL")
+    ]
+    if unsupported:
+        raise NativeLintError(f"unsupported lint rule selector: {', '.join(unsupported)}")
