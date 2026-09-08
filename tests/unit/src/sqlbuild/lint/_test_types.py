@@ -6,6 +6,17 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
+class CustomLintTestCase:
+    """One statement-only custom lint authoring case."""
+
+    description: str
+    source: str
+    expected_code: str
+    expected_start: int
+    expected_end: int
+
+
+@dataclass(frozen=True)
 class LintBehaviorTestCase:
     """Identity for one non-tabular lint behavior test."""
 

@@ -1,0 +1,411 @@
+use crate::constants::{API_VERSION, BUILT_IN_RULE_NAMESPACE, CUSTOM_RULE_NAMESPACE};
+use crate::models::{CustomRule, ResolveRulesRequest, RuleGuidance, RuleMetadata};
+use fensu_policy::policy::errors::PolicyError;
+use fensu_policy::policy::main::resolve_policy::resolve_policy;
+use fensu_policy::policy::models::{PolicySelectors, ProductRuleCodeGrammar};
+use fensu_policy::policy::types::RuleCodeGrammar;
+use sha2::{Digest, Sha256};
+
+const CUSTOM_RULE_COVERAGE_CODE: &str = "SQBPT301";
+
+fn grammar() -> Result<ProductRuleCodeGrammar, String> {
+    ProductRuleCodeGrammar::new(BUILT_IN_RULE_NAMESPACE, CUSTOM_RULE_NAMESPACE)
+}
+
+macro_rules! rule {
+    ($code:expr, $family:expr, $slug:expr, $message:expr, $remediation:expr $(,)?) => {
+        RuleMetadata {
+            code: $code.into(),
+            family: $family.into(),
+            slug: $slug.into(),
+            message: $message.into(),
+            remediation: $remediation.into(),
+            guidance: None,
+            implementation_fingerprint: env!("CARGO_PKG_VERSION").into(),
+            enabled_by_default: true,
+            project_wide: matches!(
+                $code,
+                "SQBPD201"
+                    | "SQBPD301"
+                    | "SQBPD302"
+                    | "SQBPD303"
+                    | "SQBPD304"
+                    | "SQBPD305"
+                    | "SQBPD306"
+                    | "SQBPR201"
+                    | "SQBPR202"
+                    | "SQBPR203"
+                    | "SQBPR204"
+                    | "SQBPT101"
+                    | "SQBPT102"
+                    | "SQBPT103"
+                    | "SQBPT104"
+                    | "SQBPT105"
+                    | "SQBPT301"
+            ),
+            custom: false,
+        }
+    };
+}
+
+pub(crate) fn catalogue() -> Vec<RuleMetadata> {
+    let mut rules = vec![
+        rule!(
+            "SQBPS101",
+            "structure",
+            "dependency-import-ctes",
+            "dependencies must be isolated in import CTEs",
+            "Move each __ref(...) or __source(...) into one named top-level import CTE and reference that CTE from later logic.",
+        ),
+        rule!(
+            "SQBPS102",
+            "structure",
+            "select-star-discipline",
+            "SELECT * is allowed only inside dependency import CTEs",
+            "Enumerate output columns in this logical CTE or terminal SELECT; keep * only in a dependency import CTE.",
+        ),
+        rule!(
+            "SQBPS103",
+            "structure",
+            "view-marker",
+            "view materialization and model v marker must agree",
+            "Use stg_v/int_v/mart_v for a view, or change the materialization to match the non-view layer name.",
+        ),
+        rule!(
+            "SQBPG101",
+            "graph",
+            "forward-only-references",
+            "model dependencies must flow forward through the layer order",
+            "Move the dependency logic to the current or an earlier layer; skipping layers forward is allowed, reaching backward from an earlier layer is not.",
+        ),
+        rule!(
+            "SQBPG102",
+            "graph",
+            "declared-table-references",
+            "table dependencies must use __ref or __source",
+            "Replace this qualified table with __ref(\"<model>\") or __source(\"<source>\") so it participates in the DAG.",
+        ),
+        rule!(
+            "SQBPR101",
+            "repository",
+            "model-name-grammar",
+            "model names must use the closed policy layer grammar",
+            "Rename deterministic conforming work to int_clean and cross-source resolution work to int_enriched; express additional steps in the entity suffix.",
+        ),
+        rule!(
+            "SQBPR102",
+            "repository",
+            "folder-layer",
+            "model layer names must match their folders",
+            "Move the model beneath staging/, intermediate/, or mart/ to match its name, or rename it for the folder that owns it.",
+        ),
+        rule!(
+            "SQBPR103",
+            "repository",
+            "source-token-policy",
+            "model source suffixes must use approved, current tokens",
+            "Rename the source suffix at this model path to the configured token.",
+        ),
+        rule!(
+            "SQBPR104",
+            "repository",
+            "reference-name-policy",
+            "referenced model identifiers must follow policy naming grammar",
+            "Rename the referenced model and this __ref to the policy model grammar.",
+        ),
+        rule!(
+            "SQBPC101",
+            "contracts",
+            "contract-enforced-required",
+            "models must declare an enforced output contract",
+            "Declare contract enforced and list the authoritative output columns in MODEL().",
+        ),
+        rule!(
+            "SQBPR201",
+            "repository",
+            "domain-level-layout",
+            "models must resolve to one configured domain root and level",
+            "Move the model beneath a configured level, or configure an explicit domain root when inference is ambiguous.",
+        ),
+        rule!(
+            "SQBPR202",
+            "repository",
+            "owner-leaf-or-branch",
+            "model owners must be either leaves or branches",
+            "Keep models directly in a leaf owner, or move all direct models into meaningfully named child owners.",
+        ),
+        rule!(
+            "SQBPR203",
+            "repository",
+            "maximum-subdomain-depth",
+            "model ownership must stay within the configured subdomain depth",
+            "Flatten this ownership path, promote part of it into the domain root, or increase max_subdomain_depth explicitly.",
+        ),
+        rule!(
+            "SQBPR204",
+            "repository",
+            "shared-owner-prefix",
+            "sibling owner names must not hide an implicit hierarchy",
+            "Consolidate the shared concern, make the compressed token owner explicit, or rename siblings whose prefix is not ownership.",
+        ),
+        rule!(
+            "SQBPC102",
+            "contracts",
+            "boolean-column-name",
+            "boolean column names must have BOOLEAN types",
+            "Declare this is_/has_/can_ column as BOOLEAN in columns (...), or rename it to match its actual type.",
+        ),
+        rule!(
+            "SQBPC103",
+            "contracts",
+            "timestamp-column-name",
+            "timestamp column names must have timestamp types",
+            "Declare this *_at/*_ts/*_timestamp column with a timestamp type in columns (...), or rename it.",
+        ),
+        rule!(
+            "SQBPC104",
+            "contracts",
+            "date-column-name",
+            "date column names must have DATE types",
+            "Declare this *_date column as DATE in columns (...), or rename it to match its actual type.",
+        ),
+        rule!(
+            "SQBPD101",
+            "declarations",
+            "named-enum-decisions",
+            "enum comparisons must use declared members and normalized operands",
+            "Compare directly to @enum(\"<enum>\").<MEMBER>. Only a direct source-side value may be normalized in the comparison; move other normalization upstream and never wrap the enum member.",
+        ),
+        rule!(
+            "SQBPD102",
+            "declarations",
+            "named-numeric-decisions",
+            "non-canonical numeric comparisons must use constants",
+            "Declare the threshold as a CONSTANT and compare through @const(\"<name>\"); only -1, 0, and 1 are self-explanatory.",
+        ),
+        rule!(
+            "SQBPD201",
+            "declarations",
+            "duplicate-enums",
+            "identical enum domains must be consolidated",
+            "Keep one public enum declaration and replace the duplicate declaration's references with it.",
+        ),
+        rule!(
+            "SQBPD301",
+            "declarations",
+            "declaration-domain-placement",
+            "public enum and constant files must live under a configured domain folder",
+            "Move this declaration beneath enums/<domain>/ or constants/<domain>/.",
+        ),
+        rule!(
+            "SQBPD302",
+            "declarations",
+            "declaration-container-shape",
+            "declaration role containers must be flat or grouped",
+            "Keep files directly in the role container, or move every file into one level of meaningful concern buckets.",
+        ),
+        rule!(
+            "SQBPD303",
+            "declarations",
+            "declaration-container-depth",
+            "declaration role buckets must stay within the configured depth",
+            "Flatten nested buckets or increase max_role_container_depth explicitly.",
+        ),
+        rule!(
+            "SQBPD304",
+            "declarations",
+            "declaration-container-capacity",
+            "declaration role containers and buckets must remain bounded",
+            "Group files by a meaningful concern or increase the declaration-kind file threshold explicitly.",
+        ),
+        rule!(
+            "SQBPD305",
+            "declarations",
+            "declaration-bucket-name",
+            "declaration role buckets must name a specific concern",
+            "Rename this generic or reserved bucket after the concern it contains.",
+        ),
+        rule!(
+            "SQBPD306",
+            "declarations",
+            "declaration-container-prefix",
+            "declaration filenames must not hide an obvious navigation bucket",
+            "Group this compressed filename prefix into a scope-neutral concern bucket or rename files whose prefix is not a shared concern.",
+        ),
+        rule!(
+            "SQBPT101",
+            "tests",
+            "canonical-test-roots",
+            "SQL unit tests and scenarios must use their compiler-owned canonical roots",
+            "Move unit tests beneath tests/unit/ and scenarios beneath tests/scenarios/.",
+        ),
+        rule!(
+            "SQBPT102",
+            "tests",
+            "test-filename-grammar",
+            "SQL test and scenario filenames must identify their subject and behavior",
+            "Use test_<subject>__<behavior>.sql for unit tests and <subject>__<behavior>.sql for scenarios.",
+        ),
+        rule!(
+            "SQBPT103",
+            "tests",
+            "semantic-test-mirroring",
+            "SQL unit tests must mirror compiler-resolved resource ownership",
+            "Move the test to the reported directory derived from its resolved models or direct tested resource.",
+        ),
+        rule!(
+            "SQBPT104",
+            "tests",
+            "structured-test-name",
+            "every SQL unit-test block must have a target-aware subject__expected_behavior name",
+            "Add name \"<resolved_subject>__<expected_behavior>\" to this TEST header.",
+        ),
+        rule!(
+            "SQBPT105",
+            "tests",
+            "scenario-business-description",
+            "scenario descriptions must identify a concrete business behavior",
+            "Write a non-generic SCENARIO description that states the business behavior under test.",
+        ),
+        rule!(
+            "SQBPT201",
+            "tests",
+            "minimum-audits",
+            "non-passthrough models must declare the configured minimum audits",
+            "Attach concrete not_null, unique, or accepted_values audits to this model's contract; audits gate promotion when bad rows appear.",
+        ),
+        minimum_tests_rule(),
+        rule!(
+            "SQBPT301",
+            "tests",
+            "custom-rule-test-coverage",
+            "selected custom policy rules must have public-harness test cases",
+            "Add RuleCase values evaluated by evaluate_rule under tests/.",
+        ),
+    ];
+    rules.sort_by(|a, b| a.code.cmp(&b.code));
+    rules
+}
+
+fn minimum_tests_rule() -> RuleMetadata {
+    let guidance = RuleGuidance {
+        good_example: "For example:\n\nTEST();\n\nWITH\n__ref__upstream_model AS (\n  SELECT 1 AS order_id, 2 AS quantity\n),\n__expected__example_model AS (\n  SELECT 1 AS order_id, 4 AS doubled_quantity\n)\nSELECT 1"
+            .into(),
+        anti_tautology: "Choose input rows and concrete expected values that exercise the model's actual filter, join, aggregation, or mapping. Do not merely assert that inputs survive unchanged or re-derive expected values with the model's own logic."
+            .into(),
+        mutation_check: "Prove the test is failable: temporarily perturb the model logic or expected value, confirm the test fails, then revert the mutation."
+            .into(),
+    };
+    RuleMetadata {
+        code: "SQBPT202".into(),
+        family: "tests".into(),
+        slug: "minimum-tests".into(),
+        message: "non-passthrough models must have the configured minimum unit tests".into(),
+        remediation: guidance.remediation(
+            "Add a SQL unit test that mocks each real import and asserts concrete transformed rows.",
+        ),
+        guidance: Some(guidance),
+        implementation_fingerprint: env!("CARGO_PKG_VERSION").into(),
+        enabled_by_default: true,
+        project_wide: false,
+        custom: false,
+    }
+}
+
+pub(crate) fn with_custom(custom: &[CustomRule]) -> Result<Vec<RuleMetadata>, String> {
+    let grammar = grammar()?;
+    let mut result = catalogue();
+    for item in custom {
+        if !grammar.rule_code_is_exact(&item.code) || !item.code.starts_with("XSQBP") {
+            return Err(format!("invalid policy rule code: {}", item.code));
+        }
+        result.push(RuleMetadata {
+            code: item.code.clone(),
+            family: item.family.clone(),
+            slug: item.slug.clone(),
+            message: item.message.clone(),
+            remediation: item.remediation.clone(),
+            guidance: None,
+            implementation_fingerprint: item.implementation_fingerprint.clone(),
+            enabled_by_default: item.enabled_by_default,
+            project_wide: item.project_wide,
+            custom: true,
+        });
+    }
+    result.sort_by(|a, b| a.code.cmp(&b.code));
+    for pair in result.windows(2) {
+        if pair[0].code == pair[1].code {
+            return Err(format!("duplicate policy rule codes: {}", pair[0].code));
+        }
+    }
+    Ok(result)
+}
+
+pub(crate) fn select<'a>(
+    catalogue: &'a [RuleMetadata],
+    selected: &[String],
+    ignored: &[String],
+) -> Result<Vec<&'a RuleMetadata>, String> {
+    let grammar = grammar()?;
+    let references: Vec<&RuleMetadata> = catalogue.iter().collect();
+    let configured = PolicySelectors {
+        select: selected.to_vec(),
+        warn: Vec::new(),
+        ignore: Vec::new(),
+    };
+    let configured_policy =
+        resolve_policy(&references, &(), &configured, &grammar).map_err(policy_error)?;
+    let mut effective_select = selected.to_vec();
+    if configured_policy.blocking.iter().any(|rule| rule.custom)
+        && !effective_select
+            .iter()
+            .any(|code| code == CUSTOM_RULE_COVERAGE_CODE)
+    {
+        effective_select.push(CUSTOM_RULE_COVERAGE_CODE.to_owned());
+    }
+    let effective = PolicySelectors {
+        select: effective_select,
+        warn: Vec::new(),
+        ignore: ignored.to_vec(),
+    };
+    resolve_policy(&references, &(), &effective, &grammar)
+        .map(|policy| policy.blocking)
+        .map_err(policy_error)
+}
+
+pub(crate) fn selected_codes_json(request_json: &str) -> Result<String, String> {
+    let request: ResolveRulesRequest = serde_json::from_str(request_json)
+        .map_err(|error| format!("invalid project policy request: {error}"))?;
+    if request.version != API_VERSION {
+        return Err(format!(
+            "unsupported policy native API version {}; expected {API_VERSION}",
+            request.version
+        ));
+    }
+    crate::configuration::main::validate::validate(&request.config)?;
+    let rules = with_custom(&request.custom_rules)?;
+    let selected = select(&rules, &request.config.select, &request.config.ignore)?;
+    let codes: Vec<&str> = selected.iter().map(|rule| rule.code.as_str()).collect();
+    serde_json::to_string(&codes).map_err(|error| error.to_string())
+}
+
+fn policy_error(error: PolicyError) -> String {
+    match error {
+        PolicyError::InvalidSelector { selector, .. } => {
+            format!("malformed policy rule selector: {selector}")
+        }
+        PolicyError::SelectorMatchesNoConfiguredRule { selector, .. } => {
+            format!("policy rule selector matches no rules: {selector}")
+        }
+        other => format!("invalid project policy: {other}"),
+    }
+}
+
+pub(crate) fn fingerprint(
+    rules: &[&RuleMetadata],
+    config: &crate::models::PolicyConfig,
+    dialect: &str,
+) -> Result<String, String> {
+    let payload = serde_json::to_vec(&(rules, config, dialect)).map_err(|e| e.to_string())?;
+    Ok(format!("{:x}", Sha256::digest(payload)))
+}

@@ -19,8 +19,8 @@ from sqlbuild.cli.commands.models import (
 from sqlbuild.cli.commands.types import CliCommand
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.executor.pipeline.exceptions import AuditExecutionError
-from sqlbuild.kata_engine.exceptions import KataError
 from sqlbuild.lint.exceptions import LintError
+from sqlbuild.policy_engine.exceptions import PolicyError
 from sqlbuild.spec.contracts.exceptions import SpecConfigError
 from sqlbuild.virtual.state.exceptions import StateBackendError
 
@@ -39,7 +39,7 @@ def dispatch_and_handle_errors(
         return dispatch_with_observability(args=args, handlers=handlers)
     except SystemExit as error:
         return error.code if isinstance(error.code, int) else 1
-    except (CliUserError, KataError) as error:
+    except (CliUserError, PolicyError) as error:
         logging.getLogger("sqlbuild.cli").exception("cli user error")
         print(
             format_expected_error(error=error, fallback_code="C000", use_color=use_color),

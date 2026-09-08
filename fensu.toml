@@ -167,6 +167,11 @@ path = "src/sqlbuild/integrations/rivers/__init__.py"
 reason = "These imports preserve Rivers' documented external package-root APIs."
 
 [[rule_exceptions]]
+rule = "FFR402"
+path = "src/sqlbuild/lint/__init__.py"
+reason = "These imports provide the documented statement-local custom lint authoring API."
+
+[[rule_exceptions]]
 rule = "FFS120"
 path = "src/sqlbuild/integrations/dagster/classes/sqlbuild_cli_resource.py"
 symbols = ["SqlBuildCliResource.cli"]
