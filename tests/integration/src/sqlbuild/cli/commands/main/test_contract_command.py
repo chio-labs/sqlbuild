@@ -7,6 +7,7 @@ from pathlib import Path
 
 import duckdb
 import pytest
+from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
@@ -320,11 +321,16 @@ def test_given_prod_target_credentials_when_contract_diffing_then_uses_active_co
         ]
     )
 
-    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    captured: CaptureResult[str] = capsys.readouterr()
+    payload: dict[str, object] = json.loads(captured.out)
     assert exit_code == test_case.expected_exit_code
     assert payload["from_target"] == "prod"
     assert payload["resources"][0]["relation"].endswith("prod.orders")
     assert all("connection" not in key for key in payload)
+    assert "Connecting to duckdb..." in captured.err
+    assert "Warehouse connected" in captured.err
+    assert "Inspecting 1 contract from target 'prod'..." in captured.err
+    assert "Inspected 1 contract from target 'prod'" in captured.err
 
 
 @pytest.mark.parametrize(

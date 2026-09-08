@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -1888,7 +1889,7 @@ def test_given_skills_command_when_running_then_it_dispatches_handler(
     ],
     ids=lambda case: case.description,
 )
-def test_given_stale_configured_skills_when_command_finishes_then_notice_preserves_exit_code(
+def test_given_stale_configured_skills_when_command_starts_then_notice_precedes_command_output(
     test_case: SkillFreshnessNoticeTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -1898,13 +1899,20 @@ def test_given_stale_configured_skills_when_command_finishes_then_notice_preserv
         encoding="utf-8",
     )
 
+    def run_compile(_request: CompileCommandRequest) -> int:
+        print("command completed", file=sys.stderr)
+        return test_case.expected_exit_code
+
     exit_code: int = _main_with_dependencies(
         argv=["--project-dir", str(tmp_path), "compile"],
-        handlers=build_handlers(run_compile=lambda _request: test_case.expected_exit_code),
+        handlers=build_handlers(run_compile=run_compile),
     )
 
     assert exit_code == test_case.expected_exit_code
-    assert test_case.expected_stderr_fragment in capsys.readouterr().err
+    stderr: str = capsys.readouterr().err
+    assert test_case.expected_stderr_fragment in stderr
+    assert stderr.index(test_case.expected_stderr_fragment) < stderr.index("command completed")
+    assert stderr.rstrip().endswith("command completed")
 
 
 @pytest.mark.parametrize(

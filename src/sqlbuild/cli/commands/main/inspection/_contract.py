@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
-from typing import Any
+from typing import TextIO
 
+from sqlbuild.cli.commands._helpers.contract.progress import (
+    inspect_contracts_with_progress,
+    write_contract_updates_with_progress,
+)
 from sqlbuild.cli.commands._helpers.runtime.adapter_context import (
     resolve_adapter_connection_context,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import AdapterConnectionContext, ContractCommandRequest
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey, CompiledSource
-from sqlbuild.compiler.contract_adoption.main.compare import compare_contracts
 from sqlbuild.compiler.contract_adoption.models import ContractAdoptionResult, ContractEvidence
 from sqlbuild.compiler.contract_adoption.types import ContractAction
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -22,6 +26,7 @@ from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.main.selection.selection import (
     resolve_project_selectors,
 )
+from sqlbuild.presentation.main.supports_color import supports_color
 
 
 def run_contract(request: ContractCommandRequest) -> int:
@@ -66,29 +71,29 @@ def run_contract(request: ContractCommandRequest) -> int:
     )
     if not selected_models and not selected_sources:
         raise CliUserError("contract selection contains no models or sources", code="C473")
-    connection: Any = context.adapter.connect(context.connection_config)
-    try:
-        evidence: tuple[ContractEvidence, ...] = compare_contracts(
-            adapter=context.adapter,
-            connection=connection,
-            models=selected_models,
-            sources=selected_sources,
-        )
-    finally:
-        context.adapter.close(connection)
+
+    progress_stream: TextIO = sys.stderr if request.json_output else sys.stdout
+    use_progress_color: bool = not request.no_color and not request.json_output and supports_color()
+    evidence: tuple[ContractEvidence, ...] = inspect_contracts_with_progress(
+        context=context,
+        request=request,
+        selected_models=selected_models,
+        selected_sources=selected_sources,
+        progress_stream=progress_stream,
+        use_progress_color=use_progress_color,
+    )
     result: ContractAdoptionResult = ContractAdoptionResult(
         from_target=request.from_target, evidence=evidence
     )
     if request.action == ContractAction.GENERATE and request.write:
-        from sqlbuild.compiler.contract_adoption.main.write import write_contracts
-
-        result = write_contracts(
+        result = write_contract_updates_with_progress(
             project_dir=project_dir,
             graph=graph,
             result=result,
-            overwrite=request.overwrite,
+            request=request,
             adapter=context.adapter,
-            cli_vars=request.cli_vars,
+            progress_stream=progress_stream,
+            use_progress_color=use_progress_color,
         )
     _write_output(request=request, result=result)
     return 1 if result.findings else 0
