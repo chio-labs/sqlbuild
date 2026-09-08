@@ -111,7 +111,7 @@ def test_given_missing_declarations_when_generating_additively_then_preserves_me
     "test_case",
     [
         ContractCommandIntegrationTestCase(
-            description="parameterized physical type is quoted in a generated model header",
+            description="parameterized physical type is unquoted in a generated model header",
             expected_exit_code=0,
         )
     ],
@@ -151,11 +151,11 @@ def test_given_parameterized_physical_type_when_generating_then_writes_valid_mod
     assert exit_code == test_case.expected_exit_code
     assert "0 contract difference(s)" in capsys.readouterr().out
     generated_sql: str = model_path.read_text(encoding="utf-8")
-    assert 'amount (type "DECIMAL(10,2)")' in generated_sql
+    assert "amount (type DECIMAL(10,2))" in generated_sql
     _ = model_path.write_text(
         generated_sql.replace(
-            'amount (type "DECIMAL(10,2)")',
-            'amount (description "type DECIMAL(10,2)", type "DECIMAL(10,2)")',
+            "amount (type DECIMAL(10,2))",
+            'amount (description "type DECIMAL(10,2)", type DECIMAL (10, 2))',
         ),
         encoding="utf-8",
     )
@@ -182,7 +182,7 @@ def test_given_parameterized_physical_type_when_generating_then_writes_valid_mod
     assert overwrite_exit_code == test_case.expected_exit_code
     assert "0 contract difference(s)" in capsys.readouterr().out
     overwritten_sql: str = model_path.read_text(encoding="utf-8")
-    assert 'amount (description "type DECIMAL(10,2)", type "DECIMAL(12,3)")' in overwritten_sql
+    assert 'amount (description "type DECIMAL(10,2)", type DECIMAL(12,3))' in overwritten_sql
 
 
 @pytest.mark.parametrize(

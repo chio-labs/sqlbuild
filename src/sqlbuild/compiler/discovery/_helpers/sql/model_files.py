@@ -39,6 +39,7 @@ _MODEL_HEADER_KEY_VALUE_SEPARATOR: str = ":"
 _MODEL_HEADER_QUOTE_NAMES: dict[str, str] = {"'": "single", '"': "double"}
 _MODEL_HEADER_ESCAPE_CHARACTER: str = "\\"
 _MODEL_HEADER_COLUMNS_KEY: str = "columns"
+_MODEL_HEADER_TYPE_KEY: str = "type"
 _MODEL_HEADER_RELATION_CALL_NAMES: frozenset[str] = frozenset(
     {
         SqlReferenceKind.REF.function_name,
@@ -598,6 +599,8 @@ class _ModelHeaderParser:
         end_symbol: str | None,
         threshold_policy: bool = False,
         allow_outside_threshold: bool = False,
+        column_entries: bool = False,
+        column_metadata: bool = False,
     ) -> dict[str, object]:
         values: dict[str, object] = {}
         while not self._is_at_end_symbol(end_symbol):
@@ -618,12 +621,16 @@ class _ModelHeaderParser:
                 values[key] = self._parse_outside_threshold()
             elif key in _MODEL_HEADER_HOOK_FIELD_NAMES:
                 values[key] = self._parse_hook_field_value(key)
+            elif column_metadata and key == _MODEL_HEADER_TYPE_KEY:
+                values[key] = self._parse_type_value()
             else:
                 values[key] = self._parse_value(
                     threshold_policy=key == _MODEL_HEADER_THRESHOLDS_KEY,
                     allow_outside_threshold=(
                         threshold_policy and key in _MODEL_HEADER_THRESHOLD_BOUND_KEYS
                     ),
+                    nested_column_entries=key == _MODEL_HEADER_COLUMNS_KEY,
+                    nested_column_metadata=column_entries,
                 )
             self._match_symbol(_MODEL_HEADER_COMMA)
         if end_symbol is not None:
@@ -639,8 +646,46 @@ class _ModelHeaderParser:
         upper: object = self._parse_value()
         return lower, upper
 
+    def _parse_type_value(self) -> object:
+        """Parse parameterized SQL types as scalar header values."""
+
+        token: _ModelHeaderToken = self._peek()
+        if token.kind != _MODEL_HEADER_WORD_TOKEN:
+            return self._parse_value()
+        if not (
+            self._tokens[self._index + 1].kind == _MODEL_HEADER_SYMBOL_TOKEN
+            and self._tokens[self._index + 1].value == _MODEL_HEADER_OPEN_PAREN
+        ):
+            return self._parse_value()
+
+        parts: list[str] = [self._advance().value, self._advance().value]
+        depth: int = 1
+        while depth > 0:
+            parameter_token: _ModelHeaderToken = self._peek()
+            if parameter_token.kind == _MODEL_HEADER_END_TOKEN:
+                raise ModelHeaderSyntaxError(f"unterminated SQL type at position {token.position}")
+            if parameter_token.kind == _MODEL_HEADER_STRING_TOKEN:
+                raise ModelHeaderSyntaxError(
+                    f"quoted SQL type parameters require the whole type to be quoted "
+                    f"at position {parameter_token.position}"
+                )
+            self._advance()
+            parts.append(parameter_token.value)
+            if parameter_token.kind != _MODEL_HEADER_SYMBOL_TOKEN:
+                continue
+            if parameter_token.value == _MODEL_HEADER_OPEN_PAREN:
+                depth += 1
+            elif parameter_token.value == _MODEL_HEADER_CLOSE_PAREN:
+                depth -= 1
+        return "".join(parts)
+
     def _parse_value(
-        self, *, threshold_policy: bool = False, allow_outside_threshold: bool = False
+        self,
+        *,
+        threshold_policy: bool = False,
+        allow_outside_threshold: bool = False,
+        nested_column_entries: bool = False,
+        nested_column_metadata: bool = False,
     ) -> object:
         token: _ModelHeaderToken = self._peek()
         if token.kind == _MODEL_HEADER_STRING_TOKEN:
@@ -680,6 +725,8 @@ class _ModelHeaderParser:
                 end_symbol=_MODEL_HEADER_CLOSE_PAREN,
                 threshold_policy=threshold_policy,
                 allow_outside_threshold=allow_outside_threshold,
+                column_entries=nested_column_entries,
+                column_metadata=nested_column_metadata,
             )
         raise ModelHeaderSyntaxError(f"expected value at position {token.position}")
 
