@@ -7,6 +7,7 @@ from pathlib import Path
 
 import duckdb
 import pytest
+from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
@@ -111,7 +112,7 @@ def test_given_missing_declarations_when_generating_additively_then_preserves_me
     "test_case",
     [
         ContractCommandIntegrationTestCase(
-            description="parameterized physical type is quoted in a generated model header",
+            description="parameterized physical type is unquoted in a generated model header",
             expected_exit_code=0,
         )
     ],
@@ -151,11 +152,11 @@ def test_given_parameterized_physical_type_when_generating_then_writes_valid_mod
     assert exit_code == test_case.expected_exit_code
     assert "0 contract difference(s)" in capsys.readouterr().out
     generated_sql: str = model_path.read_text(encoding="utf-8")
-    assert 'amount (type "DECIMAL(10,2)")' in generated_sql
+    assert "amount (type DECIMAL(10,2))" in generated_sql
     _ = model_path.write_text(
         generated_sql.replace(
-            'amount (type "DECIMAL(10,2)")',
-            'amount (description "type DECIMAL(10,2)", type "DECIMAL(10,2)")',
+            "amount (type DECIMAL(10,2))",
+            'amount (description "type DECIMAL(10,2)", type DECIMAL (10, 2))',
         ),
         encoding="utf-8",
     )
@@ -182,7 +183,7 @@ def test_given_parameterized_physical_type_when_generating_then_writes_valid_mod
     assert overwrite_exit_code == test_case.expected_exit_code
     assert "0 contract difference(s)" in capsys.readouterr().out
     overwritten_sql: str = model_path.read_text(encoding="utf-8")
-    assert 'amount (description "type DECIMAL(10,2)", type "DECIMAL(12,3)")' in overwritten_sql
+    assert 'amount (description "type DECIMAL(10,2)", type DECIMAL(12,3))' in overwritten_sql
 
 
 @pytest.mark.parametrize(
@@ -320,11 +321,16 @@ def test_given_prod_target_credentials_when_contract_diffing_then_uses_active_co
         ]
     )
 
-    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    captured: CaptureResult[str] = capsys.readouterr()
+    payload: dict[str, object] = json.loads(captured.out)
     assert exit_code == test_case.expected_exit_code
     assert payload["from_target"] == "prod"
     assert payload["resources"][0]["relation"].endswith("prod.orders")
     assert all("connection" not in key for key in payload)
+    assert "Connecting to duckdb..." in captured.err
+    assert "Warehouse connected" in captured.err
+    assert "Inspecting 1 contract from target 'prod'..." in captured.err
+    assert "Inspected 1 contract from target 'prod'" in captured.err
 
 
 @pytest.mark.parametrize(

@@ -165,6 +165,9 @@ from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_KIND_TABLE as _POLYGLOT_KIND_TABLE,
 )
 from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_KIND_TIMESTAMP as _POLYGLOT_KIND_TIMESTAMP,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_KIND_TRY_CAST as _POLYGLOT_KIND_TRY_CAST,
 )
 from sqlbuild.compiler.sql_analysis.constants import (
@@ -207,10 +210,16 @@ from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_PAYLOAD_THIS as _POLYGLOT_PAYLOAD_THIS,
 )
 from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_TIMEZONE as _POLYGLOT_PAYLOAD_TIMEZONE,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_PAYLOAD_TO as _POLYGLOT_PAYLOAD_TO,
 )
 from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_SET_OPERATION_KINDS as _POLYGLOT_SET_OPERATION_KINDS,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    TIMESTAMP_WITH_TIME_ZONE_SQL_TYPE_NAME as _TIMESTAMP_WITH_TIME_ZONE_SQL_TYPE_NAME,
 )
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
@@ -1127,6 +1136,11 @@ def _polyglot_expression_type(
         custom_name: object = target.get(_POLYGLOT_PAYLOAD_NAME)
         if isinstance(custom_name, str) and custom_name:
             return custom_name.upper()
+    if (
+        raw_type.lower() == _POLYGLOT_KIND_TIMESTAMP
+        and target.get(_POLYGLOT_PAYLOAD_TIMEZONE) is True
+    ):
+        return _TIMESTAMP_WITH_TIME_ZONE_SQL_TYPE_NAME
     type_name: str = _polyglot_type_name(raw_type)
     precision: object = target.get(_POLYGLOT_PAYLOAD_PRECISION)
     scale: object = target.get(_POLYGLOT_PAYLOAD_SCALE)

@@ -34,6 +34,7 @@ def dispatch_and_handle_errors(
 ) -> int:
     """Dispatch once and preserve the CLI's established error projection."""
 
+    _report_skill_freshness(invocation=invocation)
     try:
         return dispatch_with_observability(args=args, handlers=handlers)
     except SystemExit as error:
@@ -65,8 +66,6 @@ def dispatch_and_handle_errors(
             file=sys.stderr,
         )
         return 1
-    finally:
-        _report_skill_freshness(invocation=invocation)
 
 
 def _report_skill_freshness(*, invocation: ParsedCliInvocation) -> None:
@@ -80,7 +79,7 @@ def _report_skill_freshness(*, invocation: ParsedCliInvocation) -> None:
     project_dir: Path = Path(args.project_dir) if args.project_dir is not None else Path.cwd()
     try:
         result: SkillMaintenanceResult = maintain_sqlbuild_skills(project_dir=project_dir)
-    except (CliUserError, OSError):
+    except (CliUserError, OSError, UnicodeError):
         return
     if result.message:
         print(result.message, file=sys.stderr, end="")

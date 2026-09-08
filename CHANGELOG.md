@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.91.3](https://github.com/chio-labs/sqlbuild/compare/v0.91.2...v0.91.3) (2026-09-08)
+
+
+### Bug Fixes
+
+* report contract command progress ([#585](https://github.com/chio-labs/sqlbuild/issues/585)) ([3dae082](https://github.com/chio-labs/sqlbuild/commit/3dae082e37333f793a181cabc22a448ceaab30cd))
+
+## [0.91.2](https://github.com/chio-labs/sqlbuild/compare/v0.91.1...v0.91.2) (2026-09-08)
+
+
+### Bug Fixes
+
+* render parameterized model types without quotes ([#583](https://github.com/chio-labs/sqlbuild/issues/583)) ([ead4b60](https://github.com/chio-labs/sqlbuild/commit/ead4b60003a194dcd244d7f8dd8bb1e26c22b8da))
+
+## [0.91.1](https://github.com/chio-labs/sqlbuild/compare/v0.91.0...v0.91.1) (2026-09-08)
+
+
+### Bug Fixes
+
+* preserve timestamp timezone inference ([#580](https://github.com/chio-labs/sqlbuild/issues/580)) ([d596d4c](https://github.com/chio-labs/sqlbuild/commit/d596d4cb076d9f8f78c8c649726e2108f7013af2))
+
 ## [0.91.0](https://github.com/chio-labs/sqlbuild/compare/v0.90.5...v0.91.0) (2026-09-07)
 
 

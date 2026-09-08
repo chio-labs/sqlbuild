@@ -21,12 +21,19 @@ _YAML_COLUMNS_KEY: str = "columns"
 _YAML_TYPE_KEY: str = "type"
 _YAML_KEY_SEPARATOR: str = ":"
 _MODEL_HEADER_ENTRY_SEPARATOR: str = ","
+_MODEL_HEADER_OPEN_PAREN: str = "("
+_MODEL_HEADER_CLOSE_PAREN: str = ")"
+_MODEL_HEADER_OPEN_NESTING_CHARACTERS: frozenset[str] = frozenset({"(", "[", "{"})
+_MODEL_HEADER_CLOSE_NESTING_CHARACTERS: frozenset[str] = frozenset({")", "]", "}"})
 _MODEL_HEADER_ESCAPE_CHARACTER: str = "\\"
 _MODEL_HEADER_WORD_EXTRA_CHARACTERS: frozenset[str] = frozenset({"_", "$"})
 _SINGLE_QUOTE: str = "'"
 _DOUBLE_QUOTE: str = '"'
 _MINIMUM_QUOTED_LENGTH: int = 2
-_BARE_MODEL_TYPE_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
+_UNQUOTED_MODEL_TYPE_PATTERN: re.Pattern[str] = re.compile(
+    r"^[A-Za-z_][A-Za-z0-9_$]*"
+    r"(?:\s*\(\s*[A-Za-z0-9_$+-]+(?:\s*,\s*[A-Za-z0-9_$+-]+)*\s*\))?$"
+)
 
 
 def edit_model(
@@ -108,7 +115,7 @@ def _render_model_columns(columns: tuple[ColumnInfo, ...]) -> str:
 
 
 def _render_model_type(value: str) -> str:
-    if _BARE_MODEL_TYPE_PATTERN.fullmatch(value):
+    if _UNQUOTED_MODEL_TYPE_PATTERN.fullmatch(value):
         return value
     escaped: str = value.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'
@@ -128,10 +135,22 @@ def _declared_type_span(
     *, contents: str, column_span: ModelHeaderColumnSpan, declared_type: str
 ) -> tuple[int, int] | None:
     index: int = column_span.metadata_start
+    nesting_depth: int = 0
     while index < column_span.metadata_end:
         character: str = contents[index]
         if character in {_SINGLE_QUOTE, _DOUBLE_QUOTE}:
             index = _quoted_value_end(contents=contents, start=index, end=column_span.metadata_end)
+            continue
+        if character in _MODEL_HEADER_OPEN_NESTING_CHARACTERS:
+            nesting_depth += 1
+            index += 1
+            continue
+        if character in _MODEL_HEADER_CLOSE_NESTING_CHARACTERS:
+            nesting_depth = max(0, nesting_depth - 1)
+            index += 1
+            continue
+        if nesting_depth > 0:
+            index += 1
             continue
         if not contents[index : index + len(_YAML_TYPE_KEY)].casefold() == _YAML_TYPE_KEY:
             index += 1
@@ -157,17 +176,56 @@ def _declared_type_span(
                 f"\\{contents[value_start]}", contents[value_start]
             ).replace("\\\\", "\\")
         else:
-            value_end = value_start
-            while value_end < column_span.metadata_end and not (
-                contents[value_end].isspace()
-                or contents[value_end] == _MODEL_HEADER_ENTRY_SEPARATOR
-            ):
-                value_end += 1
+            value_end = _unquoted_type_value_end(
+                contents=contents,
+                start=value_start,
+                end=column_span.metadata_end,
+            )
             authored_value = contents[value_start:value_end]
-        if authored_value.casefold() == declared_type.casefold():
+        if _model_types_match(authored=authored_value, parsed=declared_type):
             return value_start, value_end
         index = value_end
     return None
+
+
+def _model_types_match(*, authored: str, parsed: str) -> bool:
+    if authored.casefold() == parsed.casefold():
+        return True
+    if not (
+        _UNQUOTED_MODEL_TYPE_PATTERN.fullmatch(authored)
+        and _UNQUOTED_MODEL_TYPE_PATTERN.fullmatch(parsed)
+    ):
+        return False
+    return re.sub(r"\s+", "", authored).casefold() == re.sub(r"\s+", "", parsed).casefold()
+
+
+def _unquoted_type_value_end(*, contents: str, start: int, end: int) -> int:
+    index: int = start
+    parenthesis_depth: int = 0
+    saw_open_parenthesis: bool = False
+    while index < end:
+        character: str = contents[index]
+        if character == _MODEL_HEADER_OPEN_PAREN:
+            parenthesis_depth += 1
+            saw_open_parenthesis = True
+        elif character == _MODEL_HEADER_CLOSE_PAREN:
+            if parenthesis_depth == 0:
+                break
+            parenthesis_depth -= 1
+        elif parenthesis_depth == 0 and character.isspace():
+            next_non_whitespace: int = index
+            while next_non_whitespace < end and contents[next_non_whitespace].isspace():
+                next_non_whitespace += 1
+            if not saw_open_parenthesis and contents[
+                next_non_whitespace : next_non_whitespace + 1
+            ] == (_MODEL_HEADER_OPEN_PAREN):
+                index = next_non_whitespace
+                continue
+            break
+        elif parenthesis_depth == 0 and character == _MODEL_HEADER_ENTRY_SEPARATOR:
+            break
+        index += 1
+    return index
 
 
 def _quoted_value_end(*, contents: str, start: int, end: int) -> int:
