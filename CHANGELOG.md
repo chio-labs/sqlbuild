@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.91.3](https://github.com/chio-labs/sqlbuild/compare/v0.91.2...v0.91.3) (2026-09-08)
+
+
+### Bug Fixes
+
+* report contract command progress ([#585](https://github.com/chio-labs/sqlbuild/issues/585)) ([3dae082](https://github.com/chio-labs/sqlbuild/commit/3dae082e37333f793a181cabc22a448ceaab30cd))
+
 ## [0.91.2](https://github.com/chio-labs/sqlbuild/compare/v0.91.1...v0.91.2) (2026-09-08)
 
 
