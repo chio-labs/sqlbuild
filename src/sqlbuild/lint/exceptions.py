@@ -31,3 +31,9 @@ class ProjectCompileError(LintError):
     """The project could not be compiled, so its SQL cannot be linted."""
 
     code: str = "L005"
+
+
+class CustomLintError(LintError):
+    """A repository-defined statement-local lint rule is invalid or failed."""
+
+    code: str = "L006"

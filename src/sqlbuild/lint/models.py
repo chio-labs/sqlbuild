@@ -8,7 +8,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.models import ExpansionSpan
 from sqlbuild.lint.constants import VIOLATION_SEVERITY_FAULT, VIOLATION_SEVERITY_WARNING
-from sqlbuild.lint.types import LintSeverity
+from sqlbuild.lint.types import CustomLintCheck, LintSeverity
 
 
 @dataclass(frozen=True)
@@ -73,6 +73,40 @@ class LintViolation:
 
 
 @dataclass(frozen=True)
+class LintRuleOption[T]:
+    """One typed option available to a custom statement-local lint rule."""
+
+    name: str
+    value_type: type[T]
+    default: T
+    description: str
+
+
+@dataclass(frozen=True)
+class CustomLintFinding:
+    """One custom lint diagnostic over a plain SQL source span."""
+
+    code: str
+    start: int
+    end: int
+    message: str
+    remediation: str
+
+
+@dataclass(frozen=True)
+class CustomLintRule:
+    """Metadata and implementation for one custom SQL lint rule."""
+
+    code: str
+    family: str
+    slug: str
+    message: str
+    remediation: str
+    check: CustomLintCheck
+    options: tuple[LintRuleOption[object], ...] = ()
+
+
+@dataclass(frozen=True)
 class FormatChange:
     """One deterministic file-formatting change."""
 
@@ -102,6 +136,11 @@ class LintConfig:
     dialect: str = "generic"
     enabled_native_rules: tuple[str, ...] | None = None
     ignored_native_rules: tuple[str, ...] = ()
+    selected_custom_rules: tuple[str, ...] = ()
+    ignored_custom_rules: tuple[str, ...] = ()
+    custom_rule_paths: tuple[str, ...] = ()
+    custom_rule_modules: tuple[str, ...] = ()
+    custom_rule_options: dict[str, dict[str, object]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

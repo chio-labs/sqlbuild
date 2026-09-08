@@ -1,0 +1,12 @@
+"""Test case types for policy performance guards."""
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class PolicyPerformanceGuardTestCase:
+    description: str
+    model_count: int
+    hard_ceiling_seconds: int
+    expected_max_elapsed_seconds: float
+    expected_returncode: int

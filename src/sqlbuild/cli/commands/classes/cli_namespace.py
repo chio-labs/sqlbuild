@@ -127,9 +127,9 @@ _DEFAULT_VALUES: dict[str, object] = {
     "dbt_command": None,
     "dbt_args": [],
     "vars": {},
-    "kata_command": None,
-    "kata_rule_code": None,
-    "kata_skills_check": False,
+    "policy_command": None,
+    "policy_rule_code": None,
+    "policy_skills_check": False,
     "format_check": False,
     "format_diff": False,
     "fix_check": False,
@@ -281,9 +281,9 @@ class CliNamespace:
     dbt_command: str | None
     dbt_args: list[str]
     vars: dict[str, object]
-    kata_command: str | None
-    kata_rule_code: str | None
-    kata_skills_check: bool
+    policy_command: str | None
+    policy_rule_code: str | None
+    policy_skills_check: bool
     format_check: bool
     format_diff: bool
     fix_check: bool

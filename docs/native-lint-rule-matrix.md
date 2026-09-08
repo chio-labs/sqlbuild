@@ -11,7 +11,7 @@ Disposition meanings:
 - **Optional lint**: selected with `[lint].select`; suppressible with a reason.
 - **Compiler**: mandatory SQLBuild artifact invariant; ordinary parser/validator behavior for plain SQL.
 - **Format**: one deterministic canonical representation, not a configurable warning.
-- **Kata**: repository architecture or naming policy rather than generic SQL correctness.
+- **Project Policy**: a deterministic check that requires SQLBuild resource or repository evidence.
 - **Dialect/not applicable**: statement family is outside SQLBuild model queries or already rejected by
   the applicable dialect parser.
 - **Drop**: subjective policy whose cost or ambiguity exceeds its generic value.
@@ -72,7 +72,7 @@ SQLBuild has one canonical formatter and does not expose capitalization rule con
 | CV06 terminator | Format | — | format | Canonical statement/file boundary. |
 | CV07 statement brackets | Format | — | format | Remove only with equivalence proof. |
 | CV08 prefer LEFT JOIN | Drop | — | never | Direction is contextual, not correctness. |
-| CV09 blocked words | Kata | — | never | Repository governance, not generic SQL. |
+| CV09 blocked words | Project Policy | — | never | Repository governance, not generic SQL. |
 | CV10 literal quote style | Format | — | format | Normalize only with dialect-safe equivalence. |
 | CV11 cast style | Format | — | format | Canonical printer owns spelling without changing types. |
 | CV12 hidden join condition | Core lint | `SQBL002` | conditional | Comma joins become explicit only when precedence is clear. |
@@ -91,8 +91,8 @@ SQLBuild has one canonical formatter and does not expose capitalization rule con
 | RF01 reference absent from scope | Core lint/compiler | `SQBL029` | never | Native lint reports proven unknown qualifiers; compiler owns schema-resolved failures. |
 | RF02 qualify multi-relation columns | Optional lint | `SQBL027` | never | Correct qualifier requires relation-resolution evidence. |
 | RF03 consistent single-relation qualification | Optional lint | `SQBL028` | never | Readability policy; do not rewrite several ranges speculatively. |
-| RF04 keyword identifiers | Dialect/Kata | — | never | Dialect parser owns illegal forms; legal naming policy belongs in Kata. |
-| RF05 special characters | Kata | — | never | Project naming policy, not generic correctness. |
+| RF04 keyword identifiers | Dialect/Project Policy | — | never | Dialect parser owns illegal forms; legal naming policy requires project context. |
+| RF05 special characters | Project Policy | — | never | Project naming policy, not generic correctness. |
 | RF06 unnecessary quotes | Format | — | format | Remove only when identifier semantics remain identical. |
 | RF07 window alias references | Compiler/dialect | — | never | Scope resolution and active dialect determine legality. |
 
@@ -120,7 +120,7 @@ SQLBuild has one canonical formatter and does not expose capitalization rule con
 | OR01 Oracle empty batch | Dialect/not applicable | SQLBuild model bodies are query expressions; active parser owns batch syntax. |
 | PG01 excessive locks | Dialect/not applicable | Transaction/DDL operational policy is outside model-query lint. |
 | PG02 NOT VALID foreign key | Dialect/not applicable | SQLBuild model bodies do not own PostgreSQL constraint DDL. |
-| TQ01 `sp_` procedure prefix | Kata/not applicable | Procedure naming policy is not generic model SQL. |
+| TQ01 `sp_` procedure prefix | Project Policy/not applicable | Procedure naming policy is not generic model SQL. |
 | TQ02 procedure BEGIN/END | Dialect/not applicable | Procedure body syntax is owned by the T-SQL parser/compiler. |
 | TQ03 empty batch | Format/dialect | Canonical file output removes empty statements where applicable. |
 | TQ04 procedure alias spelling | Format/dialect | Canonical spelling only in supported T-SQL statement contexts. |
@@ -133,17 +133,23 @@ SQLBuild has one canonical formatter and does not expose capitalization rule con
 | `SQBL018` | Core lint | never | `ROW_NUMBER` without deterministic window ordering is unstable. |
 | `SQBL019` | Core lint | never | Literal NULL in `NOT IN` triggers three-valued anti-filter behavior. |
 | `SQBL024` | Optional lint | never | Right-side WHERE reference can null-reject a LEFT JOIN. |
+| `SQBL033` | Optional lint | never | Standalone comments attach immediately to a supported syntax node. |
+| `SQBL034` | Optional lint | never | Transformation logic remains in top-level CTEs. |
+| `SQBL035` | Optional lint | never | The terminal SELECT reads plainly from the final top-level CTE. |
+| `SQBL036` | Optional lint | never | CTEs remain at statement top level. |
+| `SQBL037` | Optional lint | never | Recursive CTEs require an explicit alternative design. |
+| `SQBL038` | Optional lint | never | Explicit cartesian products require a reasoned suppression. |
 
 Schema-dependent nullable `NOT IN`, inferred join cardinality, denominator safety, integer division,
 timezone comparison, persisted-output policy, and incremental cursor/replay checks remain compiler or
-Kata work when they need project schema/materialization facts. They are not weakened into syntax-only
+Project Policy work when they need project schema/materialization facts. They are not weakened into syntax-only
 generic guesses.
 
 ## Current native totals
 
-- 32 SQLBuild-owned generic native rule codes (`SQBL001`–`SQBL032`)
+- 38 SQLBuild-owned generic native rule codes (`SQBL001`–`SQBL038`)
 - 12 core defaults
-- 20 optional rules selectable by exact code or prefix under `[lint].select`
+- 26 optional rules selectable by exact code or prefix under `[lint].select`
 - 14 always-or-conditionally fixable native rule types
 - `SQBL000` suppression validation, with stale standalone directives fixable
 - five SQLBuild header diagnostics, with whitespace and leading-comment promotion handled when safe

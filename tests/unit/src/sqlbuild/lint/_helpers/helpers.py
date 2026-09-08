@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.lint import CustomLintFinding, LintRuleContext, lint_rule
 from sqlbuild.lint._helpers.headers import scan_headers, sql_body_ranges
 from sqlbuild.lint.models import HeaderSpan, LintBody
 
@@ -26,3 +27,19 @@ def lint_bodies_for(*, file_path: Path, contents: str) -> tuple[LintBody, ...]:
             )
         )
     return tuple(bodies)
+
+
+@lint_rule(
+    code="XSQBLS001",
+    family="shape",
+    slug="no-star",
+    message="Star is forbidden",
+    remediation="Enumerate columns.",
+)
+def no_star(*, ctx: LintRuleContext) -> tuple[CustomLintFinding, ...]:
+    """Report a star projection without exposing project capabilities."""
+
+    assert not hasattr(ctx, "model")
+    assert not hasattr(ctx, "project")
+    start: int = ctx.source.index("*")
+    return (ctx.finding(start=start, end=start + 1),)

@@ -107,9 +107,9 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
             module_name="sqlbuild.cli.commands.main.project._fix",
             function_name="run_fix_command",
         ),
-        "kata": _lazy_handler(
-            module_name="sqlbuild.cli.commands.main.project._kata",
-            function_name="run_kata_command",
+        "policy": _lazy_handler(
+            module_name="sqlbuild.cli.commands.main.project._policy",
+            function_name="run_policy_command",
         ),
         "lint": _lazy_handler(
             module_name="sqlbuild.cli.commands.main.project._lint",
@@ -284,7 +284,7 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
         ),
         run_scenario=lazy["scenario"],
         run_scenario_capture=lazy["scenario_capture"],
-        run_kata=lazy["kata"],
+        run_policy=lazy["policy"],
         run_scope=lazy["scope"],
         run_contract=lazy["contract"],
     )

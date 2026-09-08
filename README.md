@@ -100,51 +100,82 @@ unofficial project structure. Keep repository pytest tests outside the SQLBuild 
 directory, which is reserved for SQLBuild SQL tests and scenarios. Documented integration paths
 such as `dagster/`, `rivers_pipeline/`, and their `definitions.py` modules are also supported.
 
-## Kata SQL architecture checks
+## SQL lint and Project Policy
 
-Kata is SQLBuild's opt-in, error-only SQL model shape checker. It runs offline over the compiled
+SQL lint evaluates one plain SQL statement. Project Policy evaluates how SQLBuild resources are
+organised, configured, documented, tested, and connected. Both are deterministic: the boundary is
+the evidence a rule needs, not its severity.
+
+`sqb lint` owns statement-local `SQBL` checks, including comment attachment, CTE shape, set
+operations, and joins. Repository-defined statement-local checks use the separate `XSQBL` API:
+
+```python
+from sqlbuild.lint import LintRuleContext, lint_rule
+
+
+@lint_rule(
+    code="XSQBLS001",
+    family="shape",
+    slug="no-star",
+    message="Star projections are not allowed",
+    remediation="Enumerate the intended columns.",
+)
+def no_star(*, ctx: LintRuleContext):
+    if "*" not in ctx.source:
+        return ()
+    start = ctx.source.index("*")
+    return (ctx.finding(start=start, end=start + 1),)
+```
+
+Custom lint receives only SQL source, dialect, AST, source spans, and declared options. It cannot
+observe models, paths, project configuration, the dependency graph, declarations, filesystem,
+environment, process, network, or warehouse state. Configure repository-owned lint files with
+`[lint].rule_paths`, select them with `XSQBL...`, and test them directly with
+`evaluate_lint_rule`.
+
+Project Policy is SQLBuild's opt-in, error-only project-aware checker. It runs offline over the compiled
 project, reports coded faults with remediations, and never rewrites SQL. Its built-in lifecycle is
 native: Rust resolves rule policy, parses each model, evaluates built-ins, applies suppressions,
 and owns the persistent cache and deterministic result ordering.
 
-Kata is disabled until the project selects at least one rule. Select the complete built-in policy
+Project Policy is disabled until the project selects at least one rule. Select the complete built-in policy
 in `sqlbuild_project.toml` with its namespace prefix:
 
 ```toml
-[kata]
-select = ["SQBK"]
+[policy]
+select = ["SQBP"]
 ```
 
-`SQBK` activates every built-in rule. Narrower prefixes such as `SQBKS` activate one family, exact
+`SQBP` activates every built-in rule. Narrower prefixes such as `SQBPS` activate one family, exact
 codes select individual rules, and `ignore` removes matching rules. Audit, unit-test, and custom-rule
-test-case minimums each default to one and can be overridden under `[kata.thresholds]`.
+test-case minimums each default to one and can be overridden under `[policy.thresholds]`.
 
-Kata also keeps model ownership shallow and explicit. Configured level paths separate warehouse
+Project Policy also keeps model ownership shallow and explicit. Configured level paths separate warehouse
 layers from domain ownership; every owner is a leaf or a branch, subdomain depth defaults to one,
 and declaration roles remain bounded flat-or-grouped containers:
 
 ```toml
-[kata.layout]
+[policy.layout]
 levels = ["staging", "intermediate/clean", "intermediate/enriched", "mart"]
-domain_roots = ["market/betfair", "model/horsenet/ratings"] # optional disambiguation
+domain_roots = ["sales/partner", "inventory/forecasting"] # optional disambiguation
 
-[kata.thresholds]
+[policy.thresholds]
 max_subdomain_depth = 1
 min_shared_owner_prefix_directories = 2
 ```
 
-Run `sqb kata`, inspect metadata with `sqb kata rule SQBKS101`, and generate agent guidance from
-the same active ruleset with `sqb kata skills`. Use `sqb kata skills --check` in CI to detect stale
+Run `sqb policy`, inspect metadata with `sqb policy rule SQBPS101`, and generate agent guidance from
+the same active ruleset with `sqb policy skills`. Use `sqb policy skills --check` in CI to detect stale
 guidance. `--json`, `--select`, and `--exclude` are available for automation and model scoping.
 
 Repository rules use the public API:
 
 ```python
-from sqlbuild.kata import RuleContext, kata
+from sqlbuild.policy import RuleContext, policy
 
 
-@kata(
-    code="XSQBKP001",
+@policy(
+    code="XSQBPP001",
     family="prices",
     slug="typed-currency",
     message="price models must declare a currency column",
@@ -156,10 +187,15 @@ def typed_currency(*, model, ctx: RuleContext):
     ]
 ```
 
-Load repository-owned files through `rule_paths = ["kata/rules"]` or dotted packages through
+Load repository-owned files through `rule_paths = ["policy/rules"]` or dotted packages through
 `rule_modules`. Test each custom rule with `RuleCase` and `evaluate_rule`. Selecting custom rules
-disables caching unless `[kata.cache] require_cacheable = true`; cacheable rules may import only
-the supported pure modules and must access project files through `RuleContext`.
+disables caching unless `[policy.cache] require_cacheable = true`; cacheable rules may import only
+the supported pure modules and must access tracked `.py`, `.sql`, `.toml`, `.yaml`, or `.yml`
+project files through `RuleContext`.
+
+Custom Project Policy rules are model-local by default and receive incremental per-model cache
+entries. Set `project_wide=True` on rules that inspect project-wide context or report findings for
+other paths; cacheability validation rejects project-wide context access from a model-local rule.
 
 Python is used only for the SQLBuild compiler adapter and selected custom rules. Built-in-only
 runs cross into the native engine once as a compiled model batch and do not materialize or walk
@@ -169,6 +205,18 @@ Polyglot AST escape hatch; its findings rejoin native suppression, ordering, and
 Exact `rule_exceptions` require a rule, file, and reason and fail when stale. Broader
 `rule_ignores` and lone-star allowances also require reasons but are intentionally not
 stale-checked.
+
+Run the neutral large-project benchmark locally after implementation changes:
+
+```bash
+uv run python -m scripts.benchmark_project_policy --models 3000 --iterations 3
+uv run python -m scripts.benchmark_project_policy --models 5000 --iterations 3
+```
+
+The generated projects contain no company model names or SQL. They retain representative graph,
+SQL-complexity, contract, test, declaration, and custom-policy stressors and report cold, unchanged,
+leaf-edit, shared-ancestor, tracked-policy-input, custom-rule-edit, cache-disabled, and non-cacheable
+rejection median/p95 timings.
 
 ## Supported adapters
 

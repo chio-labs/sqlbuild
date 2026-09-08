@@ -10,8 +10,10 @@ import pytest
 from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands._helpers.lint import selection as lint_selection
+from sqlbuild.cli.commands._helpers.lint.runs import resolve_lint_config
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.cli.commands.main.project import _lint
+from sqlbuild.lint.exceptions import NativeLintError
 from tests.unit.src.sqlbuild.lint._test_types import (
     FixCliTestCase,
     FormatCliTestCase,
@@ -72,7 +74,61 @@ PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n'
                 "models/limited.sql": ('MODEL (description "ok");\nSELECT id FROM items LIMIT 1\n'),
                 "sqlbuild_project.toml": (
                     'name = "demo"\nadapter = "duckdb"\n'
-                    '[lint]\nselect = ["SQBL"]\nignore = ["SQBL004"]\n'
+                    '[lint]\nselect = ["SQBL"]\nignore = ["SQBL004", "SQBL034"]\n'
+                ),
+            },
+            expected_exit_code=0,
+            expected_output_fragments=("WARN=0",),
+        ),
+        LintCliTestCase(
+            description="custom lint evaluates statement-local rules through the real CLI",
+            files={
+                "models/custom.sql": ('MODEL (description "ok");\nSELECT * FROM items\n'),
+                "lint/no_star.py": (
+                    "from sqlbuild.lint import LintRuleContext, lint_rule\n\n"
+                    "@lint_rule(\n"
+                    '    code="XSQBLS001", family="shape", slug="no-star",\n'
+                    '    message="Star is forbidden here",\n'
+                    '    remediation="Enumerate columns.",\n'
+                    ")\n"
+                    "def check(*, ctx: LintRuleContext):\n"
+                    '    start = ctx.source.index("*")\n'
+                    "    return [ctx.finding(start=start, end=start + 1)]\n"
+                ),
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n'
+                    "[lint]\n"
+                    'select = ["XSQBLS001"]\n'
+                    'rule_paths = ["lint"]\n'
+                ),
+            },
+            expected_exit_code=1,
+            expected_output_fragments=(
+                "warning[XSQBLS001]: Star is forbidden here",
+                "WARN=1",
+            ),
+        ),
+        LintCliTestCase(
+            description="custom lint ignores apply after prefix selection",
+            files={
+                "models/custom.sql": ('MODEL (description "ok");\nSELECT * FROM items\n'),
+                "lint/no_star.py": (
+                    "from sqlbuild.lint import LintRuleContext, lint_rule\n\n"
+                    "@lint_rule(\n"
+                    '    code="XSQBLS001", family="shape", slug="no-star",\n'
+                    '    message="Star is forbidden here",\n'
+                    '    remediation="Enumerate columns.",\n'
+                    ")\n"
+                    "def check(*, ctx: LintRuleContext):\n"
+                    '    start = ctx.source.index("*")\n'
+                    "    return [ctx.finding(start=start, end=start + 1)]\n"
+                ),
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n'
+                    "[lint]\n"
+                    'select = ["XSQBLS"]\n'
+                    'ignore = ["XSQBLS001"]\n'
+                    'rule_paths = ["lint"]\n'
                 ),
             },
             expected_exit_code=0,
@@ -110,6 +166,30 @@ def test_given_project_when_running_lint_then_exit_code_and_output_match_expecte
     for relative_path, file_fragment in test_case.expected_file_fragments.items():
         written: str = (tmp_path / relative_path).read_text(encoding="utf-8")
         assert file_fragment in written
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LintBehaviorTestCase(
+            description="unknown lint selector is rejected instead of silently ignored",
+            expected_value="unsupported lint rule selector: SQLB020",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unknown_selector_when_resolving_lint_config_then_rejects_it(
+    tmp_path: Path,
+    test_case: LintBehaviorTestCase,
+) -> None:
+    config: Path = tmp_path / "sqlbuild_project.toml"
+    config.write_text(
+        'name = "demo"\nadapter = "duckdb"\n[lint]\nselect = ["SQLB020"]\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(NativeLintError, match=str(test_case.expected_value)):
+        resolve_lint_config(project_dir=tmp_path)
 
 
 @pytest.mark.parametrize(
