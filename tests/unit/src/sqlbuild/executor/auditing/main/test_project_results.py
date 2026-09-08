@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import Mock
 
 import pytest
 
@@ -24,6 +24,7 @@ from tests.unit.src.sqlbuild.executor.auditing.main._test_types import AuditExec
 from tests.unit.src.sqlbuild.executor.auditing.main.helpers import (
     build_projection_entry,
     build_projection_result,
+    writer_adapter,
 )
 
 
@@ -54,16 +55,7 @@ def test_given_executed_measurement_when_projected_then_builds_record_and_lifecy
         },
     )
     # Writer is replaced, so only method attributes passed into it are required.
-    adapter: Any = cast(
-        Any,
-        SimpleNamespace(
-            execute=lambda *args, **kwargs: None,
-            render_qualified_name=lambda *args, **kwargs: None,
-            render_framework_type=lambda *args, **kwargs: "",
-            render_create_audit_result_table_sql=lambda *args, **kwargs: "",
-            render_create_audit_result_index_sqls=lambda *args, **kwargs: (),
-        ),
-    )
+    adapter: Any = writer_adapter()
 
     with (
         identity_scope(ExecutionIdentity(invocation_id="invocation", run_id="run")),
@@ -104,7 +96,7 @@ def test_given_reused_measurement_when_projected_then_skips_history_and_event(
     test_case: AuditExecutionCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    writer_calls: list[object] = []
+    writer_calls: list[dict[str, Any]] = []
     monkeypatch.setattr(
         projection_module,
         "write_audit_result_records",
@@ -122,7 +114,7 @@ def test_given_reused_measurement_when_projected_then_skips_history_and_event(
         projection: Any = project_audit_result_batch(
             plan=plan,
             results=(replace(build_projection_result(), reused=True),),
-            adapter=cast(Any, object()),
+            adapter=writer_adapter(),
             connection=object(),
             storage_schema="analytics",
         )
@@ -151,16 +143,7 @@ def test_given_history_storage_failure_when_projected_then_reports_degradation_w
         "write_audit_result_records",
         fail_write,
     )
-    adapter: Any = cast(
-        Any,
-        SimpleNamespace(
-            execute=lambda *args, **kwargs: None,
-            render_qualified_name=lambda *args, **kwargs: None,
-            render_framework_type=lambda *args, **kwargs: "",
-            render_create_audit_result_table_sql=lambda *args, **kwargs: "",
-            render_create_audit_result_index_sqls=lambda *args, **kwargs: (),
-        ),
-    )
+    adapter: Any = writer_adapter()
     plan: PlanOutput = PlanOutput(
         audit_entries=(build_projection_entry(),),
         model_locations={
@@ -205,7 +188,7 @@ def test_given_record_build_failure_when_projected_then_reports_degradation_with
         projection: Any = project_audit_result_batch(
             plan=PlanOutput(audit_entries=(build_projection_entry(),)),
             results=(build_projection_result(),),
-            adapter=cast(Any, object()),
+            adapter=writer_adapter(),
             connection=object(),
             storage_schema="analytics",
         )
@@ -223,11 +206,11 @@ def test_given_record_build_failure_when_projected_then_reports_degradation_with
     [AuditExecutionCase("unmatched result batch", AuditOutcome.WARN)],
     ids=lambda case: case.description,
 )
-def test_given_one_unmatched_result_when_projecting_batch_then_publishes_no_partial_batch(
+def test_given_one_unmatched_result_when_projecting_batch_then_publishes_valid_results(
     test_case: AuditExecutionCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    writer_calls: list[object] = []
+    writer_calls: list[dict[str, Any]] = []
     monkeypatch.setattr(
         projection_module,
         "write_audit_result_records",
@@ -247,15 +230,18 @@ def test_given_one_unmatched_result_when_projecting_batch_then_publishes_no_part
                 build_projection_result(),
                 replace(build_projection_result(), audit_name="unplanned_audit"),
             ),
-            adapter=cast(Any, object()),
+            adapter=writer_adapter(),
             connection=object(),
             storage_schema="analytics",
         )
 
     assert projection.attempted_count == 2
-    assert projection.failed_count == 2
-    assert events == []
-    assert writer_calls == []
+    assert projection.written_count == 1
+    assert projection.failed_count == 1
+    assert len(events) == 1
+    assert events[0].payload["audit_name"] == "row_rate"
+    assert len(writer_calls) == 1
+    assert len(writer_calls[0]["records"]) == 1
     assert build_projection_result().outcome == test_case.expected_outcome
 
 
@@ -264,18 +250,17 @@ def test_given_one_unmatched_result_when_projecting_batch_then_publishes_no_part
     [AuditExecutionCase("lifecycle validation failure", AuditOutcome.WARN)],
     ids=lambda case: case.description,
 )
-def test_given_lifecycle_validation_failure_when_projected_then_reports_degradation_without_raising(
+def test_given_lifecycle_validation_failure_when_projected_then_continues_and_persists_records(
     test_case: AuditExecutionCase,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    writer_calls: list[object] = []
+    writer_calls: list[dict[str, Any]] = []
+    lifecycle_publisher: Mock = Mock(
+        side_effect=(ObservabilityValidationError("invalid lifecycle payload"), None)
+    )
 
-    def fail_lifecycle_publication(record: AuditResultRecord) -> None:
-        del record
-        raise ObservabilityValidationError("invalid lifecycle payload")
-
-    monkeypatch.setattr(projection_module, "_publish_audit_completed", fail_lifecycle_publication)
+    monkeypatch.setattr(projection_module, "_publish_audit_completed", lifecycle_publisher)
     monkeypatch.setattr(
         projection_module,
         "write_audit_result_records",
@@ -285,18 +270,20 @@ def test_given_lifecycle_validation_failure_when_projected_then_reports_degradat
     with identity_scope(ExecutionIdentity(invocation_id="invocation", run_id="run")):
         projection: Any = project_audit_result_batch(
             plan=PlanOutput(audit_entries=(build_projection_entry(),)),
-            results=(build_projection_result(),),
-            adapter=cast(Any, object()),
+            results=(build_projection_result(), build_projection_result()),
+            adapter=writer_adapter(),
             connection=object(),
             storage_schema="analytics",
         )
 
-    assert projection.attempted_count == 1
-    assert projection.written_count == 0
-    assert projection.failed_count == 1
-    assert projection.degraded is True
-    assert writer_calls == []
-    assert "Audit result projection degraded" in caplog.text
+    assert projection.attempted_count == 2
+    assert projection.written_count == 2
+    assert projection.failed_count == 0
+    assert projection.degraded is False
+    assert len(writer_calls) == 1
+    assert len(writer_calls[0]["records"]) == 2
+    assert lifecycle_publisher.call_count == 2
+    assert "Audit result lifecycle publication degraded" in caplog.text
     assert build_projection_result().outcome == test_case.expected_outcome
 
 

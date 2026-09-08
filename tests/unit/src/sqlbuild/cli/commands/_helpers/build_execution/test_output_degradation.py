@@ -146,7 +146,7 @@ def test_given_audit_history_write_failure_when_formatting_json_then_reports_bou
     }
     assert payload["projection_degradation_reasons"] == [
         {
-            "reason": "audit_result_persistence_failure",
+            "reason": "audit_result_projection_failure",
             "attempted_count": 3,
             "written_count": 0,
             "failed_count": 3,
