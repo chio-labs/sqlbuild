@@ -60,7 +60,7 @@ def run_pre_hook_phase(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.PRE_HOOK,
-            error=str(exc),
+            error=exc,
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
@@ -103,7 +103,7 @@ def run_post_hook_phase(
             failure=build_failed_result(
                 entry=entry,
                 phase=ExecutionPhase.POST_HOOK,
-                error=str(exc),
+                error=exc,
                 staging_relation=staging_relation,
                 promoted_relation=promoted_relation,
                 warnings=warnings,

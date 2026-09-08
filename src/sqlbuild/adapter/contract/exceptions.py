@@ -17,6 +17,19 @@ class AdapterUserError(ValueError):
         self.help = help
 
 
+class SqlStatementExecutionError(RuntimeError):
+    """Warehouse error attributed to the exact SQL statement that raised it."""
+
+    def __init__(self, *, sql: str, error: Exception) -> None:
+        super().__init__(str(error))
+        self.failed_sql = sql
+        self.original_error = error
+        self.message = str(getattr(error, "message", str(error)))
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self.original_error, name)
+
+
 class UnsupportedTypedSqlRenderingError(AdapterUserError, SqlValueRenderingError):
     """Raised when an adapter cannot represent a requested typed SQL value."""
 

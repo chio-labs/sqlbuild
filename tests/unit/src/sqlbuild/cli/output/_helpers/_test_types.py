@@ -62,3 +62,4 @@ class MeasurementAuditOutputTestCase:
 class FailedModelSqlOutputTestCase:
     description: str
     expected_recorded_sql: str
+    expected_failed_sql: str

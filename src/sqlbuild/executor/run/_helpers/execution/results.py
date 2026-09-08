@@ -37,6 +37,7 @@ def build_failed_result(
     entry: ModelPlanEntry,
     phase: ExecutionPhase,
     error: str | BaseException,
+    error_prefix: str | None = None,
     staging_relation: str | None = None,
     promoted_relation: str | None = None,
     warnings: list[str],
@@ -49,6 +50,8 @@ def build_failed_result(
     rendered_error, rendered_code, rendered_help = _render_failure_error(
         error=error, fallback_code=_fallback_code_for_phase(phase)
     )
+    if error_prefix is not None:
+        rendered_error = f"{error_prefix}: {rendered_error}"
 
     statement_recorder.log(f"model {entry.name} failed phase={phase.value} error={rendered_error}")
     if staging_relation is not None:
@@ -67,6 +70,7 @@ def build_failed_result(
         error_code=rendered_code,
         error_help=rendered_help,
         error_message=rendered_error,
+        failed_sql=_failed_sql(error),
         future_cursor_safety=_future_cursor_safety(entry),
         maximum_start_safety=_maximum_start_safety(entry=entry, error=error),
         microbatch_limit=entry.microbatch_limit,
@@ -76,6 +80,13 @@ def build_failed_result(
         microbatch_strategy=entry.microbatch_strategy,
         microbatch_plan_reason=entry.reason.value,
     )
+
+
+def _failed_sql(error: str | BaseException) -> str | None:
+    if isinstance(error, str):
+        return None
+    failed_sql: object = getattr(error, "failed_sql", None)
+    return failed_sql if isinstance(failed_sql, str) and failed_sql else None
 
 
 def build_skipped_result(

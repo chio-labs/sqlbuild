@@ -69,6 +69,7 @@ from tests.unit.src.sqlbuild.cli.output._helpers._test_types import (
         FailedModelSqlOutputTestCase(
             description="failed staging statement remains available to integrations",
             expected_recorded_sql="CREATE TABLE staging_orders AS SELECT * FROM raw_orders",
+            expected_failed_sql="CREATE TABLE staging_orders AS SELECT invalid FROM raw_orders",
         ),
     ),
     ids=lambda case: case.description,
@@ -85,11 +86,13 @@ def test_given_failed_model_when_formatting_json_then_last_recorded_sql_is_prese
             LifeCycleEvent(kind=LifeCycleEventKind.LOG, content="staging failed"),
         ),
         error_message="syntax error",
+        failed_sql=test_case.expected_failed_sql,
     )
 
     assets: tuple[dict[str, object], ...] = _format_model_assets(results=(result,), plan=None)
 
     assert assets[0]["last_recorded_sql"] == test_case.expected_recorded_sql
+    assert assets[0]["failed_sql"] == test_case.expected_failed_sql
 
 
 @pytest.mark.parametrize(

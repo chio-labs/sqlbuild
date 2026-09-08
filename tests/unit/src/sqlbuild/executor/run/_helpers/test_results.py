@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.exceptions import SqlStatementExecutionError
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
@@ -62,6 +63,30 @@ from tests.unit.src.sqlbuild.executor.run._helpers.helpers import build_result_m
                 ),
             ),
         ),
+        BuildFailedResultTestCase(
+            description="preserves exact failed SQL separately from recorded statements",
+            error=SqlStatementExecutionError(
+                sql="CREATE TABLE analytics.orders__staging AS SELECT invalid",
+                error=ValueError("warehouse syntax error"),
+            ),
+            recorded_statements=("CREATE TABLE analytics.orders__staging AS SELECT valid",),
+            warning_messages=(),
+            expected_model_name="orders",
+            expected_error_message="batch 2: warehouse syntax error",
+            expected_error_code="R002",
+            expected_lifecycle_events=(
+                LifeCycleEvent(
+                    kind=LifeCycleEventKind.SQL,
+                    content="CREATE TABLE analytics.orders__staging AS SELECT valid",
+                ),
+                LifeCycleEvent(
+                    kind=LifeCycleEventKind.LOG,
+                    content="model orders failed phase=staging error=batch 2: warehouse syntax error",
+                ),
+            ),
+            expected_failed_sql="CREATE TABLE analytics.orders__staging AS SELECT invalid",
+            error_prefix="batch 2",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -76,6 +101,7 @@ def test_given_statement_recorder_when_building_failed_result_then_snapshots_sta
         entry=build_result_model_plan_entry(),
         phase=ExecutionPhase.STAGING,
         error=test_case.error,
+        error_prefix=test_case.error_prefix,
         warnings=warnings,
         audit_results=[],
         statement_recorder=recorder,
@@ -88,3 +114,4 @@ def test_given_statement_recorder_when_building_failed_result_then_snapshots_sta
     assert result.error_code == test_case.expected_error_code
     assert result.lifecycle_events == test_case.expected_lifecycle_events
     assert result.warning_messages == test_case.warning_messages
+    assert result.failed_sql == test_case.expected_failed_sql

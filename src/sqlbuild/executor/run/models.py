@@ -158,6 +158,7 @@ class ModelExecutionResult:
     error_code: str | None = None
     error_help: str | None = None
     error_message: str | None = None
+    failed_sql: str | None = None
     microbatch_run_type: str | None = None
     microbatch_strategy: str | None = None
     microbatch_plan_reason: str | None = None
