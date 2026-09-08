@@ -1789,7 +1789,7 @@ class PostgresAdapter(MicrobatchMixin, BaseAdapter):
         cast_clause: str = ", ".join(cast_projections)
         if all_columns_cast:
             return f"(SELECT {cast_clause} FROM {source_relation})"
-        exclude_list: str = ", ".join(cast_column_names)
+        exclude_list: str = ", ".join(self.render_identifier(name) for name in cast_column_names)
         return f"(SELECT * EXCLUDE ({exclude_list}), {cast_clause} FROM {source_relation})"
 
     def _render_source_relation_cast_subquery_with_columns(
@@ -1810,7 +1810,9 @@ class PostgresAdapter(MicrobatchMixin, BaseAdapter):
         passthrough_columns: tuple[str, ...] = tuple(
             column for column in warehouse_column_names if column not in projection_names
         )
-        passthrough_clause: str = ", ".join(passthrough_columns)
+        passthrough_clause: str = ", ".join(
+            self.render_identifier(name) for name in passthrough_columns
+        )
         projection_clause: str = cast_clause
         if passthrough_clause:
             projection_clause = f"{passthrough_clause}, {cast_clause}"

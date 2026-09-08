@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.adapter.contract.models import LifeCycleEvent
+from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.cli.commands._helpers.test.sql_progress import format_parameterized_test_label
 from sqlbuild.cli.output._helpers.execution_result_document import (
     _format_audit_checks,
@@ -39,6 +41,7 @@ from sqlbuild.executor.run.models import (
     MicrobatchAccountingInterval,
     ModelExecutionResult,
 )
+from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.testing.models import (
     SqlTestDifferenceSample,
@@ -51,12 +54,42 @@ from sqlbuild.sql_values.models import SqlLogicalType, SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 from tests.unit.src.sqlbuild.cli.output._helpers._test_types import (
     AuditExecutionProtocolTestCase,
+    FailedModelSqlOutputTestCase,
     FutureCursorExecutionProtocolTestCase,
     MeasurementAuditOutputTestCase,
     MicrobatchExecutionProtocolTestCase,
     SqlTestCaseExecutionProtocolTestCase,
     SqlTestDifferenceOutputTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        FailedModelSqlOutputTestCase(
+            description="failed staging statement remains available to integrations",
+            expected_recorded_sql="CREATE TABLE staging_orders AS SELECT * FROM raw_orders",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_failed_model_when_formatting_json_then_last_recorded_sql_is_preserved(
+    test_case: FailedModelSqlOutputTestCase,
+) -> None:
+    result: ModelExecutionResult = ModelExecutionResult(
+        model_name="orders",
+        status=ExecutionStatus.FAILED,
+        failed_phase=ExecutionPhase.STAGING,
+        lifecycle_events=(
+            LifeCycleEvent(kind=LifeCycleEventKind.SQL, content=test_case.expected_recorded_sql),
+            LifeCycleEvent(kind=LifeCycleEventKind.LOG, content="staging failed"),
+        ),
+        error_message="syntax error",
+    )
+
+    assets: tuple[dict[str, object], ...] = _format_model_assets(results=(result,), plan=None)
+
+    assert assets[0]["last_recorded_sql"] == test_case.expected_recorded_sql
 
 
 @pytest.mark.parametrize(

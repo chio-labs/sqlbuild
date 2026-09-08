@@ -142,7 +142,7 @@ class MotherDuckAdapter(MicrobatchMixin, DuckDbBackedAdapter):
         cast_clause: str = ", ".join(cast_projections)
         if all_columns_cast:
             return f"(SELECT {cast_clause} FROM {source_relation})"
-        exclude_list: str = ", ".join(cast_column_names)
+        exclude_list: str = ", ".join(self.render_identifier(name) for name in cast_column_names)
         return f"(SELECT * EXCLUDE ({exclude_list}), {cast_clause} FROM {source_relation})"
 
     def connect(self, config: dict[str, Any]) -> Any:

@@ -275,9 +275,9 @@ def _build_relation_cast_subquery(
 
     cast_expressions: tuple[str, ...] = tuple(
         adapter.render_source_expression_cast(
-            expression=name,
+            expression=adapter.render_identifier(name),
             target_type=enforced_map[name],
-            alias=name,
+            alias=adapter.render_identifier(name),
         )
         for name in cast_names
     )
@@ -398,16 +398,16 @@ def _build_expression_source_projections(
     for name in expression_names:
         enforced_entry: tuple[str, str] | None = enforced_by_expression_name.get(name)
         if enforced_entry is None:
-            projections.append(name)
+            projections.append(adapter.render_identifier(name))
             continue
         declared_name: str
         column_type: str
         declared_name, column_type = enforced_entry
         projections.append(
             adapter.render_source_expression_cast(
-                expression=name,
+                expression=adapter.render_identifier(name),
                 target_type=column_type,
-                alias=declared_name,
+                alias=adapter.render_identifier(declared_name),
             )
         )
     return projections

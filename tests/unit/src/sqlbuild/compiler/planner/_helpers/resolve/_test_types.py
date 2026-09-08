@@ -102,6 +102,12 @@ class AdapterSourceResolutionTestCase:
 
 
 @dataclass(frozen=True)
+class ReservedSourceColumnTestCase:
+    description: str
+    expected_sql: str
+
+
+@dataclass(frozen=True)
 class RefResolutionTestCase:
     description: str
     query_sql: str

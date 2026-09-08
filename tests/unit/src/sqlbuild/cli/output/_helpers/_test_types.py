@@ -56,3 +56,9 @@ class MeasurementAuditOutputTestCase:
     outcome: AuditOutcome
     expected_status: str
     expected_passed: bool
+
+
+@dataclass(frozen=True)
+class FailedModelSqlOutputTestCase:
+    description: str
+    expected_recorded_sql: str

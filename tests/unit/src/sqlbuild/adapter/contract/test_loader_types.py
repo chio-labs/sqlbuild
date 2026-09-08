@@ -312,7 +312,7 @@ def test_given_adapter_when_rendering_empty_loader_rows_then_returns_expected_sq
                 "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
             ),
             expected_relation_cast_subquery=(
-                "(SELECT * EXCLUDE (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
+                '(SELECT * EXCLUDE ("id"), CAST(id AS INTEGER) AS id FROM raw.orders)'
             ),
         ),
         AdapterSourceExpressionRenderingTestCase(
@@ -323,7 +323,7 @@ def test_given_adapter_when_rendering_empty_loader_rows_then_returns_expected_sq
                 "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
             ),
             expected_relation_cast_subquery=(
-                "(SELECT * EXCLUDE (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
+                '(SELECT * EXCLUDE ("id"), CAST(id AS INTEGER) AS id FROM raw.orders)'
             ),
         ),
         AdapterSourceExpressionRenderingTestCase(
@@ -334,7 +334,7 @@ def test_given_adapter_when_rendering_empty_loader_rows_then_returns_expected_sq
                 "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
             ),
             expected_relation_cast_subquery=(
-                "(SELECT * EXCLUDE (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
+                '(SELECT * EXCLUDE ("id"), CAST(id AS INTEGER) AS id FROM raw.orders)'
             ),
         ),
         AdapterSourceExpressionRenderingTestCase(
@@ -345,7 +345,7 @@ def test_given_adapter_when_rendering_empty_loader_rows_then_returns_expected_sq
                 "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
             ),
             expected_relation_cast_subquery=(
-                "(SELECT * EXCLUDE (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
+                '(SELECT * EXCLUDE ("ID"), CAST(id AS INTEGER) AS id FROM raw.orders)'
             ),
         ),
         AdapterSourceExpressionRenderingTestCase(
@@ -356,7 +356,7 @@ def test_given_adapter_when_rendering_empty_loader_rows_then_returns_expected_sq
                 "(SELECT CAST(id AS INTEGER) AS id FROM (SELECT 1 AS id) AS __source_expression)"
             ),
             expected_relation_cast_subquery=(
-                "(SELECT * EXCEPT (id), CAST(id AS INTEGER) AS id FROM raw.orders)"
+                "(SELECT * EXCEPT (`id`), CAST(id AS INTEGER) AS id FROM raw.orders)"
             ),
         ),
         AdapterSourceExpressionRenderingTestCase(
@@ -367,7 +367,7 @@ def test_given_adapter_when_rendering_empty_loader_rows_then_returns_expected_sq
                 "(SELECT CAST(id AS INT64) AS id FROM (SELECT 1 AS id) AS __source_expression)"
             ),
             expected_relation_cast_subquery=(
-                "(SELECT * EXCEPT (id), CAST(id AS INT64) AS id FROM raw.orders)"
+                "(SELECT * EXCEPT (`id`), CAST(id AS INT64) AS id FROM raw.orders)"
             ),
         ),
     ],

@@ -1573,7 +1573,7 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
         cast_clause: str = ", ".join(cast_projections)
         if all_columns_cast:
             return f"(SELECT {cast_clause} FROM {source_relation})"
-        exclude_list: str = ", ".join(cast_column_names)
+        exclude_list: str = ", ".join(self.render_identifier(name) for name in cast_column_names)
         return f"(SELECT * EXCEPT ({exclude_list}), {cast_clause} FROM {source_relation})"
 
     def requires_derived_table_aliases(self) -> bool:

@@ -44,9 +44,9 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                       - name: raw_orders
                         expression: |
                           SELECT * FROM (VALUES
-                            (1, '1', '2026-01-01 00:30:00', 100),
-                            (2, '2', '2026-01-01 01:30:00', 200)
-                          ) AS orders(order_id, customer_id, ordered_at, amount_cents)
+                            (1, '1', '2026-01-01 00:30:00', 100, 'web'),
+                            (2, '2', '2026-01-01 01:30:00', 200, 'partner')
+                          ) AS orders(order_id, customer_id, ordered_at, amount_cents, "table")
                         type_enforcement: true
                         columns:
                           - name: order_id
@@ -57,6 +57,8 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                             type: TIMESTAMP
                           - name: amount_cents
                             type: INTEGER
+                          - name: table
+                            type: VARCHAR
                     """
                 ).strip()
                 + "\n",
@@ -68,7 +70,8 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
                       order_id,
                       customer_id,
                       ordered_at,
-                      amount_cents
+                      amount_cents,
+                      "table"
                     FROM __source("raw_orders")
                     """
                 ).strip()
@@ -80,14 +83,15 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_query_results=(
                 (
                     (
-                        "SELECT order_id, customer_id, amount_cents "
+                        'SELECT order_id, customer_id, amount_cents, "table" '
                         "FROM main.fact_orders ORDER BY order_id"
                     ),
-                    ((1, 1, 100), (2, 2, 200)),
+                    ((1, 1, 100, "web"), (2, 2, 200, "partner")),
                 ),
             ),
             expected_runtime_fragments=(
-                "CAST(customer_id AS INTEGER) AS customer_id",
+                'CAST("customer_id" AS INTEGER) AS "customer_id"',
+                'CAST("table" AS VARCHAR) AS "table"',
                 "FROM (SELECT * FROM (VALUES",
             ),
         )
