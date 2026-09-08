@@ -380,7 +380,7 @@ fn build_facts(expressions: &[Expression], tokens: &[Token], sql: &str) -> Query
 fn collect_token_query_facts(tokens: &[Token], sql: &str) -> QueryFacts {
     let mut facts = QueryFacts::default();
     let depths = token_depths(tokens);
-    collect_policy_migration_facts(tokens, &depths, sql, &mut facts);
+    facts = collect_policy_migration_facts(tokens, &depths, sql, facts);
     for (select_index, token) in tokens.iter().enumerate() {
         if token.token_type != TokenType::Select {
             continue;
@@ -418,8 +418,8 @@ fn collect_policy_migration_facts(
     tokens: &[Token],
     depths: &[usize],
     sql: &str,
-    facts: &mut QueryFacts,
-) {
+    mut facts: QueryFacts,
+) -> QueryFacts {
     let significant: Vec<usize> = (0..tokens.len())
         .filter(|&index| !is_layout(&tokens[index]) && !is_comment(&tokens[index]))
         .collect();
@@ -446,21 +446,28 @@ fn collect_policy_migration_facts(
         }
     }
 
-    collect_terminal_shape_facts(tokens, depths, &significant, facts);
-    collect_comment_attachment_facts(tokens, sql, facts);
+    let (cte_only_bodies, terminal_selects) =
+        collect_terminal_shape_facts(tokens, depths, &significant);
+    facts.cte_only_bodies.extend(cte_only_bodies);
+    facts.terminal_selects.extend(terminal_selects);
+    facts
+        .invalid_comment_attachments
+        .extend(collect_comment_attachment_facts(tokens, sql));
+    facts
 }
 
 fn collect_terminal_shape_facts(
     tokens: &[Token],
     depths: &[usize],
     significant: &[usize],
-    facts: &mut QueryFacts,
-) {
+) -> (Vec<Span>, Vec<Span>) {
+    let mut cte_only_bodies: Vec<Span> = Vec::new();
+    let mut terminal_selects: Vec<Span> = Vec::new();
     let Some(root_select_position) = significant
         .iter()
         .rposition(|&index| depths[index] == 0 && tokens[index].token_type == TokenType::Select)
     else {
-        return;
+        return (cte_only_bodies, terminal_selects);
     };
     let root_select = significant[root_select_position];
     let has_top_level_with = significant[..root_select_position]
@@ -489,10 +496,10 @@ fn collect_terminal_shape_facts(
         )
     });
     if !has_top_level_with || has_terminal_logic {
-        facts.cte_only_bodies.push(tokens[root_select].span);
+        cte_only_bodies.push(tokens[root_select].span);
     }
     if !has_top_level_with {
-        return;
+        return (cte_only_bodies, terminal_selects);
     }
 
     let final_cte = significant[..root_select_position]
@@ -522,8 +529,9 @@ fn collect_terminal_shape_facts(
             && remainder.is_empty()
     });
     if !terminal_is_plain {
-        facts.terminal_selects.push(tokens[root_select].span);
+        terminal_selects.push(tokens[root_select].span);
     }
+    (cte_only_bodies, terminal_selects)
 }
 
 fn plain_terminal_projection(tokens: &[Token], projection: &[usize]) -> bool {
@@ -543,10 +551,11 @@ fn is_lint_identifier(token: &Token) -> bool {
     )
 }
 
-fn collect_comment_attachment_facts(tokens: &[Token], sql: &str, facts: &mut QueryFacts) {
+fn collect_comment_attachment_facts(tokens: &[Token], sql: &str) -> Vec<Span> {
+    let mut invalid: Vec<Span> = Vec::new();
     for (index, token) in tokens.iter().enumerate() {
         if !token.trailing_comments.is_empty() {
-            facts.invalid_comment_attachments.push(token.span);
+            invalid.push(token.span);
         }
         if token.comments.is_empty() {
             continue;
@@ -567,9 +576,10 @@ fn collect_comment_attachment_facts(tokens: &[Token], sql: &str, facts: &mut Que
                 | TokenType::From
         );
         if block_comment || detached || unsupported_target {
-            facts.invalid_comment_attachments.push(token.span);
+            invalid.push(token.span);
         }
     }
+    invalid
 }
 
 pub(super) fn token_depths(tokens: &[Token]) -> Vec<usize> {
@@ -1213,6 +1223,14 @@ pub(super) fn is_comment(token: &Token) -> bool {
 }
 
 fn diagnostics(context: &DiagnosticContext<'_>) -> Vec<LintDiagnostic> {
+    let mut output: Vec<LintDiagnostic> = core_diagnostics(context);
+    output.extend(additional_style_diagnostics(context));
+    output.extend(additional_relation_diagnostics(context));
+    output.extend(policy_migration_diagnostics(context));
+    output
+}
+
+fn core_diagnostics(context: &DiagnosticContext<'_>) -> Vec<LintDiagnostic> {
     let DiagnosticContext {
         sql,
         dialect,
@@ -1302,6 +1320,17 @@ fn diagnostics(context: &DiagnosticContext<'_>) -> Vec<LintDiagnostic> {
             )
         }));
     }
+    diagnostics
+}
+
+fn additional_style_diagnostics(context: &DiagnosticContext<'_>) -> Vec<LintDiagnostic> {
+    let DiagnosticContext {
+        sql,
+        facts,
+        enabled,
+        ..
+    } = context;
+    let mut diagnostics: Vec<LintDiagnostic> = Vec::new();
     if enabled.contains(DUPLICATE_TABLE_ALIAS.code) {
         diagnostics.extend(diagnostics_for_spans(
             &DUPLICATE_TABLE_ALIAS,
@@ -1391,6 +1420,18 @@ fn diagnostics(context: &DiagnosticContext<'_>) -> Vec<LintDiagnostic> {
             Some("ordering columns and a stable tie-breaker require user intent"),
         ));
     }
+    diagnostics
+}
+
+fn additional_relation_diagnostics(context: &DiagnosticContext<'_>) -> Vec<LintDiagnostic> {
+    let DiagnosticContext {
+        sql,
+        facts,
+        tokens,
+        enabled,
+        ..
+    } = context;
+    let mut diagnostics: Vec<LintDiagnostic> = Vec::new();
     if enabled.contains(NULL_NOT_IN.code) {
         diagnostics.extend(diagnostics_for_spans(
             &NULL_NOT_IN,
@@ -1502,6 +1543,12 @@ fn diagnostics(context: &DiagnosticContext<'_>) -> Vec<LintDiagnostic> {
             Some("the join may intentionally filter or multiply rows"),
         ));
     }
+    diagnostics
+}
+
+fn policy_migration_diagnostics(context: &DiagnosticContext<'_>) -> Vec<LintDiagnostic> {
+    let DiagnosticContext { facts, enabled, .. } = context;
+    let mut diagnostics: Vec<LintDiagnostic> = Vec::new();
     if enabled.contains(COMMENT_ATTACHMENT.code) {
         diagnostics.extend(diagnostics_for_spans(
             &COMMENT_ATTACHMENT,

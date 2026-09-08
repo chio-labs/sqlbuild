@@ -76,13 +76,13 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
     let cache = cache_enabled
         .then(|| Cache::open(Path::new(&request.project_dir)))
         .transpose()?;
-    let custom_faults = evaluate_custom_rules_cached(
-        &request,
-        &selected_by_code,
-        cache.as_ref(),
-        &ruleset_fingerprint,
-        project_fingerprint.as_deref(),
-    )?;
+    let custom_faults = evaluate_custom_rules_cached(CustomRulesCacheRequest {
+        request: &request,
+        selected: &selected_by_code,
+        cache: cache.as_ref(),
+        ruleset_fingerprint: &ruleset_fingerprint,
+        project_fingerprint: project_fingerprint.as_deref(),
+    })?;
     let mut models: Vec<_> = request.models.iter().collect();
     models.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
     let mut raw_faults = evaluate_project::evaluate_project(ProjectEvaluationRequest {
@@ -141,13 +141,24 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
     .map_err(|error| error.to_string())
 }
 
+struct CustomRulesCacheRequest<'a> {
+    request: &'a EvaluateRequest,
+    selected: &'a BTreeMap<String, &'a RuleMetadata>,
+    cache: Option<&'a Cache>,
+    ruleset_fingerprint: &'a str,
+    project_fingerprint: Option<&'a str>,
+}
+
 fn evaluate_custom_rules_cached(
-    request: &EvaluateRequest,
-    selected: &BTreeMap<String, &RuleMetadata>,
-    cache: Option<&Cache>,
-    ruleset_fingerprint: &str,
-    project_fingerprint: Option<&str>,
+    request: CustomRulesCacheRequest<'_>,
 ) -> Result<Vec<Fault>, String> {
+    let CustomRulesCacheRequest {
+        request,
+        selected,
+        cache,
+        ruleset_fingerprint,
+        project_fingerprint,
+    } = request;
     let custom_selected = selected.values().any(|rule| rule.custom);
     if !custom_selected {
         return Ok(Vec::new());
@@ -165,7 +176,7 @@ fn evaluate_custom_rules_cached(
         .filter(|(_, rule)| rule.custom && rule.project_wide)
         .map(|(code, rule)| (code.clone(), *rule))
         .collect();
-    let mut faults = Vec::new();
+    let mut faults: Vec<Fault> = Vec::new();
     if !project_wide.is_empty() {
         let identity = custom_project_identity(ruleset_fingerprint, project_fingerprint);
         if let Some(cached) = cache.get("__custom_policy_project__", &identity)? {

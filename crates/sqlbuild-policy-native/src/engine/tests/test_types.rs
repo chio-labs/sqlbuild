@@ -6,6 +6,30 @@ pub(crate) struct NativeEvaluationTestCase {
     pub(crate) expected_faults: Value,
 }
 
+pub(crate) struct DialectEvaluationTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) query_sql: &'static str,
+    pub(crate) expected_code: &'static str,
+}
+
+pub(crate) struct NormalizationTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_typed_lambda: &'static str,
+    pub(crate) expected_quoted_call: &'static str,
+    pub(crate) expected_comment: &'static str,
+    pub(crate) expected_table_function: &'static str,
+    pub(crate) expected_other_dialect_lambda: &'static str,
+}
+
+pub(crate) struct DeepExpressionTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) depth: usize,
+    pub(crate) expected_code: &'static str,
+}
+
 pub(crate) struct DomainLayoutTestCase {
     pub(crate) description: &'static str,
     pub(crate) code: &'static str,

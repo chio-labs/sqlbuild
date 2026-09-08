@@ -486,13 +486,16 @@ fn is_star_modifier_before(sql: &[u8], modifier_start: usize) -> bool {
 }
 
 fn is_cast_type_before(sql: &[u8], type_start: usize) -> bool {
+    const AS_KEYWORD_LENGTH: usize = 2;
+    const BYTE_BEFORE_AS_OFFSET: usize = 3;
     let mut cursor = type_start;
     while cursor > 0 && sql[cursor - 1].is_ascii_whitespace() {
         cursor -= 1;
     }
-    cursor >= 2
-        && sql[cursor - 2..cursor].eq_ignore_ascii_case(b"AS")
-        && (cursor == 2 || !sql[cursor - 3].is_ascii_alphanumeric())
+    cursor >= AS_KEYWORD_LENGTH
+        && sql[cursor - AS_KEYWORD_LENGTH..cursor].eq_ignore_ascii_case(b"AS")
+        && (cursor == AS_KEYWORD_LENGTH
+            || !sql[cursor - BYTE_BEFORE_AS_OFFSET].is_ascii_alphanumeric())
 }
 
 fn matching_parenthesis(sql: &[u8], open: usize) -> Option<usize> {

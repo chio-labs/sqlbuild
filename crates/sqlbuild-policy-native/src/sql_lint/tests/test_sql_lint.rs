@@ -248,113 +248,124 @@ fn given_sql_cases_when_linting_then_diagnostics_match() -> Result<(), String> {
 fn given_plain_sql_policy_rules_when_linting_then_project_context_is_not_required()
 -> Result<(), String> {
     let test_cases = [
-        (
-            "trailing comment",
-            "SELECT id -- why\nFROM items",
-            "SQBL033",
-            1,
-        ),
-        (
-            "detached comment",
-            "SELECT id\n-- why\n\nFROM items",
-            "SQBL033",
-            1,
-        ),
-        (
-            "attached predicate comment",
-            "SELECT id FROM items WHERE active\n-- retain settled rows\nAND settled",
-            "SQBL033",
-            0,
-        ),
-        (
-            "attached CTE comment",
-            "WITH\n-- normalized rows\nnormalized AS (SELECT id FROM items)\nSELECT id FROM normalized",
-            "SQBL033",
-            0,
-        ),
-        (
-            "attached join comment",
-            "SELECT left_rows.id FROM left_rows\n-- match stable identities\nJOIN right_rows ON left_rows.id = right_rows.id",
-            "SQBL033",
-            0,
-        ),
-        (
-            "attached filter comment",
-            "SELECT id FROM items\n-- retain active rows\nWHERE active",
-            "SQBL033",
-            0,
-        ),
-        (
-            "attached projection comment",
-            "SELECT\n-- stable identity\nid\nFROM items",
-            "SQBL033",
-            0,
-        ),
-        (
-            "attached CASE branch comment",
-            "SELECT CASE\n-- settled outcome\nWHEN settled THEN 1 ELSE 0 END FROM items",
-            "SQBL033",
-            0,
-        ),
-        (
-            "attached ordering comment with Unicode and CRLF",
-            "SELECT id FROM items\r\n-- deterministic café order\r\nORDER BY id",
-            "SQBL033",
-            0,
-        ),
-        (
-            "block comment",
-            "SELECT id\n/* selected identity */\nFROM items",
-            "SQBL033",
-            1,
-        ),
-        ("body without CTE", "SELECT id FROM items", "SQBL034", 1),
-        (
-            "logic in terminal select",
-            "WITH final_rows AS (SELECT id FROM items) SELECT id FROM final_rows WHERE id > 0",
-            "SQBL034",
-            1,
-        ),
-        (
-            "terminal select reads wrong CTE",
-            "WITH first_rows AS (SELECT 1 AS id), final_rows AS (SELECT id FROM first_rows) SELECT id FROM first_rows",
-            "SQBL035",
-            1,
-        ),
-        (
-            "plain terminal select",
-            "WITH first_rows AS (SELECT 1 AS id), final_rows AS (SELECT id FROM first_rows) SELECT id FROM final_rows",
-            "SQBL035",
-            0,
-        ),
-        (
-            "nested CTE",
-            "SELECT id FROM (WITH nested_rows AS (SELECT 1 AS id) SELECT id FROM nested_rows)",
-            "SQBL036",
-            1,
-        ),
-        (
-            "recursive CTE",
-            "WITH RECURSIVE numbers AS (SELECT 1 UNION ALL SELECT 2) SELECT * FROM numbers",
-            "SQBL037",
-            1,
-        ),
-        (
-            "cross join",
-            "SELECT left_rows.id FROM left_rows CROSS JOIN right_rows",
-            "SQBL038",
-            1,
-        ),
+        test_types::PlainSqlLintTestCase {
+            description: "trailing comment",
+            sql: "SELECT id -- why\nFROM items",
+            rule: "SQBL033",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "detached comment",
+            sql: "SELECT id\n-- why\n\nFROM items",
+            rule: "SQBL033",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "attached predicate comment",
+            sql: "SELECT id FROM items WHERE active\n-- retain settled rows\nAND settled",
+            rule: "SQBL033",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "attached CTE comment",
+            sql: "WITH\n-- normalized rows\nnormalized AS (SELECT id FROM items)\nSELECT id FROM normalized",
+            rule: "SQBL033",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "attached join comment",
+            sql: "SELECT left_rows.id FROM left_rows\n-- match stable identities\nJOIN right_rows ON left_rows.id = right_rows.id",
+            rule: "SQBL033",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "attached filter comment",
+            sql: "SELECT id FROM items\n-- retain active rows\nWHERE active",
+            rule: "SQBL033",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "attached projection comment",
+            sql: "SELECT\n-- stable identity\nid\nFROM items",
+            rule: "SQBL033",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "attached CASE branch comment",
+            sql: "SELECT CASE\n-- settled outcome\nWHEN settled THEN 1 ELSE 0 END FROM items",
+            rule: "SQBL033",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "attached ordering comment with Unicode and CRLF",
+            sql: "SELECT id FROM items\r\n-- deterministic café order\r\nORDER BY id",
+            rule: "SQBL033",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "block comment",
+            sql: "SELECT id\n/* selected identity */\nFROM items",
+            rule: "SQBL033",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "body without CTE",
+            sql: "SELECT id FROM items",
+            rule: "SQBL034",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "logic in terminal select",
+            sql: "WITH final_rows AS (SELECT id FROM items) SELECT id FROM final_rows WHERE id > 0",
+            rule: "SQBL034",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "terminal select reads wrong CTE",
+            sql: "WITH first_rows AS (SELECT 1 AS id), final_rows AS (SELECT id FROM first_rows) SELECT id FROM first_rows",
+            rule: "SQBL035",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "plain terminal select",
+            sql: "WITH first_rows AS (SELECT 1 AS id), final_rows AS (SELECT id FROM first_rows) SELECT id FROM final_rows",
+            rule: "SQBL035",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "nested CTE",
+            sql: "SELECT id FROM (WITH nested_rows AS (SELECT 1 AS id) SELECT id FROM nested_rows)",
+            rule: "SQBL036",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "recursive CTE",
+            sql: "WITH RECURSIVE numbers AS (SELECT 1 UNION ALL SELECT 2) SELECT * FROM numbers",
+            rule: "SQBL037",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "cross join",
+            sql: "SELECT left_rows.id FROM left_rows CROSS JOIN right_rows",
+            rule: "SQBL038",
+            expected_count: 1,
+        },
     ];
 
-    for (description, sql, rule, expected_count) in test_cases {
-        let diagnostics = helpers::diagnostics_for_rules(sql, &[rule])?;
-        assert_eq!(diagnostics.len(), expected_count, "{description}");
+    for test_case in test_cases {
+        let diagnostics = helpers::diagnostics_for_rules(test_case.sql, &[test_case.rule])?;
+        assert_eq!(
+            diagnostics.len(),
+            test_case.expected_count,
+            "{}",
+            test_case.description
+        );
         assert!(
             diagnostics
                 .iter()
-                .all(|diagnostic| diagnostic["code"] == rule),
-            "{description}"
+                .all(|diagnostic| diagnostic["code"] == test_case.rule),
+            "{}",
+            test_case.description
         );
     }
     Ok(())
