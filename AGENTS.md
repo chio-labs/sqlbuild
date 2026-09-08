@@ -18,6 +18,23 @@
   explicitly requests it; rely on CI for those suites.
 - Before pushing, run the exact static CI target with all optional dependencies available: `uv sync --all-extras` followed by `make check-ci`.
 
+## Command-Line User Experience
+
+- Keep lifecycle feedback consistent across commands. Potentially slow discovery, connection,
+  inspection, planning, and execution phases must emit a concise start message and an explicit
+  success or failure completion message; do not leave users watching a blank terminal with no
+  indication that work is active.
+- Preserve machine-readable stdout. When JSON or another machine-output mode is active, send
+  lifecycle progress to stderr so redirected output remains valid while interactive users still see
+  meaningful progress.
+- Prefer a few meaningful phase transitions over noisy per-resource narration. Long-running TTY
+  phases should use the shared transient progress facilities where practical.
+- Maintenance notices and unrelated warnings must not be the final visible output of an otherwise
+  successful command. Report them before command execution or ensure the command still prints an
+  unambiguous terminal success state afterward.
+- Use `sqb debug` as the first diagnostic when distinguishing authentication, connection,
+  configuration, and command-specific failures.
+
 ## Subagent Verification
 
 - The primary agent owns the overall verification plan. Do not ask multiple subagents to run the same broad test suites.
