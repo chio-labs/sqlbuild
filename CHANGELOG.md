@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.91.1](https://github.com/chio-labs/sqlbuild/compare/v0.91.0...v0.91.1) (2026-09-08)
+
+
+### Bug Fixes
+
+* preserve timestamp timezone inference ([#580](https://github.com/chio-labs/sqlbuild/issues/580)) ([d596d4c](https://github.com/chio-labs/sqlbuild/commit/d596d4cb076d9f8f78c8c649726e2108f7013af2))
+
 ## [0.91.0](https://github.com/chio-labs/sqlbuild/compare/v0.90.5...v0.91.0) (2026-09-07)
 
 
