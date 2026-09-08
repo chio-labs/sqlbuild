@@ -186,7 +186,7 @@ def maintain_sqlbuild_skills(*, project_dir: Path) -> SkillMaintenanceResult:
     if settings.auto_update and stale_paths:
         for path in stale_paths:
             write_skill_file(path=path, content=expected_content)
-        message: str = "\nUpdated stale SQLBuild skill files:\n" + "".join(
+        message: str = "Updated stale SQLBuild skill files:\n" + "".join(
             f"  {path}\n" for path in stale_paths
         )
         if collision_paths:
@@ -203,7 +203,7 @@ def _stale_skill_message(*, collision_paths: list[Path]) -> str:
         collision_detail = "  Custom files were not overwritten:\n" + "".join(
             f"    {path}\n" for path in collision_paths
         )
-    return f"\nSQLBuild skill files are out of date\n{collision_detail}  Run: sqb skills\n"
+    return f"SQLBuild skill files are out of date\n{collision_detail}  Run: sqb skills\n"
 
 
 def _local_install_path(*, project_dir: Path, target_name: str) -> Path:
