@@ -10,6 +10,8 @@ from contextvars import ContextVar, Token
 from pathlib import Path
 from typing import cast
 
+from sqlbuild.adapter.contract.models import LifeCycleEvent as StatementLifeCycleEvent
+from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.cli.output._helpers.future_cursor_safety import serialize_future_cursor_safety
 from sqlbuild.cli.output._helpers.integration_result import _render_measurement_thresholds
 from sqlbuild.cli.output._helpers.maximum_start_safety import serialize_maximum_start_safety
@@ -653,6 +655,11 @@ def _format_model_assets(
                 "error_code": result.error_code,
                 "error_help": result.error_help,
                 "error_message": result.error_message,
+                "last_recorded_sql": (
+                    _last_recorded_sql(result.lifecycle_events)
+                    if result.status == ExecutionStatus.FAILED
+                    else None
+                ),
                 "warnings": result.warning_messages,
                 "future_cursor_safety": serialize_future_cursor_safety(result.future_cursor_safety),
                 "maximum_start_safety": serialize_maximum_start_safety(result.maximum_start_safety),
@@ -662,6 +669,14 @@ def _format_model_assets(
         for result in results
         if _result_has_terminal(result=result)
     )
+
+
+def _last_recorded_sql(events: tuple[StatementLifeCycleEvent, ...]) -> str | None:
+    event: StatementLifeCycleEvent
+    for event in reversed(events):
+        if event.kind == LifeCycleEventKind.SQL:
+            return event.content
+    return None
 
 
 def _format_microbatch_result(result: ModelExecutionResult) -> dict[str, object] | None:

@@ -9,6 +9,7 @@ from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.planner._helpers.resolve.sources import (
     resolve_source_references,
@@ -17,6 +18,7 @@ from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.spec.contracts.models import SourceColumnEntry, SourceEntry
 from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     AdapterSourceResolutionTestCase,
+    ReservedSourceColumnTestCase,
     SourceResolutionErrorTestCase,
     SourceResolutionTestCase,
 )
@@ -134,8 +136,8 @@ _ENFORCED_WAREHOUSE_COLUMNS: dict[str, tuple[ColumnInfo, ...]] = {
                 ),
             },
             expected_sql=(
-                "SELECT * FROM (SELECT CAST(order_id AS INTEGER) AS order_id, "
-                "CAST(amount AS DECIMAL) AS amount "
+                'SELECT * FROM (SELECT CAST("order_id" AS INTEGER) AS "order_id", '
+                'CAST("amount" AS DECIMAL) AS "amount" '
                 "FROM (SELECT '1' AS order_id, 12 AS amount) AS __source_expression)"
             ),
         ),
@@ -159,8 +161,8 @@ _ENFORCED_WAREHOUSE_COLUMNS: dict[str, tuple[ColumnInfo, ...]] = {
                 ),
             },
             expected_sql=(
-                "SELECT * FROM (SELECT id, "
-                "CAST(amount_cents AS INTEGER) AS amount_cents, status "
+                'SELECT * FROM (SELECT "id", '
+                'CAST("amount_cents" AS INTEGER) AS "amount_cents", "status" '
                 "FROM (SELECT 1 AS id, '1700' AS amount_cents, 'success' AS status) "
                 "AS __source_expression)"
             ),
@@ -187,7 +189,7 @@ _ENFORCED_WAREHOUSE_COLUMNS: dict[str, tuple[ColumnInfo, ...]] = {
                 ),
             },
             expected_sql=(
-                "SELECT * FROM (SELECT CAST(ID AS INTEGER) AS id, FIRST_NAME "
+                'SELECT * FROM (SELECT CAST("ID" AS INTEGER) AS "id", "FIRST_NAME" '
                 "FROM (SELECT 1 AS id, 'Leslie' AS first_name) AS __source_expression)"
             ),
         ),
@@ -198,9 +200,9 @@ _ENFORCED_WAREHOUSE_COLUMNS: dict[str, tuple[ColumnInfo, ...]] = {
             source_map={"raw_orders": _ENFORCED_SOURCE},
             source_warehouse_columns=_ENFORCED_WAREHOUSE_COLUMNS,
             expected_sql=(
-                "SELECT * FROM (SELECT * EXCLUDE (order_id, status), "
-                "CAST(order_id AS VARCHAR) AS order_id, "
-                "CAST(status AS INTEGER) AS status "
+                'SELECT * FROM (SELECT * EXCLUDE ("order_id", "status"), '
+                'CAST("order_id" AS VARCHAR) AS "order_id", '
+                'CAST("status" AS INTEGER) AS "status" '
                 "FROM raw.public.orders)"
             ),
         ),
@@ -211,9 +213,9 @@ _ENFORCED_WAREHOUSE_COLUMNS: dict[str, tuple[ColumnInfo, ...]] = {
             source_map={"raw_orders": _ENFORCED_SOURCE},
             source_warehouse_columns=_ENFORCED_WAREHOUSE_COLUMNS,
             expected_sql=(
-                "SELECT * FROM (SELECT * EXCLUDE (order_id, status), "
-                "CAST(order_id AS VARCHAR) AS order_id, "
-                "CAST(status AS INTEGER) AS status "
+                'SELECT * FROM (SELECT * EXCLUDE ("order_id", "status"), '
+                'CAST("order_id" AS VARCHAR) AS "order_id", '
+                'CAST("status" AS INTEGER) AS "status" '
                 "FROM raw.public.orders)"
             ),
         ),
@@ -290,8 +292,8 @@ _ENFORCED_WAREHOUSE_COLUMNS: dict[str, tuple[ColumnInfo, ...]] = {
             },
             expected_sql=(
                 "SELECT * FROM (SELECT "
-                "CAST(id AS INTEGER) AS id, "
-                "CAST(name AS VARCHAR) AS name "
+                'CAST("id" AS INTEGER) AS "id", '
+                'CAST("name" AS VARCHAR) AS "name" '
                 "FROM raw.public.all_cols)"
             ),
         ),
@@ -365,8 +367,8 @@ def test_given_source_references_when_resolving_then_returns_expected_sql(
                     ColumnInfo(name="status", type=""),
                 ),
             },
-            expected_sql_fragment="CAST(amount_cents AS INT64) AS amount_cents",
-            forbidden_sql_fragment="CAST(amount_cents AS INTEGER)",
+            expected_sql_fragment="CAST(`amount_cents` AS INT64) AS `amount_cents`",
+            forbidden_sql_fragment="CAST(`amount_cents` AS INTEGER)",
         ),
         AdapterSourceResolutionTestCase(
             description="bigquery relation source casts use adapter-normalized types",
@@ -388,10 +390,10 @@ def test_given_source_references_when_resolving_then_returns_expected_sql(
                 ),
             },
             expected_sql_fragment=(
-                "CAST(first_name AS STRING) AS first_name FROM "
+                "CAST(`first_name` AS STRING) AS `first_name` FROM "
                 "`project-with-hyphens.raw_dataset.customers`"
             ),
-            forbidden_sql_fragment="CAST(first_name AS VARCHAR)",
+            forbidden_sql_fragment="CAST(`first_name` AS VARCHAR)",
         ),
     ],
     ids=lambda case: case.description,
@@ -417,6 +419,54 @@ def test_given_adapter_specific_source_references_when_resolving_then_returns_ad
 
 @pytest.mark.parametrize(
     "test_case",
+    (
+        ReservedSourceColumnTestCase(
+            description="snowflake contract projection quotes reserved source column",
+            expected_sql=(
+                'SELECT order_id FROM (SELECT CAST("ORDER_ID" AS INTEGER) AS "ORDER_ID", '
+                'CAST("TABLE" AS VARCHAR) AS "TABLE" FROM raw.public.orders)'
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_reserved_source_column_when_resolving_then_quotes_contract_projection(
+    test_case: ReservedSourceColumnTestCase,
+) -> None:
+    result: str = resolve_source_references(
+        query_sql='SELECT order_id FROM __source("raw_orders")',
+        source_map={
+            "raw_orders": SourceEntry(
+                name="raw_orders",
+                database="raw",
+                schema="public",
+                table="orders",
+                type_enforcement=True,
+                columns=(
+                    SourceColumnEntry(name="order_id", type="INTEGER"),
+                    SourceColumnEntry(name="table", type="VARCHAR"),
+                ),
+            )
+        },
+        source_warehouse_columns={
+            "raw_orders": (
+                ColumnInfo(name="order_id", type="VARCHAR"),
+                ColumnInfo(name="table", type="VARCHAR"),
+            )
+        },
+        star_exclude_keyword="EXCLUDE",
+        cursor_bounds=None,
+        cursor_filter_inputs={},
+        adapter=SnowflakeAdapter(),
+        cursor_type=None,
+        lower_bound_inclusive=True,
+    )
+
+    assert result == test_case.expected_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [
         SourceResolutionTestCase(
             description="adds internal alias for type-enforced source without user alias",
@@ -425,9 +475,9 @@ def test_given_adapter_specific_source_references_when_resolving_then_returns_ad
             source_map={"raw_orders": _ENFORCED_SOURCE},
             source_warehouse_columns=_ENFORCED_WAREHOUSE_COLUMNS,
             expected_sql=(
-                "SELECT * FROM (SELECT amount, "
-                "CAST(order_id AS VARCHAR) AS order_id, "
-                "CAST(status AS INTEGER) AS status "
+                "SELECT * FROM (SELECT [amount], "
+                "CAST([order_id] AS VARCHAR) AS [order_id], "
+                "CAST([status] AS INTEGER) AS [status] "
                 "FROM raw.public.orders) AS __sqb_source_raw_orders WHERE status = 1"
             ),
         ),
@@ -438,9 +488,9 @@ def test_given_adapter_specific_source_references_when_resolving_then_returns_ad
             source_map={"raw_orders": _ENFORCED_SOURCE},
             source_warehouse_columns=_ENFORCED_WAREHOUSE_COLUMNS,
             expected_sql=(
-                "SELECT o.order_id FROM (SELECT amount, "
-                "CAST(order_id AS VARCHAR) AS order_id, "
-                "CAST(status AS INTEGER) AS status "
+                "SELECT o.order_id FROM (SELECT [amount], "
+                "CAST([order_id] AS VARCHAR) AS [order_id], "
+                "CAST([status] AS INTEGER) AS [status] "
                 "FROM raw.public.orders) AS o WHERE o.status = 1"
             ),
         ),
@@ -451,9 +501,9 @@ def test_given_adapter_specific_source_references_when_resolving_then_returns_ad
             source_map={"raw_orders": _ENFORCED_SOURCE},
             source_warehouse_columns=_ENFORCED_WAREHOUSE_COLUMNS,
             expected_sql=(
-                "SELECT o.order_id FROM (SELECT amount, "
-                "CAST(order_id AS VARCHAR) AS order_id, "
-                "CAST(status AS INTEGER) AS status "
+                "SELECT o.order_id FROM (SELECT [amount], "
+                "CAST([order_id] AS VARCHAR) AS [order_id], "
+                "CAST([status] AS INTEGER) AS [status] "
                 "FROM raw.public.orders) AS o WHERE o.status = 1"
             ),
         ),
@@ -483,10 +533,10 @@ def test_given_adapter_specific_source_references_when_resolving_then_returns_ad
                 ),
             },
             expected_sql=(
-                "SELECT o.order_id, c.customer_id FROM (SELECT amount, "
-                "CAST(order_id AS VARCHAR) AS order_id, "
-                "CAST(status AS INTEGER) AS status FROM raw.public.orders) AS o "
-                "JOIN (SELECT email, CAST(customer_id AS INTEGER) AS customer_id "
+                "SELECT o.order_id, c.customer_id FROM (SELECT [amount], "
+                "CAST([order_id] AS VARCHAR) AS [order_id], "
+                "CAST([status] AS INTEGER) AS [status] FROM raw.public.orders) AS o "
+                "JOIN (SELECT [email], CAST([customer_id] AS INTEGER) AS [customer_id] "
                 "FROM raw.public.customers) AS c ON o.customer_id = c.customer_id"
             ),
         ),
@@ -565,9 +615,9 @@ def test_given_sqlserver_timestamp_bounds_when_resolving_then_uses_datetime2_lit
             source_map={"raw_orders": _ENFORCED_SOURCE},
             source_warehouse_columns=_ENFORCED_WAREHOUSE_COLUMNS,
             expected_sql=(
-                "SELECT order_id, status, amount FROM (SELECT amount, "
-                "CAST(order_id AS VARCHAR) AS order_id, "
-                "CAST(status AS INTEGER) AS status "
+                'SELECT order_id, status, amount FROM (SELECT "amount", '
+                'CAST("order_id" AS VARCHAR) AS "order_id", '
+                'CAST("status" AS INTEGER) AS "status" '
                 "FROM raw.public.orders)"
             ),
         ),
