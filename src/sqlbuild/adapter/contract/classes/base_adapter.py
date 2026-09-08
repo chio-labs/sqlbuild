@@ -1907,7 +1907,7 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         cast_clause: str = ", ".join(cast_projections)
         if all_columns_cast:
             return f"(SELECT {cast_clause} FROM {source_relation})"
-        exclude_list: str = ", ".join(cast_column_names)
+        exclude_list: str = ", ".join(self.render_identifier(name) for name in cast_column_names)
         return (
             f"(SELECT * {self.star_exclude_keyword()} ({exclude_list}), {cast_clause} "
             f"FROM {source_relation})"

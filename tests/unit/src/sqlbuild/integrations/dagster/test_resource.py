@@ -1604,7 +1604,9 @@ def test_given_blocked_command_when_live_stream_closes_then_subprocess_terminate
                 '{"kind": "model", "name": "customers", '
                 '"status": "failed", "action": "failed", "failed_phase": "staging", '
                 '"error_code": "R002", "error_message": "invalid identifier CUSTOMER_ID", '
-                '"staging_relation": "analytics.customers__staging"}], "checks": []}'
+                '"staging_relation": "analytics.customers__staging", '
+                '"last_recorded_sql": "CREATE TABLE customers AS SELECT customer_id FROM raw.customers"}], '
+                '"checks": []}'
             ),
             expected_materialized_asset_key=("analytics", "orders"),
             expected_incomplete_assets="model:customers (failed)",
@@ -1612,6 +1614,7 @@ def test_given_blocked_command_when_live_stream_closes_then_subprocess_terminate
                 "model:customers (failed) during staging",
                 "[R002] invalid identifier CUSTOMER_ID",
                 "staging relation: analytics.customers__staging",
+                "last recorded SQL:\n    CREATE TABLE customers AS SELECT customer_id FROM raw.customers",
             ),
         )
     ],

@@ -2495,7 +2495,9 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
         passthrough_columns: tuple[str, ...] = tuple(
             column for column in warehouse_column_names if column not in projection_names
         )
-        passthrough_clause: str = ", ".join(passthrough_columns)
+        passthrough_clause: str = ", ".join(
+            self.render_identifier(name) for name in passthrough_columns
+        )
         projection_clause: str = cast_clause
         if passthrough_clause:
             projection_clause = f"{passthrough_clause}, {cast_clause}"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import textwrap
 import time
 from collections.abc import Iterator, Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -73,6 +74,10 @@ def _format_asset_failure(asset: Mapping[str, Any]) -> str:
     staging_relation: object = asset.get("staging_relation")
     if staging_relation is not None:
         lines.append(f"  staging relation: {staging_relation}")
+    last_recorded_sql: object = asset.get("last_recorded_sql")
+    if isinstance(last_recorded_sql, str) and last_recorded_sql:
+        lines.append("  last recorded SQL:")
+        lines.append(textwrap.indent(last_recorded_sql, "    "))
     return "\n".join(lines)
 
 
