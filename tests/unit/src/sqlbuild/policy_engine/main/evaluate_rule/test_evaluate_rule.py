@@ -32,12 +32,12 @@ from tests.unit.src.sqlbuild.policy_engine.main.evaluate_rule.helpers import req
                     "WITH final AS (SELECT 1 AS id)\n"
                     "SELECT id FROM final\n"
                 ),
-                path="models/mart/commerce__mart__prices.sql",
-                config={"required_domain": "race"},
+                path="models/mart/commerce__mart__orders.sql",
+                config={"required_domain": "support"},
                 expected_fault_count=1,
             ),
             expected_code="XSQBPD001",
-            expected_path="models/mart/commerce__mart__prices.sql",
+            expected_path="models/mart/commerce__mart__orders.sql",
         )
     ],
     ids=lambda case: case.description,
@@ -64,8 +64,8 @@ def test_given_rule_case_when_evaluating_then_runs_real_pipeline(
                     "WITH final AS (SELECT 1 AS id)\n"
                     "SELECT id FROM final\n"
                 ),
-                path="models/mart/commerce__mart__prices.sql",
-                config={"required_domain": "race"},
+                path="models/mart/commerce__mart__orders.sql",
+                config={"required_domain": "support"},
                 expected_fault_count=1,
             ),
             expected_fault_count=1,
@@ -80,7 +80,7 @@ def test_given_same_custom_rule_when_using_public_and_native_paths_then_faults_h
     rule_case: RuleCase = test_case.rule_case
     public_result: RuleResult = evaluate_rule(rule=required_domain, test_case=rule_case)
     project: CompiledProject = build_project(
-        name="commerce__mart__prices",
+        name="commerce__mart__orders",
         relative_path=rule_case.path,
         sql="WITH final AS (SELECT 1 AS id) SELECT id FROM final",
         authored_sql=rule_case.source,

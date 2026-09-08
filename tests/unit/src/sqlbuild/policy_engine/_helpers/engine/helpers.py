@@ -189,8 +189,8 @@ def custom_rule_inputs(
         project_wide=test_case.project_wide,
     )
     project: CompiledProject = build_project(
-        name="commerce__mart__prices",
-        relative_path="models/mart/commerce__mart__prices.sql",
+        name="commerce__mart__orders",
+        relative_path="models/mart/commerce__mart__orders.sql",
         sql=_MODEL_SQL,
         config_values={},
     )

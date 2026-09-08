@@ -62,7 +62,7 @@ fn given_owner_and_declaration_layouts_when_evaluating_then_returns_expected_fau
             scope_index: helpers::scope_index(),
             expected_codes: &["SQBPR204"],
             expected_message_fragments: &["order_status"],
-            expected_absent_fragments: &["bucket \"barrier\""],
+            expected_absent_fragments: &["bucket \"order\""],
         },
         test_types::DomainLayoutTestCase {
             description: "each branching owner prefix faults",

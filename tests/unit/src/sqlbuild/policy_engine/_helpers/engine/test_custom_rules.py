@@ -206,7 +206,7 @@ def test_given_project_wide_rule_when_reading_project_context_then_cache_is_allo
             rule_exceptions=(
                 RuleExemption(
                     rule="XSQBPT101",
-                    path="models/mart/commerce__mart__prices.sql",
+                    path="models/mart/commerce__mart__orders.sql",
                     reason="Tracked custom-rule migration",
                 ),
             ),
@@ -240,7 +240,7 @@ def test_given_common_suppression_when_custom_rule_faults_then_native_policy_sup
     project: CompiledProject
     config: PolicyConfig
     project, config = custom_rule_inputs(tmp_path=tmp_path, test_case=custom_rule_case)
-    relative_path: str = "models/mart/commerce__mart__prices.sql"
+    relative_path: str = "models/mart/commerce__mart__orders.sql"
     target: Path = tmp_path / relative_path
     target.parent.mkdir(parents=True)
     target.write_text("WITH final AS (SELECT 1 AS id) SELECT id FROM final\n", encoding="utf-8")

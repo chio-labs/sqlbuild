@@ -24,51 +24,51 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
         ),
         FindMatchingPathDefaultTestCase(
             description="recursive glob matches a staging directory prefix",
-            model_relative_path="models/market/partner_feed/staging/orders.sql",
-            path_defaults={"market/**/staging": {}},
-            expected_path_default="market/**/staging",
+            model_relative_path="models/commerce/partner_feed/staging/orders.sql",
+            path_defaults={"commerce/**/staging": {}},
+            expected_path_default="commerce/**/staging",
         ),
         FindMatchingPathDefaultTestCase(
             description="recursive glob matches zero path segments",
-            model_relative_path="models/market/staging/orders.sql",
-            path_defaults={"market/**/staging": {}},
-            expected_path_default="market/**/staging",
+            model_relative_path="models/commerce/staging/orders.sql",
+            path_defaults={"commerce/**/staging": {}},
+            expected_path_default="commerce/**/staging",
         ),
         FindMatchingPathDefaultTestCase(
             description="single glob consumes exactly one path segment",
-            model_relative_path="models/market/partner_feed/staging/orders.sql",
-            path_defaults={"market/*/staging": {}},
-            expected_path_default="market/*/staging",
+            model_relative_path="models/commerce/partner_feed/staging/orders.sql",
+            path_defaults={"commerce/*/staging": {}},
+            expected_path_default="commerce/*/staging",
         ),
         FindMatchingPathDefaultTestCase(
             description="single glob does not consume multiple path segments",
-            model_relative_path="models/market/eu/partner_feed/staging/orders.sql",
-            path_defaults={"market/*/staging": {}},
+            model_relative_path="models/commerce/eu/partner_feed/staging/orders.sql",
+            path_defaults={"commerce/*/staging": {}},
             expected_path_default=None,
         ),
         FindMatchingPathDefaultTestCase(
             description="literal prefix outranks a matching recursive glob",
-            model_relative_path="models/market/partner_feed/staging/orders.sql",
+            model_relative_path="models/commerce/partner_feed/staging/orders.sql",
             path_defaults={
-                "market/**/staging": {},
-                "market/partner_feed/staging": {},
+                "commerce/**/staging": {},
+                "commerce/partner_feed/staging": {},
             },
-            expected_path_default="market/partner_feed/staging",
+            expected_path_default="commerce/partner_feed/staging",
         ),
         FindMatchingPathDefaultTestCase(
             description="single segment glob outranks recursive glob",
-            model_relative_path="models/market/partner_feed/staging/orders.sql",
+            model_relative_path="models/commerce/partner_feed/staging/orders.sql",
             path_defaults={
-                "market/**/staging": {},
-                "market/*/staging": {},
+                "commerce/**/staging": {},
+                "commerce/*/staging": {},
             },
-            expected_path_default="market/*/staging",
+            expected_path_default="commerce/*/staging",
         ),
         FindMatchingPathDefaultTestCase(
             description="recursive glob matches Windows-style model path",
-            model_relative_path="models\\market\\partner_feed\\staging\\orders.sql",
-            path_defaults={"market/**/staging": {}},
-            expected_path_default="market/**/staging",
+            model_relative_path="models\\commerce\\partner_feed\\staging\\orders.sql",
+            path_defaults={"commerce/**/staging": {}},
+            expected_path_default="commerce/**/staging",
         ),
     ),
     ids=lambda case: case.description,
@@ -99,14 +99,14 @@ def test_given_windows_style_model_path_when_finding_path_default_then_returns_n
     (
         FindMatchingPathDefaultErrorTestCase(
             description="equally specific matching globs are ambiguous regardless of values",
-            model_relative_path="models/market/eu/staging/orders.sql",
+            model_relative_path="models/commerce/eu/staging/orders.sql",
             path_defaults={
-                "market/*/staging": {"schema": "shared"},
-                "market/eu/*": {"schema": "shared"},
+                "commerce/*/staging": {"schema": "shared"},
+                "commerce/eu/*": {"schema": "shared"},
             },
             expected_error_fragment=(
                 r"matches equally specific path_defaults keys: "
-                r"'market/\*/staging', 'market/eu/\*'"
+                r"'commerce/\*/staging', 'commerce/eu/\*'"
             ),
         ),
     ),

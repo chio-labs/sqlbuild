@@ -26,22 +26,22 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
         ),
         ValidatePathDefaultsMatchModelsTestCase(
             description="accepts recursive glob matching nested staging prefix",
-            model_relative_paths=("models/market/partner_feed/staging/orders.sql",),
-            path_defaults={"market/**/staging": {}},
+            model_relative_paths=("models/commerce/partner_feed/staging/orders.sql",),
+            path_defaults={"commerce/**/staging": {}},
             expected_model_file_count=1,
         ),
         ValidatePathDefaultsMatchModelsTestCase(
             description="accepts recursive glob matching zero segments",
-            model_relative_paths=("models/market/staging/orders.sql",),
-            path_defaults={"market/**/staging": {}},
+            model_relative_paths=("models/commerce/staging/orders.sql",),
+            path_defaults={"commerce/**/staging": {}},
             expected_model_file_count=1,
         ),
         ValidatePathDefaultsMatchModelsTestCase(
             description="counts broad glob as matched when a literal wins selection",
-            model_relative_paths=("models/market/partner_feed/staging/orders.sql",),
+            model_relative_paths=("models/commerce/partner_feed/staging/orders.sql",),
             path_defaults={
-                "market/**/staging": {},
-                "market/partner_feed/staging": {},
+                "commerce/**/staging": {},
+                "commerce/partner_feed/staging": {},
             },
             expected_model_file_count=1,
         ),
@@ -77,16 +77,16 @@ def test_given_windows_style_model_paths_when_validating_path_defaults_then_they
     (
         ValidatePathDefaultsMatchModelsErrorTestCase(
             description="rejects recursive glob matching no model paths",
-            model_relative_paths=("models/market/partner_feed/marts/orders.sql",),
-            path_defaults={"market/**/staging": {}},
+            model_relative_paths=("models/commerce/partner_feed/marts/orders.sql",),
+            path_defaults={"commerce/**/staging": {}},
             expected_error_fragment=(
-                r"path_defaults\['market/\*\*/staging'\] does not match any model paths"
+                r"path_defaults\['commerce/\*\*/staging'\] does not match any model paths"
             ),
         ),
         ValidatePathDefaultsMatchModelsErrorTestCase(
             description="rejects equally specific matching globs during discovery",
-            model_relative_paths=("models/market/eu/staging/orders.sql",),
-            path_defaults={"market/*/staging": {}, "market/eu/*": {}},
+            model_relative_paths=("models/commerce/eu/staging/orders.sql",),
+            path_defaults={"commerce/*/staging": {}, "commerce/eu/*": {}},
             expected_error_fragment="matches equally specific path_defaults keys",
         ),
     ),

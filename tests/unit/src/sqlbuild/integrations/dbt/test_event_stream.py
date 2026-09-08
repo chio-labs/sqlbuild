@@ -368,8 +368,8 @@ def test_given_non_result_event_when_parsing_then_returns_none(
             expected_unique_ids=("model.analytics.bias__stg_partner_feed",),
             expected_output_fragments=(
                 "Running dbt model bias__stg_partner_feed...",
-                "model     bias__stg_partner_feed                 START",
-                "model     bias__stg_partner_feed                 OK     20.40s",
+                "model     bias__stg_partner_feed         START",
+                "model     bias__stg_partner_feed         OK     20.40s",
             ),
             expected_rendered_rows=2,
         ),
@@ -387,8 +387,8 @@ def test_given_non_result_event_when_parsing_then_returns_none(
             expected_unique_ids=("model.analytics.bias__stg_partner_feed",),
             expected_output_fragments=(
                 "Running dbt model bias__stg_partner_feed...",
-                "model     bias__stg_partner_feed                 START",
-                "model     bias__stg_partner_feed                 OK     20.40s",
+                "model     bias__stg_partner_feed         START",
+                "model     bias__stg_partner_feed         OK     20.40s",
             ),
             expected_rendered_rows=2,
         ),

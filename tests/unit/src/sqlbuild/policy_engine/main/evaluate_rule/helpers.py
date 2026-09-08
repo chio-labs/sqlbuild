@@ -6,7 +6,7 @@ from sqlbuild.policy_engine.models import ModelNameParts
 
 REQUIRED_DOMAIN: RuleOption[str] = RuleOption.string(
     name="required_domain",
-    default="market",
+    default="commerce",
     description="Domain that models must belong to.",
 )
 

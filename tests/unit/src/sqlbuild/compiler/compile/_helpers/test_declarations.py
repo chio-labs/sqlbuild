@@ -548,10 +548,10 @@ def test_given_declaration_change_when_compiling_then_updates_dependent_identity
         CompileDeclarationsErrorTestCase(
             description="lowercase enum member access",
             repo_files={
-                "enums/state.sql": 'ENUM (name state, members (ACTIVE "active"));',
-                "models/orders.sql": ('MODEL ();\nSELECT @enum("state").win AS state\n'),
+                "enums/state.sql": 'ENUM (name state, members (DELIVERY "active"));',
+                "models/orders.sql": ('MODEL ();\nSELECT @enum("state").active AS state\n'),
             },
-            expected_error_fragment="Unknown member 'win' for enum 'state'",
+            expected_error_fragment="Unknown member 'active' for enum 'state'",
         ),
         CompileDeclarationsErrorTestCase(
             description="unknown constant",

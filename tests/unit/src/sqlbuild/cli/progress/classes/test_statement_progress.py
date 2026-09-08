@@ -45,7 +45,7 @@ def test_given_slow_statement_when_it_completes_then_progress_is_announced_and_m
     "test_case",
     (
         StatementMonitorRaceCase(
-            description="query ID capture analytics with stop publishes once",
+            description="query ID capture concurrent with stop publishes once",
             query_id="01-query-race",
             expected_submission_count=1,
         ),

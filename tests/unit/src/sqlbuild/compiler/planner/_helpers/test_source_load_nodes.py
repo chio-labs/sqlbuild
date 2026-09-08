@@ -179,10 +179,10 @@ def test_given_unselected_upstream_in_closure_when_filtering_metadata_then_uses_
         query_sql="SELECT * FROM __ref('stg_orders')",
         config=CompileModelConfig(),
         destination=CompiledRelationLocation(
-            database="ANALYTICS",
+            database="ANALYTICS_DB",
             schema="ANALYTICS",
             name="FACT_ORDERS_PHYSICAL",
-            qualified_name="ANALYTICS.ANALYTICS.FACT_ORDERS_PHYSICAL",
+            qualified_name="ANALYTICS_DB.ANALYTICS.FACT_ORDERS_PHYSICAL",
         ),
     )
     upstream_model: CompiledModel = CompiledModel(
@@ -193,10 +193,10 @@ def test_given_unselected_upstream_in_closure_when_filtering_metadata_then_uses_
         query_sql="SELECT 1 AS id",
         config=CompileModelConfig(),
         destination=CompiledRelationLocation(
-            database="ANALYTICS",
+            database="ANALYTICS_DB",
             schema="STAGING",
             name="STG_ORDERS_PHYSICAL",
-            qualified_name="ANALYTICS.STAGING.STG_ORDERS_PHYSICAL",
+            qualified_name="ANALYTICS_DB.STAGING.STG_ORDERS_PHYSICAL",
         ),
     )
     project: CompiledProject = CompiledProject(
