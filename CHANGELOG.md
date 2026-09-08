@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.92.0](https://github.com/chio-labs/sqlbuild/compare/v0.91.4...v0.92.0) (2026-09-08)
+
+
+### Features
+
+* replace kata with project policy ([#588](https://github.com/chio-labs/sqlbuild/issues/588)) ([18cee6b](https://github.com/chio-labs/sqlbuild/commit/18cee6b888c0eff9db39694d0a0ca728948c002c))
+
 ## [0.91.4](https://github.com/chio-labs/sqlbuild/compare/v0.91.3...v0.91.4) (2026-09-08)
 
 
