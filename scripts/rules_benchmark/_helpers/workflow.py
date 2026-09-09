@@ -23,6 +23,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import write_custom_rules
 
+_COMPILE_TIMEOUT_SECONDS: int = 300
+
 
 def run_benchmark(*, model_count: int, iterations: int, output: Path | None) -> int:
     """Generate a representative project, execute scenarios, and render measurements."""
@@ -56,6 +58,14 @@ def run_rule_count_benchmark(
         _write_project(project_dir=project_dir, model_count=model_count)
         _ = _invoke(project_dir)
         profiles: list[dict[str, object]] = []
+        _write_rule_count_checkpoint(
+            output=output,
+            model_count=model_count,
+            iterations=iterations,
+            rule_counts=rule_counts,
+            profiles=profiles,
+            complete=False,
+        )
         for rule_count in rule_counts:
             write_custom_rules(project_dir=project_dir, rule_count=rule_count)
             cold: BenchmarkResult = _measure(
@@ -100,10 +110,19 @@ def run_rule_count_benchmark(
                     ],
                 }
             )
+            _write_rule_count_checkpoint(
+                output=output,
+                model_count=model_count,
+                iterations=iterations,
+                rule_counts=rule_counts,
+                profiles=profiles,
+                complete=False,
+            )
         workload: dict[str, int] = _workload_counts(project_dir=project_dir)
     return _write_benchmark_payload(
         payload={
             "benchmark": "custom_rule_count_scaling",
+            "complete": True,
             "hardware": _hardware_payload(),
             "iterations": iterations,
             "model_count": model_count,
@@ -181,6 +200,7 @@ def _run_scenarios(
             project_dir=project_dir,
             iterations=iterations,
             mutate=lambda iteration: None,
+            allow_failure=True,
         )
     )
     _remove_sql_finding(path=finding_path)
@@ -259,7 +279,12 @@ def _run_scenarios(
 
 
 def _measure(
-    *, scenario: str, project_dir: Path, iterations: int, mutate: Callable[[int], None]
+    *,
+    scenario: str,
+    project_dir: Path,
+    iterations: int,
+    mutate: Callable[[int], None],
+    allow_failure: bool = False,
 ) -> BenchmarkResult:
     elapsed: list[float] = []
     core_ms: list[int] = []
@@ -269,7 +294,7 @@ def _measure(
     for iteration in range(iterations):
         mutate(iteration)
         started: float = time.perf_counter()
-        payload = _invoke(project_dir)
+        payload = _invoke(project_dir, allow_failure=allow_failure)
         elapsed.append(time.perf_counter() - started)
         timings: object = payload.get("compile_timings")
         if not isinstance(timings, dict):
@@ -301,9 +326,10 @@ def _measure(
     )
 
 
-def _invoke(project_dir: Path) -> dict[str, object]:
+def _invoke(project_dir: Path, *, allow_failure: bool = False) -> dict[str, object]:
     result: subprocess.CompletedProcess[str] = _run(project_dir)
-    if result.returncode not in (0, 1) or not result.stdout:
+    accepted_codes: tuple[int, ...] = (0, 1) if allow_failure else (0,)
+    if result.returncode not in accepted_codes or not result.stdout:
         raise RulesBenchmarkError(result.stderr or "Rules benchmark produced no output")
     return json.loads(result.stdout)
 
@@ -321,7 +347,7 @@ def _run(project_dir: Path) -> subprocess.CompletedProcess[str]:
         check=False,
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=_COMPILE_TIMEOUT_SECONDS,
     )
     return result
 
@@ -491,6 +517,31 @@ def _write_benchmark_payload(*, payload: dict[str, object], output: Path | None)
         output.write_text(rendered + "\n", encoding="utf-8")
     print(rendered)
     return 0
+
+
+def _write_rule_count_checkpoint(
+    *,
+    output: Path | None,
+    model_count: int,
+    iterations: int,
+    rule_counts: tuple[int, ...],
+    profiles: list[dict[str, object]],
+    complete: bool,
+) -> None:
+    if output is None:
+        return
+    payload: dict[str, object] = {
+        "benchmark": "custom_rule_count_scaling",
+        "complete": complete,
+        "hardware": _hardware_payload(),
+        "iterations": iterations,
+        "model_count": model_count,
+        "multi_edit_model_count": _multi_edit_model_count(model_count),
+        "rule_counts": rule_counts,
+        "versions": _version_payload(),
+        "profiles": profiles,
+    }
+    output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _rules_cache_bytes(project_dir: Path) -> int:
