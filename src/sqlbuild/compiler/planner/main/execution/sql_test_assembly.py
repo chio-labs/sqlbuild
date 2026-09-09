@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledProject, CompiledSqlTest
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompiledSqlTest
 from sqlbuild.compiler.planner._helpers.sql_tests.assembly import (
     plan_test,
     resolve_test_model_chain_names,
@@ -26,8 +26,11 @@ def build_sql_test_plan_entry(
 
 
 def _sql_test_model_chain_names(
-    *, test: CompiledSqlTest, project: CompiledProject
+    *,
+    test: CompiledSqlTest,
+    project: CompiledProject,
+    model_map: dict[str, CompiledModel] | None = None,
 ) -> tuple[str, ...]:
     """Return the exact model closure a SQL test plan will expand."""
 
-    return resolve_test_model_chain_names(test=test, project=project)
+    return resolve_test_model_chain_names(test=test, project=project, model_map=model_map)
