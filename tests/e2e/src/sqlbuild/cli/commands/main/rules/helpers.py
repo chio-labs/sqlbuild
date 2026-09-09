@@ -34,13 +34,31 @@ def check_001(*, project: Project, ctx: RuleContext) -> list[Finding]:
 
 
 def _model_local_rule(*, index: int) -> str:
-    sql_fact: str = {
+    check: str = {
         2: (
             "(sum(1 for node in ctx.sql.for_model(model).expanded.polyglot_ast().walk() "
             'if str(getattr(node, "key", "")).lower() == "select") '
-            'if model.name == "model_00000" else 1)'
-        )
-    }.get(index, "1")
+            '>= 1 if model.name == "model_00000" else True)'
+        ),
+        3: "len(ctx.graph.dependencies(model)) >= 0",
+        4: "len(ctx.graph.dependents(model)) >= 0",
+        5: "len(ctx.columns.declared(model)) >= 0",
+        6: "ctx.columns.names(model) is None or len(ctx.columns.names(model) or ()) >= 0",
+        7: "isinstance(ctx.contracts.enforced(model), bool)",
+        8: "len(ctx.contracts.grain(model)) >= 0",
+        9: "len(ctx.tests.for_model(model)) >= 0",
+        10: "len(ctx.audits.for_model(model)) >= 0",
+        11: "bool(ctx.sql.for_model(model).authored.source)",
+        12: "bool(ctx.sql.for_model(model).expanded.source)",
+        13: "len(ctx.declarations.enums) >= 0",
+        14: "len(ctx.declarations.constants) >= 0",
+        15: "len(ctx.project.tree.relative_parts(path=model.path, under='models')) >= 1",
+        16: "bool(model.materialization)",
+        17: "len(ctx.project.sources) >= 0",
+        18: "len(ctx.project.seeds) >= 0",
+        19: "len(ctx.project.functions) >= 0",
+        20: "all(len(dependency.path.parts) >= 2 for dependency in ctx.graph.dependencies(model))",
+    }.get(index, "len(ctx.graph.dependencies(model)) >= 0")
     return f"""@rule(
     code="XSQBRB{index:03d}",
     slug="bounded-project-fact-{index:03d}",
@@ -49,16 +67,7 @@ def _model_local_rule(*, index: int) -> str:
     enabled_by_default=True,
 )
 def check_{index:03d}(*, model: Model, ctx: RuleContext) -> list[Finding]:
-    select_count = {sql_fact}
-    evidence = (
-        model.name,
-        model.materialization,
-        len(ctx.graph.dependencies(model)),
-        len(ctx.columns.declared(model)),
-        len(ctx.audits.for_model(model)),
-        len(ctx.tests.for_model(model)),
-        select_count,
-    )
-    return [] if evidence[0] and evidence[-1] >= 1 else [ctx.finding(subject=model)]
+    valid = {check}
+    return [] if valid else [ctx.finding(subject=model)]
 
 """
