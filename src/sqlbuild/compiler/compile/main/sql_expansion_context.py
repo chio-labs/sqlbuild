@@ -85,6 +85,11 @@ def build_sql_expansion_context(
             sql_analysis_enabled=False,
             target_name=effective_discovered_inputs.project_config.default_target,
             vars=effective_vars,
+            _value_renderer=value_renderer,
+            _collection_rendering=resolve_effective_collection_rendering(
+                project_config=effective_discovered_inputs.project_config,
+                declaration_override=None,
+            ),
         ),
         enums=enums,
         constants=constants,

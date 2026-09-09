@@ -5,16 +5,76 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     MacroDeclarationContextErrorTestCase,
+    MacroDeclarationRenderingTestCase,
     MacroDeclarationResourceTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
     run_compile_pipeline_for_project,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MacroDeclarationRenderingTestCase(
+            description="DuckDB array rendering",
+            adapter_name="duckdb",
+            adapter_factory=DuckDbAdapter,
+            expected_sql="SELECT ['north', 'south'] AS regions",
+        ),
+        MacroDeclarationRenderingTestCase(
+            description="Snowflake array rendering",
+            adapter_name="snowflake",
+            adapter_factory=SnowflakeAdapter,
+            expected_sql="SELECT ARRAY_CONSTRUCT('north', 'south') AS regions",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_active_adapter_when_macro_renders_constant_then_uses_adapter_sql(
+    test_case: MacroDeclarationRenderingTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": (
+                f'name = "demo"\nadapter = "{test_case.adapter_name}"\n\n'
+                "[settings]\nsql_analysis = false\n"
+            ),
+            "models/_constants/policy.sql": (
+                'CONSTANT (name regions, value ["north", "south"], render_as array);\n'
+            ),
+            "models/_macros/policy.py": (
+                "def region_array(ctx) -> str:\n    return ctx.render_constant('regions')\n"
+            ),
+            "models/summary.sql": (
+                "MODEL (materialized view, database warehouse, schema analytics);\n\n"
+                "SELECT @region_array() AS regions"
+            ),
+        },
+    )
+    adapter: BaseAdapter = test_case.adapter_factory()
+
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+    project: CompiledProject = compile_project(
+        discovered_inputs=discovered_inputs,
+        adapter=adapter,
+    )
+
+    assert project.models[0].query_sql == test_case.expected_sql
 
 
 @pytest.mark.parametrize(
@@ -97,7 +157,7 @@ def test_given_macro_context_declarations_when_compiling_resources_then_all_expa
                 "models/_constants/policy.sql": ("CONSTANT (name minimum_quantity, value 2);\n"),
                 "models/_macros/policy.py": (
                     "def missing_quantity(ctx) -> str:\n"
-                    "    return str(ctx.constants['maximum_quantity'])\n"
+                    "    return ctx.render_constant('maximum_quantity')\n"
                 ),
                 "models/summary.sql": (
                     "MODEL (materialized view);\n\nSELECT @missing_quantity() AS maximum_quantity"
@@ -116,7 +176,9 @@ def test_given_macro_context_declarations_when_compiling_resources_then_all_expa
                 ),
                 "models/_macros/policy.py": (
                     "def missing_status(ctx) -> str:\n"
-                    "    return str(ctx.enums['order_status']['CLOSED'])\n"
+                    "    return ctx.render_enum_member(\n"
+                    "        enum_name='order_status', member_name='CLOSED'\n"
+                    "    )\n"
                 ),
                 "models/summary.sql": (
                     "MODEL (materialized view);\n\nSELECT @missing_status() AS status"

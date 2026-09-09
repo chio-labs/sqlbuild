@@ -100,6 +100,28 @@ unofficial project structure. Keep repository pytest tests outside the SQLBuild 
 directory, which is reserved for SQLBuild SQL tests and scenarios. Documented integration paths
 such as `dagster/`, `rivers_pipeline/`, and their `definitions.py` modules are also supported.
 
+### Python macro declaration context
+
+Python SQL macros receive the constants and enums visible to the SQL resource that calls them.
+Use the typed mappings for Python control flow, and use the rendering methods when inserting a
+declaration into generated SQL so quoting and collection syntax follow the active adapter:
+
+```python
+def minimum_order_filter(ctx) -> str:
+    minimum = ctx.constants["minimum_order_value"]
+    if minimum is None:  # The visible declaration explicitly has a NULL value.
+        return "TRUE"
+    return f"order_value >= {ctx.render_constant('minimum_order_value')}"
+
+
+def active_status_filter(ctx) -> str:
+    status = ctx.render_enum_member(enum_name="order_status", member_name="active")
+    return f"status = {status}"
+```
+
+Callers can still pass explicit `@const(...)` or `@enum(...)` values as macro arguments. Context
+lookups are intended for policy owned by the macro; both forms use the caller's declaration scope.
+
 ## SQL lint and Project Policy
 
 SQL lint evaluates one plain SQL statement. Project Policy evaluates how SQLBuild resources are

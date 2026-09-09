@@ -1519,7 +1519,7 @@ def _build_test_model_query_overrides(
         return {}
     if not test_input.payload.macro_mocks:
         return {}
-    macro_context: MacroContext = MacroContext(
+    macro_context: MacroContext = inputs.macro_context or MacroContext(
         adapter_name=resolve_effective_adapter_name(
             project_config=inputs.project_config,
             local_config=inputs.local_config,

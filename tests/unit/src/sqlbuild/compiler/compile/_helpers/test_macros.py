@@ -634,6 +634,17 @@ def bad_macro() -> list[str]:
             expected_error_fragment="must return a SQL string when used directly in SQL",
         ),
         ExpandSqlMacrosErrorTestCase(
+            description="raises clearly when SQL rendering is used outside project invocation",
+            macro_file_contents=(
+                "def rendered_constant(ctx) -> str:\n"
+                "    return ctx.render_constant('unknown_quantity')\n"
+            ),
+            sql="SELECT @rendered_constant()",
+            expected_error_fragment=(
+                "Constant SQL rendering is available only during a project macro invocation"
+            ),
+        ),
+        ExpandSqlMacrosErrorTestCase(
             description="raises when generated SQL contains an ordinary macro call",
             macro_file_contents=(
                 "def outer_macro() -> str:\n    return '@inner_macro()'\n\n"

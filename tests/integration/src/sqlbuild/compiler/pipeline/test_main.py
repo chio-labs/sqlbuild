@@ -186,6 +186,7 @@ _PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabas
                     "CONSTANT (name unique_ids, value {2, 1});\n"
                     'CONSTANT (name labels, value (north "North", south "South"));\n'
                     'CONSTANT (name adjustment, type decimal, value "2.50");\n'
+                    'CONSTANT (name display_name, value "O\'Reilly");\n'
                 ),
                 "models/_enums/status.sql": (
                     'ENUM (name order_status, members (ACTIVE "active", PAUSED "paused"));\n'
@@ -197,14 +198,20 @@ _PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabas
                     "    region_count = len(ctx.constants['regions'])\n"
                     "    unique_count = len(ctx.constants['unique_ids'])\n"
                     "    label = ctx.constants['labels']['north']\n"
-                    "    adjustment = ctx.constants['adjustment']\n"
-                    "    active = ctx.enums['order_status']['ACTIVE']\n"
+                    "    adjustment_sql = ctx.render_constant('adjustment')\n"
+                    "    display_name_sql = ctx.render_constant('display_name')\n"
+                    "    regions_sql = ctx.render_constant('regions')\n"
+                    "    active_sql = ctx.render_enum_member(\n"
+                    "        enum_name='order_status', member_name='ACTIVE'\n"
+                    "    )\n"
                     "    optional = ctx.constants.get('maximum_quantity', 7)\n"
                     "    has_closed = 'CLOSED' in ctx.enums['order_status']\n"
                     "    return (\n"
                     '        f"{minimum} AS minimum_quantity, {region_count} AS region_count, "\n'
                     "        f\"{unique_count} AS unique_count, '{label}' AS label, \"\n"
-                    "        f\"{adjustment} AS adjustment, '{active}' AS active_status, \"\n"
+                    '        f"{adjustment_sql} AS adjustment, {display_name_sql} AS display_name, "\n'
+                    "        f\"{active_sql} AS active_status, 'north' IN {regions_sql} \"\n"
+                    '        f"AS region_supported, "\n'
                     '        f"{optional} AS optional_quantity, {has_closed} AS has_closed"\n'
                     "    )\n"
                 ),
@@ -217,13 +224,17 @@ _PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabas
                     description="model expanded with caller-visible declarations",
                     expected_resolved_sql_fragment=(
                         "SELECT 2 AS minimum_quantity, 2 AS region_count, 2 AS unique_count, "
-                        "'North' AS label, 2.50 AS adjustment, 'active' AS active_status, "
+                        "'North' AS label, 2.50 AS adjustment, 'O''Reilly' AS display_name, "
+                        "'active' AS active_status, 'north' IN ('north', 'south') "
+                        "AS region_supported, "
                         "7 AS optional_quantity, False AS has_closed"
                     ),
                     expected_logical_ddl_fragment="CREATE OR REPLACE VIEW",
                     expected_manifest_compiled_code_fragment=(
                         "SELECT 2 AS minimum_quantity, 2 AS region_count, 2 AS unique_count, "
-                        "'North' AS label, 2.50 AS adjustment, 'active' AS active_status, "
+                        "'North' AS label, 2.50 AS adjustment, 'O''Reilly' AS display_name, "
+                        "'active' AS active_status, 'north' IN ('north', 'south') "
+                        "AS region_supported, "
                         "7 AS optional_quantity, False AS has_closed"
                     ),
                 ),
@@ -233,6 +244,7 @@ _PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabas
             expected_manifest_node_count=1,
             expected_declaration_usages=(
                 "constant:adjustment",
+                "constant:display_name",
                 "constant:labels",
                 "constant:minimum_quantity",
                 "constant:regions",
