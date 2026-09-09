@@ -27,6 +27,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
 from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import write_custom_rules
 
 _COMPILE_TIMEOUT_SECONDS: int = 300
+_CI_THRESHOLDS_PATH: Path = Path(__file__).parents[1] / "ci_thresholds.json"
 _GNU_TIME_PATH: Path = Path("/usr/bin/time")
 _PEAK_RSS_MARKER: str = "__SQLBUILD_BENCHMARK_PEAK_RSS_KIB__="
 
@@ -147,6 +148,408 @@ def run_rule_count_benchmark(
         },
         output=output,
     )
+
+
+def run_ci_benchmark(*, output: Path, summary_output: Path, max_seconds: int = 420) -> int:
+    """Run the bounded required-CI Rules performance profile."""
+
+    started: float = time.perf_counter()
+    profiles: list[dict[str, object]] = []
+    with tempfile.TemporaryDirectory(prefix="sqlbuild-rules-ci-benchmark-") as temporary:
+        root: Path = Path(temporary)
+        for model_count in (3000, 5000, 10000):
+            project_dir: Path = root / f"project-{model_count}"
+            _write_project(project_dir=project_dir, model_count=model_count)
+            profiles.append(
+                _ci_twenty_rule_profile(
+                    project_dir=project_dir,
+                    model_count=model_count,
+                )
+            )
+            if model_count in {5000, 10000}:
+                profiles.append(
+                    _ci_hundred_rule_profile(
+                        project_dir=project_dir,
+                        model_count=model_count,
+                    )
+                )
+    elapsed_seconds: float = time.perf_counter() - started
+    benchmark_seconds: float = sum(
+        _number(profile.get("benchmark_seconds")) for profile in profiles
+    )
+    guard_failures: list[str] = []
+    for profile in profiles:
+        raw_failures: object = profile.get("guard_failures")
+        if isinstance(raw_failures, list | tuple):
+            guard_failures.extend(
+                str(failure) for failure in raw_failures if isinstance(failure, str)
+            )
+    payload: dict[str, object] = {
+        "benchmark": "required_ci_rules_performance",
+        "benchmark_schema_version": 1,
+        "complete": True,
+        "elapsed_seconds": elapsed_seconds,
+        "benchmark_seconds": benchmark_seconds,
+        "max_seconds": max_seconds,
+        "within_time_budget": benchmark_seconds <= max_seconds,
+        "guard_failures": guard_failures,
+        "thresholds": _ci_thresholds(),
+        "hardware": _hardware_payload(),
+        "versions": _version_payload(),
+        "profiles": profiles,
+    }
+    _ = _write_benchmark_payload(payload=payload, output=output)
+    summary_output.write_text(_ci_summary(payload=payload), encoding="utf-8")
+    return 0 if benchmark_seconds <= max_seconds and not guard_failures else 1
+
+
+def _ci_twenty_rule_profile(*, project_dir: Path, model_count: int) -> dict[str, object]:
+    results: list[BenchmarkResult] = [
+        _measure(
+            scenario="cold",
+            project_dir=project_dir,
+            iterations=1,
+            mutate=lambda iteration: _clear_target(project_dir),
+        )
+    ]
+    results.append(
+        _measure(
+            scenario="unchanged_warm",
+            project_dir=project_dir,
+            iterations=1,
+            mutate=lambda iteration: None,
+        )
+    )
+    results.append(
+        _measure(
+            scenario="multi_model_edit",
+            project_dir=project_dir,
+            iterations=1,
+            mutate=lambda iteration: _append_model_markers(
+                project_dir=project_dir,
+                model_count=model_count,
+                edit_count=_multi_edit_model_count(model_count),
+                iteration=iteration,
+            ),
+        )
+    )
+    if model_count == 5000:
+        results.extend(_ci_five_thousand_invalidation_results(project_dir=project_dir))
+    return _ci_profile_payload(
+        project_dir=project_dir,
+        model_count=model_count,
+        rule_count=20,
+        results=tuple(results),
+    )
+
+
+def _ci_five_thousand_invalidation_results(*, project_dir: Path) -> tuple[BenchmarkResult, ...]:
+    return (
+        _measure(
+            scenario="rules_cold",
+            project_dir=project_dir,
+            iterations=1,
+            mutate=lambda iteration: _clear_cache(project_dir),
+        ),
+        _measure(
+            scenario="sql_test_edit",
+            project_dir=project_dir,
+            iterations=1,
+            mutate=lambda iteration: _append_marker(
+                path=project_dir / "tests" / "unit" / "test_group_00000.sql",
+                scenario="sql-test",
+                iteration=iteration,
+            ),
+        ),
+        _measure(
+            scenario="macro_edit",
+            project_dir=project_dir,
+            iterations=1,
+            mutate=lambda iteration: _set_macro_offset(
+                path=project_dir / "models" / "macros" / "macro_00000.py",
+                iteration=iteration,
+            ),
+        ),
+        _measure(
+            scenario="project_config_edit",
+            project_dir=project_dir,
+            iterations=1,
+            mutate=lambda iteration: _set_benchmark_revision(
+                path=project_dir / "sqlbuild_project.toml",
+                iteration=iteration,
+            ),
+        ),
+        _measure(
+            scenario="custom_rule_helper_edit",
+            project_dir=project_dir,
+            iterations=1,
+            mutate=lambda iteration: _append_marker(
+                path=project_dir / "rules" / "benchmark_helpers.py",
+                scenario="custom-rule-helper",
+                iteration=iteration,
+            ),
+        ),
+        _measure(
+            scenario="custom_rule_source_edit",
+            project_dir=project_dir,
+            iterations=1,
+            mutate=lambda iteration: _mutate_custom_rule(
+                path=project_dir / "rules" / "benchmark_rules.py",
+                iteration=iteration,
+            ),
+        ),
+    )
+
+
+def _ci_hundred_rule_profile(*, project_dir: Path, model_count: int) -> dict[str, object]:
+    write_custom_rules(project_dir=project_dir, rule_count=100)
+    results: list[BenchmarkResult] = [
+        _measure(
+            scenario="rules_cold",
+            project_dir=project_dir,
+            iterations=1,
+            mutate=lambda iteration: _clear_cache(project_dir),
+        ),
+        _measure(
+            scenario="unchanged_warm",
+            project_dir=project_dir,
+            iterations=1,
+            mutate=lambda iteration: None,
+        ),
+    ]
+    if model_count == 5000:
+        results.extend(
+            (
+                _measure(
+                    scenario="multi_model_edit",
+                    project_dir=project_dir,
+                    iterations=1,
+                    mutate=lambda iteration: _append_model_markers(
+                        project_dir=project_dir,
+                        model_count=model_count,
+                        edit_count=_multi_edit_model_count(model_count),
+                        iteration=iteration,
+                    ),
+                ),
+                _measure(
+                    scenario="custom_rule_source_edit",
+                    project_dir=project_dir,
+                    iterations=1,
+                    mutate=lambda iteration: _mutate_custom_rule(
+                        path=project_dir / "rules" / "benchmark_rules.py",
+                        iteration=iteration,
+                    ),
+                ),
+            )
+        )
+    return _ci_profile_payload(
+        project_dir=project_dir,
+        model_count=model_count,
+        rule_count=100,
+        results=tuple(results),
+    )
+
+
+def _ci_profile_payload(
+    *,
+    project_dir: Path,
+    model_count: int,
+    rule_count: int,
+    results: tuple[BenchmarkResult, ...],
+) -> dict[str, object]:
+    cache_bytes: int = _rules_cache_bytes(project_dir)
+    guard_failures: tuple[str, ...] = (
+        *_ci_cache_guard_failures(
+            model_count=model_count,
+            rule_count=rule_count,
+            results=results,
+        ),
+        *_ci_resource_guard_failures(
+            model_count=model_count,
+            rule_count=rule_count,
+            cache_bytes=cache_bytes,
+            results=results,
+        ),
+    )
+    return {
+        "model_count": model_count,
+        "custom_rule_count": rule_count,
+        "multi_edit_model_count": _multi_edit_model_count(model_count),
+        "cache_bytes": cache_bytes,
+        "workload": _workload_counts(project_dir=project_dir),
+        "scenarios": [_result_payload(result=result) for result in results],
+        "benchmark_seconds": sum(sum(result.seconds) for result in results),
+        "guard_failures": guard_failures,
+    }
+
+
+def _ci_thresholds() -> dict[str, object]:
+    payload: object = json.loads(_CI_THRESHOLDS_PATH.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise RulesBenchmarkError("CI Rules thresholds must be a JSON object")
+    return {str(key): value for key, value in payload.items()}
+
+
+def _ci_resource_guard_failures(
+    *,
+    model_count: int,
+    rule_count: int,
+    cache_bytes: int,
+    results: tuple[BenchmarkResult, ...],
+) -> tuple[str, ...]:
+    payload: dict[str, object] = _ci_thresholds()
+    raw_profiles: object = payload.get("profiles")
+    profiles: dict[str, object] = (
+        {str(key): value for key, value in raw_profiles.items()}
+        if isinstance(raw_profiles, dict)
+        else {}
+    )
+    raw_profile: object = profiles.get(f"{model_count}:{rule_count}")
+    if not isinstance(raw_profile, dict):
+        return (f"missing CI threshold profile for {model_count} models / {rule_count} Rules",)
+    profile: dict[str, object] = {str(key): value for key, value in raw_profile.items()}
+    failures: list[str] = []
+    max_cache_bytes: object = profile.get("max_cache_bytes")
+    if isinstance(max_cache_bytes, int) and cache_bytes > max_cache_bytes:
+        failures.append(
+            f"{model_count} models / {rule_count} Rules cache uses {cache_bytes} bytes, "
+            f"above {max_cache_bytes}"
+        )
+    max_peak_rss_bytes: object = profile.get("max_peak_rss_bytes")
+    raw_scenarios: object = profile.get("scenarios")
+    scenario_limits: dict[str, object] = (
+        {str(key): value for key, value in raw_scenarios.items()}
+        if isinstance(raw_scenarios, dict)
+        else {}
+    )
+    measured_scenarios: set[str] = {result.scenario for result in results}
+    expected_scenarios: set[str] = set(scenario_limits)
+    if measured_scenarios != expected_scenarios:
+        failures.append(
+            f"{model_count} models / {rule_count} Rules scenario contract differs: "
+            f"expected {sorted(expected_scenarios)}, got {sorted(measured_scenarios)}"
+        )
+    for result in results:
+        max_seconds: object = scenario_limits.get(result.scenario)
+        if isinstance(max_seconds, int | float) and max(result.seconds) > max_seconds:
+            failures.append(
+                f"{model_count} models / {rule_count} Rules / {result.scenario} took "
+                f"{max(result.seconds):.2f}s, above {max_seconds}s"
+            )
+        if (
+            isinstance(max_peak_rss_bytes, int)
+            and result.peak_rss_bytes
+            and max(result.peak_rss_bytes) > max_peak_rss_bytes
+        ):
+            failures.append(
+                f"{model_count} models / {rule_count} Rules / {result.scenario} used "
+                f"{max(result.peak_rss_bytes)} peak RSS bytes, above {max_peak_rss_bytes}"
+            )
+    return tuple(failures)
+
+
+def _ci_cache_guard_failures(
+    *, model_count: int, rule_count: int, results: tuple[BenchmarkResult, ...]
+) -> tuple[str, ...]:
+    failures: list[str] = []
+    total: int = model_count * rule_count + 2
+    edit_count: int = _multi_edit_model_count(model_count)
+    expected_by_scenario: dict[str, tuple[int, int]] = {
+        "cold": (0, total),
+        "rules_cold": (0, total),
+        "unchanged_warm": (total, 0),
+        "multi_model_edit": (total - (rule_count * edit_count + 2), rule_count * edit_count + 2),
+        "custom_rule_source_edit": (total - (model_count + 1), model_count + 1),
+    }
+    if model_count == 5000 and rule_count == 20:
+        expected_by_scenario.update(
+            {
+                "sql_test_edit": (90_000, 10_002),
+                "macro_edit": (99_900, 102),
+                "project_config_edit": (2_020, 97_982),
+                "custom_rule_helper_edit": (95_001, 5_001),
+            }
+        )
+    for result in results:
+        expected: tuple[int, int] | None = expected_by_scenario.get(result.scenario)
+        if expected is None:
+            continue
+        for sample_index, (hits, misses) in enumerate(
+            zip(result.cache_hit_samples, result.cache_miss_samples, strict=True),
+            start=1,
+        ):
+            if (hits, misses) != expected:
+                failures.append(
+                    f"{model_count} models / {rule_count} Rules / {result.scenario} sample "
+                    f"{sample_index}: expected cache {expected[0]}/{expected[1]}, got "
+                    f"{hits}/{misses}"
+                )
+    return tuple(failures)
+
+
+def _ci_summary(*, payload: dict[str, object]) -> str:
+    raw_elapsed: object = payload.get("elapsed_seconds")
+    elapsed_seconds: float = float(raw_elapsed) if isinstance(raw_elapsed, int | float) else 0.0
+    raw_max_seconds: object = payload.get("max_seconds")
+    max_seconds: int = raw_max_seconds if isinstance(raw_max_seconds, int) else 0
+    benchmark_seconds: float = _number(payload.get("benchmark_seconds"))
+    lines: list[str] = [
+        "## Rules performance guards",
+        "",
+        f"Compiler invocations: {benchmark_seconds:.2f}s / {max_seconds}s budget",
+        f"Total setup and benchmark wall time: {elapsed_seconds:.2f}s",
+        "",
+    ]
+    raw_failures: object = payload.get("guard_failures")
+    if isinstance(raw_failures, list) and raw_failures:
+        lines.extend(("", "### Guard failures", ""))
+        lines.extend(f"- {failure}" for failure in raw_failures)
+        lines.append("")
+    lines.extend(
+        (
+            (
+                "| Models | Custom Rules | Scenario | Median | p95 | Cache hits | "
+                "Cache misses | Peak RSS |"
+            ),
+            "|---:|---:|---|---:|---:|---:|---:|---:|",
+        )
+    )
+    profiles: object = payload.get("profiles")
+    if not isinstance(profiles, list):
+        return "\n".join(lines) + "\n"
+    for raw_profile in profiles:
+        if not isinstance(raw_profile, dict):
+            continue
+        profile: dict[str, object] = {str(key): value for key, value in raw_profile.items()}
+        model_count: object = profile.get("model_count")
+        rule_count: object = profile.get("custom_rule_count")
+        scenarios: object = profile.get("scenarios")
+        if not isinstance(scenarios, list):
+            continue
+        for raw_scenario in scenarios:
+            if not isinstance(raw_scenario, dict):
+                continue
+            scenario: dict[str, object] = {str(key): value for key, value in raw_scenario.items()}
+            peak: object = scenario.get("peak_rss_bytes")
+            peak_values: dict[str, object] = (
+                {str(key): value for key, value in peak.items()} if isinstance(peak, dict) else {}
+            )
+            peak_bytes: object = peak_values.get("p95_bytes")
+            peak_label: str = (
+                "n/a" if not isinstance(peak_bytes, int) else f"{peak_bytes / 1_000_000:.0f} MB"
+            )
+            lines.append(
+                f"| {model_count} | {rule_count} | {scenario.get('scenario')} | "
+                f"{_number(scenario.get('median_seconds')):.2f}s | "
+                f"{_number(scenario.get('p95_seconds')):.2f}s | "
+                f"{scenario.get('cache_hits')} | {scenario.get('cache_misses')} | "
+                f"{peak_label} |"
+            )
+    return "\n".join(lines) + "\n"
+
+
+def _number(value: object) -> float:
+    return float(value) if isinstance(value, int | float) else 0.0
 
 
 def _write_project(*, project_dir: Path, model_count: int) -> None:

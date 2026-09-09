@@ -1,0 +1,56 @@
+{
+  "benchmark_schema_version": 1,
+  "profiles": {
+    "3000:20": {
+      "max_cache_bytes": 20000000,
+      "max_peak_rss_bytes": 650000000,
+      "scenarios": {
+        "cold": 30,
+        "multi_model_edit": 10,
+        "unchanged_warm": 7
+      }
+    },
+    "5000:20": {
+      "max_cache_bytes": 35000000,
+      "max_peak_rss_bytes": 900000000,
+      "scenarios": {
+        "cold": 50,
+        "custom_rule_helper_edit": 16,
+        "custom_rule_source_edit": 16,
+        "macro_edit": 16,
+        "multi_model_edit": 16,
+        "project_config_edit": 50,
+        "rules_cold": 20,
+        "sql_test_edit": 16,
+        "unchanged_warm": 11
+      }
+    },
+    "5000:100": {
+      "max_cache_bytes": 100000000,
+      "max_peak_rss_bytes": 1000000000,
+      "scenarios": {
+        "custom_rule_source_edit": 22,
+        "multi_model_edit": 22,
+        "rules_cold": 30,
+        "unchanged_warm": 16
+      }
+    },
+    "10000:20": {
+      "max_cache_bytes": 65000000,
+      "max_peak_rss_bytes": 1600000000,
+      "scenarios": {
+        "cold": 110,
+        "multi_model_edit": 30,
+        "unchanged_warm": 20
+      }
+    },
+    "10000:100": {
+      "max_cache_bytes": 220000000,
+      "max_peak_rss_bytes": 1700000000,
+      "scenarios": {
+        "rules_cold": 50,
+        "unchanged_warm": 30
+      }
+    }
+  }
+}

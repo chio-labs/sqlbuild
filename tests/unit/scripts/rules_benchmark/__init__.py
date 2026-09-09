@@ -1,0 +1,1 @@
+"""Rules benchmark script tests."""
