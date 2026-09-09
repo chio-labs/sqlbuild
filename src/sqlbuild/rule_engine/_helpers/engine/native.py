@@ -49,6 +49,8 @@ from sqlbuild.rule_engine.models import (
 from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 
+_CUSTOM_HOST_REQUIRED: str = "selected custom rules require a custom host"
+
 
 def evaluate_native(
     *,
@@ -86,20 +88,24 @@ def evaluate_native(
             catalogue=catalogue, project=project, project_dir=project_dir
         ),
     }
-    custom_host, custom_host_input = _custom_host_payload(
-        project=project,
-        config=config,
-        project_dir=project_dir,
-        catalogue=tuple(selected_catalogue),
-        dialect=dialect,
-    )
-    request["custom_host"] = custom_host
+    custom_host_input: Path | None = None
+    request["custom_host"] = None
     try:
-        response: object = orjson.loads(
-            _native.evaluate_json(
-                orjson.dumps(request, option=orjson.OPT_SORT_KEYS, default=str).decode()
+        try:
+            response_json: str = _evaluate_request(request)
+        except ValueError as error:
+            if _CUSTOM_HOST_REQUIRED not in str(error):
+                raise
+            custom_host, custom_host_input = _custom_host_payload(
+                project=project,
+                config=config,
+                project_dir=project_dir,
+                catalogue=tuple(selected_catalogue),
+                dialect=dialect,
             )
-        )
+            request["custom_host"] = custom_host
+            response_json = _evaluate_request(request)
+        response: object = orjson.loads(response_json)
     except (ValueError, TypeError) as error:
         raise RulesError(str(error)) from error
     finally:
@@ -120,6 +126,12 @@ def evaluate_native(
         cache_misses=int(payload.get("cache_misses", 0)),
         built_in_ms=int(payload.get("built_in_ms", 0)),
         custom_ms=int(payload.get("custom_ms", 0)),
+    )
+
+
+def _evaluate_request(request: dict[str, object]) -> str:
+    return _native.evaluate_json(
+        orjson.dumps(request, option=orjson.OPT_SORT_KEYS, default=str).decode()
     )
 
 
