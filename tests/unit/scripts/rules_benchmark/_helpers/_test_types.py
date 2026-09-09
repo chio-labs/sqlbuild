@@ -18,3 +18,11 @@ class ResourceGuardTestCase:
     cache_bytes: int
     results: tuple[BenchmarkResult, ...]
     expected_failures: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class WarmIterationsTestCase:
+    description: str
+    model_count: int
+    rule_count: int
+    expected_iterations: int

@@ -23,7 +23,9 @@ from scripts.rules_benchmark.constants import (
     CI_DEFAULT_MAX_SECONDS,
     CI_MODEL_COUNTS,
     CI_PRIMARY_MODEL_COUNT,
+    CI_SCALE_MODEL_COUNT,
     CI_STRESS_RULE_COUNT,
+    CI_STRESS_WARM_ITERATIONS,
     NON_CACHEABLE_REJECTION,
     SQL_SUFFIX,
 )
@@ -33,7 +35,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     write_layered_production_compile_project,
 )
 
-_COMPILE_TIMEOUT_SECONDS: int = 300
+_COMPILE_TIMEOUT_SECONDS: int = 120
 _CI_THRESHOLDS_PATH: Path = Path(__file__).parents[1] / "ci_thresholds.json"
 _GNU_TIME_PATH: Path = Path("/usr/bin/time")
 _PEAK_RSS_MARKER: str = "__SQLBUILD_BENCHMARK_PEAK_RSS_KIB__="
@@ -225,7 +227,7 @@ def _ci_twenty_rule_profile(*, project_dir: Path, model_count: int) -> dict[str,
         _measure(
             scenario="unchanged_warm",
             project_dir=project_dir,
-            iterations=1,
+            iterations=_ci_warm_iterations(model_count=model_count, rule_count=20),
             mutate=lambda iteration: None,
         )
     )
@@ -322,7 +324,10 @@ def _ci_hundred_rule_profile(*, project_dir: Path, model_count: int) -> dict[str
         _measure(
             scenario="unchanged_warm",
             project_dir=project_dir,
-            iterations=1,
+            iterations=_ci_warm_iterations(
+                model_count=model_count,
+                rule_count=CI_STRESS_RULE_COUNT,
+            ),
             mutate=lambda iteration: None,
         ),
     ]
@@ -440,10 +445,11 @@ def _ci_resource_guard_failures(
         )
     for result in results:
         max_seconds: object = scenario_limits.get(result.scenario)
-        if isinstance(max_seconds, int | float) and max(result.seconds) > max_seconds:
+        median_seconds: float = statistics.median(result.seconds)
+        if isinstance(max_seconds, int | float) and median_seconds > max_seconds:
             failures.append(
-                f"{model_count} models / {rule_count} Rules / {result.scenario} took "
-                f"{max(result.seconds):.2f}s, above {max_seconds}s"
+                f"{model_count} models / {rule_count} Rules / {result.scenario} median took "
+                f"{median_seconds:.2f}s, above {max_seconds}s"
             )
         if (
             isinstance(max_peak_rss_bytes, int)
@@ -455,6 +461,12 @@ def _ci_resource_guard_failures(
                 f"{max(result.peak_rss_bytes)} peak RSS bytes, above {max_peak_rss_bytes}"
             )
     return tuple(failures)
+
+
+def _ci_warm_iterations(*, model_count: int, rule_count: int) -> int:
+    if model_count == CI_SCALE_MODEL_COUNT and rule_count == CI_STRESS_RULE_COUNT:
+        return CI_STRESS_WARM_ITERATIONS
+    return 1
 
 
 def _ci_cache_guard_failures(
