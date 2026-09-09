@@ -1,6 +1,6 @@
 ---
 name: sqlbuild
-description: Use when working with SQLBuild syntax, project structure, configuration, testing, adapters, CLI behavior, SQLBuild docs, or SQLBuild-related code.
+description: ALWAYS load this skill when doing ANY SQLBuild work. This includes models, tests, audits, scenarios, configuration, CLI behavior, adapters, dependencies, documentation, and related code.
 ---
 
 <!-- generated-by: sqlbuild skills -->
@@ -55,6 +55,7 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/snapshots`
 - `concepts/audits`
 - `concepts/rules`
+- `concepts/rules/overview`
 - `concepts/rules/configuration-and-selection`
 - `concepts/rules/findings-and-exceptions`
 - `concepts/rules/execution-and-caching`
@@ -5957,6 +5958,62 @@ limit deliberately because parallel queries can increase warehouse load and cost
 ## Rules
 
 Source: `concepts/rules.mdx`
+
+Enforce repeatable SQL and project requirements during compilation.
+
+Rules are configurable compile-time requirements evaluated against SQLBuild's compiled project.
+They turn decisions that would otherwise be repeated in code review into deterministic compiler
+findings.
+
+SQLBuild evaluates checks in this order:
+
+1. mandatory compiler correctness
+2. selected native built-in Rules
+3. selected custom Python Rules
+4. artifact completion
+
+Rules report findings and never rewrite source. [`sqb format`](/cli/format) remains the separate
+source-rewriting command.
+
+### Built-in and custom Rules
+
+Native built-in Rules use `SQBR...` codes and cover reusable requirements maintained by SQLBuild.
+Projects can define custom Python Rules with project-owned `XSQBR...` codes. Both use the same
+selection, findings, exceptions, ordering, and cache system.
+
+You can adopt and configure custom Rules without maintaining their implementation. Python authoring
+details live in [Custom Rules](/concepts/rules/custom-rules).
+
+### One definition of project validity
+
+`sqb compile` is authoritative. Build and execution commands use the same compiler path and reject
+configured findings before opening a warehouse connection. A successful compile means mandatory
+compiler correctness and every selected Rule passed.
+
+Use `sqb rules` for focused catalogue inspection and development. Passing a focused Rule selection
+does not claim that the complete configured Rules set passed.
+
+### Rules and other checks
+
+| Capability | Purpose |
+|---|---|
+| Compiler correctness | Mandatory requirements needed to construct a trustworthy project |
+| Rules | Configurable static requirements over compiled project facts |
+| Formatting | Canonical source rewriting through `sqb format` |
+| Tests | Expected behavior of SQL logic |
+| Audits | Warehouse-data quality requirements |
+| Runtime checks | Validation of external resources and execution state |
+
+### Explore Rules
+
+    Select exact Rules or families and configure project-owned options.
+    Understand diagnostics, exact exceptions, path ignores, and stale checks.
+    Learn evaluation order, focused execution, and dependency-aware reuse.
+    Author typed Python Rules over compiler-owned facts.
+
+## Overview
+
+Source: `concepts/rules/overview.mdx`
 
 Turn repeated SQL and project review decisions into compiler-enforced requirements.
 
