@@ -673,13 +673,16 @@ def _validate_declared_seed_files(
         seed_entry: SchemaSeedEntry
         for seed_entry in schema_file.seed_entries:
             declared_seed_entries.append((seed_entry, str(schema_file.relative_path)))
+    seed_files_by_name: dict[str, list[DiscoveredSeedFile]] = {}
+    for seed_file in seed_files:
+        seed_files_by_name.setdefault(seed_file.file_path.stem, []).append(seed_file)
 
     seed_entry_and_path: tuple[SchemaSeedEntry, str]
     for seed_entry_and_path in declared_seed_entries:
         seed_entry: SchemaSeedEntry = seed_entry_and_path[0]
         declaration_path: str = seed_entry_and_path[1]
         matching_seed_files: tuple[DiscoveredSeedFile, ...] = tuple(
-            seed_file for seed_file in seed_files if seed_file.file_path.stem == seed_entry.name
+            seed_files_by_name.get(seed_entry.name, ())
         )
         if not matching_seed_files:
             raise SeedDiscoveryError(
