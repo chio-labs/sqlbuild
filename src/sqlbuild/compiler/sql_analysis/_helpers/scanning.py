@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.sql_analysis.constants import (
     SQL_CLOSE_PARENTHESIS,
@@ -10,6 +12,8 @@ from sqlbuild.compiler.sql_analysis.constants import (
     SQL_OPEN_PARENTHESIS,
     SQL_QUOTE_CHARACTERS,
 )
+
+_PAREN_SCAN_SPECIAL: re.Pattern[str] = re.compile(r"[-/'\"`()]")
 
 
 def skip_quoted_text_impl(*, sql: str, start: int, context: str = "SQL") -> int:
@@ -53,6 +57,10 @@ def find_matching_paren_impl(*, sql: str, open_paren_index: int, context: str = 
     depth: int = 1
     index: int = open_paren_index + 1
     while index < len(sql):
+        special: re.Match[str] | None = _PAREN_SCAN_SPECIAL.search(sql, index)
+        if special is None:
+            break
+        index = special.start()
         if sql.startswith("--", index):
             index = skip_line_comment_impl(sql=sql, start=index)
             continue
