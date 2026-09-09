@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from bisect import bisect_right
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 from sqlbuild.compiler.auditing.types import ThresholdOperator
@@ -879,6 +880,7 @@ class _ModelHeaderParser:
         return token
 
 
+@lru_cache(maxsize=256)
 def _tokenize_model_header(header: str) -> list[_ModelHeaderToken]:
     tokens: list[_ModelHeaderToken] = []
     index: int = 0
