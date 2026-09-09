@@ -55,6 +55,9 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/snapshots`
 - `concepts/audits`
 - `concepts/rules`
+- `concepts/rules/configuration-and-selection`
+- `concepts/rules/findings-and-exceptions`
+- `concepts/rules/execution-and-caching`
 - `concepts/testing`
 - `concepts/scenarios`
 - `concepts/selectors`
@@ -67,6 +70,8 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/declaration-scopes/placement`
 - `concepts/declaration-scopes/explorer`
 - `concepts/rules/custom-rules`
+- `concepts/rules/custom-rules/rule-context`
+- `concepts/rules/custom-rules/testing-and-determinism`
 - `concepts/python-nodes/overview`
 - `concepts/python-nodes/loaders`
 - `concepts/python-nodes/tasks`
@@ -5949,15 +5954,15 @@ to eight selected audits at once, using one warehouse connection per active work
 limit deliberately because parallel queries can increase warehouse load and cost. See
 [`sqb audit`](/cli/audit) for precedence, ordering, and cancellation details.
 
-## Compiler-integrated Rules
+## Rules
 
 Source: `concepts/rules.mdx`
 
-Turn repeatable SQL and project review decisions into compiler-enforced findings.
+Enforce repeatable SQL and project requirements during compilation.
 
-Rules are configurable, deterministic checks over compiler-owned SQL, models, dependencies,
-contracts, tests, audits, declarations, and project paths. They run during ordinary compilation,
-before artifacts are completed or warehouse planning begins.
+Rules are configurable compile-time requirements evaluated against SQLBuild's compiled project.
+They turn decisions that would otherwise be repeated in code review into deterministic compiler
+findings.
 
 SQLBuild evaluates checks in this order:
 
@@ -5966,10 +5971,52 @@ SQLBuild evaluates checks in this order:
 3. selected custom Python Rules
 4. artifact completion
 
-Rules report findings and never rewrite source. [`sqb format`](/cli/format) remains the separate,
+Rules report findings and never rewrite source. [`sqb format`](/cli/format) remains the separate
 source-rewriting command.
 
-### Configure Rules
+### Built-in and custom Rules
+
+Native built-in Rules use `SQBR...` codes and cover reusable requirements maintained by SQLBuild.
+Projects can define custom Python Rules with project-owned `XSQBR...` codes. Both use the same
+selection, findings, exceptions, ordering, and cache system.
+
+You can adopt and configure custom Rules without maintaining their implementation. Python authoring
+details live in [Custom Rules](/concepts/rules/custom-rules).
+
+### One definition of project validity
+
+`sqb compile` is authoritative. Build and execution commands use the same compiler path and reject
+configured findings before opening a warehouse connection. A successful compile means mandatory
+compiler correctness and every selected Rule passed.
+
+Use `sqb rules` for focused catalogue inspection and development. Passing a focused Rule selection
+does not claim that the complete configured Rules set passed.
+
+### Rules and other checks
+
+| Capability | Purpose |
+|---|---|
+| Compiler correctness | Mandatory requirements needed to construct a trustworthy project |
+| Rules | Configurable static requirements over compiled project facts |
+| Formatting | Canonical source rewriting through `sqb format` |
+| Tests | Expected behavior of SQL logic |
+| Audits | Warehouse-data quality requirements |
+| Runtime checks | Validation of external resources and execution state |
+
+### Explore Rules
+
+    Select exact Rules or families and configure project-owned options.
+    Understand diagnostics, exact exceptions, path ignores, and stale checks.
+    Learn evaluation order, focused execution, and dependency-aware reuse.
+    Author typed Python Rules over compiler-owned facts.
+
+## Configuration and selection
+
+Source: `concepts/rules/configuration-and-selection.mdx`
+
+Select built-in and custom Rules by exact code or family prefix.
+
+Configure built-in and custom Rules together:
 
 ```toml
 [rules]
@@ -5977,32 +6024,70 @@ select = ["SQBRSQL", "SQBRGRAPH", "XSQBRARCH"]
 ignore = ["SQBRSQL004"]
 ```
 
-An empty `select` disables configurable Rules. Exact codes select one rule; family prefixes select
-matching rules. Built-in codes use `SQBR<FAMILY><three digits>`, such as `SQBRSQL004`,
-`SQBRMODEL101`, and `SQBRGRAPH101`. Custom codes use
-`XSQBR<optional uppercase family><three digits>`, such as `XSQBRARCH001`. A family is always the
-code with its final three digits removed.
+An empty `select` disables configurable Rules. It does not disable mandatory compiler correctness.
 
-### Enforcement
+### Codes and families
 
-`sqb compile` is authoritative. Build and execution commands use the same compiler path and reject
-configured findings before opening a warehouse connection. Use a focused command while developing
-or adopting a rule:
+Built-in codes use `SQBR<FAMILY><three digits>`, such as `SQBRSQL004`, `SQBRMODEL101`, and
+`SQBRGRAPH101`. Custom codes use `XSQBR<optional uppercase family><three digits>`, such as
+`XSQBRARCH001`.
+
+A family is always the code with its final three digits removed:
+
+```text
+SQBRSQL004    → SQBRSQL
+XSQBRARCH001  → XSQBRARCH
+XSQBR001      → XSQBR
+```
+
+Exact codes select one Rule. Prefixes select every matching Rule. `ignore` uses the same matching
+semantics and takes precedence over `select`.
+
+Use the catalogue to inspect available codes and metadata:
 
 ```bash
 sqb rules list
 sqb rules show SQBRSQL004
+```
+
+### Rule options
+
+Custom Rules can declare typed options. Configure them by exact code:
+
+```toml
+[rules.rule_options.XSQBRNAME001]
+required_prefix = "order"
+```
+
+Unknown Rule codes, option names, and invalid option values fail configuration.
+
+### Focused selection
+
+Run one exact Rule or family while developing or adopting it:
+
+```bash
+sqb rules run SQBRSQL004
 sqb rules run SQBRSQL
 sqb rules run XSQBRARCH --select customer_orders
 ```
 
-Native built-ins run before custom Rules. JSON output stays on stdout; lifecycle progress is written
-to stderr.
+Focused execution constructs the compiler facts needed by the selected Rules. It does not replace
+the complete configured enforcement performed by `sqb compile`.
 
-### Findings and suppressions
+  See every `sqb rules` command and exit code.
 
-A finding has a code, project-relative path, line, column, message, and remediation. Exact
-exceptions are stale-checked and require a reason:
+## Findings and exceptions
+
+Source: `concepts/rules/findings-and-exceptions.mdx`
+
+Understand Rule diagnostics and record intentional exceptions safely.
+
+A Rule finding identifies an exact code, project-relative path, line, column, message, and
+remediation. Error findings make compilation fail and prevent artifact completion.
+
+### Exact exceptions
+
+Use an exact exception for one known finding. Exceptions require a reason and are stale-checked:
 
 ```toml
 [[rules.rule_exceptions]]
@@ -6011,7 +6096,12 @@ path = "models/examples/sample_orders.sql"
 reason = "This example intentionally demonstrates one sampled row."
 ```
 
-Broader path-scoped ignores also require a reason:
+An exception refers to one exact Rule code and path. If the finding disappears, SQLBuild reports
+the stale exception so obsolete configuration does not accumulate silently.
+
+### Path-scoped ignores
+
+Use a path ignore when a documented project area intentionally follows a different convention:
 
 ```toml
 [[rules.rule_ignores]]
@@ -6020,31 +6110,67 @@ paths = ["models/examples/**"]
 reason = "Examples retain intentionally minimal SQL."
 ```
 
-Mandatory compiler correctness cannot be suppressed.
+Path ignores accept exact codes and family prefixes. Keep their scope narrow and explain why the
+project differs from the selected requirement.
 
-### Typed compiler facts
+### Mandatory correctness
 
-Custom Rules receive stable, typed views through `RuleContext`:
+Mandatory compiler correctness is not configurable and cannot be suppressed. A project must first
+compile into a trustworthy representation before any selected Rule can run.
 
-- `ctx.sql`: authored and expanded SQL, common SQL structures, and lazy Polyglot AST access
-- `ctx.graph`: compiler-resolved dependencies and dependents
-- `ctx.columns` and `ctx.contracts`: declared, inferred, contract, and grain facts
-- `ctx.tests` and `ctx.audits`: checks associated with a model
-- `ctx.declarations`: public and model-scoped enum and constant facts
-- `ctx.project`: deterministic project resources and tree observations
+### Machine-readable findings
 
-See [Custom Rules](/concepts/rules/custom-rules) for authoring and testing.
+Use JSON when another tool consumes findings:
 
-### Caching and determinism
+```bash
+sqb compile --json
+sqb rules --json run SQBRSQL
+```
 
-Rules cache under `target/rules-cache`. Cache identity includes rule implementation and imported
-helpers, options, invocation subject, accessed compiler-fact families, tracked project observations,
-dialect, and compatibility versions. Negative project-tree observations are dependencies too: if a
-rule observes that a glob has no matches, adding a matching file invalidates that rule.
+Machine-readable output remains on stdout. Lifecycle progress and terminal status are written to
+stderr.
 
-Custom Rules run in a bounded Python subprocess. Environment, time, randomness, network,
-subprocess, and direct filesystem access are rejected. Read supported project text through
-`ctx.project.tree`.
+## Execution and caching
+
+Source: `concepts/rules/execution-and-caching.mdx`
+
+Understand Rule enforcement order, focused runs, and dependency-aware reuse.
+
+SQLBuild evaluates a project in this order:
+
+1. discovery, expansion, and mandatory compiler correctness
+2. selected native built-in Rules
+3. selected custom Python Rules
+4. artifact completion
+
+Native built-ins always run before custom Rules. Structured compile output reports built-in and
+custom durations separately, together with cache hits and misses.
+
+### Authoritative enforcement
+
+`sqb compile` runs the complete configured Rules set. Build and execution commands use the same
+compiler path and reject Rule findings before opening a warehouse connection.
+
+`sqb rules run` is intentionally focused. Use it to inspect one exact code or family, but run the
+normal compiler before treating the complete project as valid.
+
+### Dependency-aware caching
+
+Rules cache under `target/rules-cache`. A cache identity includes the Rule code, implementation and
+imported helpers, options, invocation subject, accessed compiler facts, dialect, tracked project
+observations, and compatibility versions.
+
+Model-subject Rules support fine-grained reuse. Editing one model invalidates affected model
+subjects rather than every Rule invocation. Project-subject Rules run once and are appropriate for
+genuinely project-wide invariants, with correspondingly broader invalidation.
+
+Positive and negative project-tree observations are dependencies. If a Rule observes that a glob
+has no matches, adding a matching file invalidates that result.
+
+### Built-in-only execution
+
+When no custom Rule is selected, SQLBuild does not initialize the custom Python host. When every
+custom result is cached, the host is not launched for evaluation.
 
 ### Agent guidance
 
@@ -8166,11 +8292,11 @@ connection settings are not included.
     Review the directory rules behind the report.
     See all selectors, filters, pagination options, output sections, and JSON behavior.
 
-## Custom Rules
+## Authoring custom Rules
 
 Source: `concepts/rules/custom-rules.mdx`
 
-Define and test repository-owned checks over SQLBuild compiler facts.
+Define repository-owned checks with one typed Python API.
 
 Custom Rules are ordinary Python under `rules/**/*.py`. Only functions decorated with `@rule`
 register; helpers, constants, dataclasses, and classes remain ordinary Python.
@@ -8212,19 +8338,8 @@ def final_directory(*, ctx: RuleContext, project: Project) -> list[Finding]:
     return [] if paths else [ctx.finding(subject="models")]
 ```
 
-### SQL access
-
-Common SQL structures are typed and lazy. Full Polyglot access is deliberate:
-
-```python
-sql = ctx.sql.for_model(model)
-for cte in sql.expanded.ctes():
-    ...
-
-ast = sql.expanded.polyglot_ast()
-```
-
-Rules cannot mutate SQL, resources, adapter lowering, or compiler output.
+Rules cannot mutate SQL, resources, adapter lowering, or compiler output. They return diagnostics
+only.
 
 ### Typed options
 
@@ -8255,6 +8370,90 @@ required_prefix = "order"
 
 Unknown codes, option names, or invalid values fail configuration.
 
+### Continue
+
+    Inspect SQL, graph, contracts, tests, audits, declarations, and project structure.
+    Test findings and keep helper and project observations cacheable.
+
+## RuleContext and compiler facts
+
+Source: `concepts/rules/custom-rules/rule-context.mdx`
+
+Inspect stable compiler-owned facts and opt into lazy SQL AST access.
+
+`RuleContext` exposes typed, read-only views over the compiled project:
+
+- `ctx.sql`: authored and expanded SQL
+- `ctx.graph`: compiler-resolved dependencies and dependents
+- `ctx.columns`: declared and inferred output columns
+- `ctx.contracts`: enforcement and grain facts
+- `ctx.tests` and `ctx.audits`: checks associated with a model
+- `ctx.declarations`: public and model-scoped enums and constants
+- `ctx.project`: compiled resources and deterministic project-tree observations
+
+### Authored and expanded SQL
+
+Choose the SQL representation that matches the requirement:
+
+```python
+sql = ctx.sql.for_model(model)
+
+authored_text = sql.authored.source
+expanded_text = sql.expanded.source
+```
+
+An authoring convention may inspect what a developer wrote. A compiler-output convention may need
+the expanded SQL after interpolation, declarations, and macros.
+
+### Common SQL structures
+
+Common structures are available through typed source nodes:
+
+```python
+for cte in sql.expanded.ctes():
+    ...
+
+for star in sql.authored.star_projections():
+    ...
+```
+
+### Lazy Polyglot access
+
+Use the full Polyglot AST only when common projections are insufficient:
+
+```python
+ast = sql.expanded.polyglot_ast()
+for node in ast.walk():
+    ...
+```
+
+AST construction is lazy. A path or contract Rule does not pay for SQL parsing merely because AST
+access exists elsewhere.
+
+### Project structure
+
+Use the compiler-owned tree rather than direct filesystem calls:
+
+```python
+parts = ctx.project.tree.relative_parts(path=model.path, under="models")
+models = ctx.project.tree.resources_under("models/orders")
+config = ctx.project.tree.read_text("rules/requirements.yaml")
+```
+
+Paths remain project-relative, and observations participate in cache invalidation.
+
+### Choose the subject deliberately
+
+A model-subject Rule is evaluated and cached per model. A project-subject Rule runs once and can
+iterate `ctx.project.models`. Use a project subject only when the invariant genuinely needs a
+project-wide view; its cache invalidation is intentionally broader.
+
+## Testing and deterministic Rules
+
+Source: `concepts/rules/custom-rules/testing-and-determinism.mdx`
+
+Test custom findings and keep implementations safe for dependency-aware caching.
+
 ### Test Rules
 
 Use the public harness to exercise discovery, compilation, and Rules evaluation:
@@ -8277,14 +8476,40 @@ def test_given_missing_order_id_when_evaluating_then_reports_finding() -> None:
     assert result.finding_count == 1
 ```
 
-`RuleCase.files` adds supporting project files and `RuleCase.config` supplies option values.
+`RuleCase.files` adds supporting project files. `RuleCase.config` supplies option values. Include
+passing cases, failing cases, near misses, and exact source-position assertions.
 
-### Deterministic project observations
+Repository pytest files remain outside the SQLBuild project's SQL `tests/` directory.
 
-Rules may import supported pure modules and repository-owned helpers under `rules/`. Direct calls to
-filesystem, environment, clock, random, network, and subprocess APIs are rejected. Use
-`ctx.project.tree.read_text(...)` and `ctx.project.tree.glob(...)`; positive and negative
-observations participate in cache identity.
+### Helpers
+
+Custom Rules can import repository-owned helpers under `rules/` and supported pure Python modules.
+Changing an imported helper invalidates the Rules that depend on it.
+
+Only decorated functions register. Ordinary functions, constants, dataclasses, and classes remain
+helpers.
+
+### Deterministic inputs
+
+Direct filesystem, environment, clock, randomness, network, and subprocess access is rejected.
+Those inputs cannot be reproduced safely by the Rules cache.
+
+Read supported project text and structure through `ctx.project.tree`:
+
+```python
+text = ctx.project.tree.read_text("rules/requirements.yaml")
+matches = ctx.project.tree.glob("models/*/interface/*.sql")
+```
+
+Both positive and negative observations are tracked. If `glob` returns no paths, adding a matching
+path invalidates the cached result.
+
+### Cache granularity
+
+Cache identity incorporates the Rule implementation, imported helper closure, configured options,
+subject, accessed compiler facts, tracked project observations, dialect, and compatibility
+versions. Prefer model subjects for independent per-model checks and project subjects for genuine
+cross-project invariants.
 
 ## Overview
 
