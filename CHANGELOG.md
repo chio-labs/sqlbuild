@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.92.3](https://github.com/chio-labs/sqlbuild/compare/v0.92.2...v0.92.3) (2026-09-09)
+
+
+### Bug Fixes
+
+* use patched polyglot scope validation ([#596](https://github.com/chio-labs/sqlbuild/issues/596)) ([5788959](https://github.com/chio-labs/sqlbuild/commit/5788959de887b4f55159e490e96b8db8554272c2))
+
 ## [0.92.2](https://github.com/chio-labs/sqlbuild/compare/v0.92.1...v0.92.2) (2026-09-09)
 
 
