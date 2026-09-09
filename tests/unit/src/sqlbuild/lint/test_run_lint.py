@@ -202,7 +202,7 @@ def test_given_non_ascii_sql_when_native_linting_then_span_maps_to_authored_colu
         config=LintConfig(dialect="duckdb"),
     )
 
-    assert tuple(item.code for item in result.violations) == ("SQBL001",)
+    assert tuple(item.code for item in result.violations) == ("SQBRSQL001",)
     assert (result.violations[0].line, result.violations[0].column) == test_case.expected_value
     assert (result.violations[0].end_line, result.violations[0].end_column) == (2, 45)
     assert result.violations[0].remediation == ("Use IS NULL or IS NOT NULL when testing for NULL.")
@@ -289,7 +289,7 @@ def test_given_reasoned_local_suppression_when_linting_then_matching_warning_is_
     target.parent.mkdir()
     _ = target.write_text(
         'MODEL (description "ok");\n'
-        "-- sqb: ignore SQBL004 because this fixture intentionally samples one row\n"
+        "-- sqb: ignore SQBRSQL004 because this fixture intentionally samples one row\n"
         "SELECT value FROM items LIMIT 1\n",
         encoding="utf-8",
     )
@@ -307,7 +307,7 @@ def test_given_reasoned_local_suppression_when_linting_then_matching_warning_is_
     [
         LintBehaviorTestCase(
             description="unused local suppression",
-            expected_value="Unused suppression for SQBL004",
+            expected_value="Unused suppression for SQBRSQL004",
         )
     ],
     ids=lambda case: case.description,
@@ -322,7 +322,7 @@ def test_given_unused_local_suppression_when_linting_then_reports_suppression_wa
     target.parent.mkdir()
     _ = target.write_text(
         'MODEL (description "ok");\n'
-        "-- sqb: ignore SQBL004 because this query used to sample one row\n"
+        "-- sqb: ignore SQBRSQL004 because this query used to sample one row\n"
         "SELECT value FROM items ORDER BY value LIMIT 1\n",
         encoding="utf-8",
     )
@@ -332,7 +332,7 @@ def test_given_unused_local_suppression_when_linting_then_reports_suppression_wa
         config=LintConfig(dialect="duckdb"),
     )
 
-    assert tuple(item.code for item in result.violations) == ("SQBL000",)
+    assert tuple(item.code for item in result.violations) == ("SQBRSQL000",)
     assert result.violations[0].message == test_case.expected_value
 
 
@@ -341,7 +341,7 @@ def test_given_unused_local_suppression_when_linting_then_reports_suppression_wa
     [
         LintBehaviorTestCase(
             description="mandatory fault suppression attempt",
-            expected_value={"SQBL000", "description-present"},
+            expected_value={"SQBRSQL000", "description-present"},
         )
     ],
     ids=lambda case: case.description,

@@ -13,7 +13,7 @@ _SUPPRESSION_PREFIX: str = "sqb: ignore"
 _SUPPRESSION_PATTERN: re.Pattern[str] = re.compile(
     r"^\s*--\s*sqb:\s*ignore\s+(?P<code>[A-Za-z0-9_-]+)\s+because\s+(?P<reason>\S.*)\s*$"
 )
-_SUPPRESSION_DIAGNOSTIC_CODE: str = "SQBL000"
+_SUPPRESSION_DIAGNOSTIC_CODE: str = "SQBRSQL000"
 
 
 @dataclass(frozen=True)
@@ -41,7 +41,7 @@ def apply_suppressions(
                     and violation.line == suppression.target_line
                     and violation.code == suppression.code
                     and violation.engine == LINT_ENGINE_NATIVE
-                    and violation.code.startswith("SQBL")
+                    and violation.code.startswith("SQBRSQL")
                 ),
                 None,
             )

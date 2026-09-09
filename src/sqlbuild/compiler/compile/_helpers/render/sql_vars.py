@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -43,6 +44,8 @@ from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_c
 from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
 from sqlbuild.sql_values.types import CollectionRendering
+
+_SQL_INTERPOLATION_SPECIAL: re.Pattern[str] = re.compile(r"['\"`\-/@]")
 
 _CONTEXT: str = "SQL interpolation"
 
@@ -222,6 +225,15 @@ def substitute_sql_vars_with_spans(
     output_length: int = 0
     cursor: int = 0
     while cursor < len(sql):
+        special: re.Match[str] | None = _SQL_INTERPOLATION_SPECIAL.search(sql, cursor)
+        if special is None:
+            parts.append(sql[cursor:])
+            break
+        if special.start() > cursor:
+            plain: str = sql[cursor : special.start()]
+            parts.append(plain)
+            output_length += len(plain)
+            cursor = special.start()
         character: str = sql[cursor]
         if character in SQL_QUOTE_TOKENS:
             end: int = skip_quoted_text(sql=sql, start=cursor, context=_CONTEXT)
@@ -305,31 +317,34 @@ def _interpolate_sql_segment(
     output_length: int = 0
     cursor: int = 0
     while cursor < len(segment):
-        if segment.startswith("@@", cursor):
-            rendered_token: str
-            next_cursor: int
-            rendered_token, next_cursor = _render_interpolation_token(
-                sql=segment,
-                start=cursor,
-                file_path=file_path,
-                effective_vars=effective_vars,
-                context_values=context_values,
+        token_start: int = segment.find(SQL_INTERPOLATION_TOKEN, cursor)
+        if token_start < 0:
+            parts.append(segment[cursor:])
+            break
+        if token_start > cursor:
+            plain: str = segment[cursor:token_start]
+            parts.append(plain)
+            output_length += len(plain)
+        rendered_token: str
+        next_cursor: int
+        rendered_token, next_cursor = _render_interpolation_token(
+            sql=segment,
+            start=token_start,
+            file_path=file_path,
+            effective_vars=effective_vars,
+            context_values=context_values,
+        )
+        parts.append(rendered_token)
+        spans.append(
+            ExpansionSpan(
+                source_start=token_start,
+                source_end=next_cursor,
+                output_start=output_length,
+                output_end=output_length + len(rendered_token),
             )
-            parts.append(rendered_token)
-            spans.append(
-                ExpansionSpan(
-                    source_start=cursor,
-                    source_end=next_cursor,
-                    output_start=output_length,
-                    output_end=output_length + len(rendered_token),
-                )
-            )
-            output_length += len(rendered_token)
-            cursor = next_cursor
-            continue
-        parts.append(segment[cursor])
-        output_length += 1
-        cursor += 1
+        )
+        output_length += len(rendered_token)
+        cursor = next_cursor
     return "".join(parts), tuple(spans)
 
 

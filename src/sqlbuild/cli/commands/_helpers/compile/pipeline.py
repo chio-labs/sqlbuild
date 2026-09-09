@@ -25,7 +25,12 @@ from sqlbuild.cli.commands.models import (
     WrittenTarget,
 )
 from sqlbuild.cli.commands.types import CompileLineageMode
-from sqlbuild.compiler.compile.models import CompileAnalysisSelection
+from sqlbuild.compiler.compile.models import (
+    CompileAnalysisSelection,
+    CompiledObjectKey,
+    CompilerDiagnostic,
+)
+from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.dag.main.build import build_dag_json
@@ -41,6 +46,9 @@ from sqlbuild.compiler.planner.main.selection.selection import resolve_project_s
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.rule_engine.main.load_config import load_rules_config
+from sqlbuild.rule_engine.main.run_rules import run_rules
+from sqlbuild.rule_engine.models import RulesRunResult
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
@@ -129,25 +137,67 @@ def analyze_compile_project(
         _ = complete_compile_phase(
             status=status, message=f"Validated model contracts. ({contract_ms / 1000:.2f}s)"
         )
+    selected_keys: frozenset[CompiledObjectKey] = resolve_project_selectors(
+        select=select,
+        exclude=exclude,
+        all_keys=graph.all_keys,
+        upstream_deps=graph.upstream_deps,
+        downstream_deps=graph.downstream_deps,
+        tag_index=graph.tag_index,
+        path_index=graph.path_index,
+    )
+    rules_result: RulesRunResult = RulesRunResult(
+        findings=(), evaluated_models=0, built_in_ms=0, custom_ms=0
+    )
+    core_diagnostics: tuple[CompilerDiagnostic, ...] = (
+        *graph.project.diagnostics,
+        *contract_result.diagnostics,
+    )
+    if not any(diagnostic.is_error for diagnostic in core_diagnostics):
+        _ = start_compile_phase(status=status, message="Evaluating built-in and custom rules...")
+        rules_result = run_rules(
+            graph=graph,
+            discovered_inputs=discovered_inputs,
+            config=load_rules_config(project_dir=project_dir),
+            project_dir=project_dir,
+            dialect=adapter.sql_analysis_dialect() or "generic",
+            selected_keys=selected_keys if select or exclude else None,
+        )
+        _ = complete_compile_phase(
+            status=status,
+            message=(
+                f"Evaluated rules. (built-in {rules_result.built_in_ms / 1000:.2f}s, "
+                f"custom {rules_result.custom_ms / 1000:.2f}s)"
+            ),
+        )
+    rule_diagnostics: tuple[CompilerDiagnostic, ...] = tuple(
+        CompilerDiagnostic(
+            phase=DiagnosticPhase.RULE,
+            severity=DiagnosticSeverity.ERROR,
+            code=fault.code,
+            message=fault.message,
+            path=fault.path,
+            line=fault.line,
+            column=fault.column,
+            help=fault.remediation,
+        )
+        for fault in rules_result.findings
+    )
     return CompileAnalysis(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         graph=graph,
-        selected_keys=resolve_project_selectors(
-            select=select,
-            exclude=exclude,
-            all_keys=graph.all_keys,
-            upstream_deps=graph.upstream_deps,
-            downstream_deps=graph.downstream_deps,
-            tag_index=graph.tag_index,
-            path_index=graph.path_index,
-        ),
+        selected_keys=selected_keys,
         lineage=lineage,
-        diagnostics=(*graph.project.diagnostics, *contract_result.diagnostics),
+        diagnostics=(*core_diagnostics, *rule_diagnostics),
         discover_ms=discover_ms,
         graph_ms=graph_ms,
         lineage_ms=lineage_ms,
         contract_ms=contract_ms,
+        built_in_rules_ms=rules_result.built_in_ms,
+        custom_rules_ms=rules_result.custom_ms,
+        rule_cache_hits=rules_result.cache_hits,
+        rule_cache_misses=rules_result.cache_misses,
     )
 
 

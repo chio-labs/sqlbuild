@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import replace
+from itertools import chain
 from pathlib import Path
 from typing import cast
 
@@ -523,6 +524,41 @@ def test_given_exact_declaration_placement_when_assembling_then_project_is_accep
     "test_case",
     (
         ScopePlacementCompileTestCase(
+            description="two models reuse directory scope",
+            files={},
+            expected_model_names=("customers", "orders"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_models_in_same_directory_when_reusing_visibility_then_usage_consumers_remain_exact(
+    test_case: ScopePlacementCompileTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "models/domain/area/_constants/value.sql": "CONSTANT (name value, value 1);",
+            "models/domain/area/orders.sql": 'MODEL ();\nSELECT @const("value") AS value',
+            "models/domain/area/customers.sql": 'MODEL ();\nSELECT @const("value") AS value',
+        },
+    )
+
+    inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+    compiled: CompiledProject = assemble_project(inputs=inputs, skip_column_inference=True)
+
+    consumers: set[ResourceIdentity] = {
+        cast(ResourceIdentity, usage.consumer) for usage in compiled.scope_index.usages
+    }
+    assert {consumer.name for consumer in consumers} == set(test_case.expected_model_names)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ScopePlacementCompileTestCase(
             description="used global with one owner is rejected as over broad",
             files={
                 "constants/value.sql": "CONSTANT (name value, value 1);",
@@ -691,6 +727,104 @@ def test_given_scoped_declaration_when_compiling_source_then_uses_authored_sourc
     )
 
     assert inputs.source_inputs[0].source_entry.expression == test_case.expected_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ScopePlacementCompileTestCase(
+            description="two sources reuse file scope",
+            files={},
+            expected_model_names=("customer_orders", "inventory_orders"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_sources_in_same_file_when_reusing_visibility_then_usage_consumers_remain_exact(
+    test_case: ScopePlacementCompileTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    source_path: Path = tmp_path / "sources/domain/source.yml"
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "sources/domain/_constants/value.sql": "CONSTANT (name value, value 14);",
+            "models/orders.sql": "MODEL ();\nSELECT 1",
+        },
+    )
+    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+    discovered = replace(
+        discovered,
+        source_files=(
+            DiscoveredSourceFile(
+                file_path=source_path,
+                relative_path=Path("sources/domain/source.yml"),
+                contents="",
+                source_entries=(
+                    SourceEntry(name="customer_orders", expression='SELECT @const("value")'),
+                    SourceEntry(name="inventory_orders", expression='SELECT @const("value")'),
+                ),
+            ),
+        ),
+    )
+
+    inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discovered,
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+        run_id="source_scope_reuse_test",
+    )
+
+    source_usages: Iterator[UsageRecord] = chain.from_iterable(
+        source.declaration_usages for source in inputs.source_inputs
+    )
+    consumers: set[ResourceIdentity | DeclarationIdentity] = {
+        usage.consumer for usage in source_usages
+    }
+    assert {consumer.name for consumer in consumers} == set(test_case.expected_model_names)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ScopePlacementCompileTestCase(
+            description="two tests reuse directory scope",
+            files={},
+            expected_model_names=("customer_orders", "inventory_orders"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_tests_in_same_directory_when_reusing_visibility_then_usage_consumers_remain_exact(
+    test_case: ScopePlacementCompileTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    test_sql: str = (
+        "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
+        '__expected__orders AS (SELECT @const("value") AS value) SELECT 1'
+    )
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "models/orders.sql": "MODEL ();\nSELECT 1 AS value",
+            "tests/unit/domain/_constants/value.sql": "CONSTANT (name value, value 16);",
+            "tests/unit/domain/customer_orders.sql": test_sql,
+            "tests/unit/domain/inventory_orders.sql": test_sql,
+        },
+    )
+
+    inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+
+    test_usages: Iterator[UsageRecord] = chain.from_iterable(
+        test.declaration_usages for test in inputs.test_inputs
+    )
+    consumers: set[ResourceIdentity | DeclarationIdentity] = {
+        usage.consumer for usage in test_usages
+    }
+    assert {consumer.name for consumer in consumers} == set(test_case.expected_model_names)
 
 
 if __name__ == "__main__":

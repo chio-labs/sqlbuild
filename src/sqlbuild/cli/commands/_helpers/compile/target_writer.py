@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -21,7 +22,7 @@ from sqlbuild.cli.commands.models import (
     WrittenTarget,
 )
 from sqlbuild.cli.paths.main._sql_test_output_path import sql_test_output_path
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.main.execution.sql_test_assembly import (
     _sql_test_model_chain_names,
@@ -273,6 +274,7 @@ def _write_static_tests(
         if project.compile_cache_dir is not None
         else None
     )
+    model_map: dict[str, CompiledModel] = {model.name: model for model in project.models}
     for test in project.sql_tests:
         record_key: str | None = None
         artifact_identity: str | None = None
@@ -280,7 +282,9 @@ def _write_static_tests(
             record_key = sql_test_artifact_record_key(test=test)
             artifact_identity = sql_test_artifact_identity(
                 test=test,
-                model_chain_names=_sql_test_model_chain_names(test=test, project=project),
+                model_chain_names=_sql_test_model_chain_names(
+                    test=test, project=project, model_map=model_map
+                ),
                 context=identity_context,
             )
             cached_record: SqlTestArtifactCacheRecord | None = cached_records.get(record_key)
@@ -351,19 +355,22 @@ def _remove_stale_compiled_files(*, target_dir: Path, managed_paths: set[Path]) 
     compiled_dir: Path = target_dir / _COMPILED_DIR
     if not compiled_dir.is_dir():
         return
-    for path in compiled_dir.rglob("*"):
-        if path.is_file() and path not in managed_paths:
-            path.unlink()
-    directories: list[Path] = sorted(
-        (path for path in compiled_dir.rglob("*") if path.is_dir()),
-        key=lambda path: len(path.parts),
-        reverse=True,
-    )
-    for directory in (*directories, compiled_dir):
-        try:
-            directory.rmdir()
-        except OSError:
-            pass
+    for root, directories, filenames in os.walk(compiled_dir, topdown=False):
+        root_path: Path = Path(root)
+        for filename in filenames:
+            path: Path = root_path / filename
+            if path not in managed_paths:
+                path.unlink()
+        for name in directories:
+            _remove_empty_directory(root_path / name)
+    _remove_empty_directory(compiled_dir)
+
+
+def _remove_empty_directory(directory: Path) -> None:
+    try:
+        directory.rmdir()
+    except OSError:
+        pass
 
 
 def _model_output_path(relative_path: Path) -> Path:

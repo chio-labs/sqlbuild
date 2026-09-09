@@ -127,13 +127,11 @@ _DEFAULT_VALUES: dict[str, object] = {
     "dbt_command": None,
     "dbt_args": [],
     "vars": {},
-    "policy_command": None,
-    "policy_rule_code": None,
-    "policy_skills_check": False,
+    "rules_command": None,
+    "rules_rule_selector": None,
+    "rules_skills_check": False,
     "format_check": False,
     "format_diff": False,
-    "fix_check": False,
-    "fix_diff": False,
     "scope_target": None,
     "scope_at": None,
     "scope_as_path": None,
@@ -281,13 +279,11 @@ class CliNamespace:
     dbt_command: str | None
     dbt_args: list[str]
     vars: dict[str, object]
-    policy_command: str | None
-    policy_rule_code: str | None
-    policy_skills_check: bool
+    rules_command: str | None
+    rules_rule_selector: str | None
+    rules_skills_check: bool
     format_check: bool
     format_diff: bool
-    fix_check: bool
-    fix_diff: bool
     scope_target: str | None
     scope_at: str | None
     scope_as_path: str | None

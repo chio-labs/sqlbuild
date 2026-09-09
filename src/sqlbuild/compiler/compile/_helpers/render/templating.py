@@ -20,6 +20,7 @@ from sqlbuild.compiler.compile.constants import (
     TEMPLATE_NAMESPACE_SEPARATOR,
     TEMPLATE_NE_FUNCTION_NAME,
     TEMPLATE_NULL_LITERAL,
+    TEMPLATE_OPEN_TOKEN,
     TEMPLATE_PATTERN,
     TEMPLATE_TRUE_LITERAL,
 )
@@ -117,6 +118,8 @@ def expand_template_data(
     """Recursively expand template strings inside supported Python container values."""
 
     if isinstance(value, str):
+        if TEMPLATE_OPEN_TOKEN not in value:
+            return value
         resolver: _TemplateResolver = _TemplateResolver(
             variables=variables,
             resolve_variable=lambda name: _lookup_variable(

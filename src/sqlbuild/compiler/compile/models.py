@@ -712,6 +712,7 @@ class CompiledModel:
     fast_lineage_has_star: bool = False
     authored_sql: str = ""
     output_column_locations: dict[str, SourceLocation] = field(default_factory=dict)
+    extract_implicit_alias_columns: bool = True
     macro_deps: tuple[str, ...] = field(default_factory=tuple)
     enum_declarations: tuple[EnumDeclaration, ...] = field(default_factory=tuple)
     constant_declarations: tuple[ConstantDeclaration, ...] = field(default_factory=tuple)

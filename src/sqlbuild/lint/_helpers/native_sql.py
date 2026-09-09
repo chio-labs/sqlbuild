@@ -37,7 +37,7 @@ from sqlbuild.lint.models import LintBody, LintConfig, LintEdit, LintViolation
 _NATIVE_LINT_API_VERSION: int = 1
 _MAX_NATIVE_LINT_WORKERS: int = 8
 _NEWLINE_CHARACTER: str = "\n"
-_UNUSED_CTE_CODE: str = "SQBL005"
+_UNUSED_CTE_CODE: str = "SQBRSQL005"
 _PARSE_ERROR_POSITION_PATTERN: re.Pattern[str] = re.compile(
     r"^Parse error at line (?P<line>\d+), column (?P<column>\d+):"
 )

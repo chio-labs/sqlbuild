@@ -20,6 +20,8 @@ from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
     CompileSourceInput,
     DeclarationExpansionContext,
+    DeclarationResolutionContext,
+    DeclarationScopeResolver,
     LoadedMacro,
     MacroContext,
 )
@@ -27,8 +29,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSourceFile,
 )
-from sqlbuild.compiler.scopes.models import ResourceIdentity, UsageRecord
-from sqlbuild.compiler.scopes.types import ResourceKind
+from sqlbuild.compiler.scopes.models import ResourceIdentity, UsageRecord, VisibilityRecord
+from sqlbuild.compiler.scopes.types import ResourceKind, ScopeKind
 from sqlbuild.spec.contracts.models import (
     SchemaAuditInstance,
     SettingsConfig,
@@ -58,10 +60,40 @@ def build_source_inputs(
 
     source_inputs: list[CompileSourceInput] = []
     sql_validation_enabled: bool = effective_settings.sql_analysis and not no_sql_validation
+    resolver: DeclarationScopeResolver | None = declaration_expansion.resolver
+    reuse_file_scope: bool = (
+        resolver is not None
+        and not any(
+            declaration.scope is ScopeKind.PRIVATE
+            for declaration in resolver.lookup.index.declarations
+        )
+        and not any(
+            resource.kind is ResourceKind.SOURCE for resource in resolver.lookup.grants_by_resource
+        )
+    )
+    declarations_by_file: dict[Path, DeclarationExpansionContext] = {}
     source_file: DiscoveredSourceFile
     for source_file in discovered_inputs.source_files:
         source_entry: SourceEntry
         for raw_source_entry in source_file.source_entries:
+            source_resource: ResourceIdentity = ResourceIdentity(
+                ResourceKind.SOURCE, raw_source_entry.name
+            )
+            scoped_declarations: DeclarationExpansionContext | None = declarations_by_file.get(
+                source_file.file_path
+            )
+            if scoped_declarations is not None:
+                scoped_declarations = _rebind_source_declarations(
+                    context=scoped_declarations, consumer=source_resource
+                )
+            else:
+                scoped_declarations = resolve_declaration_expansion(
+                    context=declaration_expansion,
+                    file_path=source_file.file_path,
+                    resource=source_resource,
+                )
+                if reuse_file_scope:
+                    declarations_by_file[source_file.file_path] = scoped_declarations
             source_entry, usages = expand_source_entry_templates(
                 source_entry=raw_source_entry,
                 file_path=source_file.file_path,
@@ -69,6 +101,7 @@ def build_source_inputs(
                 loaded_macros=loaded_macros,
                 macro_context=macro_context,
                 declaration_expansion=declaration_expansion,
+                scoped_declarations=scoped_declarations,
             )
             source_expression: str | None = source_entry.expression
             if source_expression is not None:
@@ -103,16 +136,18 @@ def expand_source_entry_templates(
     loaded_macros: dict[str, LoadedMacro],
     macro_context: MacroContext,
     declaration_expansion: DeclarationExpansionContext,
+    scoped_declarations: DeclarationExpansionContext | None = None,
 ) -> tuple[SourceEntry, tuple[UsageRecord, ...]]:
     """Apply config templating and SQL interpolation to source metadata."""
 
     expression: str | None = None
     usages: tuple[UsageRecord, ...] = ()
-    scoped_declarations: DeclarationExpansionContext = resolve_declaration_expansion(
-        context=declaration_expansion,
-        file_path=file_path,
-        resource=ResourceIdentity(ResourceKind.SOURCE, source_entry.name),
-    )
+    if scoped_declarations is None:
+        scoped_declarations = resolve_declaration_expansion(
+            context=declaration_expansion,
+            file_path=file_path,
+            resource=ResourceIdentity(ResourceKind.SOURCE, source_entry.name),
+        )
     if source_entry.expression is not None:
         expansion: AuthoredSqlExpansionResult = expand_authored_sql_result(
             sql=source_entry.expression,
@@ -176,6 +211,36 @@ def expand_source_entry_templates(
         ),
     )
     return expanded_entry, usages
+
+
+def _rebind_source_declarations(
+    *, context: DeclarationExpansionContext, consumer: ResourceIdentity
+) -> DeclarationExpansionContext:
+    declarations: DeclarationResolutionContext = context.declarations
+    return replace(
+        context,
+        declarations=replace(
+            declarations,
+            consumer=consumer,
+            enum_visibility=_rebind_visibility(
+                visibility=declarations.enum_visibility, consumer=consumer
+            ),
+            constant_visibility=_rebind_visibility(
+                visibility=declarations.constant_visibility, consumer=consumer
+            ),
+        ),
+    )
+
+
+def _rebind_visibility(
+    *,
+    visibility: dict[str, tuple[VisibilityRecord, ...]],
+    consumer: ResourceIdentity,
+) -> dict[str, tuple[VisibilityRecord, ...]]:
+    rebound: dict[str, tuple[VisibilityRecord, ...]] = {}
+    for name, records in visibility.items():
+        rebound[name] = tuple(replace(record, resource=consumer) for record in records)
+    return rebound
 
 
 def expand_source_column_templates(

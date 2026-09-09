@@ -53,10 +53,8 @@ class CliCommand(StrEnum):
     SCENARIO = "scenario"
     DBT = "dbt"
     SKILLS = "skills"
-    LINT = "lint"
-    FIX = "fix"
     FORMAT = "format"
-    POLICY = "policy"
+    RULES = "rules"
     SCOPE = "scope"
     CONTRACT = "contract"
 
@@ -152,33 +150,7 @@ class SkillsUpdateCommandHandler(Protocol):
     ) -> int: ...
 
 
-class LintCommandHandler(Protocol):
-    def __call__(
-        self,
-        project_dir: Path | None,
-        *,
-        select: tuple[str, ...],
-        exclude: tuple[str, ...],
-        json_output: bool,
-        no_color: bool,
-    ) -> int: ...
-
-
 class FormatCommandHandler(Protocol):
-    def __call__(
-        self,
-        project_dir: Path | None,
-        *,
-        select: tuple[str, ...],
-        exclude: tuple[str, ...],
-        check: bool,
-        diff: bool,
-        json_output: bool,
-        no_color: bool,
-    ) -> int: ...
-
-
-class FixCommandHandler(Protocol):
     def __call__(
         self,
         project_dir: Path | None,

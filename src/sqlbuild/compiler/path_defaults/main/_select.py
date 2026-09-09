@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from sqlbuild.compiler.discovery.exceptions import DiscoveryConflictError
 from sqlbuild.compiler.path_defaults._helpers.matching import (
     is_wildcard,
@@ -15,6 +17,13 @@ def select_path_default(*, model_path: str, path_keys: tuple[str, ...]) -> PathD
     """Match and deterministically select a path default for a model path."""
 
     normalized_path: str = model_path.replace("\\", "/").removeprefix("models/")
+    return _select_normalized_path_default(normalized_path=normalized_path, path_keys=path_keys)
+
+
+@lru_cache(maxsize=32_768)
+def _select_normalized_path_default(
+    *, normalized_path: str, path_keys: tuple[str, ...]
+) -> PathDefaultSelection:
     path_parts: tuple[str, ...] = tuple(part for part in normalized_path.split("/") if part)
     matched_keys: tuple[str, ...] = tuple(
         sorted(

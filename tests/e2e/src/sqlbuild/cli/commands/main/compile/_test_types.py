@@ -50,7 +50,7 @@ class SqlTestHeavyCompilePerformanceGuardTestCase:
 
 
 @dataclass(frozen=True)
-class DagsterShapedCompilePerformanceGuardTestCase:
+class LayeredProductionCompilePerformanceGuardTestCase:
     description: str
     model_count: int
     source_count: int

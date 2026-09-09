@@ -122,123 +122,75 @@ def active_status_filter(ctx) -> str:
 Callers can still pass explicit `@const(...)` or `@enum(...)` values as macro arguments. Context
 lookups are intended for policy owned by the macro; both forms use the caller's declaration scope.
 
-## SQL lint and Project Policy
+## Compiler-integrated Rules
 
-SQL lint evaluates one plain SQL statement. Project Policy evaluates how SQLBuild resources are
-organised, configured, documented, tested, and connected. Both are deterministic: the boundary is
-the evidence a rule needs, not its severity.
+Rules turn repeatable SQL and project review decisions into compile-time diagnostics. Mandatory
+compiler correctness still runs first. SQLBuild then evaluates selected native built-ins, followed by
+selected custom Python rules, before completing compile artifacts. `sqb compile` is authoritative;
+build and execution commands enforce the same configuration. Rules report findings and never rewrite
+SQL. `sqb format` remains a separate source-rewriting command.
 
-`sqb lint` owns statement-local `SQBL` checks, including comment attachment, CTE shape, set
-operations, and joins. Repository-defined statement-local checks use the separate `XSQBL` API:
-
-```python
-from sqlbuild.lint import LintRuleContext, lint_rule
-
-
-@lint_rule(
-    code="XSQBLS001",
-    family="shape",
-    slug="no-star",
-    message="Star projections are not allowed",
-    remediation="Enumerate the intended columns.",
-)
-def no_star(*, ctx: LintRuleContext):
-    if "*" not in ctx.source:
-        return ()
-    start = ctx.source.index("*")
-    return (ctx.finding(start=start, end=start + 1),)
-```
-
-Custom lint receives only SQL source, dialect, AST, source spans, and declared options. It cannot
-observe models, paths, project configuration, the dependency graph, declarations, filesystem,
-environment, process, network, or warehouse state. Configure repository-owned lint files with
-`[lint].rule_paths`, select them with `XSQBL...`, and test them directly with
-`evaluate_lint_rule`.
-
-Project Policy is SQLBuild's opt-in, error-only project-aware checker. It runs offline over the compiled
-project, reports coded faults with remediations, and never rewrites SQL. Its built-in lifecycle is
-native: Rust resolves rule policy, parses each model, evaluates built-ins, applies suppressions,
-and owns the persistent cache and deterministic result ordering.
-
-Project Policy is disabled until the project selects at least one rule. Select the complete built-in policy
-in `sqlbuild_project.toml` with its namespace prefix:
+Select rules in `sqlbuild_project.toml` by exact code or derived family prefix:
 
 ```toml
-[policy]
-select = ["SQBP"]
+[rules]
+select = ["SQBRSQL", "XSQBRARCH"]
+ignore = ["SQBRSQL004"]
 ```
 
-`SQBP` activates every built-in rule. Narrower prefixes such as `SQBPS` activate one family, exact
-codes select individual rules, and `ignore` removes matching rules. Audit, unit-test, and custom-rule
-test-case minimums each default to one and can be overridden under `[policy.thresholds]`.
+Built-in codes use `SQBR<FAMILY><three digits>`, such as `SQBRSQL001` and
+`SQBRGRAPH101`. Custom codes use `XSQBR<optional family><three digits>`, such as
+`XSQBRARCH001`. A family is always the code with its final three digits removed.
 
-Project Policy also keeps model ownership shallow and explicit. Configured level paths separate warehouse
-layers from domain ownership; every owner is a leaf or a branch, subdomain depth defaults to one,
-and declaration roles remain bounded flat-or-grouped containers:
-
-```toml
-[policy.layout]
-levels = ["staging", "intermediate/clean", "intermediate/enriched", "mart"]
-domain_roots = ["sales/partner", "inventory/forecasting"] # optional disambiguation
-
-[policy.thresholds]
-max_subdomain_depth = 1
-min_shared_owner_prefix_directories = 2
-```
-
-Run `sqb policy`, inspect metadata with `sqb policy rule SQBPS101`, and generate agent guidance from
-the same active ruleset with `sqb policy skills`. Use `sqb policy skills --check` in CI to detect stale
-guidance. `--json`, `--select`, and `--exclude` are available for automation and model scoping.
-
-Repository rules use the public API:
+Custom rules are ordinary Python beneath `rules/**/*.py`. Only `@rule` functions register; helper
+functions, constants, dataclasses, classes, and nested packages remain ordinary Python. Typed,
+keyword-only parameters determine whether a rule runs once per model or once per project:
 
 ```python
-from sqlbuild.policy import RuleContext, policy
+from sqlbuild.rules import Finding, Model, RuleContext, rule
 
 
-@policy(
-    code="XSQBPP001",
-    family="prices",
-    slug="typed-currency",
-    message="price models must declare a currency column",
-    remediation="Declare currency in the MODEL columns contract at this model path.",
+@rule(
+    code="XSQBRARCH001",
+    message="Final models must declare an order identifier",
+    remediation="Declare order_id in the model contract.",
 )
-def typed_currency(*, model, ctx: RuleContext):
-    return [] if any(column.name == "currency" for column in ctx.declared_columns) else [
-        ctx.path_fault()
-    ]
+def final_order_identifier(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    declared = {column.name for column in ctx.columns.declared(model)}
+    return [] if "order_id" in declared else [ctx.finding(subject=model)]
 ```
 
-Load repository-owned files through `rule_paths = ["policy/rules"]` or dotted packages through
-`rule_modules`. Test each custom rule with `RuleCase` and `evaluate_rule`. Selecting custom rules
-disables caching unless `[policy.cache] require_cacheable = true`; cacheable rules may import only
-the supported pure modules and must access tracked `.py`, `.sql`, `.toml`, `.yaml`, or `.yml`
-project files through `RuleContext`.
+Use `Project` instead of `Model` for an invariant with no natural model subject. A model rule can
+still inspect project-wide facts. `RuleContext` exposes compiler-owned SQL, graph, columns,
+contracts, tests, audits, declarations, project metadata, and a deterministic project tree. Common
+SQL facts are typed and lazy; the full Polyglot AST is an explicit escape hatch at
+`ctx.sql.for_model(model).expanded.polyglot_ast()`.
 
-Custom Project Policy rules are model-local by default and receive incremental per-model cache
-entries. Set `project_wide=True` on rules that inspect project-wide context or report findings for
-other paths; cacheability validation rejects project-wide context access from a model-local rule.
+Custom rules are deterministic and cacheable. Environment, network, subprocess, time, randomness,
+and untracked filesystem access are rejected. Tracked project text must be read through
+`ctx.project.tree`, and implementation, options, subject facts, helper code, project observations,
+and backend compatibility participate in cache identity.
 
-Python is used only for the SQLBuild compiler adapter and selected custom rules. Built-in-only
-runs cross into the native engine once as a compiled model batch and do not materialize or walk
-Python AST objects. A selected custom rule can still use the public `RuleContext` and raw
-Polyglot AST escape hatch; its findings rejoin native suppression, ordering, and cache policy.
-
-Exact `rule_exceptions` require a rule, file, and reason and fail when stale. Broader
-`rule_ignores` and lone-star allowances also require reasons but are intentionally not
-stale-checked.
-
-Run the neutral large-project benchmark locally after implementation changes:
+Inspect and run focused selections with:
 
 ```bash
-uv run python -m scripts.benchmark_project_policy --models 3000 --iterations 3
-uv run python -m scripts.benchmark_project_policy --models 5000 --iterations 3
+sqb rules list
+sqb rules show SQBRSQL001
+sqb rules run SQBRSQL
+sqb rules run XSQBRARCH --select customer_orders
+sqb rules skills --check
 ```
 
-The generated projects contain no company model names or SQL. They retain representative graph,
-SQL-complexity, contract, test, declaration, and custom-policy stressors and report cold, unchanged,
-leaf-edit, shared-ancestor, tracked-policy-input, custom-rule-edit, cache-disabled, and non-cacheable
-rejection median/p95 timings.
+Test custom rules through the real discovery and compiler path with `RuleCase` and `evaluate_rule`
+from `sqlbuild.rules.testing`.
+
+The neutral large-project benchmark supports 1,000, 3,000, 5,000, and 10,000-model profiles and
+reports repeated median/p95 timings with cache accounting and phase breakdowns:
+
+```bash
+uv run python -m scripts.benchmark_rules --models 3000 --iterations 5
+uv run python -m scripts.benchmark_rules --models 5000 --iterations 5
+```
 
 ## Supported adapters
 

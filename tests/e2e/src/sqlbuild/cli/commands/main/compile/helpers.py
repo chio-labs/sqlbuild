@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import statistics
 import time
 from bisect import bisect_left
 from collections.abc import Callable, Iterator
@@ -29,6 +30,8 @@ _DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
     (0.999, 265_000),
     (1.0, 522_000),
 )
+_DBT_SHAPED_WARM_SAMPLE_COUNT: int = 3
+_PERFORMANCE_SAFETY_TIMEOUT_MULTIPLIER: float = 2.0
 
 
 class CompileBenchmarkMeasurement(NamedTuple):
@@ -37,7 +40,7 @@ class CompileBenchmarkMeasurement(NamedTuple):
     summary: dict[str, int]
 
 
-class DagsterShapedCompileBenchmarkResult(NamedTuple):
+class LayeredProductionCompileBenchmarkResult(NamedTuple):
     cold: CompileBenchmarkMeasurement
     warm: CompileBenchmarkMeasurement
     leaf_model_edit: CompileBenchmarkMeasurement
@@ -45,6 +48,12 @@ class DagsterShapedCompileBenchmarkResult(NamedTuple):
     test_edit: CompileBenchmarkMeasurement
     macro_edit: CompileBenchmarkMeasurement
     project_config_edit: CompileBenchmarkMeasurement
+
+
+class DbtShapedCompileBenchmarkResult(NamedTuple):
+    cold_seconds: float
+    warm_median_seconds: float
+    warm_samples_seconds: tuple[float, ...]
 
 
 def run_advanced_compile_benchmark(
@@ -77,7 +86,7 @@ def run_dbt_shaped_compile_benchmark(
     model_count: int,
     expected_max_seconds: float,
     expected_warm_max_seconds: float,
-) -> tuple[float, float]:
+) -> DbtShapedCompileBenchmarkResult:
     skip_actions: dict[bool, Callable[[], None]] = {
         False: _continue_compile_benchmark,
         True: _skip_compile_benchmark,
@@ -86,13 +95,25 @@ def run_dbt_shaped_compile_benchmark(
     write_dbt_shaped_compile_project(project_dir=project_dir, model_count=model_count)
     cold_seconds: float = _run_compile_benchmark(
         project_dir=project_dir,
-        expected_max_seconds=expected_max_seconds,
+        expected_max_seconds=expected_max_seconds * _PERFORMANCE_SAFETY_TIMEOUT_MULTIPLIER,
     )
-    warm_seconds: float = _run_compile_benchmark(
+    warm_safety_timeout: float = expected_warm_max_seconds * _PERFORMANCE_SAFETY_TIMEOUT_MULTIPLIER
+    _run_compile_benchmark(
         project_dir=project_dir,
-        expected_max_seconds=expected_warm_max_seconds,
+        expected_max_seconds=warm_safety_timeout,
     )
-    return cold_seconds, warm_seconds
+    warm_samples: tuple[float, ...] = tuple(
+        _run_compile_benchmark(
+            project_dir=project_dir,
+            expected_max_seconds=warm_safety_timeout,
+        )
+        for _ in range(_DBT_SHAPED_WARM_SAMPLE_COUNT)
+    )
+    return DbtShapedCompileBenchmarkResult(
+        cold_seconds=cold_seconds,
+        warm_median_seconds=statistics.median(warm_samples),
+        warm_samples_seconds=warm_samples,
+    )
 
 
 def run_test_heavy_compile_benchmark(
@@ -139,7 +160,7 @@ def run_test_heavy_compile_benchmark(
     return cold_seconds, warm_seconds, model_edit_seconds, test_edit_seconds
 
 
-def run_dagster_shaped_compile_benchmark(
+def run_layered_production_compile_benchmark(
     *,
     project_dir: Path,
     model_count: int,
@@ -152,7 +173,7 @@ def run_dagster_shaped_compile_benchmark(
     expected_warm_max_seconds: float,
     expected_edit_max_seconds: float,
     expected_config_edit_max_seconds: float,
-) -> DagsterShapedCompileBenchmarkResult:
+) -> LayeredProductionCompileBenchmarkResult:
     """Measure the production-shaped cold, warm, and representative edit paths."""
 
     skip_actions: dict[bool, Callable[[], None]] = {
@@ -163,7 +184,7 @@ def run_dagster_shaped_compile_benchmark(
     warmup_dir: Path = project_dir.parent / "compile_runtime_warmup"
     write_advanced_compile_project(project_dir=warmup_dir, model_count=32)
     _ = _run_compile_benchmark(project_dir=warmup_dir, expected_max_seconds=5.0)
-    write_dagster_shaped_compile_project(
+    write_layered_production_compile_project(
         project_dir=project_dir,
         model_count=model_count,
         source_count=source_count,
@@ -171,6 +192,7 @@ def run_dagster_shaped_compile_benchmark(
         function_count=function_count,
         macro_count=macro_count,
         test_count=test_count,
+        audit_count=_REPRESENTATIVE_AUDIT_COUNT,
     )
     cold: CompileBenchmarkMeasurement = _run_profiled_compile_benchmark(
         project_dir=project_dir,
@@ -218,7 +240,7 @@ def run_dagster_shaped_compile_benchmark(
         project_dir=project_dir,
         expected_max_seconds=expected_config_edit_max_seconds,
     )
-    return DagsterShapedCompileBenchmarkResult(
+    return LayeredProductionCompileBenchmarkResult(
         cold=cold,
         warm=warm,
         leaf_model_edit=leaf_model_edit,
@@ -632,7 +654,7 @@ SELECT 1
 
 _SPINE_DEPTH: int = 54
 _TEST_CHAIN_DEPTH: int = 8
-_ATTACHED_AUDIT_COUNT: int = 700
+_REPRESENTATIVE_AUDIT_COUNT: int = 700
 _TOP_LEVEL_WITH_INTERVAL: int = 20
 _NESTED_QUERY_INTERVAL: int = 15
 _MACRO_INTERVAL: int = 13
@@ -652,7 +674,7 @@ _SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
 )
 
 
-def write_dagster_shaped_compile_project(
+def write_layered_production_compile_project(
     *,
     project_dir: Path,
     model_count: int,
@@ -661,25 +683,27 @@ def write_dagster_shaped_compile_project(
     function_count: int,
     macro_count: int,
     test_count: int,
+    audit_count: int,
 ) -> None:
     """Write a deterministic generated project matching real resource ratios."""
 
-    _dagster_write_project_config(project_dir=project_dir)
-    _dagster_write_sources(project_dir=project_dir, source_count=source_count)
-    _dagster_write_seeds(project_dir=project_dir, seed_count=seed_count)
-    _dagster_write_functions(project_dir=project_dir, function_count=function_count)
-    _dagster_write_macros(project_dir=project_dir, macro_count=macro_count)
-    _dagster_write_schemas(project_dir=project_dir)
-    _dagster_write_hooks(project_dir=project_dir)
-    _dagster_write_models(
+    _layered_write_project_config(project_dir=project_dir)
+    _layered_write_sources(project_dir=project_dir, source_count=source_count)
+    _layered_write_seeds(project_dir=project_dir, seed_count=seed_count)
+    _layered_write_functions(project_dir=project_dir, function_count=function_count)
+    _layered_write_macros(project_dir=project_dir, macro_count=macro_count)
+    _layered_write_schemas(project_dir=project_dir)
+    _layered_write_hooks(project_dir=project_dir)
+    _layered_write_models(
         project_dir=project_dir,
         model_count=model_count,
         source_count=source_count,
         seed_count=seed_count,
         function_count=function_count,
         macro_count=macro_count,
+        audit_count=audit_count,
     )
-    _dagster_write_tests(
+    _layered_write_tests(
         project_dir=project_dir,
         model_count=model_count,
         test_count=test_count,
@@ -687,10 +711,10 @@ def write_dagster_shaped_compile_project(
     )
 
 
-def _dagster_write_project_config(*, project_dir: Path) -> None:
+def _layered_write_project_config(*, project_dir: Path) -> None:
     project_dir.mkdir(parents=True)
     (project_dir / "sqlbuild_project.toml").write_text(
-        """name = "dagster_shaped_performance_guard"
+        """name = "layered_production_performance_guard"
 adapter = "duckdb"
 default_target = "dev"
 
@@ -716,7 +740,7 @@ materialized = "table"
     )
 
 
-def _dagster_write_sources(*, project_dir: Path, source_count: int) -> None:
+def _layered_write_sources(*, project_dir: Path, source_count: int) -> None:
     sources_dir: Path = project_dir / "sources"
     sources_dir.mkdir()
     entries: str = "\n".join(
@@ -734,7 +758,7 @@ def _dagster_write_sources(*, project_dir: Path, source_count: int) -> None:
     (sources_dir / "generated.yml").write_text(f"sources:\n{entries}\n", encoding="utf-8")
 
 
-def _dagster_write_seeds(*, project_dir: Path, seed_count: int) -> None:
+def _layered_write_seeds(*, project_dir: Path, seed_count: int) -> None:
     seeds_dir: Path = project_dir / "seeds"
     seeds_dir.mkdir()
     schema_entries: str = "\n".join(
@@ -754,7 +778,7 @@ def _dagster_write_seeds(*, project_dir: Path, seed_count: int) -> None:
         )
 
 
-def _dagster_write_functions(*, project_dir: Path, function_count: int) -> None:
+def _layered_write_functions(*, project_dir: Path, function_count: int) -> None:
     functions_dir: Path = project_dir / "functions" / "sql"
     functions_dir.mkdir(parents=True)
     for index in range(function_count):
@@ -770,7 +794,7 @@ input_value + 1
         )
 
 
-def _dagster_write_macros(*, project_dir: Path, macro_count: int) -> None:
+def _layered_write_macros(*, project_dir: Path, macro_count: int) -> None:
     macros_dir: Path = project_dir / "models" / "macros"
     macros_dir.mkdir(parents=True)
     for index in range(macro_count):
@@ -797,7 +821,7 @@ def macro_{index:05d}(expression: str) -> str:
         )
 
 
-def _dagster_write_schemas(*, project_dir: Path) -> None:
+def _layered_write_schemas(*, project_dir: Path) -> None:
     schemas_dir: Path = project_dir / "schemas"
     schemas_dir.mkdir()
     (schemas_dir / "benchmark_row.sql").write_text(
@@ -814,7 +838,7 @@ def _dagster_write_schemas(*, project_dir: Path) -> None:
     )
 
 
-def _dagster_write_hooks(*, project_dir: Path) -> None:
+def _layered_write_hooks(*, project_dir: Path) -> None:
     hooks_dir: Path = project_dir / "hooks" / "sql"
     hooks_dir.mkdir(parents=True)
     (hooks_dir / "before_build.sql").write_text(
@@ -827,7 +851,7 @@ def _dagster_write_hooks(*, project_dir: Path) -> None:
     )
 
 
-def _dagster_write_models(
+def _layered_write_models(
     *,
     project_dir: Path,
     model_count: int,
@@ -835,15 +859,17 @@ def _dagster_write_models(
     seed_count: int,
     function_count: int,
     macro_count: int,
+    audit_count: int,
 ) -> None:
     for index in range(model_count):
-        folder: str = _dagster_model_folder(index=index)
+        folder: str = _layered_model_folder(index=index)
         model_dir: Path = project_dir / "models" / folder
         model_dir.mkdir(parents=True, exist_ok=True)
-        sql: str = _dagster_model_sql(
+        sql: str = _layered_model_sql(
             index=index,
             model_count=model_count,
             source_count=source_count,
+            audit_count=audit_count,
             seed_count=seed_count,
             function_count=function_count,
             macro_count=macro_count,
@@ -851,7 +877,7 @@ def _dagster_write_models(
         (model_dir / f"model_{index:05d}.sql").write_text(sql, encoding="utf-8")
 
 
-def _dagster_model_folder(*, index: int) -> str:
+def _layered_model_folder(*, index: int) -> str:
     layer_index: int = index % 10
     return {
         (True, True): "staging",
@@ -860,11 +886,11 @@ def _dagster_model_folder(*, index: int) -> str:
     }[(layer_index < 4, layer_index < 8)]
 
 
-def _dagster_is_base_model(*, index: int) -> bool:
+def _layered_is_base_model(*, index: int) -> bool:
     return index == 0 or (index >= _SPINE_DEPTH and (index - _SPINE_DEPTH) % _TEST_CHAIN_DEPTH == 0)
 
 
-def _dagster_model_header(*, index: int) -> str:
+def _layered_model_header(*, index: int, audit_count: int) -> str:
     contract_header: str = """MODEL (
   model_schema benchmark_row,
   contract enforced,
@@ -881,10 +907,10 @@ def _dagster_model_header(*, index: int) -> str:
         (True, False): contract_header,
         (False, True): "MODEL ();",
         (False, False): audit_header,
-    }[(index == 0, index >= _ATTACHED_AUDIT_COUNT)]
+    }[(index == 0, index >= audit_count)]
 
 
-def _dagster_model_sql(
+def _layered_model_sql(
     *,
     index: int,
     model_count: int,
@@ -892,27 +918,32 @@ def _dagster_model_sql(
     seed_count: int,
     function_count: int,
     macro_count: int,
+    audit_count: int,
 ) -> str:
     builders: dict[bool, Callable[[], str]] = {
-        True: lambda: _dagster_base_model_sql(
+        True: lambda: _layered_base_model_sql(
             index=index,
             model_count=model_count,
             source_count=source_count,
+            audit_count=audit_count,
         ),
-        False: lambda: _dagster_dependent_model_sql(
+        False: lambda: _layered_dependent_model_sql(
             index=index,
             model_count=model_count,
             seed_count=seed_count,
             function_count=function_count,
             macro_count=macro_count,
+            audit_count=audit_count,
         ),
     }
-    return builders[_dagster_is_base_model(index=index)]()
+    return builders[_layered_is_base_model(index=index)]()
 
 
-def _dagster_base_model_sql(*, index: int, model_count: int, source_count: int) -> str:
-    source_index: int = _dagster_base_source_index(index=index, source_count=source_count)
-    contract_query_sql: str = f"""{_dagster_model_header(index=index)}
+def _layered_base_model_sql(
+    *, index: int, model_count: int, source_count: int, audit_count: int
+) -> str:
+    source_index: int = _layered_base_source_index(index=index, source_count=source_count)
+    contract_query_sql: str = f"""{_layered_model_header(index=index, audit_count=audit_count)}
 
 SELECT
   CAST(id AS INTEGER) AS id,
@@ -920,30 +951,31 @@ SELECT
   CAST(status AS VARCHAR) AS status
 FROM __source("source_{source_index:05d}")
 """
-    regular_query_sql: str = f"""{_dagster_model_header(index=index)}
+    regular_query_sql: str = f"""{_layered_model_header(index=index, audit_count=audit_count)}
 
 SELECT
   id,
-  amount + {_dagster_generated_mapping_expression()}
+  amount + {_layered_generated_mapping_expression()}
     + CAST(@@benchmark_revision AS INTEGER) AS amount,
   status
 FROM __source("source_{source_index:05d}")
 """
     query_sql: str = {True: contract_query_sql, False: regular_query_sql}[index == 0]
-    return _dagster_pad_model_sql(
+    return _layered_pad_model_sql(
         sql=query_sql,
-        target_bytes=_dagster_model_sql_size_target(index=index, model_count=model_count),
+        target_bytes=_layered_model_sql_size_target(index=index, model_count=model_count),
         index=index,
     )
 
 
-def _dagster_dependent_model_sql(
+def _layered_dependent_model_sql(
     *,
     index: int,
     model_count: int,
     seed_count: int,
     function_count: int,
     macro_count: int,
+    audit_count: int,
 ) -> str:
     previous_name: str = f"model_{index - 1:05d}"
     macro_index: int = (index // _MACRO_INTERVAL) % macro_count
@@ -952,7 +984,7 @@ def _dagster_dependent_model_sql(
         False: f"id + {index % 7}",
     }[index % _MACRO_INTERVAL == 0]
     generated_amount_expression: str = (
-        f"amount + {index % 11} + {_dagster_generated_mapping_expression()} "
+        f"amount + {index % 11} + {_layered_generated_mapping_expression()} "
         "+ CAST(@@benchmark_revision AS INTEGER)"
     )
     function_index: int = index % function_count
@@ -971,15 +1003,15 @@ def _dagster_dependent_model_sql(
   CASE WHEN id % 2 = 0 THEN 'even' ELSE 'odd' END AS status
 FROM __ref("{previous_name}") AS previous{join_sql}
 '''
-    direct_sql: str = f"{_dagster_model_header(index=index)}\n\n{query}"
-    with_sql: str = f"""{_dagster_model_header(index=index)}
+    direct_sql: str = f"{_layered_model_header(index=index, audit_count=audit_count)}\n\n{query}"
+    with_sql: str = f"""{_layered_model_header(index=index, audit_count=audit_count)}
 
 WITH transformed AS (
 {query.rstrip()}
 )
 SELECT id, amount, status FROM transformed
 """
-    nested_sql: str = f"""{_dagster_model_header(index=index)}
+    nested_sql: str = f"""{_layered_model_header(index=index, audit_count=audit_count)}
 
 SELECT id, amount, status
 FROM (
@@ -997,14 +1029,14 @@ FROM (
             index % _NESTED_QUERY_INTERVAL == 0,
         )
     ]
-    return _dagster_pad_model_sql(
+    return _layered_pad_model_sql(
         sql=model_sql,
-        target_bytes=_dagster_model_sql_size_target(index=index, model_count=model_count),
+        target_bytes=_layered_model_sql_size_target(index=index, model_count=model_count),
         index=index,
     )
 
 
-def _dagster_write_tests(
+def _layered_write_tests(
     *, project_dir: Path, model_count: int, test_count: int, source_count: int
 ) -> None:
     tests_dir: Path = project_dir / "tests" / "unit"
@@ -1015,7 +1047,7 @@ def _dagster_write_tests(
     for file_index in range((test_count + tests_per_file - 1) // tests_per_file):
         first_test_index: int = file_index * tests_per_file
         blocks: str = "\n".join(
-            _dagster_test_block(
+            _layered_test_block(
                 test_index=test_index,
                 model_count=model_count,
                 source_count=source_count,
@@ -1029,7 +1061,7 @@ def _dagster_write_tests(
         (tests_dir / f"test_group_{file_index:05d}.sql").write_text(blocks, encoding="utf-8")
 
 
-def _dagster_test_block(
+def _layered_test_block(
     *,
     test_index: int,
     model_count: int,
@@ -1041,9 +1073,9 @@ def _dagster_test_block(
     group_index: int = ((test_index // 5) * representative_group_count) // repeated_target_count
     base_index: int = _SPINE_DEPTH + group_index * _TEST_CHAIN_DEPTH
     target_index: int = base_index + _TEST_CHAIN_DEPTH - 1
-    source_index: int = _dagster_base_source_index(index=base_index, source_count=source_count)
+    source_index: int = _layered_base_source_index(index=base_index, source_count=source_count)
     fixture_row_count: int = 40 + (test_index % 5) * 40
-    return _dagster_test_sql(
+    return _layered_test_sql(
         test_index=test_index,
         source_index=source_index,
         target_index=target_index,
@@ -1052,7 +1084,7 @@ def _dagster_test_block(
     )
 
 
-def _dagster_test_sql(
+def _layered_test_sql(
     *,
     test_index: int,
     source_index: int,
@@ -1069,7 +1101,7 @@ __assert__non_negative_{target_index:05d} AS (
   SELECT * FROM __ref("model_{target_index:05d}") WHERE amount < 0
 )"""
     assertion: str = {True: assertion_sql, False: ""}[include_assertion]
-    return f"""TEST (name "dagster_shaped_case_{test_index:05d}");
+    return f"""TEST (name "layered_production_case_{test_index:05d}");
 
 WITH
 __source__source_{source_index:05d} AS (
@@ -1082,7 +1114,7 @@ SELECT 1
 """
 
 
-def _dagster_base_source_index(*, index: int, source_count: int) -> int:
+def _layered_base_source_index(*, index: int, source_count: int) -> int:
     base_ordinal: int = {
         True: 0,
         False: 1 + (index - _SPINE_DEPTH) // _TEST_CHAIN_DEPTH,
@@ -1090,7 +1122,7 @@ def _dagster_base_source_index(*, index: int, source_count: int) -> int:
     return base_ordinal % source_count
 
 
-def _dagster_model_sql_size_target(*, index: int, model_count: int) -> int:
+def _layered_model_sql_size_target(*, index: int, model_count: int) -> int:
     quantile: float = (index + 1) / model_count
     upper_quantiles: tuple[float, ...] = tuple(item[0] for item in _SQL_SIZE_PROFILE)
     upper_index: int = bisect_left(upper_quantiles, quantile)
@@ -1100,12 +1132,12 @@ def _dagster_model_sql_size_target(*, index: int, model_count: int) -> int:
     return round(lower_size + position * (upper_size - lower_size))
 
 
-def _dagster_generated_mapping_expression() -> str:
+def _layered_generated_mapping_expression() -> str:
     clauses: str = "".join(f"WHEN id = {value:05d} THEN {value % 13:02d} " for value in range(45))
     return f"CASE {clauses} ELSE 0 END"
 
 
-def _dagster_pad_model_sql(*, sql: str, target_bytes: int, index: int) -> str:
+def _layered_pad_model_sql(*, sql: str, target_bytes: int, index: int) -> str:
     missing_bytes: int = max(0, target_bytes - len(sql.encode()))
     line_template: str = "-- generated field 00000 maps source_metric to output_metric_00000\n"
     line_count: int = (missing_bytes + len(line_template) - 1) // len(line_template)

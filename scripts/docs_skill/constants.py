@@ -8,8 +8,9 @@ DEFAULT_CLONE_DIR: Path = Path(tempfile.gettempdir()) / "sqlbuild-docs-skill-sou
 DEFAULT_OUTPUT_PATH: Path = Path("src/sqlbuild/.agents/skills/sqlbuild/SKILL.md")
 GENERATED_MARKER: str = "<!-- generated-by: sqlbuild skills -->"
 SKILL_DESCRIPTION: str = (
-    "Use when working with SQLBuild syntax, project structure, configuration, testing, "
-    "adapters, CLI behavior, SQLBuild docs, or SQLBuild-related code."
+    "ALWAYS load this skill when doing ANY SQLBuild work. This includes models, tests, audits, "
+    "scenarios, configuration, CLI behavior, adapters, dependencies, documentation, and related "
+    "code."
 )
 SKILL_FRONTMATTER: str = f"""---
 name: sqlbuild

@@ -167,9 +167,24 @@ path = "src/sqlbuild/integrations/rivers/__init__.py"
 reason = "These imports preserve Rivers' documented external package-root APIs."
 
 [[rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/rules/__init__.py"
+reason = "The Rules package is the documented custom-rule authoring API, not an internal runtime leaf."
+
+[[rule_exceptions]]
 rule = "FFR402"
-path = "src/sqlbuild/lint/__init__.py"
-reason = "These imports provide the documented statement-local custom lint authoring API."
+path = "src/sqlbuild/rules/__init__.py"
+reason = "These imports provide the documented sqlbuild.rules package-root authoring API."
+
+[[rule_exceptions]]
+rule = "FFR307"
+path = "src/sqlbuild/rules/testing.py"
+reason = "sqlbuild.rules.testing is the documented public custom-rule harness module."
+
+[[rule_exceptions]]
+rule = "FFR403"
+path = "src/sqlbuild/rules/testing.py"
+reason = "This deliberate public shim keeps test-harness internals outside the stable authoring API."
 
 [[rule_exceptions]]
 rule = "FFS120"

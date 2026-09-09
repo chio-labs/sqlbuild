@@ -73,7 +73,7 @@ def build_cli_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     _add_workspace_parsers(subparsers)
     _add_dbt_parsers(subparsers)
     _add_skills_parsers(subparsers)
-    _add_policy_parser(subparsers)
+    _add_rules_parser(subparsers)
     return parser
 
 
@@ -300,16 +300,6 @@ def _add_quality_parsers(
     _ = add_select_args(audit_parser)
     _ = add_vars_args(audit_parser)
     _ = add_dbt_config_args(parser=audit_parser)
-
-    lint_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.LINT)
-    lint_parser.add_argument("--json", action="store_true", default=False)
-    _ = add_select_args(lint_parser)
-
-    fix_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.FIX)
-    fix_parser.add_argument("--json", action="store_true", default=False)
-    fix_parser.add_argument("--check", dest="fix_check", action="store_true")
-    fix_parser.add_argument("--diff", dest="fix_diff", action="store_true")
-    _ = add_select_args(fix_parser)
 
     format_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.FORMAT)
     format_parser.add_argument("--json", action="store_true", default=False)
@@ -684,16 +674,19 @@ def _add_skills_parsers(
     skills_parser.add_argument("--force", dest="skills_force", action="store_true")
 
 
-def _add_policy_parser(
+def _add_rules_parser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
-    policy_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.POLICY)
-    policy_parser.add_argument("--json", action="store_true", default=False)
-    add_select_args(policy_parser)
-    policy_subparsers: argparse._SubParsersAction[argparse.ArgumentParser] = (
-        policy_parser.add_subparsers(dest="policy_command")
+    rules_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.RULES)
+    rules_parser.add_argument("--json", action="store_true", default=False)
+    rules_subparsers: argparse._SubParsersAction[argparse.ArgumentParser] = (
+        rules_parser.add_subparsers(dest="rules_command", required=True)
     )
-    rule_parser: argparse.ArgumentParser = policy_subparsers.add_parser("rule")
-    rule_parser.add_argument("policy_rule_code")
-    skills_parser: argparse.ArgumentParser = policy_subparsers.add_parser("skills")
-    skills_parser.add_argument("--check", dest="policy_skills_check", action="store_true")
+    _ = rules_subparsers.add_parser("list")
+    show_parser: argparse.ArgumentParser = rules_subparsers.add_parser("show")
+    show_parser.add_argument("rules_rule_selector")
+    run_parser: argparse.ArgumentParser = rules_subparsers.add_parser("run")
+    run_parser.add_argument("rules_rule_selector")
+    add_select_args(run_parser)
+    skills_parser: argparse.ArgumentParser = rules_subparsers.add_parser("skills")
+    skills_parser.add_argument("--check", dest="rules_skills_check", action="store_true")

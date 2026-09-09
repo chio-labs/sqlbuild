@@ -80,6 +80,7 @@ TEMPLATE_EQ_FUNCTION_NAME: str = "eq"
 TEMPLATE_NE_FUNCTION_NAME: str = "ne"
 TEMPLATE_COALESCE_FUNCTION_NAME: str = "coalesce"
 TEMPLATE_ESCAPE_TOKEN: str = "\\"
+TEMPLATE_OPEN_TOKEN: str = "${"
 TEMPLATE_FALSE_VALUES: frozenset[str] = frozenset({"", "0", "false"})
 MISSING_TEMPLATE_VALUE_MESSAGE_PARTS: frozenset[str] = frozenset(
     {

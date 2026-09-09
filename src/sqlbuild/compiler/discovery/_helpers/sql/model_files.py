@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from bisect import bisect_right
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 from sqlbuild.compiler.auditing.types import ThresholdOperator
@@ -78,6 +79,7 @@ _MODEL_HEADER_PATTERN: re.Pattern[str] = re.compile(
     r"^\s*MODEL\s*\((?P<header>.*?)\)\s*;\s*(?P<sql>.*)\Z",
     re.DOTALL,
 )
+_SELECT_SCAN_SPECIAL: re.Pattern[str] = re.compile(r"['\"`()sSfFuU]")
 
 
 @dataclass(frozen=True)
@@ -292,6 +294,11 @@ def _top_level_select_list_bounds(sql: str) -> tuple[int, int] | None:
     length: int = len(sql)
     has_union_candidate: bool = _SQL_UNION_LOWER_KEYWORD in sql.lower()
     while index < length:
+        if in_quote is None:
+            special: re.Match[str] | None = _SELECT_SCAN_SPECIAL.search(sql, index)
+            if special is None:
+                break
+            index = special.start()
         character: str = sql[index]
         if in_quote is not None:
             if character == _MODEL_HEADER_ESCAPE_CHARACTER:
@@ -873,6 +880,7 @@ class _ModelHeaderParser:
         return token
 
 
+@lru_cache(maxsize=256)
 def _tokenize_model_header(header: str) -> list[_ModelHeaderToken]:
     tokens: list[_ModelHeaderToken] = []
     index: int = 0

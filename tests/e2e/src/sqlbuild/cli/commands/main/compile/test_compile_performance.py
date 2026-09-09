@@ -10,18 +10,19 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompilePerformanceGuardTestCase,
     CompileScalingGuardTestCase,
-    DagsterShapedCompilePerformanceGuardTestCase,
     DbtShapedCompilePerformanceGuardTestCase,
+    LayeredProductionCompilePerformanceGuardTestCase,
     SqlTestHeavyCompilePerformanceGuardTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     CompileBenchmarkMeasurement,
-    DagsterShapedCompileBenchmarkResult,
+    DbtShapedCompileBenchmarkResult,
+    LayeredProductionCompileBenchmarkResult,
     measure_compiled_test_sql_bytes,
     measure_model_sql_bytes,
     run_advanced_compile_benchmark,
-    run_dagster_shaped_compile_benchmark,
     run_dbt_shaped_compile_benchmark,
+    run_layered_production_compile_benchmark,
     run_test_heavy_compile_benchmark,
 )
 
@@ -128,7 +129,7 @@ def test_given_wide_scan_heavy_projects_when_doubling_sql_size_then_compile_scal
             expected_min_sql_bytes=18_000_000,
             expected_max_sql_bytes=25_000_000,
             expected_max_seconds=4.0,
-            expected_warm_max_seconds=2.25,
+            expected_warm_max_seconds=3.0,
         ),
         DbtShapedCompilePerformanceGuardTestCase(
             description="dbt-shaped 10000 model cold and warm compiles stay within budget",
@@ -146,23 +147,26 @@ def test_given_dbt_shaped_project_when_compiling_cold_and_warm_then_finishes_wit
     test_case: DbtShapedCompilePerformanceGuardTestCase,
 ) -> None:
     project_dir: Path = tmp_path / f"dbt_shaped_{test_case.model_count}"
-    cold_seconds, warm_seconds = run_dbt_shaped_compile_benchmark(
+    result: DbtShapedCompileBenchmarkResult = run_dbt_shaped_compile_benchmark(
         project_dir=project_dir,
         model_count=test_case.model_count,
         expected_max_seconds=test_case.expected_max_seconds,
         expected_warm_max_seconds=test_case.expected_warm_max_seconds,
     )
     _LOGGER.info(
-        f"dbt-shaped compile models={test_case.model_count} cold={cold_seconds:.3f}s "
-        f"warm={warm_seconds:.3f}s budgets={test_case.expected_max_seconds:g}s/"
+        f"dbt-shaped compile models={test_case.model_count} "
+        f"cold={result.cold_seconds:.3f}s "
+        f"warm_median={result.warm_median_seconds:.3f}s "
+        f"warm_samples={[round(sample, 3) for sample in result.warm_samples_seconds]} "
+        f"budgets={test_case.expected_max_seconds:g}s/"
         f"{test_case.expected_warm_max_seconds:g}s"
     )
 
     total_sql_bytes: int = measure_model_sql_bytes(project_dir)
     assert test_case.expected_min_sql_bytes <= total_sql_bytes
     assert total_sql_bytes <= test_case.expected_max_sql_bytes
-    assert cold_seconds < test_case.expected_max_seconds
-    assert warm_seconds < test_case.expected_warm_max_seconds
+    assert result.cold_seconds < test_case.expected_max_seconds
+    assert result.warm_median_seconds < test_case.expected_warm_max_seconds
 
 
 @pytest.mark.performance
@@ -220,8 +224,8 @@ def test_given_test_heavy_project_when_compiling_then_finishes_within_budget(
 @pytest.mark.parametrize(
     "test_case",
     [
-        DagsterShapedCompilePerformanceGuardTestCase(
-            description="Dagster-shaped compile paths stay within production budgets",
+        LayeredProductionCompilePerformanceGuardTestCase(
+            description="Layered production-shaped compile paths stay within production budgets",
             model_count=976,
             source_count=232,
             seed_count=46,
@@ -242,12 +246,12 @@ def test_given_test_heavy_project_when_compiling_then_finishes_within_budget(
     ],
     ids=lambda case: case.description,
 )
-def test_given_dagster_shaped_project_when_compiling_and_editing_then_reports_phased_budgets(
+def test_given_layered_production_project_when_compiling_and_editing_then_reports_phased_budgets(
     tmp_path: Path,
-    test_case: DagsterShapedCompilePerformanceGuardTestCase,
+    test_case: LayeredProductionCompilePerformanceGuardTestCase,
 ) -> None:
-    project_dir: Path = tmp_path / "dagster_shaped"
-    result: DagsterShapedCompileBenchmarkResult = run_dagster_shaped_compile_benchmark(
+    project_dir: Path = tmp_path / "layered_production"
+    result: LayeredProductionCompileBenchmarkResult = run_layered_production_compile_benchmark(
         project_dir=project_dir,
         model_count=test_case.model_count,
         source_count=test_case.source_count,

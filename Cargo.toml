@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "crates/sqlbuild-policy-native",
+    "crates/sqlbuild-rules-native",
     "crates/sqlbuild-structure-checker",
 ]
 resolver = "2"

@@ -79,6 +79,7 @@ def test_given_local_project_when_running_compile_then_it_does_not_connect(
                 "Compiled project graph.",
                 "Analyzed column lineage.",
                 "Validated model contracts.",
+                "Evaluated rules.",
                 "Wrote compiled artifacts.",
             ),
         )
@@ -139,6 +140,7 @@ def test_given_tty_stdout_when_running_compile_then_it_persists_phase_timings(
         "Compiling project graph...",
         "Analyzing column lineage...",
         "Validating model contracts...",
+        "Evaluating built-in and custom rules...",
         "Writing compiled artifacts...",
     ]
     assert len(completed_messages) == len(test_case.expected_stdout_fragments)
