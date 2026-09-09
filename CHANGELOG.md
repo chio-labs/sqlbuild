@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.94.0](https://github.com/chio-labs/sqlbuild/compare/v0.93.1...v0.94.0) (2026-09-09)
+
+
+### Features
+
+* integrate configurable compiler rules ([#601](https://github.com/chio-labs/sqlbuild/issues/601)) ([697ff36](https://github.com/chio-labs/sqlbuild/commit/697ff36fe917fcb2c890783df5557d8d997304a1))
+
 ## [0.93.1](https://github.com/chio-labs/sqlbuild/compare/v0.93.0...v0.93.1) (2026-09-09)
 
 
