@@ -176,6 +176,71 @@ _PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabas
             expected_seed_count=0,
             expected_manifest_node_count=2,
         ),
+        RunCompilePipelineIntegrationTestCase(
+            description="Python macro receives constants and enums visible to its caller",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_TOML,
+                "models/_constants/policy.sql": (
+                    "CONSTANT (name minimum_quantity, value 2);\n"
+                    'CONSTANT (name regions, value ["north", "south"]);\n'
+                    "CONSTANT (name unique_ids, value {2, 1});\n"
+                    'CONSTANT (name labels, value (north "North", south "South"));\n'
+                    'CONSTANT (name adjustment, type decimal, value "2.50");\n'
+                ),
+                "models/_enums/status.sql": (
+                    'ENUM (name order_status, members (ACTIVE "active", PAUSED "paused"));\n'
+                ),
+                "models/_macros/policy.py": (
+                    "from sqlbuild.compiler.compile.models import MacroContext\n\n\n"
+                    "def policy_columns(ctx: MacroContext) -> str:\n"
+                    "    minimum = ctx.constants['minimum_quantity']\n"
+                    "    region_count = len(ctx.constants['regions'])\n"
+                    "    unique_count = len(ctx.constants['unique_ids'])\n"
+                    "    label = ctx.constants['labels']['north']\n"
+                    "    adjustment = ctx.constants['adjustment']\n"
+                    "    active = ctx.enums['order_status']['ACTIVE']\n"
+                    "    optional = ctx.constants.get('maximum_quantity', 7)\n"
+                    "    has_closed = 'CLOSED' in ctx.enums['order_status']\n"
+                    "    return (\n"
+                    '        f"{minimum} AS minimum_quantity, {region_count} AS region_count, "\n'
+                    "        f\"{unique_count} AS unique_count, '{label}' AS label, \"\n"
+                    "        f\"{adjustment} AS adjustment, '{active}' AS active_status, \"\n"
+                    '        f"{optional} AS optional_quantity, {has_closed} AS has_closed"\n'
+                    "    )\n"
+                ),
+                "models/policy_summary.sql": (
+                    "MODEL (materialized view);\n\nSELECT @policy_columns()"
+                ),
+            },
+            expected_models={
+                "policy_summary": ExpectedModelEntry(
+                    description="model expanded with caller-visible declarations",
+                    expected_resolved_sql_fragment=(
+                        "SELECT 2 AS minimum_quantity, 2 AS region_count, 2 AS unique_count, "
+                        "'North' AS label, 2.50 AS adjustment, 'active' AS active_status, "
+                        "7 AS optional_quantity, False AS has_closed"
+                    ),
+                    expected_logical_ddl_fragment="CREATE OR REPLACE VIEW",
+                    expected_manifest_compiled_code_fragment=(
+                        "SELECT 2 AS minimum_quantity, 2 AS region_count, 2 AS unique_count, "
+                        "'North' AS label, 2.50 AS adjustment, 'active' AS active_status, "
+                        "7 AS optional_quantity, False AS has_closed"
+                    ),
+                ),
+            },
+            expected_model_count=1,
+            expected_seed_count=0,
+            expected_manifest_node_count=1,
+            expected_declaration_usages=(
+                "constant:adjustment",
+                "constant:labels",
+                "constant:minimum_quantity",
+                "constant:regions",
+                "constant:unique_ids",
+                "enum:order_status",
+                "macro:policy_columns",
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -193,6 +258,13 @@ def test_given_project_files_when_running_compile_pipeline_then_produces_valid_o
 
     assert len(result.plan_output.model_entries) == test_case.expected_model_count
     assert len(result.plan_output.seed_entries) == test_case.expected_seed_count
+    actual_declaration_usages: tuple[str, ...] = tuple(
+        sorted(
+            f"{usage.declaration.kind.value}:{usage.declaration.name}"
+            for usage in result.project.scope_index.usages
+        )
+    )
+    assert actual_declaration_usages == test_case.expected_declaration_usages
     manifest: dict[str, object] = build_manifest_for_pipeline_result(
         result=result,
         project_name="demo",

@@ -269,7 +269,7 @@ def declaration_usage_records(
             if is_enum
             else declarations.constant_visibility.get(name, ())
         )
-        for record in _usage_visibility(visibility=visibility, consumer=resource):
+        for record in usage_visibility(visibility=visibility, consumer=resource):
             usages.append(
                 UsageRecord(
                     consumer=resource,
@@ -530,7 +530,7 @@ def expand_declaration_references_result(
             visibility = declarations.constant_visibility.get(constant_match.group("name"), ())
             member = None
         if declarations.consumer is not None:
-            for visible in _usage_visibility(
+            for visible in usage_visibility(
                 visibility=visibility,
                 consumer=declarations.consumer,
             ):
@@ -560,7 +560,7 @@ def expand_declaration_references_result(
     )
 
 
-def _usage_visibility(
+def usage_visibility(
     *,
     visibility: tuple[VisibilityRecord, ...],
     consumer: ResourceIdentity | DeclarationIdentity,

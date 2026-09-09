@@ -53,6 +53,7 @@ class RunCompilePipelineIntegrationTestCase:
     expected_model_count: int = 0
     expected_seed_count: int = 0
     expected_manifest_node_count: int = 0
+    expected_declaration_usages: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,21 @@ class MacroCompositionIntegrationTestCase:
     macro_name: str
     expected_dependencies: tuple[str, ...]
     expected_declaration_resolution_count: int
+
+
+@dataclass(frozen=True)
+class MacroDeclarationContextErrorTestCase:
+    description: str
+    project_files: dict[str, str]
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class MacroDeclarationResourceTestCase:
+    description: str
+    expected_model_sql_fragment: str
+    expected_test_sql_fragment: str
+    expected_audit_sql_fragment: str
 
 
 @dataclass(frozen=True)

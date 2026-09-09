@@ -15,5 +15,9 @@ class CompileInputError(ValueError):
         self.help = help
 
 
+class MacroDeclarationLookupError(CompileInputError, KeyError):
+    """Retain authored diagnostics while honoring the Mapping lookup contract."""
+
+
 class AnalysisCacheEntryError(ValueError):
     """Raised when a persisted model analysis cache entry is invalid."""
