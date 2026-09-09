@@ -117,6 +117,8 @@ def expand_template_data(
     """Recursively expand template strings inside supported Python container values."""
 
     if isinstance(value, str):
+        if "${" not in value:
+            return value
         resolver: _TemplateResolver = _TemplateResolver(
             variables=variables,
             resolve_variable=lambda name: _lookup_variable(
