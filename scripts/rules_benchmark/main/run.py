@@ -26,8 +26,8 @@ def run_rules_benchmark(argv: list[str] | None = None) -> int:
         parser.error("--iterations must be positive")
     if arguments.rule_counts is not None:
         rule_counts: tuple[int, ...] = tuple(dict.fromkeys(arguments.rule_counts))
-        if any(count < 3 or count > 999 for count in rule_counts):
-            parser.error("--rule-counts values must be between 3 and 999")
+        if any(count < 1 or count > 999 for count in rule_counts):
+            parser.error("--rule-counts values must be between 1 and 999")
         return run_rule_count_benchmark(
             model_count=arguments.models,
             iterations=arguments.iterations,

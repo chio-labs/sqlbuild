@@ -417,10 +417,16 @@ def _mutate_custom_rule(*, path: Path) -> None:
         "def check_003(*, model: Model, ctx: RuleContext) -> list[Finding]:\n"
         "    select_count = (1 + 0)"
     )
+    project_plain: str = 'content = ctx.project.tree.read_text("rules/benchmark_input.yaml")'
+    project_changed: str = 'content = (ctx.project.tree.read_text("rules/benchmark_input.yaml"))'
     if plain in source:
         source = source.replace(plain, changed, 1)
     elif changed in source:
         source = source.replace(changed, plain, 1)
+    elif project_plain in source:
+        source = source.replace(project_plain, project_changed, 1)
+    elif project_changed in source:
+        source = source.replace(project_changed, project_plain, 1)
     else:
         raise RulesBenchmarkError("could not locate custom rule implementation marker")
     path.write_text(source, encoding="utf-8")
