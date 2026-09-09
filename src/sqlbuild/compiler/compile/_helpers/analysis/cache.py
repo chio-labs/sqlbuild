@@ -32,8 +32,8 @@ from sqlbuild.compiler.lineage.types import (
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 
-_ANALYSIS_CACHE_VERSION: int = 7
-_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v7-schema-binding"
+_ANALYSIS_CACHE_VERSION: int = 8
+_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v8-polyglot-scope-fix"
 _MAX_CACHE_ENTRY_BYTES: int = 10_000_000
 _SHA256_HEX_LENGTH: int = 64
 _CACHE_ENTRY_SEPARATOR: str = "\n"
@@ -85,7 +85,7 @@ def build_analysis_cache_context(
         "algorithm": _ANALYSIS_ALGORITHM_FINGERPRINT,
         "cache_version": _ANALYSIS_CACHE_VERSION,
         "sqlbuild_version": _package_version("sqlbuild"),
-        "polyglot_version": _package_version("polyglot-sql"),
+        "polyglot_version": _package_version("polyglot-sql-chio"),
         "python_version": platform.python_version_tuple()[:2],
         "allow_compact_analysis": allow_compact_analysis,
         "inference_profile": profile_payload,
