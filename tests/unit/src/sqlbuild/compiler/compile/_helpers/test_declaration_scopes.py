@@ -519,6 +519,35 @@ def test_given_exact_declaration_placement_when_assembling_then_project_is_accep
     assert compiled.scope_index.completeness.placement is test_case.expected_complete
 
 
+def test_given_models_in_same_directory_when_reusing_visibility_then_usage_consumers_remain_exact(
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "models/domain/area/_constants/value.sql": "CONSTANT (name value, value 1);",
+            "models/domain/area/orders.sql": 'MODEL ();\nSELECT @const("value") AS value',
+            "models/domain/area/customers.sql": 'MODEL ();\nSELECT @const("value") AS value',
+        },
+    )
+
+    inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+    compiled: CompiledProject = assemble_project(inputs=inputs, skip_column_inference=True)
+
+    consumers: set[ResourceIdentity] = {
+        usage.consumer
+        for usage in compiled.scope_index.usages
+        if usage.declaration == DeclarationIdentity(DeclarationKind.CONSTANT, "value")
+        and isinstance(usage.consumer, ResourceIdentity)
+    }
+    assert consumers == {
+        ResourceIdentity(ResourceKind.MODEL, "customers"),
+        ResourceIdentity(ResourceKind.MODEL, "orders"),
+    }
+
+
 @pytest.mark.parametrize(
     "test_case",
     (

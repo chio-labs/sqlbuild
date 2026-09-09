@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, fields, replace
+from dataclasses import dataclass, field, fields, replace
 from inspect import Parameter, Signature
 from pathlib import Path
 from typing import Any, cast
@@ -120,6 +120,7 @@ from sqlbuild.compiler.scopes.models import (
 from sqlbuild.compiler.scopes.types import (
     DeclarationKind,
     ResourceKind,
+    ScopeKind,
     UsageKind,
     VisibilityReason,
 )
@@ -158,6 +159,46 @@ class _VisibleModelDeclarations:
     macros: dict[str, LoadedMacro]
     macro_records: dict[str, DeclarationRecord]
     inaccessible_macros: dict[str, DeclarationRecord]
+
+
+@dataclass
+class _VisibleModelDeclarationCache:
+    context: ModelInputBuildContext
+    reusable_by_parent: bool
+    by_parent: dict[Path, _VisibleModelDeclarations] = field(default_factory=dict)
+
+    @classmethod
+    def build(cls, context: ModelInputBuildContext) -> _VisibleModelDeclarationCache:
+        resolver = context.declaration_resolver
+        return cls(
+            context=context,
+            reusable_by_parent=(
+                resolver is not None
+                and not any(
+                    declaration.scope is ScopeKind.PRIVATE
+                    for declaration in resolver.lookup.index.declarations
+                )
+                and not any(
+                    resource.kind is ResourceKind.MODEL
+                    for resource in resolver.lookup.grants_by_resource
+                )
+            ),
+        )
+
+    def for_model(
+        self, *, model_file: DiscoveredSqlModelFile, consumer: ResourceIdentity
+    ) -> _VisibleModelDeclarations:
+        parent: Path = model_file.file_path.parent
+        cached: _VisibleModelDeclarations | None = self.by_parent.get(parent)
+        if self.reusable_by_parent and cached is not None:
+            return _rebind_visible_declarations(declarations=cached, consumer=consumer)
+        resolved: _VisibleModelDeclarations = _build_visible_declaration_indexes(
+            model_file=model_file,
+            context=self.context,
+        )
+        if self.reusable_by_parent:
+            self.by_parent[parent] = resolved
+        return resolved
 
 
 @dataclass(frozen=True)
@@ -239,11 +280,14 @@ def _build_model_inputs(
         discovered_inputs.sql_hook_files
     )
     model_inputs: list[CompileModelInput] = []
+    declaration_cache = _VisibleModelDeclarationCache.build(context)
     model_file: DiscoveredSqlModelFile
     for model_file in discovered_inputs.model_files:
-        declarations: _VisibleModelDeclarations = _build_visible_declaration_indexes(
-            model_file=model_file,
-            context=context,
+        model_identity: ResourceIdentity = ResourceIdentity(
+            ResourceKind.MODEL, model_file.file_path.stem
+        )
+        declarations: _VisibleModelDeclarations = declaration_cache.for_model(
+            model_file=model_file, consumer=model_identity
         )
         matched_path_default: str | None = find_matching_path_default(
             model_file=model_file,
@@ -279,9 +323,6 @@ def _build_model_inputs(
             sql=model_file.query_sql,
             file_path=model_file.file_path,
             effective_vars=effective_vars,
-        )
-        model_identity: ResourceIdentity = ResourceIdentity(
-            ResourceKind.MODEL, model_file.file_path.stem
         )
         declaration_context: DeclarationResolutionContext = DeclarationResolutionContext(
             enums=declarations.enums,
@@ -514,7 +555,6 @@ def _build_visible_declaration_indexes(
     model_identity: ResourceIdentity = ResourceIdentity(
         ResourceKind.MODEL, model_file.file_path.stem
     )
-
     local_enums, local_constants = build_model_declaration_indexes(model_file=model_file)
     visible: DeclarationResolutionContext = DeclarationResolutionContext(
         enums=context.public_enums,
@@ -559,6 +599,22 @@ def _build_visible_declaration_indexes(
         macros=visible.macros,
         macro_records=visible.macro_records,
         inaccessible_macros=visible.inaccessible_macros,
+    )
+
+
+def _rebind_visible_declarations(
+    *, declarations: _VisibleModelDeclarations, consumer: ResourceIdentity
+) -> _VisibleModelDeclarations:
+    return replace(
+        declarations,
+        enum_visibility={
+            name: tuple(replace(record, resource=consumer) for record in records)
+            for name, records in declarations.enum_visibility.items()
+        },
+        constant_visibility={
+            name: tuple(replace(record, resource=consumer) for record in records)
+            for name, records in declarations.constant_visibility.items()
+        },
     )
 
 
