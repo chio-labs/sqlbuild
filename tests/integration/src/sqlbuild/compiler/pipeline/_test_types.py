@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 
 
 @dataclass(frozen=True)
@@ -95,6 +98,14 @@ class MacroDeclarationResourceTestCase:
     expected_model_sql_fragment: str
     expected_test_sql_fragment: str
     expected_audit_sql_fragment: str
+
+
+@dataclass(frozen=True)
+class MacroDeclarationRenderingTestCase:
+    description: str
+    adapter_name: str
+    adapter_factory: Callable[[], BaseAdapter]
+    expected_sql: str
 
 
 @dataclass(frozen=True)

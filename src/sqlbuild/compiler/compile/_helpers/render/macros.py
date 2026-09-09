@@ -1456,6 +1456,7 @@ def _build_macro_invocation_context(
         macro_context,
         constants=constants,
         enums=cast(Mapping[str, Mapping[str, str | int]], enum_mapping),
+        _constant_declarations=MappingProxyType(declarations.constants),
     )
 
 
