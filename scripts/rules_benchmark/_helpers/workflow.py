@@ -6,6 +6,7 @@ import importlib.metadata
 import json
 import os
 import platform
+import re
 import shutil
 import statistics
 import subprocess
@@ -109,7 +110,7 @@ def run_rule_count_benchmark(
                 project_dir=project_dir,
                 iterations=iterations,
                 mutate=lambda iteration: _mutate_custom_rule(
-                    path=project_dir / "rules" / "benchmark_rules.py"
+                    path=project_dir / "rules" / "benchmark_rules.py", iteration=iteration
                 ),
             )
             profiles.append(
@@ -180,9 +181,18 @@ def _run_scenarios(
             scenario="cold",
             project_dir=project_dir,
             iterations=iterations,
-            mutate=lambda iteration: _clear_cache(project_dir),
+            mutate=lambda iteration: _clear_target(project_dir),
         )
     ]
+    _ = _invoke(project_dir)
+    results.append(
+        _measure(
+            scenario="rules_cold",
+            project_dir=project_dir,
+            iterations=iterations,
+            mutate=lambda iteration: _clear_cache(project_dir),
+        )
+    )
     _ = _invoke(project_dir)
     results.append(
         _measure(
@@ -206,6 +216,7 @@ def _run_scenarios(
     )
     finding_path: Path = _generated_model_path(project_dir=project_dir, index=model_count - 1)
     _inject_sql_finding(path=finding_path)
+    _ = _invoke(project_dir, allow_failure=True)
     results.append(
         _measure(
             scenario="failing_rule",
@@ -271,10 +282,9 @@ def _run_scenarios(
             scenario="macro_edit",
             project_dir=project_dir,
             iterations=iterations,
-            mutate=lambda iteration: _toggle_text(
+            mutate=lambda iteration: _set_macro_offset(
                 path=project_dir / "models" / "macros" / "macro_00000.py",
-                plain='return f"({expression} + 0)"',
-                changed='return f"({expression} + 1000)"',
+                iteration=iteration,
             ),
         )
     )
@@ -283,10 +293,9 @@ def _run_scenarios(
             scenario="project_config_edit",
             project_dir=project_dir,
             iterations=iterations,
-            mutate=lambda iteration: _toggle_text(
+            mutate=lambda iteration: _set_benchmark_revision(
                 path=project_dir / "sqlbuild_project.toml",
-                plain='benchmark_revision = "0"',
-                changed='benchmark_revision = "1"',
+                iteration=iteration,
             ),
         )
     )
@@ -295,10 +304,10 @@ def _run_scenarios(
             scenario="custom_rule_helper_edit",
             project_dir=project_dir,
             iterations=iterations,
-            mutate=lambda iteration: _toggle_text(
+            mutate=lambda iteration: _append_marker(
                 path=project_dir / "rules" / "benchmark_helpers.py",
-                plain="return name.startswith('model_')",
-                changed="return (name.startswith('model_'))",
+                scenario="custom-rule-helper",
+                iteration=iteration,
             ),
         )
     )
@@ -308,7 +317,7 @@ def _run_scenarios(
             project_dir=project_dir,
             iterations=iterations,
             mutate=lambda iteration: _mutate_custom_rule(
-                path=project_dir / "rules" / "benchmark_rules.py"
+                path=project_dir / "rules" / "benchmark_rules.py", iteration=iteration
             ),
         )
     )
@@ -352,6 +361,8 @@ def _measure(
     custom_rules_ms: list[int] = []
     timings_ms: dict[str, list[int]] = defaultdict(list)
     peak_rss_bytes: list[int] = []
+    cache_hit_samples: list[int] = []
+    cache_miss_samples: list[int] = []
     payload: dict[str, object] = {}
     for iteration in range(iterations):
         mutate(iteration)
@@ -375,6 +386,8 @@ def _measure(
         )
         built_in_rules_ms.append(_integer(payload=timing_values, key="built_in_rules_ms"))
         custom_rules_ms.append(_integer(payload=timing_values, key="custom_rules_ms"))
+        cache_hit_samples.append(_integer(payload=timing_values, key="rule_cache_hits"))
+        cache_miss_samples.append(_integer(payload=timing_values, key="rule_cache_misses"))
     summary: object = payload.get("summary")
     timings = payload.get("compile_timings")
     if not isinstance(summary, dict) or not isinstance(timings, dict):
@@ -387,6 +400,8 @@ def _measure(
         evaluated_models=_integer(payload=summary_values, key="selected_models"),
         cache_hits=_integer(payload=timing_values, key="rule_cache_hits"),
         cache_misses=_integer(payload=timing_values, key="rule_cache_misses"),
+        cache_hit_samples=tuple(cache_hit_samples),
+        cache_miss_samples=tuple(cache_miss_samples),
         core_ms=tuple(core_ms),
         built_in_rules_ms=tuple(built_in_rules_ms),
         custom_rules_ms=tuple(custom_rules_ms),
@@ -487,6 +502,12 @@ def _clear_cache(project_dir: Path) -> None:
         shutil.rmtree(cache)
 
 
+def _clear_target(project_dir: Path) -> None:
+    target: Path = project_dir / "target"
+    if target.exists():
+        shutil.rmtree(target)
+
+
 def _append_marker(*, path: Path, scenario: str, iteration: int) -> None:
     prefix: str = "--" if path.suffix == SQL_SUFFIX else "#"
     with path.open("a", encoding="utf-8") as handle:
@@ -508,34 +529,41 @@ def _multi_edit_model_count(model_count: int) -> int:
     return max(1, model_count // 100)
 
 
-def _mutate_custom_rule(*, path: Path) -> None:
+def _mutate_custom_rule(*, path: Path, iteration: int) -> None:
     source: str = path.read_text(encoding="utf-8")
-    plain: str = "valid = len(ctx.graph.dependencies(model)) >= 0"
-    changed: str = "valid = (len(ctx.graph.dependencies(model)) >= 0)"
-    project_plain: str = 'content = ctx.project.tree.read_text("rules/benchmark_input.yaml")'
-    project_changed: str = 'content = (ctx.project.tree.read_text("rules/benchmark_input.yaml"))'
-    if plain in source:
-        source = source.replace(plain, changed, 1)
-    elif changed in source:
-        source = source.replace(changed, plain, 1)
-    elif project_plain in source:
-        source = source.replace(project_plain, project_changed, 1)
-    elif project_changed in source:
-        source = source.replace(project_changed, project_plain, 1)
-    else:
+    marker: str = "def check_003(*, model: Model, ctx: RuleContext) -> list[Finding]:\n"
+    if marker not in source:
+        marker = "def check_001(*, project: Project, ctx: RuleContext) -> list[Finding]:\n"
+    if marker not in source:
         raise RulesBenchmarkError("could not locate custom rule implementation marker")
+    source = source.replace(marker, f"{marker}    # benchmark source edit {iteration}\n", 1)
     path.write_text(source, encoding="utf-8")
 
 
-def _toggle_text(*, path: Path, plain: str, changed: str) -> None:
+def _set_benchmark_revision(*, path: Path, iteration: int) -> None:
     source: str = path.read_text(encoding="utf-8")
-    if plain in source:
-        source = source.replace(plain, changed, 1)
-    elif changed in source:
-        source = source.replace(changed, plain, 1)
-    else:
+    changed, replacement_count = re.subn(
+        r'benchmark_revision = "[0-9]+"',
+        f'benchmark_revision = "{iteration + 1}"',
+        source,
+        count=1,
+    )
+    if replacement_count != 1:
         raise RulesBenchmarkError(f"could not locate benchmark marker in {path}")
-    path.write_text(source, encoding="utf-8")
+    path.write_text(changed, encoding="utf-8")
+
+
+def _set_macro_offset(*, path: Path, iteration: int) -> None:
+    source: str = path.read_text(encoding="utf-8")
+    changed, replacement_count = re.subn(
+        r'return f"\(\{expression\} \+ [0-9]+\)"',
+        f'return f"({{expression}} + {iteration + 1000})"',
+        source,
+        count=1,
+    )
+    if replacement_count != 1:
+        raise RulesBenchmarkError(f"could not locate macro benchmark marker in {path}")
+    path.write_text(changed, encoding="utf-8")
 
 
 def _inject_sql_finding(*, path: Path) -> None:
@@ -568,6 +596,8 @@ def _result_payload(*, result: BenchmarkResult) -> dict[str, object]:
         "evaluated_models": result.evaluated_models,
         "cache_hits": result.cache_hits,
         "cache_misses": result.cache_misses,
+        "cache_hits_distribution": _count_distribution(result.cache_hit_samples),
+        "cache_misses_distribution": _count_distribution(result.cache_miss_samples),
         "core_ms": _distribution(result.core_ms),
         "built_in_rules_ms": _distribution(result.built_in_rules_ms),
         "custom_rules_ms": _distribution(result.custom_rules_ms),
@@ -598,6 +628,18 @@ def _byte_distribution(values: tuple[int, ...]) -> dict[str, object] | None:
         "median_bytes": statistics.median(values),
         "p95_bytes": ordered[p95_index],
         "samples_bytes": values,
+    }
+
+
+def _count_distribution(values: tuple[int, ...]) -> dict[str, object] | None:
+    if not values:
+        return None
+    ordered: list[int] = sorted(values)
+    p95_index: int = min(len(ordered) - 1, round(0.95 * (len(ordered) - 1)))
+    return {
+        "median": statistics.median(values),
+        "p95": ordered[p95_index],
+        "samples": values,
     }
 
 

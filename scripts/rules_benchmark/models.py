@@ -12,6 +12,8 @@ class BenchmarkResult:
     evaluated_models: int
     cache_hits: int
     cache_misses: int
+    cache_hit_samples: tuple[int, ...] = ()
+    cache_miss_samples: tuple[int, ...] = ()
     core_ms: tuple[int, ...] = ()
     built_in_rules_ms: tuple[int, ...] = ()
     custom_rules_ms: tuple[int, ...] = ()
