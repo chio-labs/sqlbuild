@@ -10,9 +10,11 @@ import inspect
 import re
 import sys
 import threading
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from types import ModuleType
+from types import MappingProxyType, ModuleType
+from typing import cast
 
 from sqlbuild.compiler.compile.constants import (
     DECLARATION_REFERENCE_NAMES,
@@ -22,7 +24,7 @@ from sqlbuild.compiler.compile.constants import (
     SQL_OPEN_PAREN_TOKEN,
     SQL_QUOTE_TOKENS,
 )
-from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.exceptions import CompileInputError, MacroDeclarationLookupError
 from sqlbuild.compiler.compile.models import (
     DeclarationResolutionContext,
     DeclarationScopeResolver,
@@ -34,7 +36,11 @@ from sqlbuild.compiler.compile.models import (
     StaticMacroFault,
     StaticMacroInventory,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
+from sqlbuild.compiler.discovery.models import (
+    ConstantDeclaration,
+    DiscoveredMacroFile,
+    EnumDeclaration,
+)
 from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
     validate_resource_identity,
 )
@@ -43,8 +49,9 @@ from sqlbuild.compiler.scopes.models import (
     DeclarationRecord,
     ResourceIdentity,
     UsageRecord,
+    VisibilityRecord,
 )
-from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind, UsageKind
+from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind, UsageKind
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
 from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
     is_identifier_character as _is_identifier_continue,
@@ -55,6 +62,8 @@ from sqlbuild.compiler.sql_analysis.main._is_identifier_start import (
 from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
 from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
+from sqlbuild.sql_values.models import SqlValue
+from sqlbuild.sql_values.types import SqlValueKind
 
 _CONTEXT: str = "Macro expansion"
 _LINE_COMMENT_TOKEN: str = "--"
@@ -62,6 +71,7 @@ _BLOCK_COMMENT_TOKEN: str = "/*"
 _STAR_IMPORT_NAME: str = "*"
 _MACRO_SCAN_PATTERN: re.Pattern[str] = re.compile(r"@|--|/\*|'|\"|`")
 _SYNTHETIC_PACKAGE_PREFIX: str = "_sqlbuild_project_macros_"
+_OBJECT_ENTRY_LENGTH: int = 2
 _MACRO_MODULE_LOAD_LOCK: threading.RLock = threading.RLock()
 
 
@@ -111,6 +121,73 @@ class _ExpansionState:
     declarations: DeclarationResolutionContext | None
     facts: _ExpansionFacts
     consumer: ResourceIdentity | DeclarationIdentity | None = None
+
+
+class _MacroDeclarationValues(Mapping[str, object]):
+    def __init__(
+        self,
+        *,
+        values: Mapping[str, object],
+        inaccessible: Mapping[str, DeclarationRecord],
+        declaration_kind: str,
+        file_path: Path,
+        on_access: Callable[[str], None],
+    ) -> None:
+        self._values: Mapping[str, object] = values
+        self._inaccessible: Mapping[str, DeclarationRecord] = inaccessible
+        self._declaration_kind: str = declaration_kind
+        self._file_path: Path = file_path
+        self._on_access: Callable[[str], None] = on_access
+
+    def __getitem__(self, name: str) -> object:
+        if name in self._values:
+            self._on_access(name)
+            return self._values[name]
+        inaccessible: DeclarationRecord | None = self._inaccessible.get(name)
+        if inaccessible is not None:
+            owner: str = inaccessible.owning_path or "global"
+            raise MacroDeclarationLookupError(
+                f"{self._declaration_kind.title()} '{name}' in '{self._file_path}' is "
+                f"inaccessible. Defined at '{inaccessible.path}:{inaccessible.line}:"
+                f"{inaccessible.column}' with scope owner '{owner}'"
+            )
+        visible: str = ", ".join(sorted(self._values)) or "none"
+        raise MacroDeclarationLookupError(
+            f"Unknown {self._declaration_kind} '{name}' in '{self._file_path}'. "
+            f"Visible {self._declaration_kind}s: {visible}"
+        )
+
+    def __iter__(self) -> Iterator[str]:
+        for name in self._values:
+            self._on_access(name)
+            yield name
+
+    def __len__(self) -> int:
+        for name in self._values:
+            self._on_access(name)
+        return len(self._values)
+
+
+class _MacroEnumMembers(Mapping[str, str | int]):
+    def __init__(self, *, enum_name: str, values: Mapping[str, str | int], file_path: Path) -> None:
+        self._enum_name: str = enum_name
+        self._values: Mapping[str, str | int] = values
+        self._file_path: Path = file_path
+
+    def __getitem__(self, name: str) -> str | int:
+        if name in self._values:
+            return self._values[name]
+        available: str = ", ".join(sorted(self._values)) or "none"
+        raise MacroDeclarationLookupError(
+            f"Unknown member '{name}' for enum '{self._enum_name}' in '{self._file_path}'. "
+            f"Available members: {available}"
+        )
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._values)
+
+    def __len__(self) -> int:
+        return len(self._values)
 
 
 def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[str, LoadedMacro]:
@@ -1304,12 +1381,20 @@ def _evaluate_macro_call(
         stack=stack,
     )
     try:
+        invocation_context: MacroContext = _build_macro_invocation_context(
+            macro_context=state.macro_context,
+            declarations=declarations,
+            file_path=file_path,
+            state=state,
+        )
         macro_result: object = _call_loaded_macro(
             loaded_macro=loaded_macro,
-            macro_context=state.macro_context,
+            macro_context=invocation_context,
             args=args,
             kwargs=kwargs,
         )
+    except CompileInputError:
+        raise
     except TypeError as error:
         raise CompileInputError(
             f"Macro '@{macro_name}' in '{file_path}' could not be called: {error}"
@@ -1328,6 +1413,165 @@ def _evaluate_macro_call(
             macro_name=macro_name, file_path=file_path, macro_result=macro_result
         )
     return macro_result, closing_paren_index + 1
+
+
+def _build_macro_invocation_context(
+    *,
+    macro_context: MacroContext,
+    declarations: DeclarationResolutionContext | None,
+    file_path: Path,
+    state: _ExpansionState,
+) -> MacroContext:
+    if declarations is None:
+        return macro_context
+    constant_values: Mapping[str, object] = _build_constant_context_values(declarations.constants)
+    enum_values: Mapping[str, object] = _build_enum_context_values(
+        declarations=declarations.enums, file_path=file_path
+    )
+    constants: Mapping[str, object] = _MacroDeclarationValues(
+        values=constant_values,
+        inaccessible=declarations.inaccessible_constants,
+        declaration_kind="constant",
+        file_path=file_path,
+        on_access=lambda name: _record_macro_declaration_usage(
+            name=name,
+            kind=DeclarationKind.CONSTANT,
+            declarations=declarations,
+            state=state,
+        ),
+    )
+    enum_mapping: Mapping[str, object] = _MacroDeclarationValues(
+        values=enum_values,
+        inaccessible=declarations.inaccessible_enums,
+        declaration_kind="enum",
+        file_path=file_path,
+        on_access=lambda name: _record_macro_declaration_usage(
+            name=name,
+            kind=DeclarationKind.ENUM,
+            declarations=declarations,
+            state=state,
+        ),
+    )
+    return replace(
+        macro_context,
+        constants=constants,
+        enums=cast(Mapping[str, Mapping[str, str | int]], enum_mapping),
+    )
+
+
+def _build_constant_context_values(
+    declarations: Mapping[str, ConstantDeclaration],
+) -> Mapping[str, object]:
+    values: dict[str, object] = {}
+    for name, declaration in declarations.items():
+        values[name] = _constant_python_value(declaration.value)
+    return MappingProxyType(values)
+
+
+def _build_enum_context_values(
+    *,
+    declarations: Mapping[str, EnumDeclaration],
+    file_path: Path,
+) -> Mapping[str, object]:
+    values: dict[str, object] = {}
+    for name, declaration in declarations.items():
+        members: dict[str, str | int] = {}
+        for member in declaration.members:
+            members[member.name] = member.value
+        values[name] = _MacroEnumMembers(
+            enum_name=name,
+            values=MappingProxyType(members),
+            file_path=file_path,
+        )
+    return MappingProxyType(values)
+
+
+def _constant_python_value(value: SqlValue) -> object:
+    if value.kind in {
+        SqlValueKind.STRING,
+        SqlValueKind.INTEGER,
+        SqlValueKind.BOOLEAN,
+        SqlValueKind.FLOAT,
+        SqlValueKind.DECIMAL,
+        SqlValueKind.NULL,
+    }:
+        return value.value
+    if value.kind == SqlValueKind.LIST:
+        return tuple(_constant_python_value(item) for item in _constant_items(value))
+    if value.kind == SqlValueKind.SET:
+        return frozenset(_constant_python_value(item) for item in _constant_items(value))
+    return MappingProxyType(
+        {key: _constant_python_value(item) for key, item in _constant_object_items(value)}
+    )
+
+
+def _constant_items(value: SqlValue) -> tuple[SqlValue, ...]:
+    if not isinstance(value.value, tuple) or not all(
+        isinstance(item, SqlValue) for item in value.value
+    ):
+        raise CompileInputError("Invalid normalized collection constant in macro context")
+    return cast(tuple[SqlValue, ...], value.value)
+
+
+def _constant_object_items(value: SqlValue) -> tuple[tuple[str, SqlValue], ...]:
+    if not isinstance(value.value, tuple) or not all(
+        isinstance(item, tuple)
+        and len(item) == _OBJECT_ENTRY_LENGTH
+        and isinstance(item[0], str)
+        and isinstance(item[1], SqlValue)
+        for item in value.value
+    ):
+        raise CompileInputError("Invalid normalized object constant in macro context")
+    return cast(tuple[tuple[str, SqlValue], ...], value.value)
+
+
+def _record_macro_declaration_usage(
+    *,
+    name: str,
+    kind: DeclarationKind,
+    declarations: DeclarationResolutionContext,
+    state: _ExpansionState,
+) -> None:
+    from sqlbuild.compiler.compile._helpers.render.declarations import usage_visibility
+
+    consumer: ResourceIdentity | DeclarationIdentity | None = (
+        state.consumer or declarations.consumer
+    )
+    if consumer is None:
+        return
+    visibility: tuple[VisibilityRecord, ...] = (
+        declarations.constant_visibility.get(name, ())
+        if kind == DeclarationKind.CONSTANT
+        else declarations.enum_visibility.get(name, ())
+    )
+    if visibility:
+        visible_records: tuple[VisibilityRecord, ...] = usage_visibility(
+            visibility=visibility,
+            consumer=consumer,
+        )
+        for visible in visible_records:
+            _ = state.facts.add_usage(
+                UsageRecord(
+                    consumer=consumer,
+                    declaration=visible.declaration,
+                    kind=UsageKind.RUNTIME,
+                    through=visible.through,
+                )
+            )
+        return
+    else:
+        declaration: ConstantDeclaration | EnumDeclaration = (
+            declarations.constants[name]
+            if kind == DeclarationKind.CONSTANT
+            else declarations.enums[name]
+        )
+        owner: ResourceIdentity | None = (
+            ResourceIdentity(kind=ResourceKind.MODEL, name=declaration.model_name)
+            if declaration.model_name is not None
+            else None
+        )
+        identity: DeclarationIdentity = DeclarationIdentity(kind=kind, name=name, owner=owner)
+    _ = state.facts.add_usage(UsageRecord(consumer, identity, UsageKind.RUNTIME))
 
 
 def _validate_final_macro_sql(*, macro_name: str, file_path: Path, macro_result: str) -> None:

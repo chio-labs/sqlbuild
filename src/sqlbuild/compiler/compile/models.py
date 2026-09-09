@@ -252,12 +252,14 @@ class DeclarationScopeBuild:
 
 @dataclass(frozen=True)
 class MacroContext:
-    """Compile-time context passed to adapter-aware SQL macros."""
+    """Expose target settings and caller-visible declarations to a Python SQL macro."""
 
     adapter_name: str
     sql_analysis_enabled: bool
     target_name: str | None
     vars: dict[str, object] = field(default_factory=dict)
+    constants: Mapping[str, object] = field(default_factory=dict)
+    enums: Mapping[str, Mapping[str, str | int]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
