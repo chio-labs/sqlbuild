@@ -10,13 +10,18 @@ class TestFacts:
 
     def __init__(self, *, project: CompiledProject) -> None:
         self._tests: tuple[CompiledSqlTest, ...] = project.sql_tests
+        by_model: dict[str, list[CompiledSqlTest]] = {}
+        for test in self._tests:
+            if test.mode is not SqlTestMode.MODEL:
+                continue
+            for model_name in dict.fromkeys(test.target_model_names):
+                by_model.setdefault(model_name, []).append(test)
+        self._by_model: dict[str, tuple[CompiledSqlTest, ...]] = {
+            name: tuple(tests) for name, tests in by_model.items()
+        }
 
     def all(self) -> tuple[CompiledSqlTest, ...]:
         return self._tests
 
     def for_model(self, model: Model) -> tuple[CompiledSqlTest, ...]:
-        return tuple(
-            test
-            for test in self._tests
-            if test.mode is SqlTestMode.MODEL and model.name in test.target_model_names
-        )
+        return self._by_model.get(model.name, ())
