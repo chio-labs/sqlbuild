@@ -34,29 +34,86 @@ def run_benchmark(*, model_count: int, iterations: int, output: Path | None) -> 
         )
         workload: dict[str, int] = _workload_counts(project_dir=project_dir)
     payload: dict[str, object] = {
-        "hardware": {
-            "platform": platform.platform(),
-            "python": sys.version.split()[0],
-            "cpu": _cpu_model(),
-            "logical_cpus": os.cpu_count(),
-            "memory_bytes": _memory_bytes(),
-        },
+        "hardware": _hardware_payload(),
         "iterations": iterations,
         "model_count": model_count,
         "custom_rule_count": 20,
         "multi_edit_model_count": _multi_edit_model_count(model_count),
-        "versions": {
-            "sqlbuild": importlib.metadata.version("sqlbuild"),
-            "polyglot_sql": importlib.metadata.version("polyglot-sql"),
-        },
+        "versions": _version_payload(),
         "workload": workload,
         "scenarios": [_result_payload(result=result) for result in results],
     }
-    rendered: str = json.dumps(payload, indent=2, sort_keys=True)
-    if output is not None:
-        output.write_text(rendered + "\n", encoding="utf-8")
-    print(rendered)
-    return 0
+    return _write_benchmark_payload(payload=payload, output=output)
+
+
+def run_rule_count_benchmark(
+    *, model_count: int, iterations: int, rule_counts: tuple[int, ...], output: Path | None
+) -> int:
+    """Measure custom-rule count scaling against one stable generated project."""
+
+    with tempfile.TemporaryDirectory(prefix="sqlbuild-rule-count-benchmark-") as temporary:
+        project_dir: Path = Path(temporary) / "project"
+        _write_project(project_dir=project_dir, model_count=model_count)
+        profiles: list[dict[str, object]] = []
+        for rule_count in rule_counts:
+            write_custom_rules(project_dir=project_dir, rule_count=rule_count)
+            cold: BenchmarkResult = _measure(
+                scenario="cold",
+                project_dir=project_dir,
+                iterations=iterations,
+                mutate=lambda iteration: _clear_cache(project_dir),
+            )
+            _ = _invoke(project_dir)
+            warm: BenchmarkResult = _measure(
+                scenario="unchanged_warm",
+                project_dir=project_dir,
+                iterations=iterations,
+                mutate=lambda iteration: None,
+            )
+            multi_edit: BenchmarkResult = _measure(
+                scenario="multi_model_edit",
+                project_dir=project_dir,
+                iterations=iterations,
+                mutate=lambda iteration: _append_model_markers(
+                    project_dir=project_dir,
+                    model_count=model_count,
+                    edit_count=_multi_edit_model_count(model_count),
+                    iteration=iteration,
+                ),
+            )
+            rule_edit: BenchmarkResult = _measure(
+                scenario="custom_rule_source_edit",
+                project_dir=project_dir,
+                iterations=iterations,
+                mutate=lambda iteration: _mutate_custom_rule(
+                    path=project_dir / "rules" / "benchmark_rules.py"
+                ),
+            )
+            profiles.append(
+                {
+                    "custom_rule_count": rule_count,
+                    "cache_bytes": _rules_cache_bytes(project_dir),
+                    "scenarios": [
+                        _result_payload(result=result)
+                        for result in (cold, warm, multi_edit, rule_edit)
+                    ],
+                }
+            )
+        workload: dict[str, int] = _workload_counts(project_dir=project_dir)
+    return _write_benchmark_payload(
+        payload={
+            "benchmark": "custom_rule_count_scaling",
+            "hardware": _hardware_payload(),
+            "iterations": iterations,
+            "model_count": model_count,
+            "multi_edit_model_count": _multi_edit_model_count(model_count),
+            "rule_counts": rule_counts,
+            "versions": _version_payload(),
+            "workload": workload,
+            "profiles": profiles,
+        },
+        output=output,
+    )
 
 
 def _write_project(*, project_dir: Path, model_count: int) -> None:
@@ -408,6 +465,36 @@ def _memory_bytes() -> int | None:
         if line.startswith("MemTotal:"):
             return int(line.split()[1]) * 1024
     return None
+
+
+def _hardware_payload() -> dict[str, object]:
+    return {
+        "platform": platform.platform(),
+        "python": sys.version.split()[0],
+        "cpu": _cpu_model(),
+        "logical_cpus": os.cpu_count(),
+        "memory_bytes": _memory_bytes(),
+    }
+
+
+def _version_payload() -> dict[str, str]:
+    return {
+        "sqlbuild": importlib.metadata.version("sqlbuild"),
+        "polyglot_sql": importlib.metadata.version("polyglot-sql"),
+    }
+
+
+def _write_benchmark_payload(*, payload: dict[str, object], output: Path | None) -> int:
+    rendered: str = json.dumps(payload, indent=2, sort_keys=True)
+    if output is not None:
+        output.write_text(rendered + "\n", encoding="utf-8")
+    print(rendered)
+    return 0
+
+
+def _rules_cache_bytes(project_dir: Path) -> int:
+    cache_dir: Path = project_dir / "target" / "rules-cache"
+    return sum(path.stat().st_size for path in cache_dir.rglob("*") if path.is_file())
 
 
 def _workload_counts(*, project_dir: Path) -> dict[str, int]:

@@ -3,15 +3,17 @@
 from pathlib import Path
 
 
-def write_custom_rules(*, project_dir: Path) -> None:
+def write_custom_rules(*, project_dir: Path, rule_count: int = 20) -> None:
     """Write neutral custom rules that stress AST and compiler-owned facts."""
 
+    if not 1 <= rule_count <= 999:
+        raise ValueError("rule_count must be between 1 and 999")
     rule_file: Path = project_dir / "rules" / "benchmark_rules.py"
-    rule_file.parent.mkdir(parents=True)
+    rule_file.parent.mkdir(parents=True, exist_ok=True)
     (rule_file.parent / "benchmark_input.yaml").write_text("status: required\n", encoding="utf-8")
     header: str = "from sqlbuild.rules import Finding, Model, Project, RuleContext, rule\n\n"
     rules: list[str] = [_project_wide_rule()]
-    rules.extend(_model_local_rule(index=index) for index in range(2, 21))
+    rules.extend(_model_local_rule(index=index) for index in range(2, rule_count + 1))
     rule_file.write_text(header + "".join(rules), encoding="utf-8")
 
 
