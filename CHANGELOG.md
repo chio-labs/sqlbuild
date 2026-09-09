@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.94.1](https://github.com/chio-labs/sqlbuild/compare/v0.94.0...v0.94.1) (2026-09-09)
+
+
+### Bug Fixes
+
+* activate custom rule family prefixes ([#603](https://github.com/chio-labs/sqlbuild/issues/603)) ([665413e](https://github.com/chio-labs/sqlbuild/commit/665413eb0bad3d3fcf7d65d4dd27b33fc10f8b0e))
+
 ## [0.94.0](https://github.com/chio-labs/sqlbuild/compare/v0.93.1...v0.94.0) (2026-09-09)
 
 
