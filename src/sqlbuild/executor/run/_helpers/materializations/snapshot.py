@@ -125,7 +125,7 @@ def execute_snapshot_entry(  # noqa: PLR0915
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.PRE_HOOK,
-            error=str(exc),
+            error=exc,
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
@@ -208,7 +208,7 @@ def execute_snapshot_entry(  # noqa: PLR0915
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.STAGING,
-            error=str(exc),
+            error=exc,
             staging_relation=delta_qualified,
             warnings=warnings,
             audit_results=audit_results,
@@ -268,7 +268,7 @@ def execute_snapshot_entry(  # noqa: PLR0915
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.DML,
-            error=str(exc),
+            error=exc,
             staging_relation=delta_qualified,
             warnings=warnings,
             audit_results=audit_results,
@@ -513,7 +513,8 @@ def _reconcile_snapshot_full_refresh_result(
         return build_failed_result(
             entry=context.entry,
             phase=ExecutionPhase.DML,
-            error=f"failed to reconcile snapshot full-refresh rebuild: {exc}",
+            error=exc,
+            error_prefix="failed to reconcile snapshot full-refresh rebuild",
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
@@ -558,7 +559,8 @@ def _snapshot_promotion_failure(
         return build_failed_result(
             entry=context.entry,
             phase=ExecutionPhase.DML,
-            error=f"failed to promote snapshot full-refresh rebuild: {exc}",
+            error=exc,
+            error_prefix="failed to promote snapshot full-refresh rebuild",
             staging_relation=relations.rebuild_qualified,
             promoted_relation=relations.target_qualified,
             warnings=warnings,

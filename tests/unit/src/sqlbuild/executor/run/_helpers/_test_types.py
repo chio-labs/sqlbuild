@@ -91,6 +91,8 @@ class BuildFailedResultTestCase:
     expected_error_message: str
     expected_error_code: str
     expected_lifecycle_events: tuple[LifeCycleEvent, ...]
+    expected_failed_sql: str | None = None
+    error_prefix: str | None = None
 
 
 @dataclass(frozen=True)

@@ -101,7 +101,7 @@ def execute_view_entry(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.PRE_HOOK,
-            error=str(exc),
+            error=exc,
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
@@ -127,7 +127,7 @@ def execute_view_entry(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.STAGING,
-            error=str(exc),
+            error=exc,
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
@@ -203,7 +203,7 @@ def execute_view_entry(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.POST_HOOK,
-            error=str(exc),
+            error=exc,
             promoted_relation=target_qualified,
             warnings=warnings,
             audit_results=audit_results,

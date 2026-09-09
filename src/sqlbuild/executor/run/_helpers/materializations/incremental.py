@@ -162,7 +162,7 @@ def execute_incremental_entry(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.STAGING,
-            error=str(exc),
+            error=exc,
             staging_relation=delta_qualified,
             warnings=warnings,
             audit_results=audit_results,
@@ -209,7 +209,7 @@ def execute_incremental_entry(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.TYPE_ENFORCEMENT,
-            error=str(exc),
+            error=exc,
             staging_relation=delta_qualified,
             warnings=warnings,
             audit_results=audit_results,
@@ -241,7 +241,7 @@ def execute_incremental_entry(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.SCHEMA_CHANGE,
-            error=str(exc),
+            error=exc,
             staging_relation=delta_qualified,
             warnings=warnings,
             audit_results=audit_results,
@@ -318,7 +318,7 @@ def execute_incremental_entry(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.DML,
-            error=str(exc),
+            error=exc,
             staging_relation=delta_qualified,
             warnings=warnings,
             audit_results=audit_results,
