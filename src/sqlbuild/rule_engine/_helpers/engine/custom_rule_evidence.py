@@ -31,6 +31,26 @@ class _RuleTestEvidence:
     owner: str
 
 
+class _ModuleBindingVisitor(ast.NodeVisitor):
+    """Collect names bound in module control flow without entering local scopes."""
+
+    def __init__(self) -> None:
+        self.names: set[str] = set()
+
+    def visit_Name(self, node: ast.Name) -> None:
+        if isinstance(node.ctx, ast.Store):
+            self.names.add(node.id)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self.names.add(node.name)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self.names.add(node.name)
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.names.add(node.name)
+
+
 def custom_rule_test_evidence(*, rule: Rule, project_dir: Path) -> tuple[_RuleTestEvidence, ...]:
     """Return statically associated public-harness cases for one exact custom rule."""
 
@@ -74,6 +94,7 @@ def custom_rule_implementation_fingerprint(
         digest.update(inspect.getsource(rule.check).encode())
         return digest.hexdigest()
     digest.update(inspect.getsource(rule.check).encode())
+    digest.update(_module_binding_fingerprint(rule=rule))
     root: Path = project_dir.resolve()
     closure: tuple[Path, ...] = (
         custom_rule_import_closure(rule=rule, project_dir=root)
@@ -84,6 +105,48 @@ def custom_rule_implementation_fingerprint(
         digest.update(path.relative_to(root).as_posix().encode())
         digest.update(path.read_bytes())
     return digest.hexdigest()
+
+
+def _module_binding_fingerprint(*, rule: Rule) -> bytes:
+    if rule.source is None:
+        return b""
+    source_path: Path = Path(rule.source).resolve()
+    try:
+        source: str = source_path.read_text(encoding="utf-8")
+        tree: ast.Module = ast.parse(source, filename=str(source_path))
+    except (OSError, UnicodeError, SyntaxError):
+        return b""
+    definitions: dict[str, ast.AST] = {}
+    for statement in tree.body:
+        visitor: _ModuleBindingVisitor = _ModuleBindingVisitor()
+        visitor.visit(statement)
+        for name in visitor.names:
+            definitions[name] = statement
+    check_name: str = getattr(rule.check, "__name__", "")
+    check_node: ast.AST | None = definitions.get(check_name)
+    pending: list[str] = [] if check_node is None else list(_loaded_names(check_node))
+    visited: set[str] = {check_name}
+    parts: list[bytes] = []
+    while pending:
+        name: str = pending.pop()
+        if name in visited:
+            continue
+        visited.add(name)
+        definition: ast.AST | None = definitions.get(name)
+        if definition is None:
+            continue
+        parts.append(name.encode())
+        parts.append(ast.dump(definition, include_attributes=False).encode())
+        pending.extend(_loaded_names(definition))
+    return b"\0".join(parts)
+
+
+def _loaded_names(node: ast.AST) -> tuple[str, ...]:
+    return tuple(
+        child.id
+        for child in ast.walk(node)
+        if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load)
+    )
 
 
 def custom_rule_project_fact_attributes(

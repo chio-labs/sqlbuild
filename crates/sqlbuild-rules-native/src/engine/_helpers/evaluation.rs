@@ -459,6 +459,7 @@ fn fingerprint_request_facts(seed: &[u8], request: &EvaluateRequest) -> Result<S
     digest.update(seed);
     digest.update(
         serde_json::to_vec(&(
+            &request.models,
             &request.public_enums,
             &request.public_constants,
             &request.sql_tests,

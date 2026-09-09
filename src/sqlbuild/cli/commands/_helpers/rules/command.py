@@ -149,7 +149,7 @@ def _run_rule_selection(
         config=replace(config, select=(selector,), ignore=()),
         project_dir=project_dir,
         dialect=adapter.sql_analysis_dialect() or "generic",
-        selected_keys=selected_keys,
+        selected_keys=selected_keys if request.select or request.exclude else None,
     )
     print(
         format_result(

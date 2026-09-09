@@ -500,6 +500,8 @@ def _custom_fact_fingerprint(*, project: CompiledProject, attributes: frozenset[
             tuple(model.enum_declarations for model in project.models),
             tuple(model.constant_declarations for model in project.models),
         )
+    if RULE_CONTEXT_PROJECT_FACT in attributes:
+        facts[RULE_CONTEXT_PROJECT_FACT] = project.models
     encoded: bytes = orjson.dumps(facts, option=orjson.OPT_SORT_KEYS, default=str)
     return hashlib.sha256(encoded).hexdigest()
 

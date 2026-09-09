@@ -26,6 +26,7 @@ from sqlbuild.rule_engine.models import Finding, Rule, RulesConfig, RulesResult,
 
 _SQL_RULE_CACHE_VERSION: str = "sql-rules-v1"
 _SQLBUILD_VERSION: str = version("sqlbuild")
+_SQL_RULE_SUPPRESSION_CODE: str = "SQBRSQL000"
 
 
 @dataclass(frozen=True)
@@ -46,17 +47,18 @@ def evaluate_rules(
 ) -> RulesRunResult:
     """Run selected native built-ins before selected custom Python rules."""
 
-    include_custom: bool = any(selector.startswith("XSQBR") for selector in config.select)
+    resolved_project_dir: Path = project_dir.resolve()
+    include_custom: bool = _config_references_custom_rules(config)
     catalogue: tuple[Rule, ...] = build_catalogue(
-        config=config, project_dir=project_dir, include_custom=include_custom
+        config=config, project_dir=resolved_project_dir, include_custom=include_custom
     )
     selected: tuple[Rule, ...] = select_rules(
-        catalogue=catalogue, config=config, project_dir=project_dir
+        catalogue=catalogue, config=config, project_dir=resolved_project_dir
     )
     native_rules: tuple[Rule, ...] = tuple(rule for rule in selected if not rule.custom)
     custom_rules: tuple[Rule, ...] = tuple(rule for rule in selected if rule.custom)
     if custom_rules:
-        _ = verify_custom_rules(rules=custom_rules, project_dir=project_dir)
+        _ = verify_custom_rules(rules=custom_rules, project_dir=resolved_project_dir)
     model_paths: frozenset[str] | None = _selected_model_paths(
         graph=graph, selected_keys=selected_keys
     )
@@ -64,7 +66,7 @@ def evaluate_rules(
     sql_started: float = time.monotonic()
     sql_result: _SqlRulesEvaluation = _run_sql_rules(
         rules=native_rules,
-        project_dir=project_dir,
+        project_dir=resolved_project_dir,
         discovered_inputs=discovered_inputs,
         project=selected_project,
         dialect=dialect,
@@ -75,11 +77,11 @@ def evaluate_rules(
     result: RulesResult = evaluate_native(
         project=selected_project,
         config=replace(
-            config,
+            _selection_rules_config(config=config, model_paths=model_paths),
             select=tuple(rule.code for rule in selected),
             ignore=(),
         ),
-        project_dir=project_dir,
+        project_dir=resolved_project_dir,
         catalogue=catalogue,
         dialect=dialect,
         initial_findings=sql_result.findings,
@@ -97,6 +99,33 @@ def evaluate_rules(
         custom_ms=result.custom_ms,
         cache_hits=result.cache_hits + sql_result.cache_hits,
         cache_misses=result.cache_misses + sql_result.cache_misses,
+    )
+
+
+def _config_references_custom_rules(config: RulesConfig) -> bool:
+    ignore_selectors: list[str] = []
+    for entry in config.rule_ignores:
+        ignore_selectors.extend(entry.rules)
+    selectors: tuple[str, ...] = (
+        *config.select,
+        *config.ignore,
+        *config.rule_options,
+        *(entry.rule for entry in config.rule_exceptions),
+        *ignore_selectors,
+    )
+    return any(selector.startswith("XSQBR") for selector in selectors)
+
+
+def _selection_rules_config(
+    *, config: RulesConfig, model_paths: frozenset[str] | None
+) -> RulesConfig:
+    if model_paths is None:
+        return config
+    return replace(
+        config,
+        rule_exceptions=tuple(
+            entry for entry in config.rule_exceptions if Path(entry.path).as_posix() in model_paths
+        ),
     )
 
 
@@ -164,7 +193,7 @@ def _run_sql_rules(
         if selected_paths
         else None
     )
-    selected_codes: frozenset[str] = frozenset(codes)
+    selected_codes: frozenset[str] = frozenset((*codes, _SQL_RULE_SUPPRESSION_CODE))
     evaluated: tuple[Finding, ...] = tuple(
         _lint_finding(violation=violation, project_dir=project_dir)
         for violation in (() if result is None else result.violations)

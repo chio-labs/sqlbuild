@@ -161,7 +161,7 @@ def analyze_compile_project(
             config=load_rules_config(project_dir=project_dir),
             project_dir=project_dir,
             dialect=adapter.sql_analysis_dialect() or "generic",
-            selected_keys=selected_keys,
+            selected_keys=selected_keys if select or exclude else None,
         )
         _ = complete_compile_phase(
             status=status,

@@ -172,3 +172,265 @@ def test_given_sql_rule_exception_when_compiling_then_unified_suppression_is_app
     assert exit_code == test_case.expected_exit_code
     payload: dict[str, object] = json.loads(capsys.readouterr().out)
     assert test_case.expected_code not in json.dumps(payload["diagnostics"])
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulesIntegrationTestCase("module constant edit invalidates custom rule", 0, "")],
+    ids=lambda case: case.description,
+)
+def test_given_custom_rule_module_constant_edit_when_compiling_then_cached_result_is_invalidated(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n'
+        '[rules]\nselect = ["XSQBRARCH001"]\n\n'
+        "[rules.thresholds]\nmin_custom_rule_test_cases = 0\n",
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text("MODEL ();\nSELECT 1 AS order_id\n", encoding="utf-8")
+    rule_file: Path = tmp_path / "rules" / "architecture.py"
+    rule_file.parent.mkdir()
+    rule_source: str = """from sqlbuild.rules import Finding, Model, RuleContext, rule
+
+FORBIDDEN, UNUSED = ("orders", "unused")
+
+@rule(code="XSQBRARCH001", message="Forbidden name", remediation="Rename the model.")
+def forbidden_name(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    return [ctx.finding(subject=model)] if model.name == FORBIDDEN else []
+"""
+    rule_file.write_text(rule_source, encoding="utf-8")
+
+    first_exit: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
+    _ = capsys.readouterr()
+    rule_file.write_text(
+        rule_source.replace(
+            'FORBIDDEN, UNUSED = ("orders", "unused")',
+            'FORBIDDEN, UNUSED = ("customers", "unused")',
+        ),
+        encoding="utf-8",
+    )
+    second_exit: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
+    second: dict[str, object] = json.loads(capsys.readouterr().out)
+
+    assert first_exit == 1
+    assert second_exit == test_case.expected_exit_code
+    assert second["diagnostics"] == []
+    assert second["compile_timings"]["rule_cache_misses"] >= 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulesIntegrationTestCase("focused project cache cannot poison full compile", 0, "")],
+    ids=lambda case: case.description,
+)
+def test_given_focused_project_rule_result_when_compiling_full_project_then_subset_cache_is_not_used(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n'
+        '[rules]\nselect = ["XSQBRARCH001"]\n\n'
+        "[rules.thresholds]\nmin_custom_rule_test_cases = 0\n",
+        encoding="utf-8",
+    )
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "orders.sql").write_text("MODEL ();\nSELECT 1 AS order_id\n", encoding="utf-8")
+    (models / "customers.sql").write_text("MODEL ();\nSELECT 1 AS customer_id\n", encoding="utf-8")
+    rule_file: Path = tmp_path / "rules" / "architecture.py"
+    rule_file.parent.mkdir()
+    rule_file.write_text(
+        """from sqlbuild.rules import Finding, Project, RuleContext, rule
+
+@rule(code="XSQBRARCH001", message="Two models required", remediation="Add the other model.")
+def two_models(*, project: Project, ctx: RuleContext) -> list[Finding]:
+    del project
+    return [] if len(ctx.project.models) == 2 else [ctx.finding(subject="models")]
+""",
+        encoding="utf-8",
+    )
+
+    focused_exit: int = main(
+        ["--project-dir", str(tmp_path), "compile", "--json", "--select", "orders"]
+    )
+    _ = capsys.readouterr()
+    full_exit: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
+    full: dict[str, object] = json.loads(capsys.readouterr().out)
+
+    assert focused_exit == 1
+    assert full_exit == test_case.expected_exit_code
+    assert full["diagnostics"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulesIntegrationTestCase("default compile evaluates audit SQL", 1, "SQBRSQL004")],
+    ids=lambda case: case.description,
+)
+def test_given_non_model_sql_violation_when_compiling_then_compile_is_authoritative(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRSQL004"]\n',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text("MODEL ();\nSELECT 1 AS order_id\n", encoding="utf-8")
+    audit: Path = tmp_path / "audits" / "order_sample.sql"
+    audit.parent.mkdir()
+    audit.write_text('AUDIT ();\nSELECT * FROM __ref("orders") LIMIT 1\n', encoding="utf-8")
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+
+    assert exit_code == test_case.expected_exit_code
+    assert payload["diagnostics"][0]["code"] == test_case.expected_code
+    assert payload["diagnostics"][0]["path"] == "audits/order_sample.sql"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulesIntegrationTestCase("focused compile ignores unselected exact exception", 0, "")],
+    ids=lambda case: case.description,
+)
+def test_given_exception_for_other_model_when_compiling_selection_then_exception_is_not_stale(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRSQL004"]\n\n'
+        '[[rules.rule_exceptions]]\nrule = "SQBRSQL004"\npath = "models/customers.sql"\n'
+        'reason = "The fixture intentionally selects one row."\n',
+        encoding="utf-8",
+    )
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "orders.sql").write_text("MODEL ();\nSELECT 1 AS order_id\n", encoding="utf-8")
+    (models / "customers.sql").write_text(
+        "MODEL ();\nSELECT customer_id FROM customers LIMIT 1\n", encoding="utf-8"
+    )
+
+    exit_code: int = main(
+        ["--project-dir", str(tmp_path), "compile", "--json", "--select", "orders"]
+    )
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+
+    assert exit_code == test_case.expected_exit_code
+    assert payload["diagnostics"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulesIntegrationTestCase("relative project path retains cached SQL finding", 1, "SQBRSQL004")],
+    ids=lambda case: case.description,
+)
+def test_given_relative_project_path_when_compiling_twice_then_sql_finding_remains_cached(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRSQL004"]\n',
+        encoding="utf-8",
+    )
+    model: Path = project_dir / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text("MODEL ();\nSELECT order_id FROM orders LIMIT 1\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    first_exit: int = main(["--project-dir", "project", "compile", "--json"])
+    _ = capsys.readouterr()
+    second_exit: int = main(["--project-dir", "project", "compile", "--json"])
+    second: dict[str, object] = json.loads(capsys.readouterr().out)
+
+    assert first_exit == second_exit == test_case.expected_exit_code
+    assert second["diagnostics"][0]["code"] == test_case.expected_code
+    assert second["compile_timings"]["rule_cache_hits"] == 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulesIntegrationTestCase("unused inline suppression is diagnosed", 1, "SQBRSQL000")],
+    ids=lambda case: case.description,
+)
+def test_given_unused_inline_suppression_when_compiling_then_stale_directive_is_reported(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRSQL004"]\n',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        "MODEL ();\n-- sqb: ignore SQBRSQL004 because this fixture checks stale directives\n"
+        "SELECT 1 AS order_id\n",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+
+    assert exit_code == test_case.expected_exit_code
+    assert payload["diagnostics"][0]["code"] == test_case.expected_code
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulesIntegrationTestCase("unselected custom options validate consistently", 0, "")],
+    ids=lambda case: case.description,
+)
+def test_given_unselected_custom_rule_options_when_compiling_then_configuration_is_validated(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = []\n\n'
+        '[rules.rule_options.XSQBRARCH001]\nrequired_prefix = "order"\n',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text("MODEL ();\nSELECT 1 AS order_id\n", encoding="utf-8")
+    rule_file: Path = tmp_path / "rules" / "architecture.py"
+    rule_file.parent.mkdir()
+    rule_file.write_text(
+        """from sqlbuild.rules import Finding, Model, RuleContext, RuleOption, rule
+
+REQUIRED_PREFIX = RuleOption.string(
+    name="required_prefix", default="model", description="Required model prefix."
+)
+
+@rule(
+    code="XSQBRARCH001",
+    message="Wrong prefix",
+    remediation="Rename the model.",
+    options=(REQUIRED_PREFIX,),
+)
+def required_prefix(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    return [] if model.name.startswith(ctx.option(REQUIRED_PREFIX)) else [ctx.finding(subject=model)]
+""",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+
+    assert exit_code == test_case.expected_exit_code
+    assert payload["diagnostics"] == []
