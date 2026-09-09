@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.93.1](https://github.com/chio-labs/sqlbuild/compare/v0.93.0...v0.93.1) (2026-09-09)
+
+
+### Bug Fixes
+
+* render macro declarations safely ([#599](https://github.com/chio-labs/sqlbuild/issues/599)) ([a82cee2](https://github.com/chio-labs/sqlbuild/commit/a82cee20ce140e6410d31d27ebb4c00c6f4293f4))
+
 ## [0.93.0](https://github.com/chio-labs/sqlbuild/compare/v0.92.3...v0.93.0) (2026-09-09)
 
 
