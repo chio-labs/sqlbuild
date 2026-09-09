@@ -54,23 +54,41 @@ def custom_rule_test_evidence(*, rule: Rule, project_dir: Path) -> tuple[_RuleTe
     return tuple(sorted(evidence))
 
 
-def custom_rule_implementation_fingerprint(*, rule: Rule, project_dir: Path) -> str:
+def custom_rule_import_closure(*, rule: Rule, project_dir: Path) -> tuple[Path, ...]:
+    """Return repository-owned helper files imported by one rule module."""
+
+    if rule.source is None:
+        return ()
+    return _import_closure(
+        source_path=Path(rule.source).resolve(), project_dir=project_dir.resolve()
+    )
+
+
+def custom_rule_implementation_fingerprint(
+    *, rule: Rule, project_dir: Path, import_closure: tuple[Path, ...] | None = None
+) -> str:
     """Fingerprint one rule function and its repository-owned imported helper closure."""
 
     digest: Any = hashlib.sha256()
     if rule.source is None:
         digest.update(inspect.getsource(rule.check).encode())
         return digest.hexdigest()
-    source_path: Path = Path(rule.source).resolve()
     digest.update(inspect.getsource(rule.check).encode())
     root: Path = project_dir.resolve()
-    for path in _import_closure(source_path=source_path, project_dir=root):
+    closure: tuple[Path, ...] = (
+        custom_rule_import_closure(rule=rule, project_dir=root)
+        if import_closure is None
+        else import_closure
+    )
+    for path in closure:
         digest.update(path.relative_to(root).as_posix().encode())
         digest.update(path.read_bytes())
     return digest.hexdigest()
 
 
-def custom_rule_project_fact_attributes(*, rule: Rule, project_dir: Path) -> frozenset[str]:
+def custom_rule_project_fact_attributes(
+    *, rule: Rule, project_dir: Path, import_closure: tuple[Path, ...] | None = None
+) -> frozenset[str]:
     """Return project-wide context attributes used by implementation or helper code."""
 
     if rule.project_wide:
@@ -78,9 +96,12 @@ def custom_rule_project_fact_attributes(*, rule: Rule, project_dir: Path) -> fro
     if rule.source is None:
         sources: tuple[str, ...] = (inspect.getsource(rule.check),)
     else:
-        source_path: Path = Path(rule.source).resolve()
-        helper_paths: tuple[Path, ...] = _import_closure(
-            source_path=source_path, project_dir=project_dir.resolve()
+        helper_paths: tuple[Path, ...] = (
+            _import_closure(
+                source_path=Path(rule.source).resolve(), project_dir=project_dir.resolve()
+            )
+            if import_closure is None
+            else import_closure
         )
         sources = (
             inspect.getsource(rule.check),

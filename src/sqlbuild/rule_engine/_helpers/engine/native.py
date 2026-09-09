@@ -27,6 +27,7 @@ from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclarat
 from sqlbuild.compiler.scopes.main.scope_metadata import scope_metadata_projection
 from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
     custom_rule_implementation_fingerprint,
+    custom_rule_import_closure,
     custom_rule_project_fact_attributes,
     custom_rule_test_evidence,
 )
@@ -170,6 +171,7 @@ def native_selected_codes(
 ) -> tuple[str, ...]:
     """Resolve the active ruleset through the native Fensu adapter."""
 
+    closures: dict[str, tuple[Path, ...]] = {}
     request: dict[str, object] = {
         "version": RULES_NATIVE_API_VERSION,
         "config": _config_payload(config),
@@ -182,7 +184,11 @@ def native_selected_codes(
                 "remediation": rule.remediation,
                 "enabled_by_default": rule.enabled_by_default,
                 "implementation_fingerprint": custom_rule_implementation_fingerprint(
-                    rule=rule, project_dir=project_dir
+                    rule=rule,
+                    project_dir=project_dir,
+                    import_closure=_shared_import_closure(
+                        rule=rule, project_dir=project_dir, cache=closures
+                    ),
                 ),
                 **_custom_rule_source_payload(rule=rule, project_dir=project_dir),
                 "project_wide": rule.project_wide,
@@ -405,12 +411,16 @@ def _custom_rule_payloads(
     *, catalogue: tuple[Rule, ...], project: CompiledProject, project_dir: Path
 ) -> list[dict[str, object]]:
     fingerprints: dict[frozenset[str], str] = {}
+    closures: dict[str, tuple[Path, ...]] = {}
     payloads: list[dict[str, object]] = []
     for rule in catalogue:
         if not rule.custom:
             continue
+        closure: tuple[Path, ...] = _shared_import_closure(
+            rule=rule, project_dir=project_dir, cache=closures
+        )
         attributes: frozenset[str] = custom_rule_project_fact_attributes(
-            rule=rule, project_dir=project_dir
+            rule=rule, project_dir=project_dir, import_closure=closure
         )
         if attributes not in fingerprints:
             fingerprints[attributes] = _custom_fact_fingerprint(
@@ -423,6 +433,7 @@ def _custom_rule_payloads(
                 project_dir=project_dir,
                 project_attributes=attributes,
                 fact_fingerprint=fact_fingerprint,
+                import_closure=closure,
             )
         )
     return payloads
@@ -434,6 +445,7 @@ def _custom_rule_payload(
     project_dir: Path,
     project_attributes: frozenset[str],
     fact_fingerprint: str,
+    import_closure: tuple[Path, ...],
 ) -> dict[str, object]:
     check_name: str = getattr(rule.check, "__name__", "")
     return {
@@ -444,7 +456,7 @@ def _custom_rule_payload(
         "remediation": rule.remediation,
         "enabled_by_default": rule.enabled_by_default,
         "implementation_fingerprint": custom_rule_implementation_fingerprint(
-            rule=rule, project_dir=project_dir
+            rule=rule, project_dir=project_dir, import_closure=import_closure
         ),
         **_custom_rule_source_payload(rule=rule, project_dir=project_dir),
         "project_wide": rule.project_wide,
@@ -453,6 +465,17 @@ def _custom_rule_payload(
         "check_name": check_name,
         "test_case_count": len(custom_rule_test_evidence(rule=rule, project_dir=project_dir)),
     }
+
+
+def _shared_import_closure(
+    *, rule: Rule, project_dir: Path, cache: dict[str, tuple[Path, ...]]
+) -> tuple[Path, ...]:
+    if rule.source is None:
+        return ()
+    source: str = str(Path(rule.source).resolve())
+    if source not in cache:
+        cache[source] = custom_rule_import_closure(rule=rule, project_dir=project_dir)
+    return cache[source]
 
 
 def _custom_fact_fingerprint(*, project: CompiledProject, attributes: frozenset[str]) -> str:
