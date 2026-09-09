@@ -339,6 +339,7 @@ def test_given_source_freshness_changes_during_build_when_appending_then_persist
             description="direct source freshness appends independent successful branch only",
             expected_exit_code=1,
             expected_output_fragments=("orders", "payments", "FAIL"),
+            expected_failed_sql_fragment="CAST('bad' AS INTEGER)",
         )
     ],
     ids=lambda case: case.description,
@@ -414,9 +415,10 @@ def test_given_independent_source_branch_failure_when_building_then_appends_succ
         "MODEL (materialized table);\n\nSELECT CAST('bad' AS INTEGER) AS payment_id\n",
         encoding="utf-8",
     )
+    execution_json_path: Path = project_dir / "target" / "failed-build.json"
 
     build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"),
+        command=("--no-color", "build", "--json-output", str(execution_json_path)),
         project_dir=project_dir,
     )
 
@@ -426,6 +428,17 @@ def test_given_independent_source_branch_failure_when_building_then_appends_succ
     fragment: str
     for fragment in test_case.expected_output_fragments:
         assert fragment in build_result.stdout + build_result.stderr
+    execution_payload: dict[str, object] = json.loads(
+        execution_json_path.read_text(encoding="utf-8")
+    )
+    assets: dict[str, dict[str, object]] = {
+        str(asset["name"]): asset
+        for asset in execution_payload["assets"]  # type: ignore[index]
+    }
+    failed_asset: dict[str, object] = assets["payments"]
+    assert failed_asset["status"] == "failed"
+    assert test_case.expected_failed_sql_fragment is not None
+    assert test_case.expected_failed_sql_fragment in str(failed_asset["failed_sql"])
     rows: list[tuple[Any, ...]] = query_duckdb(
         db_path=project_dir / "warehouse.duckdb",
         sql=(

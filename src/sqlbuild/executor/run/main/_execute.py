@@ -90,7 +90,8 @@ def execute_table_entry(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.STAGING,
-            error=f"failed to resolve runtime cursor bounds: {exc}",
+            error=exc,
+            error_prefix="failed to resolve runtime cursor bounds",
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
@@ -114,7 +115,7 @@ def execute_table_entry(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.PRE_HOOK,
-            error=str(exc),
+            error=exc,
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,
@@ -203,7 +204,7 @@ def _staged_lifecycle(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.STAGING,
-            error=str(exc),
+            error=exc,
             staging_relation=staging_qualified,
             warnings=warnings,
             audit_results=audit_results,
@@ -231,7 +232,7 @@ def _staged_lifecycle(
             return build_failed_result(
                 entry=entry,
                 phase=ExecutionPhase.TYPE_ENFORCEMENT,
-                error=str(exc),
+                error=exc,
                 staging_relation=staging_qualified,
                 warnings=warnings,
                 audit_results=audit_results,
@@ -308,7 +309,7 @@ def _staged_lifecycle(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.PROMOTION,
-            error=str(exc),
+            error=exc,
             staging_relation=staging_qualified,
             warnings=warnings,
             audit_results=audit_results,
@@ -402,7 +403,7 @@ def _immediate_lifecycle(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.STAGING,
-            error=str(exc),
+            error=exc,
             warnings=warnings,
             audit_results=audit_results,
             statement_recorder=statement_recorder,

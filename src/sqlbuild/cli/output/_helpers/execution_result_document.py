@@ -655,6 +655,7 @@ def _format_model_assets(
                 "error_code": result.error_code,
                 "error_help": result.error_help,
                 "error_message": result.error_message,
+                "failed_sql": result.failed_sql,
                 "last_recorded_sql": (
                     _last_recorded_sql(result.lifecycle_events)
                     if result.status == ExecutionStatus.FAILED

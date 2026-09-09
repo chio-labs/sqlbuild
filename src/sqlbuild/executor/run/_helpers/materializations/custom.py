@@ -173,7 +173,7 @@ def _run_custom_pre_hooks(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.PRE_HOOK,
-            error=str(exc),
+            error=exc,
             warnings=state.warnings,
             audit_results=state.audit_results,
             statement_recorder=state.statement_recorder,
@@ -250,7 +250,7 @@ def _run_custom_materialization(
             failure=build_failed_result(
                 entry=entry,
                 phase=ExecutionPhase.CUSTOM_MATERIALIZATION,
-                error=str(exc),
+                error=exc,
                 warnings=state.warnings,
                 audit_results=state.audit_results,
                 statement_recorder=state.statement_recorder,
@@ -374,7 +374,7 @@ def _run_custom_post_hooks(
         return build_failed_result(
             entry=entry,
             phase=ExecutionPhase.POST_HOOK,
-            error=str(exc),
+            error=exc,
             promoted_relation=materialization_result.relation,
             warnings=state.warnings,
             audit_results=state.audit_results,

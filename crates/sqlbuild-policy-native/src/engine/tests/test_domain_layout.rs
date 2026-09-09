@@ -123,7 +123,9 @@ fn given_owner_and_declaration_layouts_when_evaluating_then_returns_expected_fau
             models: json!([]),
             thresholds: json!({}),
             layout: json!({}),
-            scope_index: helpers::scope_with_macros(&["models/commerce/_macros/utils/item.py".into()]),
+            scope_index: helpers::scope_with_macros(&[
+                "models/commerce/_macros/utils/item.py".into()
+            ]),
             expected_codes: &["SQBPD305"],
             expected_message_fragments: &[],
             expected_absent_fragments: &[],

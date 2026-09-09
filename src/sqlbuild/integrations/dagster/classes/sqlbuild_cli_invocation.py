@@ -74,6 +74,10 @@ def _format_asset_failure(asset: Mapping[str, Any]) -> str:
     staging_relation: object = asset.get("staging_relation")
     if staging_relation is not None:
         lines.append(f"  staging relation: {staging_relation}")
+    failed_sql: object = asset.get("failed_sql")
+    if isinstance(failed_sql, str) and failed_sql:
+        lines.append("  failed SQL:")
+        lines.append(textwrap.indent(failed_sql, "    "))
     last_recorded_sql: object = asset.get("last_recorded_sql")
     if isinstance(last_recorded_sql, str) and last_recorded_sql:
         lines.append("  last recorded SQL:")

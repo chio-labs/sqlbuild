@@ -343,6 +343,7 @@ class DirectChangesOnlyBuildE2ETestCase:
     expected_output_fragments: tuple[str, ...]
     unexpected_output_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_query_results: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
+    expected_failed_sql_fragment: str | None = None
 
 
 @dataclass(frozen=True)

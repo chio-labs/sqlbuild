@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Generator
 from typing import Any, ClassVar
 
+from sqlbuild.adapter.contract.main._attribute_failed_sql import attribute_failed_sql
 from sqlbuild.adapter.contract.models import QueryResult
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 
@@ -25,7 +26,13 @@ class ConnectionMixin(ABC):
         """Execute SQL through the framework-owned statement lifecycle."""
 
         with StatementLifecycle(adapter=self.adapter_name, sql=sql, intent="execute") as lifecycle:
-            result: Any = self._execute(connection=connection, sql=sql)
+            try:
+                result: Any = self._execute(connection=connection, sql=sql)
+            except Exception as error:
+                attributed_error: Exception = attribute_failed_sql(error=error, sql=sql)
+                if attributed_error is error:
+                    raise
+                raise attributed_error from error
             lifecycle.completed(affected_rows=self.affected_row_count(cursor=result))
             return result
 

@@ -953,7 +953,8 @@ def _publish_pending_reconciliation_events(
         return build_failed_result(
             entry=context.entry,
             phase=ExecutionPhase.MICROBATCH_STATE,
-            error=f"failed to append microbatch reconciliation state: {exc}",
+            error=exc,
+            error_prefix="failed to append microbatch reconciliation state",
             warnings=state.warnings,
             audit_results=state.audit_results,
             statement_recorder=state.statement_recorder,
@@ -1416,7 +1417,8 @@ def _read_microbatch_history(
         return build_failed_result(
             entry=context.entry,
             phase=ExecutionPhase.MICROBATCH_STATE,
-            error=f"failed to read microbatch history: {exc}",
+            error=exc,
+            error_prefix="failed to read microbatch history",
             warnings=state.warnings,
             audit_results=state.audit_results,
             statement_recorder=state.statement_recorder,
@@ -1797,7 +1799,8 @@ def _record_microbatch_completion(
         return build_failed_result(
             entry=context.entry,
             phase=ExecutionPhase.MICROBATCH_STATE,
-            error=f"batch {batch.index}: target DML succeeded but completion write failed: {exc}",
+            error=exc,
+            error_prefix=f"batch {batch.index}: target DML succeeded but completion write failed",
             staging_relation=targets.delta_qualified,
             promoted_relation=targets.target_qualified,
             warnings=state.warnings,
@@ -2237,7 +2240,8 @@ def _physical_cursor_envelope(
         return build_failed_result(
             entry=context.entry,
             phase=ExecutionPhase.MICROBATCH_STATE,
-            error=f"failed to inspect target cursor envelope: {exc}",
+            error=exc,
+            error_prefix="failed to inspect target cursor envelope",
             warnings=state.warnings,
             audit_results=state.audit_results,
             statement_recorder=state.statement_recorder,
@@ -2364,7 +2368,8 @@ def _count_unaccounted_intervals(
             return build_failed_result(
                 entry=context.entry,
                 phase=ExecutionPhase.MICROBATCH_STATE,
-                error=f"failed to count unaccounted microbatch intervals: {exc}",
+                error=exc,
+                error_prefix="failed to count unaccounted microbatch intervals",
                 warnings=state.warnings,
                 audit_results=state.audit_results,
                 statement_recorder=state.statement_recorder,
@@ -2669,7 +2674,8 @@ def _stage_microbatch_delta(
         return build_failed_result(
             entry=context.entry,
             phase=ExecutionPhase.STAGING,
-            error=f"batch {batch.index}: {exc}",
+            error=exc,
+            error_prefix=f"batch {batch.index}",
             staging_relation=targets.delta_qualified,
             warnings=state.warnings,
             audit_results=state.audit_results,
@@ -2725,7 +2731,7 @@ def _apply_microbatch_schema_change(
             failure=build_failed_result(
                 entry=context.entry,
                 phase=ExecutionPhase.SCHEMA_CHANGE,
-                error=str(exc),
+                error=exc,
                 staging_relation=targets.delta_qualified,
                 warnings=state.warnings,
                 audit_results=state.audit_results,
@@ -2770,7 +2776,8 @@ def _enforce_microbatch_types(
         return build_failed_result(
             entry=context.entry,
             phase=ExecutionPhase.TYPE_ENFORCEMENT,
-            error=f"batch {batch.index}: {exc}",
+            error=exc,
+            error_prefix=f"batch {batch.index}",
             staging_relation=targets.delta_qualified,
             warnings=state.warnings,
             audit_results=state.audit_results,
@@ -2876,7 +2883,8 @@ def _apply_microbatch_dml(
         return build_failed_result(
             entry=context.entry,
             phase=ExecutionPhase.DML,
-            error=f"batch {batch.index}: {exc}",
+            error=exc,
+            error_prefix=f"batch {batch.index}",
             staging_relation=targets.delta_qualified,
             warnings=state.warnings,
             audit_results=state.audit_results,
@@ -2974,7 +2982,7 @@ def _prepare_full_refresh_rebuild(
         return build_failed_result(
             entry=context.entry,
             phase=ExecutionPhase.STAGING,
-            error=str(exc),
+            error=exc,
             warnings=state.warnings,
             audit_results=state.audit_results,
             statement_recorder=state.statement_recorder,
@@ -3009,7 +3017,8 @@ def _promote_microbatch_full_refresh(
         return build_failed_result(
             entry=context.entry,
             phase=ExecutionPhase.DML,
-            error=f"failed to promote full-refresh rebuild: {exc}",
+            error=exc,
+            error_prefix="failed to promote full-refresh rebuild",
             staging_relation=relations.rebuild_qualified,
             promoted_relation=relations.target_qualified,
             warnings=state.warnings,
