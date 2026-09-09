@@ -366,10 +366,10 @@ pub(crate) fn select<'a>(
         warn: Vec::new(),
         ignore: Vec::new(),
     };
-    let configured_ruleset =
-        resolve_policy(&references, &(), &configured, &grammar).map_err(rules_error)?;
-    let mut effective_select = selected.to_vec();
-    if configured_ruleset.blocking.iter().any(|rule| rule.custom)
+    let _ = resolve_policy(&references, &(), &configured, &grammar).map_err(rules_error)?;
+    let (mut effective_select, custom_selected) =
+        activate_explicit_custom_matches(catalogue, selected, &grammar);
+    if custom_selected
         && !effective_select
             .iter()
             .any(|code| code == CUSTOM_RULE_COVERAGE_CODE)
@@ -384,6 +384,30 @@ pub(crate) fn select<'a>(
     resolve_policy(&references, &(), &effective, &grammar)
         .map(|ruleset| ruleset.blocking)
         .map_err(rules_error)
+}
+
+fn activate_explicit_custom_matches(
+    catalogue: &[RuleMetadata],
+    selected: &[String],
+    grammar: &RulesCodeGrammar,
+) -> (Vec<String>, bool) {
+    let mut effective = selected.to_vec();
+    let mut custom_selected = false;
+    for rule in catalogue {
+        if !rule.custom {
+            continue;
+        }
+        for selector in selected {
+            if !grammar.code_matches_selector(&rule.code, selector) {
+                continue;
+            }
+            custom_selected = true;
+            if !effective.contains(&rule.code) {
+                effective.push(rule.code.clone());
+            }
+        }
+    }
+    (effective, custom_selected)
 }
 
 pub(crate) fn selected_codes_json(request_json: &str) -> Result<String, String> {

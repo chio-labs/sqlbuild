@@ -39,8 +39,10 @@ from tests.unit.src.sqlbuild.rule_engine._helpers.engine.helpers import custom_r
             minimum_custom_rule_cases=1,
         ),
         CustomRuleTestCase(
-            description="default-off custom rule is not activated by prefix",
+            description="explicit prefix activates default-off custom rule",
             body="return [ctx.finding(subject=model)]",
+            expected_fault_codes=("XSQBRT101",),
+            expected_fault_lines=(1,),
             select=("XSQBRT",),
         ),
         CustomRuleTestCase(

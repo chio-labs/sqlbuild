@@ -145,6 +145,52 @@ def test_given_project_when_running_focused_rule_family_then_only_that_family_ru
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        RulesIntegrationTestCase(
+            "default-off custom family is explicitly selected", 1, "XSQBRARCH001"
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_default_off_custom_rule_when_running_exact_and_prefix_then_both_select_rule(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n'
+        "[rules.thresholds]\nmin_custom_rule_test_cases = 0\n",
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text('MODEL (description "Orders");\nSELECT 1 AS order_id\n', encoding="utf-8")
+    rule_file: Path = tmp_path / "rules" / "architecture.py"
+    rule_file.parent.mkdir()
+    rule_file.write_text(
+        """from sqlbuild.rules import Finding, Model, RuleContext, rule
+
+@rule(code="XSQBRARCH001", message="Forbidden name", remediation="Rename the model.")
+def forbidden_name(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    return [ctx.finding(subject=model)]
+""",
+        encoding="utf-8",
+    )
+
+    exact_exit: int = main(
+        ["--project-dir", str(tmp_path), "rules", "--json", "run", "XSQBRARCH001"]
+    )
+    exact: dict[str, object] = json.loads(capsys.readouterr().out)
+    prefix_exit: int = main(["--project-dir", str(tmp_path), "rules", "--json", "run", "XSQBRARCH"])
+    prefix: dict[str, object] = json.loads(capsys.readouterr().out)
+
+    assert exact_exit == prefix_exit == test_case.expected_exit_code
+    assert exact["findings"][0]["code"] == test_case.expected_code
+    assert prefix["findings"][0]["code"] == test_case.expected_code
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [RulesIntegrationTestCase("SQL rule exception suppresses finding", 0, "SQBRSQL004")],
     ids=lambda case: case.description,
 )
