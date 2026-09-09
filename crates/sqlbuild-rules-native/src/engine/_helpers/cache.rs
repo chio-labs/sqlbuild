@@ -102,10 +102,7 @@ fn read_bucket(path: &Path, fingerprint: &str) -> Result<RuleCacheBucket, String
         }
         Err(error) => return Err(format!("could not read bulk rules cache: {error}")),
     };
-    let bucket: RuleCacheBucket = match serde_json::from_slice(&bytes) {
-        Ok(value) => value,
-        Err(_) => RuleCacheBucket::default(),
-    };
+    let bucket: RuleCacheBucket = serde_json::from_slice(&bytes).unwrap_or_default();
     if bucket.fingerprint == fingerprint {
         Ok(bucket)
     } else {

@@ -5958,57 +5958,179 @@ limit deliberately because parallel queries can increase warehouse load and cost
 
 Source: `concepts/rules.mdx`
 
-Enforce repeatable SQL and project requirements during compilation.
+Turn repeated SQL and project review decisions into compiler-enforced requirements.
 
-Rules are configurable compile-time requirements evaluated against SQLBuild's compiled project.
-They turn decisions that would otherwise be repeated in code review into deterministic compiler
-findings.
+Code review is an expensive place to keep enforcing a decision the team has already made.
 
-SQLBuild evaluates checks in this order:
+Comments such as these are useful once, but repetitive after that:
 
-1. mandatory compiler correctness
-2. selected native built-in Rules
-3. selected custom Python Rules
-4. artifact completion
+- “This query needs deterministic ordering before `LIMIT`."
+- “Move this model into the agreed area and layer."
+- “Final models cannot depend on another area's private intermediate models."
+- “This incremental output needs a declared grain, an enforced contract, and a focused test."
+- “External sources must enter through staging."
 
-Rules report findings and never rewrite source. [`sqb format`](/cli/format) remains the separate
-source-rewriting command.
+Rules turn those decisions into configurable compile-time requirements. They run over the same
+project representation SQLBuild uses to produce executable artifacts, so a failed Rule is a failed
+compile rather than an optional report somebody must remember to run.
+
+### What Rules are for
+
+A Rule answers a static question about authored SQL or the compiled project:
+
+- Is this SQL construct safe and intentional?
+- Does this model live in the correct architectural boundary?
+- Is the dependency graph using public interfaces?
+- Do inferred output columns agree with a contract or declared grain?
+- Does a model have the tests and audits required by its role?
+- Does the project contain or omit a required path or resource?
+
+SQLBuild already knows the SQL, models, paths, configuration, declarations, columns, contracts,
+tests, audits, and resolved graph. Rules expose those compiler-owned facts instead of asking each
+check to reconstruct an incomplete view from files or generated artifacts.
+
+This enables checks that combine facts. For example, a project can allow `SELECT *` in staging while
+requiring final models to have explicit contracted outputs, or allow cross-area dependencies only
+when the referenced model lives under an `interface` directory.
+
+### Where SQL linting went
+
+SQL linting is part of the Rules system rather than a separate command.
+
+The `SQBRSQL` built-in family covers deterministic SQL diagnostics such as:
+
+- unsafe `NULL` comparisons;
+- implicit cartesian joins;
+- unordered `LIMIT` and `OFFSET`;
+- unused CTEs;
+- duplicate aliases;
+- unstable window ordering;
+- risky set-operation shapes;
+- selected SQL structure and convention requirements.
+
+```toml
+[rules]
+select = ["SQBRSQL"]
+```
+
+These checks run through ordinary compilation:
+
+```bash
+sqb compile
+```
+
+There is intentionally no separate `sqb lint` lifecycle. If an SQL requirement affects whether the
+project is acceptable, the compiler enforces it with the rest of the configured Rules.
+
+Not every traditional lint concern should become a diagnostic. SQLBuild separates three kinds of
+SQL responsibility:
+
+| Responsibility | Owner | Example |
+|---|---|---|
+| Correctness required to understand the project | Compiler | Invalid syntax, unresolved references, incompatible output shape |
+| Configurable, deterministic requirements | `SQBRSQL` Rules | Unordered `LIMIT`, unused CTE, implicit cartesian join |
+| Canonical presentation | [`sqb format`](/cli/format) | Capitalization, indentation, spacing, comma and clause layout |
+
+Rules never rewrite source. `sqb format` rewrites source and does not decide whether a project
+passes its configured Rules. This keeps diagnostics and source mutation separate.
 
 ### Built-in and custom Rules
 
-Native built-in Rules use `SQBR...` codes and cover reusable requirements maintained by SQLBuild.
-Projects can define custom Python Rules with project-owned `XSQBR...` codes. Both use the same
-selection, findings, exceptions, ordering, and cache system.
+SQLBuild maintains native built-in Rules for reusable requirements. Their codes begin with `SQBR`,
+for example `SQBRSQL004` and `SQBRGRAPH101`.
 
-You can adopt and configure custom Rules without maintaining their implementation. Python authoring
-details live in [Custom Rules](/concepts/rules/custom-rules).
+Projects can define custom Python Rules under `rules/**/*.py`. Their codes begin with `XSQBR`, for
+example `XSQBRARCH001`. Custom Rules use the same selection, findings, exceptions, execution order,
+and cache system as built-ins.
+
+```toml
+[rules]
+select = [
+  "SQBRSQL",
+  "SQBRGRAPH",
+  "XSQBRARCH",
+]
+```
+
+Exact codes select one Rule. A code without its final three digits selects the family. An empty
+`select` disables configurable Rules, but never disables mandatory compiler correctness.
+
+  Define typed model or project checks over compiler-owned facts with `@rule`, `RuleContext`, and
+  `Finding`.
 
 ### One definition of project validity
 
-`sqb compile` is authoritative. Build and execution commands use the same compiler path and reject
-configured findings before opening a warehouse connection. A successful compile means mandatory
-compiler correctness and every selected Rule passed.
+`sqb compile` is authoritative. SQLBuild evaluates a project in this order:
 
-Use `sqb rules` for focused catalogue inspection and development. Passing a focused Rule selection
-does not claim that the complete configured Rules set passed.
+```text
+mandatory compiler correctness
+→ selected native built-in Rules
+→ selected custom Python Rules
+→ artifact completion
+```
 
-### Rules and other checks
+Build and planning commands use the same compiler path. Configured findings stop execution before a
+warehouse connection is opened. Compile artifacts are not completed from a project that failed its
+Rules.
 
-| Capability | Purpose |
+Use a focused command while developing or adopting one Rule:
+
+```bash
+sqb rules list
+sqb rules show SQBRSQL004
+sqb rules run SQBRSQL004
+sqb rules run XSQBRARCH --select customer_orders
+```
+
+A focused run proves only that requested Rule and model selection passed. Run normal compilation
+before treating the complete configured project as valid.
+
+### Rules compared with tests, audits, and contracts
+
+Rules do not replace every form of validation:
+
+| Capability | Question it answers |
 |---|---|
-| Compiler correctness | Mandatory requirements needed to construct a trustworthy project |
-| Rules | Configurable static requirements over compiled project facts |
-| Formatting | Canonical source rewriting through `sqb format` |
-| Tests | Expected behavior of SQL logic |
-| Audits | Warehouse-data quality requirements |
-| Runtime checks | Validation of external resources and execution state |
+| Mandatory compiler correctness | Can SQLBuild construct a trustworthy project and executable representation? |
+| Rules | Does the authored and compiled project satisfy selected static requirements? |
+| Contracts | Does a model declare and preserve the required output shape? |
+| SQL tests | Does SQL logic produce an expected result for controlled inputs? |
+| Audits | Does warehouse data satisfy a runtime quality requirement? |
+| Runtime checks | Are external resources and execution state valid now? |
 
-### Explore Rules
+Use a Rule when the answer can be determined from source and compiler facts. Use a test when you
+need to execute SQL against controlled data. Use an audit when the answer depends on warehouse data.
+
+### Findings and intentional exceptions
+
+A finding contains a stable code, project-relative path, line, column, explanation, and remediation.
+This makes the same requirement usable in a terminal, JSON output, CI annotation, or agent workflow.
+
+Intentional departures remain explicit. Exact exceptions and path-scoped ignores require a reason;
+exact exceptions are stale-checked so obsolete suppressions do not silently accumulate. Mandatory
+compiler correctness cannot be suppressed.
+
+See [Findings and exceptions](/concepts/rules/findings-and-exceptions) for configuration examples.
+
+### Performance is part of the design
+
+Model Rules are evaluated and cached per model. Editing one model invalidates affected subjects
+rather than every invocation. Project Rules run once over the complete project view and are the
+explicit choice for genuinely project-wide invariants, with broader invalidation.
+
+Cache identity includes the Rule implementation and referenced module bindings, imported helpers,
+options, subject, accessed compiler facts, tracked project-tree observations, dialect, and
+compatibility versions. Negative observations are dependencies too: if a Rule observes that a glob
+has no matches, adding a matching file invalidates the result.
+
+See [Execution and caching](/concepts/rules/execution-and-caching) for the complete lifecycle.
+
+### Continue
 
     Select exact Rules or families and configure project-owned options.
     Understand diagnostics, exact exceptions, path ignores, and stale checks.
     Learn evaluation order, focused execution, and dependency-aware reuse.
-    Author typed Python Rules over compiler-owned facts.
+    List, inspect, run, and generate guidance for configured Rules.
 
 ## Configuration and selection
 

@@ -203,6 +203,13 @@ struct CustomEvaluation {
     misses: usize,
 }
 
+type LocalRuleMiss<'a> = (
+    &'a RuleMetadata,
+    String,
+    RuleCacheBucket,
+    BTreeMap<String, String>,
+);
+
 fn evaluate_custom_rules_cached(
     request: CustomRulesCacheRequest<'_>,
 ) -> Result<CustomEvaluation, String> {
@@ -231,15 +238,7 @@ fn evaluate_custom_rules_cached(
     let mut hits = 0;
     let mut misses_count = 0;
     let mut project_misses: BTreeMap<String, (&RuleMetadata, String)> = BTreeMap::new();
-    let mut local_misses: BTreeMap<
-        String,
-        (
-            &RuleMetadata,
-            String,
-            RuleCacheBucket,
-            BTreeMap<String, String>,
-        ),
-    > = BTreeMap::new();
+    let mut local_misses: BTreeMap<String, LocalRuleMiss<'_>> = BTreeMap::new();
     let mut selected_misses: BTreeMap<String, &RuleMetadata> = BTreeMap::new();
     let mut selected_model_paths: BTreeSet<String> = BTreeSet::new();
     let model_fact_identities = custom_model_fact_identities(&request.models)?;
