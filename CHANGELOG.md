@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.92.2](https://github.com/chio-labs/sqlbuild/compare/v0.92.1...v0.92.2) (2026-09-09)
+
+
+### Bug Fixes
+
+* attribute failures to exact SQL ([#593](https://github.com/chio-labs/sqlbuild/issues/593)) ([c17a205](https://github.com/chio-labs/sqlbuild/commit/c17a20510c5e79a01461b574fd42ba40e148c057))
+
 ## [0.92.1](https://github.com/chio-labs/sqlbuild/compare/v0.92.0...v0.92.1) (2026-09-08)
 
 
