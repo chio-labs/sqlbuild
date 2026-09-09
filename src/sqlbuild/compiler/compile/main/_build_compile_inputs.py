@@ -114,6 +114,8 @@ def build_compile_inputs(
         sql_analysis_enabled=effective_settings.sql_analysis,
         target_name=effective_target_name,
         vars=effective_vars,
+        _value_renderer=adapter_context.value_renderer,
+        _collection_rendering=adapter_context.collection_rendering,
     )
     resolved_run_id: str = resolve_run_id(selected_run_id=run_id)
     loaded_macros: dict[str, LoadedMacro] = load_project_macros(discovered_inputs.macro_files)
@@ -219,6 +221,7 @@ def build_compile_inputs(
         ),
         effective_settings=effective_settings,
         effective_vars=effective_vars,
+        macro_context=macro_context,
         loaded_macros=declaration_scope.loaded_macros,
         public_enums=model_build.declarations.enums,
         public_constants=model_build.declarations.constants,

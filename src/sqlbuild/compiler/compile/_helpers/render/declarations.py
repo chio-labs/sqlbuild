@@ -269,7 +269,7 @@ def declaration_usage_records(
             if is_enum
             else declarations.constant_visibility.get(name, ())
         )
-        for record in _usage_visibility(visibility=visibility, consumer=resource):
+        for record in usage_visibility(visibility=visibility, consumer=resource):
             usages.append(
                 UsageRecord(
                     consumer=resource,
@@ -530,7 +530,7 @@ def expand_declaration_references_result(
             visibility = declarations.constant_visibility.get(constant_match.group("name"), ())
             member = None
         if declarations.consumer is not None:
-            for visible in _usage_visibility(
+            for visible in usage_visibility(
                 visibility=visibility,
                 consumer=declarations.consumer,
             ):
@@ -560,7 +560,7 @@ def expand_declaration_references_result(
     )
 
 
-def _usage_visibility(
+def usage_visibility(
     *,
     visibility: tuple[VisibilityRecord, ...],
     consumer: ResourceIdentity | DeclarationIdentity,
@@ -659,7 +659,7 @@ def _resolve_enum_reference(
             f"Unknown member '{member_name}' for enum '{name}' in '{file_path}'. "
             f"Available members: {available}"
         )
-    return _render_scalar(value=member.value), match.end()
+    return render_enum_member_value(value=member.value), match.end()
 
 
 def _resolve_constant_reference(
@@ -692,6 +692,24 @@ def _resolve_constant_reference(
         raise CompileInputError(
             f"Unknown constant '{name}'{scope_help} in '{file_path}'. Visible constants: {visible}"
         )
+    rendered: str = render_constant_declaration(
+        declaration=declaration,
+        value_renderer=value_renderer,
+        collection_rendering=collection_rendering,
+        file_path=file_path,
+    )
+    return rendered, match.end()
+
+
+def render_constant_declaration(
+    *,
+    declaration: ConstantDeclaration,
+    value_renderer: TypedSqlValueRenderer,
+    collection_rendering: CollectionRendering,
+    file_path: Path | None = None,
+) -> str:
+    """Render one validated constant with the active adapter's typed-value contract."""
+
     selected_rendering: CollectionRendering = declaration.render_as or collection_rendering
     try:
         if declaration.value.kind in {
@@ -718,10 +736,11 @@ def _resolve_constant_reference(
     except (SqlValueRenderingError, SqlValueValidationError) as error:
         raise CompileInputError(
             f"{declaration.relative_path} constant '{declaration.name}' could not be rendered "
-            f"in '{file_path}' by adapter '{value_renderer.adapter_name}' as "
+            f"in '{file_path or declaration.relative_path}' by adapter "
+            f"'{value_renderer.adapter_name}' as "
             f"{selected_rendering.value}: {error}"
         ) from error
-    return rendered, match.end()
+    return rendered
 
 
 def _inaccessible_declaration_message(
@@ -741,7 +760,7 @@ def _inaccessible_declaration_message(
     )
 
 
-def _render_scalar(*, value: str | int) -> str:
+def render_enum_member_value(*, value: str | int) -> str:
     if isinstance(value, int):
         return str(value)
     escaped_value: str = value.replace("'", "''")

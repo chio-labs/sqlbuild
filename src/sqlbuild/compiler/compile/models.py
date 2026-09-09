@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledResourceType,
@@ -252,12 +253,54 @@ class DeclarationScopeBuild:
 
 @dataclass(frozen=True)
 class MacroContext:
-    """Compile-time context passed to adapter-aware SQL macros."""
+    """Expose target settings and caller-visible declarations to a Python SQL macro."""
 
     adapter_name: str
     sql_analysis_enabled: bool
     target_name: str | None
     vars: dict[str, object] = field(default_factory=dict)
+    constants: Mapping[str, object] = field(default_factory=dict)
+    enums: Mapping[str, Mapping[str, str | int]] = field(default_factory=dict)
+    _value_renderer: TypedSqlValueRenderer | None = field(default=None, repr=False, compare=False)
+    _collection_rendering: CollectionRendering = field(
+        default=CollectionRendering.VALUE_LIST, repr=False, compare=False
+    )
+    _constant_declarations: Mapping[str, ConstantDeclaration] = field(
+        default_factory=dict, repr=False, compare=False
+    )
+
+    def render_constant(self, name: str) -> str:
+        """Render one visible constant as an adapter-safe SQL value."""
+
+        if self._value_renderer is None:
+            raise CompileInputError(
+                "Constant SQL rendering is available only during a project macro invocation"
+            )
+        _ = self.constants[name]
+        declaration: ConstantDeclaration | None = self._constant_declarations.get(name)
+        if declaration is None:
+            raise CompileInputError(
+                "Constant SQL rendering requires a declaration resolved for this macro invocation"
+            )
+        from sqlbuild.compiler.compile._helpers.render.declarations import (
+            render_constant_declaration,
+        )
+
+        return render_constant_declaration(
+            declaration=declaration,
+            value_renderer=self._value_renderer,
+            collection_rendering=self._collection_rendering,
+        )
+
+    def render_enum_member(self, *, enum_name: str, member_name: str) -> str:
+        """Render one visible enum member as a SQL scalar literal."""
+
+        value: str | int = self.enums[enum_name][member_name]
+        from sqlbuild.compiler.compile._helpers.render.declarations import (
+            render_enum_member_value,
+        )
+
+        return render_enum_member_value(value=value)
 
 
 @dataclass(frozen=True)
@@ -623,6 +666,7 @@ class CompileProjectInputs:
     effective_connection: dict[str, object] = field(default_factory=dict)
     effective_settings: SettingsConfig = field(default_factory=SettingsConfig)
     effective_vars: dict[str, object] = field(default_factory=dict)
+    macro_context: MacroContext | None = field(default=None, repr=False, compare=False)
     loaded_macros: dict[str, LoadedMacro] = field(default_factory=dict)
     public_enums: dict[str, EnumDeclaration] = field(default_factory=dict)
     public_constants: dict[str, ConstantDeclaration] = field(default_factory=dict)

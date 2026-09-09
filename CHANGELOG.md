@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.93.1](https://github.com/chio-labs/sqlbuild/compare/v0.93.0...v0.93.1) (2026-09-09)
+
+
+### Bug Fixes
+
+* render macro declarations safely ([#599](https://github.com/chio-labs/sqlbuild/issues/599)) ([a82cee2](https://github.com/chio-labs/sqlbuild/commit/a82cee20ce140e6410d31d27ebb4c00c6f4293f4))
+
+## [0.93.0](https://github.com/chio-labs/sqlbuild/compare/v0.92.3...v0.93.0) (2026-09-09)
+
+
+### Features
+
+* expose scoped declarations to macros ([#595](https://github.com/chio-labs/sqlbuild/issues/595)) ([c074918](https://github.com/chio-labs/sqlbuild/commit/c074918b27fafcda7de652a7f23f8556abaef1b7))
+
+## [0.92.3](https://github.com/chio-labs/sqlbuild/compare/v0.92.2...v0.92.3) (2026-09-09)
+
+
+### Bug Fixes
+
+* use patched polyglot scope validation ([#596](https://github.com/chio-labs/sqlbuild/issues/596)) ([5788959](https://github.com/chio-labs/sqlbuild/commit/5788959de887b4f55159e490e96b8db8554272c2))
+
 ## [0.92.2](https://github.com/chio-labs/sqlbuild/compare/v0.92.1...v0.92.2) (2026-09-09)
 
 

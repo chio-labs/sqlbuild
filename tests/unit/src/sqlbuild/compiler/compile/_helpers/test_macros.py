@@ -33,6 +33,8 @@ _MACRO_CONTEXT: MacroContext = MacroContext(
     sql_analysis_enabled=True,
     target_name="dev",
     vars={"project_name": "demo"},
+    constants={"minimum_quantity": 2, "regions": ("north", "south")},
+    enums={"order_status": {"ACTIVE": "active", "PAUSED": "paused"}},
 )
 
 
@@ -566,6 +568,19 @@ def context_summary(ctx) -> str:
             expected_sql="SELECT 'bigquery|True|dev|demo'",
         ),
         ExpandSqlMacrosTestCase(
+            description="passes declaration values to ctx-aware macros",
+            macro_file_contents="""
+def declaration_summary(ctx) -> str:
+    minimum = ctx.constants["minimum_quantity"]
+    region_count = len(ctx.constants["regions"])
+    active = ctx.enums["order_status"]["ACTIVE"]
+    return f"SELECT {minimum}, {region_count}, '{active}'"
+""".strip()
+            + "\n",
+            sql="@declaration_summary()",
+            expected_sql="SELECT 2, 2, 'active'",
+        ),
+        ExpandSqlMacrosTestCase(
             description="ignores generated call text inside comments and quoted strings",
             macro_file_contents=(
                 "def literal_sql() -> str:\n    return \"'@quoted()' /* @commented() */\"\n"
@@ -617,6 +632,17 @@ def bad_macro() -> list[str]:
             + "\n",
             sql="SELECT @bad_macro() FROM raw_orders",
             expected_error_fragment="must return a SQL string when used directly in SQL",
+        ),
+        ExpandSqlMacrosErrorTestCase(
+            description="raises clearly when SQL rendering is used outside project invocation",
+            macro_file_contents=(
+                "def rendered_constant(ctx) -> str:\n"
+                "    return ctx.render_constant('unknown_quantity')\n"
+            ),
+            sql="SELECT @rendered_constant()",
+            expected_error_fragment=(
+                "Constant SQL rendering is available only during a project macro invocation"
+            ),
         ),
         ExpandSqlMacrosErrorTestCase(
             description="raises when generated SQL contains an ordinary macro call",
