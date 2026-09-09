@@ -722,5 +722,52 @@ def test_given_scoped_declaration_when_compiling_source_then_uses_authored_sourc
     assert inputs.source_inputs[0].source_entry.expression == test_case.expected_sql
 
 
+def test_given_sources_in_same_file_when_reusing_visibility_then_usage_consumers_remain_exact(
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    source_path: Path = tmp_path / "sources/domain/source.yml"
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "sources/domain/_constants/value.sql": "CONSTANT (name value, value 14);",
+            "models/orders.sql": "MODEL ();\nSELECT 1",
+        },
+    )
+    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+    discovered = replace(
+        discovered,
+        source_files=(
+            DiscoveredSourceFile(
+                file_path=source_path,
+                relative_path=Path("sources/domain/source.yml"),
+                contents="",
+                source_entries=(
+                    SourceEntry(name="customer_orders", expression='SELECT @const("value")'),
+                    SourceEntry(name="inventory_orders", expression='SELECT @const("value")'),
+                ),
+            ),
+        ),
+    )
+
+    inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discovered,
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+        run_id="source_scope_reuse_test",
+    )
+
+    consumers: set[ResourceIdentity | DeclarationIdentity] = {
+        usage.consumer
+        for source in inputs.source_inputs
+        for usage in source.declaration_usages
+        if usage.declaration == DeclarationIdentity(DeclarationKind.CONSTANT, "value")
+    }
+    assert consumers == {
+        ResourceIdentity(ResourceKind.SOURCE, "customer_orders"),
+        ResourceIdentity(ResourceKind.SOURCE, "inventory_orders"),
+    }
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-vv"])
