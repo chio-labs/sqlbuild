@@ -63,7 +63,8 @@ def build_lint_expansion_context(
         )
     except (AdapterUserError, CompileInputError, DiscoveryError) as error:
         raise ProjectCompileError(
-            f"sqb lint checks the SQL your project actually produces, so the project must "
+            "compiler-integrated Rules check the SQL your project actually produces, "
+            "so the project must "
             f"compile first: {error}"
         ) from error
 

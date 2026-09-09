@@ -25,9 +25,9 @@ from sqlbuild.cli.commands.models import (
     LoadCommandRequest,
     PlanCommandRequest,
     PlaygroundCommandRequest,
-    PolicyCommandRequest,
     PromoteCommandRequest,
     RollbackCommandRequest,
+    RulesCommandRequest,
     ScenarioCaptureCommandRequest,
     ScenarioTestCommandRequest,
 )
@@ -271,12 +271,14 @@ def test_given_dbt_plan_arguments_when_running_with_dependencies_then_it_dispatc
     "test_case",
     [
         MainTestCase(
-            description="dispatches typed policy request",
+            description="dispatches typed rules request",
             argv=[
                 "--project-dir",
-                "/tmp/policy-project",
-                "policy",
+                "/tmp/rules-project",
+                "rules",
                 "--json",
+                "run",
+                "SQBRSQL001",
                 "--select",
                 "commerce__mart__prices",
                 "--exclude",
@@ -287,27 +289,27 @@ def test_given_dbt_plan_arguments_when_running_with_dependencies_then_it_dispatc
     ],
     ids=lambda case: case.description,
 )
-def test_given_policy_arguments_when_running_then_dispatches_typed_request(
+def test_given_rules_arguments_when_running_then_dispatches_typed_request(
     test_case: MainTestCase,
 ) -> None:
-    received: list[PolicyCommandRequest] = []
+    received: list[RulesCommandRequest] = []
 
-    def run_policy(request: PolicyCommandRequest) -> int:
+    def run_rules(request: RulesCommandRequest) -> int:
         received.append(request)
         return test_case.expected_exit_code
 
     exit_code: int = _main_with_dependencies(
         argv=test_case.argv,
-        handlers=build_handlers(run_policy=run_policy),
+        handlers=build_handlers(run_rules=run_rules),
     )
 
     assert exit_code == test_case.expected_exit_code
     assert received == [
-        PolicyCommandRequest(
-            project_dir=Path("/tmp/policy-project"),
+        RulesCommandRequest(
+            project_dir=Path("/tmp/rules-project"),
             json_output=True,
-            rule_code=None,
-            skills=False,
+            action="run",
+            rule_selector="SQBRSQL001",
             skills_check=False,
             select=("commerce__mart__prices",),
             exclude=("legacy_model",),

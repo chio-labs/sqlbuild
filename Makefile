@@ -122,7 +122,7 @@ E2E_DUCKDB_CLI_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/debug \
 	tests/e2e/src/sqlbuild/cli/commands/main/freshness \
 	tests/e2e/src/sqlbuild/cli/commands/main/init \
-	tests/e2e/src/sqlbuild/cli/commands/main/policy \
+	tests/e2e/src/sqlbuild/cli/commands/main/rules \
 	tests/e2e/src/sqlbuild/cli/commands/main/lineage \
 	tests/e2e/src/sqlbuild/cli/commands/main/motherduck \
 	tests/e2e/src/sqlbuild/cli/commands/main/playground \

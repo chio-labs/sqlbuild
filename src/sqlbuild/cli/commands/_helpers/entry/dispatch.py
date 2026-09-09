@@ -9,7 +9,6 @@ from sqlbuild.cli.commands._helpers.entry.parsing import read_selector_file_inpu
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.constants import (
     DBT_INIT_COMMAND,
-    POLICY_SKILLS_COMMAND,
     SCENARIO_CAPTURE_COMMAND,
     SCENARIO_CLI_LOCAL_RETAIN_UNSUPPORTED,
     SCENARIO_CLI_LOCAL_SNAPSHOT_FLAG_REQUIRED,
@@ -35,9 +34,9 @@ from sqlbuild.cli.commands.models import (
     LoadCommandRequest,
     PlanCommandRequest,
     PlaygroundCommandRequest,
-    PolicyCommandRequest,
     PromoteCommandRequest,
     RollbackCommandRequest,
+    RulesCommandRequest,
     ScenarioCaptureCommandRequest,
     ScenarioSnapshotLimitInputs,
     ScenarioTestCommandRequest,
@@ -518,28 +517,28 @@ def _dispatch_local_command(
             project_dir=project_dir,
             select=select,
         )
-    if args.command in {CliCommand.LINT, CliCommand.FIX, CliCommand.FORMAT}:
+    if args.command == CliCommand.FORMAT:
         return _dispatch_lint_format_command(
             args=args,
             handlers=handlers,
             project_dir=project_dir,
             select=select,
         )
-    if args.command == CliCommand.POLICY:
-        return _dispatch_policy_command(args=args, handlers=handlers, project_dir=project_dir)
+    if args.command == CliCommand.RULES:
+        return _dispatch_rules_command(args=args, handlers=handlers, project_dir=project_dir)
     return 0
 
 
-def _dispatch_policy_command(
+def _dispatch_rules_command(
     *, args: CliNamespace, handlers: CliEntrypointHandlers, project_dir: Path | None
 ) -> int:
-    return handlers.run_policy(
-        PolicyCommandRequest(
+    return handlers.run_rules(
+        RulesCommandRequest(
             project_dir=project_dir,
             json_output=args.json,
-            rule_code=args.policy_rule_code,
-            skills=args.policy_command == POLICY_SKILLS_COMMAND,
-            skills_check=args.policy_skills_check,
+            action=args.rules_command or "list",
+            rule_selector=args.rules_rule_selector,
+            skills_check=args.rules_skills_check,
             select=tuple(args.select),
             exclude=tuple(args.exclude),
         )
@@ -553,28 +552,7 @@ def _dispatch_lint_format_command(
     project_dir: Path | None,
     select: tuple[str, ...],
 ) -> int:
-    """Route lint and format commands to their handlers."""
-
-    if args.command == CliCommand.LINT:
-        return handlers.run_lint(
-            project_dir,
-            select=select,
-            exclude=tuple(args.exclude),
-            json_output=args.json,
-            no_color=args.no_color,
-        )
-    if args.command == CliCommand.FIX:
-        if args.fix_diff and args.json:
-            raise CliUserError("fix --diff cannot be combined with --json", code="C113")
-        return handlers.run_fix(
-            project_dir,
-            select=select,
-            exclude=tuple(args.exclude),
-            check=args.fix_check,
-            diff=args.fix_diff,
-            json_output=args.json,
-            no_color=args.no_color,
-        )
+    """Route the source-formatting command to its handler."""
     if args.format_diff and args.json:
         raise CliUserError("format --diff cannot be combined with --json", code="C112")
     return handlers.run_format(

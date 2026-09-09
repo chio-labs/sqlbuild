@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -57,6 +58,11 @@ from sqlbuild.compiler.python_nodes.main._run_selection import (
 )
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
 from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
+from sqlbuild.rule_engine.exceptions import RulesError
+from sqlbuild.rule_engine.main.load_config import load_rules_config
+from sqlbuild.rule_engine.main.render_result import format_result
+from sqlbuild.rule_engine.main.run_rules import run_rules
+from sqlbuild.rule_engine.models import RulesCacheConfig, RulesConfig, RulesResult, RulesRunResult
 from sqlbuild.runtime.contracts.main.open_connection import open_connection_with_hooks
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.spec.contracts.models import TargetConfig
@@ -85,6 +91,39 @@ def run_compile_pipeline(
     effective_config: dict[str, object] = compile_result.connection_config
     project: CompiledProject = compile_result.project
     compile_seconds: float = compile_result.compile_seconds
+    graph: ProjectGraph = _build_project_graph(project=project)
+    project_dir: Path | None = discovered_inputs.project_dir
+    if project_dir is None:
+        raise RulesError("compiler rules require a resolved project directory")
+    rules_config: RulesConfig = load_rules_config(project_dir=project_dir)
+    if resolved_options.no_cache:
+        rules_config = replace(rules_config, cache=RulesCacheConfig(enabled=False))
+    if on_progress is not None:
+        on_progress("Evaluating configured rules...")
+    rules_result: RulesRunResult = run_rules(
+        graph=graph,
+        discovered_inputs=discovered_inputs,
+        config=rules_config,
+        project_dir=project_dir,
+        dialect=adapter.sql_analysis_dialect() or "generic",
+        selected_keys=None,
+    )
+    if on_progress is not None:
+        on_progress(
+            f"Evaluated rules. (built-in {rules_result.built_in_ms / 1000:.2f}s, "
+            f"custom {rules_result.custom_ms / 1000:.2f}s)"
+        )
+    if rules_result.findings:
+        rendered: str = format_result(
+            result=RulesResult(
+                findings=rules_result.findings,
+                evaluated_models=rules_result.evaluated_models,
+                cache_hits=rules_result.cache_hits,
+                cache_misses=rules_result.cache_misses,
+            ),
+            json_output=False,
+        )
+        raise RulesError(f"configured compiler rules failed:\n{rendered}")
     timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
     planning_start: float = time.monotonic()
     connection: Any | None = None

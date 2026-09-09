@@ -23,6 +23,7 @@ from sqlbuild.cli.commands.models import (
     CompileWriteResult,
 )
 from sqlbuild.cli.commands.types import CompileLineageMode
+from sqlbuild.compiler.compile.types import DiagnosticPhase
 from sqlbuild.compiler.profiling.main.collect import collect_compile_timings
 from sqlbuild.compiler.profiling.models import CompileTimingCollector
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
@@ -79,19 +80,23 @@ def _run_compile_with_status(
         exclude=request.exclude,
         status=status,
     )
+    rules_failed: bool = any(
+        diagnostic.is_error and diagnostic.phase is DiagnosticPhase.RULE
+        for diagnostic in analysis.diagnostics
+    )
     manifest_payload: dict[str, object] | None = build_compile_manifest_payload(
-        manifest=manifest,
+        manifest=manifest and not rules_failed,
         analysis=analysis,
         status=status,
     )
     write_compile_dag_artifact(
-        dag_path=request.dag_path,
+        dag_path=None if rules_failed else request.dag_path,
         project_dir=project_dir,
         analysis=analysis,
         status=status,
     )
     write_result: CompileWriteResult = write_compile_artifacts(
-        profile_skip_write=request.profile_flags.skip_write,
+        profile_skip_write=request.profile_flags.skip_write or rules_failed,
         project_dir=project_dir,
         analysis=analysis,
         manifest_payload=manifest_payload,
@@ -102,6 +107,10 @@ def _run_compile_with_status(
         "graph_ms": analysis.graph_ms,
         "lineage_ms": analysis.lineage_ms,
         "contracts_ms": analysis.contract_ms,
+        "built_in_rules_ms": analysis.built_in_rules_ms,
+        "custom_rules_ms": analysis.custom_rules_ms,
+        "rule_cache_hits": analysis.rule_cache_hits,
+        "rule_cache_misses": analysis.rule_cache_misses,
         "write_ms": write_result.write_ms,
         **detailed_timings.as_milliseconds(),
         "total_ms": elapsed_ms(total_start),

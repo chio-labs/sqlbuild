@@ -54,17 +54,19 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/planning/selection-and-staleness`
 - `concepts/snapshots`
 - `concepts/audits`
+- `concepts/rules`
 - `concepts/testing`
 - `concepts/scenarios`
 - `concepts/selectors`
 - `concepts/column-lineage`
 - `concepts/diff`
+- `concepts/observability`
+- `concepts/observability/sinks`
 - `concepts/declaration-scopes`
 - `concepts/declaration-scopes/visibility`
 - `concepts/declaration-scopes/placement`
 - `concepts/declaration-scopes/explorer`
-- `concepts/policy`
-- `concepts/policy/custom-rules`
+- `concepts/rules/custom-rules`
 - `concepts/python-nodes/overview`
 - `concepts/python-nodes/loaders`
 - `concepts/python-nodes/tasks`
@@ -94,8 +96,10 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `cli/playground`
 - `cli/skills`
 - `cli/compile`
+- `cli/format`
+- `cli/contract`
 - `cli/scope`
-- `cli/policy`
+- `cli/rules`
 - `cli/plan`
 - `cli/build`
 - `cli/load`
@@ -172,26 +176,34 @@ E2E replay.
 Before any model runs, SQLBuild does static analysis of your project - offline, no warehouse connection needed.
 
 - **Catch errors at compile.** SQL syntax, type inference, contract checks, and column lineage all run before execution. A bad reference or a type mismatch fails at compile, with an error that points at the line - not halfway through a warehouse run.
-- **Enforce architecture deliberately.** Opt into [Policy](/concepts/policy) to check model structure, dependency CTEs, layer boundaries, joins, naming, contracts, and test coverage with coded faults and remediations.
+- **Turn review decisions into compiler checks.** Configure [Rules](/concepts/rules) over compiler-owned SQL, models, dependencies, contracts, tests, and project paths.
+- **Format separately.** `sqb format` owns deterministic source rewriting; Rules remain diagnostic-only.
 - **Fast, because it's Rust where it counts.** Static analysis runs on [Polyglot](https://github.com/tobilg/polyglot), a Rust SQL engine (MIT, 32+ dialects), so compile stays quick even on large projects.
 - **Open, not paywalled.** The static analysis is part of the Apache-2.0 core - no proprietary engine, no separate login, and no paid tier gating the smart checks.
 
-### Change-aware builds, when you need them
+### Plans that explain every build
 
 **Start simple.** By default, `sqb build` runs your full selection - the same predictable mental model as dbt, with nothing to configure. For many projects, that is all they will ever need.
 
-**Scale deliberately.** Change-aware builds are powerful: every model, seed, UDF, and Python node has a versioned identity, so SQLBuild can skip anything already current and only pay for the work that actually changed. But that power introduces complexity - warehouse state to reason about, staleness and cascade behavior, and partial-selection edge cases - that is not worth it for smaller or simpler pipelines. So it is opt-in and part of [virtual environments](/concepts/virtual-environments): turn it on with `--changes-only` (or `changes_only = true` in config) when the cost of full rebuilds outgrows the simplicity of running everything.
+Every model, seed, function, and Python node has a versioned identity. SQLBuild uses those identities
+to explain query and configuration changes, propagate upstream changes, choose incremental replay
+actions, and protect scoped builds from stale dependencies. Direct mode still runs the selected
+scope; change detection makes that plan explicit rather than silently changing what was selected.
 
-When enabled, change detection covers the whole graph:
+[Virtual environments](/concepts/virtual-environments) add version reuse and optional stale-driven
+execution when a project needs isolated previews, promotion, and rollback.
 
-- **Models and UDFs:** fingerprinted by query hash, config, and upstream UDF hashes. Unchanged models are skipped.
-- **Seeds:** content and load-affecting config are hashed. Unchanged seeds are not reloaded.
-- **Audits:** audits that already passed for the same model version are not re-run.
-- **Source freshness:** external source data versions are tracked automatically. Models downstream of unchanged sources are skipped, with lag tolerance to avoid jitter.
+The planner carries that evidence across the whole graph:
+
+- **Models and functions:** query, configuration, and dependency identities explain local and cascaded changes.
+- **Seeds:** content and load-affecting configuration identify when a seed changed.
+- **Audits:** audit evidence is associated with the model version it validated.
+- **Source freshness:** observable source data versions can affect downstream plans, with lag tolerance to avoid jitter.
 - **Cascade propagation:** when a model does change, the signal propagates downstream, with configurable replay windows (`replay_on_change`).
-- **Python nodes:** loaders, tasks, assets, checks, and hooks are fingerprinted by source and dependency hashes; skip/run is user-controlled via `ctx.skip()`.
+- **Python nodes:** source and dependency identities appear in plans; skip/run remains user-controlled through `ctx.skip()`.
 
-State is plain append-only rows in your own warehouse (`_sqlbuild_fingerprints`, `_sqlbuild_source_freshness`, `_sqlbuild_node_results`) - no external state database, no manifest files, no state machine that can corrupt.
+In direct mode, this evidence is stored as append-only rows in your warehouse. Virtual environments
+use their configured state backend for environment-scoped version bindings.
 
 ### Deploy reversibly (opt-in)
 
@@ -247,6 +259,7 @@ def grant_target(target):
 
 - **Full table builds:** SQLBuild materializes into a staging table and runs `error`-severity audits before promotion. If any fail, the swap is blocked and the production table is untouched.
 - **Incremental models:** Delta-phase audits validate each batch before DML is applied. Bad data is caught before it reaches the target.
+- **Measured quality:** Measurement audits evaluate values against warning/error thresholds, distinguish insufficient samples, and can retain bounded evidence and immutable result history.
 
 #### Incremental processing
 
@@ -365,6 +378,8 @@ This guide walks you through creating and running a complete transformation proj
 
 - Python 3.12+
 - SQLBuild installed: `uv pip install sqlbuild` or `pip install sqlbuild`
+
+Confirm the installed release with `sqb --version`.
 
 ### 1. Create the playground
 
@@ -610,7 +625,7 @@ waffle-shop/
 ### Next steps
 
 - [Models](/concepts/models) - understand `MODEL()` headers and materialization types
-- [Policy](/concepts/policy) - opt into repository architecture and model-shape checks
+- [Rules](/concepts/rules) - add compile-time SQL, architecture, and model-shape checks
 - [Functions](/concepts/functions) - SQL UDFs, Python UDFs, and table functions
 - [Incremental](/concepts/incremental) - learn about cursor-based incremental strategies
 - [Audits](/concepts/audits) - configure data quality checks
@@ -639,6 +654,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Local E2E replay | Capture from warehouse, replay in DuckDB | No | No |
 | Macro / UDF / table function tests | `TEST(mode macro)`, `TEST(mode udf)`, or `TEST(mode table_fn)` | No | No |
 | Zero-row assertions | `__assert__` CTEs in tests and scenarios | No | No |
+| Failure diagnostics | Bounded, redacted unexpected and missing row samples in text and JSON | Adapter/tool dependent | Row diffs |
 
 #### Audits
 
@@ -647,15 +663,20 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Built-in audits | not_null, unique, accepted_values, relationships | not_null, unique, accepted_values, relationships | Extensive (statistical, string pattern, etc.) |
 | Blocking audits | Block promotion from staging table | Tests run after materialization | Audits gate plan application; run-time audits execute after the interval is materialized |
 | Delta/interval-scoped audits | Per-microbatch audit cycle before DML | No | Audit query filtered to processed intervals for time-range models |
+| Measurement audits | Thresholds, minimum samples, bounded evidence, and immutable result history | Package/custom test patterns | Custom audits |
+| Audit factories | Typed Python factories generate equivalent reviewed audit instances | Macros/packages | Python audit definitions |
 
 #### Compilation
 
 | Feature | SQLBuild | dbt | SQLMesh |
 |---------|----------|-----|---------|
-| SQL validation | Offline, compile-time (Polyglot) | dbt Core: none; dbt Fusion engine: compile-time (proprietary; built on Apache-2.0 dbt Core v2) | Compile-time (SQLGlot) |
+| SQL analysis | Offline syntax, binding, type inference, semantic validation, and lineage (Polyglot) | dbt Core: none; dbt Fusion engine: compile-time (proprietary; built on Apache-2.0 dbt Core v2) | Compile-time (SQLGlot) |
+| Focused compilation | Full graph integrity with deep analysis limited to selection and required upstream closure | Selected compilation | Selected planning |
 | Column-level lineage | Compile-time, fast and rich modes | dbt Core: post-hoc via docs; dbt Fusion engine: compile-time | Compile-time |
 | Column contract validation | Compile-time inference plus runtime enforcement with `contract enforced` | YAML schema contracts at runtime | Schema contracts via plan |
-| SQL architecture policy | Opt-in Policy rules over compiled models with coded faults, remediations, suppressions, and custom rules | Project conventions through packages and external tooling | Built-in audits and external linting |
+| Existing-schema contracts | Online read-only diff and safe repository generation | Codegen/packages | External schema tooling |
+| Rules and formatting | Compiler-integrated native and custom diagnostics, reasoned suppressions, and separate canonical formatting | External tools | Built-in formatter plus external linting |
+| Compiler-integrated Rules | Native and custom rules over compiler-owned SQL, models, dependencies, contracts, tests, and project paths | Project conventions through packages and external tooling | Built-in audits and external linting |
 | SQL transpilation | For local E2E replay into DuckDB | No | For cross-dialect model execution |
 | Python macros | `@macro()` syntax | No (Jinja only) | SQLMesh macro syntax |
 | Compiler-enforced declaration scopes | Project, descendant-public, exact-owner-private, and model-private tiers with offline `sqb scope` inspection | No lexical declaration scopes | No lexical declaration scopes |
@@ -666,15 +687,15 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Feature | SQLBuild | dbt | SQLMesh |
 |---------|----------|-----|---------|
 | Incremental strategies | append, delete_insert, merge, SCD Type 2 | append, delete_insert, merge, snapshots | delete_insert (time-range), merge (unique-key), SCD Type 2, partition |
-| Microbatch execution | Configurable batch sizes with per-batch audits | Microbatch (recent addition) | Batch size support |
-| Stateful interval tracking | Cursor-based, no external interval state | No | Tracks which intervals have run (in state store) |
+| Microbatch execution | Watermark and rolling-window strategies, per-batch audits, limits, and opt-in concurrency | Microbatch | Batch size support |
+| Interval progress | Sequential runs derive progress from target/input cursors; concurrent runs coordinate with append-only facts | No | Tracks intervals in a state store |
 | SCD Type 2 models | Timestamp and check strategies, historical input, hard deletes | Snapshots (timestamp and check strategies) | `SCD_TYPE_2` model kind (timestamp and check strategies) |
 
 #### Planning and change detection
 
 | Feature | SQLBuild | dbt | SQLMesh |
 |---------|----------|-----|---------|
-| Change-aware builds | Opt-in (`--changes-only`) in virtual environments; fingerprints models, seeds, functions, Python nodes and skips unchanged work including audits | dbt State (paid) | Version hash comparison |
+| Stale-driven virtual builds | Optional `--changes-only` execution over VDE version bindings | dbt State (paid) | Version hash comparison |
 | Warehouse-native state | Append-only tables in the warehouse; no external state database | manifest.json artifacts | Requires external state store (SQLite/PostgreSQL) |
 | Source freshness | `sqb freshness` with adapter/column/sql strategies, lag tolerance, and CI gating | `dbt source freshness` | No dedicated freshness command; `signals` gate model evaluation until external data is ready |
 | Reuse across environments | Virtual environments reuse fingerprint-matched physical tables across environments (shared physical storage) | dbt State clone (paid) | Virtual environments reuse fingerprint-matched physical tables across environments (shared physical storage) |
@@ -730,7 +751,8 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Adapters | DuckDB, MotherDuck, Snowflake, BigQuery, Databricks, PostgreSQL, SQL Server | 30+ (community adapters) | DuckDB, Snowflake, BigQuery, Databricks, Spark, Redshift, Postgres, Trino, MySQL |
 | State requirements | Stateless by default | manifest.json + target/ | Requires state store (local database or PostgreSQL for production) |
 | Playground | `sqb playground` | Clone example repo | Example project |
-| AI agent skills | General guidance with `sqb skills`; policy-derived guidance with `sqb policy skills` | No | No |
+| AI agent skills | General guidance with `sqb skills`; Rules guidance with `sqb rules skills` | No | No |
+| Execution observability | Immutable schema-versioned lifecycle facts, invocation-local ordering, orchestration context, and typed project sinks | Events/artifacts plus external observability | Plans, state, and external observability |
 
 ### Where each tool fits
 
@@ -1301,9 +1323,9 @@ Global feature toggles:
 [settings]
 sql_analysis = true
 query_change_tracking = true
-sql_validation = true
 column_contract_mode = "implicit"
 concurrency = 1
+microbatch_concurrency = false
 auto_load_sources = true
 table_promotion_mode = "staged"
 default_audit_severity = "warn"
@@ -1312,13 +1334,13 @@ default_audit_run_scope = "final"
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `sql_analysis` | `true` | Enable SQL validation and static analysis at compile time |
-| `changes_only` | `false` | Enable [change-aware pruning](/concepts/planning#changes-only-mode) for `plan` and `build` without passing `--changes-only` each run. Requires `virtual_environments = true`; rejected in direct mode. Can also be set per target under `[targets.<name>]`. The CLI flag takes precedence, then the selected target, then local settings, then this project setting. |
+| `sql_analysis` | `true` | Enable SQL syntax analysis, column binding, type inference, output inference, and semantic validation at compile time |
+| `changes_only` | `false` | In virtual mode, limit `plan` and `build` to [stale-driven execution](/concepts/virtual-environments/building#stale-driven-execution) without passing `--changes-only`. Rejected in direct mode. Can also be set per target under `[targets.<name>]`. The CLI flag takes precedence, then the selected target, local settings, and this project setting. |
 | `virtual_environments` | `false` | Enable [virtual environments](/concepts/virtual-environments) (versioned model outputs, promotion, rollback, state management). When `false`, the project runs in direct mode. |
 | `query_change_tracking` | `true` | Track query fingerprints for change detection |
-| `sql_validation` | `true` | Validate SQL syntax during compilation |
 | `column_contract_mode` | `implicit` | Controls whether column declarations on models without a `contract` declaration activate static shape/nullability validation. `implicit` preserves that validation; `explicit` treats columns as metadata and audit attachment unless the model declares `contract enforced`. Model-level `contract enforced` and `contract none` override this setting. Explicit type enforcement remains independent. See [Contracts](/concepts/models/contracts). |
 | `concurrency` | `1` | Maximum parallel model execution (currently serial only) |
+| `microbatch_concurrency` | `false` | Explicitly permit models with `batch_concurrency > 1`; concurrent batches use immutable coordination facts |
 | `auto_load_sources` | `true` | Automatically run source loaders before building dependent models during `sqb build`. See [Loaders](/concepts/python-nodes/loaders). |
 | `table_promotion_mode` | adapter default | `staged` (CTAS to staging, audit, then promote) or `immediate` (CTAS directly to target, then audit) |
 | `default_audit_severity` | `warn` | Default severity for audits: `warn` or `error` |
@@ -1329,21 +1351,19 @@ default_audit_run_scope = "final"
 - **`staged`** (default for most adapters): Materializes into a staging table, runs audits, then swaps into the target. If audits fail, the production table is untouched.
 - **`immediate`**: Creates the table directly at the target location. Audits run after materialization. Simpler but no pre-promotion safety net.
 
-### Policy
+### Rules
 
-Project policy belongs in the shared `sqlbuild_project.toml` so local and CI evaluation use the same
-architecture rules:
+Rules configuration belongs in the shared `sqlbuild_project.toml` so local and CI compilation use
+the same checks:
 
 ```toml
-[policy]
-select = ["SQBP"]
+[rules]
+select = ["SQBRSQL", "SQBRGRAPH", "XSQBRARCH"]
 ```
 
-Policy is opt-in. `SQBP` activates every built-in rule; narrower prefixes activate a rule family, and
-exact codes activate individual rules. Audit, SQL test, and custom-rule test-case minimums each
-default to one and can be overridden under `[policy.thresholds]`. See
-[Project Policy](/concepts/policy) for the complete rule, configuration, and suppression
-reference.
+Rules are opt-in. Exact codes activate individual checks and prefixes activate a family. Built-in
+codes begin with `SQBR`; repository-defined codes begin with `XSQBR`. See
+[Compiler-integrated Rules](/concepts/rules) for configuration, authoring, and suppressions.
 
 ### Project variables
 
@@ -1469,7 +1489,7 @@ loader_schema = "raw_alice"
 database = "my_local.duckdb"
 
 [settings]
-sql_validation = false
+sql_analysis = false
 concurrency = 4
 
 [vars]
@@ -2236,7 +2256,10 @@ For common ingestion you can declare the source entirely in YAML, with no `@load
 
 ### Source freshness
 
-Source freshness lets SQLBuild observe whether a source's data has changed between runs. This feeds into [planning and change detection](/concepts/planning): under `--changes-only` (in virtual environments), models downstream of unchanged sources are skipped.
+Source freshness lets SQLBuild observe whether a source's data changed between runs. This feeds into
+[planning and change detection](/concepts/planning): changed observations propagate to downstream
+models and can alter their planned action. Virtual environments can also use the signal for
+[stale-driven execution](/concepts/virtual-environments/building#stale-driven-execution).
 
 Configure freshness per source with a `freshness:` block:
 
@@ -2945,9 +2968,54 @@ This does not require, create, or reference a warehouse-native enum type. SQLBui
 
 Enum member references such as `@enum("fulfillment_method").DELIVERY` are a separate feature that render one validated SQL literal. See [Enum Model Contracts](/concepts/enums/model-contracts) for the complete distinction and lowering behavior.
 
+### Adopting an existing schema
+
+Ordinary `sqb compile` validates authored contracts offline. To compare declarations with existing
+warehouse relations, use the explicitly online, read-only contract commands:
+
+```bash
+sqb contract diff --from prod --select tag:commerce
+sqb contract generate --from prod --select tag:commerce
+```
+
+The target named by `--from` supplies the database and schema namespace to inspect. SQLBuild uses
+the active project connection and never resolves a second set of origin credentials.
+
+#### Preview and write
+
+`contract diff` returns exit code `1` when declarations and physical relations disagree.
+`contract generate` prints proposed declaration changes without changing files:
+
+```bash
+# Fill missing types and append physical columns missing from code
+sqb contract generate --from prod --select tag:commerce --write
+
+# Replace conflicting types/names and remove declarations absent physically
+sqb contract generate --from prod --select tag:commerce --write --overwrite
+```
+
+Contract commands never mutate warehouse relations, lifecycle state, or fingerprints.
+
+#### Safety rules
+
+- Additive generation preserves existing types on conflict, repository-only columns, comments,
+  descriptions, audits, nullability, enums, tags, freshness, and loader configuration.
+- `--overwrite` is an explicit repository replacement policy, not a warehouse write.
+- Generation does not add `contract enforced`; activation remains an authored decision.
+- A shared `SCHEMA()` is not changed from one model's evidence. Ownership conflicts are reported.
+- Writes are atomic and SQLBuild recompiles the project, restoring prior contents if validation
+  fails.
+- Sources are first-class selectable resources, for example `--select source:raw_orders`.
+
+Enforced upstream contracts are authoritative compile-time interfaces. When input evidence is
+complete, missing or ambiguous columns fail in projections, joins, filters, grouping, windows, and
+ordering. Partial or opaque schemas remain open; SQLBuild does not turn missing metadata into a
+false error. Use `sqb lineage <model> --include-uses --format json` to inspect direct
+non-projection uses such as `join_on`, `where`, `group_by`, and `window_order_by`.
+
 ### Related policies
 
-The project default is implicit open-shape validation for models that omit `contract`. A repository can select explicit opt-in contracts with `settings.column_contract_mode = "explicit"` or enable [`SQBPC101`](/concepts/policy#layers-and-model-grammar) to require enforced contracts through Policy architecture policy.
+The project default is implicit open-shape validation for models that omit `contract`. A repository can select explicit opt-in contracts with `settings.column_contract_mode = "explicit"` or configure a custom [Rule](/concepts/rules/custom-rules) that requires enforced contracts for selected model families.
 
 Contracts also constrain schema-change behavior. For example, `snapshot_schema_change append_new_columns` is incompatible with `contract enforced` because an unannounced appended column would violate the exact declaration.
 
@@ -3215,7 +3283,7 @@ AS 'SELECT 1'
 
 SQLBuild strictly validates hook resource syntax, arguments, interpolation, macros, metadata, and non-empty payloads. It does not classify executable statement kinds or implement vendor SQL grammar. Each rendered hook payload is passed to the adapter in one `execute` call; whether a driver accepts multiple statements or client-side batch separators is adapter and warehouse behavior. Use separate hook entries when portable ordering between statements matters.
 
-After expansion, Polyglot validates the complete payload using the active adapter's analysis dialect when the model's effective SQL-validation gate is enabled, which it is by default. SQL analysis must be enabled, `--no-sql-validation` must be absent, and the effective project or model `sql_validation` value must be true. Polyglot does not understand every administrative or procedural command supported by every warehouse. If it cannot parse valid vendor-specific hook SQL, disable SQL validation for that model or invocation and let the adapter and warehouse provide the authoritative result. SQLBuild does not compensate with keyword allowlists or handwritten parser fallbacks.
+After expansion, Polyglot validates the complete payload using the active adapter's analysis dialect when the model's effective `sql_analysis` setting is enabled, which it is by default. The `--no-sql-analysis` flag disables this analysis for the invocation. Polyglot does not understand every administrative or procedural command supported by every warehouse. If it cannot parse valid vendor-specific hook SQL, disable SQL analysis for that model or invocation and let the adapter and warehouse provide the authoritative result. SQLBuild does not compensate with keyword allowlists or handwritten parser fallbacks.
 
 Common errors include:
 
@@ -3335,7 +3403,7 @@ Compilation reports unknown hooks and invalid signatures with the model name and
 
 Source: `concepts/models/configuration.mdx`
 
-MODEL() header fields and SQL-validation controls.
+MODEL() header fields and SQL-analysis controls.
 
 ### Common fields
 
@@ -3356,17 +3424,20 @@ MODEL() header fields and SQL-validation controls.
 | `post_hooks` | Ordered `inline_sql(...)`, `sql("name", ...)`, or `python("name", ...)` hooks after materialization |
 | `enabled` | Set to `false` to disable the model |
 | `contract` | `none` for an open statically checked declaration, or `enforced` for an exact declaration |
-| `sql_validation` | Per-model SQL-validation override |
+| `sql_analysis` | Per-model SQL-analysis override |
 
-### SQL validation
+### SQL analysis
 
-SQL validation has two hard gates and one effective setting:
+SQL analysis has project, invocation, and model gates:
 
 1. `settings.sql_analysis` must be enabled.
-2. `--no-sql-validation` must not be present.
-3. `MODEL (sql_validation true|false)` overrides `settings.sql_validation` for that model. If omitted, the project setting is used.
+2. `--no-sql-analysis` must not be present.
+3. `MODEL (sql_analysis false)` can disable analysis for that model. If omitted, the project setting
+   is used.
 
-The model override can re-enable validation when the project-level `settings.sql_validation` value is false, but it cannot bypass disabled SQL analysis or the CLI kill switch.
+A model cannot re-enable analysis when either broader gate disables it. The older `sql_validation`
+and `--no-sql-validation` spellings remain compatibility aliases; use `sql_analysis` for new
+configuration.
 
 ### Table fields
 
@@ -3388,7 +3459,11 @@ Table promotion mode is a project setting rather than a `MODEL()` field. Staged 
 | `cursor_inputs` | Upstream names mapped to cursor columns |
 | `unique_key` | Merge or delete/insert matching columns |
 | `incremental_mode` | Set to `microbatch` for batched execution |
+| `microbatch_strategy` | Required in microbatch mode: `watermark` or `rolling_window` |
+| `cursor_watermark_mode` | Watermark strategy policy: `all` or `any` |
 | `batch_size` | Timestamp duration string such as `1d` or `1h`; use a numeric string such as `"1000"` for an integer cursor |
+| `batch_concurrency` | Concurrent batch workers; values above `1` require `delete_insert` and the project concurrency gate |
+| `microbatch_limit` | Nested `max_batches` and `action` policy for watermark execution |
 | `lookback` | Backward replay extension |
 | `append_cursor_inclusive` | Include (`true`, default) or exclude (`false`) the current append-cursor boundary |
 | `merge_exclude_columns` | Columns left unchanged by matched-row merge updates |
@@ -3450,7 +3525,7 @@ subdirectories can organize a large enum library without changing where the enum
 ```text
 my_project/
 ├── enums/
-│   ├── commerce/
+│   ├── fulfillment/
 │   │   └── fulfillment_method.sql
 │   └── order_status.sql
 ├── models/
@@ -3458,7 +3533,7 @@ my_project/
 ```
 
 ```sql
--- enums/commerce/fulfillment_method.sql
+-- enums/fulfillment/fulfillment_method.sql
 ENUM (
   name fulfillment_method,
   members [DELIVERY, PICKUP, SHIPPING],
@@ -3566,7 +3641,7 @@ Reference a constant with `@const("name")`:
 
 ```sql
 SELECT *
-FROM orders
+FROM order_batches
 WHERE item_count >= @const("min_items")
   AND source = @const("fallback_source")
 ```
@@ -3821,13 +3896,13 @@ MODEL (
     _state [OPEN, CLOSED],
   ),
   constants (
-    _min_items 7,
-    _supported_countries ["US", "CA", "DE"],
+    _min_items 2,
+    _supported_countries ["GB", "FR", "DE"],
   ),
 );
 
 SELECT *
-FROM items
+FROM order_batches
 WHERE state = @enum("_state").OPEN
   AND item_count > @const("_min_items")
   AND country_code IN @const("_supported_countries")
@@ -4547,7 +4622,11 @@ Source: `concepts/incremental.mdx`
 
 Cursor-based incremental strategies, microbatch execution, and backfill policies.
 
-Incremental models process only new or changed data instead of rebuilding the entire table. SQLBuild works out where to resume from the current target and input relations, so there is no separate checkpoint store. A retry recomputes its interval from current warehouse state rather than reusing the exact interval of a failed attempt.
+Incremental models process only new or changed data instead of rebuilding the entire table. In the
+default sequential path, SQLBuild works out where to resume from the current target and input
+relations with no separate checkpoint store. A retry recomputes its interval from current warehouse
+state rather than reusing the exact interval of a failed attempt. Opt-in concurrent microbatching
+adds immutable coordination facts as described below.
 
 ### Strategies
 
@@ -4736,7 +4815,15 @@ With `lookback 3d`, the replay window starts 3 days before the normal cursor pos
 
 ### Microbatch execution
 
-For large incremental ranges, microbatch mode splits the replay window into configurable batches. Each batch is processed serially with its own audit cycle: create delta, run delta audits, apply DML, clean up.
+For large incremental ranges, microbatch mode splits the replay window into configurable batches.
+Choose an explicit strategy:
+
+| Strategy | Window source |
+|----------|---------------|
+| `watermark` | Declared input availability; supports timestamp and integer cursors |
+| `rolling_window` | A timestamp window relative to the current run rather than input maxima |
+
+Each batch has its own audit cycle: create delta, run delta audits, apply DML, and clean up.
 
 ```sql
 MODEL (
@@ -4745,10 +4832,12 @@ MODEL (
   cursor activity_hour,
   cursor_type timestamp,
   cursor_grain hour,
-  cursor_inputs (
-    fact_orders ordered_at,
-  ),
   incremental_mode microbatch,
+  microbatch_strategy watermark,
+  cursor_watermark_mode all,
+  cursor_inputs (
+    fact_orders (column ordered_at, roles [filter, watermark]),
+  ),
   batch_size 1d,
 );
 ```
@@ -4758,6 +4847,36 @@ Without microbatch mode, the entire replay range is processed in one pass.
 #### Batch size
 
 `batch_size` controls the window size for each batch. For timestamp cursors, use duration strings like `1d`, `6h`, `1mo`. For integer cursors, use an integer value.
+
+For watermark models, each `cursor_inputs` entry declares whether the input filters model SQL,
+contributes an availability watermark, or does both. `cursor_watermark_mode all` uses the
+conservative common watermark; `any` permits progress from any watermark input. A filter-only input
+does not claim that its intervals are available.
+
+#### Concurrent batches
+
+Sequential execution is the default and does not read or write `_sqlbuild_microbatches`. To opt into
+concurrent `delete_insert` batches, enable the project gate and choose a model limit:
+
+```toml
+[settings]
+microbatch_concurrency = true
+```
+
+```sql
+MODEL (
+  materialized incremental,
+  incremental_strategy delete_insert,
+  incremental_mode microbatch,
+  microbatch_strategy watermark,
+  batch_concurrency 4,
+  -- cursor configuration omitted
+);
+```
+
+Concurrent execution uses immutable requirement and completion facts to coordinate dependencies and
+reconcile retries. It does not update one mutable status row through planned/running/complete
+states. Increase concurrency deliberately because every active batch can consume warehouse work.
 
 #### Watermark batch limits
 
@@ -4773,6 +4892,9 @@ MODEL (
   cursor event_date,
   cursor_type timestamp,
   cursor_grain day,
+  cursor_inputs (
+    raw_events (column event_date, roles [filter, watermark]),
+  ),
   batch_size 1d,
   microbatch_limit (
     max_batches 7,
@@ -4790,9 +4912,9 @@ MODEL (
 
 A cap changes only the work selected for that invocation. Deferred batches are not recorded as complete. `cap_from_end` is useful for feeds where keeping the latest projection current is more important than catching up oldest-first; `cap_from_start` is the oldest-first catch-up policy.
 
-For `cap_from_start`, `max_batches` must be large enough to cover the model's ordinary lookback/current buckets and at least one forward batch. SQLBuild rejects a static limit that cannot make forward progress, including when an idempotent strategy uses its implicit one-batch lookback.
-
-When another watermark model consumes a capped model, SQLBuild uses the producer's durable partition-completion facts as the authoritative availability intervals. A configured producer `cursor_end` remains a domain boundary, but neither that declaration nor the target table's physical `MIN`/`MAX` envelope proves that deferred or intervening intervals were materialized. This keeps disjoint `cap_from_end` suffixes disjoint for downstream execution. If completion history is unavailable, the consumer fails closed.
+Downstream watermark models consume durable completion facts from capped upstream models. A target
+table's physical minimum/maximum does not prove that deferred or intervening intervals were built;
+if completion evidence is unavailable, SQLBuild fails closed rather than inventing availability.
 
 The project can also set an outer safety policy:
 
@@ -4802,7 +4924,7 @@ max_batches = 100
 action = "error" # or "warn"
 ```
 
-Project limits support only `error` and `warn`; they never silently cap work. When a model has a nested `microbatch_limit`, the project policy checks the full resolved range first and the model policy then applies.
+Project limits support only `error` and `warn`; they never silently cap work. When a model has a nested `microbatch_limit`, the project limit checks the full resolved range first and the model policy then applies.
 
 `--max-microbatches N` is an invocation-wide, hard `error` ceiling and an explicit one-run authorization. It takes precedence over project and model limits, applies to models without a declared limit, and never inherits `cap_from_start` or `cap_from_end`. For example, passing a value large enough for an intentional backfill authorizes the full range instead of retaining the model's ordinary-run cap.
 
@@ -4880,125 +5002,144 @@ Controls how schema differences are handled at execution time when the increment
 | `ignore` | Log and continue without schema changes |
 | `fail` | Reject the build with an error |
 
-## Overview
+## Planning and change detection
 
 Source: `concepts/planning.mdx`
 
-How SQLBuild decides what to build: fingerprints, change reasons, and warehouse-native state.
+How SQLBuild explains build work, detects changes, and chooses safe model actions.
 
-When you run `sqb plan` or `sqb build`, SQLBuild compiles your project, compares it against the current warehouse state, and produces a plan. By default, SQLBuild runs your full selection - the same predictable behavior as a plain build, with nothing to configure.
+`sqb plan` previews the work for a build without executing it. `sqb build` uses the same planner
+before running the selected resources.
 
-Change-aware pruning is opt-in and requires [virtual environments](/concepts/virtual-environments). In a virtual environment, pass `--changes-only` (or set `changes_only = true` in config) to narrow the run to only stale work - unchanged models, seeds, audits, and Python nodes are then skipped. The fingerprints and change reasons below are recorded on every successful build regardless, so change detection is ready the moment you enable pruning.
+Planning and selection are separate concerns:
 
-### What is tracked
+- **Selection** determines which resources are in scope. By default, that is the whole project; use
+  `--select` and `--exclude` to choose a smaller scope.
+- **Change detection** compares compiled resources with recorded warehouse state. It explains why a
+  resource needs work, chooses the correct action for incremental models, propagates upstream
+  changes, and warns when a partial selection would be incoherent.
 
-Every node in the graph has a versioned identity stored in `_sqlbuild_fingerprints` in the target schema. The planner reads these on every run and compares them against the compiled project.
+In the default **direct mode**, a build runs its selected scope. Change detection still matters: the
+plan can show query and configuration differences, calculate replay or full-refresh actions, and
+identify stale upstreams. It does not filter a direct build to stale models.
+
+[Virtual environments](/concepts/virtual-environments) additionally bind each model to a versioned
+physical relation. Virtual builds can use those bindings to reuse existing versions or limit an
+invocation to stale work. That virtual execution behavior is documented under
+[Building in a virtual environment](/concepts/virtual-environments/building#stale-driven-execution).
+
+### Reading a plan
+
+Run the plan command with the same target and selectors you intend to build:
+
+```bash
+sqb plan
+sqb --target dev plan --select +fact_orders
+```
+
+A plan answers four questions:
+
+1. Which resources are selected?
+2. What does SQLBuild know about their current warehouse state?
+3. Why does each selected model need work?
+4. What materialization or incremental action will the build take?
+
+Plans may include query diffs, schema changes, backfill ranges, source freshness signals, cascade
+reasons, and warnings about stale dependencies. Planning does not modify model relations.
+
+### What SQLBuild compares
 
 #### Models and functions
 
-Each model and function has a **fingerprint** derived from:
+Each model and function has a version identity derived from the inputs that affect its result:
 
-- **Query hash** - the normalized SQL after macro expansion and reference resolution.
-- **Config hash** - version-identity config values (materialization settings, contracts, ordered rendered SQL hooks, Python hook invocations and version hashes, custom config/placeholders).
-- **Function hashes** - for models that depend on user-defined functions, the function's own fingerprint is included. A function change cascades to all dependent models.
+- normalized SQL after macro expansion and reference resolution;
+- materialization settings, contracts, rendered SQL hooks, Python hook versions, and other
+  version-relevant configuration;
+- referenced function identities; and
+- upstream version identities where dependency changes must propagate.
+
+A function change therefore appears on the function itself and on dependent models.
 
 #### Seeds
 
-Seeds are fingerprinted by content hash and load-affecting config. Unchanged seeds are not reloaded.
+Seeds use a content hash plus load-affecting configuration. SQLBuild can distinguish an unchanged
+seed from one whose file or loading behavior changed.
 
 #### Python nodes
 
-Loaders, tasks, assets, checks, and Python hooks are fingerprinted by source-code hash, transitive project-dependency hashes (scoped to the git root, so third-party package changes don't count), and decorator config. A Python hook's version hash is also included in every model that invokes it. Reusable SQL hooks are compiled into each consuming model, so their rendered statements participate directly in model identity.
+Loaders, tasks, assets, checks, and Python hooks have identities derived from project-owned source,
+transitive project dependencies, and decorator configuration. Python hook identities also
+participate in the identity of models that invoke them.
 
-Python identity tracking is primarily a **visual indicator** in the plan: when a node's identity changes, the plan shows source and dependency diffs. Unlike SQL models, the framework can't observe a Python node's external inputs (an API, a file, a service), so skip/run decisions are **user-controlled** via `ctx.skip()` - the node's own logic decides whether it needs to run. See [Python node pruning](#python-node-pruning).
+For standalone Python nodes, this identity is primarily planning evidence. SQLBuild cannot observe
+arbitrary external inputs such as APIs or files, so a node controls its own no-work decision with
+`ctx.skip()` rather than relying on SQL identity alone.
 
-#### Audits
+#### Sources
 
-Audits that already passed for the same model version identity are not re-run. When a model's version changes, its audits are re-validated.
+[Source freshness](/concepts/planning/source-freshness) records an observable data version for a
+source. A new observation can mark downstream models as affected even when their SQL is unchanged.
 
 ### Change reasons
 
-The plan assigns a reason to each node that needs work:
+The plan assigns reasons to explain detected work:
 
 | Reason | Meaning |
 |--------|---------|
-| First run | No fingerprint exists in the target schema |
-| Query changed / checksum changed | The model's query SQL differs from the stored fingerprint (the plan can show a query diff) |
-| Config changed | Version-identity config values differ |
-| Schema changed | Upstream schema changes detected (column additions, removals, type changes) |
-| Upstream changed | An upstream model's change cascades downstream (see [Cascade propagation](/concepts/planning/cascade-propagation)) |
-| Run despite unchanged | The model is configured to run periodically even without changes (see [Run despite unchanged](#run-despite-unchanged)) |
+| First run | No previous identity exists for the resource |
+| Query changed / checksum changed | Compiled SQL or seed content differs from the recorded identity |
+| Config changed | Version-relevant configuration differs |
+| Schema changed | A relevant warehouse or upstream schema changed |
+| Function changed | A referenced function has a different identity |
+| Upstream changed | A dependency change propagated to this model |
+| Run despite unchanged | A table's explicit policy requires another run despite an unchanged identity |
 
-By default, every selected node runs regardless of its reason. Under `--changes-only`, nodes with no pending work are pruned and show as current in the plan output.
+These reasons explain the plan; they are not a promise that direct mode will skip entries labelled
+current. Direct builds execute the selected scope. Virtual mode can compare expected identities with
+the versions already bound to a VDE and avoid unnecessary version creation.
 
-### Changes-only mode
+### Cascades and incremental actions
 
-Change-aware pruning requires virtual environments (`virtual_environments = true`); it is rejected in direct mode. Within a virtual environment, `--changes-only` narrows the scope to only models that are actually stale:
+Changes propagate through the DAG in dependency order. The resulting action depends on the
+materialization:
 
-```bash
-sqb build --virtual-env pr_123 --changes-only
-sqb build --virtual-env pr_123 --select path:models/marts --changes-only
-sqb plan --virtual-env pr_123 --changes-only
-```
+- views are recreated when selected for a direct build;
+- tables rebuild when selected;
+- incremental models use their cursor state, backfill policy, and `replay_on_change` setting to
+  determine the affected range; and
+- a changed upstream can alter the action of downstream models even when their own SQL is unchanged.
 
-To make it the default for a project or target, set it in config instead of passing the flag every run:
+See [Cascade propagation](/concepts/planning/cascade-propagation) for the detailed materialization
+rules.
 
-```toml
-[settings]
-virtual_environments = true
-changes_only = true
+### Selection and coherence
 
-[targets.dev]
-changes_only = true
-```
+SQLBuild reasons about dependencies outside a scoped selection without silently adding them to the
+plan. If building the selected resources would use a stale or missing upstream, the planner warns or
+blocks instead of presenting an incoherent partial build as current.
 
-The CLI flag takes precedence, followed by the selected target, explicit local settings, then project settings. When any source enables it, the planner removes models and functions from the selected scope if they have no pending work; models with any change reason, a pending backfill, or a changed upstream source are kept. Sources, seeds, and other non-model resources are always kept. See [Virtual Environments: Building](/concepts/virtual-environments/building).
+See [Selection and staleness](/concepts/planning/selection-and-staleness) for closure selectors and
+stale-upstream handling.
 
-### On this topic
+### Recorded state
 
-- [Cascade propagation](/concepts/planning/cascade-propagation) - how a change signal propagates downstream, and how each materialization type responds.
-- [Source freshness](/concepts/planning/source-freshness) - observing whether external source data has actually changed between runs.
-- [Selection and staleness](/concepts/planning/selection-and-staleness) - how `--select` interacts with change detection, and the stale warnings that prevent silent partial rebuilds.
+Direct mode records append-only planning evidence in the warehouse:
 
-### Run despite unchanged
+- `_sqlbuild_fingerprints` stores resource identities;
+- `_sqlbuild_source_freshness` stores source observations; and
+- `_sqlbuild_node_results` stores Python node outcomes.
 
-Some models depend on external data that isn't tracked by source freshness, for example a table model that reads from an API-populated staging area. `run_despite_unchanged` forces a model to run periodically even when its version identity hasn't changed.
+The planner reads the latest applicable facts and appends new facts after successful work. Virtual
+mode stores version bindings and environment-scoped planning state in its configured state backend;
+see [Virtual environment setup](/concepts/virtual-environments/setup).
 
-```sql
-MODEL (
-  materialized table,
-  run_despite_unchanged "always",
-);
-```
+### Related topics
 
-- **`always`** - run on every build regardless of state.
-- **Duration** (e.g. `24h`, `30d`, `90m`) - run if at least the specified time has passed since the model's upstream source freshness was last observed. Requires at least one upstream source with timestamp freshness tracking.
-
-Only table materializations support `run_despite_unchanged`. When triggered, downstream models are also marked as stale.
-
-### Python node pruning
-
-When unchanged SQL models are skipped, read-side Python nodes (tasks, assets, checks) that depend on those models are also skipped. Loaders always run regardless of pruning, since they populate sources that the SQL graph depends on.
-
-Python nodes also have their own identity fingerprints: if a node's source code or dependencies change, it runs even if its SQL dependencies haven't.
-
-### Warehouse-native state (direct mode)
-
-In direct mode, all change-tracking state lives in the warehouse as append-only tables in the same schemas as your data:
-
-- **`_sqlbuild_fingerprints`** - version identities for models, functions, seeds, and Python nodes. One row per successful build per identity.
-- **`_sqlbuild_source_freshness`** - source freshness observations. One row per successful build per source identity.
-- **`_sqlbuild_node_results`** - Python node runtime results (payload, metadata, status, errors). One row per execution per node.
-
-There is no external state database, no manifest files, and no state machine with transitions that can corrupt. The planner reads the latest row per identity, compares it against the compiled project, and writes new rows after successful builds. Old rows are retained as immutable history.
-
-State tables are read across all target schemas in the project, so fingerprints and freshness observations resolve consistently regardless of which schema a model targets.
-
-Use `sqb janitor` to prune old state history rows while retaining the latest per identity.
-
-### Virtual environments
-
-Virtual environments store identities and change-tracking state in the VDE state backend (PostgreSQL or DuckDB) rather than in warehouse fingerprint tables, scoped per environment. See [Virtual Environments: Building](/concepts/virtual-environments/building).
+- [Cascade propagation](/concepts/planning/cascade-propagation)
+- [Source freshness](/concepts/planning/source-freshness)
+- [Selection and staleness](/concepts/planning/selection-and-staleness)
+- [Building in a virtual environment](/concepts/virtual-environments/building)
 
 ## Cascade propagation
 
@@ -5044,9 +5185,12 @@ See [Incremental Models: Replay on change](/concepts/incremental#replay-on-chang
 
 Source: `concepts/planning/source-freshness.mdx`
 
-Observing whether external source data has actually changed between runs, so downstream models can be skipped when sources are unchanged.
+Observe external source changes and propagate them through planning.
 
-Source freshness lets SQLBuild observe whether external source data has actually changed between runs. Under [`--changes-only`](/concepts/planning#changes-only-mode), models downstream of unchanged sources are skipped; on a default full build the observations are still recorded so pruning is accurate the next time you enable it.
+Source freshness lets SQLBuild observe whether external source data changed between runs. A changed
+observation propagates through the dependency graph, so plans can explain which downstream models
+are affected and choose the correct incremental action. In a virtual environment, the same signal
+also participates in [stale-driven execution](/concepts/virtual-environments/building#stale-driven-execution).
 
 ### Configuration
 
@@ -5068,9 +5212,13 @@ For timestamp-based freshness, `lag_tolerance` controls how much the observed va
 
 ### State storage
 
-Source freshness observations are stored in `_sqlbuild_source_freshness` in each target schema. Records are appended only after the affected downstream models build successfully. If a build fails, the previous observation is preserved so the next run still sees the source as changed.
+In direct mode, source freshness observations are appended to `_sqlbuild_source_freshness` in each
+target schema. In virtual mode, observations are scoped to the VDE in the configured state backend.
+In both modes, failed work does not replace the prior successful observation, so the next plan still
+sees the pending source change.
 
-Observations are resolved across all target schemas in the project, so a source referenced by models in different schemas is tracked consistently.
+Direct observations are resolved across all target schemas in the project, so a source referenced by
+models in different schemas is tracked consistently.
 
 Use [`sqb freshness`](/cli/freshness) to observe source freshness on demand without triggering a build.
 
@@ -5504,19 +5652,97 @@ FROM __source("products")
 
 Source: `concepts/audits.mdx`
 
-Data quality checks that run before data reaches the target table.
+Violation and measurement checks that gate data and record quality outcomes.
 
-Audits are SQL queries that verify data quality. If an audit returns rows, something is wrong. SQLBuild runs audits *before* data is promoted to the target table, so bad data never reaches production.
+Audits are SQL queries that verify data quality. Violation audits return invalid rows. Measurement
+audits return a value that SQLBuild evaluates against authored thresholds and sample policy.
+SQLBuild can run audits before table promotion or incremental DML so error-severity failures do not
+reach the target.
 
 ### How audits work
 
-An audit is a SELECT query that returns rows that violate a condition. Zero rows means the audit passes. Any rows returned means a failure.
+Violation audits pass when their query returns zero rows. Measurement audits produce one value and
+optionally a sample count; their outcome is `pass`, `warn`, `fail`, or `insufficient`.
 
 For `error` severity audits:
 - **Full table builds:** SQLBuild materializes into a staging table, runs audits against it, and only promotes to the target if all audits pass. If any fail, the staging table is kept for inspection and the production table is untouched.
 - **Incremental models:** Delta-phase audits validate each batch before DML is applied. If an audit fails, the batch is not applied.
 
 For `warn` severity audits, the build continues and the failure is reported in the output.
+
+### Measurement audits
+
+A reusable measurement audit separates the aggregate query from optional bounded evidence:
+
+```sql
+-- audits/generic/valid_order_rate.sql
+AUDIT (
+  evaluation measurement,
+  value valid_rate,
+  sample_count total_rows,
+  sample_unit rows
+);
+
+MEASURE (
+  SELECT
+    COUNT(*) AS total_rows,
+    100.0 * AVG(CASE WHEN @condition THEN 1 ELSE 0 END) AS valid_rate
+  FROM @relation
+);
+
+EVIDENCE (
+  SELECT * FROM @relation WHERE NOT (@condition)
+);
+```
+
+Attach threshold and sample policy where the audit is used:
+
+```sql
+MODEL (
+  audits [
+    valid_order_rate (
+      condition "order_id IS NOT NULL",
+      minimum_samples 100,
+      evidence_limit 20,
+      thresholds (warn (below 99.9), error (below 99))
+    )
+  ]
+);
+```
+
+`minimum_samples` keeps low-volume measurements distinct as `insufficient` rather than inventing a
+pass or failure. Evidence is diagnostic and bounded by `evidence_limit`; the measurement and
+threshold determine the outcome.
+
+### Audit factories
+
+Use a Python audit factory when many related audit instances should be generated from one reviewed
+declaration:
+
+```python
+from sqlbuild.audits import AuditCase, AuditSeverity, audit_factory
+
+@audit_factory
+def order_quality():
+    return [
+        AuditCase(
+            name="positive_amount",
+            definition="expression_is_true",
+            arguments={"expression": "amount > 0"},
+            severity=AuditSeverity.ERROR,
+        )
+    ]
+```
+
+Attach it with `MODEL (audit_factories [order_quality])`. Generated cases compile to the same audit
+contract as directly authored instances.
+
+### Result history
+
+Native warehouse adapters best-effort append confirmed audit outcomes to
+`_sqlbuild_audit_results`. Rows are immutable and use deterministic IDs, so retrying the same result
+is idempotent. Projection failure is reported separately and does not change the audit outcome or
+command exit code. Lifecycle sinks can also consume the corresponding `audit_completed` fact.
 
 ### Built-in audits
 
@@ -5723,6 +5949,116 @@ to eight selected audits at once, using one warehouse connection per active work
 limit deliberately because parallel queries can increase warehouse load and cost. See
 [`sqb audit`](/cli/audit) for precedence, ordering, and cancellation details.
 
+## Compiler-integrated Rules
+
+Source: `concepts/rules.mdx`
+
+Turn repeatable SQL and project review decisions into compiler-enforced findings.
+
+Rules are configurable, deterministic checks over compiler-owned SQL, models, dependencies,
+contracts, tests, audits, declarations, and project paths. They run during ordinary compilation,
+before artifacts are completed or warehouse planning begins.
+
+SQLBuild evaluates checks in this order:
+
+1. mandatory compiler correctness
+2. selected native built-in Rules
+3. selected custom Python Rules
+4. artifact completion
+
+Rules report findings and never rewrite source. [`sqb format`](/cli/format) remains the separate,
+source-rewriting command.
+
+### Configure Rules
+
+```toml
+[rules]
+select = ["SQBRSQL", "SQBRGRAPH", "XSQBRARCH"]
+ignore = ["SQBRSQL004"]
+```
+
+An empty `select` disables configurable Rules. Exact codes select one rule; family prefixes select
+matching rules. Built-in codes use `SQBR<FAMILY><three digits>`, such as `SQBRSQL004`,
+`SQBRMODEL101`, and `SQBRGRAPH101`. Custom codes use
+`XSQBR<optional uppercase family><three digits>`, such as `XSQBRARCH001`. A family is always the
+code with its final three digits removed.
+
+### Enforcement
+
+`sqb compile` is authoritative. Build and execution commands use the same compiler path and reject
+configured findings before opening a warehouse connection. Use a focused command while developing
+or adopting a rule:
+
+```bash
+sqb rules list
+sqb rules show SQBRSQL004
+sqb rules run SQBRSQL
+sqb rules run XSQBRARCH --select customer_orders
+```
+
+Native built-ins run before custom Rules. JSON output stays on stdout; lifecycle progress is written
+to stderr.
+
+### Findings and suppressions
+
+A finding has a code, project-relative path, line, column, message, and remediation. Exact
+exceptions are stale-checked and require a reason:
+
+```toml
+[[rules.rule_exceptions]]
+rule = "SQBRSQL004"
+path = "models/examples/sample_orders.sql"
+reason = "This example intentionally demonstrates one sampled row."
+```
+
+Broader path-scoped ignores also require a reason:
+
+```toml
+[[rules.rule_ignores]]
+rules = ["SQBRSQL"]
+paths = ["models/examples/**"]
+reason = "Examples retain intentionally minimal SQL."
+```
+
+Mandatory compiler correctness cannot be suppressed.
+
+### Typed compiler facts
+
+Custom Rules receive stable, typed views through `RuleContext`:
+
+- `ctx.sql`: authored and expanded SQL, common SQL structures, and lazy Polyglot AST access
+- `ctx.graph`: compiler-resolved dependencies and dependents
+- `ctx.columns` and `ctx.contracts`: declared, inferred, contract, and grain facts
+- `ctx.tests` and `ctx.audits`: checks associated with a model
+- `ctx.declarations`: public and model-scoped enum and constant facts
+- `ctx.project`: deterministic project resources and tree observations
+
+See [Custom Rules](/concepts/rules/custom-rules) for authoring and testing.
+
+### Caching and determinism
+
+Rules cache under `target/rules-cache`. Cache identity includes rule implementation and imported
+helpers, options, invocation subject, accessed compiler-fact families, tracked project observations,
+dialect, and compatibility versions. Negative project-tree observations are dependencies too: if a
+rule observes that a glob has no matches, adding a matching file invalidates that rule.
+
+Custom Rules run in a bounded Python subprocess. Environment, time, randomness, network,
+subprocess, and direct filesystem access are rejected. Read supported project text through
+`ctx.project.tree`.
+
+### Agent guidance
+
+Generate project-specific guidance from the configured Rules:
+
+```bash
+sqb rules skills
+sqb rules skills --check
+```
+
+SQLBuild manages `.agents/skills/sqlbuild-rules/SKILL.md`,
+`.claude/skills/sqlbuild-rules/SKILL.md`, and `.opencode/skills/sqlbuild-rules/SKILL.md` without
+overwriting divergent or unowned content.
+
 ## Testing
 
 Source: `concepts/testing.mdx`
@@ -5768,6 +6104,12 @@ The test:
 2. Runs the real `stg_orders` model SQL with the mock substituted in
 3. Compares the output against `__expected__stg_orders`
 4. Passes if row counts match and there are zero mismatched rows
+
+When an expected-output comparison fails, SQLBuild reports the unexpected and missing row counts
+and best-effort samples from each direction. Samples are deliberately bounded to three rows, 12
+columns, and 120 characters per value, and pass through diagnostic redaction. They are also present
+as structured `unexpected_samples` and `missing_samples` in JSON output. Sampling failure never
+replaces the known test failure.
 
 The trailing `SELECT 1` is required as a ceremonial closing statement.
 
@@ -6986,6 +7328,179 @@ sqb diff prod:dev --full --select tag:acceptance
 
 `sqb diff` returns exit code `0` when all selected models have no differences, and `1` when any model has schema or row differences. This makes it usable in CI pipelines as a validation gate.
 
+## Execution Observability
+
+Source: `concepts/observability.mdx`
+
+Choose authoritative lifecycle facts, readable logs, or command-output records.
+
+SQLBuild keeps execution facts separate from human output. Do not parse terminal text to determine
+whether work started, completed, failed, skipped, or retried.
+
+| Record | Purpose | Authority |
+|--------|---------|-----------|
+| `LifecycleEvent` | Immutable invocation, run, resource-attempt, operation, statement, retry, and audit facts | Canonical lifecycle evidence once durably stored |
+| `DiagnosticLog` | Structured framework diagnostics | Explanatory only |
+| `stdout.log` / `stderr.log` | Exact host-local process output | Troubleshooting transcript |
+| `CommandOutputRecord` | Bounded, ANSI-free remote stdout/stderr chunks | Potentially sensitive and lossy troubleshooting data |
+| Final JSON output | End-of-command aggregate | Result projection, not event history |
+
+Human-readable CLI output remains the normal operator interface. Structured records are a separate
+contract for integrations and durable consumers.
+
+### Lifecycle envelope
+
+New events use lifecycle schema version 2:
+
+```json
+{
+  "event_id": "9fb6d899754d4bd79c703067a8d5046c",
+  "event_type": "statement_completed",
+  "schema_version": 2,
+  "producer": "sqlbuild",
+  "producer_version": "0.91.0",
+  "occurred_at": "2026-09-07T18:15:30.125000Z",
+  "invocation_id": "4cc757dd93fe466aad2a220f1e76625e",
+  "invocation_sequence": 17,
+  "run_id": "run-20260907-181500",
+  "resource_id": "model:orders",
+  "resource_attempt_id": "97933c4aa29441cda133641345515e20",
+  "operation_id": "c978e47367494051bdde68ad03e56db4",
+  "statement_id": "5113ebc5afe247eb9c41dc0b27ef1a9a",
+  "external_context": {
+    "integration": {
+      "name": "dagster",
+      "run_id": "dagster-run-1",
+      "job_name": "daily_models",
+      "step_key": "sqlbuild_assets",
+      "retry_number": 0,
+      "partition_key": "2026-09-07"
+    }
+  },
+  "payload": {
+    "adapter": "snowflake",
+    "duration_ms": 318.4,
+    "query_id": "01b6f1c2-0000-0000-0000-000000000000",
+    "sql_digest": "881b77b00a75e07936d7f20ea308a55e9ef98f2f1fd42c144a3a998d32094c1b"
+  }
+}
+```
+
+`event_id` is the immutable deduplication identity. `invocation_sequence` is unique and increasing
+in synchronous publication order within one invocation, including concurrent workers. A sink may
+prioritize delivery, so consumers reconstruct invocation chronology by sorting this field rather
+than relying on arrival timestamps.
+
+Schema-version-1 events remain readable. Unknown event names and future schema versions are retained
+as opaque envelopes instead of being assigned invented semantics.
+
+### Correlation and privacy
+
+Every fact has an invocation ID. Nested IDs identify a run, logical resource and attempt, non-SQL
+operation, and SQL statement. Orchestrators may provide bounded JSON-compatible
+`external_context`; the Dagster integration supplies run, job, step, retry, and partition values
+when its execution context exposes them.
+
+Lifecycle payloads exclude full SQL, parameter values, credentials, arbitrary user messages, and
+raw process output. Command output and local logs can contain sensitive data and require an explicit
+retention and access policy.
+
+### Failure semantics
+
+A start without a terminal fact is unknown or presumed lost. Consumers must not fabricate success
+or failure. Sink delivery is bounded and best effort; destination failure does not change successful
+warehouse work, and successful delivery does not prove the command succeeded.
+
+See [Typed Sinks](/concepts/observability/sinks) to export lifecycle and command-output records.
+
+## Typed Sinks
+
+Source: `concepts/observability/sinks.mdx`
+
+Export lifecycle facts and command output through project-owned providers.
+
+Project sinks consume one declared record type. Lifecycle and command-output streams remain separate
+even when they share a provider and destination.
+
+### Lifecycle sink
+
+```python
+# sinks/publish.py
+from providers.destination_client import DestinationClient
+from sqlbuild.sinks import (
+    LifecycleEvent,
+    LifecycleEventKind,
+    lifecycle_event_sink,
+    lifecycle_event_to_json,
+)
+
+@lifecycle_event_sink(
+    event_kinds={
+        LifecycleEventKind.INVOCATION,
+        LifecycleEventKind.RUN,
+        LifecycleEventKind.RESOURCE,
+        LifecycleEventKind.AUDIT,
+    }
+)
+def publish_lifecycle(event: LifecycleEvent, destination_client: DestinationClient) -> None:
+    destination_client.publish(
+        route="sqlbuild.lifecycle.v2",
+        key=event.invocation_id,
+        payload=lifecycle_event_to_json(event).encode("utf-8"),
+    )
+```
+
+Using `invocation_id` as a partition key keeps one invocation on one Kafka partition. Keep
+`event_id` in the payload as the deduplication identity. Confirm the destination topic is not
+compacted when complete lifecycle history must remain replayable.
+
+### Command-output sink
+
+```python
+from sqlbuild.sinks import CommandOutputRecord, command_output_sink, command_output_to_json
+
+@command_output_sink(streams={"stdout", "stderr"})
+def publish_output(record: CommandOutputRecord, destination_client: DestinationClient) -> None:
+    destination_client.publish(
+        route="sqlbuild.command_output.v1",
+        key=record.record_id,
+        payload=command_output_to_json(record).encode("utf-8"),
+    )
+```
+
+Command output groups adjacent text into bounded byte chunks and flushes on elapsed time, stream
+change, size, or close. A loss record reports bounded-queue drops. This stream is useful for remote
+transcripts but is not lifecycle evidence.
+
+### Configuration
+
+Runtime configuration can narrow declaration filters:
+
+```toml
+[sinks.lifecycle]
+event_kinds = ["run", "resource", "operation", "statement", "audit"]
+min_severity = "info"
+
+[sinks.lifecycle.named.publish_lifecycle]
+event_kinds = ["resource", "statement"]
+min_severity = "warning"
+```
+
+SQLBuild owns envelope validation, local queueing, filtering, and bounded dispatch. The project owns
+destination credentials, serialization, routes/topics, acknowledgements, retries, retention, and
+durability. SQLBuild core does not provide a Kafka or ClickHouse implementation.
+
+### Delivery behavior
+
+- Lifecycle dispatch prioritizes failures and terminal facts, remaining FIFO within equal priority.
+- Queue overflow can displace or drop lower-priority records and is reflected in sink accounting.
+- A failing or timed-out sink is isolated from command correctness.
+- Provider setup and declaration errors fail before execution because the project configuration is
+  invalid.
+- Providers shared by multiple sinks are set up and torn down once per command.
+
+Use lifecycle facts—not command-output records—to build execution state and timelines.
+
 ## Overview
 
 Source: `concepts/declaration-scopes.mdx`
@@ -7651,544 +8166,125 @@ connection settings are not included.
     Review the directory rules behind the report.
     See all selectors, filters, pagination options, output sections, and JSON behavior.
 
-## Project Policy
+## Custom Rules
 
-Source: `concepts/policy.mdx`
+Source: `concepts/rules/custom-rules.mdx`
 
-Enforce opt-in Project Policy over your compiled SQLBuild project.
+Define and test repository-owned checks over SQLBuild compiler facts.
 
-Project Policy compiles the project, then checks resource structure, naming, dependency boundaries,
-contracts, declarations, and test coverage. Built-in checks run
-offline: they do not execute warehouse SQL or rewrite source files. Findings have stable codes and
-concrete remediations.
+Custom Rules are ordinary Python under `rules/**/*.py`. Only functions decorated with `@rule`
+register; helpers, constants, dataclasses, and classes remain ordinary Python.
 
-Policy is error-only: every retained finding blocks the command. Use it for conventions that a team
-has deliberately adopted, not as a collection of advisory style warnings.
-
-SQL lint evaluates one plain SQL statement. Project Policy evaluates how SQLBuild resources are
-organised, configured, documented, tested, and connected. Tests codify behavioural expectations;
-Project Policy codifies deterministic project expectations.
-
-### Where Policy fits
-
-| Command | Responsibility |
-|---------|----------------|
-| `sqb compile` | SQL validity, references, inferred columns, contracts, and lineage |
-| `sqb lint` | Statement-local SQL diagnostics, including joins, CTE shape, and comments |
-| `sqb format` | Canonical SQL presentation |
-| `sqb policy` | SQLBuild resource and repository conventions |
-| `sqb test` | Transformation behavior |
-| `sqb audit` | Data quality against materialized data |
-
-Policy is a separate command. It is not run automatically by `compile` or `build`.
-
-### Custom SQL lint
-
-Use custom lint for checks that need only one SQL statement. Custom rules use
-`XSQBL<family><three digits>` and receive SQL source, dialect, AST, source spans, and declared
-options. Their context does not expose model identity, paths, project configuration, graph facts,
-declarations, filesystem, environment, process, network, or warehouse state.
+### Model-subject Rules
 
 ```python
-from sqlbuild.lint import LintRuleContext, lint_rule
+from sqlbuild.rules import Finding, Model, RuleContext, rule
 
-
-@lint_rule(
-    code="XSQBLS001",
-    family="shape",
-    slug="no-star",
-    message="Star projections are not allowed",
-    remediation="Enumerate the intended columns.",
+@rule(
+    code="XSQBRARCH001",
+    message="Final models must declare an order identifier",
+    remediation="Declare order_id in the model contract.",
 )
-def no_star(*, ctx: LintRuleContext):
-    if "*" not in ctx.source:
-        return ()
-    start = ctx.source.index("*")
-    return (ctx.finding(start=start, end=start + 1),)
+def final_order_identifier(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    declared = {column.name for column in ctx.columns.declared(model)}
+    return [] if "order_id" in declared else [ctx.finding(subject=model)]
 ```
 
-Load repository-owned rules with `[lint].rule_paths` or `[lint].rule_modules`, select them through
-`[lint].select`, and test them without project discovery through `evaluate_lint_rule`.
+Annotations determine invocation. The signature must contain exactly one typed `Model` or `Project`
+subject and one typed `RuleContext`, all keyword-only. Parameter names and position are not semantic.
+A model-subject Rule can still inspect project-wide facts.
 
-### Enable Policy
+### Project-subject Rules
 
-Commit the shared policy to `sqlbuild_project.toml`:
-
-```toml
-[policy]
-select = ["SQBP"]
-```
-
-This activates the complete standard policy. Start here, then use `ignore` to switch off conventions
-the repository is not ready to enforce.
-
-Policy evaluates no rules when `[policy].select` is empty. Prefixes select matching rules that are
-enabled by default; exact codes also select individually opt-in rules. All current built-ins are
-enabled by default, so `SQBP` selects the complete built-in catalogue.
-
-Rule selectors are case-sensitive prefixes. They do not use `*` wildcards:
-
-- Built-in rules use `SQBP<family><three digits>`, such as `SQBPS101`.
-- Custom rules use `XSQBP<family><three digits>`, such as `XSQBPP001`.
-- `select` activates rules; `ignore` removes matching rules from the active policy.
-- An exact code activates that rule even when it is opt-in.
-- The CLI `--select` and `--exclude` flags scope models, not rules.
-
-Inspect any built-in or configured custom rule without enabling it:
-
-```bash
-sqb policy rule SQBPS101
-```
-
-### Built-in rules
-
-All current built-ins form the standard policy and are enabled by matching prefixes.
-
-#### Structure
-
-| Code | Check |
-|------|-------|
-| `SQBPS101` | Each `__ref` and `__source` is isolated in one dependency import CTE |
-| `SQBPS102` | `SELECT *` is restricted to dependency import CTEs |
-| `SQBPS103` | View materialization agrees with the `stg_v`, `int_v`, or `mart_v` marker |
-
-#### Layers and model grammar
-
-| Code | Check |
-|------|-------|
-| `SQBPG101` | Dependencies flow forward through the layer order |
-| `SQBPG102` | Qualified table dependencies use `__ref` or `__source` |
-| `SQBPR101` | Model names follow `<domain>__<layer>__<entity>[__<source>]` |
-| `SQBPR102` | Model layer names agree with their folders |
-| `SQBPR103` | Model source suffixes and source dependency names use approved, current tokens |
-| `SQBPR104` | Referenced model identifiers follow Policy model-name grammar |
-| `SQBPC101` | Models declare `contract enforced` |
-| `SQBPR201` | Every model resolves to one configured domain root and level |
-| `SQBPR202` | Every model owner is a leaf or a branch, never both |
-| `SQBPR203` | Ownership paths stay within `max_subdomain_depth` |
-| `SQBPR204` | Compressed underscore-token prefixes do not hide implicit owners |
-
-#### Owner layout
-
-Policy treats warehouse levels as an axis beneath a genuine domain root. Levels are configurable and
-may contain more than one path component:
-
-```toml
-[policy.layout]
-levels = ["staging", "intermediate/clean", "intermediate/enriched", "mart"]
-domain_roots = ["sales/partner", "inventory/forecasting"]
-```
-
-`domain_roots` is optional. Without it, Policy infers the complete domain root as every path component
-between `models/` and the configured level. If more than one configured level can interpret a path,
-`SQBPR201` reports every candidate instead of guessing. Add explicit roots for those ambiguous
-trees. Level paths and explicit domain roots must be normalized, unique, and non-overlapping.
-
-The standard owner shapes are:
-
-```text
-models/<domain>/<level>/<model>.sql
-models/<domain>/<level>/<subdomain>/<model>.sql
-```
-
-At every ownership node, direct models make the node a leaf and child owners make it a branch. A
-directory may not contain both. Different branches may terminate at different depths; Policy does not
-require empty ceremonial folders merely to make paths the same length.
-
-`max_subdomain_depth` defaults to one and counts only owners after the configured level. Domain-root
-components, composite-level components, declaration roles, and declaration-role buckets do not
-count. Projects can raise the non-negative threshold explicitly:
-
-```toml
-[policy.thresholds]
-max_subdomain_depth = 2
-```
-
-Policy detects ownership hidden in flattened underscore names with a compressed token trie. Unary
-token chains remain compound terms, so `order_status/` and `order_status_history/` identify
-`order_status` rather than `order`. Real branch points remain explicit: partner annotation
-export, annotation validation, and events identify an outer `partner` owner and an inner
-`annotation` concern. Detection starts with two siblings by default:
-
-```toml
-[policy.thresholds]
-min_shared_owner_prefix_directories = 2
-```
-
-Set this threshold to zero to disable the prefix-family check.
-
-#### Column naming and types
-
-| Code | Check |
-|------|-------|
-| `SQBPC102` | `is_`, `has_`, and `can_` columns are BOOLEAN |
-| `SQBPC103` | `*_at`, `*_ts`, and `*_timestamp` columns use timestamp types |
-| `SQBPC104` | `*_date` columns are DATE |
-
-These checks use declared contract columns, not inferred output columns.
-
-#### Decision hygiene
-
-| Code | Check |
-|------|-------|
-| `SQBPD101` | Enum comparisons use declared members and normalized operands |
-| `SQBPD102` | Non-canonical numeric decisions use named constants |
-| `SQBPD201` | Identical enum domains are consolidated |
-| `SQBPD301` | Public enum and constant files live under domain folders |
-| `SQBPD302` | Declaration role containers are flat or fully grouped |
-| `SQBPD303` | Declaration role buckets stay within their configured depth |
-| `SQBPD304` | Flat roles and individual buckets stay within file-count caps |
-| `SQBPD305` | Buckets use specific concern names rather than generic role names |
-| `SQBPD306` | Shared filename prefixes become navigation buckets |
-
-`SQBPD101` requires direct comparisons to `@enum("<enum>").<MEMBER>`. Normalize controlled values
-upstream rather than wrapping either comparison operand. A direct source-side value may be
-normalized in the comparison because the project does not control source casing; the enum member
-must still remain unwrapped.
-
-The declaration-container rules apply to public and private `macros`, `constants`, and `enums`
-roles. A container is either flat or every file is grouped into one level of concern buckets:
-
-```text
-_macros/                       _macros/
-├── normalise_name.py          ├── normalisation/
-└── resolve_match.py           │   └── names.py
-                               └── resolution/
-                                   └── matches.py
-```
-
-Buckets are navigation only. They never change the declaration owner or compiler visibility.
-Generic buckets such as `utils`, `common`, `shared`, and `misc` fault. Defaults are:
-
-```toml
-[policy.thresholds]
-max_role_container_depth = 1
-max_macro_container_files = 10
-max_constant_container_files = 10
-max_enum_container_files = 10
-min_shared_container_prefix_files = 2
-```
-
-#### Tests and coverage
-
-| Code | Check |
-|------|-------|
-| `SQBPT201` | Non-passthrough models meet the configured audit minimum |
-| `SQBPT202` | Non-passthrough models meet the configured SQL test minimum |
-| `SQBPT301` | Selected custom rules have statically discoverable public-harness test cases |
-
-Selecting a custom rule automatically adds `SQBPT301` unless the policy ignores it. This is a
-static check for conventional `RuleCase` and `evaluate_rule` usage; it does not execute the tests.
-Thresholds default to one and can be set to zero to disable the corresponding minimum:
-
-```toml
-[policy.thresholds]
-min_audits_per_model = 1
-min_tests_per_model = 1
-min_custom_rule_test_cases = 1
-```
-
-#### SQL tests and scenarios
-
-The `SQBPT` family governs SQL authored under `tests/unit/` and `tests/scenarios/`. It consumes
-compiler-resolved test targets and resource ownership; it does not infer ownership from filenames
-or repeat compiler diagnostics for malformed tests.
-
-| Code | Check |
-|------|-------|
-| `SQBPT101` | Unit tests and scenarios use their compiler-owned canonical roots |
-| `SQBPT102` | Unit and scenario filenames identify their subject and behavior |
-| `SQBPT103` | Unit tests mirror resolved model, macro, UDF, or table-function ownership |
-| `SQBPT104` | Every `TEST` block has an explicit target-aware `subject__expected_behavior` name |
-| `SQBPT105` | Scenario descriptions identify a concrete business behavior rather than generic case numbering |
-
-Select the family independently when adopting these conventions:
-
-```toml
-[policy]
-select = ["SQBPT"]
-```
-
-Every unit-test block, including the only block in a file, has an explicit name:
-
-```sql
-TEST (
-  name "stg_orders__excludes_cancelled_orders",
-);
-```
-
-The double underscore immediately following the resolved subject separates it from nonempty
-behavior. This keeps identities such as `commerce__mart_v_order` valid as complete subjects.
-Single-model subjects match the resolved expected model, direct-mode subjects match the tested
-macro, UDF, or table function, and multi-model subjects name the common domain or an explicit
-pipeline. Single underscores separate words within either part. Generic values such as `test`,
-`works`, `basic`, and `case_1` are rejected without maintaining a verb allowlist.
-
-Unit filenames use either `test_<subject>.sql` or `test_<subject>__<behavior>.sql`. When a behavior
-suffix is present, it corresponds to the behavior portion; concise prefixes such as
-`excludes_cancelled` for `excludes_cancelled_orders` are valid. Scenario filenames omit the
-redundant prefix and use `<subject>__<behavior>.sql`:
-
-```text
-tests/unit/staging/test_stg_orders__excludes_cancelled.sql
-tests/scenarios/daily_revenue__multiple_orders.sql
-```
-
-Mirroring uses compiled relationships:
-
-- A single-model test mirrors the model parent below its compiler-owned model root.
-- A multi-model test mirrors the nearest common model-domain parent.
-- Models with no meaningful common parent use the configured pipeline directory.
-- Macro, UDF, and table-function tests mirror all resolved direct resource owners.
-- When ownership cannot be proven from compiler facts, Policy skips mirroring rather than guessing.
-
-The pipeline directory is relative to `tests/unit/`, normalized, and included in cache and generated
-guidance identity. The default is `pipelines`:
-
-```toml
-[policy.sql_tests]
-pipeline_directory = "chains/commerce"
-```
-
-This maps cross-domain tests to `tests/unit/chains/commerce/`. Absolute paths, traversal, repeated
-separators, and backslash paths are invalid configuration.
-
-### Naming policy
-
-Naming and layer rules can use a closed project vocabulary:
-
-```toml
-[policy]
-domains = ["commerce", "support"]
-approved_source_tokens = ["web", "partner"]
-
-[policy.retired_source_tokens]
-legacy_feed = "partner"
-```
-
-Valid Policy layers are `stg`, `stg_v`, `int_clean`, `int_v`, `int_enriched`, `mart`, and
-`mart_v`. Configuration supplies vocabulary to active rules; it does not activate them. When
-`SQBPR101` or `SQBPD301` is active, a non-empty `domains` list constrains model or declaration
-domains respectively.
-
-### Exceptions and scoped ignores
-
-Choose the narrowest mechanism that represents the policy:
-
-| Mechanism | Scope | Reason required | Stale-checked |
-|-----------|-------|-----------------|---------------|
-| `ignore` | Disable rules globally | No | No |
-| `rule_exceptions` | One exact rule and exact file | Yes | Yes |
-| `rule_ignores` | Rule prefixes or codes across path globs | Yes | No |
-| `select_star_allow` | Path-glob allowance for `SQBPS102` | Yes | No |
-
-```toml
-[[policy.rule_exceptions]]
-rule = "SQBPS103"
-path = "models/mart/sales__mart__legacy_view.sql"
-reason = "Tracked view-marker migration"
-
-[[policy.rule_ignores]]
-rules = ["SQBPS"]
-paths = ["models/legacy/**"]
-reason = "Legacy migration boundary"
-
-[[policy.select_star_allow]]
-paths = ["models/mart/*_export.sql"]
-reason = "Intentional passthrough export"
-```
-
-An exact exception fails when its active rule no longer produces a fault at that file, prompting
-the repository to remove obsolete exceptions. Broad migration boundaries and lone-star allowances
-remain reasoned but are intentionally not stale-checked.
-
-### Cache and CI
-
-Built-in policies use a persistent cache under `target/policy-cache`. Compiled model content, active
-rules, options, thresholds, naming vocabulary, and relevant project files participate in cache
-identity. Disable it when diagnosing cache behavior:
-
-```toml
-[policy.cache]
-enabled = false
-```
-
-Run Policy directly in CI. It exits `1` when faults remain:
-
-```bash
-sqb policy
-sqb policy --json
-```
-
-Generate agent guidance from the same resolved policy and verify that committed guidance remains
-fresh:
-
-```bash
-sqb policy skills
-sqb policy skills --check
-```
-
-Policy manages `.agents/skills/sqlbuild-policy/SKILL.md`,
-`.claude/skills/sqlbuild-policy/SKILL.md`, and `.opencode/skills/sqlbuild-policy/SKILL.md`. It refuses
-to overwrite divergent or unowned files.
-
-See [Custom Policy Rules](/concepts/policy/custom-rules) to encode repository-specific policy and the
-[Policy CLI reference](/cli/policy) for command output and exit behavior.
-
-## Custom Policy Rules
-
-Source: `concepts/policy/custom-rules.mdx`
-
-Define and test repository-owned SQL architecture rules with the public Policy API.
-
-Custom Policy rules extend the built-in policy when a repository has domain conventions that cannot
-be expressed by configuration alone. They use the same selection, suppression, deterministic
-ordering, and remediation output as built-ins.
-
-Custom rule codes use `XSQBP<family><three digits>`. Keep codes stable after adoption because they
-become part of configuration, CI output, and exceptions.
-
-### Define a rule
+Use `Project` when an invariant has no natural model subject:
 
 ```python
-from sqlbuild.policy import PolicyFault, RuleContext, policy
+from sqlbuild.rules import Finding, Project, RuleContext, rule
 
-@policy(
-    code="XSQBPP001",
-    family="prices",
-    slug="typed-currency",
-    message="price models must declare a currency column",
-    remediation="Declare currency in the MODEL columns contract.",
+@rule(
+    code="XSQBRARCH002",
+    message="The project must contain a final model directory",
+    remediation="Add models/final and place final outputs beneath it.",
 )
-def typed_currency(*, model, ctx: RuleContext) -> list[PolicyFault]:
-    if any(column.name == "currency" for column in ctx.declared_columns):
-        return []
-    return [ctx.path_fault()]
+def final_directory(*, ctx: RuleContext, project: Project) -> list[Finding]:
+    del project
+    paths = ctx.project.tree.glob("models/final/**")
+    return [] if paths else [ctx.finding(subject="models")]
 ```
 
-The function signature is exactly two keyword-only arguments named `model` and `ctx`. Return an
-empty list when the model passes or one or more `PolicyFault` values when it fails.
+### SQL access
 
-`RuleContext` exposes the compiled model, authored SQL, raw Polyglot AST, references, parsed model
-name, materialization, declared columns, audit and test counts, public declarations, active policy,
-and fault constructors. Repository files can be read safely through `project_read_text` and
-`project_glob` when they use a tracked `.py`, `.sql`, `.toml`, `.yaml`, or `.yml` suffix.
+Common SQL structures are typed and lazy. Full Polyglot access is deliberate:
 
-Rules are model-local by default. Add `project_wide=True` to `@policy` when a rule reads
-project-wide context, scans tracked repository files, or reports findings for paths other than the
-current model. Cacheability validation rejects those capabilities from model-local rules.
+```python
+sql = ctx.sql.for_model(model)
+for cte in sql.expanded.ctes():
+    ...
 
-### Load and select rules
-
-Load repository-owned files or dotted modules from `sqlbuild_project.toml`:
-
-```toml
-[policy]
-select = ["XSQBPP001"]
-rule_paths = ["policy/rules"]
-rule_modules = ["project_policy.rules"]
+ast = sql.expanded.polyglot_ast()
 ```
 
-A directory in `rule_paths` is scanned recursively for Python files containing `@policy`. Dotted
-modules must resolve beneath the project root. Codes must be unique across built-in and custom
-rules.
-
-Custom rules require exact selectors by default. Set `enabled_by_default=True` on the decorator to
-include a rule in matching prefix selections. This does not activate Policy when
-`[policy].select` is empty.
+Rules cannot mutate SQL, resources, adapter lowering, or compiler output.
 
 ### Typed options
 
-Declare options with `RuleOption.boolean`, `integer`, `string`, `string_list`, or `integer_list`:
-
 ```python
-from sqlbuild.policy import PolicyFault, RuleContext, RuleOption, policy
+from sqlbuild.rules import Finding, Model, RuleContext, RuleOption, rule
 
-REQUIRED_DOMAIN = RuleOption.string(
-    name="required_domain",
-    default="market",
-    description="Domain that owns price models",
+REQUIRED_PREFIX = RuleOption.string(
+    name="required_prefix",
+    default="customer",
+    description="Required model-name prefix.",
 )
 
-@policy(
-    code="XSQBPP002",
-    family="prices",
-    slug="required-domain",
-    message="price models must belong to the configured domain",
-    remediation="Move or rename this model for the configured domain.",
-    options=(REQUIRED_DOMAIN,),
+@rule(
+    code="XSQBRNAME001",
+    message="The model name uses the wrong prefix",
+    remediation="Rename the model with the configured prefix.",
+    options=(REQUIRED_PREFIX,),
 )
-def required_domain(*, model, ctx: RuleContext) -> list[PolicyFault]:
-    parts = ctx.name_parts
-    if parts is not None and parts.domain == ctx.option(REQUIRED_DOMAIN):
-        return []
-    return [ctx.path_fault()]
+def required_prefix(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    prefix = ctx.option(REQUIRED_PREFIX)
+    return [] if model.name.startswith(prefix) else [ctx.finding(subject=model)]
 ```
-
-Configure options under the exact rule code. Unknown rules, option names, or invalid values fail
-configuration:
 
 ```toml
-[policy.rule_options.XSQBPP002]
-required_domain = "finance"
+[rules.rule_options.XSQBRNAME001]
+required_prefix = "order"
 ```
 
-### Test every rule
+Unknown codes, option names, or invalid values fail configuration.
 
-Use the public harness so tests exercise normal SQLBuild discovery, compilation, rule loading, and
-structured fault evaluation:
+### Test Rules
+
+Use the public harness to exercise discovery, compilation, and Rules evaluation:
 
 ```python
-from sqlbuild.policy import RuleCase, evaluate_rule
+from sqlbuild.rules.testing import RuleCase, evaluate_rule
+from rules.final_outputs import final_order_identifier
 
-from policy.rules.prices import typed_currency
-
-def test_missing_currency_faults() -> None:
+def test_given_missing_order_id_when_evaluating_then_reports_finding() -> None:
     result = evaluate_rule(
-        rule=typed_currency,
+        rule=final_order_identifier,
         test_case=RuleCase(
-            description="missing currency faults",
-            source=(
-                "MODEL (materialized table);\n\n"
-                "WITH final AS (SELECT 1 AS price)\n"
-                "SELECT price FROM final\n"
-            ),
-            path="models/mart/commerce__mart__prices.sql",
-            expected_fault_count=1,
+            description="missing order identifier",
+            source='MODEL (description "Orders");\nSELECT 1 AS customer_id\n',
+            path="models/final/customer_orders.sql",
+            expected_finding_count=1,
         ),
     )
 
-    assert result.fault_count == 1
+    assert result.finding_count == 1
 ```
 
-`RuleCase.files` can add supporting project files and `RuleCase.config` supplies the rule's option
-values. Keep conventional `RuleCase` and `evaluate_rule` calls under `tests/` so `SQBPT301` can
-count statically discoverable harness cases. This coverage check does not execute the tests, so run
-the test suite separately in CI.
+`RuleCase.files` adds supporting project files and `RuleCase.config` supplies option values.
 
-### Execution and caching
+### Deterministic project observations
 
-Selected custom rules execute in a bounded Python subprocess with a 30-second timeout. Exceptions
-are reported with the rule code and model path, and returned faults rejoin normal suppressions and
-deterministic ordering.
-
-Selecting any custom rule disables caching by default. Require hermetic custom rules explicitly to
-cache both built-in and custom findings:
-
-```toml
-[policy.cache]
-enabled = true
-require_cacheable = true
-```
-
-Cacheable rules may import supported pure modules such as `collections`, `dataclasses`, `enum`,
-`math`, `re`, `typing`, and `sqlbuild.policy`. SQLBuild validates these constraints before
-evaluation. Model-local custom rules use per-model cache entries, so a leaf edit evaluates only the
-changed model. Project-wide custom rules use a project cache keyed by rule implementation,
-configuration, compiler facts, and tracked repository evidence.
-
-Return to [Project Policy](/concepts/policy) for built-in rules, selectors, and
-exceptions.
+Rules may import supported pure modules and repository-owned helpers under `rules/`. Direct calls to
+filesystem, environment, clock, random, network, and subprocess APIs are rejected. Use
+`ctx.project.tree.read_text(...)` and `ctx.project.tree.glob(...)`; positive and negative
+observations participate in cache identity.
 
 ## Overview
 
@@ -9822,7 +9918,9 @@ Build a subset of models with `--select`:
 sqb build --virtual-env pr_123 --select fact_orders
 ```
 
-Partial builds leave the VDE in `active` (working) status if downstream models remain stale. A follow-up `sqb build --virtual-env pr_123 --changes-only` (without `--select`) builds the remaining stale models to finalize the VDE; a plain `sqb build --virtual-env pr_123` rebuilds the whole selection.
+Partial builds leave the VDE in `active` (working) status if downstream models remain stale. A
+follow-up `sqb build --virtual-env pr_123 --changes-only` without `--select` builds the remaining
+stale models to finalize the VDE. A plain `sqb build --virtual-env pr_123` runs the whole selection.
 
 #### Stale upstream coherence
 
@@ -9839,17 +9937,58 @@ Pass `--include-stale-upstreams` to expand the selection to the minimal set of s
 sqb build --virtual-env pr_123 --select fact_orders --include-stale-upstreams
 ```
 
-#### Stale-driven selection
+### Stale-driven execution
 
-Virtual environment builds run the full selection by default, like direct mode. Add `--changes-only` to intersect the selection with the stale-driven set, so only models that are both selected and stale are built:
+Virtual environment builds run the full selection by default. Add `--changes-only` to limit a plan
+or build to work whose expected version is not already bound in the target VDE:
 
 ```bash
+sqb plan --virtual-env pr_123 --changes-only
+sqb build --virtual-env pr_123 --changes-only
 sqb build --virtual-env pr_123 --select path:models/marts --changes-only
 ```
 
-This is useful when the stale cascade is large and you want to build a coherent subgraph without running unchanged models. Without `--changes-only`, every selected model is built regardless of state.
+With selectors, SQLBuild intersects the selected scope with the stale set. Models with changed SQL or
+configuration, pending backfills, changed functions, or affected upstreams remain in the plan;
+models already bound to their expected version do not need another physical version.
 
-Change-aware pruning is opt-in within virtual environments and unavailable in direct mode. See [Planning and Change Detection](/concepts/planning) for how fingerprints, source freshness, and identity tracking determine what gets built.
+`--changes-only` is a virtual-mode execution option. Direct mode always runs its selected build
+scope, although its plan still reports change reasons and uses them to choose incremental actions.
+See [Planning and change detection](/concepts/planning) for the shared identity and cascade model.
+
+You can make stale-driven execution the default for virtual plans and builds:
+
+```toml
+[settings]
+virtual_environments = true
+changes_only = true
+
+[targets.dev]
+changes_only = true
+```
+
+The CLI flag takes precedence, followed by the selected target, local settings, and project
+settings.
+
+#### Run despite unchanged
+
+`run_despite_unchanged` lets a table remain eligible during stale-driven execution even when its
+version identity is unchanged. This is useful when external data changes cannot be represented by
+source freshness.
+
+```sql
+MODEL (
+  materialized table,
+  run_despite_unchanged "always",
+);
+```
+
+- `always` runs whenever the model is selected.
+- A duration such as `24h`, `30d`, or `90m` keeps the model eligible while the newest timestamp data
+  version from an upstream source is no older than that duration; it is not a periodic scheduler.
+
+Only table materializations support this setting. When it triggers, downstream models are also
+stale.
 
 ### Stale detection
 
@@ -10709,7 +10848,7 @@ This creates the waffle shop project with a `dagster/definitions.py` that includ
 1. `sqb compile --dag` generates a static `sqlbuild_dag.json` artifact with your project's full graph (nodes, edges, checks)
 2. `@sqlbuild_assets()` reads the artifact and creates one Dagster `AssetSpec` per source, seed, model, function, loader, task, and asset, with dependency edges preserved
 3. `SqlBuildCliResource` shells out to `sqb build`, `sqb test`, `sqb scenario test`, etc. as subprocesses
-4. Execution results (materializations, audit pass/fail, scenario outcomes) are parsed from structured JSON and emitted as Dagster `MaterializeResult` and `AssetCheckResult` events
+4. Execution results (materializations, audit pass/fail, scenario outcomes) are read from SQLBuild's structured integration-result stream and emitted as Dagster `MaterializeResult` and `AssetCheckResult` events
 
 SQLBuild tests, audits, and Python checks become Dagster asset checks. Scenarios become asset checks attached to the models they exercise.
 
@@ -10755,6 +10894,9 @@ When you select a subset of assets in the Dagster UI, the integration automatica
 
 This means Dagster's asset subsetting works naturally with SQLBuild's selector system.
 
+An explicit `--select`, `--select-file`, or `--exclude` supplied by application code takes
+precedence; SQLBuild does not silently combine it with Dagster's implicit asset selection.
+
 ### Checks
 
 SQLBuild tests, audits, scenarios, and Python checks are registered as Dagster asset checks:
@@ -10765,6 +10907,21 @@ SQLBuild tests, audits, scenarios, and Python checks are registered as Dagster a
 - **Python checks** (`@check`) become checks attached to the tasks, assets, or loaders they validate
 
 Check results are emitted with pass/fail status and metadata from the execution JSON.
+
+### Execution correlation
+
+When a Dagster execution context is passed to `sqb.cli`, SQLBuild propagates bounded orchestration
+metadata to command-output and lifecycle records:
+
+- integration name (`dagster`)
+- Dagster run ID and job name
+- step/op key
+- retry number
+- partition key, when the run is partitioned
+
+Lifecycle events remain SQLBuild's immutable execution facts. Human stdout/stderr remains a
+correlated troubleshooting transcript; the integration does not parse terminal text to establish
+resource status. See [Execution Observability](/concepts/observability).
 
 ### Scenarios as checks
 
@@ -10980,10 +11137,12 @@ Customise how SQLBuild DAG nodes map to Dagster asset metadata. Subclass and ove
 
 | Method | Arguments | Returns | Default behavior |
 |--------|-----------|---------|------------------|
-| `get_asset_key` | `node` | `AssetKey` | `AssetKey(node["asset_key"])` |
-| `get_group_name` | `node` | `str \| None` | Node kind (e.g. `"model"`, `"source"`) |
+| `get_asset_key` | `node` | `AssetKey` | Authored source `meta.dagster.asset_key`, otherwise `AssetKey(node["asset_key"])` |
+| `is_asset_node` | `node` | `bool` | Include the node as a Dagster asset |
+| `is_asset_check` | `check` | `bool` | Include the check in the multi-asset definition |
+| `get_group_name` | `node` | `str \| None` | Authored group, project name, then `sqlbuild` |
 | `get_tags` | `node` | `dict[str, str]` | `sqlbuild/kind` tag plus any model tags |
-| `get_metadata` | `node` | `dict[str, Any]` | `sqlbuild_id`, `sqlbuild_name`, `sqlbuild_kind`, path, target, description, columns |
+| `get_metadata` | `node` | `dict[str, Any]` | SQLBuild identity/selector plus available path, target, SQL, columns, lineage, group, language, materialization, loader, and authored metadata |
 | `get_description` | `node` | `str \| None` | Node description if present |
 | `get_check_name` | `check` | `str` | `"{kind}__{name}"` with optional column/target suffix |
 | `get_check_metadata` | `check` | `dict[str, Any]` | Check ID, kind, name, and selector |
@@ -11021,6 +11180,20 @@ Python node asset keys use a two-part key with the node kind as prefix:
 | Task | `("task", "prepare_orders")` |
 | Asset | `("asset", "orders_export")` |
 | Loader | `("loader", "raw_orders")` |
+
+A source can provide a stable Dagster-native key without replacing the translator:
+
+```yaml
+sources:
+  - name: raw__orders
+    meta:
+      dagster:
+        asset_key: [warehouse, raw, orders]
+```
+
+Override `is_asset_node` or `is_asset_check` when one SQLBuild project intentionally exposes only a
+subset through a particular Dagster definition. Filtering changes Dagster ownership; it does not
+remove the resource from SQLBuild's compiled graph.
 
 #### Check structure
 
@@ -11615,11 +11788,12 @@ No flags. Run in the directory where you want to create the project.
 
 ### Project layout
 
-`sqb init` creates the configuration and empty resource directories needed for a standalone project:
+`sqb init` creates the configuration, linter settings, and empty resource directories needed for a standalone project:
 
 ```text
 my-project/
   sqlbuild_project.toml
+  .sqruff
   models/
     staging/
     marts/
@@ -11855,20 +12029,20 @@ cd waffle-shop
 # Agent skill files are already installed
 ```
 
-### Project policy skills
+### Project Rules skills
 
-`sqb skills` installs general SQLBuild framework guidance. `sqb policy skills` generates
-project-specific guidance from the active Policy rules, options, thresholds, naming vocabulary, and
-scoped deviations:
+`sqb skills` installs general SQLBuild framework guidance. `sqb rules skills` generates
+project-specific guidance from the active Rules, options, thresholds, naming vocabulary, and scoped
+deviations:
 
 ```bash
-sqb policy skills
-sqb policy skills --check
+sqb rules skills
+sqb rules skills --check
 ```
 
-Use `--check` in CI to detect missing or stale policy guidance without rewriting files. Policy uses
-the separate `sqlbuild-policy` skill path and refuses to overwrite divergent or unowned content. See
-[Project Policy](/concepts/policy) and the [Policy CLI reference](/cli/policy).
+Use `--check` in CI to detect missing or stale Rules guidance without rewriting files. Rules use
+the separate `sqlbuild-rules` skill path and refuse to overwrite divergent or unowned content. See
+[Compiler-integrated Rules](/concepts/rules) and the [Rules CLI reference](/cli/rules).
 
 ## compile
 
@@ -11878,7 +12052,7 @@ Compile models into resolved SQL, validate contracts, and write target artifacts
 
 ## sqb compile
 
-Compiles all discovered models, seeds, audits, and tests. Resolves references, expands macros, validates SQL, checks column contracts, computes column lineage, and writes compiled artifacts to `target/`. The compile command is fully offline - it does not connect to the warehouse.
+Discovers the complete project, resolves references, expands macros, validates SQL, checks column contracts, computes column lineage, and writes compiled artifacts to `target/`. The compile command is fully offline—it does not connect to the warehouse.
 
 ### Usage
 
@@ -11890,11 +12064,15 @@ sqb --project-dir <path> compile [flags]
 
 | Flag | Description |
 |------|-------------|
-| `--no-sql-validation` | Skip compile-time SQL syntax validation |
+| `--no-sql-analysis` | Disable SQL syntax, binding, type inference, and semantic validation (`--no-sql-validation` remains an alias) |
+| `--no-cache` | Bypass the reusable compile-analysis cache for this invocation |
 | `--defer-to` | Resolve unselected model references against another target |
 | `--json` | Output the full compile report as JSON |
 | `--manifest` | Generate `target/manifest.json` with project metadata |
 | `--lineage-mode` | Column lineage mode: `fast` (default), `rich` (slower, more detail), or `none` |
+| `--select`, `-s` | Analyze and report selected resources |
+| `--select-file` | Read selectors from a file, one selector per line |
+| `--exclude` | Remove resources from the selected scope |
 
 ### What compile does
 
@@ -11903,7 +12081,26 @@ sqb --project-dir <path> compile [flags]
 3. **SQL validation** - validates SQL syntax (when SQL analysis is enabled)
 4. **Column lineage** - analyzes column-level dependencies across models (fast mode by default)
 5. **Contract validation** - checks declared column contracts against inferred query output
-6. **Artifact write** - writes compiled SQL to `target/compiled/`
+6. **Rules** - evaluates selected native built-ins, then selected custom Python Rules
+7. **Artifact write** - writes compiled SQL to `target/compiled/` when Rules pass
+
+### Focused compilation
+
+Use normal selectors to limit expensive analysis and reporting while retaining complete project
+discovery and reference integrity:
+
+```bash
+sqb compile --select fact_orders daily_revenue
+sqb compile --select-file selected-models.txt
+sqb compile --exclude deprecated_model
+```
+
+SQLBuild deeply analyzes the selected resources and the upstream closure needed to understand them.
+The text report contains only the selected scope. Project totals remain available in JSON, together
+with selected model, seed, and function counts.
+
+Manifest and DAG outputs remain full-project artifacts. Focused compilation changes analysis and
+reporting scope; it does not produce a partial project graph.
 
 ### Static analysis
 
@@ -11913,9 +12110,9 @@ When SQL analysis is enabled (default), compile performs static analysis on your
 - **Column contract validation**: Under the default `settings.column_contract_mode = "implicit"`, a model with declared columns and no model-level `contract` declaration checks that every declared column exists in the statically inferred query output. `explicit` mode requires `contract enforced` to activate shape checks. Explicit type enforcement remains independent and verifies inferred types when possible
 - **Column lineage**: Traces which source columns flow into each output column, including transform classification. See [Column Lineage](/concepts/column-lineage) for details
 
-`sqb compile` checks SQL correctness, contracts, and lineage. [`sqb policy`](/cli/policy) compiles the
-project and then applies its separately configured architecture policy. Policy is not run
-automatically by `compile`.
+`sqb compile` is authoritative for mandatory correctness, contracts, lineage, and configured Rules.
+Rules findings block artifact completion. Use [`sqb rules run`](/cli/rules) to focus on one exact
+code or family without changing project configuration.
 
 #### Contract diagnostics
 
@@ -12012,9 +12209,87 @@ sqb compile --lineage-mode none
 # Generate manifest
 sqb compile --manifest
 
-# Skip SQL validation
-sqb compile --no-sql-validation
+# Compile only selected models
+sqb compile --select fact_orders daily_revenue
+
+# Disable SQL analysis
+sqb compile --no-sql-analysis
 ```
+
+## format
+
+Source: `cli/format.mdx`
+
+Apply canonical SQLBuild SQL formatting.
+
+## sqb format
+
+Formats SQL files using SQLBuild's canonical, dialect-aware representation.
+
+```bash
+sqb format [flags]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--check` | Fail when formatting changes are needed without writing |
+| `--diff` | Print the proposed diff without writing |
+| `--json` | Print structured results |
+| `--select`, `-s` | Format selected models |
+| `--select-file` | Read selectors from a file |
+| `--exclude` | Exclude models from the selected scope |
+
+```bash
+sqb format
+sqb format --check
+sqb format --diff --select tag:marts
+```
+
+Formatting owns presentation and source rewriting. Compiler-integrated diagnostics belong to
+configured [Rules](/concepts/rules), which never mutate source.
+
+## contract
+
+Source: `cli/contract.mdx`
+
+Compare or generate repository contracts from physical warehouse schemas.
+
+## sqb contract
+
+Existing-schema comparison is explicitly online and read-only with respect to the warehouse.
+
+### diff
+
+```bash
+sqb contract diff --from <target> [flags]
+```
+
+Reports declaration differences. Exit code `0` means agreement and `1` means differences exist.
+
+### generate
+
+```bash
+sqb contract generate --from <target> [flags]
+```
+
+Prints proposed declaration updates. Add `--write` to change repository files and `--overwrite` to
+replace conflicts rather than preserving authored declarations.
+
+### Flags
+
+| Flag | Commands | Description |
+|------|----------|-------------|
+| `--from` | both | Target namespace to inspect (required) |
+| `--json` | both | Print structured findings |
+| `--select`, `-s` | both | Inspect selected models or sources |
+| `--select-file` | both | Read selectors from a file |
+| `--exclude` | both | Exclude resources from the selected scope |
+| `--vars` | both | Override project variables |
+| `--write` | generate | Apply generated repository changes |
+| `--overwrite` | generate | Replace conflicting declarations; requires `--write` |
+
+See [Contracts](/concepts/models/contracts#adopting-an-existing-schema) for ownership and safety
+guarantees.
 
 ## scope
 
@@ -12407,182 +12682,56 @@ There is no `--show-values` option.
 For declaration directory rules, placement checks, test access through expected output, and scoped
 macro imports, see [Declarations and Scopes](/concepts/declaration-scopes).
 
-## policy
+## rules
 
-Source: `cli/policy.mdx`
+Source: `cli/rules.mdx`
 
-Run configured SQL architecture checks, inspect rules, and generate policy guidance.
+List, inspect, or run compiler-integrated Rules and generate project guidance.
 
-## sqb policy
+## sqb rules
 
-Compiles the project and applies its configured [Policy architecture policy](/concepts/policy)
-to compiled models. Built-in checks run offline and never connect to the warehouse or rewrite SQL.
-Policy reports coded, error-only faults with source locations and remediations. Repository-defined
-custom rules run in a bounded Python subprocess.
+Configured Rules run automatically through `sqb compile` and build planning. The `rules` command
+provides focused catalogue, inspection, execution, and guidance operations.
 
 ### Usage
 
 ```bash
-sqb --project-dir <path> policy [flags]
-sqb policy rule <rule-code>
-sqb policy skills [--check]
+sqb rules list
+sqb rules show <rule-code>
+sqb rules run <rule-code-or-family> [--select <selector>] [--exclude <selector>]
+sqb rules skills [--check]
 ```
 
-### Evaluation flags
-
-| Flag | Description |
-|------|-------------|
-| `--json` | Emit structured JSON instead of text |
-| `--select`, `-s` | Evaluate selected models using normal SQLBuild selector syntax |
-| `--exclude` | Exclude models from a non-empty `--select` scope |
-
-Rule policy comes from `[policy].select` in `sqlbuild_project.toml`; CLI `--select` and `--exclude`
-scope models within that policy. Model selectors support names, `tag:`, `path:`, graph `+`, and
-path-between syntax.
-
-`--exclude` is applied only when `--select` is also provided. To evaluate all models except one,
-start with an explicit broad selector such as `--select path:models`.
-
-### Text output
-
-A clean policy prints its model and cache counts:
-
-```text
-Project Policy passed: 42 models evaluated, 0 faults (40 cache hits, 2 misses)
-```
-
-Faults include a source location, rule code, message, and remediation. Model-level checks use
-line 1, column 1:
-
-```text
-models/mart/orders.sql:1:1 [SQBPC101] models must declare an enforced output contract
-  Remediation: Declare contract enforced and list the authoritative output columns in MODEL().
-Found 1 Project Policy faults
-```
-
-Project-phase SQL test policy also reports the authored test or scenario path. A finding can name
-the compiler-resolved target and exact destination:
-
-```text
-tests/unit/test_stg_orders.sql:1:1 [SQBPT103] unit test block 1 resolves to resources mirrored by tests/unit/staging/
-  Remediation: Move this test file beneath tests/unit/staging/.
-Found 1 Project Policy faults
-```
-
-`SQBPT` rules run once per project, including projects with direct-resource tests but no models.
-Path-scoped exceptions and ignores match the reported test or scenario path.
-
-### JSON output
+Add `--json` after `rules` for machine-readable list or run output:
 
 ```bash
-sqb policy --json
+sqb rules --json list
+sqb rules --json run SQBRSQL
 ```
 
-```json
-{
-  "cache_hits": 0,
-  "cache_misses": 1,
-  "evaluated_models": 1,
-  "fault_count": 1,
-  "faults": [
-    {
-      "code": "SQBPC101",
-      "column": 1,
-      "line": 1,
-      "message": "models must declare an enforced output contract",
-      "path": "models/mart/orders.sql",
-      "remediation": "Declare contract enforced and list the authoritative output columns in MODEL()."
-    }
-  ]
-}
-```
+Lifecycle progress is written to stderr so stdout remains valid JSON.
 
-Faults are ordered deterministically by path, position, code, and content.
+### Commands
 
-### Inspect a rule
+- `list`: print built-in and repository-defined Rules.
+- `show`: print metadata for one exact code.
+- `run`: compile and evaluate only one exact code or family prefix.
+- `skills`: install guidance derived from configured Rules; `--check` verifies freshness without writing.
 
-`rule` prints metadata for any exact built-in or configured custom code. The rule does not need to
-be active:
-
-```bash
-sqb policy rule SQBPS101
-```
-
-```text
-SQBPS101: dependency-import-ctes
-Family: structure
-Enabled by default: no
-Kind: built-in
-
-dependencies must be isolated in import CTEs
-
-Remediation: Move each __ref(...) or __source(...) into one named top-level import CTE and reference that CTE from later logic.
-```
-
-Custom rules also show their source and declared option defaults.
-
-Inspecting an `SQBPT` rule also prints the effective canonical roots and configured cross-domain
-pipeline directory:
-
-```bash
-sqb policy rule SQBPT103
-```
-
-### Generate policy skills
-
-Generate agent guidance from the active rules, options, thresholds, naming vocabulary, SQL test
-paths, and scoped deviations:
-
-```bash
-sqb policy skills
-```
-
-Policy writes the same policy-specific guidance to:
-
-- `.agents/skills/sqlbuild-policy/SKILL.md`
-- `.claude/skills/sqlbuild-policy/SKILL.md`
-- `.opencode/skills/sqlbuild-policy/SKILL.md`
-
-Check committed guidance in CI without rewriting it:
-
-```bash
-sqb policy skills --check
-```
-
-Install mode refuses to overwrite divergent, malformed, or unowned files. See
-[SQLBuild skills](/cli/skills) for the separate general framework guidance command.
+`run` accepts normal SQLBuild model selectors. Native built-ins execute before custom Python Rules.
 
 ### Exit codes
 
 | Command | Code | Meaning |
-|---------|------|---------|
-| `sqb policy` | `0` | No retained faults |
-| `sqb policy` | `1` | Faults found or Policy could not evaluate the project |
-| `sqb policy rule` | `0` | Exact rule found |
-| `sqb policy rule` | `2` | Unknown rule code |
-| `sqb policy skills` | `0` | Guidance installed |
-| `sqb policy skills --check` | `0` | All guidance is fresh |
-| `sqb policy skills --check` | `1` | Guidance is not fresh: missing, stale, divergent, malformed, or unowned |
-
-### Examples
-
-```bash
-# Evaluate the configured policy
-sqb policy
-
-# Emit machine-readable CI output
-sqb policy --json
-
-# Scope evaluation to marts and their downstream models
-sqb policy --select tag:marts+
-
-# Inspect an opt-in rule before adopting it
-sqb policy rule SQBPS103
-
-# Keep policy-derived agent guidance current
-sqb policy skills
-sqb policy skills --check
-```
+|---|---:|---|
+| `rules list` | 0 | Catalogue printed |
+| `rules show` | 0 | Exact code found |
+| `rules show` | 2 | Unknown code |
+| `rules run` | 0 | No findings |
+| `rules run` | 1 | Findings reported or compilation failed |
+| `rules run` | 2 | Unknown code or family |
+| `rules skills --check` | 0 | Guidance is fresh |
+| `rules skills --check` | 1 | Guidance is missing or stale |
 
 ## plan
 
@@ -12604,8 +12753,9 @@ sqb --project-dir <path> plan [flags]
 
 | Flag | Description |
 |------|-------------|
-| `--no-sql-validation` | Skip compile-time SQL syntax validation |
-| `--changes-only` | Narrow the plan to only stale models; prune anything already current (virtual environments only) |
+| `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
+| `--no-cache` | Bypass the reusable compile-analysis cache for this invocation |
+| `--changes-only` | Virtual mode only: show work not already bound to its expected VDE version |
 | `--no-python` | Exclude read-side Python tasks and assets from the plan |
 | `--defer-to` | Resolve unselected model references against another target |
 | `--json` | Output the plan as JSON |
@@ -12675,11 +12825,14 @@ Build the upstream chain first, or select it along with the model: `sqb build --
 
 Source: `cli/build.mdx`
 
-Execute the build lifecycle: compile, plan, and build what changed.
+Compile, plan, and execute the selected build lifecycle.
 
 ## sqb build
 
-Compiles, plans, and executes the build lifecycle. By default, SQLBuild runs your full selection. In a [virtual environment](/concepts/virtual-environments), pass `--changes-only` (or set `changes_only = true` in config) to skip work that is already current - unchanged models, seeds, audits, and Python nodes. Use `--no-tests` and `--no-audits` to skip validation for fast iteration.
+Compiles, plans, and executes the selected build lifecycle. Direct mode runs the full selected
+scope. [Virtual environments](/concepts/virtual-environments) can additionally use
+`--changes-only` to build work not already represented by the target VDE's bound versions. Use
+`--no-tests` and `--no-audits` to skip validation for fast iteration.
 
 ### Usage
 
@@ -12692,11 +12845,12 @@ sqb --project-dir <path> build [flags]
 | Flag | Description |
 |------|-------------|
 | `--target` | Build against a configured target instead of the active/default target |
-| `--changes-only` | Skip models, seeds, audits, and Python nodes that are already current; build only stale work (virtual environments only) |
+| `--changes-only` | Virtual mode only: build work not already bound to its expected VDE version |
 | `--no-tests` | Skip SQL unit tests |
 | `--no-audits` | Skip audits |
 | `--no-python` | Skip read-side Python tasks and assets (loader-side Python still runs for selected sources) |
-| `--no-sql-validation` | Skip compile-time SQL syntax validation |
+| `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
+| `--no-cache` | Bypass the reusable compile-analysis cache for this invocation |
 | `--full-refresh` | Drop and rebuild selected models unless a model sets `full_refresh false`; `full_refresh true` forces a model even without this flag |
 | `--defer-to` | Resolve unselected model references against another target |
 | `--defer-sources-to` | Read managed source data from another target |
@@ -12731,7 +12885,7 @@ This replaces the former `sqb run` command. The full lifecycle (tests + audits) 
 2. Seeds are loaded (if changed)
 3. Source audits run before their dependent models (unless `--no-audits`)
 4. SQL unit tests run before their target model (unless `--no-tests`)
-5. Models are materialized in DAG topological order (`--changes-only` skips models already current)
+5. Models are materialized in DAG topological order (virtual `--changes-only` limits this to stale work)
 6. Error-severity audits run against the staging table before promotion to the target (unless `--no-audits`)
 
 ### Output
@@ -12934,7 +13088,7 @@ sqb --project-dir <path> test [flags]
 
 | Flag | Description |
 |------|-------------|
-| `--no-sql-validation` | Skip compile-time SQL syntax validation |
+| `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 | `--select`, `-s` | Select tests targeting specific models |
 | `--exclude` | Exclude tests targeting specific models |
 
@@ -12990,7 +13144,7 @@ sqb scenario test [flags]
 | `--max-snapshot-total-rows` | Override total row limit for capture |
 | `--max-snapshot-bytes` | Override per-relation byte limit for capture |
 | `--max-snapshot-total-bytes` | Override total byte limit for capture |
-| `--no-sql-validation` | Skip compile-time SQL syntax validation |
+| `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 
 #### Selectors
 
@@ -13079,7 +13233,7 @@ sqb scenario capture [flags]
 | `--max-snapshot-total-rows` | Override total row limit |
 | `--max-snapshot-bytes` | Override per-relation byte limit |
 | `--max-snapshot-total-bytes` | Override total byte limit |
-| `--no-sql-validation` | Skip compile-time SQL syntax validation |
+| `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 
 #### Examples
 
@@ -13137,11 +13291,14 @@ sqb --project-dir <path> audit [flags]
 
 | Flag | Description |
 |------|-------------|
-| `--no-sql-validation` | Skip compile-time SQL syntax validation |
+| `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 | `--defer-to` | Resolve model references against another target |
 | `--select`, `-s` | Select audits attached to specific models |
+| `--select-file` | Read selectors from a file |
 | `--exclude` | Exclude audits attached to specific models |
 | `--concurrency` | Maximum number of audits to run concurrently (default: `1`) |
+| `--json` | Print structured audit results |
+| `--json-output` | Write structured audit results to a file |
 
 ### Concurrency
 
@@ -13209,7 +13366,7 @@ sqb --project-dir <path> freshness [flags]
 | `--virtual-env` | Read previous state from the specified virtual environment instead of direct state |
 | `--json` | Output as JSON instead of human-readable text |
 | `--json-output` | Write JSON output to a file path (also prints text to stdout unless `--json` is set) |
-| `--no-sql-validation` | Skip compile-time SQL syntax validation |
+| `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 | `--select`, `-s` | Select specific sources or models (sources upstream of selected models are included) |
 | `--exclude` | Exclude specific sources or models |
 
@@ -13370,7 +13527,7 @@ sqb --project-dir <path> check [flags]
 |------|-------------|
 | `--select`, `-s` | Select checks to run (by name, `check:`, `tag:`, or graph expansion) |
 | `--exclude` | Exclude checks from the selection |
-| `--no-sql-validation` | Skip compile-time SQL syntax validation |
+| `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 | `--json` | Print check results as JSON |
 | `--json-output` | Write check results JSON to a file path |
 | `--vars` | Override project variables |
@@ -13438,7 +13595,7 @@ sqb --project-dir <path> clone --from <target> [--to <target>] [flags]
 | `--from` | Source target (required) |
 | `--to` | Destination target; defaults to the active target |
 | `--hard-copy` | Force physical table copies instead of zero-copy cloning |
-| `--no-sql-validation` | Skip compile-time SQL syntax validation |
+| `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 | `--select`, `-s` | Select specific models to clone |
 | `--exclude` | Exclude specific models from cloning |
 
@@ -13525,7 +13682,7 @@ Full and bounded row comparisons require the model to define `unique_key`. Bound
 | `--verbose`, `-v` | Show more example rows (default: 3, verbose: 10) |
 | `--max-column-examples` | Override maximum examples per changed column |
 | `--max-row-only-examples` | Override maximum examples for side-only rows |
-| `--no-sql-validation` | Skip compile-time SQL syntax validation |
+| `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 | `--select`, `-s` | Select specific models to diff (required in v1) |
 | `--exclude` | Exclude specific models from diffing |
 
@@ -13579,7 +13736,7 @@ Exactly one of a positional target or `--select` is required.
 | `--depth` | How many hops to traverse. An integer or `all` (default: `all`). |
 | `--format` | Output format: `tree` (default), `list`, or `json`. |
 | `--mode` | Column lineage analysis mode: `rich` (default) or `fast`. |
-| `--no-sql-validation` | Skip compile-time SQL syntax validation. |
+| `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias). |
 | `--select`, `-s` | Select resources using standard selector syntax. |
 | `--exclude` | Exclude resources from the selection. |
 
@@ -13817,7 +13974,7 @@ sqb --project-dir <path> dag [flags]
 | Flag | Description |
 |------|-------------|
 | `--json` | Print the full DAG artifact as JSON to stdout |
-| `--no-sql-validation` | Skip compile-time SQL syntax validation |
+| `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 | `--vars` | JSON object of project variable overrides |
 
 Without `--json`, the command prints a summary:

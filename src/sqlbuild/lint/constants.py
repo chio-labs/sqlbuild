@@ -59,13 +59,8 @@ RULE_HEADER_WHITESPACE: str = "header-whitespace"
 RULE_HEADER_PARSE: str = "header-parse"
 
 PROJECT_CONFIG_FILENAME_KEY: str = "sqlbuild_project.toml"
-LINT_SECTION_KEY: str = "lint"
+FORMAT_SECTION_KEY: str = "format"
 MAX_DESCRIPTION_LINES_KEY: str = "max_description_lines"
-LINT_RULE_SELECT_KEY: str = "select"
-LINT_RULE_IGNORE_KEY: str = "ignore"
-LINT_RULE_PATHS_KEY: str = "rule_paths"
-LINT_RULE_MODULES_KEY: str = "rule_modules"
-LINT_RULE_OPTIONS_KEY: str = "rule_options"
 
 ADAPTER_DIALECT_TRANSLATIONS: dict[str, str] = {
     "duckdb": "duckdb",

@@ -4,23 +4,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import SqlExpansionContext
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
-from sqlbuild.lint._helpers.expansion import build_lint_expansion_context, prepare_lint_body
-from sqlbuild.lint._helpers.headers import lint_body_ranges, scan_headers
+from sqlbuild.lint._helpers.headers import scan_headers
 from sqlbuild.lint._helpers.native import format_native_headers, lint_native_headers
 from sqlbuild.lint._helpers.native_format import (
     format_native_sql_bodies,
     newline_style,
     with_newline_style,
 )
-from sqlbuild.lint._helpers.native_sql import run_native_sql_lint
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
 from sqlbuild.lint._helpers.suppressions import apply_suppressions
 from sqlbuild.lint.models import (
     FormatChange,
     HeaderSpan,
-    LintBody,
     LintConfig,
     LintRunResult,
     LintViolation,
@@ -133,22 +129,14 @@ def _lint_final_contents(
     project_dir: Path,
     value_renderer: TypedSqlValueRenderer | None,
 ) -> list[LintViolation]:
-    """Lint final contents so reported violations match a follow-up lint run."""
+    """Return formatter-owned header diagnostics without enforcing configured Rules."""
 
+    del project_dir, value_renderer
     violations: list[LintViolation] = []
-    final_by_path: dict[Path, str] = {}
-    bodies: list[LintBody] = []
-    context: SqlExpansionContext | None = None
-    if config.native_enabled:
-        context = build_lint_expansion_context(
-            project_dir=project_dir,
-            value_renderer=value_renderer,
-        )
     file_path: Path
     contents: str
     for file_path, contents in sorted(files.items()):
         final_contents: str = updated_contents.get(file_path, contents)
-        final_by_path[file_path] = final_contents
         headers: tuple[HeaderSpan, ...] = scan_headers(contents=final_contents)
         violations.extend(
             lint_native_headers(
@@ -158,34 +146,4 @@ def _lint_final_contents(
                 config=config,
             )
         )
-        if context is None:
-            continue
-        body_start: int
-        body_end: int
-        for body_start, body_end in lint_body_ranges(
-            contents=final_contents,
-            headers=headers,
-            file_path=file_path,
-            project_dir=project_dir,
-        ):
-            bodies.append(
-                prepare_lint_body(
-                    project_dir=project_dir,
-                    file_path=file_path,
-                    contents=final_contents,
-                    body_start=body_start,
-                    body_end=body_end,
-                    context=context,
-                )
-            )
-    if not bodies:
-        return violations
-    native_violations: dict[Path, tuple[LintViolation, ...]] = run_native_sql_lint(
-        bodies=tuple(bodies),
-        contents_by_path=final_by_path,
-        config=config,
-    )
-    entries: tuple[LintViolation, ...]
-    for entries in native_violations.values():
-        violations.extend(entries)
     return violations

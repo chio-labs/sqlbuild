@@ -17,11 +17,9 @@ from sqlbuild.cli.commands.types import (
     DagCommandHandler,
     DebugCheckStatus,
     DebugCommandHandler,
-    FixCommandHandler,
     FormatCommandHandler,
     FreshnessSourceStatus,
     LineageCommandHandler,
-    LintCommandHandler,
     PlaygroundTemplate,
     QueryCommandHandler,
     ReconcileCommandHandler,
@@ -540,6 +538,10 @@ class CompileAnalysis:
     graph_ms: int
     lineage_ms: int
     contract_ms: int
+    built_in_rules_ms: int = 0
+    custom_rules_ms: int = 0
+    rule_cache_hits: int = 0
+    rule_cache_misses: int = 0
 
 
 @dataclass(frozen=True)
@@ -1349,13 +1351,13 @@ class ParsedCliInvocation:
 
 
 @dataclass(frozen=True)
-class PolicyCommandRequest:
-    """Inputs for policy evaluation, inspection, or skill generation."""
+class RulesCommandRequest:
+    """Inputs for focused rule execution, inspection, or skill generation."""
 
     project_dir: Path | None
     json_output: bool
-    rule_code: str | None
-    skills: bool
+    action: str
+    rule_selector: str | None
     skills_check: bool
     select: tuple[str, ...] = ()
     exclude: tuple[str, ...] = ()
@@ -1468,12 +1470,10 @@ class CliEntrypointHandlers:
     run_init: Callable[[Path | None], int]
     run_playground: Callable[[PlaygroundCommandRequest], int]
     run_skills_update: SkillsUpdateCommandHandler
-    run_lint: LintCommandHandler
     run_format: FormatCommandHandler
-    run_fix: FixCommandHandler
     run_scenario: Callable[[ScenarioTestCommandRequest], int]
     run_scenario_capture: Callable[[ScenarioCaptureCommandRequest], int]
-    run_policy: Callable[[PolicyCommandRequest], int]
+    run_rules: Callable[[RulesCommandRequest], int]
     run_scope: ScopeCommandHandler
     run_contract: Callable[[ContractCommandRequest], int] | None = None
 

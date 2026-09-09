@@ -13,6 +13,7 @@ from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePip
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
 from sqlbuild.diagnostics.models import PartialBuildPhaseTimings
+from sqlbuild.rule_engine.models import RulesConfig, RulesRunResult
 from tests.unit.src.sqlbuild.compiler.pipeline.main._test_types import PipelinePhaseTimingTestCase
 
 
@@ -52,6 +53,14 @@ def test_given_slow_planning_connection_when_compiling_then_direct_phases_are_di
     )
     monkeypatch.setattr(compile_module, "open_connection_with_hooks", Mock(return_value=object()))
     monkeypatch.setattr(compile_module, "_build_result", Mock(return_value=pipeline_result))
+    monkeypatch.setattr(compile_module, "load_rules_config", Mock(return_value=RulesConfig()))
+    monkeypatch.setattr(
+        compile_module,
+        "run_rules",
+        Mock(
+            return_value=RulesRunResult(findings=(), evaluated_models=0, built_in_ms=0, custom_ms=0)
+        ),
+    )
     tracker: BuildPhaseTimingTracker = BuildPhaseTimingTracker(monotonic=monotonic)
 
     with tracker.scope():

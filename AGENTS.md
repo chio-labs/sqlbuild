@@ -81,7 +81,7 @@
 Orchestrating agents must run reviews as a single bounded cycle, not an open-ended loop:
 
 1. The orchestrator first performs its own targeted diff scan of dangerous seams (boundaries, gates, exit codes, state writes, deleted-symbol references) — not a line-by-line style review.
-2. Exactly one independent read-only review pass runs on the complete combined diff, scoped to concrete correctness, data-loss, authorization, and behavioral-regression risks, with file:line evidence required for every finding. The reviewer must be explicitly told not to propose architecture expansions.
+2. Use exactly one independent read-only review subagent on the complete combined diff, scoped to concrete correctness, data-loss, authorization, and behavioral-regression risks, with file:line evidence required for every finding. The reviewer must be explicitly told not to propose architecture expansions or run broad test suites.
 3. Findings are hypotheses, never mandates. A validated in-scope correctness bug is fixed; any finding whose fix would expand behavior, state, permissions, or ownership is escalated to the user as a product decision — accept the reviewer's finding, never its solution, without validation. This rule exists because converting a correct review finding directly into an unapproved stateful implementation caused a production defect.
 4. One follow-up pass verifies only the fixed findings and their affected boundaries — never a fresh full re-review, never broad suites.
 5. Do not run overlapping review agents, issue "look for more things to harden" prompts, or enter review→fix→review loops. Valid out-of-scope findings become tickets, not opportunistic fixes.

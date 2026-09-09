@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
+from unittest.mock import Mock
 
 import pytest
 
@@ -12,15 +13,18 @@ from sqlbuild.cli.commands._helpers.compile.target_writer import write_compile_t
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline.main import compile as compile_pipeline
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ModelPlanEntry
+from sqlbuild.rule_engine.exceptions import RulesError
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     AppendCursorPipelineIntegrationTestCase,
     CompileProgressIntegrationTestCase,
     DeferToIntegrationTestCase,
     ExpectedModelEntry,
+    RulesPipelineIntegrationTestCase,
     RunCompilePipelineIntegrationTestCase,
     SnowflakeTargetValidationIntegrationTestCase,
     SqlAnalysisChainCompileTargetIntegrationTestCase,
@@ -32,6 +36,40 @@ from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
 )
 
 _PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = ":memory:"\n'
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RulesPipelineIntegrationTestCase(
+            description="configured Rules block planning before a warehouse connection",
+            expected_error_pattern="SQBRSQL004",
+            expected_connection_calls=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_rule_finding_when_running_shared_compile_pipeline_then_planning_is_blocked(
+    test_case: RulesPipelineIntegrationTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'{_PROJECT_TOML}\n[rules]\nselect = ["SQBRSQL004"]\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        'MODEL (description "Orders");\nSELECT order_id FROM orders LIMIT 1\n',
+        encoding="utf-8",
+    )
+    open_connection: Mock = Mock()
+    monkeypatch.setattr(compile_pipeline, "open_connection_with_hooks", open_connection)
+
+    with pytest.raises(RulesError, match=test_case.expected_error_pattern):
+        _ = run_compile_pipeline_for_project(project_dir=tmp_path, adapter=DuckDbAdapter())
+
+    assert open_connection.call_count == test_case.expected_connection_calls
 
 
 @pytest.mark.parametrize(

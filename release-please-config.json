@@ -10,7 +10,7 @@
       "extra-files": [
         {
           "type": "toml",
-          "path": "crates/sqlbuild-policy-native/Cargo.toml",
+          "path": "crates/sqlbuild-rules-native/Cargo.toml",
           "jsonpath": "$.package.version"
         },
         {

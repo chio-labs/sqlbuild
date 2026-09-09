@@ -13,7 +13,7 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.spec.contracts.models import SnapshotsConfig
 
-_POLICY_STRICTNESS: dict[SnapshotFullRefreshPolicy, int] = {
+_RULES_STRICTNESS: dict[SnapshotFullRefreshPolicy, int] = {
     SnapshotFullRefreshPolicy.ALLOW: 0,
     SnapshotFullRefreshPolicy.REQUIRE_CONFIRMATION: 1,
     SnapshotFullRefreshPolicy.DENY: 2,
@@ -89,7 +89,7 @@ def _effective_policy(
     if entry.snapshot_full_refresh is None:
         return project_policy
     model_policy: SnapshotFullRefreshPolicy = SnapshotFullRefreshPolicy(entry.snapshot_full_refresh)
-    return max((project_policy, model_policy), key=lambda policy: _POLICY_STRICTNESS[policy])
+    return max((project_policy, model_policy), key=lambda policy: _RULES_STRICTNESS[policy])
 
 
 def _confirm(

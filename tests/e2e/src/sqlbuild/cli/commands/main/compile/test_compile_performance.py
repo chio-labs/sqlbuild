@@ -10,18 +10,18 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompilePerformanceGuardTestCase,
     CompileScalingGuardTestCase,
-    DagsterShapedCompilePerformanceGuardTestCase,
     DbtShapedCompilePerformanceGuardTestCase,
+    LayeredProductionCompilePerformanceGuardTestCase,
     SqlTestHeavyCompilePerformanceGuardTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     CompileBenchmarkMeasurement,
-    DagsterShapedCompileBenchmarkResult,
+    LayeredProductionCompileBenchmarkResult,
     measure_compiled_test_sql_bytes,
     measure_model_sql_bytes,
     run_advanced_compile_benchmark,
-    run_dagster_shaped_compile_benchmark,
     run_dbt_shaped_compile_benchmark,
+    run_layered_production_compile_benchmark,
     run_test_heavy_compile_benchmark,
 )
 
@@ -220,8 +220,8 @@ def test_given_test_heavy_project_when_compiling_then_finishes_within_budget(
 @pytest.mark.parametrize(
     "test_case",
     [
-        DagsterShapedCompilePerformanceGuardTestCase(
-            description="Dagster-shaped compile paths stay within production budgets",
+        LayeredProductionCompilePerformanceGuardTestCase(
+            description="Layered production-shaped compile paths stay within production budgets",
             model_count=976,
             source_count=232,
             seed_count=46,
@@ -242,12 +242,12 @@ def test_given_test_heavy_project_when_compiling_then_finishes_within_budget(
     ],
     ids=lambda case: case.description,
 )
-def test_given_dagster_shaped_project_when_compiling_and_editing_then_reports_phased_budgets(
+def test_given_layered_production_project_when_compiling_and_editing_then_reports_phased_budgets(
     tmp_path: Path,
-    test_case: DagsterShapedCompilePerformanceGuardTestCase,
+    test_case: LayeredProductionCompilePerformanceGuardTestCase,
 ) -> None:
-    project_dir: Path = tmp_path / "dagster_shaped"
-    result: DagsterShapedCompileBenchmarkResult = run_dagster_shaped_compile_benchmark(
+    project_dir: Path = tmp_path / "layered_production"
+    result: LayeredProductionCompileBenchmarkResult = run_layered_production_compile_benchmark(
         project_dir=project_dir,
         model_count=test_case.model_count,
         source_count=test_case.source_count,

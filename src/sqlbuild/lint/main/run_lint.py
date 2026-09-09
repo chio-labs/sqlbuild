@@ -18,7 +18,6 @@ from sqlbuild.lint._helpers.native import lint_native_headers
 from sqlbuild.lint._helpers.native_sql import run_native_sql_lint
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
 from sqlbuild.lint._helpers.suppressions import apply_suppressions
-from sqlbuild.lint.main._evaluate_custom_rules import evaluate_custom_lint_rules
 from sqlbuild.lint.models import HeaderSpan, LintBody, LintConfig, LintRunResult, LintViolation
 
 
@@ -84,16 +83,6 @@ def run_lint(
         )
         for entries in native_violations.values():
             violations.extend(entries)
-    if bodies and config.selected_custom_rules:
-        violations.extend(
-            evaluate_custom_lint_rules(
-                bodies=tuple(bodies),
-                contents_by_path=files,
-                config=config,
-                project_dir=project_dir,
-            )
-        )
-
     return LintRunResult(
         files_checked=len(files),
         violations=sort_violations(

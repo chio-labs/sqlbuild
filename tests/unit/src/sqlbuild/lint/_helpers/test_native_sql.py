@@ -43,21 +43,21 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
             description="source span must fit SQL text",
             response=(
                 '{"version":1,"diagnostics":['
-                '{"code":"SQBL001","message":"bad","start":99,"end":100}]}'
+                '{"code":"SQBRSQL001","message":"bad","start":99,"end":100}]}'
             ),
             expected_message="invalid code, message, or source span",
         ),
         InvalidNativeSqlResponseTestCase(
             description="remediation must be present",
             response=(
-                '{"version":1,"diagnostics":[{"code":"SQBL001","message":"bad","start":0,"end":1}]}'
+                '{"version":1,"diagnostics":[{"code":"SQBRSQL001","message":"bad","start":0,"end":1}]}'
             ),
             expected_message="invalid code, message, or source span",
         ),
         InvalidNativeSqlResponseTestCase(
             description="fix edit must have a valid authored range",
             response=(
-                '{"version":1,"diagnostics":[{"code":"SQBL001","message":"bad",'
+                '{"version":1,"diagnostics":[{"code":"SQBRSQL001","message":"bad",'
                 '"remediation":"repair","start":0,"end":1,'
                 '"fix":{"start":1,"end":1,"replacement":"IS"}}]}'
             ),
@@ -248,7 +248,7 @@ def test_given_diagnostic_crossing_generated_sql_when_mapping_then_range_falls_b
             "version": 1,
             "diagnostics": [
                 {
-                    "code": "SQBL004",
+                    "code": "SQBRSQL004",
                     "message": "bad",
                     "remediation": "fix it",
                     "start": test_case.diagnostic_start,

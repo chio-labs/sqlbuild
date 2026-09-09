@@ -4,6 +4,15 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
+class RulesPipelineIntegrationTestCase:
+    """One configured Rules failure in the shared planning compiler."""
+
+    description: str
+    expected_error_pattern: str
+    expected_connection_calls: int
+
+
+@dataclass(frozen=True)
 class AuditFactoryCompileIntegrationTestCase:
     description: str
     expected_audit_count: int

@@ -6,36 +6,12 @@ from sqlbuild.compiler.planner.models import CursorOverrides
 
 
 @dataclass(frozen=True)
-class LintDiagnosticIntegrationTestCase:
-    """Real CLI inputs and expected actionable lint diagnostic fragments."""
+class RulesIntegrationTestCase:
+    """One compiler-integrated Rules command expectation."""
 
     description: str
-    model_name: str
-    source_line: str
+    expected_exit_code: int
     expected_code: str
-    expected_message: str
-    expected_location: str
-    expected_caret_suffix: str
-    expected_remediation: str
-
-
-@dataclass(frozen=True)
-class LintProjectIntegrationTestCase:
-    """Real CLI project-level lint and fix-check expectations."""
-
-    description: str
-    expected_files_checked: int
-
-
-@dataclass(frozen=True)
-class FixCommandIntegrationTestCase:
-    """Real CLI project proving native fixes and convergence."""
-
-    description: str
-    selected_rules: tuple[str, ...]
-    original_sql: str
-    expected_sql: str
-    expected_fixed_codes: tuple[str, ...]
 
 
 @dataclass(frozen=True)

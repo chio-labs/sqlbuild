@@ -103,17 +103,9 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
             module_name="sqlbuild.cli.commands.main.project._format",
             function_name="run_format_command",
         ),
-        "fix": _lazy_handler(
-            module_name="sqlbuild.cli.commands.main.project._fix",
-            function_name="run_fix_command",
-        ),
-        "policy": _lazy_handler(
-            module_name="sqlbuild.cli.commands.main.project._policy",
-            function_name="run_policy_command",
-        ),
-        "lint": _lazy_handler(
-            module_name="sqlbuild.cli.commands.main.project._lint",
-            function_name="run_lint_command",
+        "rules": _lazy_handler(
+            module_name="sqlbuild.cli.commands.main.project._rules",
+            function_name="run_rules_command",
         ),
         "plan": _lazy_handler(
             module_name="sqlbuild.cli.commands.main.project._plan",
@@ -253,13 +245,6 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
             targets=targets,
             force=force,
         ),
-        run_lint=lambda project_dir, select, exclude, json_output, no_color: lazy["lint"](
-            project_dir=project_dir,
-            select=select,
-            exclude=exclude,
-            json_output=json_output,
-            no_color=no_color,
-        ),
         run_format=lambda project_dir, select, exclude, check, diff, json_output, no_color: lazy[
             "format"
         ](
@@ -271,20 +256,9 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
             json_output=json_output,
             no_color=no_color,
         ),
-        run_fix=lambda project_dir, select, exclude, check, diff, json_output, no_color: lazy[
-            "fix"
-        ](
-            project_dir=project_dir,
-            select=select,
-            exclude=exclude,
-            check=check,
-            diff=diff,
-            json_output=json_output,
-            no_color=no_color,
-        ),
         run_scenario=lazy["scenario"],
         run_scenario_capture=lazy["scenario_capture"],
-        run_policy=lazy["policy"],
+        run_rules=lazy["rules"],
         run_scope=lazy["scope"],
         run_contract=lazy["contract"],
     )

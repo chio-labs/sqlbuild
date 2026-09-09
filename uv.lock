@@ -4156,6 +4156,7 @@ source = { editable = "." }
 dependencies = [
     { name = "duckdb" },
     { name = "filelock" },
+    { name = "orjson" },
     { name = "polyglot-sql" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
@@ -4230,6 +4231,7 @@ requires-dist = [
     { name = "google-cloud-bigquery", marker = "extra == 'bigquery'", specifier = ">=3.37.0" },
     { name = "ingestr", marker = "extra == 'ingestr'", specifier = ">=1.0.0" },
     { name = "jinja2", marker = "extra == 'dbt'", specifier = ">=3.1" },
+    { name = "orjson", specifier = ">=3.10.0" },
     { name = "polyglot-sql", specifier = "==0.9.2" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.2.0" },
     { name = "pydantic-settings", specifier = ">=2,<3" },

@@ -62,6 +62,7 @@ class DiagnosticPhase(StrEnum):
 
     COMPILE = "compile"
     CONTRACT = "contract"
+    RULE = "rule"
     PLAN = "plan"
     BUILD = "build"
     AUDIT = "audit"

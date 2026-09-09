@@ -6,17 +6,6 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
-class CustomLintTestCase:
-    """One statement-only custom lint authoring case."""
-
-    description: str
-    source: str
-    expected_code: str
-    expected_start: int
-    expected_end: int
-
-
-@dataclass(frozen=True)
 class LintBehaviorTestCase:
     """Identity for one non-tabular lint behavior test."""
 
@@ -56,40 +45,14 @@ class FormatNewlineTestCase:
 
 
 @dataclass(frozen=True)
-class LintCliTestCase:
-    """Test case for the sqb lint command."""
-
-    description: str
-    files: dict[str, str]
-    expected_exit_code: int
-    extra_arguments: tuple[str, ...] = ()
-    expected_output_fragments: tuple[str, ...] = ()
-    expected_file_fragments: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
 class FormatCliTestCase:
-    """Test case for the sqb format command."""
+    """One real format or compile command expectation."""
 
     description: str
-    files: dict[str, str]
-    expected_exit_code: int
-    extra_arguments: tuple[str, ...] = ()
-    expected_output_fragments: tuple[str, ...] = ()
-    expected_file_fragments: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class FixCliTestCase:
-    """Test case for the sqb fix command."""
-
-    description: str
-    original_sql: str
     arguments: tuple[str, ...]
     expected_exit_code: int
-    expected_sql: str
-    expected_output_fragments: tuple[str, ...]
-    project_toml: str | None = None
+    expected_fragment: str
+    expected_writes: bool = False
 
 
 @dataclass(frozen=True)
