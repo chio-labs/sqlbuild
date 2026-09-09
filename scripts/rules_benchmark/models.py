@@ -1,6 +1,6 @@
 """Structured Rules benchmark results."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -15,4 +15,6 @@ class BenchmarkResult:
     core_ms: tuple[int, ...] = ()
     built_in_rules_ms: tuple[int, ...] = ()
     custom_rules_ms: tuple[int, ...] = ()
+    timings_ms: dict[str, tuple[int, ...]] = field(default_factory=dict)
+    peak_rss_bytes: tuple[int, ...] = ()
     rejected: bool = False

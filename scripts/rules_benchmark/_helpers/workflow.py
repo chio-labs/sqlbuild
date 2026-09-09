@@ -12,7 +12,9 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections import defaultdict
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from scripts.rules_benchmark.constants import NON_CACHEABLE_REJECTION, SQL_SUFFIX
@@ -24,6 +26,16 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
 from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import write_custom_rules
 
 _COMPILE_TIMEOUT_SECONDS: int = 300
+_GNU_TIME_PATH: Path = Path("/usr/bin/time")
+_PEAK_RSS_MARKER: str = "__SQLBUILD_BENCHMARK_PEAK_RSS_KIB__="
+
+
+@dataclass(frozen=True)
+class _BenchmarkProcessResult:
+    returncode: int
+    stdout: str
+    stderr: str
+    peak_rss_bytes: int | None
 
 
 def run_benchmark(*, model_count: int, iterations: int, output: Path | None) -> int:
@@ -244,6 +256,54 @@ def _run_scenarios(
     )
     results.append(
         _measure(
+            scenario="sql_test_edit",
+            project_dir=project_dir,
+            iterations=iterations,
+            mutate=lambda iteration: _append_marker(
+                path=project_dir / "tests" / "unit" / "test_group_00000.sql",
+                scenario="sql-test",
+                iteration=iteration,
+            ),
+        )
+    )
+    results.append(
+        _measure(
+            scenario="macro_edit",
+            project_dir=project_dir,
+            iterations=iterations,
+            mutate=lambda iteration: _toggle_text(
+                path=project_dir / "models" / "macros" / "macro_00000.py",
+                plain='return f"({expression} + 0)"',
+                changed='return f"({expression} + 1000)"',
+            ),
+        )
+    )
+    results.append(
+        _measure(
+            scenario="project_config_edit",
+            project_dir=project_dir,
+            iterations=iterations,
+            mutate=lambda iteration: _toggle_text(
+                path=project_dir / "sqlbuild_project.toml",
+                plain='benchmark_revision = "0"',
+                changed='benchmark_revision = "1"',
+            ),
+        )
+    )
+    results.append(
+        _measure(
+            scenario="custom_rule_helper_edit",
+            project_dir=project_dir,
+            iterations=iterations,
+            mutate=lambda iteration: _toggle_text(
+                path=project_dir / "rules" / "benchmark_helpers.py",
+                plain="return name.startswith('model_')",
+                changed="return (name.startswith('model_'))",
+            ),
+        )
+    )
+    results.append(
+        _measure(
             scenario="custom_rule_source_edit",
             project_dir=project_dir,
             iterations=iterations,
@@ -290,16 +350,23 @@ def _measure(
     core_ms: list[int] = []
     built_in_rules_ms: list[int] = []
     custom_rules_ms: list[int] = []
+    timings_ms: dict[str, list[int]] = defaultdict(list)
+    peak_rss_bytes: list[int] = []
     payload: dict[str, object] = {}
     for iteration in range(iterations):
         mutate(iteration)
         started: float = time.perf_counter()
-        payload = _invoke(project_dir, allow_failure=allow_failure)
+        payload, peak_rss = _invoke(project_dir, allow_failure=allow_failure)
+        if peak_rss is not None:
+            peak_rss_bytes.append(peak_rss)
         elapsed.append(time.perf_counter() - started)
         timings: object = payload.get("compile_timings")
         if not isinstance(timings, dict):
             raise RulesBenchmarkError("Rules benchmark returned no compile timings")
         timing_values: dict[str, object] = {str(key): value for key, value in timings.items()}
+        for key, value in timing_values.items():
+            if key.endswith("_ms") and isinstance(value, int) and not isinstance(value, bool):
+                timings_ms[key].append(value)
         core_ms.append(
             sum(
                 _integer(payload=timing_values, key=key)
@@ -323,33 +390,62 @@ def _measure(
         core_ms=tuple(core_ms),
         built_in_rules_ms=tuple(built_in_rules_ms),
         custom_rules_ms=tuple(custom_rules_ms),
+        timings_ms={key: tuple(values) for key, values in sorted(timings_ms.items())},
+        peak_rss_bytes=tuple(peak_rss_bytes),
     )
 
 
-def _invoke(project_dir: Path, *, allow_failure: bool = False) -> dict[str, object]:
-    result: subprocess.CompletedProcess[str] = _run(project_dir)
+def _invoke(
+    project_dir: Path, *, allow_failure: bool = False
+) -> tuple[dict[str, object], int | None]:
+    result: _BenchmarkProcessResult = _run(project_dir)
     accepted_codes: tuple[int, ...] = (0, 1) if allow_failure else (0,)
     if result.returncode not in accepted_codes or not result.stdout:
         raise RulesBenchmarkError(result.stderr or "Rules benchmark produced no output")
-    return json.loads(result.stdout)
+    return json.loads(result.stdout), result.peak_rss_bytes
 
 
-def _run(project_dir: Path) -> subprocess.CompletedProcess[str]:
-    result: subprocess.CompletedProcess[str] = subprocess.run(
-        [
-            str(Path(sys.executable).with_name("sqb")),
-            "--project-dir",
-            str(project_dir),
-            "--no-color",
-            "compile",
-            "--json",
-        ],
+def _run(project_dir: Path) -> _BenchmarkProcessResult:
+    command: list[str] = [
+        str(Path(sys.executable).with_name("sqb")),
+        "--project-dir",
+        str(project_dir),
+        "--no-color",
+        "compile",
+        "--json",
+    ]
+    if _GNU_TIME_PATH.is_file():
+        command = [str(_GNU_TIME_PATH), "-f", f"{_PEAK_RSS_MARKER}%M", "--", *command]
+    completed: subprocess.CompletedProcess[str] = subprocess.run(
+        command,
         check=False,
         capture_output=True,
         text=True,
         timeout=_COMPILE_TIMEOUT_SECONDS,
     )
-    return result
+    stderr, peak_rss_bytes = _extract_peak_rss(completed.stderr)
+    return _BenchmarkProcessResult(
+        returncode=completed.returncode,
+        stdout=completed.stdout,
+        stderr=stderr,
+        peak_rss_bytes=peak_rss_bytes,
+    )
+
+
+def _extract_peak_rss(stderr: str) -> tuple[str, int | None]:
+    lines: list[str] = []
+    peak_rss_bytes: int | None = None
+    for line in stderr.splitlines():
+        if line.startswith(_PEAK_RSS_MARKER):
+            raw_value: str = line.removeprefix(_PEAK_RSS_MARKER)
+            if raw_value.isdigit():
+                peak_rss_bytes = int(raw_value) * 1024
+                continue
+        lines.append(line)
+    cleaned: str = "\n".join(lines)
+    if stderr.endswith("\n") and cleaned:
+        cleaned += "\n"
+    return cleaned, peak_rss_bytes
 
 
 def _measure_rejection(*, project_dir: Path, iterations: int) -> BenchmarkResult:
@@ -357,10 +453,13 @@ def _measure_rejection(*, project_dir: Path, iterations: int) -> BenchmarkResult
     with rule_file.open("a", encoding="utf-8") as handle:
         handle.write("\ndef non_cacheable_probe():\n    return open('untracked.txt')\n")
     elapsed: list[float] = []
+    peak_rss_bytes: list[int] = []
     for _ in range(iterations):
         started: float = time.perf_counter()
-        result: subprocess.CompletedProcess[str] = _run(project_dir)
+        result: _BenchmarkProcessResult = _run(project_dir)
         elapsed.append(time.perf_counter() - started)
+        if result.peak_rss_bytes is not None:
+            peak_rss_bytes.append(result.peak_rss_bytes)
         detail: str = f"{result.stderr}\n{result.stdout}".strip()
         if result.returncode == 0 or NON_CACHEABLE_REJECTION not in detail:
             raise RulesBenchmarkError(f"non-cacheable custom rule was not rejected: {detail}")
@@ -370,6 +469,7 @@ def _measure_rejection(*, project_dir: Path, iterations: int) -> BenchmarkResult
         evaluated_models=0,
         cache_hits=0,
         cache_misses=0,
+        peak_rss_bytes=tuple(peak_rss_bytes),
         rejected=True,
     )
 
@@ -410,13 +510,8 @@ def _multi_edit_model_count(model_count: int) -> int:
 
 def _mutate_custom_rule(*, path: Path) -> None:
     source: str = path.read_text(encoding="utf-8")
-    plain: str = (
-        "def check_003(*, model: Model, ctx: RuleContext) -> list[Finding]:\n    select_count = 1"
-    )
-    changed: str = (
-        "def check_003(*, model: Model, ctx: RuleContext) -> list[Finding]:\n"
-        "    select_count = (1 + 0)"
-    )
+    plain: str = "valid = len(ctx.graph.dependencies(model)) >= 0"
+    changed: str = "valid = (len(ctx.graph.dependencies(model)) >= 0)"
     project_plain: str = 'content = ctx.project.tree.read_text("rules/benchmark_input.yaml")'
     project_changed: str = 'content = (ctx.project.tree.read_text("rules/benchmark_input.yaml"))'
     if plain in source:
@@ -429,6 +524,17 @@ def _mutate_custom_rule(*, path: Path) -> None:
         source = source.replace(project_changed, project_plain, 1)
     else:
         raise RulesBenchmarkError("could not locate custom rule implementation marker")
+    path.write_text(source, encoding="utf-8")
+
+
+def _toggle_text(*, path: Path, plain: str, changed: str) -> None:
+    source: str = path.read_text(encoding="utf-8")
+    if plain in source:
+        source = source.replace(plain, changed, 1)
+    elif changed in source:
+        source = source.replace(changed, plain, 1)
+    else:
+        raise RulesBenchmarkError(f"could not locate benchmark marker in {path}")
     path.write_text(source, encoding="utf-8")
 
 
@@ -465,6 +571,8 @@ def _result_payload(*, result: BenchmarkResult) -> dict[str, object]:
         "core_ms": _distribution(result.core_ms),
         "built_in_rules_ms": _distribution(result.built_in_rules_ms),
         "custom_rules_ms": _distribution(result.custom_rules_ms),
+        "timings_ms": {key: _distribution(values) for key, values in result.timings_ms.items()},
+        "peak_rss_bytes": _byte_distribution(result.peak_rss_bytes),
         "rejected": result.rejected,
     }
 
@@ -478,6 +586,18 @@ def _distribution(values: tuple[int, ...]) -> dict[str, object] | None:
         "median_ms": statistics.median(values),
         "p95_ms": ordered[p95_index],
         "samples_ms": values,
+    }
+
+
+def _byte_distribution(values: tuple[int, ...]) -> dict[str, object] | None:
+    if not values:
+        return None
+    ordered: list[int] = sorted(values)
+    p95_index: int = min(len(ordered) - 1, round(0.95 * (len(ordered) - 1)))
+    return {
+        "median_bytes": statistics.median(values),
+        "p95_bytes": ordered[p95_index],
+        "samples_bytes": values,
     }
 
 
