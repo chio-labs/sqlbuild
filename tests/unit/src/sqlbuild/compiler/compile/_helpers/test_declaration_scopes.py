@@ -769,5 +769,38 @@ def test_given_sources_in_same_file_when_reusing_visibility_then_usage_consumers
     }
 
 
+def test_given_tests_in_same_directory_when_reusing_visibility_then_usage_consumers_remain_exact(
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    test_sql: str = (
+        "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
+        '__expected__orders AS (SELECT @const("value") AS value) SELECT 1'
+    )
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "models/orders.sql": "MODEL ();\nSELECT 1 AS value",
+            "tests/unit/domain/_constants/value.sql": "CONSTANT (name value, value 16);",
+            "tests/unit/domain/customer_orders.sql": test_sql,
+            "tests/unit/domain/inventory_orders.sql": test_sql,
+        },
+    )
+
+    inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+
+    consumers: set[ResourceIdentity | DeclarationIdentity] = {
+        usage.consumer
+        for test in inputs.test_inputs
+        for usage in test.declaration_usages
+        if usage.declaration == DeclarationIdentity(DeclarationKind.CONSTANT, "value")
+    }
+    assert consumers == {
+        ResourceIdentity(ResourceKind.TEST, "customer_orders"),
+        ResourceIdentity(ResourceKind.TEST, "inventory_orders"),
+    }
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-vv"])

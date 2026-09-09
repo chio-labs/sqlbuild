@@ -68,7 +68,7 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.compiler.scopes.models import ResourceIdentity, UsageRecord
-from sqlbuild.compiler.scopes.types import ResourceKind, UsageKind
+from sqlbuild.compiler.scopes.types import ResourceKind, ScopeKind, UsageKind
 
 _HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
 _LEGACY_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hook", "post_hook"})
@@ -156,6 +156,18 @@ def build_test_inputs(
         if function_input.return_columns
     }
     test_inputs: list[CompileSqlTestInput] = []
+    resolver = declaration_expansion.resolver
+    reuse_parent_scope: bool = (
+        resolver is not None
+        and not any(
+            declaration.scope is ScopeKind.PRIVATE
+            for declaration in resolver.lookup.index.declarations
+        )
+        and not any(
+            resource.kind is ResourceKind.TEST for resource in resolver.lookup.grants_by_resource
+        )
+    )
+    declarations_by_parent: dict[Path, DeclarationExpansionContext] = {}
     test_file: DiscoveredSqlTestFile
     for test_file in discovered_inputs.test_files:
         test_block: DiscoveredSqlTestBlock
@@ -163,11 +175,22 @@ def build_test_inputs(
             resource: ResourceIdentity = ResourceIdentity(
                 ResourceKind.TEST, test_block.name or test_file.relative_path.stem
             )
-            scoped_declarations: DeclarationExpansionContext = resolve_declaration_expansion(
-                context=declaration_expansion,
-                file_path=test_file.file_path,
-                resource=resource,
+            parent: Path = test_file.file_path.parent
+            scoped_declarations: DeclarationExpansionContext | None = declarations_by_parent.get(
+                parent
             )
+            if scoped_declarations is not None:
+                scoped_declarations = _rebind_test_declarations(
+                    context=scoped_declarations, consumer=resource
+                )
+            else:
+                scoped_declarations = resolve_declaration_expansion(
+                    context=declaration_expansion,
+                    file_path=test_file.file_path,
+                    resource=resource,
+                )
+                if reuse_parent_scope:
+                    declarations_by_parent[parent] = scoped_declarations
             case_variants: tuple[DiscoveredSqlTestCase | None, ...] = test_block.cases or (None,)
             test_case: DiscoveredSqlTestCase | None
             for test_case in case_variants:
@@ -275,6 +298,27 @@ def build_test_inputs(
                     )
                 )
     return tuple(test_inputs)
+
+
+def _rebind_test_declarations(
+    *, context: DeclarationExpansionContext, consumer: ResourceIdentity
+) -> DeclarationExpansionContext:
+    declarations: DeclarationResolutionContext = context.declarations
+    return replace(
+        context,
+        declarations=replace(
+            declarations,
+            consumer=consumer,
+            enum_visibility={
+                name: tuple(replace(record, resource=consumer) for record in records)
+                for name, records in declarations.enum_visibility.items()
+            },
+            constant_visibility={
+                name: tuple(replace(record, resource=consumer) for record in records)
+                for name, records in declarations.constant_visibility.items()
+            },
+        ),
+    )
 
 
 def _macro_test_declaration_usages(
