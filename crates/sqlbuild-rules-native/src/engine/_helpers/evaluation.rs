@@ -1,8 +1,10 @@
 use crate::configuration::main::validate as config;
-use crate::constants::RulesCodeGrammar;
-use crate::constants::{API_VERSION, TARGET_DIRECTORY};
+use crate::constants::{
+    API_VERSION, CUSTOM_HOST_REQUIRED_ERROR, GIT_DIRECTORY, LOGS_DIRECTORY, PYTHON_EXTENSION,
+    RULES_DIRECTORY, TARGET_DIRECTORY,
+};
 use crate::engine::_helpers::cache::{Cache, RuleCacheBucket, RuleCacheEntry};
-use crate::models::{EvaluateRequest, EvaluateResponse, Fault, RuleMetadata};
+use crate::models::{EvaluateRequest, EvaluateResponse, Fault, RuleMetadata, RulesCodeGrammar};
 use crate::rules::main::{
     assemble_catalogue, evaluate as rules, evaluate_project, fingerprint,
     resolve_threshold_overrides, select,
@@ -166,7 +168,7 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
         project_fingerprint: project_fingerprint.as_deref(),
     }) {
         Ok(value) => value,
-        Err(error) if error == "selected custom rules require a custom host" => {
+        Err(error) if error == CUSTOM_HOST_REQUIRED_ERROR => {
             return Err(format!("{error} [native_cache_misses={cache_misses}]"));
         }
         Err(error) => return Err(error),
@@ -210,6 +212,16 @@ type LocalRuleMiss<'a> = (
     BTreeMap<String, String>,
 );
 
+fn count_custom_rules(selected: &BTreeMap<String, &RuleMetadata>) -> usize {
+    let mut count = 0;
+    for rule in selected.values() {
+        if rule.custom {
+            count += 1;
+        }
+    }
+    count
+}
+
 fn evaluate_custom_rules_cached(
     request: CustomRulesCacheRequest<'_>,
 ) -> Result<CustomEvaluation, String> {
@@ -231,7 +243,7 @@ fn evaluate_custom_rules_cached(
         return evaluate_custom_rules(request, selected, None).map(|faults| CustomEvaluation {
             faults,
             hits: 0,
-            misses: selected.values().filter(|rule| rule.custom).count(),
+            misses: count_custom_rules(selected),
         });
     };
     let mut faults: Vec<Fault> = Vec::new();
@@ -478,10 +490,9 @@ fn collect_rule_input_files(root: &Path, directory: &Path) -> Result<Vec<PathBuf
             entry.map_err(|error| format!("could not read rules project entry: {error}"))?;
         let path = entry.path();
         if path.is_dir() {
-            if path
-                .file_name()
-                .is_some_and(|name| name == TARGET_DIRECTORY || name == "logs" || name == ".git")
-            {
+            if path.file_name().is_some_and(|name| {
+                name == TARGET_DIRECTORY || name == LOGS_DIRECTORY || name == GIT_DIRECTORY
+            }) {
                 continue;
             }
             output.extend(collect_rule_input_files(root, &path)?);
@@ -490,9 +501,14 @@ fn collect_rule_input_files(root: &Path, directory: &Path) -> Result<Vec<PathBuf
         let supported = path
             .extension()
             .and_then(|value| value.to_str())
-            .is_some_and(|value| matches!(value, "py" | "sql" | "toml" | "yaml" | "yml"));
+            .is_some_and(|value| {
+                matches!(value, PYTHON_EXTENSION | "sql" | "toml" | "yaml" | "yml")
+            });
         let is_rule_python = path.strip_prefix(root).is_ok_and(|relative| {
-            relative.starts_with("rules") && path.extension().is_some_and(|value| value == "py")
+            relative.starts_with(RULES_DIRECTORY)
+                && path
+                    .extension()
+                    .is_some_and(|value| value == PYTHON_EXTENSION)
         });
         if supported && !is_rule_python && path.starts_with(root) {
             output.push(path);

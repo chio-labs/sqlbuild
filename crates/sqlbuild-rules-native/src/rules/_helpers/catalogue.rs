@@ -1,4 +1,5 @@
-use crate::constants::{API_VERSION, RulesCodeGrammar};
+use crate::constants::API_VERSION;
+use crate::models::RulesCodeGrammar;
 use crate::models::{CustomRule, ResolveRulesRequest, RuleGuidance, RuleMetadata};
 use fensu_policy::policy::errors::PolicyError;
 use fensu_policy::policy::main::resolve_policy::resolve_policy;
@@ -280,7 +281,7 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
     ];
     rules.extend(
-        crate::sql_lint::main::engine::catalogue()
+        crate::sql_lint::main::catalogue::catalogue()
             .into_iter()
             .map(|rule| RuleMetadata {
                 code: rule.code.into(),

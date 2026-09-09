@@ -2,7 +2,48 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
-use crate::constants::{API_VERSION, SCOPE_METADATA_SCHEMA_VERSION};
+use crate::constants::{
+    API_VERSION, BUILT_IN_RULE_NAMESPACE, CUSTOM_RULE_NAMESPACE, RULE_CODE_NUMBER_LENGTH,
+    SCOPE_METADATA_SCHEMA_VERSION,
+};
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct RulesCodeGrammar;
+
+impl fensu_policy::policy::types::RuleCodeGrammar for RulesCodeGrammar {
+    fn rule_code_is_exact(&self, value: &str) -> bool {
+        let Some((namespace, remainder)) = Self::namespace_and_remainder(value) else {
+            return false;
+        };
+        if remainder.len() < RULE_CODE_NUMBER_LENGTH {
+            return false;
+        }
+        let (family, number) = remainder.split_at(remainder.len() - RULE_CODE_NUMBER_LENGTH);
+        let family_valid = family.bytes().all(|value| value.is_ascii_uppercase());
+        let number_valid = number.bytes().all(|value| value.is_ascii_digit());
+        number_valid && family_valid && (namespace == CUSTOM_RULE_NAMESPACE || !family.is_empty())
+    }
+
+    fn rule_selector_is_valid(&self, value: &str) -> bool {
+        let Some((_, remainder)) = Self::namespace_and_remainder(value) else {
+            return false;
+        };
+        remainder.is_empty()
+            || remainder.bytes().all(|value| value.is_ascii_uppercase())
+            || self.rule_code_is_exact(value)
+    }
+}
+
+impl RulesCodeGrammar {
+    fn namespace_and_remainder(value: &str) -> Option<(&'static str, &str)> {
+        if let Some(remainder) = value.strip_prefix(CUSTOM_RULE_NAMESPACE) {
+            return Some((CUSTOM_RULE_NAMESPACE, remainder));
+        }
+        value
+            .strip_prefix(BUILT_IN_RULE_NAMESPACE)
+            .map(|remainder| (BUILT_IN_RULE_NAMESPACE, remainder))
+    }
+}
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]

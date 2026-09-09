@@ -16,6 +16,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     CompileBenchmarkMeasurement,
+    DbtShapedCompileBenchmarkResult,
     LayeredProductionCompileBenchmarkResult,
     measure_compiled_test_sql_bytes,
     measure_model_sql_bytes,
@@ -146,23 +147,26 @@ def test_given_dbt_shaped_project_when_compiling_cold_and_warm_then_finishes_wit
     test_case: DbtShapedCompilePerformanceGuardTestCase,
 ) -> None:
     project_dir: Path = tmp_path / f"dbt_shaped_{test_case.model_count}"
-    cold_seconds, warm_seconds = run_dbt_shaped_compile_benchmark(
+    result: DbtShapedCompileBenchmarkResult = run_dbt_shaped_compile_benchmark(
         project_dir=project_dir,
         model_count=test_case.model_count,
         expected_max_seconds=test_case.expected_max_seconds,
         expected_warm_max_seconds=test_case.expected_warm_max_seconds,
     )
     _LOGGER.info(
-        f"dbt-shaped compile models={test_case.model_count} cold={cold_seconds:.3f}s "
-        f"warm={warm_seconds:.3f}s budgets={test_case.expected_max_seconds:g}s/"
+        f"dbt-shaped compile models={test_case.model_count} "
+        f"cold={result.cold_seconds:.3f}s "
+        f"warm_median={result.warm_median_seconds:.3f}s "
+        f"warm_samples={[round(sample, 3) for sample in result.warm_samples_seconds]} "
+        f"budgets={test_case.expected_max_seconds:g}s/"
         f"{test_case.expected_warm_max_seconds:g}s"
     )
 
     total_sql_bytes: int = measure_model_sql_bytes(project_dir)
     assert test_case.expected_min_sql_bytes <= total_sql_bytes
     assert total_sql_bytes <= test_case.expected_max_sql_bytes
-    assert cold_seconds < test_case.expected_max_seconds
-    assert warm_seconds < test_case.expected_warm_max_seconds
+    assert result.cold_seconds < test_case.expected_max_seconds
+    assert result.warm_median_seconds < test_case.expected_warm_max_seconds
 
 
 @pytest.mark.performance

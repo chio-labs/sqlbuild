@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import statistics
 import time
 from bisect import bisect_left
 from collections.abc import Callable, Iterator
@@ -29,6 +30,8 @@ _DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
     (0.999, 265_000),
     (1.0, 522_000),
 )
+_DBT_SHAPED_WARM_SAMPLE_COUNT: int = 3
+_PERFORMANCE_SAFETY_TIMEOUT_MULTIPLIER: float = 2.0
 
 
 class CompileBenchmarkMeasurement(NamedTuple):
@@ -45,6 +48,12 @@ class LayeredProductionCompileBenchmarkResult(NamedTuple):
     test_edit: CompileBenchmarkMeasurement
     macro_edit: CompileBenchmarkMeasurement
     project_config_edit: CompileBenchmarkMeasurement
+
+
+class DbtShapedCompileBenchmarkResult(NamedTuple):
+    cold_seconds: float
+    warm_median_seconds: float
+    warm_samples_seconds: tuple[float, ...]
 
 
 def run_advanced_compile_benchmark(
@@ -77,7 +86,7 @@ def run_dbt_shaped_compile_benchmark(
     model_count: int,
     expected_max_seconds: float,
     expected_warm_max_seconds: float,
-) -> tuple[float, float]:
+) -> DbtShapedCompileBenchmarkResult:
     skip_actions: dict[bool, Callable[[], None]] = {
         False: _continue_compile_benchmark,
         True: _skip_compile_benchmark,
@@ -86,13 +95,25 @@ def run_dbt_shaped_compile_benchmark(
     write_dbt_shaped_compile_project(project_dir=project_dir, model_count=model_count)
     cold_seconds: float = _run_compile_benchmark(
         project_dir=project_dir,
-        expected_max_seconds=expected_max_seconds,
+        expected_max_seconds=expected_max_seconds * _PERFORMANCE_SAFETY_TIMEOUT_MULTIPLIER,
     )
-    warm_seconds: float = _run_compile_benchmark(
+    warm_safety_timeout: float = expected_warm_max_seconds * _PERFORMANCE_SAFETY_TIMEOUT_MULTIPLIER
+    _run_compile_benchmark(
         project_dir=project_dir,
-        expected_max_seconds=expected_warm_max_seconds,
+        expected_max_seconds=warm_safety_timeout,
     )
-    return cold_seconds, warm_seconds
+    warm_samples: tuple[float, ...] = tuple(
+        _run_compile_benchmark(
+            project_dir=project_dir,
+            expected_max_seconds=warm_safety_timeout,
+        )
+        for _ in range(_DBT_SHAPED_WARM_SAMPLE_COUNT)
+    )
+    return DbtShapedCompileBenchmarkResult(
+        cold_seconds=cold_seconds,
+        warm_median_seconds=statistics.median(warm_samples),
+        warm_samples_seconds=warm_samples,
+    )
 
 
 def run_test_heavy_compile_benchmark(

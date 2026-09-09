@@ -17,39 +17,9 @@ pub(crate) const TIMESTAMP_TYPE: &str = "TIMESTAMP";
 pub(crate) const DATE_TYPE: &str = "DATE";
 pub(crate) const NEGATION_OPERATOR: &str = "-";
 pub(crate) const DECLARATION_DOMAIN_COMPONENTS: usize = 3;
-
-#[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct RulesCodeGrammar;
-
-impl fensu_policy::policy::types::RuleCodeGrammar for RulesCodeGrammar {
-    fn rule_code_is_exact(&self, value: &str) -> bool {
-        let Some((namespace, remainder)) = namespace_and_remainder(value) else {
-            return false;
-        };
-        if remainder.len() < 3 {
-            return false;
-        }
-        let (family, number) = remainder.split_at(remainder.len() - 3);
-        let family_valid = family.bytes().all(|value| value.is_ascii_uppercase());
-        let number_valid = number.bytes().all(|value| value.is_ascii_digit());
-        number_valid && family_valid && (namespace == CUSTOM_RULE_NAMESPACE || !family.is_empty())
-    }
-
-    fn rule_selector_is_valid(&self, value: &str) -> bool {
-        let Some((_, remainder)) = namespace_and_remainder(value) else {
-            return false;
-        };
-        remainder.is_empty()
-            || remainder.bytes().all(|value| value.is_ascii_uppercase())
-            || self.rule_code_is_exact(value)
-    }
-}
-
-fn namespace_and_remainder(value: &str) -> Option<(&'static str, &str)> {
-    if let Some(remainder) = value.strip_prefix(CUSTOM_RULE_NAMESPACE) {
-        return Some((CUSTOM_RULE_NAMESPACE, remainder));
-    }
-    value
-        .strip_prefix(BUILT_IN_RULE_NAMESPACE)
-        .map(|remainder| (BUILT_IN_RULE_NAMESPACE, remainder))
-}
+pub(crate) const RULE_CODE_NUMBER_LENGTH: usize = 3;
+pub(crate) const CUSTOM_HOST_REQUIRED_ERROR: &str = "selected custom rules require a custom host";
+pub(crate) const LOGS_DIRECTORY: &str = "logs";
+pub(crate) const GIT_DIRECTORY: &str = ".git";
+pub(crate) const RULES_DIRECTORY: &str = "rules";
+pub(crate) const PYTHON_EXTENSION: &str = "py";
