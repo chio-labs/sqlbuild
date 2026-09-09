@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.93.0](https://github.com/chio-labs/sqlbuild/compare/v0.92.3...v0.93.0) (2026-09-09)
+
+
+### Features
+
+* expose scoped declarations to macros ([#595](https://github.com/chio-labs/sqlbuild/issues/595)) ([c074918](https://github.com/chio-labs/sqlbuild/commit/c074918b27fafcda7de652a7f23f8556abaef1b7))
+
 ## [0.92.3](https://github.com/chio-labs/sqlbuild/compare/v0.92.2...v0.92.3) (2026-09-09)
 
 
