@@ -24,8 +24,8 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestCte,
 )
 
-_CACHE_VERSION: int = 1
-_ALGORITHM_FINGERPRINT: str = "sql-test-artifact-v1"
+_CACHE_VERSION: int = 2
+_ALGORITHM_FINGERPRINT: str = "sql-test-artifact-v2-polyglot-scope-fix"
 _CACHE_FILE_NAME: str = "sql-test-artifacts.json"
 _MAX_CACHE_BYTES: int = 10_000_000
 _MAX_CACHE_RECORDS: int = 100_000
@@ -42,7 +42,7 @@ def build_sql_test_artifact_identity_context(
         {
             "algorithm": _ALGORITHM_FINGERPRINT,
             "sqlbuild_version": _package_version("sqlbuild"),
-            "polyglot_version": _package_version("polyglot-sql"),
+            "polyglot_version": _package_version("polyglot-sql-chio"),
             "python_version": platform.python_version_tuple()[:2],
             "adapter_class": f"{type(adapter).__module__}.{type(adapter).__qualname__}",
             "set_difference_operator": adapter.render_set_difference_operator(),
