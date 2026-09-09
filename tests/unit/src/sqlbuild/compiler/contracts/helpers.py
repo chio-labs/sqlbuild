@@ -36,6 +36,7 @@ def make_contract_project(
     declared_nullable_by_column: dict[str, bool | None] | None = None,
     inferred_nullability_by_column: dict[str, InferredNullability] | None = None,
     fast_lineage_has_star: bool = False,
+    authored_sql: str = "",
 ) -> CompiledProject:
     """Build a compiled project for contract validation tests."""
 
@@ -99,6 +100,7 @@ def make_contract_project(
                     ),
                 )[inferred_columns is not None],
                 fast_lineage_has_star=fast_lineage_has_star,
+                authored_sql=authored_sql,
             ),
         ),
     )

@@ -322,6 +322,33 @@ def test_given_column_location_when_validating_contracts_then_diagnostic_uses_lo
     assert result.diagnostics[0].column == test_case.expected_column
 
 
+def test_given_deferred_output_locations_when_contract_fails_then_locates_authored_projection() -> (
+    None
+):
+    result: ContractValidationResult = evaluate_model_contracts(
+        project=make_contract_project(
+            declared_columns=(("order_id", "INTEGER"),),
+            inferred_columns=(("order_id", "INTEGER"), ("amount", "INTEGER")),
+            type_enforcement=True,
+            contract="enforced",
+            authored_sql=(
+                "MODEL (columns (order_id (type INTEGER)));\n"
+                "SELECT\n"
+                "  1 AS order_id,\n"
+                "  2 AS amount\n"
+            ),
+        ),
+        dialect=TypeDialect.DUCKDB,
+    )
+
+    assert len(result.diagnostics) == 1
+    assert result.diagnostics[0].code == "K005"
+    assert result.diagnostics[0].location is not None
+    assert result.diagnostics[0].location.path == Path("models/orders.sql")
+    assert result.diagnostics[0].location.line == 4
+    assert result.diagnostics[0].location.column == 3
+
+
 @pytest.mark.parametrize(
     "test_case",
     (
