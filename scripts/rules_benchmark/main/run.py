@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 
 from scripts.rules_benchmark._helpers.workflow import run_benchmark, run_rule_count_benchmark
+from scripts.rules_benchmark.constants import MAX_CUSTOM_RULE_COUNT
 
 
 def run_rules_benchmark(argv: list[str] | None = None) -> int:
@@ -26,7 +27,7 @@ def run_rules_benchmark(argv: list[str] | None = None) -> int:
         parser.error("--iterations must be positive")
     if arguments.rule_counts is not None:
         rule_counts: tuple[int, ...] = tuple(dict.fromkeys(arguments.rule_counts))
-        if any(count < 1 or count > 999 for count in rule_counts):
+        if any(count < 1 or count > MAX_CUSTOM_RULE_COUNT for count in rule_counts):
             parser.error("--rule-counts values must be between 1 and 999")
         return run_rule_count_benchmark(
             model_count=arguments.models,

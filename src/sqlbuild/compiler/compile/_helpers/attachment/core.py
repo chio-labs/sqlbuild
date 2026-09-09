@@ -85,6 +85,7 @@ from sqlbuild.compiler.compile.models import (
     DeclarationExpansionContext,
     DeclarationExpansionResult,
     DeclarationResolutionContext,
+    DeclarationScopeResolver,
     HookExpansionResult,
     LoadedMacro,
     MacroContext,
@@ -169,7 +170,7 @@ class _VisibleModelDeclarationCache:
 
     @classmethod
     def build(cls, context: ModelInputBuildContext) -> _VisibleModelDeclarationCache:
-        resolver = context.declaration_resolver
+        resolver: DeclarationScopeResolver | None = context.declaration_resolver
         return cls(
             context=context,
             reusable_by_parent=(
@@ -199,6 +200,21 @@ class _VisibleModelDeclarationCache:
         if self.reusable_by_parent:
             self.by_parent[parent] = resolved
         return resolved
+
+
+@dataclass(frozen=True)
+class _ModelValidationContext:
+    effective_settings: SettingsConfig
+    no_sql_validation: bool
+    defer_model_sql_validation: bool
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None
+    extract_references: Callable[[str], tuple[CompileSqlReference, ...]]
+    known_model_names: set[str]
+    known_seed_names: set[str]
+    known_source_names: set[str]
+    known_function_names: set[str]
+    known_table_function_names: set[str]
+    custom_materialization_names: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -276,11 +292,24 @@ def _build_model_inputs(
     custom_materialization_names: frozenset[str] = frozenset(
         mf.name for mf in discovered_inputs.materialization_files
     )
+    validation_context: _ModelValidationContext = _ModelValidationContext(
+        effective_settings=effective_settings,
+        no_sql_validation=no_sql_validation,
+        defer_model_sql_validation=defer_model_sql_validation,
+        external_sql_reference_resolver=external_sql_reference_resolver,
+        extract_references=extract_references,
+        known_model_names=known_model_names,
+        known_seed_names=known_seed_names,
+        known_source_names=known_source_names,
+        known_function_names=known_function_names,
+        known_table_function_names=known_table_function_names,
+        custom_materialization_names=custom_materialization_names,
+    )
     sql_hook_definitions: dict[str, DiscoveredSqlHookFile] = _index_sql_hook_definitions(
         discovered_inputs.sql_hook_files
     )
     model_inputs: list[CompileModelInput] = []
-    declaration_cache = _VisibleModelDeclarationCache.build(context)
+    declaration_cache: _VisibleModelDeclarationCache = _VisibleModelDeclarationCache.build(context)
     model_file: DiscoveredSqlModelFile
     for model_file in discovered_inputs.model_files:
         model_identity: ResourceIdentity = ResourceIdentity(
@@ -367,68 +396,13 @@ def _build_model_inputs(
             if isinstance(raw_placeholders, dict)
             else None
         )
-        sql_validation_enabled: bool = _model_sql_validation_gate(
-            effective_settings=effective_settings,
-            no_sql_validation=no_sql_validation,
-            model_config=effective_config,
-        )
-        if sql_validation_enabled and not defer_model_sql_validation:
-            validate_sql_syntax(
-                query_sql=cursor_intrinsics_analysis_sql(
-                    sql=expanded_query_sql,
-                    cursor_type=effective_config.values.get("cursor_type"),
-                ),
-                model_name=model_file.file_path.stem,
-                file_path=model_file.file_path,
-                placeholders=sql_validation_placeholders,
-            )
-        references: tuple[CompileSqlReference, ...] = extract_references(expanded_query_sql)
-        validate_model_references(
-            references=references,
+        sql_validation_enabled, references = _validate_model_input(
+            context=validation_context,
             model_file=model_file,
-            known_model_names=known_model_names,
-            known_seed_names=known_seed_names,
-            known_source_names=known_source_names,
-            known_function_names=known_function_names,
-            known_table_function_names=known_table_function_names,
-            external_sql_reference_resolver=external_sql_reference_resolver,
-        )
-        validate_incremental_config(
             config=effective_config,
-            model_name=model_file.file_path.stem,
-            ref_count=len(references),
-            known_input_names=frozenset(reference.ref_name for reference in references),
-            declared_columns=model_schema_columns,
-        )
-        validate_microbatch_project_capability(
-            config=effective_config,
-            settings=effective_settings,
-            model_name=model_file.file_path.stem,
-        )
-        validate_contract_config(
-            config=effective_config,
-            model_name=model_file.file_path.stem,
-        )
-        validate_non_incremental_config(
-            config=effective_config,
-            model_name=model_file.file_path.stem,
-        )
-        validate_snapshot_config(
-            config=effective_config,
-            model_name=model_file.file_path.stem,
-            declared_columns=model_schema_columns,
-        )
-        validate_custom_materialization_config(
-            config=effective_config,
-            model_name=model_file.file_path.stem,
-            custom_materialization_names=custom_materialization_names,
-        )
-        validate_storage_policies(config=effective_config, model_name=model_file.file_path.stem)
-        validate_placeholder_config(
-            config=effective_config,
-            model_name=model_file.file_path.stem,
-            query_sql=expanded_query_sql,
-            custom_materialization_names=custom_materialization_names,
+            expanded_query_sql=expanded_query_sql,
+            sql_validation_placeholders=sql_validation_placeholders,
+            model_schema_columns=model_schema_columns,
         )
         hook_expansion: HookExpansionResult = expand_model_hook_macros_result(
             values=effective_config.values,
@@ -547,6 +521,76 @@ def _build_model_inputs(
     return tuple(model_inputs)
 
 
+def _validate_model_input(
+    *,
+    context: _ModelValidationContext,
+    model_file: DiscoveredSqlModelFile,
+    config: CompileModelConfig,
+    expanded_query_sql: str,
+    sql_validation_placeholders: dict[str, str] | None,
+    model_schema_columns: tuple[SchemaColumn, ...] | None,
+) -> tuple[bool, tuple[CompileSqlReference, ...]]:
+    model_name: str = model_file.file_path.stem
+    sql_validation_enabled: bool = _model_sql_validation_gate(
+        effective_settings=context.effective_settings,
+        no_sql_validation=context.no_sql_validation,
+        model_config=config,
+    )
+    if sql_validation_enabled and not context.defer_model_sql_validation:
+        validate_sql_syntax(
+            query_sql=cursor_intrinsics_analysis_sql(
+                sql=expanded_query_sql,
+                cursor_type=config.values.get("cursor_type"),
+            ),
+            model_name=model_name,
+            file_path=model_file.file_path,
+            placeholders=sql_validation_placeholders,
+        )
+    references: tuple[CompileSqlReference, ...] = context.extract_references(expanded_query_sql)
+    validate_model_references(
+        references=references,
+        model_file=model_file,
+        known_model_names=context.known_model_names,
+        known_seed_names=context.known_seed_names,
+        known_source_names=context.known_source_names,
+        known_function_names=context.known_function_names,
+        known_table_function_names=context.known_table_function_names,
+        external_sql_reference_resolver=context.external_sql_reference_resolver,
+    )
+    validate_incremental_config(
+        config=config,
+        model_name=model_name,
+        ref_count=len(references),
+        known_input_names=frozenset(reference.ref_name for reference in references),
+        declared_columns=model_schema_columns,
+    )
+    validate_microbatch_project_capability(
+        config=config,
+        settings=context.effective_settings,
+        model_name=model_name,
+    )
+    validate_contract_config(config=config, model_name=model_name)
+    validate_non_incremental_config(config=config, model_name=model_name)
+    validate_snapshot_config(
+        config=config,
+        model_name=model_name,
+        declared_columns=model_schema_columns,
+    )
+    validate_custom_materialization_config(
+        config=config,
+        model_name=model_name,
+        custom_materialization_names=context.custom_materialization_names,
+    )
+    validate_storage_policies(config=config, model_name=model_name)
+    validate_placeholder_config(
+        config=config,
+        model_name=model_name,
+        query_sql=expanded_query_sql,
+        custom_materialization_names=context.custom_materialization_names,
+    )
+    return sql_validation_enabled, references
+
+
 def _build_visible_declaration_indexes(
     *, model_file: DiscoveredSqlModelFile, context: ModelInputBuildContext
 ) -> _VisibleModelDeclarations:
@@ -607,15 +651,24 @@ def _rebind_visible_declarations(
 ) -> _VisibleModelDeclarations:
     return replace(
         declarations,
-        enum_visibility={
-            name: tuple(replace(record, resource=consumer) for record in records)
-            for name, records in declarations.enum_visibility.items()
-        },
-        constant_visibility={
-            name: tuple(replace(record, resource=consumer) for record in records)
-            for name, records in declarations.constant_visibility.items()
-        },
+        enum_visibility=_rebind_visibility(
+            visibility=declarations.enum_visibility, consumer=consumer
+        ),
+        constant_visibility=_rebind_visibility(
+            visibility=declarations.constant_visibility, consumer=consumer
+        ),
     )
+
+
+def _rebind_visibility(
+    *,
+    visibility: dict[str, tuple[VisibilityRecord, ...]],
+    consumer: ResourceIdentity,
+) -> dict[str, tuple[VisibilityRecord, ...]]:
+    rebound: dict[str, tuple[VisibilityRecord, ...]] = {}
+    for name, records in visibility.items():
+        rebound[name] = tuple(replace(record, resource=consumer) for record in records)
+    return rebound
 
 
 def _generated_enum_usages(

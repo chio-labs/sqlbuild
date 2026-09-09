@@ -322,9 +322,25 @@ def test_given_column_location_when_validating_contracts_then_diagnostic_uses_lo
     assert result.diagnostics[0].column == test_case.expected_column
 
 
-def test_given_deferred_output_locations_when_contract_fails_then_locates_authored_projection() -> (
-    None
-):
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ContractLocationTestCase(
+            description="deferred unexpected column location",
+            column_name="amount",
+            path=Path("models/orders.sql"),
+            line=4,
+            column=3,
+            expected_path=Path("models/orders.sql"),
+            expected_line=4,
+            expected_column=3,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_deferred_output_locations_when_contract_fails_then_locates_authored_projection(
+    test_case: ContractLocationTestCase,
+) -> None:
     result: ContractValidationResult = evaluate_model_contracts(
         project=make_contract_project(
             declared_columns=(("order_id", "INTEGER"),),
@@ -344,9 +360,9 @@ def test_given_deferred_output_locations_when_contract_fails_then_locates_author
     assert len(result.diagnostics) == 1
     assert result.diagnostics[0].code == "K005"
     assert result.diagnostics[0].location is not None
-    assert result.diagnostics[0].location.path == Path("models/orders.sql")
-    assert result.diagnostics[0].location.line == 4
-    assert result.diagnostics[0].location.column == 3
+    assert result.diagnostics[0].location.path == test_case.expected_path
+    assert result.diagnostics[0].location.line == test_case.expected_line
+    assert result.diagnostics[0].location.column == test_case.expected_column
 
 
 @pytest.mark.parametrize(

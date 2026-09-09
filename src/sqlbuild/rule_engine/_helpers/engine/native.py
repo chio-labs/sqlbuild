@@ -558,7 +558,8 @@ def _custom_host_payload(
         if input_path is not None:
             input_path.unlink(missing_ok=True)
         raise
-    assert input_path is not None
+    if input_path is None:
+        raise RulesError("custom host project payload was not created")
     return (
         {
             "program": sys.executable,

@@ -5,21 +5,43 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledAudit, CompiledObjectKey
-from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredAuditBlock, DiscoveredAuditFile
+from sqlbuild.compiler.compile.models import CompiledAudit, CompiledProject
 from sqlbuild.rule_engine.classes.audit_facts import AuditFacts
 from sqlbuild.rule_engine.models import Model
+from tests.unit.src.sqlbuild.rule_engine.classes.audit_facts._test_types import (
+    AuditFactsTestCase,
+)
+from tests.unit.src.sqlbuild.rule_engine.classes.audit_facts.helpers import build_audit
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project
 
 
-def test_given_attached_and_project_audits_when_querying_model_then_returns_only_attached_audits() -> (
-    None
-):
-    attached: CompiledAudit = _audit(name="order_amount", attached_target_name="orders")
-    other_model: CompiledAudit = _audit(name="customer_status", attached_target_name="customers")
-    project_audit: CompiledAudit = _audit(name="inventory_balance", attached_target_name=None)
-    project = replace(
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        AuditFactsTestCase(
+            description="attached and project audits",
+            attached_name="order_amount",
+            other_model_name="customer_status",
+            project_audit_name="inventory_balance",
+            expected_attached_names=("order_amount",),
+            expected_all_names=("order_amount", "customer_status", "inventory_balance"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_attached_and_project_audits_when_querying_model_then_returns_only_attached_audits(
+    test_case: AuditFactsTestCase,
+) -> None:
+    attached: CompiledAudit = build_audit(
+        name=test_case.attached_name, attached_target_name="orders"
+    )
+    other_model: CompiledAudit = build_audit(
+        name=test_case.other_model_name, attached_target_name="customers"
+    )
+    project_audit: CompiledAudit = build_audit(
+        name=test_case.project_audit_name, attached_target_name=None
+    )
+    project: CompiledProject = replace(
         build_project(
             name="orders",
             relative_path="models/orders.sql",
@@ -29,32 +51,13 @@ def test_given_attached_and_project_audits_when_querying_model_then_returns_only
         audits=(attached, other_model, project_audit),
     )
 
-    facts = AuditFacts(project=project)
+    facts: AuditFacts = AuditFacts(project=project)
 
-    assert facts.for_model(
+    attached_audits: tuple[CompiledAudit, ...] = facts.for_model(
         Model(name="orders", path=Path("models/orders.sql"), materialization="view")
-    ) == (attached,)
-    assert facts.all() == (attached, other_model, project_audit)
-
-
-def _audit(*, name: str, attached_target_name: str | None) -> CompiledAudit:
-    relative_path: Path = Path(f"audits/{name}.sql")
-    audit_file = DiscoveredAuditFile(
-        file_path=relative_path,
-        relative_path=relative_path,
-        contents="",
-        blocks=(),
     )
-    return CompiledAudit(
-        key=CompiledObjectKey(CompiledResourceType.AUDIT, name),
-        scope_deps=(),
-        name=name,
-        definition_name=name,
-        audit_file=audit_file,
-        audit_block=DiscoveredAuditBlock(audit_index=0, header_values={}, sql_body="SELECT 1"),
-        sql_body="SELECT 1",
-        attached_target_name=attached_target_name,
-    )
+    assert tuple(audit.name for audit in attached_audits) == test_case.expected_attached_names
+    assert tuple(audit.name for audit in facts.all()) == test_case.expected_all_names
 
 
 if __name__ == "__main__":

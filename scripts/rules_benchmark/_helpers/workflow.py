@@ -18,13 +18,20 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from scripts.rules_benchmark.constants import NON_CACHEABLE_REJECTION, SQL_SUFFIX
+from scripts.rules_benchmark._helpers.custom_rules import write_custom_rules
+from scripts.rules_benchmark.constants import (
+    CI_DEFAULT_MAX_SECONDS,
+    CI_MODEL_COUNTS,
+    CI_PRIMARY_MODEL_COUNT,
+    CI_STRESS_RULE_COUNT,
+    NON_CACHEABLE_REJECTION,
+    SQL_SUFFIX,
+)
 from scripts.rules_benchmark.exceptions import RulesBenchmarkError
 from scripts.rules_benchmark.models import BenchmarkResult
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     write_layered_production_compile_project,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import write_custom_rules
 
 _COMPILE_TIMEOUT_SECONDS: int = 300
 _CI_THRESHOLDS_PATH: Path = Path(__file__).parents[1] / "ci_thresholds.json"
@@ -70,7 +77,7 @@ def run_rule_count_benchmark(
     with tempfile.TemporaryDirectory(prefix="sqlbuild-rule-count-benchmark-") as temporary:
         project_dir: Path = Path(temporary) / "project"
         _write_project(project_dir=project_dir, model_count=model_count)
-        _ = _invoke(project_dir)
+        _ = _invoke(project_dir=project_dir)
         profiles: list[dict[str, object]] = []
         _write_rule_count_checkpoint(
             output=output,
@@ -88,7 +95,7 @@ def run_rule_count_benchmark(
                 iterations=iterations,
                 mutate=lambda iteration: _clear_cache(project_dir),
             )
-            _ = _invoke(project_dir)
+            _ = _invoke(project_dir=project_dir)
             warm: BenchmarkResult = _measure(
                 scenario="unchanged_warm",
                 project_dir=project_dir,
@@ -150,14 +157,16 @@ def run_rule_count_benchmark(
     )
 
 
-def run_ci_benchmark(*, output: Path, summary_output: Path, max_seconds: int = 420) -> int:
+def run_ci_benchmark(
+    *, output: Path, summary_output: Path, max_seconds: int = CI_DEFAULT_MAX_SECONDS
+) -> int:
     """Run the bounded required-CI Rules performance profile."""
 
     started: float = time.perf_counter()
     profiles: list[dict[str, object]] = []
     with tempfile.TemporaryDirectory(prefix="sqlbuild-rules-ci-benchmark-") as temporary:
         root: Path = Path(temporary)
-        for model_count in (3000, 5000, 10000):
+        for model_count in CI_MODEL_COUNTS:
             project_dir: Path = root / f"project-{model_count}"
             _write_project(project_dir=project_dir, model_count=model_count)
             profiles.append(
@@ -166,7 +175,7 @@ def run_ci_benchmark(*, output: Path, summary_output: Path, max_seconds: int = 4
                     model_count=model_count,
                 )
             )
-            if model_count in {5000, 10000}:
+            if model_count >= CI_PRIMARY_MODEL_COUNT:
                 profiles.append(
                     _ci_hundred_rule_profile(
                         project_dir=project_dir,
@@ -233,7 +242,7 @@ def _ci_twenty_rule_profile(*, project_dir: Path, model_count: int) -> dict[str,
             ),
         )
     )
-    if model_count == 5000:
+    if model_count == CI_PRIMARY_MODEL_COUNT:
         results.extend(_ci_five_thousand_invalidation_results(project_dir=project_dir))
     return _ci_profile_payload(
         project_dir=project_dir,
@@ -317,7 +326,7 @@ def _ci_hundred_rule_profile(*, project_dir: Path, model_count: int) -> dict[str
             mutate=lambda iteration: None,
         ),
     ]
-    if model_count == 5000:
+    if model_count == CI_PRIMARY_MODEL_COUNT:
         results.extend(
             (
                 _measure(
@@ -461,7 +470,7 @@ def _ci_cache_guard_failures(
         "multi_model_edit": (total - (rule_count * edit_count + 2), rule_count * edit_count + 2),
         "custom_rule_source_edit": (total - (model_count + 1), model_count + 1),
     }
-    if model_count == 5000 and rule_count == 20:
+    if model_count == CI_PRIMARY_MODEL_COUNT and rule_count != CI_STRESS_RULE_COUNT:
         expected_by_scenario.update(
             {
                 "sql_test_edit": (90_000, 10_002),
@@ -587,7 +596,7 @@ def _run_scenarios(
             mutate=lambda iteration: _clear_target(project_dir),
         )
     ]
-    _ = _invoke(project_dir)
+    _ = _invoke(project_dir=project_dir)
     results.append(
         _measure(
             scenario="rules_cold",
@@ -596,7 +605,7 @@ def _run_scenarios(
             mutate=lambda iteration: _clear_cache(project_dir),
         )
     )
-    _ = _invoke(project_dir)
+    _ = _invoke(project_dir=project_dir)
     results.append(
         _measure(
             scenario="tracked_rule_input_edit",
@@ -619,7 +628,7 @@ def _run_scenarios(
     )
     finding_path: Path = _generated_model_path(project_dir=project_dir, index=model_count - 1)
     _inject_sql_finding(path=finding_path)
-    _ = _invoke(project_dir, allow_failure=True)
+    _ = _invoke(project_dir=project_dir, allow_failure=True)
     results.append(
         _measure(
             scenario="failing_rule",
@@ -630,7 +639,7 @@ def _run_scenarios(
         )
     )
     _remove_sql_finding(path=finding_path)
-    _ = _invoke(project_dir)
+    _ = _invoke(project_dir=project_dir)
     results.append(
         _measure(
             scenario="leaf_edit",
@@ -770,7 +779,7 @@ def _measure(
     for iteration in range(iterations):
         mutate(iteration)
         started: float = time.perf_counter()
-        payload, peak_rss = _invoke(project_dir, allow_failure=allow_failure)
+        payload, peak_rss = _invoke(project_dir=project_dir, allow_failure=allow_failure)
         if peak_rss is not None:
             peak_rss_bytes.append(peak_rss)
         elapsed.append(time.perf_counter() - started)
@@ -814,7 +823,7 @@ def _measure(
 
 
 def _invoke(
-    project_dir: Path, *, allow_failure: bool = False
+    *, project_dir: Path, allow_failure: bool = False
 ) -> tuple[dict[str, object], int | None]:
     result: _BenchmarkProcessResult = _run(project_dir)
     accepted_codes: tuple[int, ...] = (0, 1) if allow_failure else (0,)

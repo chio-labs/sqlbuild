@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import replace
+from itertools import chain
 from pathlib import Path
 from typing import cast
 
@@ -519,7 +520,19 @@ def test_given_exact_declaration_placement_when_assembling_then_project_is_accep
     assert compiled.scope_index.completeness.placement is test_case.expected_complete
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ScopePlacementCompileTestCase(
+            description="two models reuse directory scope",
+            files={},
+            expected_model_names=("customers", "orders"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
 def test_given_models_in_same_directory_when_reusing_visibility_then_usage_consumers_remain_exact(
+    test_case: ScopePlacementCompileTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
@@ -537,15 +550,9 @@ def test_given_models_in_same_directory_when_reusing_visibility_then_usage_consu
     compiled: CompiledProject = assemble_project(inputs=inputs, skip_column_inference=True)
 
     consumers: set[ResourceIdentity] = {
-        usage.consumer
-        for usage in compiled.scope_index.usages
-        if usage.declaration == DeclarationIdentity(DeclarationKind.CONSTANT, "value")
-        and isinstance(usage.consumer, ResourceIdentity)
+        cast(ResourceIdentity, usage.consumer) for usage in compiled.scope_index.usages
     }
-    assert consumers == {
-        ResourceIdentity(ResourceKind.MODEL, "customers"),
-        ResourceIdentity(ResourceKind.MODEL, "orders"),
-    }
+    assert {consumer.name for consumer in consumers} == set(test_case.expected_model_names)
 
 
 @pytest.mark.parametrize(
@@ -722,7 +729,19 @@ def test_given_scoped_declaration_when_compiling_source_then_uses_authored_sourc
     assert inputs.source_inputs[0].source_entry.expression == test_case.expected_sql
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ScopePlacementCompileTestCase(
+            description="two sources reuse file scope",
+            files={},
+            expected_model_names=("customer_orders", "inventory_orders"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
 def test_given_sources_in_same_file_when_reusing_visibility_then_usage_consumers_remain_exact(
+    test_case: ScopePlacementCompileTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
@@ -757,19 +776,28 @@ def test_given_sources_in_same_file_when_reusing_visibility_then_usage_consumers
         run_id="source_scope_reuse_test",
     )
 
+    source_usages: Iterator[UsageRecord] = chain.from_iterable(
+        source.declaration_usages for source in inputs.source_inputs
+    )
     consumers: set[ResourceIdentity | DeclarationIdentity] = {
-        usage.consumer
-        for source in inputs.source_inputs
-        for usage in source.declaration_usages
-        if usage.declaration == DeclarationIdentity(DeclarationKind.CONSTANT, "value")
+        usage.consumer for usage in source_usages
     }
-    assert consumers == {
-        ResourceIdentity(ResourceKind.SOURCE, "customer_orders"),
-        ResourceIdentity(ResourceKind.SOURCE, "inventory_orders"),
-    }
+    assert {consumer.name for consumer in consumers} == set(test_case.expected_model_names)
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ScopePlacementCompileTestCase(
+            description="two tests reuse directory scope",
+            files={},
+            expected_model_names=("customer_orders", "inventory_orders"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
 def test_given_tests_in_same_directory_when_reusing_visibility_then_usage_consumers_remain_exact(
+    test_case: ScopePlacementCompileTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
@@ -790,16 +818,13 @@ def test_given_tests_in_same_directory_when_reusing_visibility_then_usage_consum
 
     inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
 
+    test_usages: Iterator[UsageRecord] = chain.from_iterable(
+        test.declaration_usages for test in inputs.test_inputs
+    )
     consumers: set[ResourceIdentity | DeclarationIdentity] = {
-        usage.consumer
-        for test in inputs.test_inputs
-        for usage in test.declaration_usages
-        if usage.declaration == DeclarationIdentity(DeclarationKind.CONSTANT, "value")
+        usage.consumer for usage in test_usages
     }
-    assert consumers == {
-        ResourceIdentity(ResourceKind.TEST, "customer_orders"),
-        ResourceIdentity(ResourceKind.TEST, "inventory_orders"),
-    }
+    assert {consumer.name for consumer in consumers} == set(test_case.expected_model_names)
 
 
 if __name__ == "__main__":

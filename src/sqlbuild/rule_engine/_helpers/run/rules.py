@@ -9,17 +9,19 @@ import time
 from dataclasses import dataclass, replace
 from importlib.metadata import version
 from pathlib import Path
+from typing import Any
 
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.lint._helpers.project_files import collect_project_files
+from sqlbuild.lint.main.collect_project_files import collect_project_files
 from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import LintConfig, LintRunResult, LintViolation
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue, select_rules
 from sqlbuild.rule_engine._helpers.engine.hermeticity import verify_custom_rules
 from sqlbuild.rule_engine._helpers.engine.native import evaluate_native
+from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.models import Finding, Rule, RulesConfig, RulesResult, RulesRunResult
 
 _SQL_RULE_CACHE_VERSION: str = "sql-rules-v1"
@@ -203,7 +205,7 @@ def _lint_finding(*, violation: LintViolation, project_dir: Path) -> Finding:
 
 
 def _sql_rule_identity(*, model: CompiledModel, codes: tuple[str, ...], dialect: str) -> str:
-    digest = hashlib.sha256()
+    digest: Any = hashlib.sha256()
     digest.update(_SQL_RULE_CACHE_VERSION.encode())
     digest.update(_SQLBUILD_VERSION.encode())
     digest.update(dialect.encode())
@@ -241,20 +243,20 @@ def _cached_sql_findings(
         return None
     try:
         return tuple(_finding_from_cache_payload(value) for value in values)
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, RulesError, TypeError, ValueError):
         return None
 
 
 def _finding_from_cache_payload(value: object) -> Finding:
     if not isinstance(value, dict):
-        raise TypeError("cached SQL finding must be an object")
+        raise RulesError("cached SQL finding must be an object")
     payload: dict[str, object] = {str(key): item for key, item in value.items()}
-    code = payload["code"]
-    path = payload["path"]
-    line = payload["line"]
-    column = payload["column"]
-    message = payload["message"]
-    remediation = payload["remediation"]
+    code: object = payload["code"]
+    path: object = payload["path"]
+    line: object = payload["line"]
+    column: object = payload["column"]
+    message: object = payload["message"]
+    remediation: object = payload["remediation"]
     if (
         not isinstance(code, str)
         or not isinstance(path, str)
@@ -263,7 +265,7 @@ def _finding_from_cache_payload(value: object) -> Finding:
         or not isinstance(message, str)
         or not isinstance(remediation, str)
     ):
-        raise TypeError("cached SQL finding has invalid fields")
+        raise RulesError("cached SQL finding has invalid fields")
     return Finding(
         code=code,
         path=Path(path),

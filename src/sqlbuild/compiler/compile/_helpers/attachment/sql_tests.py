@@ -50,6 +50,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestInput,
     DeclarationExpansionContext,
     DeclarationResolutionContext,
+    DeclarationScopeResolver,
     LoadedMacro,
     MacroContext,
 )
@@ -67,7 +68,7 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
-from sqlbuild.compiler.scopes.models import ResourceIdentity, UsageRecord
+from sqlbuild.compiler.scopes.models import ResourceIdentity, UsageRecord, VisibilityRecord
 from sqlbuild.compiler.scopes.types import ResourceKind, ScopeKind, UsageKind
 
 _HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
@@ -156,7 +157,7 @@ def build_test_inputs(
         if function_input.return_columns
     }
     test_inputs: list[CompileSqlTestInput] = []
-    resolver = declaration_expansion.resolver
+    resolver: DeclarationScopeResolver | None = declaration_expansion.resolver
     reuse_parent_scope: bool = (
         resolver is not None
         and not any(
@@ -309,16 +310,25 @@ def _rebind_test_declarations(
         declarations=replace(
             declarations,
             consumer=consumer,
-            enum_visibility={
-                name: tuple(replace(record, resource=consumer) for record in records)
-                for name, records in declarations.enum_visibility.items()
-            },
-            constant_visibility={
-                name: tuple(replace(record, resource=consumer) for record in records)
-                for name, records in declarations.constant_visibility.items()
-            },
+            enum_visibility=_rebind_visibility(
+                visibility=declarations.enum_visibility, consumer=consumer
+            ),
+            constant_visibility=_rebind_visibility(
+                visibility=declarations.constant_visibility, consumer=consumer
+            ),
         ),
     )
+
+
+def _rebind_visibility(
+    *,
+    visibility: dict[str, tuple[VisibilityRecord, ...]],
+    consumer: ResourceIdentity,
+) -> dict[str, tuple[VisibilityRecord, ...]]:
+    rebound: dict[str, tuple[VisibilityRecord, ...]] = {}
+    for name, records in visibility.items():
+        rebound[name] = tuple(replace(record, resource=consumer) for record in records)
+    return rebound
 
 
 def _macro_test_declaration_usages(

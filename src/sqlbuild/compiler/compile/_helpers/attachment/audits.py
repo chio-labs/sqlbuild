@@ -83,6 +83,16 @@ class _AuditAttachmentContext:
         default_factory=dict, compare=False, repr=False
     )
 
+    def remember_scoped_declarations(
+        self,
+        *,
+        key: tuple[Path, ResourceIdentity],
+        declarations: DeclarationExpansionContext,
+    ) -> None:
+        """Retain one resolved audit scope for reuse in this compile invocation."""
+
+        self.scoped_declarations[key] = declarations
+
 
 _LEGACY_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hook", "post_hook"})
 _MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
@@ -132,7 +142,7 @@ def build_audit_inputs(
             continue
         audit_block: DiscoveredAuditBlock
         for audit_block in audit_file.blocks:
-            audit_resource = ResourceIdentity(
+            audit_resource: ResourceIdentity = ResourceIdentity(
                 ResourceKind.AUDIT,
                 audit_block.name or audit_file.relative_path.stem,
             )
@@ -408,7 +418,7 @@ def _scoped_audit_declarations(
         file_path=file_path,
         resource=resource,
     )
-    context.scoped_declarations[key] = resolved
+    context.remember_scoped_declarations(key=key, declarations=resolved)
     return resolved
 
 
@@ -468,7 +478,7 @@ def build_attached_audit_input(
             owner_file=owner_file,
             definition_name=audit_instance.definition_name,
         )
-    audit_resource = ResourceIdentity(
+    audit_resource: ResourceIdentity = ResourceIdentity(
         ResourceKind.AUDIT,
         definition[1].name or definition[0].relative_path.stem,
     )
