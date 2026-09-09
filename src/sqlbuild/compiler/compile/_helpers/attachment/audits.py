@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.compiler.auditing.constants import (
@@ -79,6 +79,9 @@ class _AuditAttachmentContext:
     effective_vars: dict[str, object]
     macro_context: MacroContext
     declaration_expansion: DeclarationExpansionContext
+    scoped_declarations: dict[tuple[Path, ResourceIdentity], DeclarationExpansionContext] = field(
+        default_factory=dict, compare=False, repr=False
+    )
 
 
 _LEGACY_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hook", "post_hook"})
@@ -129,13 +132,14 @@ def build_audit_inputs(
             continue
         audit_block: DiscoveredAuditBlock
         for audit_block in audit_file.blocks:
-            scoped_declarations: DeclarationExpansionContext = resolve_declaration_expansion(
-                context=declaration_expansion,
+            audit_resource = ResourceIdentity(
+                ResourceKind.AUDIT,
+                audit_block.name or audit_file.relative_path.stem,
+            )
+            scoped_declarations: DeclarationExpansionContext = _scoped_audit_declarations(
+                context=attachment_context,
                 file_path=audit_file.file_path,
-                resource=ResourceIdentity(
-                    ResourceKind.AUDIT,
-                    audit_block.name or audit_file.relative_path.stem,
-                ),
+                resource=audit_resource,
             )
             expansion: AuthoredSqlExpansionResult = expand_authored_sql_result(
                 sql=audit_block.sql_body,
@@ -392,6 +396,22 @@ def build_source_attached_audit_inputs(
     return tuple(attached_audit_inputs)
 
 
+def _scoped_audit_declarations(
+    *, context: _AuditAttachmentContext, file_path: Path, resource: ResourceIdentity
+) -> DeclarationExpansionContext:
+    key: tuple[Path, ResourceIdentity] = (file_path, resource)
+    cached: DeclarationExpansionContext | None = context.scoped_declarations.get(key)
+    if cached is not None:
+        return cached
+    resolved: DeclarationExpansionContext = resolve_declaration_expansion(
+        context=context.declaration_expansion,
+        file_path=file_path,
+        resource=resource,
+    )
+    context.scoped_declarations[key] = resolved
+    return resolved
+
+
 def build_attached_audit_input(
     *,
     audit_instance: SchemaAuditInstance,
@@ -448,13 +468,14 @@ def build_attached_audit_input(
             owner_file=owner_file,
             definition_name=audit_instance.definition_name,
         )
-    scoped_declarations: DeclarationExpansionContext = resolve_declaration_expansion(
-        context=context.declaration_expansion,
+    audit_resource = ResourceIdentity(
+        ResourceKind.AUDIT,
+        definition[1].name or definition[0].relative_path.stem,
+    )
+    scoped_declarations: DeclarationExpansionContext = _scoped_audit_declarations(
+        context=context,
         file_path=definition[0].file_path,
-        resource=ResourceIdentity(
-            ResourceKind.AUDIT,
-            definition[1].name or definition[0].relative_path.stem,
-        ),
+        resource=audit_resource,
     )
     expansion: AuthoredSqlExpansionResult = expand_authored_sql_result(
         sql=rendered_sql_body,
