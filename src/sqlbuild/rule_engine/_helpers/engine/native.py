@@ -6,6 +6,7 @@ import hashlib
 import inspect
 import json
 import pickle
+import re
 import sys
 import tempfile
 from dataclasses import asdict, replace
@@ -51,6 +52,7 @@ from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 
 _CUSTOM_HOST_REQUIRED: str = "selected custom rules require a custom host"
+_NATIVE_CACHE_MISSES_PATTERN: re.Pattern[str] = re.compile(r"native_cache_misses=(\d+)")
 
 
 def evaluate_native(
@@ -90,6 +92,7 @@ def evaluate_native(
         ),
     }
     custom_host_input: Path | None = None
+    retry_native_misses: int = 0
     request["custom_host"] = None
     try:
         try:
@@ -97,6 +100,8 @@ def evaluate_native(
         except ValueError as error:
             if _CUSTOM_HOST_REQUIRED not in str(error):
                 raise
+            match: re.Match[str] | None = _NATIVE_CACHE_MISSES_PATTERN.search(str(error))
+            retry_native_misses = 0 if match is None else int(match.group(1))
             custom_host, custom_host_input = _custom_host_payload(
                 project=project,
                 config=config,
@@ -123,8 +128,8 @@ def evaluate_native(
     return RulesResult(
         findings=tuple(_decode_finding(value) for value in raw_findings),
         evaluated_models=int(payload.get("evaluated_models", 0)),
-        cache_hits=int(payload.get("cache_hits", 0)),
-        cache_misses=int(payload.get("cache_misses", 0)),
+        cache_hits=max(0, int(payload.get("cache_hits", 0)) - retry_native_misses),
+        cache_misses=int(payload.get("cache_misses", 0)) + retry_native_misses,
         built_in_ms=int(payload.get("built_in_ms", 0)),
         custom_ms=int(payload.get("custom_ms", 0)),
     )

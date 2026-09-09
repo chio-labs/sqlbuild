@@ -159,12 +159,18 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
     }
     let built_in_ms = built_in_started.elapsed().as_millis() as u64;
     let custom_started = Instant::now();
-    let custom = evaluate_custom_rules_cached(CustomRulesCacheRequest {
+    let custom = match evaluate_custom_rules_cached(CustomRulesCacheRequest {
         request: &request,
         selected: &selected_by_code,
         cache: cache.as_ref(),
         project_fingerprint: project_fingerprint.as_deref(),
-    })?;
+    }) {
+        Ok(value) => value,
+        Err(error) if error == "selected custom rules require a custom host" => {
+            return Err(format!("{error} [native_cache_misses={cache_misses}]"));
+        }
+        Err(error) => return Err(error),
+    };
     cache_hits += custom.hits;
     cache_misses += custom.misses;
     raw_faults.extend(custom.faults);

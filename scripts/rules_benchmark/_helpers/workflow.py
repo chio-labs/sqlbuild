@@ -54,6 +54,7 @@ def run_rule_count_benchmark(
     with tempfile.TemporaryDirectory(prefix="sqlbuild-rule-count-benchmark-") as temporary:
         project_dir: Path = Path(temporary) / "project"
         _write_project(project_dir=project_dir, model_count=model_count)
+        _ = _invoke(project_dir)
         profiles: list[dict[str, object]] = []
         for rule_count in rule_counts:
             write_custom_rules(project_dir=project_dir, rule_count=rule_count)
