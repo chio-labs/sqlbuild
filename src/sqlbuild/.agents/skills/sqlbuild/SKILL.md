@@ -871,16 +871,17 @@ project contains:
 | Authored model SQL | 31.3 MB |
 | Authored SQL-test definitions | 6.4 MB |
 
-On this project, 20 custom Rules complete their first Rules run in just over 10 seconds. An
-unchanged recompile completes in under six seconds.
+On this project, 20 custom Rules complete their first compile in just over 10 seconds. An unchanged
+compile completes in under six seconds.
 
-Even with 100 custom Rules—500,002 Rule evaluations—an unchanged recompile completes in just over
+Even with 100 custom Rules—500,002 Rule evaluations—an unchanged compile completes in just over
 seven seconds.
 
-| Custom Rules | Rule evaluations | First Rules run | Unchanged recompile | Recompile after editing 1% |
-|---:|---:|---:|---:|---:|
-| 20 | 100,002 | 10.83s | 5.81s | 7.43s |
-| 100 | 500,002 | 12.19s | 7.24s | 10.02s |
+| Compile | 20 custom Rules<br />100,002 evaluations | 100 custom Rules<br />500,002 evaluations |
+|---|---:|---:|
+| First compile (no cache) | 10.83s | 12.19s |
+| Unchanged compile | 5.81s | 7.24s |
+| After editing 1% of models | 7.43s | 10.02s |
 
 Each measurement executes the complete `sqb compile` command. The edit scenario changes 50 of the
 5,000 models before recompiling.
@@ -6349,7 +6350,7 @@ explicit choice for genuinely project-wide requirements, with broader invalidati
 the inputs each Rule depends on so cached findings are reused only while those inputs remain valid.
 
 In required CI, 20 custom Rules over a production-shaped 5,000-model project complete their first
-Rules run in just over 10 seconds and an unchanged recompile in under six. A 100-Rule stress profile
+compile in just over 10 seconds and an unchanged compile in under six. A 100-Rule stress profile
 reuses all 500,002 cached evaluations in just over seven seconds.
 
 See [Benchmarks](/benchmarks#rules-performance) for the complete workload, methodology, and results,
