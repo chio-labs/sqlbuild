@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.94.6](https://github.com/chio-labs/sqlbuild/compare/v0.94.5...v0.94.6) (2026-09-10)
+
+
+### Bug Fixes
+
+* use one connection for target diffs ([#614](https://github.com/chio-labs/sqlbuild/issues/614)) ([7d009f5](https://github.com/chio-labs/sqlbuild/commit/7d009f5c9d89a6346ce79c46cb3df430aee23b46))
+
 ## [0.94.5](https://github.com/chio-labs/sqlbuild/compare/v0.94.4...v0.94.5) (2026-09-10)
 
 
