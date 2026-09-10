@@ -54,6 +54,12 @@ def prepare_direct_diff(
     adapter: BaseAdapter = resolve_adapter(
         adapter_name=effective_adapter_name, project_dir=invocation.effective_project_dir
     )
+    connection_config: dict[str, object] = resolve_target_connection_config(
+        discovered_inputs=invocation.discovered_inputs,
+        project_dir=invocation.effective_project_dir,
+        target_name=to_target,
+        cli_vars=request.cli_vars,
+    )
     left_project: Any
     right_project: Any
     selected_names: tuple[str, ...]
@@ -62,6 +68,7 @@ def prepare_direct_diff(
         adapter=adapter,
         from_target=from_target,
         to_target=to_target,
+        resolved_connection=connection_config,
         no_sql_validation=request.no_sql_validation,
         select=request.select,
         exclude=request.exclude,
@@ -80,12 +87,7 @@ def prepare_direct_diff(
         left_project=left_project,
         right_project=right_project,
         selected_names=selected_names,
-        connection_config=resolve_target_connection_config(
-            discovered_inputs=invocation.discovered_inputs,
-            project_dir=invocation.effective_project_dir,
-            target_name=to_target,
-            cli_vars=request.cli_vars,
-        ),
+        connection_config=connection_config,
         effective_max_column_examples=_effective_max_examples(
             explicit_value=request.max_column_examples, verbose=request.verbose
         ),

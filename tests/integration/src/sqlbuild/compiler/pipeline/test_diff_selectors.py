@@ -106,6 +106,7 @@ def test_given_compiled_project_when_resolving_diff_selectors_then_returns_expec
         discovered_inputs=discovered_inputs,
         adapter=DuckDbAdapter(),
         target_name="dev",
+        resolved_connection={"database": ":memory:"},
         no_sql_validation=True,
     )
 

@@ -339,6 +339,133 @@ def test_given_diff_project_when_running_diff_then_behavior_matches_expected(
 @pytest.mark.parametrize(
     "test_case",
     [
+        DiffCommandE2ETestCase(
+            description="schema diff ignores unused from connection credentials",
+            command=(
+                "--no-color",
+                "diff",
+                "prod:dev",
+                "--schema-only",
+                "--select",
+                "orders_snapshot",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=("No schema differences.",),
+        ),
+        DiffCommandE2ETestCase(
+            description="full diff ignores unused from connection credentials",
+            command=(
+                "--no-color",
+                "diff",
+                "prod:dev",
+                "--full",
+                "--select",
+                "orders_snapshot",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=("No changed columns.",),
+        ),
+        DiffCommandE2ETestCase(
+            description="bounded diff ignores unused from connection credentials",
+            command=(
+                "--no-color",
+                "diff",
+                "prod:dev",
+                "--bounded",
+                "30d",
+                "--select",
+                "orders_snapshot",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=("No changed columns.",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unused_from_connection_when_diffing_then_to_connection_is_authoritative(
+    test_case: DiffCommandE2ETestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = prepare_diff_project(tmp_path)
+    build_both_environments(project_dir=project_dir)
+    project_config_path: Path = project_dir / "sqlbuild_project.toml"
+    original_project_config: str = project_config_path.read_text(encoding="utf-8")
+    rewritten_project_config: str = original_project_config.replace(
+        '[targets.prod]\nschema = "prod"',
+        '[targets.prod]\nschema = "prod"\n\n[targets.prod.connection]\n'
+        'database = "${ENV:SQLBUILD_TEST_UNUSED_FROM_DATABASE}"',
+    )
+    assert rewritten_project_config != original_project_config
+    project_config_path.write_text(
+        rewritten_project_config,
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("SQLBUILD_TEST_UNUSED_FROM_DATABASE", raising=False)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DiffCommandE2ETestCase(
+            description="missing to connection credential fails before inspection",
+            command=(
+                "--no-color",
+                "diff",
+                "prod:dev",
+                "--schema-only",
+                "--select",
+                "orders_snapshot",
+            ),
+            expected_exit_code=1,
+            expected_stderr_fragments=(
+                "effective connection references missing ENV variable "
+                "'SQLBUILD_TEST_MISSING_TO_DATABASE'",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_missing_to_connection_credential_when_diffing_then_it_fails_before_inspection(
+    test_case: DiffCommandE2ETestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = prepare_diff_project(tmp_path)
+    build_both_environments(project_dir=project_dir)
+    project_config_path: Path = project_dir / "sqlbuild_project.toml"
+    original_project_config: str = project_config_path.read_text(encoding="utf-8")
+    rewritten_project_config: str = original_project_config.replace(
+        '[targets.dev]\nschema = "dev"',
+        '[targets.dev]\nschema = "dev"\n\n[targets.dev.connection]\n'
+        'database = "${ENV:SQLBUILD_TEST_MISSING_TO_DATABASE}"',
+    )
+    assert rewritten_project_config != original_project_config
+    project_config_path.write_text(rewritten_project_config, encoding="utf-8")
+    monkeypatch.delenv("SQLBUILD_TEST_MISSING_TO_DATABASE", raising=False)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    for fragment in test_case.expected_stderr_fragments:
+        assert fragment in result.stderr, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         DiffKeyFailureE2ETestCase(
             description="null unique key fails clearly",
             mutation_sql=("UPDATE dev.orders_snapshot SET order_id = NULL WHERE order_id = 3",),
