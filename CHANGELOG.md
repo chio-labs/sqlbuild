@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.94.2](https://github.com/chio-labs/sqlbuild/compare/v0.94.1...v0.94.2) (2026-09-10)
+
+
+### Documentation
+
+* sync rules overview skill ([#605](https://github.com/chio-labs/sqlbuild/issues/605)) ([2d71f57](https://github.com/chio-labs/sqlbuild/commit/2d71f57d3b7206299138a6312e687a449e6d087e))
+
 ## [0.94.1](https://github.com/chio-labs/sqlbuild/compare/v0.94.0...v0.94.1) (2026-09-09)
 
 
