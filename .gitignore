@@ -67,7 +67,12 @@ sqlbuild_local.toml
 .tmp*
 
 # Claude Code
-.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/fensu-sqlbuild/
+.claude/skills/fensu-sqlbuild/*
+!.claude/skills/fensu-sqlbuild/SKILL.md
 
 # Local agent instructions
 AGENTS.md

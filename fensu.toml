@@ -1,3 +1,5 @@
+[targets.python]
+analyzer = "python"
 roots = ["src/sqlbuild"]
 tests = ["tests"]
 tooling = ["scripts"]
@@ -11,110 +13,104 @@ rule_modules = [
 ]
 select = ["FF", "XSB"]
 
-[cache]
+[targets.python.cache]
 enabled = true
 require_cacheable = true
 
-[experimental]
-memory = true
-
-[memory.tasks]
-archive_after_days = 7
-
-[evaluation]
+[targets.python.evaluation]
 exclude = ["tests/e2e/fixtures/**"]
 
-[thresholds]
+[targets.python.thresholds]
 max_positional_args = 1
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR309"
 path = "src/sqlbuild/adapters/bigquery/__init__.py"
 reason = "The BigQuery backend intentionally owns behavior through its adapter class rather than function entrypoints."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR309"
 path = "src/sqlbuild/adapters/databricks/constants.py"
 reason = "The Databricks backend intentionally owns behavior through its adapter class rather than function entrypoints."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR309"
 path = "src/sqlbuild/adapters/duckdb/__init__.py"
 reason = "The DuckDB backend intentionally owns behavior through its adapter class rather than function entrypoints."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR309"
 path = "src/sqlbuild/adapters/motherduck/__init__.py"
 reason = "The MotherDuck backend intentionally owns behavior through its adapter class rather than function entrypoints."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR309"
 path = "src/sqlbuild/adapters/postgres/__init__.py"
 reason = "The Postgres backend intentionally owns behavior through its adapter class rather than function entrypoints."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR309"
 path = "src/sqlbuild/adapters/snowflake/__init__.py"
 reason = "The Snowflake backend intentionally owns behavior through its adapter class rather than function entrypoints."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR309"
 path = "src/sqlbuild/adapters/sqlserver/__init__.py"
 reason = "The SQL Server backend intentionally owns behavior through its adapter class rather than function entrypoints."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR601"
 path = "src/sqlbuild/adapter/contract/classes/base_adapter.py"
 reason = "The adapter contract intentionally keeps its overrideable methods on one class."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR601"
 path = "src/sqlbuild/adapter/contract/classes/duckdb_backed_adapter.py"
 reason = "The shared DuckDB-backed adapter intentionally keeps overrideable methods on one class."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR601"
 path = "src/sqlbuild/adapters/bigquery/classes/bigquery_adapter.py"
 reason = "The BigQuery adapter intentionally keeps overrideable backend behavior on one class."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR601"
 path = "src/sqlbuild/adapters/databricks/classes/databricks_adapter.py"
 reason = "The Databricks adapter intentionally keeps overrideable backend behavior on one class."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR601"
 path = "src/sqlbuild/adapters/postgres/classes/postgres_adapter.py"
 reason = "The Postgres adapter intentionally keeps overrideable backend behavior on one class."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR601"
 path = "src/sqlbuild/adapters/snowflake/classes/snowflake_adapter.py"
 reason = "The Snowflake adapter intentionally keeps overrideable backend behavior on one class."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR601"
 path = "src/sqlbuild/adapters/sqlserver/classes/sqlserver_adapter.py"
 reason = "The SQL Server adapter intentionally keeps overrideable backend behavior on one class."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR601"
 path = "src/sqlbuild/virtual/state/classes/postgres.py"
 reason = "The Postgres state backend intentionally keeps its transactional storage contract on one class."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFS120"
 path = "src/sqlbuild/integrations/dbt/_helpers/profile/render.py"
 symbols = ["_render_string.env_var", "_render_string.var"]
 reason = "These Jinja globals preserve dbt's external positional call protocol."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFS120"
 path = "scripts/cli_preview/_helpers/workflow.py"
 symbols = ["_run_process._forward_signal"]
 reason = "This callback preserves signal.signal's required positional handler protocol."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFS120"
 path = "src/sqlbuild/integrations/dlt/classes/sqlbuild_dlt_progress_collector.py"
 symbols = [
@@ -126,132 +122,156 @@ symbols = [
 ]
 reason = "These collector methods preserve dlt's external positional progress protocol."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFS120"
 path = "src/sqlbuild/loaders.py"
 symbols = ["loader"]
 reason = "Bare @loader is evaluated by Python as loader(function), requiring positional function calling."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFS120"
 path = "src/sqlbuild/assets.py"
 symbols = ["asset"]
 reason = "Bare @asset is evaluated by Python as asset(function), requiring positional function calling."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFS120"
 path = "src/sqlbuild/hooks.py"
 symbols = ["hook"]
 reason = "Bare @hook is evaluated by Python as hook(function), requiring positional function calling."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFS120"
 path = "src/sqlbuild/tasks.py"
 symbols = ["task"]
 reason = "Bare @task is evaluated by Python as task(function), requiring positional function calling."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR402"
 path = "src/sqlbuild/integrations/dagster/__init__.py"
 reason = "These imports preserve Dagster's documented external package-root APIs."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFS120"
 path = "src/sqlbuild/sinks.py"
 symbols = ["command_output_sink", "lifecycle_event_sink"]
 reason = "Bare sink decorators are evaluated by Python as decorator(function), requiring positional function calling."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR402"
 path = "src/sqlbuild/integrations/rivers/__init__.py"
 reason = "These imports preserve Rivers' documented external package-root APIs."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR309"
 path = "src/sqlbuild/rules/__init__.py"
 reason = "The Rules package is the documented custom-rule authoring API, not an internal runtime leaf."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR402"
 path = "src/sqlbuild/rules/__init__.py"
 reason = "These imports provide the documented sqlbuild.rules package-root authoring API."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR307"
 path = "src/sqlbuild/rules/testing.py"
 reason = "sqlbuild.rules.testing is the documented public custom-rule harness module."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR403"
 path = "src/sqlbuild/rules/testing.py"
 reason = "This deliberate public shim keeps test-harness internals outside the stable authoring API."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFS120"
 path = "src/sqlbuild/integrations/dagster/classes/sqlbuild_cli_resource.py"
 symbols = ["SqlBuildCliResource.cli"]
 reason = "This method follows Dagster's public cli(args, *, ...) positional convention."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFS120"
 path = "src/sqlbuild/adapters/snowflake/classes/snowflake_connection.py"
 symbols = ["_SnowflakeConnection.execute"]
 reason = "This wrapper preserves the connection.execute(sql) protocol shared by adapter helpers."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFS120"
 path = "src/sqlbuild/adapters/snowflake/classes/snowflake_cursor.py"
 symbols = ["_SnowflakeCursor.execute", "_SnowflakeCursor.executemany"]
 reason = "This proxy preserves Snowflake's DB-API cursor positional execution protocol."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFS120"
 path = "src/sqlbuild/adapter/contract/classes/observed_cursor.py"
 symbols = ["ObservedCursor.execute", "ObservedCursor.executemany"]
 reason = "This proxy preserves the external DB-API cursor positional execution protocol."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFS120"
 path = "src/sqlbuild/adapter/contract/classes/observed_connection.py"
 symbols = ["ObservedConnection.execute", "ObservedConnection.executemany"]
 reason = "This proxy preserves DuckDB's positional connection execution protocol."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFL101"
 path = "scripts/fensu_policy/rules/adapter_ownership.py"
 reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers imports, despite FFR704 requiring that layout."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFL101"
 path = "scripts/fensu_policy/rules/canonical_operations.py"
 reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers imports, despite FFR704 requiring that layout."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFL101"
 path = "scripts/fensu_policy/rules/execution_observability.py"
 reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers imports, despite FFR704 requiring that layout."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFL101"
 path = "scripts/fensu_policy/rules/module_boundaries.py"
 reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers imports, despite FFR704 requiring that layout."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFL101"
 path = "scripts/fensu_policy/rules/orchestration_dataflow.py"
 reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers imports, despite FFR704 requiring that layout."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFL102"
 path = "src/sqlbuild/lint/_helpers/native.py"
 reason = "The lint layer reuses the compiler's MODEL() header parser; the compiler exposes no public facade for it."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR601"
 path = "src/sqlbuild/executor/run/_helpers/materializations/microbatch.py"
 reason = "Microbatch execution is one ordered failure-sensitive lifecycle; splitting reconciliation, DML, completion publication, and aggregate gates would hide the required phase ordering across module boundaries."
 
-[[rule_exceptions]]
+[[targets.python.rule_exceptions]]
 rule = "FFR601"
 path = "src/sqlbuild/virtual/executor/_helpers/build.py"
 reason = "Virtual build orchestration intentionally keeps resolution, immutable physical-version execution, lease fencing, and state publication in one auditable lifecycle module."
+
+[targets.rust]
+analyzer = "rust"
+roots = ["crates"]
+tests = []
+tooling = []
+rule_packs = ["rust"]
+select = ["FPRS"]
+
+[targets.rust.rule_options.FPRSL301]
+forbidden_packages = [
+    "sqlbuild-structure-checker",
+    "fensu-structure-checker",
+]
+
+[targets.rust.rule_options.FPRSL102]
+packages = []
+restricted_paths = ["crates/sqlbuild-rules-native/src/rules"]
+remediation = "consume SQLBuild-owned SQL fact rows instead of raw parser types"
+
+[targets.rust.rule_options.FPRSL304]
+crate_names = [
+    "sqlbuild-rules-native",
+]

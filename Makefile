@@ -28,7 +28,8 @@ type:
 rust-check:
 	cargo fmt --all --check
 	cargo clippy --workspace --all-targets --all-features -- -D warnings
-	cargo run -p sqlbuild-structure-checker --quiet -- --config fensu-structure.toml
+	uv run fensu check
+	uv run fensu skills --check
 	cargo test --workspace --all-features
 
 
@@ -533,6 +534,7 @@ check-ci: check-e2e-shards
 	uv run ty check src tests
 	uv run pytest tests/unit/src/sqlbuild/adapter/contract/classes/strict_adapter/test_strict_adapter.py -q
 	uv run fensu check
+	uv run fensu skills --check
 
 
 check-pr-metadata:
