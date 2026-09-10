@@ -7682,9 +7682,11 @@ SQLBuild can compare schemas and row-level data between two build contexts. This
 
 The mechanics below are identical for both; only what `FROM` and `TO` refer to changes.
 
-In direct mode, each name resolves a configured target, including its named connection and
-authoritative database/schema namespace. Unknown connection references fail during offline
-configuration loading before SQLBuild attempts the comparison.
+In direct mode, `FROM` and `TO` resolve the authoritative database/schema namespaces to compare.
+SQLBuild uses the `TO` target's named connection for the complete comparison and accesses both
+namespaces through fully qualified relations. It does not resolve or open the `FROM` target's
+connection. The `TO` connection must therefore be able to read both namespaces; missing credentials
+for that execution connection still fail before warehouse inspection.
 
 ```bash
 sqb diff prod:dev --full --select customer_status_snapshot
