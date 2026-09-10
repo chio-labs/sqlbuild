@@ -14,6 +14,7 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `index`
 - `quickstart`
 - `feature-comparison`
+- `benchmarks`
 - `concepts/dbt-compatibility/overview`
 - `concepts/dbt-compatibility/selection`
 - `concepts/dbt-compatibility/adding-sqlbuild-models`
@@ -69,7 +70,7 @@ This file is generated from the SQLBuild documentation. Use it as the source of 
 - `concepts/declaration-scopes/visibility`
 - `concepts/declaration-scopes/placement`
 - `concepts/declaration-scopes/explorer`
-- `concepts/rules/custom-rules`
+- `concepts/rules/custom-rules/overview`
 - `concepts/rules/custom-rules/rule-context`
 - `concepts/rules/custom-rules/testing-and-determinism`
 - `concepts/python-nodes/overview`
@@ -770,6 +771,189 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 ### Not yet in SQLBuild
 
 - **Broader adapter support** - ClickHouse, Redshift, Trino, Spark, Athena
+
+## Benchmarks
+
+Source: `benchmarks.mdx`
+
+End-to-end compiler and Rules performance on deterministic, production-shaped projects.
+
+SQLBuild benchmarks run the real `sqb compile` command. They measure complete compiler workflows,
+including project discovery, parsing, dependency resolution, SQL expansion and analysis, contracts,
+tests, Rules, cache publication, and artifact generation.
+
+The benchmark projects are generated so each run is deterministic and reproducible. Their shape is
+not arbitrary: the reference workload was calibrated from a real working SQLBuild project, including
+its resource ratios, graph structure, SQL-size distribution, tests, audits, macros, functions,
+sources, seeds, and hooks.
+
+The generated projects contain neutral names and data. They do not contain source code or business
+data from the reference project.
+
+### Production-shaped workload
+
+The reference compiler workload reproduces the measured characteristics of a working SQLBuild
+project:
+
+| Characteristic | Observed project | Generated benchmark |
+|---|---:|---:|
+| Models | 976 | 976 |
+| Sources | 232 | 232 |
+| Seeds | 46 | 46 |
+| SQL functions | 23 | 23 |
+| Python macros | 12 | 12 |
+| Attached audits | 731 | 700 |
+| Native SQL test cases | 130 | 130 |
+| SQL hooks | 2 | 2 |
+| Execution layers | 54 | 54 |
+| Authored model SQL | 6.05 MB | about 6.4 MB |
+| Median model size | 1.9 KB | 1.9 KB |
+| 75th-percentile model size | 4.5 KB | 4.5 KB |
+| 90th-percentile model size | 10.9 KB | 11.0 KB |
+| 95th-percentile model size | 15.2 KB | 15.2 KB |
+| 99th-percentile model size | 48.2 KB | 48.0 KB |
+| Largest model | 519 KB | 520 KB |
+
+The generated dependency graph combines a 54-layer spine with bounded model chains. The workload
+also includes path defaults, reusable schemas, enforced contracts, attached audits, SQL hooks,
+source and seed references, SQL functions, composed Python macros, CTEs, derived tables, assertions,
+repeated test targets, and test fixtures ranging from 40 to 200 rows.
+
+This preserves the characteristics that exercise the compiler without publishing or depending on
+one specific project.
+
+### Compiler performance
+
+On the production-shaped 976-model workload, a required CI run measured:
+
+| Compile path | End-to-end `sqb compile` time |
+|---|---:|
+| First compile | 3.21s |
+| Unchanged recompile | 0.60s |
+| Recompile after a leaf-model edit | 0.78s |
+| Recompile after a central-model edit | 0.67s |
+| Recompile after a SQL-test edit | 0.70s |
+| Recompile after a Python-macro edit | 0.94s |
+| Recompile after a project-configuration edit | 3.56s |
+
+Model, test, and macro edits reuse unaffected compiler work. The project-configuration scenario
+deliberately changes an input with broad impact and therefore performs wider recomputation.
+
+#### Model and SQL-volume scaling
+
+A separate compiler profile increases model count and authored SQL volume while retaining the
+measured model-size distribution:
+
+| Models | Authored model SQL | First compile | Unchanged recompile |
+|---:|---:|---:|---:|
+| 3,000 | 18–25 MB | 2.37s | 1.84s |
+| 10,000 | 60–80 MB | 7.50s | 5.09s |
+
+This profile isolates compiler scaling by model count and SQL volume. The production-shaped profile
+above is the broader test of sources, seeds, functions, macros, tests, audits, hooks, contracts, and
+artifact generation occurring together.
+
+### Rules performance
+
+The Rules benchmark scales the same production-shaped generator to 5,000 models. The resulting
+project contains:
+
+| Characteristic | Generated workload |
+|---|---:|
+| Models | 5,000 |
+| Sources | 1,189 |
+| Seeds | 236 |
+| SQL functions | 118 |
+| Python macros | 61 |
+| Native SQL tests | 666 |
+| Attached audits | 3,586 |
+| SQL hooks | 2 |
+| Authored model SQL | 31.3 MB |
+| Authored SQL-test definitions | 6.4 MB |
+
+On this project, 20 custom Rules complete their first Rules run in just over 10 seconds. An
+unchanged recompile completes in under six seconds.
+
+Even with 100 custom Rules—500,002 Rule evaluations—an unchanged recompile completes in just over
+seven seconds.
+
+| Custom Rules | Rule evaluations | First Rules run | Unchanged recompile | Recompile after editing 1% |
+|---:|---:|---:|---:|---:|
+| 20 | 100,002 | 10.83s | 5.81s | 7.43s |
+| 100 | 500,002 | 12.19s | 7.24s | 10.02s |
+
+Each measurement executes the complete `sqb compile` command. The edit scenario changes 50 of the
+5,000 models before recompiling.
+
+Increasing the custom Rule pack from 20 to 100 multiplies the number of Rule evaluations by five,
+while the unchanged compile median increases from 5.81 to 7.24 seconds.
+
+#### Rule implementation changes
+
+Changing a Rule or one of its imported helpers participates in cache invalidation.
+
+In the 5,000-model, 100-Rule profile, editing one custom Rule invalidated exactly 5,001 evaluations
+while preserving 495,001 cached results. The complete compile finished in a 9.89-second median.
+
+CI also verifies exact invalidation for model edits, SQL-test edits, macro edits, project
+configuration, directly observed project inputs, custom Rule source, and imported custom helpers. A
+cache result with an unexpected hit or miss count fails the benchmark.
+
+### Methodology
+
+Compiler and Rules benchmarks run on an 8-vCPU, 32 GB Linux CI runner class using Python 3.12 and
+Polyglot 0.9.2.
+
+The Rules results shown above are the median of five required-CI runs. Allocated CPUs across those
+runs were AMD EPYC or Intel Xeon processors.
+
+The Rules benchmark output records:
+
+- complete CLI elapsed time;
+- compiler phase timings;
+- Rule cache hits and misses;
+- Rule cache size;
+- peak resident memory;
+- workload resource counts;
+- SQLBuild, Python, and Polyglot versions;
+- every raw timing and memory sample.
+
+The required Rules CI profile enforces profile-specific latency, cache-size, peak-memory, timeout,
+and aggregate compiler budgets. Cache hit and miss expectations are exact.
+
+These measurements cover compilation and static analysis. They do not measure warehouse query
+execution.
+
+### Reproduce the benchmarks
+
+Run the five-iteration Rules publication profile:
+
+```bash
+uv run python -m scripts.benchmark_rules \
+  --models 5000 \
+  --iterations 5 \
+  --output rules-5000.json
+```
+
+Run the bounded profile used by required CI:
+
+```bash
+uv run python -m scripts.benchmark_rules_ci \
+  --output rules-performance-ci.json \
+  --summary-output rules-performance-ci.md
+```
+
+Run the compiler performance guards:
+
+```bash
+uv run pytest \
+  tests/e2e/src/sqlbuild/cli/commands/main/compile/test_compile_performance.py \
+  -n auto \
+  --dist loadfile
+```
+
+The benchmark generators, guard thresholds, and CI workflow are maintained in the public
+[SQLBuild repository](https://github.com/chio-labs/sqlbuild).
 
 ## Using SQLBuild with dbt
 
@@ -3020,7 +3204,7 @@ non-projection uses such as `join_on`, `where`, `group_by`, and `window_order_by
 
 ### Related policies
 
-The project default is implicit open-shape validation for models that omit `contract`. A repository can select explicit opt-in contracts with `settings.column_contract_mode = "explicit"` or configure a custom [Rule](/concepts/rules/custom-rules) that requires enforced contracts for selected model families.
+The project default is implicit open-shape validation for models that omit `contract`. A repository can select explicit opt-in contracts with `settings.column_contract_mode = "explicit"` or configure a custom [Rule](/concepts/rules/custom-rules/overview) that requires enforced contracts for selected model families.
 
 Contracts also constrain schema-change behavior. For example, `snapshot_schema_change append_new_columns` is incompatible with `contract enforced` because an unannounced appended column would violate the exact declaration.
 
@@ -5976,22 +6160,20 @@ compile rather than an optional report somebody must remember to run.
 
 ### What Rules are for
 
-SQLBuild's built-in Rules are an opinionated starting point for reusable requirements such as SQL
-safety, contracts, and dependency boundaries. Each Rule can be selected or ignored individually, so
-a project can adopt the defaults that fit without adopting the entire catalogue. Built-ins also
-provide concrete examples of the requirements a Rule can express.
+Start with built-in Rules, then add custom Rules for requirements specific to your project.
 
-Custom Rules capture decisions that are too specific to become universal defaults: a project's
-directory structure, a company's architectural boundaries, its definition of a public interface,
-or the combination of grain, contract, and test coverage required for a particular kind of model.
+- **Built-in Rules** are opinionated, reusable checks for areas such as SQL safety, contracts, and
+  dependency boundaries. Select or ignore each Rule individually.
+- **Custom Rules** encode local decisions such as directory structure, architectural boundaries,
+  public interfaces, or the contract and test coverage required for a particular kind of model.
 
-Both built-in and custom Rules check authored SQL or the compiled project without querying warehouse
-data. They use facts SQLBuild already has about SQL, models, paths, configuration, declarations,
-columns, contracts, tests, audits, and the resolved graph.
+Both evaluate authored SQL and the compiled project without querying warehouse data. They use
+compiler-owned facts about SQL, models, paths, configuration, columns, contracts, tests, audits,
+declarations, and dependencies.
 
-This enables checks that combine facts. For example, a project can allow `SELECT *` in staging while
-requiring final models to have explicit contracted outputs, or allow cross-area dependencies only
-when the referenced model lives under an `interface` directory.
+That context can be combined in one check—for example, allowing `SELECT *` in staging while requiring
+contracted outputs in final models, or allowing cross-area dependencies only through an `interface`
+model.
 
 ### How Rules work
 
@@ -6166,7 +6348,12 @@ rather than every invocation. Project Rules run once over the complete project v
 explicit choice for genuinely project-wide requirements, with broader invalidation. SQLBuild tracks
 the inputs each Rule depends on so cached findings are reused only while those inputs remain valid.
 
-See [Execution and caching](/concepts/rules/execution-and-caching) for the complete lifecycle.
+In required CI, 20 custom Rules over a production-shaped 5,000-model project complete their first
+Rules run in just over 10 seconds and an unchanged recompile in under six. A 100-Rule stress profile
+reuses all 500,002 cached evaluations in just over seven seconds.
+
+See [Benchmarks](/benchmarks#rules-performance) for the complete workload, methodology, and results,
+and [Execution and caching](/concepts/rules/execution-and-caching) for the Rules lifecycle.
 
 ### Continue
 
@@ -8457,9 +8644,9 @@ connection settings are not included.
     Review the directory rules behind the report.
     See all selectors, filters, pagination options, output sections, and JSON behavior.
 
-## Authoring custom Rules
+## Overview
 
-Source: `concepts/rules/custom-rules.mdx`
+Source: `concepts/rules/custom-rules/overview.mdx`
 
 Define repository-owned checks with one typed Python API.
 
