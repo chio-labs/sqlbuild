@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.95.0](https://github.com/chio-labs/sqlbuild/compare/v0.94.6...v0.95.0) (2026-09-10)
+
+
+### Features
+
+* improve native test diagnostics ([#616](https://github.com/chio-labs/sqlbuild/issues/616)) ([44231e7](https://github.com/chio-labs/sqlbuild/commit/44231e79fd82933e2ebdf7da74a2a98e85449dd0))
+
 ## [0.94.6](https://github.com/chio-labs/sqlbuild/compare/v0.94.5...v0.94.6) (2026-09-10)
 
 
