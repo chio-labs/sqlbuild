@@ -455,6 +455,7 @@ def build_selected_test_entries(
                 project=project,
                 adapter=adapter,
                 sql_analysis_enabled=project.settings.sql_analysis,
+                validate_fixtures=True,
             )
         except SqlTestFixtureValidationError as error:
             fixture_diagnostics.extend(error.diagnostics)

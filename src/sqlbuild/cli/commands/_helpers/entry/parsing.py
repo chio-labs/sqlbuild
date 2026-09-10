@@ -148,11 +148,6 @@ def _validate_scope_args(*, args: CliNamespace, parser: argparse.ArgumentParser)
         parser.error("scope requires exactly one of TARGET or --at PATH")
     if args.scope_as_path is not None and not has_target:
         parser.error("scope --as-path requires TARGET")
-
-
-def _validate_test_args(*, args: CliNamespace, parser: argparse.ArgumentParser) -> None:
-    if args.inspect and (args.json or args.json_output is not None):
-        parser.error("test --inspect cannot be combined with --json or --json-output")
     folder_mode: bool = args.scope_browse is not None or args.scope_list is not None
     if folder_mode and (
         args.scope_as_path is not None
@@ -188,3 +183,8 @@ def _validate_test_args(*, args: CliNamespace, parser: argparse.ArgumentParser) 
             parser.error("scope --explain requires a declaration-qualified identity")
         if not qualified_name:
             parser.error("scope --explain requires a declaration-qualified identity")
+
+
+def _validate_test_args(*, args: CliNamespace, parser: argparse.ArgumentParser) -> None:
+    if args.inspect and (args.json or args.json_output is not None):
+        parser.error("test --inspect cannot be combined with --json or --json-output")

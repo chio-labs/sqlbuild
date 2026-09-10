@@ -126,6 +126,7 @@ def plan_test(
     project: CompiledProject,
     adapter: BaseAdapter,
     sql_analysis_enabled: bool = False,
+    validate_fixtures: bool = False,
 ) -> tuple[SqlTestPlanEntry, tuple[PlanWarning, ...]]:
     """Build a test plan entry with chained resolution."""
 
@@ -175,7 +176,7 @@ def plan_test(
         model_query_overrides=model_payload.model_query_overrides,
         mock_ref_names=frozenset(mock_refs),
     )
-    if sql_analysis_enabled:
+    if sql_analysis_enabled and validate_fixtures:
         validate_test_fixtures(
             test=test,
             project=project,
