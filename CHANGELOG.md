@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.94.5](https://github.com/chio-labs/sqlbuild/compare/v0.94.4...v0.94.5) (2026-09-10)
+
+
+### Documentation
+
+* sync simplified benchmark headers ([#611](https://github.com/chio-labs/sqlbuild/issues/611)) ([13e99c9](https://github.com/chio-labs/sqlbuild/commit/13e99c931ae40df3849bcc840422e5e7cd1e0b15))
+
 ## [0.94.4](https://github.com/chio-labs/sqlbuild/compare/v0.94.3...v0.94.4) (2026-09-10)
 
 
