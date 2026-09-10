@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.94.4](https://github.com/chio-labs/sqlbuild/compare/v0.94.3...v0.94.4) (2026-09-10)
+
+
+### Documentation
+
+* sync responsive benchmark table ([#609](https://github.com/chio-labs/sqlbuild/issues/609)) ([33d3116](https://github.com/chio-labs/sqlbuild/commit/33d311634bf0731dc229c9d8a5c7ebcb7bb00fab))
+
 ## [0.94.3](https://github.com/chio-labs/sqlbuild/compare/v0.94.2...v0.94.3) (2026-09-10)
 
 
