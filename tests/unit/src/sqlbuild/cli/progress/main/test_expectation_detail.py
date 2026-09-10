@@ -3,7 +3,11 @@
 import pytest
 
 from sqlbuild.cli.progress.main._expectation_detail import format_expectation_detail
-from sqlbuild.executor.testing.models import SqlTestDifferenceSample, StepResult
+from sqlbuild.executor.testing.models import (
+    SqlTestColumnDifference,
+    SqlTestDifferenceSample,
+    StepResult,
+)
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from tests.unit.src.sqlbuild.cli.progress.main._test_types import ExpectationDetailTestCase
 
@@ -27,6 +31,11 @@ from tests.unit.src.sqlbuild.cli.progress.main._test_types import ExpectationDet
                 missing_samples=(
                     SqlTestDifferenceSample(values=(("id", "1"), ("status", "expected"))),
                 ),
+                column_differences=(
+                    SqlTestColumnDifference(
+                        name="status", actual="unexpected", expected="expected"
+                    ),
+                ),
             ),
             expected_fragments=(
                 "unexpected=1",
@@ -34,6 +43,7 @@ from tests.unit.src.sqlbuild.cli.progress.main._test_types import ExpectationDet
                 "row counts actual=2 expected=1",
                 "unexpected sample 1: id=2, status=unexpected",
                 "missing sample 1: id=1, status=expected",
+                "differing column status: actual=unexpected, expected=expected",
             ),
         ),
         ExpectationDetailTestCase(

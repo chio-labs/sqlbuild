@@ -376,6 +376,7 @@ def _classify_model_sql_test_ctes(
     mock_source_names: list[str] = []
     mock_seed_names: list[str] = []
     mock_dbt_ref_names: list[str] = []
+    expected_ctes: list[CompileSqlTestCte] = []
     expected_model_names: list[str] = []
     assertion_ctes: list[CompileSqlTestCte] = []
     assertion_names: list[str] = []
@@ -460,6 +461,7 @@ def _classify_model_sql_test_ctes(
                 )
             )
             _validate_expected_cte_query(cte=cte, file_label=file_label)
+            expected_ctes.append(cte)
             continue
         if cte.name.startswith(ASSERT_TEST_CTE_PREFIX):
             assertion_names.append(
@@ -502,6 +504,7 @@ def _classify_model_sql_test_ctes(
         mock_source_names=tuple(mock_source_names),
         mock_seed_names=tuple(mock_seed_names),
         mock_dbt_ref_names=tuple(mock_dbt_ref_names),
+        expected_ctes=tuple(expected_ctes),
         expected_model_names=tuple(expected_model_names),
         assertion_ctes=tuple(assertion_ctes),
         assertion_names=tuple(assertion_names),

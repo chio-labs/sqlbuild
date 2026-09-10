@@ -1288,6 +1288,8 @@ class TestCommandRequest:
     json_output: bool = False
     json_output_path: Path | None = None
     concurrency: int | None = None
+    case_name: str | None = None
+    inspect: bool = False
 
 
 @dataclass(frozen=True)

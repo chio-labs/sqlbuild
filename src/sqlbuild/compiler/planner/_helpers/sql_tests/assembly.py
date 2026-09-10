@@ -37,6 +37,7 @@ from sqlbuild.compiler.planner._helpers.sql_tests.comments import (
     uncommented_matches_by_pattern,
     uncommented_pattern_matches,
 )
+from sqlbuild.compiler.planner._helpers.sql_tests.fixture_validation import validate_test_fixtures
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     ChainStep,
@@ -125,6 +126,7 @@ def plan_test(
     project: CompiledProject,
     adapter: BaseAdapter,
     sql_analysis_enabled: bool = False,
+    validate_fixtures: bool = False,
 ) -> tuple[SqlTestPlanEntry, tuple[PlanWarning, ...]]:
     """Build a test plan entry with chained resolution."""
 
@@ -174,6 +176,17 @@ def plan_test(
         model_query_overrides=model_payload.model_query_overrides,
         mock_ref_names=frozenset(mock_refs),
     )
+    if sql_analysis_enabled and validate_fixtures:
+        validate_test_fixtures(
+            test=test,
+            project=project,
+            adapter=adapter,
+            ordered_model_names=ordered_names,
+            mock_refs=mock_refs,
+            mock_sources=mock_sources,
+            mock_seeds=mock_seeds,
+            expected_outputs=expected_map,
+        )
 
     warnings: list[PlanWarning] = []
     reachable_mocks: set[str] = set()
@@ -325,6 +338,10 @@ def plan_test(
         case_fingerprint=test.case_fingerprint,
         parameter_schema=test.parameter_schema,
         parameter_values=test.parameter_values,
+        mock_ref_names=tuple(sorted(mock_refs)),
+        mock_source_names=tuple(sorted(mock_sources)),
+        mock_seed_names=tuple(sorted(mock_seeds)),
+        mock_dbt_ref_names=tuple(sorted(mock_dbt_refs)),
         chain=tuple(chain_steps),
         assertions=assertion_steps,
         scope_deps=test.scope_deps,
@@ -990,16 +1007,13 @@ def _extract_expected_ctes(
     """Build expected model name to CTE SQL body mapping."""
 
     result: dict[str, str] = {}
-    pattern: re.Pattern[str] = re.compile(
-        r"(__expected__\w+)\s+AS\s*\(((?:[^()]*|\((?:[^()]*|\([^()]*\))*\))*)\)",
-        re.IGNORECASE,
-    )
-    match: re.Match[str]
-    for match in pattern.finditer(test.sql_body):
-        cte_name: str = match.group(1)
+    if not isinstance(test.payload, CompiledModelSqlTestPayload):
+        return result
+    cte: CompileSqlTestCte
+    for cte in test.payload.expected_ctes:
+        cte_name: str = cte.name
         model_name: str = cte_name.removeprefix(EXPECTED_TEST_CTE_PREFIX)
-        cte_body: str = match.group(2).strip()
-        result[model_name] = cte_body
+        result[model_name] = cte.sql_body
     return result
 
 

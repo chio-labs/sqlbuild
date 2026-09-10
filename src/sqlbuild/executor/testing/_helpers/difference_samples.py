@@ -13,12 +13,17 @@ from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
 from sqlbuild.diagnostics.classes.diagnostic_record_redactor import DiagnosticRecordRedactor
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.executor.testing._helpers.comparison_sql import format_sql, lift_step_ctes
-from sqlbuild.executor.testing.models import SqlTestDifferenceSample, StepResult
+from sqlbuild.executor.testing.models import (
+    SqlTestColumnDifference,
+    SqlTestDifferenceSample,
+    StepResult,
+)
 from sqlbuild.executor.testing.types import SqlTestDifferenceDirection, SqlTestOutcome
 
 _ROW_LIMIT: Final[int] = 3
 _COLUMN_LIMIT: Final[int] = 12
 _VALUE_LIMIT: Final[int] = 120
+_OMITTED_COLUMN_NAME: Final[str] = "..."
 _LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 
 
@@ -63,9 +68,39 @@ def add_difference_samples(
                 step_result,
                 unexpected_samples=unexpected_samples,
                 missing_samples=missing_samples,
+                column_differences=_align_single_difference(
+                    step_result=step_result,
+                    unexpected_samples=unexpected_samples,
+                    missing_samples=missing_samples,
+                ),
             )
         )
     return sampled_results
+
+
+def _align_single_difference(
+    *,
+    step_result: StepResult,
+    unexpected_samples: tuple[SqlTestDifferenceSample, ...],
+    missing_samples: tuple[SqlTestDifferenceSample, ...],
+) -> tuple[SqlTestColumnDifference, ...]:
+    """Align values only when each set-difference direction contains exactly one row."""
+
+    if step_result.unexpected_row_count != 1 or step_result.missing_row_count != 1:
+        return ()
+    if len(unexpected_samples) != 1 or len(missing_samples) != 1:
+        return ()
+    actual_values: tuple[tuple[str, str], ...] = unexpected_samples[0].values
+    expected_values: tuple[tuple[str, str], ...] = missing_samples[0].values
+    if any(name == _OMITTED_COLUMN_NAME for name, _ in (*actual_values, *expected_values)):
+        return ()
+    if tuple(name for name, _ in actual_values) != tuple(name for name, _ in expected_values):
+        return ()
+    return tuple(
+        SqlTestColumnDifference(name=name, actual=actual, expected=expected)
+        for (name, actual), (_, expected) in zip(actual_values, expected_values, strict=True)
+        if actual != expected
+    )
 
 
 def build_sql_test_difference_sample_sql(
@@ -145,7 +180,7 @@ def _fetch_difference_samples(
         ]
         omitted_columns: int = max(0, len(column_names) - _COLUMN_LIMIT)
         if omitted_columns:
-            values.append(("...", f"{omitted_columns} columns omitted"))
+            values.append((_OMITTED_COLUMN_NAME, f"{omitted_columns} columns omitted"))
         samples.append(SqlTestDifferenceSample(values=tuple(values)))
     return tuple(samples)
 

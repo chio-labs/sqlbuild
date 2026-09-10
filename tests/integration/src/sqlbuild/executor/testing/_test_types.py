@@ -48,3 +48,4 @@ class SqlTestDiagnosticsTestCase:
     expected_sample_count: int
     expect_redaction: bool = False
     expect_truncation: bool = False
+    expected_column_differences: tuple[tuple[str, str, str], ...] = ()

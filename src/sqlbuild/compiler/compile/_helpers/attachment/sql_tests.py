@@ -370,6 +370,7 @@ def _build_test_input_payload(
                 mock_source_names=model_payload.mock_source_names,
                 mock_seed_names=model_payload.mock_seed_names,
                 mock_dbt_ref_names=model_payload.mock_dbt_ref_names,
+                expected_ctes=model_payload.expected_ctes,
                 expected_model_names=model_payload.expected_model_names,
                 assertion_ctes=model_payload.assertion_ctes,
                 assertion_names=model_payload.assertion_names,

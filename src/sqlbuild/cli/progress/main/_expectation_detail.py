@@ -34,6 +34,11 @@ def format_expectation_detail(step_result: StepResult) -> str:
         )
     parts.extend(_format_samples(label="unexpected sample", samples=step_result.unexpected_samples))
     parts.extend(_format_samples(label="missing sample", samples=step_result.missing_samples))
+    for difference in step_result.column_differences:
+        parts.append(
+            f"differing column {difference.name}: actual={difference.actual}, "
+            f"expected={difference.expected}"
+        )
     return f"  {'; '.join(parts)}"
 
 

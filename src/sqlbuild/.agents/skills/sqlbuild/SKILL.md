@@ -6592,6 +6592,17 @@ columns, and 120 characters per value, and pass through diagnostic redaction. Th
 as structured `unexpected_samples` and `missing_samples` in JSON output. Sampling failure never
 replaces the known test failure.
 
+When exactly one row exists in each difference direction and the bounded samples have the same
+columns, SQLBuild also aligns the rows and reports only changed columns with their redacted actual
+and expected values. It does not guess an alignment when several rows differ or sampling is
+incomplete.
+
+Before opening a warehouse connection, SQLBuild statically checks fixture shapes when SQL analysis
+is enabled. Missing columns are reported together with the test path, fixture resource, and models
+that read them. Statically provable collection-versus-scalar type conflicts identify the affected
+column and suggest explicit `CAST`, `ARRAY_CONSTRUCT`, or `PARSE_JSON` expressions. SQLBuild never
+invents missing values.
+
 The trailing `SELECT 1` is required as a ceremonial closing statement.
 
 ### CTE conventions
@@ -6633,6 +6644,17 @@ SELECT 1
 ```
 
 SQLBuild topologically sorts the expected models, resolves each intermediate model's real SQL with mocks substituted, and chains the outputs forward. Every model between the mocked sources and the expected model is computed automatically.
+
+Inspect that boundary without opening a warehouse connection:
+
+```bash
+sqb test --select fact_orders --inspect
+```
+
+The resolved plan lists mocked sources, refs, seeds, real models in execution order, expected
+models, and any unsatisfied leaf dependencies. A mocked ref is called out explicitly because its
+real model SQL will not execute. Inspection exits non-zero when the plan contains unresolved
+dependency errors.
 
 ### Mocking refs and seeds
 
@@ -6965,8 +6987,15 @@ SELECT 1
 ```
 
 The cases report independently as `order status: maps source states [completed]`, `[cancelled]`,
-and `[pending]`. Authored order controls display order. Selection remains at the parent test's
-resolved model or resource, so selecting `stg_orders` selects every case; there is no case selector.
+and `[pending]`. Authored order controls display order. Selecting `stg_orders` selects every case by
+default. Add `--case` to run one named case without changing the test file:
+
+```bash
+sqb test --select stg_orders --case cancelled
+```
+
+If the case does not exist within the parent/model selection, SQLBuild reports the available case
+names.
 
 Supported scalar types are `string`, `integer`, `boolean`, `float`, and exact `decimal`. Decimal
 values are quoted, such as `tax_rate "0.2000"`, so they never pass through binary float. Boolean
@@ -7027,6 +7056,9 @@ SELECT 1
 
 This produces one aggregate test result. Use native cases when each row must pass or fail
 independently.
+
+Quoted strings in `VALUES` rows may contain commas, brackets, and parentheses. SQLBuild preserves
+these literals while extracting test CTEs; use normal SQL quote escaping for embedded quotes.
 
 ### Test placement
 

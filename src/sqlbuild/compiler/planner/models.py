@@ -1124,6 +1124,10 @@ class SqlTestPlanEntry:
     case_fingerprint: str | None = None
     parameter_schema: tuple[SqlTestParameterDeclaration, ...] = field(default_factory=tuple)
     parameter_values: tuple[tuple[str, SqlValue], ...] = field(default_factory=tuple)
+    mock_ref_names: tuple[str, ...] = field(default_factory=tuple)
+    mock_source_names: tuple[str, ...] = field(default_factory=tuple)
+    mock_seed_names: tuple[str, ...] = field(default_factory=tuple)
+    mock_dbt_ref_names: tuple[str, ...] = field(default_factory=tuple)
     chain: tuple[ChainStep, ...] = field(default_factory=tuple)
     assertions: tuple[SqlTestAssertionStep, ...] = field(default_factory=tuple)
     scope_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
@@ -1263,6 +1267,7 @@ class PlanOutput:
     function_entries: tuple[FunctionPlanEntry, ...] = field(default_factory=tuple)
     audit_entries: tuple[AuditPlanEntry, ...] = field(default_factory=tuple)
     test_entries: tuple[SqlTestPlanEntry, ...] = field(default_factory=tuple)
+    available_test_case_names: tuple[str, ...] = field(default_factory=tuple)
     selected_keys: frozenset[CompiledObjectKey] = field(default_factory=frozenset)
     warnings: tuple[PlanWarning, ...] = field(default_factory=tuple)
     retention_entries: tuple[RetentionPlanEntry, ...] = field(default_factory=tuple)

@@ -31,7 +31,10 @@ from sqlbuild.compiler.planner._helpers.output.plan_entry import (
 )
 from sqlbuild.compiler.planner._helpers.resolve.resolve import resolve_function_sql
 from sqlbuild.compiler.planner._helpers.sql_tests.assembly import plan_test
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.exceptions import (
+    PlannerInputError,
+    SqlTestFixtureValidationError,
+)
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
     BackfillResult,
@@ -433,21 +436,32 @@ def build_selected_test_entries(
     project: CompiledProject,
     adapter: BaseAdapter,
     selected_keys: frozenset[CompiledObjectKey],
+    case_name: str | None = None,
 ) -> tuple[list[SqlTestPlanEntry], list[PlanWarning]]:
     entries: list[SqlTestPlanEntry] = []
     warnings: list[PlanWarning] = []
+    fixture_diagnostics: list[str] = []
     sql_test: CompiledSqlTest
     for sql_test in project.sql_tests:
         if not scope_overlaps(scope_deps=sql_test.scope_deps, selected_keys=selected_keys):
             continue
+        if case_name is not None and sql_test.case_name != case_name:
+            continue
         test_entry: SqlTestPlanEntry
         test_warnings: tuple[PlanWarning, ...]
-        test_entry, test_warnings = plan_test(
-            test=sql_test,
-            project=project,
-            adapter=adapter,
-            sql_analysis_enabled=project.settings.sql_analysis,
-        )
+        try:
+            test_entry, test_warnings = plan_test(
+                test=sql_test,
+                project=project,
+                adapter=adapter,
+                sql_analysis_enabled=project.settings.sql_analysis,
+                validate_fixtures=True,
+            )
+        except SqlTestFixtureValidationError as error:
+            fixture_diagnostics.extend(error.diagnostics)
+            continue
         entries.append(test_entry)
         warnings.extend(test_warnings)
+    if fixture_diagnostics:
+        raise PlannerInputError("Invalid SQL test fixtures:\n- " + "\n- ".join(fixture_diagnostics))
     return entries, warnings

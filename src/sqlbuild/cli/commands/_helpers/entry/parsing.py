@@ -133,6 +133,8 @@ def parse_cli_invocation(
                 parser.error(str(error))
         if args.command == CliCommand.SCOPE:
             _validate_scope_args(args=args, parser=parser)
+        if args.command == CliCommand.TEST:
+            _validate_test_args(args=args, parser=parser)
     except SystemExit as error:
         exit_code: int = error.code if isinstance(error.code, int) else 1
         return ParsedCliInvocation(args=None, exit_code=exit_code)
@@ -181,3 +183,8 @@ def _validate_scope_args(*, args: CliNamespace, parser: argparse.ArgumentParser)
             parser.error("scope --explain requires a declaration-qualified identity")
         if not qualified_name:
             parser.error("scope --explain requires a declaration-qualified identity")
+
+
+def _validate_test_args(*, args: CliNamespace, parser: argparse.ArgumentParser) -> None:
+    if args.inspect and (args.json or args.json_output is not None):
+        parser.error("test --inspect cannot be combined with --json or --json-output")

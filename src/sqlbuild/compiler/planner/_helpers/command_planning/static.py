@@ -12,6 +12,7 @@ from sqlbuild.compiler.planner._helpers.identity.seed import build_seed_identity
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     build_planner_relations_context,
     extract_seed_columns,
+    scope_overlaps,
 )
 from sqlbuild.compiler.planner._helpers.output.plan_output import (
     build_selected_audit_entries,
@@ -111,6 +112,7 @@ def build_test_command_plan_impl(
     adapter: BaseAdapter,
     scope: PlannerScope,
     relations: PlannerRelationsContext,
+    case_name: str | None = None,
 ) -> PlanOutput:
     """Project selected SQL tests from static compile state."""
 
@@ -118,6 +120,17 @@ def build_test_command_plan_impl(
         project=project,
         adapter=adapter,
         selected_keys=scope.selected_keys,
+        case_name=case_name,
+    )
+    available_test_case_names: tuple[str, ...] = tuple(
+        sorted(
+            {
+                test.case_name
+                for test in project.sql_tests
+                if test.case_name is not None
+                and scope_overlaps(scope_deps=test.scope_deps, selected_keys=scope.selected_keys)
+            }
+        )
     )
     test_keys: frozenset[CompiledObjectKey] = frozenset(entry.key for entry in test_entries)
     function_keys_set: set[CompiledObjectKey] = set()
@@ -142,6 +155,7 @@ def build_test_command_plan_impl(
             key for key in scope.execution_order if key in scope.selected_keys | test_keys
         ),
         test_entries=tuple(test_entries),
+        available_test_case_names=available_test_case_names,
         function_entries=function_entries,
         warnings=tuple(warnings),
     )
@@ -210,6 +224,7 @@ def _base_plan_output(
     function_entries: tuple[FunctionPlanEntry, ...] = (),
     audit_entries: tuple[AuditPlanEntry, ...] = (),
     test_entries: tuple[SqlTestPlanEntry, ...] = (),
+    available_test_case_names: tuple[str, ...] = (),
     warnings: tuple[PlanWarning, ...] = (),
 ) -> PlanOutput:
     return PlanOutput(
@@ -222,6 +237,7 @@ def _base_plan_output(
         function_entries=function_entries,
         audit_entries=audit_entries,
         test_entries=test_entries,
+        available_test_case_names=available_test_case_names,
         selected_keys=scope.selected_keys,
         warnings=warnings,
         upstream_deps=scope.upstream_deps,

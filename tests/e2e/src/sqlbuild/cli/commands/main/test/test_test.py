@@ -8,13 +8,28 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
+    ComplexValuesFixtureE2ETestCase,
+    FixtureCompatibilityE2ETestCase,
+    ParameterCaseSelectionE2ETestCase,
     SqlAnalysisChainSqlTestE2ETestCase,
     SqlTestE2ETestCase,
+    SqlTestFixtureValidationE2ETestCase,
+    SqlTestInspectConflictE2ETestCase,
+    SqlTestPlanInspectionE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     build_assertion_test_project_files,
     build_chain_test_project_files,
+    build_complex_values_fixture_project_files,
+    build_incompatible_fixture_type_project_files,
     build_macro_test_project_files,
+    build_missing_mock_columns_project_files,
+    build_mock_boundary_test_project_files,
+    build_multiple_invalid_fixtures_project_files,
+    build_parameterized_test_project_files,
+    build_star_mock_fixture_project_files,
+    build_transformed_collection_project_files,
+    build_unsatisfied_leaf_test_project_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     assert_fragments_in_order,
@@ -22,6 +37,290 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_waffle_shop,
     run_sqb,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlTestInspectConflictE2ETestCase(
+            description="inspect rejects structured output file",
+            expected_exit_code=2,
+            expected_stderr_fragment=(
+                "test --inspect cannot be combined with --json or --json-output"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_inspection_when_requesting_json_file_then_parser_rejects_conflict(
+    test_case: SqlTestInspectConflictE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="inspect_output_conflict_project",
+        repo_files=build_parameterized_test_project_files(),
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("test", "--inspect", "--json-output", str(tmp_path / "result.json")),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code
+    assert test_case.expected_stderr_fragment in result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FixtureCompatibilityE2ETestCase(
+            description="star mock fixture defers static shape validation",
+            repo_files=build_star_mock_fixture_project_files(),
+            expected_stdout_fragment="PASS=1",
+        ),
+        FixtureCompatibilityE2ETestCase(
+            description="aggregation output does not inherit scalar input type",
+            repo_files=build_transformed_collection_project_files(),
+            expected_stdout_fragment="PASS=1",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_valid_fixture_when_static_inference_is_ambiguous_then_test_still_executes(
+    test_case: FixtureCompatibilityE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="fixture_compatibility_project",
+        repo_files=test_case.repo_files,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "test"),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert test_case.expected_stdout_fragment in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ComplexValuesFixtureE2ETestCase(
+            description="duckdb executes complex string values",
+            adapter_name="duckdb",
+            command=("--no-color", "test"),
+            expected_stdout_fragment="PASS=1",
+        ),
+        ComplexValuesFixtureE2ETestCase(
+            description="snowflake compiles complex string values unchanged",
+            adapter_name="snowflake",
+            command=("--no-color", "compile"),
+            expected_stdout_fragment="Project compiled",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_complex_strings_in_values_when_processing_then_literals_remain_intact(
+    test_case: ComplexValuesFixtureE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="complex_values_project",
+        repo_files=build_complex_values_fixture_project_files(adapter_name=test_case.adapter_name),
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert test_case.expected_stdout_fragment in result.stdout
+    artifacts: tuple[Path, ...] = tuple((project_dir / "target").glob("**/test_orders.sql"))
+    assert artifacts
+    artifact_sql: str = artifacts[0].read_text(encoding="utf-8")
+    assert "alpha,beta [one] (two)" in artifact_sql
+    assert "gamma(delta),[epsilon]" in artifact_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlTestFixtureValidationE2ETestCase(
+            description="missing source columns are reported together",
+            repo_files=build_missing_mock_columns_project_files(),
+            expected_stderr_fragments=(
+                "tests/unit/test_orders.sql:4",
+                "mock source 'raw_orders' is missing required columns: customer_id, status",
+                "read by: orders",
+            ),
+        ),
+        SqlTestFixtureValidationE2ETestCase(
+            description="duckdb array and scalar types identify the expected column",
+            repo_files=build_incompatible_fixture_type_project_files(adapter_name="duckdb"),
+            expected_stderr_fragments=(
+                "tests/unit/test_orders.sql:5",
+                "expected output 'orders' column 'item_ids' has incompatible type VARCHAR",
+                "resource type is ARRAY",
+                "ARRAY_CONSTRUCT, or PARSE_JSON",
+            ),
+        ),
+        SqlTestFixtureValidationE2ETestCase(
+            description="snowflake array and scalar types identify the expected column",
+            repo_files=build_incompatible_fixture_type_project_files(adapter_name="snowflake"),
+            expected_stderr_fragments=(
+                "tests/unit/test_orders.sql:5",
+                "expected output 'orders' column 'item_ids' has incompatible type VARCHAR",
+                "resource type is ARRAY",
+                "ARRAY_CONSTRUCT, or PARSE_JSON",
+            ),
+        ),
+        SqlTestFixtureValidationE2ETestCase(
+            description="invalid fixtures are aggregated across selected tests",
+            repo_files=build_multiple_invalid_fixtures_project_files(),
+            expected_stderr_fragments=(
+                "SQL test 'test_orders_a'",
+                "tests/unit/test_orders_a.sql:4",
+                "missing required columns: customer_id",
+                "SQL test 'test_orders_b'",
+                "tests/unit/test_orders_b.sql:4",
+                "missing required columns: status",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_fixture_when_testing_then_static_diagnostics_prevent_connection(
+    test_case: SqlTestFixtureValidationE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="fixture_validation_project",
+        repo_files=test_case.repo_files,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "test"),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    for fragment in test_case.expected_stderr_fragments:
+        assert fragment in result.stderr, result.stdout + result.stderr
+    assert "Connecting to" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlTestPlanInspectionE2ETestCase(
+            description="multi model plan shows real chain",
+            repo_files=build_chain_test_project_files(sql_analysis_enabled=True),
+            expected_stdout_fragments=(
+                "Resolved test plan",
+                "mocked sources: raw",
+                "real models: stg_orders, fact_orders",
+                "expected models: stg_orders, fact_orders",
+                "Test plan inspection complete: 1 selected, 0 errors.",
+            ),
+        ),
+        SqlTestPlanInspectionE2ETestCase(
+            description="missing leaf mock is reported before execution",
+            repo_files=build_unsatisfied_leaf_test_project_files(),
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "model 'stg_orders' references __source('raw') which has no mock",
+                "model 'fact_orders' references __source('raw') which has no mock",
+                "Test plan inspection failed: 1 selected, 2 errors.",
+            ),
+        ),
+        SqlTestPlanInspectionE2ETestCase(
+            description="ref mock shows replacement boundary",
+            repo_files=build_mock_boundary_test_project_files(),
+            expected_stdout_fragments=(
+                "mocked refs: stg_orders",
+                "real models: int_orders, fact_orders",
+                "boundary: stg_orders is replaced by __ref__stg_orders",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_sql_test_when_inspecting_then_fixture_boundaries_and_chain_are_shown(
+    test_case: SqlTestPlanInspectionE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="test_plan_inspection_project",
+        repo_files=test_case.repo_files,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "test", "--inspect"),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout, result.stdout + result.stderr
+    assert "Connecting to" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParameterCaseSelectionE2ETestCase(
+            description="named case runs without sibling cases",
+            case_name="open_case",
+            expected_exit_code=0,
+            expected_stdout_fragments=("Test ready  1 selected", "PASS=1", "open_case"),
+        ),
+        ParameterCaseSelectionE2ETestCase(
+            description="unknown case reports available selected cases",
+            case_name="missing_case",
+            expected_exit_code=1,
+            expected_stderr_fragments=(
+                "SQL test case 'missing_case' did not match the selected tests",
+                "available cases: closed_case, open_case",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_parameterized_test_when_selecting_case_then_only_named_case_runs(
+    test_case: ParameterCaseSelectionE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="parameter_case_project",
+        repo_files=build_parameterized_test_project_files(),
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "test",
+            "--select",
+            "orders",
+            "--case",
+            test_case.case_name,
+        ),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout, result.stdout + result.stderr
+    for fragment in test_case.expected_stderr_fragments:
+        assert fragment in result.stderr, result.stdout + result.stderr
 
 
 @pytest.mark.parametrize(
