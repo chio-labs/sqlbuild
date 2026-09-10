@@ -7,6 +7,7 @@ from sqlbuild.cli.commands._helpers.test.execution import (
     prepare_test_execution,
     resolve_test_concurrency,
 )
+from sqlbuild.cli.commands._helpers.test.inspection import write_test_plan_inspection
 from sqlbuild.cli.commands._helpers.test.invocation import resolve_test_invocation
 from sqlbuild.cli.commands._helpers.test.outputs import (
     resolve_test_exit_code,
@@ -32,6 +33,11 @@ def run_test(request: TestCommandRequest) -> int:
         request=request,
         invocation=invocation,
     )
+    if request.inspect:
+        return write_test_plan_inspection(
+            stream=invocation.progress_stream,
+            plan_output=pipeline_result.plan_output,
+        )
     invocation.progress_stream.write("\n")
     write_execution_header(
         stream=invocation.progress_stream,

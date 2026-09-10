@@ -38,6 +38,7 @@ class SqlTestDifferenceOutputTestCase:
     description: str
     expected_unexpected_count: int
     expected_missing_count: int
+    expected_column_differences: tuple[tuple[str, str, str], ...]
 
 
 @dataclass(frozen=True)

@@ -247,6 +247,8 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 json_output=args.json,
                 json_output_path=args.json_output,
                 concurrency=args.concurrency,
+                case_name=args.case,
+                inspect=args.inspect,
             )
         )
     if args.command == CliCommand.CHECK:

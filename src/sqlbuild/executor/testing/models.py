@@ -18,6 +18,15 @@ class SqlTestDifferenceSample:
 
 
 @dataclass(frozen=True)
+class SqlTestColumnDifference:
+    """One safely aligned, redacted actual and expected column value."""
+
+    name: str
+    actual: str
+    expected: str
+
+
+@dataclass(frozen=True)
 class StepResult:
     """Outcome of one chain step in a SQL unit test."""
 
@@ -30,6 +39,7 @@ class StepResult:
     missing_row_count: int | None = None
     unexpected_samples: tuple[SqlTestDifferenceSample, ...] = field(default_factory=tuple)
     missing_samples: tuple[SqlTestDifferenceSample, ...] = field(default_factory=tuple)
+    column_differences: tuple[SqlTestColumnDifference, ...] = field(default_factory=tuple)
     error_code: str | None = None
     error_help: str | None = None
     error_message: str | None = None

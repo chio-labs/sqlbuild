@@ -44,6 +44,7 @@ from sqlbuild.executor.run.models import (
 from sqlbuild.executor.run.types import ExecutionPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.testing.models import (
+    SqlTestColumnDifference,
     SqlTestDifferenceSample,
     SqlTestExecutionResult,
     StepResult,
@@ -102,6 +103,7 @@ def test_given_failed_model_when_formatting_json_then_last_recorded_sql_is_prese
             description="two-way samples remain structured",
             expected_unexpected_count=1,
             expected_missing_count=1,
+            expected_column_differences=(("status", "unexpected", "expected"),),
         ),
     ),
     ids=lambda case: case.description,
@@ -118,6 +120,9 @@ def test_given_difference_samples_when_formatting_json_then_structured_diagnosti
             SqlTestDifferenceSample(values=(("id", "2"), ("status", "unexpected"))),
         ),
         missing_samples=(SqlTestDifferenceSample(values=(("id", "1"), ("status", "expected"))),),
+        column_differences=(
+            SqlTestColumnDifference(name="status", actual="unexpected", expected="expected"),
+        ),
     )
 
     payload: dict[str, object] = _format_sql_test_step(step)
@@ -130,6 +135,11 @@ def test_given_difference_samples_when_formatting_json_then_structured_diagnosti
     assert payload["missing_samples"] == [
         [{"name": "id", "value": "1"}, {"name": "status", "value": "expected"}]
     ]
+    expected_column_differences: list[dict[str, str]] = [
+        {"name": name, "actual": actual, "expected": expected}
+        for name, actual, expected in test_case.expected_column_differences
+    ]
+    assert payload["column_differences"] == expected_column_differences
 
 
 @pytest.mark.parametrize(

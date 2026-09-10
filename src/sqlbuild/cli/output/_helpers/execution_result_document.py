@@ -958,6 +958,15 @@ def _format_sql_test_step(step: StepResult) -> dict[str, object]:
             "missing_row_count": step.missing_row_count,
             "unexpected_samples": _format_sql_test_difference_samples(step.unexpected_samples),
             "missing_samples": _format_sql_test_difference_samples(step.missing_samples),
+            "column_differences": [
+                {
+                    "name": difference.name,
+                    "actual": difference.actual,
+                    "expected": difference.expected,
+                }
+                for difference in step.column_differences
+            ]
+            or None,
             "error_code": step.error_code,
             "error_help": step.error_help,
             "error_message": step.error_message,

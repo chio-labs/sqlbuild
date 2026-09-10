@@ -12,9 +12,14 @@ def build_test_command_plan(
     adapter: BaseAdapter,
     scope: PlannerScope,
     relations: PlannerRelationsContext,
+    case_name: str | None = None,
 ) -> PlanOutput:
     """Project selected SQL tests from canonical static state."""
 
     return build_test_command_plan_impl(
-        project=project, adapter=adapter, scope=scope, relations=relations
+        project=project,
+        adapter=adapter,
+        scope=scope,
+        relations=relations,
+        case_name=case_name,
     )

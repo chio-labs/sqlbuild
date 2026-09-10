@@ -82,6 +82,10 @@ TEMPLATE_COALESCE_FUNCTION_NAME: str = "coalesce"
 TEMPLATE_ESCAPE_TOKEN: str = "\\"
 TEMPLATE_OPEN_TOKEN: str = "${"
 TEMPLATE_FALSE_VALUES: frozenset[str] = frozenset({"", "0", "false"})
+POLYGLOT_LITERAL_KIND: str = "literal"
+POLYGLOT_ARRAY_KIND: str = "array_func"
+POLYGLOT_STRUCTURED_KINDS: frozenset[str] = frozenset({"parse_json", "struct"})
+POLYGLOT_FUNCTION_KIND: str = "function"
 MISSING_TEMPLATE_VALUE_MESSAGE_PARTS: frozenset[str] = frozenset(
     {
         "references missing ENV variable",

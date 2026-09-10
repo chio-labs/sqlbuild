@@ -133,6 +133,8 @@ def parse_cli_invocation(
                 parser.error(str(error))
         if args.command == CliCommand.SCOPE:
             _validate_scope_args(args=args, parser=parser)
+        if args.command == CliCommand.TEST:
+            _validate_test_args(args=args, parser=parser)
     except SystemExit as error:
         exit_code: int = error.code if isinstance(error.code, int) else 1
         return ParsedCliInvocation(args=None, exit_code=exit_code)
@@ -146,6 +148,11 @@ def _validate_scope_args(*, args: CliNamespace, parser: argparse.ArgumentParser)
         parser.error("scope requires exactly one of TARGET or --at PATH")
     if args.scope_as_path is not None and not has_target:
         parser.error("scope --as-path requires TARGET")
+
+
+def _validate_test_args(*, args: CliNamespace, parser: argparse.ArgumentParser) -> None:
+    if args.inspect and (args.json or args.json_output is not None):
+        parser.error("test --inspect cannot be combined with --json or --json-output")
     folder_mode: bool = args.scope_browse is not None or args.scope_list is not None
     if folder_mode and (
         args.scope_as_path is not None

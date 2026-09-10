@@ -14,7 +14,11 @@ from sqlbuild.executor.testing._helpers.difference_samples import (
 )
 from sqlbuild.executor.testing.main._execute import execute_sql_test
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
-from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
+from sqlbuild.executor.testing.models import (
+    SqlTestColumnDifference,
+    SqlTestExecutionResult,
+    StepResult,
+)
 from sqlbuild.executor.testing.types import SqlTestDifferenceDirection, SqlTestOutcome
 from tests.integration.src.sqlbuild.executor.testing._test_types import (
     SqlTestComparisonSqlTestCase,
@@ -365,6 +369,53 @@ def test_given_two_way_mismatch_when_executing_test_then_samples_are_bounded_and
     assert (unexpected_values["access_token"] == "[REDACTED]") == test_case.expect_redaction
     assert (missing_values["access_token"] == "[REDACTED]") == test_case.expect_redaction
     assert unexpected_values["detail"].endswith("...") == test_case.expect_truncation
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SqlTestDiagnosticsTestCase(
+            description="one row each way aligns changed columns",
+            chain_steps=(
+                (
+                    "orders",
+                    "SELECT 1 AS id, 'actual' AS status",
+                    "SELECT 1 AS id, 'expected' AS status",
+                ),
+            ),
+            expected_actual_count=1,
+            expected_expected_count=1,
+            expected_unexpected_count=1,
+            expected_missing_count=1,
+            expected_sample_count=1,
+            expected_column_differences=(("status", "actual", "expected"),),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_one_row_each_way_when_executing_then_changed_columns_are_aligned(
+    test_case: SqlTestDiagnosticsTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    entry: SqlTestPlanEntry = build_sql_test_plan_entry(
+        name="aligned_diagnostics",
+        chain_steps=test_case.chain_steps,
+    )
+
+    result: SqlTestExecutionResult = execute_sql_test(
+        test_entry=entry,
+        adapter=adapter,
+        connection=connection,
+    )
+
+    assert result.outcome == SqlTestOutcome.FAIL
+    assert len(result.step_results) == 1
+    differences: tuple[SqlTestColumnDifference, ...] = result.step_results[0].column_differences
+    assert (
+        tuple((value.name, value.actual, value.expected) for value in differences)
+        == test_case.expected_column_differences
+    )
 
 
 @pytest.mark.parametrize(

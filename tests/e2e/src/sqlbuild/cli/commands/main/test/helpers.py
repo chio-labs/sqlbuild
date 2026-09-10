@@ -67,6 +67,267 @@ def build_chain_test_project_files(*, sql_analysis_enabled: bool) -> dict[str, s
     }
 
 
+def build_parameterized_test_project_files() -> dict[str, str]:
+    """Build an inline project with two independently selectable test cases."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "parameter_case_demo"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "parameter_case_demo.duckdb"\n'
+        ),
+        "models/orders.sql": 'MODEL ();\n\nSELECT status FROM __source("raw_orders")\n',
+        "models/customers.sql": ('MODEL ();\n\nSELECT status FROM __source("raw_orders")\n'),
+        "sources/raw_orders.yml": (
+            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+        ),
+        "tests/unit/test_orders.sql": (
+            'TEST (name "order_status", parameters (status string), cases ('
+            'open_case (status "open"), closed_case (status "closed")));\n\n'
+            "WITH\n"
+            '__source__raw_orders AS (SELECT @param("status") AS status),\n'
+            '__expected__orders AS (SELECT @param("status") AS status)\n'
+            "SELECT 1\n"
+        ),
+        "tests/unit/test_customers.sql": (
+            'TEST (name "customer_status", parameters (status string), '
+            'cases (customer_only (status "active")));\n\n'
+            "WITH\n"
+            '__source__raw_orders AS (SELECT @param("status") AS status),\n'
+            '__expected__customers AS (SELECT @param("status") AS status)\n'
+            "SELECT 1\n"
+        ),
+    }
+
+
+def build_mock_boundary_test_project_files() -> dict[str, str]:
+    """Build a test whose ref mock intentionally replaces one real model."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "mock_boundary_demo"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "mock_boundary_demo.duckdb"\n'
+        ),
+        "models/stg_orders.sql": "MODEL ();\n\nSELECT 1 AS order_id\n",
+        "models/int_orders.sql": ('MODEL ();\n\nSELECT order_id FROM __ref("stg_orders")\n'),
+        "models/fact_orders.sql": ('MODEL ();\n\nSELECT order_id FROM __ref("int_orders")\n'),
+        "tests/unit/test_fact_orders.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id),\n"
+            "__expected__fact_orders AS (SELECT 1 AS order_id)\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def build_unsatisfied_leaf_test_project_files() -> dict[str, str]:
+    """Build a test that omits the source mock required by its real model chain."""
+
+    files: dict[str, str] = build_chain_test_project_files(sql_analysis_enabled=True)
+    files["sources/raw.yml"] = (
+        "sources:\n"
+        "  - name: raw\n    schema: main\n    table: raw\n"
+        "  - name: unused\n    schema: main\n    table: unused\n"
+    )
+    files["tests/unit/test_chain.sql"] = (
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__unused AS (SELECT 1 AS id),\n"
+        "__expected__fact_orders AS (\n"
+        "  SELECT 1 AS id, 101 AS adjusted, 'US' AS country, "
+        "'literal' AS literal_text, 'active' AS status\n"
+        ")\n"
+        "SELECT 1\n"
+    )
+    return files
+
+
+def build_missing_mock_columns_project_files() -> dict[str, str]:
+    """Build a test whose source fixture omits two statically required columns."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "missing_fixture_columns"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "missing_fixture_columns.duckdb"\n'
+        ),
+        "models/orders.sql": (
+            'MODEL ();\n\nSELECT customer_id, status FROM __source("raw_orders")\n'
+        ),
+        "sources/raw_orders.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n"
+            "    schema: main\n"
+            "    table: raw_orders\n"
+            "    columns:\n"
+            "      - name: customer_id\n        type: INTEGER\n"
+            "      - name: status\n        type: VARCHAR\n"
+        ),
+        "tests/unit/test_orders.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            "__source__raw_orders AS (SELECT 1 AS order_id),\n"
+            "__expected__orders AS (SELECT 100 AS customer_id, 'open' AS status)\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def build_incompatible_fixture_type_project_files(*, adapter_name: str) -> dict[str, str]:
+    """Build a test whose expected scalar conflicts with an array model column."""
+
+    array_expression: str = {
+        "duckdb": "[1, 2]",
+        "snowflake": "ARRAY_CONSTRUCT(1, 2)",
+    }[adapter_name]
+    return {
+        "sqlbuild_project.toml": (
+            'name = "incompatible_fixture_type"\n'
+            f'adapter = "{adapter_name}"\n\n'
+            "[connection]\n"
+            'database = "incompatible_fixture_type.duckdb"\n'
+            'schema = "main"\n'
+        ),
+        "models/orders.sql": (
+            'MODEL (database "fixture_db", schema "main");\n\n'
+            'SELECT item_ids FROM __source("raw_orders")\n'
+        ),
+        "sources/raw_orders.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n"
+            "    schema: main\n"
+            "    table: raw_orders\n"
+            "    columns:\n"
+            "      - name: item_ids\n        type: ARRAY\n"
+        ),
+        "tests/unit/test_orders.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            f"__source__raw_orders AS (SELECT {array_expression} AS item_ids),\n"
+            "__expected__orders AS (SELECT '1,2' AS item_ids)\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def build_complex_values_fixture_project_files(*, adapter_name: str) -> dict[str, str]:
+    """Build a minimal complex-string VALUES fixture for one adapter dialect."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "complex_values_fixture"\n'
+            f'adapter = "{adapter_name}"\n\n'
+            "[connection]\n"
+            'database = "complex_values_fixture.duckdb"\n'
+            'schema = "main"\n'
+        ),
+        "models/orders.sql": (
+            'MODEL (database "fixture_db", schema "main");\n\n'
+            'SELECT order_id, mapping_text FROM __source("raw_orders")\n'
+        ),
+        "sources/raw_orders.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n"
+            "    schema: main\n"
+            "    table: raw_orders\n"
+            "    columns:\n"
+            "      - name: order_id\n        type: INTEGER\n"
+            "      - name: mapping_text\n        type: VARCHAR\n"
+        ),
+        "tests/unit/test_orders.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT order_id, mapping_text FROM (VALUES\n"
+            "    (1, 'alpha,beta [one] (two)'),\n"
+            "    (2, 'gamma(delta),[epsilon]')\n"
+            ") AS fixture(order_id, mapping_text)\n"
+            "),\n"
+            "__expected__orders AS (\n"
+            "  SELECT order_id, mapping_text FROM (VALUES\n"
+            "    (1, 'alpha,beta [one] (two)'),\n"
+            "    (2, 'gamma(delta),[epsilon]')\n"
+            ") AS fixture(order_id, mapping_text)\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def build_star_mock_fixture_project_files() -> dict[str, str]:
+    """Build a valid source fixture whose columns come from a star projection."""
+
+    files: dict[str, str] = build_missing_mock_columns_project_files()
+    files["tests/unit/test_orders.sql"] = (
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__raw_orders AS (\n"
+        "  SELECT * FROM (VALUES (100, 'open')) AS fixture(customer_id, status)\n"
+        "),\n"
+        "__expected__orders AS (SELECT 100 AS customer_id, 'open' AS status)\n"
+        "SELECT 1\n"
+    )
+    return files
+
+
+def build_transformed_collection_project_files() -> dict[str, str]:
+    """Build a valid aggregation that changes a scalar input into a collection output."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "transformed_collection"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "transformed_collection.duckdb"\n'
+        ),
+        "models/order_statuses.sql": (
+            'MODEL ();\n\nSELECT list(status) AS statuses FROM __source("raw_orders")\n'
+        ),
+        "sources/raw_orders.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n"
+            "    schema: main\n"
+            "    table: raw_orders\n"
+            "    columns:\n"
+            "      - name: status\n        type: VARCHAR\n"
+        ),
+        "tests/unit/test_order_statuses.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            "__source__raw_orders AS (SELECT 'open' AS status),\n"
+            "__expected__order_statuses AS (SELECT ['open'] AS statuses)\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def build_multiple_invalid_fixtures_project_files() -> dict[str, str]:
+    """Build two invalid tests so planning must aggregate both diagnostics."""
+
+    files: dict[str, str] = build_missing_mock_columns_project_files()
+    del files["tests/unit/test_orders.sql"]
+    files["tests/unit/test_orders_a.sql"] = (
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__raw_orders AS (SELECT 'open' AS status),\n"
+        "__expected__orders AS (SELECT 100 AS customer_id, 'open' AS status)\n"
+        "SELECT 1\n"
+    )
+    files["tests/unit/test_orders_b.sql"] = (
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__raw_orders AS (SELECT 100 AS customer_id),\n"
+        "__expected__orders AS (SELECT 100 AS customer_id, 'open' AS status)\n"
+        "SELECT 1\n"
+    )
+    return files
+
+
 def build_assertion_test_project_files(*, failing: bool) -> dict[str, str]:
     """Build an inline project with a SQL unit-test zero-row assertion."""
 
