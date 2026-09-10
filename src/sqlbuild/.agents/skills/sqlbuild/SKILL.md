@@ -874,10 +874,9 @@ project contains:
 On this project, 20 custom Rules complete their first compile in just over 10 seconds. An unchanged
 compile completes in under six seconds.
 
-Even with 100 custom Rules—500,002 Rule evaluations—an unchanged compile completes in just over
-seven seconds.
+Even with 100 custom Rules, an unchanged compile completes in just over seven seconds.
 
-| Compile | 20 custom Rules<br />100,002 evaluations | 100 custom Rules<br />500,002 evaluations |
+| Compile | 20 Custom Rules | 100 Custom Rules |
 |---|---:|---:|
 | First compile (no cache) | 10.83s | 12.19s |
 | Unchanged compile | 5.81s | 7.24s |
@@ -885,6 +884,9 @@ seven seconds.
 
 Each measurement executes the complete `sqb compile` command. The edit scenario changes 50 of the
 5,000 models before recompiling.
+
+Because most Rules in this profile evaluate once per model, the 20- and 100-Rule configurations
+perform roughly 100,000 and 500,000 Rule evaluations respectively.
 
 Increasing the custom Rule pack from 20 to 100 multiplies the number of Rule evaluations by five,
 while the unchanged compile median increases from 5.81 to 7.24 seconds.
@@ -6351,7 +6353,7 @@ the inputs each Rule depends on so cached findings are reused only while those i
 
 In required CI, 20 custom Rules over a production-shaped 5,000-model project complete their first
 compile in just over 10 seconds and an unchanged compile in under six. A 100-Rule stress profile
-reuses all 500,002 cached evaluations in just over seven seconds.
+completes an unchanged compile in just over seven seconds.
 
 See [Benchmarks](/benchmarks#rules-performance) for the complete workload, methodology, and results,
 and [Execution and caching](/concepts/rules/execution-and-caching) for the Rules lifecycle.
