@@ -8,7 +8,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.diff._helpers.execution import execute_model_diff
 from sqlbuild.executor.diff._helpers.selection import is_disabled
-from sqlbuild.executor.diff.models import DiffExecutionResult, ModelDiffResult
+from sqlbuild.executor.diff.models import DiffExecutionOptions, DiffExecutionResult, ModelDiffResult
 
 
 def execute_diff(
@@ -18,11 +18,7 @@ def execute_diff(
     left_project: Any,
     right_project: Any,
     selected_names: tuple[str, ...],
-    schema_only: bool,
-    bounded: str | None = None,
-    collect_samples: bool = False,
-    max_column_examples: int = 20,
-    max_row_only_examples: int = 20,
+    options: DiffExecutionOptions,
 ) -> DiffExecutionResult:
     """Execute schema and optional row diffs for selected model names."""
 
@@ -32,6 +28,12 @@ def execute_diff(
     right_models: dict[str, Any] = {
         model.name: model for model in right_project.models if not is_disabled(model)
     }
+    if options.max_models is not None and len(selected_names) > options.max_models:
+        raise ExecutorInputError(
+            f"diff selected {len(selected_names)} models, exceeding --max-models "
+            f"{options.max_models}",
+            code="X303",
+        )
     results: list[ModelDiffResult] = []
     name: str
     for name in selected_names:
@@ -50,11 +52,7 @@ def execute_diff(
                 name=name,
                 left_model=left_model,
                 right_model=right_model,
-                schema_only=schema_only,
-                bounded=bounded,
-                collect_samples=collect_samples,
-                max_column_examples=max_column_examples,
-                max_row_only_examples=max_row_only_examples,
+                options=options,
             )
         )
     return DiffExecutionResult(model_results=tuple(results))

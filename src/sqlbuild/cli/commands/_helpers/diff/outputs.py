@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild.cli.commands._helpers.diff.json_output import write_diff_json_output
 from sqlbuild.cli.commands._helpers.diff.output import has_diff_failures, render_diff_output
 from sqlbuild.cli.commands._helpers.diff.virtual_output import format_virtual_diff_header
 from sqlbuild.cli.commands.models import (
@@ -33,6 +34,12 @@ def write_direct_diff_output(
             max_column_examples=preparation.effective_max_column_examples,
             max_row_only_examples=preparation.effective_max_row_only_examples,
         )
+    )
+    write_diff_json_output(
+        path=request.json_output_path,
+        result=result,
+        from_label=preparation.from_target,
+        to_label=preparation.to_target,
     )
 
 
@@ -70,6 +77,12 @@ def write_virtual_diff_output(
         )
     else:
         print("No VDE ref differences in selected scope.")
+    write_diff_json_output(
+        path=request.json_output_path,
+        result=outcome.result,
+        from_label=preparation.from_virtual_environment,
+        to_label=preparation.to_virtual_environment,
+    )
 
 
 def resolve_diff_exit_code(result: DiffExecutionResult) -> int:

@@ -233,6 +233,8 @@ class SchemaDiffResult:
     added_columns: tuple[ColumnInfo, ...] = field(default_factory=tuple)
     removed_columns: tuple[ColumnInfo, ...] = field(default_factory=tuple)
     type_changed_columns: tuple[tuple[ColumnInfo, ColumnInfo], ...] = field(default_factory=tuple)
+    left_column_count: int = field(default=0, compare=False)
+    right_column_count: int = field(default=0, compare=False)
 
 
 @dataclass(frozen=True)
@@ -242,6 +244,31 @@ class RowDiffColumnResult:
     name: str
     mismatched_count: int = 0
     tolerance: RowDiffTolerance | None = None
+
+
+@dataclass(frozen=True)
+class RowDiffCoverage:
+    """Exact bounded relation coverage observed before row comparison."""
+
+    row_count: int = 0
+    minimum_cursor: object | None = None
+    maximum_cursor: object | None = None
+
+
+@dataclass(frozen=True)
+class RowDiffSampling:
+    """Deterministic key-sampling policy for a row comparison."""
+
+    row_limit: int
+    seed: int = 0
+
+
+@dataclass(frozen=True)
+class RowDiffPreparedRelations:
+    """Comparison CTEs and optional exact bounded union population."""
+
+    cte_sql: str
+    population_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -256,6 +283,20 @@ class RowDiffResult:
     left_only_count: int = 0
     right_only_count: int = 0
     column_results: tuple[RowDiffColumnResult, ...] = field(default_factory=tuple)
+    population_count: int = field(default=0, compare=False)
+    compared_count: int = field(default=0, compare=False)
+    sampling: RowDiffSampling | None = field(default=None, compare=False)
+    left_coverage: RowDiffCoverage | None = field(default=None, compare=False)
+    right_coverage: RowDiffCoverage | None = field(default=None, compare=False)
+    cursor_column: str | None = field(default=None, compare=False)
+    cursor_start: object | None = field(default=None, compare=False)
+    cursor_end: object | None = field(default=None, compare=False)
+
+    @property
+    def is_exhaustive(self) -> bool:
+        """Return whether every bounded union key was compared."""
+
+        return self.sampling is None or self.compared_count >= self.population_count
 
 
 @dataclass(frozen=True)
@@ -289,6 +330,7 @@ class RowDiffTolerances:
 
     by_type: dict[str, RowDiffTolerance] = field(default_factory=dict)
     by_column: dict[str, RowDiffTolerance] = field(default_factory=dict)
+    sampling: RowDiffSampling | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)

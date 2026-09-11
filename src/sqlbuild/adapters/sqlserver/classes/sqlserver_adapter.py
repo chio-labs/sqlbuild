@@ -41,9 +41,12 @@ from sqlbuild.adapter.contract.models import (
     QueryResult,
     RelationInfo,
     RowDiffColumnResult,
+    RowDiffCoverage,
+    RowDiffPreparedRelations,
     RowDiffResult,
     RowDiffSampleCell,
     RowDiffSampleRow,
+    RowDiffSampling,
     RowDiffTolerance,
     RowDiffTolerances,
     SchemaDiffResult,
@@ -1354,6 +1357,23 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
             for stmt in statements:
                 self.execute(connection=connection, sql=stmt)
 
+    def inspect_row_diff_coverage(
+        self,
+        *,
+        connection: Any,
+        relation: str,
+        cursor_column: str | None = None,
+        start_cursor: CursorValue | None = None,
+        end_cursor: CursorValue | None = None,
+    ) -> RowDiffCoverage:
+        return self._inspect_row_diff_coverage(
+            connection=connection,
+            relation=relation,
+            cursor_column=cursor_column,
+            start_cursor=start_cursor,
+            end_cursor=end_cursor,
+        )
+
     def diff_rows(
         self,
         *,
@@ -1368,6 +1388,7 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
         end_cursor: CursorValue | None = None,
     ) -> RowDiffResult:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
+        sampling: RowDiffSampling | None = tolerances.sampling if tolerances is not None else None
         left_columns: tuple[ColumnInfo, ...] = self.describe_relation(
             connection=connection, relation=left
         )
@@ -1401,6 +1422,14 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
             relation_label="right",
             keys=keys,
         )
+        prepared_relations: RowDiffPreparedRelations = self._build_row_diff_relation_ctes(
+            connection=connection,
+            left_sql=left_cte,
+            right_sql=right_cte,
+            keys=keys,
+            sampling=sampling,
+            inspect_population=True,
+        )
         join_condition: str = " AND ".join(f"__left.{key} = __right.{key}" for key in keys)
         column_equal_expressions: dict[str, str] = {
             column: self.build_row_diff_equal_expression(
@@ -1432,7 +1461,7 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
         if column_count_sql_parts:
             column_count_sql = ", " + ", ".join(column_count_sql_parts)
         diff_sql: str = (
-            f"WITH __left AS ({left_cte}), __right AS ({right_cte}) "
+            f"WITH {prepared_relations.cte_sql} "
             "SELECT "
             f"COUNT(CASE WHEN __left.{keys[0]} IS NOT NULL THEN 1 END) AS left_count, "
             f"COUNT(CASE WHEN __right.{keys[0]} IS NOT NULL THEN 1 END) AS right_count, "
@@ -1466,6 +1495,9 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
             left_only_count=int(row[5]),
             right_only_count=int(row[6]),
             column_results=column_results,
+            population_count=prepared_relations.population_count or int(row[2]),
+            compared_count=int(row[2]),
+            sampling=sampling,
         )
 
     def diff_schema(
@@ -1503,6 +1535,8 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
             added_columns=tuple(added),
             removed_columns=tuple(removed),
             type_changed_columns=tuple(type_changed),
+            left_column_count=len(left_columns),
+            right_column_count=len(right_columns),
         )
 
     def drop(
@@ -2657,6 +2691,7 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
         start_cursor: CursorValue | None = None,
         end_cursor: CursorValue | None = None,
         limit: int = 20,
+        sampling: RowDiffSampling | None = None,
     ) -> tuple[tuple[tuple[str, object], ...], ...]:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         cursor_filter: str = self.build_cursor_filter(
@@ -2675,6 +2710,14 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
             relation_label="left",
             keys=keys,
         )
+        prepared_relations: RowDiffPreparedRelations = self._build_row_diff_relation_ctes(
+            connection=connection,
+            left_sql=left_cte,
+            right_sql=right_cte,
+            keys=keys,
+            sampling=sampling,
+            inspect_population=False,
+        )
         self.validate_row_diff_keys(
             connection=connection,
             relation_sql=right_cte,
@@ -2692,7 +2735,7 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
         else:
             raise AdapterUserError(message="sample_side_only_rows side must be 'left' or 'right'")
         sample_sql: str = (
-            f"WITH __left AS ({left_cte}), __right AS ({right_cte}) "
+            f"WITH {prepared_relations.cte_sql} "
             f"SELECT TOP {limit} {key_select_sql} "
             f"FROM __left FULL OUTER JOIN __right ON {join_condition} "
             f"WHERE {side_condition} "
@@ -2718,6 +2761,7 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
         end_cursor: CursorValue | None = None,
         limit: int = 20,
     ) -> tuple[RowDiffSampleRow, ...]:
+        sampling: RowDiffSampling | None = tolerances.sampling if tolerances is not None else None
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         left_columns: tuple[ColumnInfo, ...] = self.describe_relation(
             connection=connection, relation=left
@@ -2745,6 +2789,14 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
             relation_sql=left_cte,
             relation_label="left",
             keys=keys,
+        )
+        prepared_relations: RowDiffPreparedRelations = self._build_row_diff_relation_ctes(
+            connection=connection,
+            left_sql=left_cte,
+            right_sql=right_cte,
+            keys=keys,
+            sampling=sampling,
+            inspect_population=False,
         )
         self.validate_row_diff_keys(
             connection=connection,
@@ -2779,7 +2831,7 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
             compare_select_sql = ", " + compare_select_sql
         join_condition: str = " AND ".join(f"__left.{key} = __right.{key}" for key in keys)
         sample_sql: str = (
-            f"WITH __left AS ({left_cte}), __right AS ({right_cte}) "
+            f"WITH {prepared_relations.cte_sql} "
             f"SELECT TOP {limit} {key_select_sql}{compare_select_sql} "
             f"FROM __left FULL OUTER JOIN __right ON {join_condition} "
             f"WHERE __left.{keys[0]} IS NOT NULL AND __right.{keys[0]} IS NOT NULL "
@@ -2874,6 +2926,45 @@ class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
             stmt: str
             for stmt in statements:
                 self.execute(connection=connection, sql=stmt)
+
+    def _render_row_diff_sample_keys_sql(
+        self,
+        *,
+        key_union_sql: str,
+        keys: tuple[str, ...],
+        sampling: RowDiffSampling,
+    ) -> str:
+        """Render deterministic SQL Server top-N union-key selection."""
+
+        key_list: str = ", ".join(keys)
+        hash_expression: str = self._render_row_diff_key_hash(
+            keys=keys,
+            alias="__key_union",
+            seed=sampling.seed,
+        )
+        tie_break: str = ", ".join(f"__key_union.{key}" for key in keys)
+        return (
+            f"SELECT TOP ({sampling.row_limit}) {key_list} "
+            f"FROM ({key_union_sql}) AS __key_union "
+            f"ORDER BY {hash_expression}, {tie_break}"
+        )
+
+    def _render_row_diff_key_hash(
+        self,
+        *,
+        keys: tuple[str, ...],
+        alias: str,
+        seed: int,
+    ) -> str:
+        """Render a stable SQL Server hash over a canonical composite key."""
+
+        key_parts: list[str] = []
+        key: str
+        for key in keys:
+            value_sql: str = f"CAST({alias}.{key} AS NVARCHAR(MAX))"
+            key_parts.append(f"CONCAT(DATALENGTH({value_sql}), ':', {value_sql})")
+        payload_parts: str = ", ".join((f"'{seed}'", *key_parts))
+        return f"CONVERT(VARCHAR(64), HASHBYTES('SHA2_256', CONCAT_WS('|', {payload_parts})), 2)"
 
     def validate_row_diff_keys(
         self,

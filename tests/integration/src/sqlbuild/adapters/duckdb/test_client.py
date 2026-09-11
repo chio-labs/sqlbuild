@@ -15,6 +15,8 @@ from sqlbuild.adapter.contract.models import (
     QueryResult,
     RowDiffColumnResult,
     RowDiffResult,
+    RowDiffSampleRow,
+    RowDiffSampling,
     RowDiffTolerance,
     RowDiffTolerances,
     SchemaDiffResult,
@@ -24,6 +26,7 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.contracts.models import SeedCsvSettings
 from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
+    CompositeRowDiffSamplingTestCase,
     ConnectSettingsTestCase,
     ConnectTestCase,
     CountRowsTestCase,
@@ -1244,6 +1247,87 @@ def test_given_two_tables_when_diffing_rows_then_returns_expected_counts(
     )
 
     assert result == test_case.expected_result
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompositeRowDiffSamplingTestCase(
+            description="length-prefixed composite keys have seeded stable membership",
+            row_limit=3,
+            seed=7,
+            alternate_seed=11,
+            expected_population_count=6,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_composite_key_population_when_sampling_then_membership_is_seeded_and_stable(
+    test_case: CompositeRowDiffSamplingTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    connection.execute(
+        "CREATE TABLE left_t AS SELECT * FROM (VALUES "
+        "(1, '23', 'left-a'), (12, '3', 'left-b'), (2, '8', 'left-c'), "
+        "(3, '5', 'left-d'), (4, '2', 'left-e'), (5, '1', 'left-f')"
+        ") AS t(order_id, line_code, value)"
+    )
+    connection.execute(
+        "CREATE TABLE right_t AS SELECT * FROM (VALUES "
+        "(1, '23', 'right-a'), (12, '3', 'right-b'), (2, '8', 'right-c'), "
+        "(3, '5', 'right-d'), (4, '2', 'right-e'), (5, '1', 'right-f')"
+        ") AS t(order_id, line_code, value)"
+    )
+    sampling: RowDiffSampling = RowDiffSampling(
+        row_limit=test_case.row_limit,
+        seed=test_case.seed,
+    )
+
+    result: RowDiffResult = adapter.diff_rows(
+        connection=connection,
+        left="left_t",
+        right="right_t",
+        unique_key=("order_id", "line_code"),
+        tolerances=RowDiffTolerances(sampling=sampling),
+    )
+    first_samples: tuple[RowDiffSampleRow, ...] = adapter.sample_unequal_rows(
+        connection=connection,
+        left="left_t",
+        right="right_t",
+        unique_key=("order_id", "line_code"),
+        tolerances=RowDiffTolerances(sampling=sampling),
+        limit=test_case.row_limit,
+    )
+    repeated_samples: tuple[RowDiffSampleRow, ...] = adapter.sample_unequal_rows(
+        connection=connection,
+        left="left_t",
+        right="right_t",
+        unique_key=("order_id", "line_code"),
+        tolerances=RowDiffTolerances(sampling=sampling),
+        limit=test_case.row_limit,
+    )
+    alternate_samples: tuple[RowDiffSampleRow, ...] = adapter.sample_unequal_rows(
+        connection=connection,
+        left="left_t",
+        right="right_t",
+        unique_key=("order_id", "line_code"),
+        tolerances=RowDiffTolerances(
+            sampling=RowDiffSampling(
+                row_limit=test_case.row_limit,
+                seed=test_case.alternate_seed,
+            ),
+        ),
+        limit=test_case.row_limit,
+    )
+
+    assert result.population_count == test_case.expected_population_count
+    assert result.compared_count == test_case.row_limit
+    assert result.unequal_count == test_case.row_limit
+    assert first_samples == repeated_samples
+    assert first_samples != alternate_samples
+    assert len(first_samples) == test_case.row_limit
+    assert len(alternate_samples) == test_case.row_limit
 
 
 @pytest.mark.parametrize(

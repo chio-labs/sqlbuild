@@ -1801,6 +1801,10 @@ def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
         values["row_diff_exclude_columns"] = defaults.row_diff_exclude_columns
     if defaults.row_diff_tolerances:
         values["row_diff_tolerances"] = defaults.row_diff_tolerances
+    if defaults.row_diff_sample_rows is not None:
+        values["row_diff_sample_rows"] = defaults.row_diff_sample_rows
+    if defaults.row_diff_sample_seed is not None:
+        values["row_diff_sample_seed"] = defaults.row_diff_sample_seed
     if defaults.tags:
         values["tags"] = list(defaults.tags)
     if defaults.pre_hooks is not None:

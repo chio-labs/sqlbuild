@@ -356,7 +356,13 @@ def _add_data_parsers(
     diff_parser.add_argument("--verbose", "-v", action="store_true", default=False)
     diff_parser.add_argument("--max-column-examples", type=int, default=None)
     diff_parser.add_argument("--max-row-only-examples", type=int, default=None)
+    diff_parser.add_argument("--sample-rows", type=int, default=None)
+    diff_parser.add_argument("--sample-seed", type=int, default=None)
+    diff_parser.add_argument("--exhaustive", action="store_true", default=False)
+    diff_parser.add_argument("--max-models", type=int, default=None)
+    diff_parser.add_argument("--max-columns", type=int, default=None)
     diff_parser.add_argument("--allow-partial-diff", action="store_true", default=False)
+    _ = add_execution_json_output_arg(diff_parser)
     _ = add_select_args(diff_parser)
     _ = add_vars_args(diff_parser)
 

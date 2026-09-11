@@ -43,3 +43,11 @@ def _validate_diff_request(*, request: DiffCommandRequest) -> None:
         raise CliUserError("diff --max-column-examples must be positive", code="C202")
     if request.max_row_only_examples is not None and request.max_row_only_examples <= 0:
         raise CliUserError("diff --max-row-only-examples must be positive", code="C203")
+    if request.sample_rows is not None and request.sample_rows <= 0:
+        raise CliUserError("diff --sample-rows must be positive", code="C208")
+    if request.exhaustive and request.sample_rows is not None:
+        raise CliUserError("diff --exhaustive cannot be combined with --sample-rows", code="C209")
+    if request.max_models is not None and request.max_models <= 0:
+        raise CliUserError("diff --max-models must be positive", code="C210")
+    if request.max_columns is not None and request.max_columns <= 0:
+        raise CliUserError("diff --max-columns must be positive", code="C211")

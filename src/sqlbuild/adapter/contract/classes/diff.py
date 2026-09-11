@@ -7,8 +7,10 @@ from typing import Any
 
 from sqlbuild.adapter.contract.models import (
     CursorValue,
+    RowDiffCoverage,
     RowDiffResult,
     RowDiffSampleRow,
+    RowDiffSampling,
     RowDiffTolerances,
     SchemaDiffResult,
 )
@@ -59,6 +61,19 @@ class DiffMixin(ABC):
         ...
 
     @abstractmethod
+    def inspect_row_diff_coverage(
+        self,
+        *,
+        connection: Any,
+        relation: str,
+        cursor_column: str | None = None,
+        start_cursor: CursorValue | None = None,
+        end_cursor: CursorValue | None = None,
+    ) -> RowDiffCoverage:
+        """Return exact bounded row count and cursor extent for one relation."""
+        ...
+
+    @abstractmethod
     def sample_unequal_rows(
         self,
         *,
@@ -89,6 +104,7 @@ class DiffMixin(ABC):
         start_cursor: CursorValue | None = None,
         end_cursor: CursorValue | None = None,
         limit: int = 20,
+        sampling: RowDiffSampling | None = None,
     ) -> tuple[tuple[tuple[str, object], ...], ...]:
         """Return sampled side-only keys for verbose diff output."""
         ...

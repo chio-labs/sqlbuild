@@ -78,6 +78,11 @@ _DEFAULT_VALUES: dict[str, object] = {
     "bounded": None,
     "max_column_examples": None,
     "max_row_only_examples": None,
+    "sample_rows": None,
+    "sample_seed": None,
+    "exhaustive": False,
+    "max_models": None,
+    "max_columns": None,
     "query_sql": None,
     "query_file": None,
     "query_format": "long",
@@ -232,6 +237,11 @@ class CliNamespace:
     bounded: str | None
     max_column_examples: int | None
     max_row_only_examples: int | None
+    sample_rows: int | None
+    sample_seed: int | None
+    exhaustive: bool
+    max_models: int | None
+    max_columns: int | None
     query_sql: str | None
     query_file: str | None
     query_format: str

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
-from sqlbuild.adapter.contract.models import CursorValue, RowDiffTolerances
+from sqlbuild.adapter.contract.models import CursorValue, RowDiffSampling, RowDiffTolerances
+from sqlbuild.executor.diff.models import RowDiffSamplingOverride
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,24 @@ class ParseRowDiffTolerancesTestCase:
 class ParseRowDiffTolerancesErrorTestCase:
     description: str
     raw: object
+    expected_error_fragment: str
+    expected_code: str
+
+
+@dataclass(frozen=True)
+class ResolveRowDiffSamplingTestCase:
+    description: str
+    raw_row_limit: object
+    raw_seed: object
+    override: RowDiffSamplingOverride
+    expected_result: RowDiffSampling | None
+
+
+@dataclass(frozen=True)
+class ResolveRowDiffSamplingErrorTestCase:
+    description: str
+    raw_row_limit: object
+    raw_seed: object
     expected_error_fragment: str
     expected_code: str
 

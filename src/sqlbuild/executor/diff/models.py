@@ -8,6 +8,29 @@ from sqlbuild.adapter.contract.models import RowDiffResult, RowDiffSampleRow, Sc
 
 
 @dataclass(frozen=True)
+class RowDiffSamplingOverride:
+    """Invocation-level sampling values that override compiled model configuration."""
+
+    row_limit: int | None = None
+    seed: int | None = None
+    exhaustive: bool = False
+
+
+@dataclass(frozen=True)
+class DiffExecutionOptions:
+    """Row-diff mode, diagnostic, and invocation override options."""
+
+    schema_only: bool
+    bounded: str | None = None
+    collect_samples: bool = False
+    max_column_examples: int = 20
+    max_row_only_examples: int = 20
+    max_models: int | None = None
+    max_columns: int | None = None
+    sampling_override: RowDiffSamplingOverride = field(default_factory=RowDiffSamplingOverride)
+
+
+@dataclass(frozen=True)
 class ModelDiffResult:
     """Diff result for one model across two targets."""
 

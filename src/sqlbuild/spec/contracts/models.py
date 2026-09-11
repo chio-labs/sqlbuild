@@ -274,6 +274,8 @@ class DefaultsConfig:
     run_despite_unchanged: str | None = None
     row_diff_exclude_columns: tuple[str, ...] = field(default_factory=tuple)
     row_diff_tolerances: dict[str, object] = field(default_factory=dict)
+    row_diff_sample_rows: int | None = None
+    row_diff_sample_seed: int | None = None
     tags: tuple[str, ...] = field(default_factory=tuple)
     contract: str | None = None
     pre_hooks: object | None = None

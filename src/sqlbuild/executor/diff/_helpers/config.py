@@ -5,13 +5,38 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 from typing import cast
 
-from sqlbuild.adapter.contract.models import RowDiffTolerance, RowDiffTolerances
+from sqlbuild.adapter.contract.models import RowDiffSampling, RowDiffTolerance, RowDiffTolerances
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.diff.constants import (
     ROW_DIFF_ABSOLUTE_TOLERANCE_KEY,
     ROW_DIFF_RELATIVE_TOLERANCE_KEY,
     ROW_DIFF_TOLERANCE_KEYS,
 )
+from sqlbuild.executor.diff.models import RowDiffSamplingOverride
+
+
+def resolve_row_diff_sampling(
+    *,
+    raw_row_limit: object,
+    raw_seed: object,
+    override: RowDiffSamplingOverride,
+    label: str,
+) -> RowDiffSampling | None:
+    """Resolve model sampling configuration with invocation overrides."""
+
+    if override.exhaustive:
+        return None
+    row_limit: int | None = _parse_optional_non_negative_integer(
+        raw=override.row_limit if override.row_limit is not None else raw_row_limit,
+        label=f"{label}.row_diff_sample_rows",
+    )
+    if row_limit in (None, 0):
+        return None
+    seed: int | None = _parse_optional_integer(
+        raw=override.seed if override.seed is not None else raw_seed,
+        label=f"{label}.row_diff_sample_seed",
+    )
+    return RowDiffSampling(row_limit=row_limit, seed=seed or 0)
 
 
 def parse_row_diff_tolerances(
@@ -99,3 +124,18 @@ def _parse_optional_decimal(*, raw: object, label: str) -> Decimal | None:
         return Decimal(str(raw))
     except InvalidOperation as error:
         raise ExecutorInputError(f"{label} must be numeric", code="X405") from error
+
+
+def _parse_optional_integer(*, raw: object, label: str) -> int | None:
+    if raw is None:
+        return None
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise ExecutorInputError(f"{label} must be an integer", code="X406")
+    return raw
+
+
+def _parse_optional_non_negative_integer(*, raw: object, label: str) -> int | None:
+    value: int | None = _parse_optional_integer(raw=raw, label=label)
+    if value is not None and value < 0:
+        raise ExecutorInputError(f"{label} must be zero or greater", code="X407")
+    return value
