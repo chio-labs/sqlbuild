@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from fnmatch import fnmatchcase
+
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.graph.core import (
@@ -285,15 +287,19 @@ def _resolve_single(
             downstream=downstream,
         )
 
-    key: CompiledObjectKey | None = _lookup_key(parsed=parsed, all_keys=all_keys)
-    if key is None:
-        raise PlannerInputError(f"unknown selector name '{parsed.value}'", code="S007")
+    keys: frozenset[CompiledObjectKey] = _lookup_keys(parsed=parsed, all_keys=all_keys)
+    if not keys:
+        label: str = "pattern" if _is_name_pattern(parsed.value) else "name"
+        raise PlannerInputError(f"unknown selector {label} '{parsed.value}'", code="S007")
 
-    result: set[CompiledObjectKey] = {key}
+    result: set[CompiledObjectKey] = set(keys)
+    key: CompiledObjectKey
     if parsed.upstream:
-        result.update(expand_upstream(key=key, upstream=upstream))
+        for key in keys:
+            result.update(expand_upstream(key=key, upstream=upstream))
     if parsed.downstream:
-        result.update(expand_downstream(key=key, downstream=downstream))
+        for key in keys:
+            result.update(expand_downstream(key=key, downstream=downstream))
     return frozenset(result)
 
 
@@ -372,15 +378,18 @@ def _path_matches(*, indexed_folder: str, selector_folder: str) -> bool:
     return indexed_folder == selector_folder or indexed_folder.startswith(f"{selector_folder}/")
 
 
-def _lookup_key(
+def _lookup_keys(
     *,
     parsed: ParsedSelector,
     all_keys: dict[str, CompiledObjectKey],
-) -> CompiledObjectKey | None:
-    """Look up the object key for a parsed selector."""
+) -> frozenset[CompiledObjectKey]:
+    """Look up object keys for an exact or glob-pattern name selector."""
 
     if parsed.kind == SelectorKind.NAME:
-        return all_keys.get(parsed.value)
+        if not _is_name_pattern(parsed.value):
+            candidate: CompiledObjectKey | None = all_keys.get(parsed.value)
+            return frozenset() if candidate is None else frozenset((candidate,))
+        return frozenset(key for name, key in all_keys.items() if fnmatchcase(name, parsed.value))
 
     resource_type: CompiledResourceType | None = _RESOURCE_TYPE_BY_SELECTOR_KIND.get(parsed.kind)
     if resource_type is None:
@@ -389,7 +398,17 @@ def _lookup_key(
             code="S010",
         )
 
-    candidate: CompiledObjectKey | None = all_keys.get(parsed.value)
-    if candidate is not None and candidate.resource_type == resource_type:
-        return candidate
-    return None
+    if not _is_name_pattern(parsed.value):
+        candidate = all_keys.get(parsed.value)
+        if candidate is not None and candidate.resource_type == resource_type:
+            return frozenset((candidate,))
+        return frozenset()
+    return frozenset(
+        key
+        for name, key in all_keys.items()
+        if key.resource_type == resource_type and fnmatchcase(name, parsed.value)
+    )
+
+
+def _is_name_pattern(value: str) -> bool:
+    return any(character in value for character in "*?[")

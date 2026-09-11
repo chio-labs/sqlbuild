@@ -6490,6 +6490,26 @@ paths, graph expansion (`+orders`, `orders+`, or `+orders+`), and lineage paths 
 `base_orders~customer_orders`. `paths` and `selectors` may be combined in one ignore. Continue to
 use `paths` for SQL tests and audits because those files are not graph resources.
 
+Bare resource names also accept glob patterns. For example, this scopes the ignore to every graph
+resource whose name starts with `intermediate_`:
+
+```toml
+[[rules.rule_ignores]]
+rules = ["SQBRSQL021"]
+selectors = ["intermediate_*"]
+reason = "These intermediate interfaces intentionally preserve upstream columns."
+```
+
+Use `paths` instead when the convention belongs to authored filenames or directories, including
+non-graph SQL files:
+
+```toml
+[[rules.rule_ignores]]
+rules = ["SQBRSQL021"]
+paths = ["models/**/intermediate_*.sql"]
+reason = "These intermediate SQL files intentionally preserve upstream columns."
+```
+
 ### Mandatory correctness
 
 Mandatory compiler correctness is not configurable and cannot be suppressed. A project must first

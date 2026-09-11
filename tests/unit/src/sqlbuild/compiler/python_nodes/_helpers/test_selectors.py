@@ -72,6 +72,18 @@ def test_given_python_node_typed_selector_when_parsing_then_returns_expected_kin
             expected_names=frozenset({"export_orders"}),
         ),
         PythonNodeSelectorTestCase(
+            description="selects Python nodes by bare name glob",
+            select=("*orders*",),
+            exclude=(),
+            expected_names=frozenset({"prepare_orders", "export_orders", "check_orders_export"}),
+        ),
+        PythonNodeSelectorTestCase(
+            description="selects Python nodes by typed name glob",
+            select=("asset:export_*",),
+            exclude=(),
+            expected_names=frozenset({"export_orders"}),
+        ),
+        PythonNodeSelectorTestCase(
             description="selects upstream Python nodes with leading plus",
             select=("+check_orders_export",),
             exclude=(),

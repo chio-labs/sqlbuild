@@ -245,7 +245,7 @@ def test_given_graph_scoped_rule_ignore_when_running_rules_then_only_matched_res
         'name = "orders"\nadapter = "duckdb"\n\n'
         "[[rules.rule_ignores]]\n"
         'rules = ["SQBRSQL021"]\n'
-        'selectors = ["+orders"]\n'
+        'selectors = ["+orders*"]\n'
         'reason = "Reviewed upstream interface boundary"\n',
         encoding="utf-8",
     )
