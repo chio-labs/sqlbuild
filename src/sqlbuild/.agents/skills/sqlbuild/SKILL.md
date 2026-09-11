@@ -6461,7 +6461,7 @@ reason = "This example intentionally demonstrates one sampled row."
 An exception refers to one exact Rule code and path. If the finding disappears, SQLBuild reports
 the stale exception so obsolete configuration does not accumulate silently.
 
-### Path-scoped ignores
+### Path- and resource-scoped ignores
 
 Use a path ignore when a documented project area intentionally follows a different convention:
 
@@ -6474,6 +6474,21 @@ reason = "Examples retain intentionally minimal SQL."
 
 Path ignores accept exact codes and family prefixes. Keep their scope narrow and explain why the
 project differs from the selected requirement.
+
+Use resource selectors when the exception follows project structure or lineage rather than a
+directory boundary:
+
+```toml
+[[rules.rule_ignores]]
+rules = ["SQBRSQL021"]
+selectors = ["+orders"]
+reason = "The reviewed orders interface preserves its upstream column contract."
+```
+
+Resource ignores use the same selector grammar as other SQLBuild commands, including names, tags,
+paths, graph expansion (`+orders`, `orders+`, or `+orders+`), and lineage paths such as
+`base_orders~customer_orders`. `paths` and `selectors` may be combined in one ignore. Continue to
+use `paths` for SQL tests and audits because those files are not graph resources.
 
 ### Mandatory correctness
 

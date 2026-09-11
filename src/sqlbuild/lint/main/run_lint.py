@@ -14,10 +14,11 @@ from sqlbuild.compiler.scopes.constants import (
 )
 from sqlbuild.lint._helpers.expansion import build_lint_expansion_context, prepare_lint_body
 from sqlbuild.lint._helpers.headers import lint_body_ranges, scan_headers
-from sqlbuild.lint._helpers.native import lint_native_headers
+from sqlbuild.lint._helpers.native import external_identifiers_for_headers, lint_native_headers
 from sqlbuild.lint._helpers.native_sql import run_native_sql_lint
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
 from sqlbuild.lint._helpers.suppressions import apply_suppressions
+from sqlbuild.lint.constants import HEADER_KIND_SCENARIO, HEADER_KIND_TEST
 from sqlbuild.lint.models import HeaderSpan, LintBody, LintConfig, LintRunResult, LintViolation
 
 
@@ -118,6 +119,12 @@ def _prepared_bodies(
     project_dir: Path,
 ) -> tuple[LintBody, ...]:
     bodies: list[LintBody] = []
+    external_identifiers: tuple[str, ...] = external_identifiers_for_headers(
+        contents=contents, headers=headers
+    )
+    allows_ceremonial_select: bool = any(
+        header.kind in {HEADER_KIND_TEST, HEADER_KIND_SCENARIO} for header in headers
+    )
     body_start: int
     body_end: int
     for body_start, body_end in lint_body_ranges(
@@ -134,6 +141,8 @@ def _prepared_bodies(
                 body_start=body_start,
                 body_end=body_end,
                 context=context,
+                external_identifiers=external_identifiers,
+                allows_ceremonial_select=allows_ceremonial_select,
             )
         )
     return tuple(bodies)

@@ -9,6 +9,7 @@ from typing import Any
 
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue, select_rules
+from sqlbuild.rule_engine._helpers.engine.config import resolve_rule_ignore_selectors
 from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
     custom_rule_implementation_fingerprint,
 )
@@ -22,19 +23,20 @@ def evaluate_project(
 ) -> RulesResult:
     """Evaluate selected rules through one native project boundary."""
 
+    effective_config: RulesConfig = resolve_rule_ignore_selectors(config=config, project=project)
     catalogue: tuple[Rule, ...] = build_catalogue(
-        config=config,
+        config=effective_config,
         project_dir=project_dir,
-        include_custom=_config_selects_custom(config),
+        include_custom=_config_selects_custom(effective_config),
     )
     if any(rule.custom for rule in catalogue):
         selected: tuple[Rule, ...] = select_rules(
-            catalogue=catalogue, config=config, project_dir=project_dir
+            catalogue=catalogue, config=effective_config, project_dir=project_dir
         )
         verify_custom_rules(rules=selected, project_dir=project_dir)
     return evaluate_native(
         project=project,
-        config=config,
+        config=effective_config,
         project_dir=project_dir,
         catalogue=catalogue,
         dialect=dialect,

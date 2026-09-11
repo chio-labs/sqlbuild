@@ -41,6 +41,7 @@ fn format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
     let formatted_context = FormatOnceContext {
         dialect_name: &request.dialect,
         dialect: &dialect,
+        original_sql: &neutral,
         original_tokens: &semantic_tokens,
         comments: &comments,
     };
@@ -68,6 +69,7 @@ fn format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
     let second_context = FormatOnceContext {
         dialect_name: &request.dialect,
         dialect: &dialect,
+        original_sql: &second_neutral,
         original_tokens: &second_semantic_tokens,
         comments: &second_comments,
     };
@@ -91,11 +93,13 @@ struct Comment {
     end: usize,
     text: String,
     line: bool,
+    leading: bool,
 }
 
 struct FormatOnceContext<'a> {
     dialect_name: &'a str,
     dialect: &'a Dialect,
+    original_sql: &'a str,
     original_tokens: &'a [Token],
     comments: &'a [Comment],
 }
@@ -104,6 +108,7 @@ fn format_once(neutral_sql: &str, context: &FormatOnceContext<'_>) -> Result<Str
     let mut formatted = format_by_name(neutral_sql, context.dialect_name)
         .map_err(|error| error.to_string())?
         .join(";\n");
+    formatted = restore_string_literals(formatted, context)?;
     if context.comments.is_empty() {
         return Ok(formatted);
     }
@@ -120,33 +125,107 @@ fn format_once(neutral_sql: &str, context: &FormatOnceContext<'_>) -> Result<Str
     {
         return Err(COMMENT_ATTACHMENT_FAILURE.to_string());
     }
-    let mut insertions: Vec<(usize, String)> = context
-        .comments
-        .iter()
-        .map(|comment| {
-            let previous = context
-                .original_tokens
-                .iter()
-                .rposition(|token| token.span.end <= comment.start);
-            let char_offset = previous.map_or(0, |index| formatted_tokens[index].span.end);
-            let separator = if char_offset == 0 { "" } else { " " };
-            let followed_by_newline = formatted.chars().nth(char_offset) == Some('\n');
-            let terminator = if (comment.line || char_offset == 0) && !followed_by_newline {
-                "\n"
-            } else {
-                ""
-            };
-            (
-                char_offset,
-                format!("{separator}{}{terminator}", comment.text),
-            )
-        })
-        .collect();
+    let mut insertions: Vec<(usize, String)> = Vec::new();
+    for comment in context.comments {
+        insertions.push(comment_insertion(
+            &formatted,
+            &formatted_tokens,
+            context,
+            comment,
+        ));
+    }
     insertions.sort_by_key(|(offset, _)| *offset);
     for (char_offset, text) in insertions.into_iter().rev() {
         formatted.insert_str(char_to_byte(&formatted, char_offset)?, &text);
     }
     Ok(formatted)
+}
+
+fn comment_insertion(
+    formatted: &str,
+    formatted_tokens: &[Token],
+    context: &FormatOnceContext<'_>,
+    comment: &Comment,
+) -> (usize, String) {
+    if comment.leading
+        && let Some(next) = context
+            .original_tokens
+            .iter()
+            .position(|token| token.span.start >= comment.end)
+    {
+        let target = &formatted_tokens[next];
+        let indentation = indentation_before(formatted, target.span.start);
+        return (
+            target.span.start,
+            format!("{}\n{}", comment.text, " ".repeat(indentation)),
+        );
+    }
+    let previous = context
+        .original_tokens
+        .iter()
+        .rposition(|token| token.span.end <= comment.start);
+    let char_offset = previous.map_or(0, |index| formatted_tokens[index].span.end);
+    let separator = if char_offset == 0 { "" } else { " " };
+    let followed_by_newline = formatted.chars().nth(char_offset) == Some('\n');
+    let terminator = if (comment.line || char_offset == 0) && !followed_by_newline {
+        "\n"
+    } else {
+        ""
+    };
+    (
+        char_offset,
+        format!("{separator}{}{terminator}", comment.text),
+    )
+}
+
+fn indentation_before(value: &str, char_offset: usize) -> usize {
+    let characters: Vec<char> = value.chars().collect();
+    let mut index = char_offset.min(characters.len());
+    let mut indentation = 0_usize;
+    while index > 0 {
+        index -= 1;
+        if characters[index] == '\n' {
+            break;
+        }
+        if characters[index].is_whitespace() {
+            indentation += 1;
+        }
+    }
+    indentation
+}
+
+fn restore_string_literals(
+    mut formatted: String,
+    context: &FormatOnceContext<'_>,
+) -> Result<String, String> {
+    let originals: Vec<String> = context
+        .original_tokens
+        .iter()
+        .filter(|token| token.token_type == polyglot_sql::tokens::TokenType::String)
+        .map(|token| char_slice(context.original_sql, token.span.start, token.span.end))
+        .collect::<Option<Vec<String>>>()
+        .ok_or_else(|| UNSUPPORTED_SQL_FAILURE.to_string())?;
+    let formatted_tokens = context
+        .dialect
+        .tokenize(&formatted)
+        .map_err(|error| error.to_string())?;
+    let formatted_strings: Vec<&Token> = formatted_tokens
+        .iter()
+        .filter(|token| token.token_type == polyglot_sql::tokens::TokenType::String)
+        .collect();
+    if originals.len() != formatted_strings.len() {
+        return Err(UNSUPPORTED_SQL_FAILURE.to_string());
+    }
+    for (token, original) in formatted_strings.into_iter().zip(originals).rev() {
+        let start = char_to_byte(&formatted, token.span.start)?;
+        let end = char_to_byte(&formatted, token.span.end)?;
+        formatted.replace_range(start..end, &original);
+    }
+    Ok(formatted)
+}
+
+fn char_slice(value: &str, start: usize, end: usize) -> Option<String> {
+    (start <= end).then(|| value.chars().skip(start).take(end - start).collect())
 }
 
 fn without_statement_terminators(tokens: &[Token]) -> Vec<Token> {
@@ -180,6 +259,13 @@ fn comments_in_gap(characters: &[char], start: usize, end: usize) -> Vec<Comment
             continue;
         }
         let start = index;
+        let line_start = (0..start)
+            .rev()
+            .find(|&position| characters[position] == '\n')
+            .map_or(0, |position| position + 1);
+        let leading = characters[line_start..start]
+            .iter()
+            .all(|character| character.is_whitespace());
         index += 2;
         if line {
             while index < end && characters[index] != '\n' {
@@ -196,6 +282,7 @@ fn comments_in_gap(characters: &[char], start: usize, end: usize) -> Vec<Comment
             end: index,
             text: characters[start..index].iter().collect(),
             line,
+            leading,
         });
     }
     comments

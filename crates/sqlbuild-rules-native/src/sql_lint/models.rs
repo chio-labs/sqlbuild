@@ -58,6 +58,10 @@ pub(crate) struct LintRequest {
     pub enabled_rules: Option<Vec<String>>,
     #[serde(default)]
     pub ignored_rules: Vec<String>,
+    #[serde(default)]
+    pub external_identifiers: Vec<String>,
+    #[serde(default)]
+    pub allows_ceremonial_select: bool,
 }
 
 #[derive(Debug, Serialize)]

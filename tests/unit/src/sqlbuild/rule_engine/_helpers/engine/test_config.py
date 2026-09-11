@@ -9,6 +9,7 @@ from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.models import LayoutConfig, RulesConfig, SqlTestRulesConfig
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
     PolicyLayoutConfigTestCase,
+    RuleIgnoreConfigTestCase,
     RulesConfigErrorTestCase,
     SqlTestRulesConfigTestCase,
 )
@@ -61,6 +62,29 @@ from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
             description="reasonless ignore",
             source=('[[rules.rule_ignores]]\nrules = ["SQBRMODEL"]\npaths = ["models/**"]\n'),
             expected_error_pattern="rules.rule_ignores.reason",
+        ),
+        RulesConfigErrorTestCase(
+            description="ignore without resource scope",
+            source=(
+                '[[rules.rule_ignores]]\nrules = ["SQBRMODEL"]\nreason = "A reviewed exception"\n'
+            ),
+            expected_error_pattern="requires rules, paths or selectors, and reason",
+        ),
+        RulesConfigErrorTestCase(
+            description="ignore with empty selector",
+            source=(
+                '[[rules.rule_ignores]]\nrules = ["SQBRMODEL"]\nselectors = [""]\n'
+                'reason = "A reviewed exception"\n'
+            ),
+            expected_error_pattern="rule ignore selectors must be non-empty",
+        ),
+        RulesConfigErrorTestCase(
+            description="ignore with empty path",
+            source=(
+                '[[rules.rule_ignores]]\nrules = ["SQBRMODEL"]\npaths = [""]\n'
+                'reason = "A reviewed exception"\n'
+            ),
+            expected_error_pattern="rule ignore paths must be non-empty",
         ),
         RulesConfigErrorTestCase(
             description="reasonless threshold override",
@@ -166,6 +190,34 @@ def test_given_pipeline_directory_when_loading_then_returns_typed_relative_confi
     assert config.sql_tests == SqlTestRulesConfig(
         pipeline_directory=test_case.expected_pipeline_directory
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        RuleIgnoreConfigTestCase(
+            description="graph selectors and paths can share one scoped ignore",
+            source=(
+                '[[rules.rule_ignores]]\nrules = ["SQBRSQL021"]\n'
+                'paths = ["tests/**"]\nselectors = ["+orders", "tag:interface+"]\n'
+                'reason = "Reviewed interface resources"\n'
+            ),
+            expected_paths=("tests/**",),
+            expected_selectors=("+orders", "tag:interface+"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_scoped_ignore_selectors_when_loading_then_returns_typed_configuration(
+    test_case: RuleIgnoreConfigTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(test_case.source, encoding="utf-8")
+
+    config: RulesConfig = load_rules_config(project_dir=tmp_path)
+
+    assert config.rule_ignores[0].paths == test_case.expected_paths
+    assert config.rule_ignores[0].selectors == test_case.expected_selectors
 
 
 @pytest.mark.parametrize(

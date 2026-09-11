@@ -59,8 +59,12 @@ def render_skills(*, config: RulesConfig, project_dir: Path) -> tuple[str, str]:
         for entry in config.rule_exceptions:
             body.append(f"- Exception `{entry.rule}` at `{entry.path}`: {entry.reason}")
         for entry in config.rule_ignores:
+            scopes: tuple[str, ...] = (
+                *(f"path:{path}" for path in entry.paths),
+                *(f"selector:{selector}" for selector in entry.selectors),
+            )
             body.append(
-                f"- Ignore `{','.join(entry.rules)}` at `{','.join(entry.paths)}`: {entry.reason}"
+                f"- Ignore `{','.join(entry.rules)}` at `{','.join(scopes)}`: {entry.reason}"
             )
         for entry in config.select_star_allow:
             body.append(f"- Lone-star allowance `{','.join(entry.paths)}`: {entry.reason}")

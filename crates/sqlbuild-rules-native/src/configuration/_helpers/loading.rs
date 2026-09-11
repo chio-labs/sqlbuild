@@ -69,7 +69,7 @@ fn validate_raw(value: &toml::Value) -> Result<(), String> {
     }
     for (key, fields) in [
         ("rule_exceptions", ["rule", "path", "reason"].as_slice()),
-        ("rule_ignores", ["rules", "paths", "reason"].as_slice()),
+        ("rule_ignores", ["rules", "reason"].as_slice()),
         ("select_star_allow", ["paths", "reason"].as_slice()),
         (
             "threshold_overrides",
@@ -198,8 +198,11 @@ pub(crate) fn validate(config: &RulesConfig) -> Result<(), String> {
         }
     }
     for ignore in &config.rule_ignores {
-        if ignore.rules.is_empty() || ignore.paths.is_empty() || ignore.reason.trim().is_empty() {
-            return Err("rules.rule_ignores requires rules, paths, and reason".into());
+        if ignore.rules.is_empty()
+            || (ignore.paths.is_empty() && ignore.selectors.is_empty())
+            || ignore.reason.trim().is_empty()
+        {
+            return Err("rules.rule_ignores requires rules, paths or selectors, and reason".into());
         }
         if let Some(selector) = ignore
             .rules
@@ -207,6 +210,16 @@ pub(crate) fn validate(config: &RulesConfig) -> Result<(), String> {
             .find(|selector| !grammar.rule_selector_is_valid(selector))
         {
             return Err(format!("malformed rule selector: {selector}"));
+        }
+        if ignore.paths.iter().any(|path| path.trim().is_empty()) {
+            return Err("rule ignore paths must be non-empty".into());
+        }
+        if ignore
+            .selectors
+            .iter()
+            .any(|selector| selector.trim().is_empty())
+        {
+            return Err("rule ignore selectors must be non-empty".into());
         }
     }
     for allow in &config.select_star_allow {

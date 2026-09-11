@@ -13,6 +13,16 @@ class RulesConfigErrorTestCase:
 
 
 @dataclass(frozen=True)
+class RuleIgnoreConfigTestCase:
+    """One scoped-ignore configuration expectation."""
+
+    description: str
+    source: str
+    expected_paths: tuple[str, ...]
+    expected_selectors: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class RuleCodeTestCase:
     """One custom-rule code grammar expectation."""
 

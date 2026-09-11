@@ -12,6 +12,7 @@ from sqlbuild.compiler.discovery._helpers.sql.model_files import (
 from sqlbuild.lint.constants import (
     DESCRIPTION_HEADER_KINDS,
     DESCRIPTION_REQUIRED_HEADER_KINDS,
+    HEADER_KIND_FUNCTION,
     HEADER_KIND_MODEL,
     RULE_DESCRIPTION_LENGTH,
     RULE_DESCRIPTION_PRESENT,
@@ -159,6 +160,23 @@ def _parse_header_values(*, kind: str, header_text: str) -> dict[str, object]:
         file_path=Path(_DESCRIPTION_SENTINEL_PATH),
         statement_name=kind,
     )
+
+
+def external_identifiers_for_headers(
+    *, contents: str, headers: tuple[HeaderSpan, ...]
+) -> tuple[str, ...]:
+    """Return SQL function argument names that are values rather than columns."""
+    for header in headers:
+        if header.kind != HEADER_KIND_FUNCTION:
+            continue
+        values: dict[str, object] = _parse_header_values(
+            kind=header.kind,
+            header_text=contents[header.start : header.end],
+        )
+        arguments: object = values.get("arguments")
+        if isinstance(arguments, dict):
+            return tuple(sorted(str(name).lower() for name in arguments))
+    return ()
 
 
 def _lint_header_whitespace(

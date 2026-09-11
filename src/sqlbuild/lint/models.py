@@ -41,6 +41,8 @@ class LintBody:
     body_end: int
     lint_text: str
     passes: tuple[tuple[ExpansionSpan, ...], ...]
+    external_identifiers: tuple[str, ...] = ()
+    allows_ceremonial_select: bool = False
 
 
 @dataclass(frozen=True)
