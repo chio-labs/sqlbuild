@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.96.0](https://github.com/chio-labs/sqlbuild/compare/v0.95.0...v0.96.0) (2026-09-11)
+
+
+### Features
+
+* add deterministic sampling for data diffs ([#618](https://github.com/chio-labs/sqlbuild/issues/618)) ([8ba77ae](https://github.com/chio-labs/sqlbuild/commit/8ba77aeac70e5ffc457d07489f56d7b58b72b819))
+
 ## [0.95.0](https://github.com/chio-labs/sqlbuild/compare/v0.94.6...v0.95.0) (2026-09-10)
 
 
