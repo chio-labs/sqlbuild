@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.96.1](https://github.com/chio-labs/sqlbuild/compare/v0.96.0...v0.96.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* improve SQL rule accuracy and scoping ([#620](https://github.com/chio-labs/sqlbuild/issues/620)) ([a2f7f85](https://github.com/chio-labs/sqlbuild/commit/a2f7f855126c8e4cf2183146e6d777b0548e508d))
+
 ## [0.96.0](https://github.com/chio-labs/sqlbuild/compare/v0.95.0...v0.96.0) (2026-09-11)
 
 
