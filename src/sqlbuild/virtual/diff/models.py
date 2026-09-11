@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
+from sqlbuild.executor.diff.models import RowDiffSamplingOverride
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
@@ -25,6 +26,9 @@ class VirtualDiffOptions:
     collect_samples: bool = False
     max_column_examples: int = 20
     max_row_only_examples: int = 20
+    max_models: int | None = None
+    max_columns: int | None = None
+    sampling_override: RowDiffSamplingOverride = field(default_factory=RowDiffSamplingOverride)
     allow_partial_diff: bool = False
     cli_vars: dict[str, object] | None = None
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None

@@ -26,7 +26,11 @@ from sqlbuild.cli.progress.classes.connection_progress_reporter import Connectio
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.pipeline.main.diff import run_diff_pipeline
 from sqlbuild.executor.diff.main.execute import execute_diff
-from sqlbuild.executor.diff.models import DiffExecutionResult
+from sqlbuild.executor.diff.models import (
+    DiffExecutionOptions,
+    DiffExecutionResult,
+    RowDiffSamplingOverride,
+)
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
@@ -110,11 +114,16 @@ def execute_direct_diff(
             left_project=preparation.left_project,
             right_project=preparation.right_project,
             selected_names=preparation.selected_names,
-            schema_only=request.schema_only,
-            bounded=request.bounded,
-            collect_samples=not request.schema_only,
-            max_column_examples=preparation.effective_max_column_examples,
-            max_row_only_examples=preparation.effective_max_row_only_examples,
+            options=DiffExecutionOptions(
+                schema_only=request.schema_only,
+                bounded=request.bounded,
+                collect_samples=not request.schema_only,
+                max_column_examples=preparation.effective_max_column_examples,
+                max_row_only_examples=preparation.effective_max_row_only_examples,
+                max_models=request.max_models,
+                max_columns=request.max_columns,
+                sampling_override=_sampling_override(request=request),
+            ),
         )
     finally:
         preparation.adapter.close(connection)
@@ -192,6 +201,9 @@ def execute_virtual_diff(
             collect_samples=not request.schema_only,
             max_column_examples=preparation.effective_max_column_examples,
             max_row_only_examples=preparation.effective_max_row_only_examples,
+            max_models=request.max_models,
+            max_columns=request.max_columns,
+            sampling_override=_sampling_override(request=request),
             allow_partial_diff=request.allow_partial_diff,
             cli_vars=request.cli_vars,
             external_sql_reference_resolver=resolve_external_sql_reference_resolver(
@@ -227,3 +239,11 @@ def execute_virtual_diff(
 
 def _effective_max_examples(*, explicit_value: int | None, verbose: bool) -> int:
     return explicit_value if explicit_value is not None else (10 if verbose else 3)
+
+
+def _sampling_override(*, request: DiffCommandRequest) -> RowDiffSamplingOverride:
+    return RowDiffSamplingOverride(
+        row_limit=request.sample_rows,
+        seed=request.sample_seed,
+        exhaustive=request.exhaustive,
+    )

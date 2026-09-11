@@ -825,6 +825,10 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
         run_despite_unchanged=_optional_str(payload=mapping, key="run_despite_unchanged"),
         row_diff_exclude_columns=row_diff_exclude_columns,
         row_diff_tolerances=row_diff_tolerances,
+        row_diff_sample_rows=_optional_non_negative_int(
+            mapping=mapping, key="row_diff_sample_rows"
+        ),
+        row_diff_sample_seed=_optional_strict_int(mapping=mapping, key="row_diff_sample_seed"),
         tags=tags,
     )
 
@@ -1555,6 +1559,19 @@ def _optional_nullable_int(*, mapping: dict[str, object], key: str) -> int | Non
     if not isinstance(value, int):
         raise ProjectConfigError(f"Expected '{key}' to be an integer when provided")
     return value
+
+
+def _optional_non_negative_int(*, mapping: dict[str, object], key: str) -> int | None:
+    value: int | None = _optional_strict_int(mapping=mapping, key=key)
+    if value is not None and value < 0:
+        raise ProjectConfigError(f"Expected '{key}' to be zero or greater when provided")
+    return value
+
+
+def _optional_strict_int(*, mapping: dict[str, object], key: str) -> int | None:
+    if isinstance(mapping.get(key), bool):
+        raise ProjectConfigError(f"Expected '{key}' to be an integer when provided")
+    return _optional_nullable_int(mapping=mapping, key=key)
 
 
 def _optional_scalar_batch_size(*, mapping: dict[str, object], key: str) -> str | int | None:

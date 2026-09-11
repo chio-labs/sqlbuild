@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 from textwrap import dedent
@@ -173,3 +174,31 @@ def execute_duckdb(*, db_path: Path, sql: str) -> None:
         connection.execute(sql)
     finally:
         connection.close()
+
+
+def changed_key_examples(*, output: str) -> tuple[str, ...]:
+    """Return stable changed-row key labels from rendered diff output."""
+
+    return tuple(re.findall(r"^\s*-\s+(.+?)\s+\|\s+.+?\s+->\s+.+$", output, flags=re.MULTILINE))
+
+
+def run_sampled_diff(
+    *, project_dir: Path, model_name: str, row_limit: int, seed: int
+) -> subprocess.CompletedProcess[str]:
+    """Run one full deterministic sampled diff."""
+
+    return run_sqb(
+        command=(
+            "--no-color",
+            "diff",
+            "prod:dev",
+            "--full",
+            "--sample-rows",
+            str(row_limit),
+            "--sample-seed",
+            str(seed),
+            "--select",
+            model_name,
+        ),
+        project_dir=project_dir,
+    )

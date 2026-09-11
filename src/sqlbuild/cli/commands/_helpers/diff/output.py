@@ -11,6 +11,7 @@ from rich.text import Text
 
 from sqlbuild.adapter.contract.models import (
     RowDiffColumnResult,
+    RowDiffCoverage,
     RowDiffResult,
     RowDiffSampleCell,
     RowDiffSampleRow,
@@ -118,7 +119,16 @@ def _render_model_result(
     if model_result.row_result is not None:
         _print_section(
             console=console,
-            title="Rows",
+            title="Coverage",
+            content=_render_coverage(
+                rows=model_result.row_result,
+                from_label=from_label,
+                to_label=to_label,
+            ),
+        )
+        _print_section(
+            console=console,
+            title="Rows" if model_result.row_result.is_exhaustive else "Sampled Rows",
             content=_render_rows(
                 rows=model_result.row_result,
                 from_label=from_label,
@@ -178,6 +188,8 @@ def _render_overview(*, model_result: ModelDiffResult, mode_label: str) -> Rende
         table.add_row("Fallback", "no cursor configured; used full row diff")
     if model_result.excluded_columns:
         table.add_row("Excluded", ", ".join(model_result.excluded_columns))
+    if model_result.row_result is not None:
+        table.add_row("Scope", _row_scope_label(rows=model_result.row_result))
     tolerance_label: str | None = _tolerance_label(model_result.row_result)
     if tolerance_label is not None:
         table.add_row("Tolerances", tolerance_label)
@@ -213,6 +225,85 @@ def _tolerance_label(row_result: RowDiffResult | None) -> str | None:
     if not labels:
         return None
     return ", ".join(labels)
+
+
+def _row_scope_label(*, rows: RowDiffResult) -> str:
+    if rows.sampling is None:
+        return f"exhaustive ({rows.population_count:,} union keys)"
+    if rows.is_exhaustive:
+        return (
+            f"exhaustive ({rows.compared_count:,} union keys; "
+            f"configured sample limit {rows.sampling.row_limit:,})"
+        )
+    percentage: str = _format_percentage(
+        numerator=rows.compared_count,
+        denominator=rows.population_count,
+    )
+    return (
+        f"sampled {rows.compared_count:,} of {rows.population_count:,} union keys "
+        f"({percentage}; seed {rows.sampling.seed})"
+    )
+
+
+def _render_coverage(*, rows: RowDiffResult, from_label: str, to_label: str) -> RenderableType:
+    if rows.left_coverage is None or rows.right_coverage is None:
+        return Text("Coverage was not collected.", style="italic")
+    table: Table = Table.grid(padding=(0, 2))
+    table.add_column(style=_RICH_OBJECT_STYLE)
+    table.add_column(justify="right")
+    table.add_column()
+    table.add_row("Side", "Rows", "Cursor extent")
+    table.add_row(
+        from_label,
+        f"{rows.left_coverage.row_count:,}",
+        _cursor_extent(rows=rows, coverage=rows.left_coverage),
+    )
+    table.add_row(
+        to_label,
+        f"{rows.right_coverage.row_count:,}",
+        _cursor_extent(rows=rows, coverage=rows.right_coverage),
+    )
+    renderables: list[RenderableType] = [table]
+    if _cursor_coverage_differs(rows=rows):
+        renderables.extend(
+            (
+                "",
+                Text(
+                    "Warning: cursor coverage differs between sides; comparison continued "
+                    "without narrowing the requested bounds.",
+                    style="yellow",
+                ),
+            )
+        )
+    return Group(*renderables)
+
+
+def _cursor_extent(*, rows: RowDiffResult, coverage: RowDiffCoverage) -> str:
+    if rows.cursor_column is None:
+        return "<not bounded by cursor>"
+    minimum: str = (
+        str(coverage.minimum_cursor) if coverage.minimum_cursor is not None else "<empty>"
+    )
+    maximum: str = (
+        str(coverage.maximum_cursor) if coverage.maximum_cursor is not None else "<empty>"
+    )
+    requested: str = _requested_cursor_bounds(rows=rows)
+    return f"{minimum} to {maximum} (requested {requested})"
+
+
+def _requested_cursor_bounds(*, rows: RowDiffResult) -> str:
+    start: str = str(rows.cursor_start) if rows.cursor_start is not None else "unbounded"
+    end: str = str(rows.cursor_end) if rows.cursor_end is not None else "unbounded"
+    return f"{start} to {end}"
+
+
+def _cursor_coverage_differs(*, rows: RowDiffResult) -> bool:
+    if rows.cursor_column is None or rows.left_coverage is None or rows.right_coverage is None:
+        return False
+    return (
+        rows.left_coverage.minimum_cursor != rows.right_coverage.minimum_cursor
+        or rows.left_coverage.maximum_cursor != rows.right_coverage.maximum_cursor
+    )
 
 
 def _render_schema_summary(model_result: ModelDiffResult) -> RenderableType:
@@ -385,7 +476,12 @@ def _render_changed_columns(
         )
     )
     if not mismatched_columns:
-        return Text("No changed columns.", style="italic")
+        message: str = (
+            "No changed columns."
+            if row_result.is_exhaustive
+            else "No changed columns in sampled keys."
+        )
+        return Text(message, style="italic")
     table: Table = Table(show_header=False)
     table.add_column(style=_RICH_OBJECT_STYLE, max_width=32, overflow="fold")
     table.add_column(justify="right")

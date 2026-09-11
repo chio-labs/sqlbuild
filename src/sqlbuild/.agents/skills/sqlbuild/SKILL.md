@@ -1292,7 +1292,7 @@ schema = "prod"
 connection = "local"
 schema = "dev"
 
-[path_defaults."models/staging"]
+[path_defaults.staging]
 materialized = "view"
 ```
 
@@ -1485,13 +1485,14 @@ Per-directory model defaults. Useful for applying different config to different 
 materialized = "view"
 tags = ["staging"]
 
-[path_defaults."models/marts"]
+[path_defaults.marts]
 materialized = "table"
 tags = ["marts"]
 replay_on_change = "full"
 ```
 
-Path matching uses the model's relative file path. A model at `models/staging/stg_orders.sql` matches the `models/staging` path default.
+Path matching uses the path below `models/`. A model at `models/staging/stg_orders.sql` matches the
+`staging` path default.
 
 #### Config layering order
 
@@ -1506,6 +1507,10 @@ Most keys are overridden by the more specific layer, but three merge instead:
 - `tags` are *unioned* across layers. A model with `tags [marts]` in its header that matches a path default with `tags [managed]` will have both tags.
 - `row_diff_exclude_columns` lists are unioned across layers.
 - `row_diff_tolerances` mappings are deep-merged across layers, so a header tolerance for one column adds to (rather than replaces) tolerances declared in defaults or path defaults.
+
+Diff sampling values use ordinary replacement precedence. `row_diff_sample_rows = 0` explicitly
+disables an inherited sample for a path or model. CLI `--sample-rows`, `--sample-seed`, and
+`--exhaustive` override the compiled configuration for one invocation.
 
 ### Settings
 
@@ -3699,6 +3704,8 @@ See [Snapshots](/concepts/snapshots) for strategy combinations, defaults, and sa
 |-------|-------------|
 | `row_diff_exclude_columns` | Columns excluded from row-level comparison |
 | `row_diff_tolerances` | Numeric comparison tolerances |
+| `row_diff_sample_rows` | Deterministic unique-key sample size; `0` disables inherited sampling |
+| `row_diff_sample_seed` | Integer seed used for deterministic key hashing |
 
 ## Enums
 
@@ -7762,6 +7769,60 @@ sqb diff prod:dev --bounded 14d --select hourly_order_activity
 
 For timestamp cursors, the bound is a duration (`14d`, `6h`, `30m`). For integer cursors, the bound is an integer value. If the model has no cursor configured, the diff falls back to a full row comparison.
 
+### Deterministic key sampling
+
+A cursor bound limits the range of data but does not guarantee a predictable number of rows. Use
+deterministic key sampling to cap the wide value comparison for a high-volume model:
+
+```toml
+[defaults]
+row_diff_sample_rows = 100000
+row_diff_sample_seed = 0
+
+[path_defaults.intermediate]
+row_diff_sample_rows = 25000
+```
+
+The settings use the normal configuration precedence: project `defaults`, matching
+`path_defaults`, the model's `MODEL()` header, and finally CLI overrides. A model can disable an
+inherited sample and request exhaustive comparison with `row_diff_sample_rows 0`:
+
+```sql
+MODEL (
+  materialized table,
+  unique_key [order_id, line_id],
+  row_diff_sample_rows 0,
+);
+```
+
+Override the effective policy for one invocation with `--sample-rows` and `--sample-seed`, or force
+an exhaustive comparison with `--exhaustive`:
+
+```bash
+sqb diff prod:dev --bounded 14d --sample-rows 50000 --sample-seed 7 --select order_lines
+sqb diff prod:dev --bounded 14d --exhaustive --select order_lines
+```
+
+SQLBuild applies the complete cursor bound first. It then selects the lowest deterministic hashes
+from the union of unique keys found on either side and uses that same key set for both relations.
+This avoids false side-only rows caused by independently sampling each side. Composite keys are
+encoded with component lengths before hashing, and key columns break hash ties deterministically.
+
+Schema comparison, bounded row counts, cursor minimum/maximum values, and null/duplicate key checks
+remain exhaustive. Only the wide column-by-column comparison is sampled. If the bounded union has
+no more keys than the configured limit, SQLBuild reports the comparison as exhaustive.
+
+Sampled success means that no differences were found in the sampled keys; it is never reported as
+complete table equality. The output shows the bounded key population, compared key count, seed, and
+percentage evaluated.
+
+### Cursor coverage
+
+Before comparing values, SQLBuild reports exact bounded `COUNT`, `MIN(cursor)`, and `MAX(cursor)`
+for each side. If cursor extents differ, it warns and continues with the requested comparison. It
+does not ask for confirmation, silently narrow to the overlap, or hide rows that exist on only one
+side.
+
 ### Row matching
 
 Rows are matched between the two sides using the model's `unique_key`. Models without a `unique_key` can use schema-only diff but cannot run full or bounded row comparisons.
@@ -7818,11 +7879,40 @@ Add `--verbose` or `-v` to see more example rows for mismatches and side-only ro
 sqb diff prod:dev --full --select customer_status_snapshot --verbose
 ```
 
-Default sample limits are 3 per category. Verbose mode increases this to 10. You can also set exact limits:
+Default example limits are 3 per category. Verbose mode increases this to 10. You can also set exact limits:
 
 ```bash
 sqb diff prod:dev --full --select customer_status_snapshot --max-column-examples 20 --max-row-only-examples 5
 ```
+
+Example limits only control diagnostic values printed after comparison. They are separate from
+`row_diff_sample_rows`, which controls how many unique keys receive the wide value comparison.
+
+### Structured output
+
+Use `--json-output PATH` to write a stable structured result while retaining the normal terminal
+summary:
+
+```bash
+sqb diff prod:dev --bounded 14d --sample-rows 50000 --select order_lines --json-output diff.json
+```
+
+Each model records `schema_only`, `exhaustive`, or `sampled` comparison scope; requested and observed
+cursor coverage; bounded population and compared key counts; seed and configured limit; row result
+counts; and changed-column counts. The top-level status distinguishes `no_differences_found` from
+`differences_found`.
+
+### Invocation safety limits
+
+Use `--max-models` and `--max-columns` to put explicit hard limits around a broad selector. SQLBuild
+fails visibly instead of truncating the selected models or compared columns:
+
+```bash
+sqb diff prod:dev --bounded 14d --sample-rows 50000 --max-models 10 --max-columns 80 --select path:models/intermediate
+```
+
+These limits are optional and apply to the complete invocation. `--max-columns` checks the larger
+observed schema for each model before starting its row comparison.
 
 ### Selectors
 
@@ -14280,9 +14370,9 @@ sqb diff <FROM>:<TO> <mode> [flags]
 
 The first argument is a positional `FROM:TO` range. Exactly one mode is required: `--full`, `--schema-only`, or `--bounded <duration>`.
 
-In direct mode, `FROM` and `TO` are configured target names. Each target supplies its named
-connection and authoritative database/schema namespace; invalid connection references are
-reported as offline configuration errors.
+In direct mode, `FROM` and `TO` are configured target names. Their database/schema namespaces remain
+authoritative, while the `TO` target's named connection executes the complete comparison and must
+be able to read both namespaces.
 
 Full and bounded row comparisons require the model to define `unique_key`. Bounded mode uses the model's cursor and falls back to a full row comparison when no cursor is configured.
 
@@ -14296,6 +14386,12 @@ Full and bounded row comparisons require the model to define `unique_key`. Bound
 | `--verbose`, `-v` | Show more example rows (default: 3, verbose: 10) |
 | `--max-column-examples` | Override maximum examples per changed column |
 | `--max-row-only-examples` | Override maximum examples for side-only rows |
+| `--sample-rows` | Override the deterministic unique-key sample size |
+| `--sample-seed` | Override the deterministic sample seed |
+| `--exhaustive` | Disable inherited sampling for this invocation |
+| `--json-output` | Write structured comparison scope, coverage, and results to a JSON file |
+| `--max-models` | Fail when the selected scope contains more models than this limit |
+| `--max-columns` | Fail when either side of a model has more columns than this limit |
 | `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 | `--select`, `-s` | Select specific models to diff (required in v1) |
 | `--exclude` | Exclude specific models from diffing |
@@ -14311,6 +14407,12 @@ sqb diff prod:dev --schema-only --select path:models/marts
 
 # Bounded diff of last 14 days
 sqb diff prod:dev --bounded 14d --select hourly_order_activity
+
+# Deterministic bounded sample
+sqb diff prod:dev --bounded 14d --sample-rows 50000 --sample-seed 7 --select order_lines
+
+# Force exhaustive comparison despite inherited sampling defaults
+sqb diff prod:dev --bounded 14d --exhaustive --select order_lines
 ```
 
 ### Exit codes

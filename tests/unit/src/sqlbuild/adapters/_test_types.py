@@ -62,3 +62,10 @@ class AdapterManagedWriteSchemaCapabilityTestCase:
     description: str
     adapter: BaseAdapter
     expected_allows_implicit_schema: bool
+
+
+@dataclass(frozen=True)
+class RowDiffSampleSqlTestCase:
+    description: str
+    adapter: BaseAdapter
+    expected_fragments: tuple[str, ...]

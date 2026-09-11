@@ -2,19 +2,29 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.models import RowDiffResult, RowDiffTolerances, SchemaDiffResult
+from sqlbuild.adapter.contract.models import (
+    RowDiffCoverage,
+    RowDiffResult,
+    RowDiffSampling,
+    RowDiffTolerances,
+    SchemaDiffResult,
+)
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.diff._helpers.bounds import resolve_bounded_cursors
-from sqlbuild.executor.diff._helpers.config import parse_row_diff_tolerances
+from sqlbuild.executor.diff._helpers.config import (
+    parse_row_diff_tolerances,
+    resolve_row_diff_sampling,
+)
 from sqlbuild.executor.diff._helpers.selection import (
     get_row_diff_exclude_columns,
     get_unique_key,
     qualified_name,
 )
-from sqlbuild.executor.diff.models import ModelDiffResult
+from sqlbuild.executor.diff.models import DiffExecutionOptions, ModelDiffResult
 
 
 def execute_model_diff(
@@ -24,11 +34,7 @@ def execute_model_diff(
     name: str,
     left_model: Any,
     right_model: Any,
-    schema_only: bool,
-    bounded: str | None,
-    collect_samples: bool,
-    max_column_examples: int,
-    max_row_only_examples: int,
+    options: DiffExecutionOptions,
 ) -> ModelDiffResult:
     """Execute schema and optional row diff for one model pair."""
 
@@ -42,13 +48,24 @@ def execute_model_diff(
         left=left_relation,
         right=right_relation,
     )
+    if options.max_columns is not None:
+        observed_columns: int = max(
+            schema_result.left_column_count,
+            schema_result.right_column_count,
+        )
+        if observed_columns > options.max_columns:
+            raise ExecutorInputError(
+                f"model '{name}' has {observed_columns} columns, exceeding --max-columns "
+                f"{options.max_columns}",
+                code="X304",
+            )
     row_result: RowDiffResult | None = None
     unequal_row_samples: tuple[Any, ...] = ()
     left_only_key_samples: tuple[tuple[tuple[str, object], ...], ...] = ()
     right_only_key_samples: tuple[tuple[tuple[str, object], ...], ...] = ()
     bounded_fallback: bool = False
     excluded_columns: tuple[str, ...] = ()
-    if not schema_only:
+    if not options.schema_only:
         (
             row_result,
             unequal_row_samples,
@@ -64,9 +81,7 @@ def execute_model_diff(
             right_relation=right_relation,
             right_model=right_model,
             unique_key=unique_key,
-            bounded=bounded,
-            collect_samples=collect_samples,
-            sample_limits=(max_column_examples, max_row_only_examples),
+            options=options,
         )
         unique_key = get_unique_key(right_model) if not unique_key else unique_key
     return ModelDiffResult(
@@ -93,9 +108,7 @@ def _execute_model_row_diff(
     right_relation: str,
     right_model: Any,
     unique_key: tuple[str, ...],
-    bounded: str | None,
-    collect_samples: bool,
-    sample_limits: tuple[int, int],
+    options: DiffExecutionOptions,
 ) -> tuple[
     RowDiffResult,
     tuple[Any, ...],
@@ -121,11 +134,32 @@ def _execute_model_row_diff(
     bounded_fallback: bool
     cursor_column, start_cursor, end_cursor, bounded_fallback = resolve_bounded_cursors(
         model=right_model,
-        bounded=bounded,
+        bounded=options.bounded,
     )
     tolerances: RowDiffTolerances = parse_row_diff_tolerances(
         raw=right_model.config.values.get("row_diff_tolerances"),
         label=f"model '{name}' row_diff_tolerances",
+    )
+    sampling: RowDiffSampling | None = resolve_row_diff_sampling(
+        raw_row_limit=right_model.config.values.get("row_diff_sample_rows"),
+        raw_seed=right_model.config.values.get("row_diff_sample_seed"),
+        override=options.sampling_override,
+        label=f"model '{name}'",
+    )
+    tolerances = replace(tolerances, sampling=sampling)
+    left_coverage: RowDiffCoverage = adapter.inspect_row_diff_coverage(
+        connection=connection,
+        relation=left_relation,
+        cursor_column=cursor_column,
+        start_cursor=start_cursor,
+        end_cursor=end_cursor,
+    )
+    right_coverage: RowDiffCoverage = adapter.inspect_row_diff_coverage(
+        connection=connection,
+        relation=right_relation,
+        cursor_column=cursor_column,
+        start_cursor=start_cursor,
+        end_cursor=end_cursor,
     )
     row_result: RowDiffResult = adapter.diff_rows(
         connection=connection,
@@ -138,10 +172,18 @@ def _execute_model_row_diff(
         start_cursor=start_cursor,
         end_cursor=end_cursor,
     )
+    row_result = replace(
+        row_result,
+        left_coverage=left_coverage,
+        right_coverage=right_coverage,
+        cursor_column=cursor_column,
+        cursor_start=start_cursor.value if start_cursor is not None else None,
+        cursor_end=end_cursor.value if end_cursor is not None else None,
+    )
     unequal_row_samples: tuple[Any, ...] = ()
     left_only_key_samples: tuple[tuple[tuple[str, object], ...], ...] = ()
     right_only_key_samples: tuple[tuple[tuple[str, object], ...], ...] = ()
-    if collect_samples and row_result.unequal_count > 0:
+    if options.collect_samples and row_result.unequal_count > 0:
         unequal_row_samples = adapter.sample_unequal_rows(
             connection=connection,
             left=left_relation,
@@ -152,9 +194,9 @@ def _execute_model_row_diff(
             cursor_column=cursor_column,
             start_cursor=start_cursor,
             end_cursor=end_cursor,
-            limit=sample_limits[0] * 5,
+            limit=options.max_column_examples * 5,
         )
-    if collect_samples and row_result.left_only_count > 0:
+    if options.collect_samples and row_result.left_only_count > 0:
         left_only_key_samples = adapter.sample_side_only_rows(
             connection=connection,
             left=left_relation,
@@ -164,9 +206,10 @@ def _execute_model_row_diff(
             cursor_column=cursor_column,
             start_cursor=start_cursor,
             end_cursor=end_cursor,
-            limit=sample_limits[1],
+            limit=options.max_row_only_examples,
+            sampling=sampling,
         )
-    if collect_samples and row_result.right_only_count > 0:
+    if options.collect_samples and row_result.right_only_count > 0:
         right_only_key_samples = adapter.sample_side_only_rows(
             connection=connection,
             left=left_relation,
@@ -176,7 +219,8 @@ def _execute_model_row_diff(
             cursor_column=cursor_column,
             start_cursor=start_cursor,
             end_cursor=end_cursor,
-            limit=sample_limits[1],
+            limit=options.max_row_only_examples,
+            sampling=sampling,
         )
     return (
         row_result,

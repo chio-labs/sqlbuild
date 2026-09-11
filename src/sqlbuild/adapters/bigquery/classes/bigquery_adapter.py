@@ -37,9 +37,12 @@ from sqlbuild.adapter.contract.models import (
     RetentionRequest,
     RetentionState,
     RowDiffColumnResult,
+    RowDiffCoverage,
+    RowDiffPreparedRelations,
     RowDiffResult,
     RowDiffSampleCell,
     RowDiffSampleRow,
+    RowDiffSampling,
     RowDiffTolerance,
     RowDiffTolerances,
     SchemaDiffResult,
@@ -731,6 +734,33 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
             raise AdapterUserError(
                 message=f"row diff {relation_label} relation contains duplicate unique_key values"
             )
+
+    def _render_row_diff_key_hash(
+        self,
+        *,
+        keys: tuple[str, ...],
+        alias: str,
+        seed: int,
+    ) -> str:
+        """Render a stable BigQuery hash over a canonical composite key."""
+
+        components: list[str] = [f"'{seed}'"]
+        key: str
+        for key in keys:
+            value_sql: str = f"CAST({alias}.{key} AS STRING)"
+            components.append(f"CONCAT(CAST(LENGTH({value_sql}) AS STRING), ':', {value_sql})")
+        separated: list[str] = []
+        component: str
+        for component in components:
+            if separated:
+                separated.append("'|'")
+            separated.append(component)
+        return f"TO_HEX(MD5(CONCAT({', '.join(separated)})))"
+
+    def _render_row_diff_union_operator(self) -> str:
+        """Render BigQuery's explicit distinct union operator."""
+
+        return "UNION DISTINCT"
 
     def resolve_row_diff_tolerance(
         self,
@@ -2332,6 +2362,23 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
     def format_row_diff_decimal_sql(self, value: Decimal) -> str:
         return format(value, "f")
 
+    def inspect_row_diff_coverage(
+        self,
+        *,
+        connection: Any,
+        relation: str,
+        cursor_column: str | None = None,
+        start_cursor: CursorValue | None = None,
+        end_cursor: CursorValue | None = None,
+    ) -> RowDiffCoverage:
+        return self._inspect_row_diff_coverage(
+            connection=connection,
+            relation=relation,
+            cursor_column=cursor_column,
+            start_cursor=start_cursor,
+            end_cursor=end_cursor,
+        )
+
     def diff_schema(
         self,
         *,
@@ -2374,6 +2421,8 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
             added_columns=tuple(added),
             removed_columns=tuple(removed),
             type_changed_columns=tuple(type_changed),
+            left_column_count=len(left_columns),
+            right_column_count=len(right_columns),
         )
 
     def diff_rows(
@@ -2390,6 +2439,7 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
         end_cursor: CursorValue | None = None,
     ) -> RowDiffResult:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
+        sampling: RowDiffSampling | None = tolerances.sampling if tolerances is not None else None
         left_columns: tuple[ColumnInfo, ...] = self.describe_relation(
             connection=connection, relation=left
         )
@@ -2421,6 +2471,14 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
             relation_label="right",
             keys=keys,
         )
+        prepared_relations: RowDiffPreparedRelations = self._build_row_diff_relation_ctes(
+            connection=connection,
+            left_sql=left_cte,
+            right_sql=right_cte,
+            keys=keys,
+            sampling=sampling,
+            inspect_population=True,
+        )
         join_condition: str = " AND ".join(f"__left.{key} = __right.{key}" for key in keys)
         column_equal_expressions: dict[str, str] = {
             col: self.build_row_diff_equal_expression(
@@ -2451,7 +2509,7 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
         if column_count_sql_parts:
             column_count_sql = ", " + ", ".join(column_count_sql_parts)
         diff_sql: str = (
-            f"WITH __left AS ({left_cte}), __right AS ({right_cte}) "
+            f"WITH {prepared_relations.cte_sql} "
             f"SELECT "
             f"COUNT(CASE WHEN __left.{keys[0]} IS NOT NULL THEN 1 END) AS left_count, "
             f"COUNT(CASE WHEN __right.{keys[0]} IS NOT NULL THEN 1 END) AS right_count, "
@@ -2485,6 +2543,9 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
             left_only_count=self._to_int(row[5]),
             right_only_count=self._to_int(row[6]),
             column_results=column_results,
+            population_count=prepared_relations.population_count or self._to_int(row[2]),
+            compared_count=self._to_int(row[2]),
+            sampling=sampling,
         )
 
     def count_rows(
@@ -2523,6 +2584,7 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
         end_cursor: CursorValue | None = None,
         limit: int = 20,
     ) -> tuple[RowDiffSampleRow, ...]:
+        sampling: RowDiffSampling | None = tolerances.sampling if tolerances is not None else None
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         left_columns: tuple[ColumnInfo, ...] = self.describe_relation(
             connection=connection, relation=left
@@ -2555,6 +2617,14 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
             relation_label="right",
             keys=keys,
         )
+        prepared_relations: RowDiffPreparedRelations = self._build_row_diff_relation_ctes(
+            connection=connection,
+            left_sql=left_cte,
+            right_sql=right_cte,
+            keys=keys,
+            sampling=sampling,
+            inspect_population=False,
+        )
         column_equal_expressions: dict[str, str] = {
             col: self.build_row_diff_equal_expression(
                 column=col,
@@ -2579,7 +2649,7 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
             compare_select_sql = ", " + compare_select_sql
         join_condition: str = " AND ".join(f"__left.{key} = __right.{key}" for key in keys)
         sample_sql: str = (
-            f"WITH __left AS ({left_cte}), __right AS ({right_cte}) "
+            f"WITH {prepared_relations.cte_sql} "
             f"SELECT {key_select_sql}{compare_select_sql} "
             f"FROM __left FULL OUTER JOIN __right ON {join_condition} "
             f"WHERE __left.{keys[0]} IS NOT NULL AND __right.{keys[0]} IS NOT NULL "
@@ -2626,6 +2696,7 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
         start_cursor: CursorValue | None = None,
         end_cursor: CursorValue | None = None,
         limit: int = 20,
+        sampling: RowDiffSampling | None = None,
     ) -> tuple[tuple[tuple[str, object], ...], ...]:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         cursor_filter: str = self.build_cursor_filter(
@@ -2650,6 +2721,14 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
             relation_label="right",
             keys=keys,
         )
+        prepared_relations: RowDiffPreparedRelations = self._build_row_diff_relation_ctes(
+            connection=connection,
+            left_sql=left_cte,
+            right_sql=right_cte,
+            keys=keys,
+            sampling=sampling,
+            inspect_population=False,
+        )
         join_condition: str = " AND ".join(f"__left.{key} = __right.{key}" for key in keys)
         key_select_sql: str = ", ".join(
             f"COALESCE(__left.{key}, __right.{key}) AS __key_{key}" for key in keys
@@ -2661,7 +2740,7 @@ class BigQueryAdapter(MicrobatchMixin, BaseAdapter):
         else:
             raise AdapterUserError(message="sample_side_only_rows side must be 'left' or 'right'")
         sample_sql: str = (
-            f"WITH __left AS ({left_cte}), __right AS ({right_cte}) "
+            f"WITH {prepared_relations.cte_sql} "
             f"SELECT {key_select_sql} "
             f"FROM __left FULL OUTER JOIN __right ON {join_condition} "
             f"WHERE {side_condition} "

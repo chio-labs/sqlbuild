@@ -185,6 +185,15 @@ class DiffRowsTestCase:
 
 
 @dataclass(frozen=True)
+class CompositeRowDiffSamplingTestCase:
+    description: str
+    row_limit: int
+    seed: int
+    alternate_seed: int
+    expected_population_count: int
+
+
+@dataclass(frozen=True)
 class DiffRowsErrorTestCase:
     description: str
     left_sql: str

@@ -28,8 +28,11 @@ from sqlbuild.adapter.contract.models import (
     FunctionInfo,
     QueryResult,
     RelationInfo,
+    RowDiffCoverage,
+    RowDiffPreparedRelations,
     RowDiffResult,
     RowDiffSampleRow,
+    RowDiffSampling,
     RowDiffTolerance,
     RowDiffTolerances,
     SchemaDiffResult,
@@ -1537,6 +1540,128 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         result: Any = cursor.fetchone()
         return int(result[0])
 
+    def _inspect_row_diff_coverage(
+        self,
+        *,
+        connection: Any,
+        relation: str,
+        cursor_column: str | None = None,
+        start_cursor: CursorValue | None = None,
+        end_cursor: CursorValue | None = None,
+    ) -> RowDiffCoverage:
+        """Return exact bounded row count and cursor extent for one relation."""
+
+        cursor_filter: str = self.build_cursor_filter(
+            cursor_column=cursor_column,
+            start_cursor=start_cursor,
+            end_cursor=end_cursor,
+        )
+        projections: str = "COUNT(*)"
+        if cursor_column is not None:
+            projections += f", MIN({cursor_column}), MAX({cursor_column})"
+        query: str = f"SELECT {projections} FROM {relation}"
+        if cursor_filter:
+            query += f" WHERE {cursor_filter}"
+        row: tuple[Any, ...] = self.execute(connection=connection, sql=query).fetchone()
+        return RowDiffCoverage(
+            row_count=int(row[0]),
+            minimum_cursor=row[1] if cursor_column is not None else None,
+            maximum_cursor=row[2] if cursor_column is not None else None,
+        )
+
+    def _build_row_diff_relation_ctes(
+        self,
+        *,
+        connection: Any,
+        left_sql: str,
+        right_sql: str,
+        keys: tuple[str, ...],
+        sampling: RowDiffSampling | None,
+        inspect_population: bool,
+    ) -> RowDiffPreparedRelations:
+        """Build bounded relation CTEs with optional deterministic union-key sampling."""
+
+        if sampling is None:
+            return RowDiffPreparedRelations(
+                cte_sql=f"__left AS ({left_sql}), __right AS ({right_sql})"
+            )
+        key_list: str = ", ".join(keys)
+        union_operator: str = self._render_row_diff_union_operator()
+        key_union_sql: str = (
+            f"SELECT {key_list} FROM ({left_sql}) AS __left_keys "
+            f"{union_operator} SELECT {key_list} FROM ({right_sql}) AS __right_keys"
+        )
+        population_count: int | None = None
+        if inspect_population:
+            population_row: tuple[Any, ...] = self.execute(
+                connection=connection,
+                sql=f"SELECT COUNT(*) FROM ({key_union_sql}) AS __key_population",
+            ).fetchone()
+            population_count = int(population_row[0])
+        sample_keys_sql: str = self._render_row_diff_sample_keys_sql(
+            key_union_sql=key_union_sql,
+            keys=keys,
+            sampling=sampling,
+        )
+        left_join: str = " AND ".join(f"__bounded_left.{key} = __sample_keys.{key}" for key in keys)
+        right_join: str = " AND ".join(
+            f"__bounded_right.{key} = __sample_keys.{key}" for key in keys
+        )
+        return RowDiffPreparedRelations(
+            cte_sql=(
+                f"__bounded_left AS ({left_sql}), __bounded_right AS ({right_sql}), "
+                f"__sample_keys AS ({sample_keys_sql}), "
+                f"__left AS (SELECT __bounded_left.* FROM __bounded_left "
+                f"INNER JOIN __sample_keys ON {left_join}), "
+                f"__right AS (SELECT __bounded_right.* FROM __bounded_right "
+                f"INNER JOIN __sample_keys ON {right_join})"
+            ),
+            population_count=population_count,
+        )
+
+    def _render_row_diff_sample_keys_sql(
+        self,
+        *,
+        key_union_sql: str,
+        keys: tuple[str, ...],
+        sampling: RowDiffSampling,
+    ) -> str:
+        """Render deterministic top-N union-key selection for LIMIT-capable engines."""
+
+        key_list: str = ", ".join(keys)
+        hash_expression: str = self._render_row_diff_key_hash(
+            keys=keys,
+            alias="__key_union",
+            seed=sampling.seed,
+        )
+        tie_break: str = ", ".join(f"__key_union.{key}" for key in keys)
+        return (
+            f"SELECT {key_list} FROM ({key_union_sql}) AS __key_union "
+            f"ORDER BY {hash_expression}, {tie_break} LIMIT {sampling.row_limit}"
+        )
+
+    def _render_row_diff_union_operator(self) -> str:
+        """Render the distinct union operator used for key population selection."""
+
+        return "UNION"
+
+    def _render_row_diff_key_hash(
+        self,
+        *,
+        keys: tuple[str, ...],
+        alias: str,
+        seed: int,
+    ) -> str:
+        """Render a stable hash over one canonical composite key representation."""
+
+        key_parts: list[str] = []
+        key: str
+        for key in keys:
+            value_sql: str = f"CAST({alias}.{key} AS VARCHAR)"
+            key_parts.append(f"CONCAT(LENGTH({value_sql}), ':', {value_sql})")
+        payload_parts: str = ", ".join((f"'{seed}'", *key_parts))
+        return f"MD5(CONCAT_WS('|', {payload_parts}))"
+
     def sample_unequal_rows(
         self,
         *,
@@ -1567,6 +1692,7 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         start_cursor: CursorValue | None = None,
         end_cursor: CursorValue | None = None,
         limit: int = 20,
+        sampling: RowDiffSampling | None = None,
     ) -> tuple[tuple[tuple[str, object], ...], ...]:
         raise AdapterUserError(
             message="sample_side_only_rows requires an engine-specific implementation"

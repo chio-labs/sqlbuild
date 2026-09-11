@@ -18,6 +18,25 @@
   explicitly requests it; rely on CI for those suites.
 - Before pushing, run the exact static CI target with all optional dependencies available: `uv sync --all-extras` followed by `make check-ci`.
 
+## Public Repository Hygiene
+
+- Treat every tracked file, generated artifact, fixture, benchmark, filename, commit, branch, pull
+  request, review comment, screenshot, and CI log as publicly visible.
+- Use only neutral synthetic examples such as orders, customers, products, inventory, fulfillment,
+  support tickets, and product-owned identifiers. Never copy organization-, client-, provider-,
+  environment-, infrastructure-, or production-specific names, data, query output, identifiers, or
+  links into public artifacts, even when the source operation was read-only.
+- Keep real-system validation evidence in its approved private tracking location. Do not paste that
+  evidence into source, tests, documentation, generated skills, benchmarks, commit metadata, pull
+  requests, or CI output.
+- Load and follow the `public-repository-hygiene` skill before editing or publishing this repository.
+  Run its private scanner over the working tree and introduced history before every push, and
+  rescan after generation, formatting, rebasing, or merging.
+- Never bypass the configured public-repository Git hooks. A missing or failing private scanner is
+  a publication blocker.
+- Do not copy the private restricted-vocabulary list or scanner implementation into this public
+  repository.
+
 ## Command-Line User Experience
 
 - Keep lifecycle feedback consistent across commands. Potentially slow discovery, connection,

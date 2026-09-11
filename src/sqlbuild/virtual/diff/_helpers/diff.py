@@ -16,7 +16,7 @@ from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.executor.diff.main.execute import execute_diff
-from sqlbuild.executor.diff.models import DiffExecutionResult
+from sqlbuild.executor.diff.models import DiffExecutionOptions, DiffExecutionResult
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.virtual.diff.models import VirtualDiffOptions, VirtualDiffState
 from sqlbuild.virtual.executor.main._rewrite import rewrite_virtual_project_model_locations
@@ -289,11 +289,16 @@ def execute_virtual_diff_between_relations(
             left_project=left_project,
             right_project=right_project,
             selected_names=compared_names,
-            schema_only=options.schema_only,
-            bounded=options.bounded,
-            collect_samples=options.collect_samples,
-            max_column_examples=options.max_column_examples,
-            max_row_only_examples=options.max_row_only_examples,
+            options=DiffExecutionOptions(
+                schema_only=options.schema_only,
+                bounded=options.bounded,
+                collect_samples=options.collect_samples,
+                max_column_examples=options.max_column_examples,
+                max_row_only_examples=options.max_row_only_examples,
+                max_models=options.max_models,
+                max_columns=options.max_columns,
+                sampling_override=options.sampling_override,
+            ),
         )
     finally:
         adapter.close(connection)

@@ -678,6 +678,12 @@ class DiffCommandRequest:
     bounded: str | None
     max_column_examples: int | None = None
     max_row_only_examples: int | None = None
+    sample_rows: int | None = None
+    sample_seed: int | None = None
+    exhaustive: bool = False
+    json_output_path: Path | None = None
+    max_models: int | None = None
+    max_columns: int | None = None
     select: tuple[str, ...] = ()
     exclude: tuple[str, ...] = ()
     verbose: bool = False
