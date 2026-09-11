@@ -412,6 +412,25 @@ def _resolve_name(
     project_graph: ProjectGraph,
     python_graph: PythonNodeGraph,
 ) -> frozenset[_SelectionAtom]:
+    if not _is_name_pattern(parsed.value):
+        sql_key: CompiledObjectKey | None = project_graph.all_keys.get(parsed.value)
+        python_exists: bool = parsed.value in python_graph.nodes_by_name
+        terminal_loader_names: frozenset[str] = frozenset(
+            _terminal_loader_by_name(project_graph=project_graph)
+        )
+        if sql_key is not None and parsed.value in terminal_loader_names:
+            return _resolve_sql(raw=raw, project_graph=project_graph)
+        if sql_key is not None and python_exists:
+            raise PlannerInputError(
+                f"selector name '{parsed.value}' matches both a SQL resource and a Python node; "
+                "resource names must be globally unique"
+            )
+        if sql_key is not None:
+            return _resolve_sql(raw=raw, project_graph=project_graph)
+        if python_exists:
+            return _resolve_python(raw=raw, python_graph=python_graph)
+        raise PlannerInputError(f"unknown selector name '{parsed.value}'", code="S007")
+
     terminal_loader_names: frozenset[str] = frozenset(
         _terminal_loader_by_name(project_graph=project_graph)
     )
@@ -442,6 +461,10 @@ def _resolve_name(
     if atoms:
         return frozenset(atoms)
     raise PlannerInputError(f"unknown selector name '{parsed.value}'", code="S007")
+
+
+def _is_name_pattern(value: str) -> bool:
+    return any(character in value for character in "*?[")
 
 
 def _build_selection(atoms: set[_SelectionAtom]) -> PythonSqlSelection:

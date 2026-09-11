@@ -13,7 +13,7 @@ from sqlbuild.compiler.python_nodes.constants import (
     EMPTY_SELECTOR_FOLDER,
     UNIFIED_PATH_ROOTS,
 )
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
+from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 
 _PYTHON_NODE_KIND_BY_SELECTOR_KIND: dict[SelectorKind, PythonNodeKind] = {
@@ -150,6 +150,9 @@ def _resolve_tag(*, parsed: ParsedSelector, graph: PythonNodeGraph) -> frozenset
 
 def _lookup_node_names(*, parsed: ParsedSelector, graph: PythonNodeGraph) -> frozenset[str]:
     if parsed.kind == SelectorKind.NAME:
+        if not _is_name_pattern(parsed.value):
+            node: DiscoveredPythonNode | None = graph.nodes_by_name.get(parsed.value)
+            return frozenset() if node is None else frozenset((node.name,))
         return frozenset(
             node.name
             for name, node in graph.nodes_by_name.items()
@@ -163,11 +166,18 @@ def _lookup_node_names(*, parsed: ParsedSelector, graph: PythonNodeGraph) -> fro
             code="S010",
         )
 
+    if not _is_name_pattern(parsed.value):
+        node = graph.nodes_by_typed_selector.get(f"{python_node_kind.value}:{parsed.value}")
+        return frozenset() if node is None else frozenset((node.name,))
     return frozenset(
         node.name
         for node in graph.nodes_by_name.values()
         if node.kind == python_node_kind and fnmatchcase(node.name, parsed.value)
     )
+
+
+def _is_name_pattern(value: str) -> bool:
+    return any(character in value for character in "*?[")
 
 
 def _expand_upstream(*, name: str, graph: PythonNodeGraph) -> frozenset[str]:

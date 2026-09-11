@@ -386,6 +386,9 @@ def _lookup_keys(
     """Look up object keys for an exact or glob-pattern name selector."""
 
     if parsed.kind == SelectorKind.NAME:
+        if not _is_name_pattern(parsed.value):
+            candidate: CompiledObjectKey | None = all_keys.get(parsed.value)
+            return frozenset() if candidate is None else frozenset((candidate,))
         return frozenset(key for name, key in all_keys.items() if fnmatchcase(name, parsed.value))
 
     resource_type: CompiledResourceType | None = _RESOURCE_TYPE_BY_SELECTOR_KIND.get(parsed.kind)
@@ -395,6 +398,11 @@ def _lookup_keys(
             code="S010",
         )
 
+    if not _is_name_pattern(parsed.value):
+        candidate = all_keys.get(parsed.value)
+        if candidate is not None and candidate.resource_type == resource_type:
+            return frozenset((candidate,))
+        return frozenset()
     return frozenset(
         key
         for name, key in all_keys.items()
