@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.97.0](https://github.com/chio-labs/sqlbuild/compare/v0.96.1...v0.97.0) (2026-09-11)
+
+
+### Features
+
+* support selector name patterns ([#622](https://github.com/chio-labs/sqlbuild/issues/622)) ([01e19c2](https://github.com/chio-labs/sqlbuild/commit/01e19c250a365f9bc4739f23e4edca9b876327c1))
+
 ## [0.96.1](https://github.com/chio-labs/sqlbuild/compare/v0.96.0...v0.96.1) (2026-09-11)
 
 
