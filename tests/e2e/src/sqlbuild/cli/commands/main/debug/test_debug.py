@@ -122,6 +122,140 @@ def test_given_debug_json_when_running_then_outputs_machine_readable_checks(
 
 @pytest.mark.parametrize(
     "test_case",
+    (
+        DebugCliTestCase(
+            description="explicit target overrides local default in text diagnostics",
+            command=("debug", "--target", "test", "--no-connection"),
+            expected_stdout_fragment="  target: test [OK resolved]",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_local_default_and_explicit_target_when_debugging_text_then_reports_destination(
+    tmp_path: Path,
+    test_case: DebugCliTestCase,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="debug_target_project",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "debug_target_project"
+                adapter = "duckdb"
+                default_target = "dev"
+
+                [targets.dev]
+                database = "dev.duckdb"
+                schema = "dev_orders"
+
+                [targets.test]
+                database = "test.duckdb"
+                schema = "test_orders"
+                """
+            ).strip()
+            + "\n",
+            "sqlbuild_local.toml": dedent(
+                """
+                target = "dev"
+
+                [targets.test]
+                database = "local-test.duckdb"
+                schema = "local_test_orders"
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_returncode, result.stderr
+    assert test_case.expected_stdout_fragment in result.stdout
+    assert (
+        "  adapter: duckdb [OK found]\n"
+        "  target: test [OK resolved]\n"
+        "  connection: inline [OK resolved]\n"
+        "  database: local-test.duckdb [OK resolved]\n"
+        "  schema: local_test_orders [OK resolved]\n"
+    ) in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DebugCliTestCase(
+            description="explicit target overrides local default in json diagnostics",
+            command=("debug", "--target", "test", "--no-connection", "--json"),
+            expected_stdout_fragment='"label": "target", "message": "test"',
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_local_default_and_explicit_target_when_debugging_json_then_reports_destination(
+    tmp_path: Path,
+    test_case: DebugCliTestCase,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="debug_target_json_project",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "debug_target_json_project"
+                adapter = "duckdb"
+                default_target = "dev"
+
+                [targets.dev]
+                database = "dev.duckdb"
+                schema = "dev_orders"
+
+                [targets.test]
+                database = "test.duckdb"
+                schema = "test_orders"
+                """
+            ).strip()
+            + "\n",
+            "sqlbuild_local.toml": dedent(
+                """
+                target = "dev"
+
+                [targets.test]
+                database = "local-test.duckdb"
+                schema = "local_test_orders"
+                """
+            ).strip()
+            + "\n",
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_returncode, result.stderr
+    assert test_case.expected_stdout_fragment in result.stdout
+    payload: dict[str, object] = json.loads(result.stdout)
+    configuration: list[dict[str, str]] = payload["configuration"]  # type: ignore[assignment]
+    destination: dict[str, str] = {line["label"]: line["message"] for line in configuration}
+    assert destination == {
+        "project file": str(project_dir / "sqlbuild_project.toml"),
+        "local config": str(project_dir / "sqlbuild_local.toml"),
+        "project": "debug_target_json_project",
+        "adapter": "duckdb",
+        "target": "test",
+        "connection": "inline",
+        "database": "local-test.duckdb",
+        "schema": "local_test_orders",
+    }
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [
         DebugCliTestCase(
             description="reports discovered providers",

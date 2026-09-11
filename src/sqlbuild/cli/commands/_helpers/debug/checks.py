@@ -14,6 +14,9 @@ from sqlbuild.cli.commands._helpers.runtime.connection import (
 )
 from sqlbuild.cli.commands.models import DebugLine, DebugResult
 from sqlbuild.cli.commands.types import DebugCheckStatus
+from sqlbuild.compiler.compile.main.effective_target_namespace import (
+    build_effective_target_namespace,
+)
 from sqlbuild.compiler.discovery.constants import (
     LEGACY_LOCAL_CONFIG_FILENAME,
     LEGACY_PROJECT_CONFIG_FILENAME,
@@ -25,6 +28,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, Discover
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
+from sqlbuild.spec.contracts.models import TargetConfig
 
 _SECRET_CONNECTION_KEYS: frozenset[str] = frozenset(
     {
@@ -61,6 +65,18 @@ def build_debug_result(
         project_dir=project_dir,
         selected_target=selected_target,
     )
+    target_name: str | None
+    target_config: TargetConfig | None
+    target_database: str | None
+    target_schema: str | None
+    target_name, target_config, target_database, target_schema = build_effective_target_namespace(
+        discovered_inputs=discovered_inputs,
+        selected_target=selected_target,
+        connection_database=connection_config.get("database"),
+        connection_schema=connection_config.get("schema"),
+        default_database=adapter.default_database(),
+        default_schema=adapter.default_schema(),
+    )
     runtime: list[DebugLine] = _build_runtime_lines()
     configuration: list[DebugLine] = [
         DebugLine(
@@ -89,7 +105,29 @@ def build_debug_result(
         ),
         DebugLine(
             label="target",
-            message=_resolve_target_label(discovered_inputs=discovered_inputs),
+            message=target_name or "default",
+            status=DebugCheckStatus.OK,
+            status_message="resolved",
+        ),
+        DebugLine(
+            label="connection",
+            message=(
+                target_config.connection_name
+                if target_config is not None and target_config.connection_name is not None
+                else "inline"
+            ),
+            status=DebugCheckStatus.OK,
+            status_message="resolved",
+        ),
+        DebugLine(
+            label="database",
+            message=_display_target_value(target_database),
+            status=DebugCheckStatus.OK,
+            status_message="resolved",
+        ),
+        DebugLine(
+            label="schema",
+            message=_display_target_value(target_schema),
             status=DebugCheckStatus.OK,
             status_message="resolved",
         ),
@@ -134,13 +172,8 @@ def _build_runtime_lines() -> list[DebugLine]:
     ]
 
 
-def _resolve_target_label(*, discovered_inputs: DiscoveredProjectInputs) -> str:
-    target_name: str | None = discovered_inputs.local_config.target
-    if target_name is not None:
-        return target_name
-    if discovered_inputs.project_config.default_target is not None:
-        return discovered_inputs.project_config.default_target
-    return "default"
+def _display_target_value(value: object | None) -> str:
+    return value if isinstance(value, str) and value else "not configured"
 
 
 def _build_connection_config_lines(connection_config: dict[str, object]) -> list[DebugLine]:

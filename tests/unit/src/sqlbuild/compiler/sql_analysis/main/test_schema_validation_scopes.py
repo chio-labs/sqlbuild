@@ -73,6 +73,42 @@ _SUPPORTED_SCHEMA_DIALECTS: tuple[str, ...] = (
             dialects=_SUPPORTED_SCHEMA_DIALECTS,
             expected_diagnostic_count=0,
         ),
+        SchemaValidationScopeTestCase(
+            description="nested qualify resolves directly projected columns",
+            query_sql=(
+                "WITH prepared_orders AS (SELECT customer_id, id AS order_id, amount "
+                "FROM orders), selected_orders AS (SELECT customer_id, order_id, amount "
+                "FROM (SELECT customer_id, order_id, amount FROM prepared_orders "
+                "QUALIFY ROW_NUMBER() OVER (PARTITION BY customer_id "
+                "ORDER BY order_id) = 1)) SELECT customer_id, order_id FROM selected_orders"
+            ),
+            schema={
+                "orders": {
+                    "id": "integer",
+                    "customer_id": "integer",
+                    "amount": "decimal",
+                },
+            },
+            dialects=("snowflake",),
+            expected_diagnostic_count=0,
+        ),
+        SchemaValidationScopeTestCase(
+            description="join using resolves a projected CTE column on both sides",
+            query_sql=(
+                "WITH eligible_orders AS (SELECT order_id FROM orders), "
+                "prepared_orders AS (SELECT orders.* FROM orders "
+                "JOIN eligible_orders USING (order_id)) "
+                "SELECT customer_id FROM prepared_orders"
+            ),
+            schema={
+                "orders": {
+                    "order_id": "integer",
+                    "customer_id": "integer",
+                },
+            },
+            dialects=_SUPPORTED_SCHEMA_DIALECTS,
+            expected_diagnostic_count=0,
+        ),
     ],
     ids=lambda case: case.description,
 )
