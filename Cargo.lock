@@ -279,8 +279,8 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
 name = "polyglot-sql"
-version = "0.9.2"
-source = "git+https://github.com/chio-labs/polyglot?rev=053913940b2ec4e5998f265cbe90f11f332e3e80#053913940b2ec4e5998f265cbe90f11f332e3e80"
+version = "0.9.3"
+source = "git+https://github.com/chio-labs/polyglot?rev=d0cbaf9a2f76c5ad468de9b7a91a6ee6ca54cbe1#d0cbaf9a2f76c5ad468de9b7a91a6ee6ca54cbe1"
 dependencies = [
  "polyglot-sql-ast-derive",
  "serde",
@@ -292,8 +292,8 @@ dependencies = [
 
 [[package]]
 name = "polyglot-sql-ast-derive"
-version = "0.9.2"
-source = "git+https://github.com/chio-labs/polyglot?rev=053913940b2ec4e5998f265cbe90f11f332e3e80#053913940b2ec4e5998f265cbe90f11f332e3e80"
+version = "0.9.3"
+source = "git+https://github.com/chio-labs/polyglot?rev=d0cbaf9a2f76c5ad468de9b7a91a6ee6ca54cbe1#d0cbaf9a2f76c5ad468de9b7a91a6ee6ca54cbe1"
 dependencies = [
  "proc-macro2",
  "quote",

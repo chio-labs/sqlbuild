@@ -85,11 +85,12 @@ fn missing_clause_columns(
         resolver: Resolver::new(scope, schema, false),
     };
     if let Expression::Select(select) = &scope.expression {
-        let projection_aliases: std::collections::HashSet<String> = select
+        let projection_names: std::collections::HashSet<String> = select
             .expressions
             .iter()
             .filter_map(|expression| match expression {
                 Expression::Alias(alias) => Some(alias.alias.to_string().to_lowercase()),
+                Expression::Column(column) => Some(column.name.to_string().to_lowercase()),
                 _ => None,
             })
             .collect();
@@ -99,7 +100,7 @@ fn missing_clause_columns(
                     continue;
                 };
                 if column.table.is_none()
-                    && projection_aliases.contains(&column.name.to_string().to_lowercase())
+                    && projection_names.contains(&column.name.to_string().to_lowercase())
                 {
                     continue;
                 }
@@ -167,7 +168,9 @@ impl ClauseResolver<'_, '_> {
         let Ok(columns) = self.resolver.get_source_columns(source_name) else {
             return false;
         };
-        columns.iter().any(|name| name == column_name)
+        columns
+            .iter()
+            .any(|name| name.eq_ignore_ascii_case(column_name))
     }
 }
 

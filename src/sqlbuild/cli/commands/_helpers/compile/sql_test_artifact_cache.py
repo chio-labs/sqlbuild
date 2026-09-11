@@ -24,8 +24,8 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestCte,
 )
 
-_CACHE_VERSION: int = 2
-_ALGORITHM_FINGERPRINT: str = "sql-test-artifact-v2-polyglot-scope-fix"
+_CACHE_VERSION: int = 3
+_ALGORITHM_FINGERPRINT: str = "sql-test-artifact-v3-polyglot-scope-fix"
 _CACHE_FILE_NAME: str = "sql-test-artifacts.json"
 _MAX_CACHE_BYTES: int = 10_000_000
 _MAX_CACHE_RECORDS: int = 100_000
