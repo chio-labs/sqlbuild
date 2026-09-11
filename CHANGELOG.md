@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.97.1](https://github.com/chio-labs/sqlbuild/compare/v0.97.0...v0.97.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* complete nested scope validation ([#624](https://github.com/chio-labs/sqlbuild/issues/624)) ([f41c00c](https://github.com/chio-labs/sqlbuild/commit/f41c00c9348dd948db30fdf603d60584aa430d02))
+
 ## [0.97.0](https://github.com/chio-labs/sqlbuild/compare/v0.96.1...v0.97.0) (2026-09-11)
 
 
