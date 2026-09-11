@@ -1569,6 +1569,25 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
             maximum_cursor=row[2] if cursor_column is not None else None,
         )
 
+    def inspect_row_diff_coverage(
+        self,
+        *,
+        connection: Any,
+        relation: str,
+        cursor_column: str | None = None,
+        start_cursor: CursorValue | None = None,
+        end_cursor: CursorValue | None = None,
+    ) -> RowDiffCoverage:
+        """Return exact bounded row count and cursor extent for custom adapters."""
+
+        return self._inspect_row_diff_coverage(
+            connection=connection,
+            relation=relation,
+            cursor_column=cursor_column,
+            start_cursor=start_cursor,
+            end_cursor=end_cursor,
+        )
+
     def _build_row_diff_relation_ctes(
         self,
         *,
