@@ -21,6 +21,7 @@ from tests.unit.src.sqlbuild.compiler.python_nodes._helpers.helpers import (
     build_python_node_graph_for_case,
     build_sql_downstream_task_to_loader_python_node_graph,
     build_sql_ref_python_node_graph,
+    build_terminal_loader_python_node_graph,
     model_ref,
     source_ref,
 )
@@ -42,6 +43,13 @@ from tests.unit.src.sqlbuild.compiler.python_nodes._helpers.helpers import (
             exclude=(),
             expected_sql_names=frozenset(),
             expected_python_node_names=frozenset({"prepare_orders"}),
+        ),
+        PythonSqlSelectorTestCase(
+            description="selects SQL and Python resources by bare name glob",
+            select=("*orders",),
+            exclude=(),
+            expected_sql_names=frozenset({"raw_orders", "orders"}),
+            expected_python_node_names=frozenset({"prepare_orders", "export_orders"}),
         ),
         PythonSqlSelectorTestCase(
             description="selects expanded Python node by typed selector",
@@ -165,6 +173,34 @@ def test_given_unknown_unified_selector_when_resolving_then_raises_clear_error(
 ) -> None:
     project_graph: ProjectGraph = build_orders_project_graph()
     python_graph: PythonNodeGraph = build_orders_python_node_graph()
+
+    with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
+        resolve_python_sql_selectors(
+            select=test_case.select,
+            exclude=test_case.exclude,
+            project_graph=project_graph,
+            python_graph=python_graph,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonSqlSelectorErrorTestCase(
+            description="typed loader glob cannot select a managed source loader",
+            select=("loader:raw_*",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment="matches managed source loader 'raw_orders'",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_managed_source_loader_glob_when_resolving_then_requires_source_selector(
+    test_case: PythonSqlSelectorErrorTestCase,
+) -> None:
+    project_graph: ProjectGraph = build_orders_project_graph()
+    python_graph: PythonNodeGraph = build_terminal_loader_python_node_graph()
 
     with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):
         resolve_python_sql_selectors(

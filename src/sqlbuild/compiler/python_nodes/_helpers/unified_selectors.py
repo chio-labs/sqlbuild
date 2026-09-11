@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from fnmatch import fnmatchcase
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -301,11 +302,18 @@ def _resolve_single(
             )
         return atoms
     if parsed.kind in _PYTHON_SELECTOR_KINDS:
-        if parsed.kind == SelectorKind.LOADER and parsed.value in _terminal_loader_by_name(
+        terminal_loader_by_name: dict[str, str] = _terminal_loader_by_name(
             project_graph=project_graph
-        ):
+        )
+        matched_terminal_loaders: tuple[str, ...] = tuple(
+            sorted(name for name in terminal_loader_by_name if fnmatchcase(name, parsed.value))
+        )
+        if parsed.kind == SelectorKind.LOADER and matched_terminal_loaders:
+            loader_name: str = matched_terminal_loaders[0]
+            source_name: str = terminal_loader_by_name[loader_name]
             raise PlannerInputError(
-                f"'{parsed.value}' is a managed source; select it as source:{parsed.value}",
+                f"loader selector '{parsed.value}' matches managed source loader "
+                f"'{loader_name}'; select it as source:{source_name}",
                 code="S007",
             )
         return _resolve_python(raw=raw, python_graph=python_graph)
@@ -404,22 +412,35 @@ def _resolve_name(
     project_graph: ProjectGraph,
     python_graph: PythonNodeGraph,
 ) -> frozenset[_SelectionAtom]:
-    sql_key: CompiledObjectKey | None = project_graph.all_keys.get(parsed.value)
-    python_exists: bool = parsed.value in python_graph.nodes_by_name
     terminal_loader_names: frozenset[str] = frozenset(
         _terminal_loader_by_name(project_graph=project_graph)
     )
-    if sql_key is not None and parsed.value in terminal_loader_names:
-        return _resolve_sql(raw=raw, project_graph=project_graph)
-    if sql_key is not None and python_exists:
+    sql_names: frozenset[str] = frozenset(
+        name for name in project_graph.all_keys if fnmatchcase(name, parsed.value)
+    )
+    python_names: frozenset[str] = frozenset(
+        name for name in python_graph.nodes_by_name if fnmatchcase(name, parsed.value)
+    )
+    conflicting_names: frozenset[str] = (sql_names & python_names) - terminal_loader_names
+    if conflicting_names:
+        conflicting_name: str = sorted(conflicting_names)[0]
         raise PlannerInputError(
-            f"selector name '{parsed.value}' matches both a SQL resource and a Python node; "
+            f"selector name '{conflicting_name}' matches both a SQL resource and a Python node; "
             "resource names must be globally unique"
         )
-    if sql_key is not None:
-        return _resolve_sql(raw=raw, project_graph=project_graph)
-    if python_exists:
-        return _resolve_python(raw=raw, python_graph=python_graph)
+    atoms: set[_SelectionAtom] = set()
+    if sql_names:
+        atoms.update(_resolve_sql(raw=raw, project_graph=project_graph))
+    if python_names:
+        python_atoms: frozenset[_SelectionAtom] = _resolve_python(
+            raw=raw, python_graph=python_graph
+        )
+        duplicate_terminal_atoms: set[_SelectionAtom] = {
+            _python_atom(name) for name in sql_names & terminal_loader_names
+        }
+        atoms.update(python_atoms - duplicate_terminal_atoms)
+    if atoms:
+        return frozenset(atoms)
     raise PlannerInputError(f"unknown selector name '{parsed.value}'", code="S007")
 
 

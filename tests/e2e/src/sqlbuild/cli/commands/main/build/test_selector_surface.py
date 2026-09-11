@@ -57,6 +57,19 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             pre_commands=(("--no-color", "build"),),
         ),
         SelectorSurfaceBuildE2ETestCase(
+            description="resource name glob selects every matching model",
+            command=("--no-color", "build", "--select", "stg_*"),
+            expected_exit_code=0,
+            expected_stdout_fragments=(
+                "Plan ready  3 selected",
+                "stg_customers",
+                "stg_orders",
+                "stg_payments",
+            ),
+            expected_stderr_fragments=(),
+            pre_commands=(("--no-color", "build"),),
+        ),
+        SelectorSurfaceBuildE2ETestCase(
             description="malformed path selector with internal plus fails clearly",
             command=("--no-color", "plan", "--select", "+fact_orders~+daily_activity_rollup"),
             expected_exit_code=1,

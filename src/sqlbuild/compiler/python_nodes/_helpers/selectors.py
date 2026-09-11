@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from fnmatch import fnmatchcase
+
 from sqlbuild.compiler.planner.constants import PATH_SELECTOR_EXPLICIT_ROOT_ERROR
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
@@ -11,7 +13,7 @@ from sqlbuild.compiler.python_nodes.constants import (
     EMPTY_SELECTOR_FOLDER,
     UNIFIED_PATH_ROOTS,
 )
-from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
+from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 
 _PYTHON_NODE_KIND_BY_SELECTOR_KIND: dict[SelectorKind, PythonNodeKind] = {
@@ -77,15 +79,18 @@ def _resolve_single(*, raw: str, graph: PythonNodeGraph) -> frozenset[str]:
     if parsed.kind == SelectorKind.PATH:
         return _resolve_path(parsed=parsed, graph=graph)
 
-    node_name: str | None = _lookup_node_name(parsed=parsed, graph=graph)
-    if node_name is None:
+    node_names: frozenset[str] = _lookup_node_names(parsed=parsed, graph=graph)
+    if not node_names:
         raise PlannerInputError(f"unknown Python node selector '{parsed.value}'", code="S007")
 
-    result: set[str] = {node_name}
+    result: set[str] = set(node_names)
+    node_name: str
     if parsed.upstream:
-        result.update(_expand_upstream(name=node_name, graph=graph))
+        for node_name in node_names:
+            result.update(_expand_upstream(name=node_name, graph=graph))
     if parsed.downstream:
-        result.update(_expand_downstream(name=node_name, graph=graph))
+        for node_name in node_names:
+            result.update(_expand_downstream(name=node_name, graph=graph))
     return frozenset(result)
 
 
@@ -143,10 +148,13 @@ def _resolve_tag(*, parsed: ParsedSelector, graph: PythonNodeGraph) -> frozenset
     return frozenset(result)
 
 
-def _lookup_node_name(*, parsed: ParsedSelector, graph: PythonNodeGraph) -> str | None:
+def _lookup_node_names(*, parsed: ParsedSelector, graph: PythonNodeGraph) -> frozenset[str]:
     if parsed.kind == SelectorKind.NAME:
-        node: DiscoveredPythonNode | None = graph.nodes_by_name.get(parsed.value)
-        return None if node is None else node.name
+        return frozenset(
+            node.name
+            for name, node in graph.nodes_by_name.items()
+            if fnmatchcase(name, parsed.value)
+        )
 
     python_node_kind: PythonNodeKind | None = _PYTHON_NODE_KIND_BY_SELECTOR_KIND.get(parsed.kind)
     if python_node_kind is None:
@@ -155,8 +163,11 @@ def _lookup_node_name(*, parsed: ParsedSelector, graph: PythonNodeGraph) -> str 
             code="S010",
         )
 
-    node = graph.nodes_by_typed_selector.get(f"{python_node_kind.value}:{parsed.value}")
-    return None if node is None else node.name
+    return frozenset(
+        node.name
+        for node in graph.nodes_by_name.values()
+        if node.kind == python_node_kind and fnmatchcase(node.name, parsed.value)
+    )
 
 
 def _expand_upstream(*, name: str, graph: PythonNodeGraph) -> frozenset[str]:

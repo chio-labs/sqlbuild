@@ -111,6 +111,24 @@ def build_external_loader_python_node_graph() -> PythonNodeGraph:
     )
 
 
+def build_terminal_loader_python_node_graph() -> PythonNodeGraph:
+    """Build a graph containing one loader owned by a managed source."""
+    return build_python_node_graph(
+        discovered_inputs=DiscoveredProjectInputs(
+            project_config=ProjectConfig(name="demo", adapter="duckdb"),
+            local_config=LocalConfig(),
+            loader_functions=(
+                DiscoveredLoaderFunction(
+                    file_path=Path("/project/loaders/orders.py"),
+                    relative_path=Path("loaders/orders.py"),
+                    name="raw_orders",
+                    function=raw_orders,
+                ),
+            ),
+        )
+    )
+
+
 def build_orders_python_node_graph() -> PythonNodeGraph:
     return build_python_node_graph(
         discovered_inputs=DiscoveredProjectInputs(

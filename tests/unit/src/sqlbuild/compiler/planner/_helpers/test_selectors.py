@@ -207,6 +207,24 @@ def test_given_invalid_selector_when_parsing_then_raises(
             expected_names=frozenset({"orders", "joined"}),
         ),
         ResolveSelectorTestCase(
+            description="selects resources by name glob",
+            select=("*orders",),
+            exclude=(),
+            expected_names=frozenset({"orders", "raw_orders"}),
+        ),
+        ResolveSelectorTestCase(
+            description="expands downstream from every name glob match",
+            select=("*orders+",),
+            exclude=(),
+            expected_names=frozenset({"raw_orders", "orders", "joined"}),
+        ),
+        ResolveSelectorTestCase(
+            description="excludes resources by name glob",
+            select=(),
+            exclude=("raw_*",),
+            expected_names=frozenset({"orders", "customers", "joined", "codes"}),
+        ),
+        ResolveSelectorTestCase(
             description="unions multiple select tokens",
             select=("orders", "customers"),
             exclude=(),
@@ -249,6 +267,12 @@ def test_given_invalid_selector_when_parsing_then_raises(
             select=("source:raw_orders",),
             exclude=(),
             expected_names=frozenset({"raw_orders"}),
+        ),
+        ResolveSelectorTestCase(
+            description="selects sources by typed name glob",
+            select=("source:raw_*",),
+            exclude=(),
+            expected_names=frozenset({"raw_orders", "raw_customers"}),
         ),
         ResolveSelectorTestCase(
             description="intersects comma-separated tokens",
@@ -382,6 +406,12 @@ def test_given_model_table_function_dependency_when_selecting_then_graph_expands
         ResolveSelectorErrorTestCase(
             description="raises when selector references unknown name",
             select=("nonexistent_model",),
+            exclude=(),
+            expected_error_type=ValueError,
+        ),
+        ResolveSelectorErrorTestCase(
+            description="raises when selector name glob matches nothing",
+            select=("missing_*",),
             exclude=(),
             expected_error_type=ValueError,
         ),
