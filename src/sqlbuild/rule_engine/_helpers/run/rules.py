@@ -19,6 +19,7 @@ from sqlbuild.lint.main.collect_project_files import collect_project_files
 from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import LintConfig, LintRunResult, LintViolation
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue, select_rules
+from sqlbuild.rule_engine._helpers.engine.config import resolve_rule_ignore_selectors
 from sqlbuild.rule_engine._helpers.engine.hermeticity import verify_custom_rules
 from sqlbuild.rule_engine._helpers.engine.native import evaluate_native
 from sqlbuild.rule_engine.exceptions import RulesError
@@ -46,14 +47,19 @@ def evaluate_rules(
     selected_keys: frozenset[CompiledObjectKey] | None = None,
 ) -> RulesRunResult:
     """Run selected native built-ins before selected custom Python rules."""
+    effective_config: RulesConfig = resolve_rule_ignore_selectors(
+        config=config, project=graph.project
+    )
 
     resolved_project_dir: Path = project_dir.resolve()
-    include_custom: bool = _config_references_custom_rules(config)
+    include_custom: bool = _config_references_custom_rules(effective_config)
     catalogue: tuple[Rule, ...] = build_catalogue(
-        config=config, project_dir=resolved_project_dir, include_custom=include_custom
+        config=effective_config,
+        project_dir=resolved_project_dir,
+        include_custom=include_custom,
     )
     selected: tuple[Rule, ...] = select_rules(
-        catalogue=catalogue, config=config, project_dir=resolved_project_dir
+        catalogue=catalogue, config=effective_config, project_dir=resolved_project_dir
     )
     native_rules: tuple[Rule, ...] = tuple(rule for rule in selected if not rule.custom)
     custom_rules: tuple[Rule, ...] = tuple(rule for rule in selected if rule.custom)
@@ -71,13 +77,13 @@ def evaluate_rules(
         project=selected_project,
         dialect=dialect,
         selected_model_paths=model_paths,
-        cache_enabled=config.cache.enabled,
+        cache_enabled=effective_config.cache.enabled,
     )
     sql_ms: int = round((time.monotonic() - sql_started) * 1000)
     result: RulesResult = evaluate_native(
         project=selected_project,
         config=replace(
-            _selection_rules_config(config=config, model_paths=model_paths),
+            _selection_rules_config(config=effective_config, model_paths=model_paths),
             select=tuple(rule.code for rule in selected),
             ignore=(),
         ),

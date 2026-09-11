@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 from _pytest.capture import CaptureResult
@@ -141,6 +142,145 @@ def test_given_project_when_running_focused_rule_family_then_only_that_family_ru
     payload: dict[str, object] = json.loads(captured.out)
     assert test_case.expected_code in json.dumps(payload["findings"])
     assert "Rule selection SQBRSQL004 failed with 1 finding(s)." in captured.err
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulesIntegrationTestCase("SQL function arguments are not columns", 0, "SQBRSQL027")],
+    ids=lambda case: case.description,
+)
+def test_given_sql_function_argument_when_running_qualification_rule_then_argument_is_not_reported(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    function: Path = tmp_path / "functions" / "sql" / "orders_by_date.sql"
+    function.parent.mkdir(parents=True)
+    function.write_text(
+        """FUNCTION (
+  arguments (start_date DATE),
+  returns table (order_id INTEGER)
+);
+
+SELECT current_orders.order_id
+FROM current_orders
+INNER JOIN order_statuses ON current_orders.order_id = order_statuses.order_id
+WHERE current_orders.created_at >= start_date
+""",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "rules",
+            "--json",
+            "run",
+            test_case.expected_code,
+        ]
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    captured: CaptureResult[str] = capsys.readouterr()
+    payload: dict[str, object] = json.loads(captured.out)
+    assert payload["findings"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulesIntegrationTestCase("ceremonial SQL test select is ignored", 0, "SQBRSQL022")],
+    ids=lambda case: case.description,
+)
+def test_given_ceremonial_test_select_when_running_alias_rule_then_control_projection_is_not_reported(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text('MODEL (description "Orders");\nSELECT 1 AS order_id\n', encoding="utf-8")
+    test: Path = tmp_path / "tests" / "unit" / "orders.sql"
+    test.parent.mkdir(parents=True)
+    test.write_text(
+        "TEST();\n\nWITH __ref__orders AS (SELECT 1 AS order_id), "
+        "__expected__orders AS (SELECT 1 AS order_id)\nSELECT 1\n",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "rules",
+            "--json",
+            "run",
+            test_case.expected_code,
+        ]
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    captured: CaptureResult[str] = capsys.readouterr()
+    payload: dict[str, object] = json.loads(captured.out)
+    assert payload["findings"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulesIntegrationTestCase("upstream graph selector scopes an ignore", 1, "SQBRSQL021")],
+    ids=lambda case: case.description,
+)
+def test_given_graph_scoped_rule_ignore_when_running_rules_then_only_matched_resources_are_ignored(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n'
+        "[[rules.rule_ignores]]\n"
+        'rules = ["SQBRSQL021"]\n'
+        'selectors = ["+orders"]\n'
+        'reason = "Reviewed upstream interface boundary"\n',
+        encoding="utf-8",
+    )
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "base_orders.sql").write_text(
+        'MODEL (description "Base orders");\nSELECT 1 AS order_id\n',
+        encoding="utf-8",
+    )
+    (models / "orders.sql").write_text(
+        'MODEL (description "Orders");\nSELECT * FROM __ref("base_orders")\n',
+        encoding="utf-8",
+    )
+    (models / "customer_orders.sql").write_text(
+        'MODEL (description "Customer orders");\nSELECT * FROM __ref("orders")\n',
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "rules",
+            "--json",
+            "run",
+            test_case.expected_code,
+        ]
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    captured: CaptureResult[str] = capsys.readouterr()
+    payload: dict[str, object] = json.loads(captured.out)
+    findings: list[dict[str, object]] = cast(list[dict[str, object]], payload["findings"])
+    finding_paths: list[object] = [finding.get("path") for finding in findings]
+    assert finding_paths == ["models/customer_orders.sql"]
 
 
 @pytest.mark.parametrize(

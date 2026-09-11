@@ -50,7 +50,14 @@ _SQLBUILD_HARNESS_CTE_PREFIXES: tuple[str, ...] = (
     DBT_REF_TEST_CTE_PREFIX,
     MACRO_TEST_CTE_PREFIX,
 )
-type _NativeCacheKey = tuple[str, str, tuple[str, ...] | None, tuple[str, ...]]
+type _NativeCacheKey = tuple[
+    str,
+    str,
+    tuple[str, ...] | None,
+    tuple[str, ...],
+    tuple[str, ...],
+    bool,
+]
 type _NativeResult = dict[str, Any] | NativeLintError
 
 
@@ -77,6 +84,10 @@ def run_native_sql_lint(
             payload["enabled_rules"] = list(config.enabled_native_rules)
         if config.ignored_native_rules:
             payload["ignored_rules"] = list(config.ignored_native_rules)
+        if body.external_identifiers:
+            payload["external_identifiers"] = list(body.external_identifiers)
+        if body.allows_ceremonial_select:
+            payload["allows_ceremonial_select"] = True
         requests[cache_key] = payload
     response_cache: dict[_NativeCacheKey, _NativeResult] = _native_responses(requests=requests)
 
@@ -112,6 +123,8 @@ def _native_cache_key(*, body: LintBody, config: LintConfig) -> _NativeCacheKey:
         config.dialect,
         config.enabled_native_rules,
         config.ignored_native_rules,
+        body.external_identifiers,
+        body.allows_ceremonial_select,
     )
 
 

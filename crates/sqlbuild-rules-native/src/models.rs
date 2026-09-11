@@ -69,8 +69,11 @@ pub(crate) struct RuleException {
 #[serde(deny_unknown_fields)]
 pub(crate) struct RuleIgnore {
     pub rules: Vec<String>,
+    #[serde(default)]
     pub paths: Vec<String>,
     pub reason: String,
+    #[serde(default)]
+    pub selectors: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

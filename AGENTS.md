@@ -56,6 +56,9 @@
 
 ## Subagent Verification
 
+- Read-only review subagents are standing-authorized at meaningful review boundaries and do not
+  require a task-specific user request. This standing authorization does not extend to implementation
+  or open-ended research delegation. The bounded review cycle below remains the required limit.
 - The primary agent owns the overall verification plan. Do not ask multiple subagents to run the same broad test suites.
 - Implementation subagents should run only tests directly covering changed behavior plus targeted lint, type, and architecture checks for touched files.
 - Review subagents are read-only by default. They should inspect the diff and relevant call flow and run only focused tests needed to validate a concrete suspected finding.

@@ -1,16 +1,21 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use polyglot_sql::tokens::{Span, Token, TokenType};
 
 use crate::sql_lint::_helpers::engine::{
-    direct_indices, is_comment, is_layout, query_end, significant_after, significant_before,
-    token_depths,
+    direct_indices, is_comment, is_layout, is_query_from, query_end, significant_after,
+    significant_before, token_depths,
 };
 use crate::sql_lint::models::AdditionalQueryFacts;
 
 const COUNT_ONE_LITERAL: &str = "1";
 const QUALIFIED_REFERENCE_LENGTH: usize = 3;
 const IMPLICIT_ALIAS_MINIMUM_LENGTH: usize = 2;
+const GENERATED_IDENTIFIER_PREFIXES: [&str; 3] = [
+    "__sqb_lint_",
+    "__sqlbuild_audit_parameter_",
+    "__sqlbuild_context_parameter_",
+];
 
 struct QuerySlice<'a> {
     tokens: &'a [Token],
@@ -21,7 +26,26 @@ struct QuerySlice<'a> {
     depth: usize,
 }
 
-pub(super) fn collect_additional_facts(tokens: &[Token]) -> AdditionalQueryFacts {
+struct ReferenceFactContext<'a> {
+    query: &'a QuerySlice<'a>,
+    outer_relations: &'a HashSet<String>,
+    external_identifiers: &'a HashSet<String>,
+    query_start: usize,
+    query_end: usize,
+}
+
+struct ReferenceCandidateContext<'a> {
+    tokens: &'a [Token],
+    references: &'a [usize],
+    external_identifiers: &'a HashSet<String>,
+    projection_aliases: &'a HashMap<String, usize>,
+}
+
+pub(super) fn collect_additional_facts(
+    tokens: &[Token],
+    external_identifiers: &HashSet<String>,
+    allows_ceremonial_select: bool,
+) -> AdditionalQueryFacts {
     let mut facts = AdditionalQueryFacts::default();
     let depths = token_depths(tokens);
     let significant: Vec<usize> = (0..tokens.len())
@@ -121,7 +145,12 @@ pub(super) fn collect_additional_facts(tokens: &[Token]) -> AdditionalQueryFacts
                 .push(tokens[significant[position + 1]].span);
         }
     }
-    let select_facts = collect_select_additional_facts(tokens, &depths);
+    let select_facts = collect_select_additional_facts(
+        tokens,
+        &depths,
+        external_identifiers,
+        allows_ceremonial_select,
+    );
     facts.duplicate_output_aliases = select_facts.duplicate_output_aliases;
     facts.unaliased_calculations = select_facts.unaliased_calculations;
     facts.projected_stars = select_facts.projected_stars;
@@ -140,7 +169,12 @@ pub(super) fn collect_additional_facts(tokens: &[Token]) -> AdditionalQueryFacts
     facts
 }
 
-fn collect_select_additional_facts(tokens: &[Token], depths: &[usize]) -> AdditionalQueryFacts {
+fn collect_select_additional_facts(
+    tokens: &[Token],
+    depths: &[usize],
+    external_identifiers: &HashSet<String>,
+    allows_ceremonial_select: bool,
+) -> AdditionalQueryFacts {
     let mut facts = AdditionalQueryFacts::default();
     for (select_index, token) in tokens.iter().enumerate() {
         if token.token_type != TokenType::Select {
@@ -154,25 +188,26 @@ fn collect_select_additional_facts(tokens: &[Token], depths: &[usize]) -> Additi
             .collect();
         let from_position = direct
             .iter()
-            .position(|&index| tokens[index].token_type == TokenType::From)
+            .position(|&index| is_query_from(tokens, index))
             .unwrap_or(direct.len());
         facts
             .duplicate_output_aliases
             .extend(duplicate_alias_spans(tokens, &direct[..from_position]));
+        if !is_exists_subquery(tokens, select_index)
+            && !is_set_continuation_select(tokens, select_index)
+            && !is_scalar_subquery(tokens, depths, select_index)
+            && !is_ceremonial_select(tokens, &direct[..from_position], allows_ceremonial_select)
+        {
+            facts
+                .unaliased_calculations
+                .extend(unaliased_calculation_spans(
+                    tokens,
+                    &direct[..from_position],
+                ));
+        }
         facts
-            .unaliased_calculations
-            .extend(unaliased_calculation_spans(
-                tokens,
-                &direct[..from_position],
-            ));
-        let projection_end = direct.get(from_position).copied().unwrap_or(end);
-        facts.projected_stars.extend(
-            (select_index + 1..projection_end)
-                .filter(|&index| {
-                    depths[index] == depth && tokens[index].token_type == TokenType::Star
-                })
-                .map(|index| tokens[index].span),
-        );
+            .projected_stars
+            .extend(projected_star_spans(tokens, &direct[..from_position]));
         if from_position < direct.len() {
             let clause_end = direct[from_position + 1..]
                 .iter()
@@ -208,7 +243,15 @@ fn collect_select_additional_facts(tokens: &[Token], depths: &[usize]) -> Additi
                 end: clause_end,
                 depth,
             };
-            let reference_facts = collect_reference_facts(&reference_slice);
+            let outer_relations = outer_relation_names(tokens, depths, select_index, depth);
+            let reference_context = ReferenceFactContext {
+                query: &reference_slice,
+                outer_relations: &outer_relations,
+                external_identifiers,
+                query_start: select_index,
+                query_end: end,
+            };
+            let reference_facts = collect_reference_facts(&reference_context);
             facts
                 .unqualified_multi_source_columns
                 .extend(reference_facts.unqualified_multi_source_columns);
@@ -232,7 +275,8 @@ fn collect_select_additional_facts(tokens: &[Token], depths: &[usize]) -> Additi
     facts
 }
 
-fn collect_reference_facts(query: &QuerySlice<'_>) -> AdditionalQueryFacts {
+fn collect_reference_facts(context: &ReferenceFactContext<'_>) -> AdditionalQueryFacts {
+    let query = context.query;
     let QuerySlice {
         tokens,
         direct,
@@ -244,16 +288,30 @@ fn collect_reference_facts(query: &QuerySlice<'_>) -> AdditionalQueryFacts {
     let relation_end = *relation_end;
     let mut facts = AdditionalQueryFacts::default();
     let relations = &direct[from_position + 1..relation_end];
-    let relation_count = 1 + relations
-        .iter()
-        .filter(|&&index| matches!(tokens[index].token_type, TokenType::Join | TokenType::Comma))
-        .count();
-    let known = relation_names(tokens, relations);
+    let relation_count = if is_values_relation(tokens, relations) {
+        1
+    } else {
+        1 + relations
+            .iter()
+            .filter(|&&index| {
+                matches!(tokens[index].token_type, TokenType::Join | TokenType::Comma)
+            })
+            .count()
+    };
+    let mut known = relation_names(tokens, relations);
+    known.extend(context.outer_relations.iter().cloned());
     let references: Vec<usize> = direct[..from_position]
         .iter()
         .chain(direct[relation_end..].iter())
         .copied()
         .collect();
+    let projection_aliases = projection_alias_positions(tokens, &direct[..from_position]);
+    let candidate_context = ReferenceCandidateContext {
+        tokens,
+        references: &references,
+        external_identifiers: context.external_identifiers,
+        projection_aliases: &projection_aliases,
+    };
     let qualified: Vec<usize> = references
         .iter()
         .enumerate()
@@ -262,9 +320,7 @@ fn collect_reference_facts(query: &QuerySlice<'_>) -> AdditionalQueryFacts {
     let unqualified: Vec<usize> = references
         .iter()
         .enumerate()
-        .filter_map(|(position, &index)| {
-            unqualified_reference(tokens, &references, position, index)
-        })
+        .filter_map(|(position, &index)| unqualified_reference(&candidate_context, position, index))
         .collect();
     if relation_count > 1 {
         facts
@@ -281,9 +337,11 @@ fn collect_reference_facts(query: &QuerySlice<'_>) -> AdditionalQueryFacts {
             .filter(|&&index| !known.contains(&tokens[index].text.to_ascii_lowercase()))
             .map(|&index| tokens[index].span),
     );
-    facts
-        .unused_joined_relations
-        .extend(unused_join_spans(query, &references));
+    facts.unused_joined_relations.extend(unused_join_spans(
+        query,
+        context.query_start,
+        context.query_end,
+    ));
     facts
 }
 
@@ -298,7 +356,13 @@ fn simple_qualifier(
     let column = references.get(position + 2).copied();
     let following = references.get(position + 3).copied();
     (is_identifier(&tokens[index])
-        && previous.is_none_or(|candidate| tokens[candidate].token_type != TokenType::Dot)
+        && !is_generated_identifier(&tokens[index])
+        && previous.is_none_or(|candidate| {
+            !matches!(
+                tokens[candidate].token_type,
+                TokenType::Dot | TokenType::Colon | TokenType::DColon | TokenType::DotColon
+            )
+        })
         && dot.is_some_and(|candidate| tokens[candidate].token_type == TokenType::Dot)
         && column.is_some_and(|candidate| is_identifier(&tokens[candidate]))
         && following.is_none_or(|candidate| tokens[candidate].token_type != TokenType::Dot))
@@ -306,21 +370,43 @@ fn simple_qualifier(
 }
 
 fn unqualified_reference(
-    tokens: &[Token],
-    references: &[usize],
+    context: &ReferenceCandidateContext<'_>,
     position: usize,
     index: usize,
 ) -> Option<usize> {
+    let ReferenceCandidateContext {
+        tokens,
+        references,
+        external_identifiers,
+        projection_aliases,
+    } = context;
     let previous = position.checked_sub(1).map(|value| references[value]);
     let next = references.get(position + 1).copied();
     (is_identifier(&tokens[index])
+        && !is_generated_identifier(&tokens[index])
+        && !is_context_value(&tokens[index])
+        && !external_identifiers.contains(&tokens[index].text.to_ascii_lowercase())
+        && !projection_aliases
+            .get(&tokens[index].text.to_ascii_lowercase())
+            .is_some_and(|alias_index| *alias_index < index)
         && previous.is_none_or(|candidate| {
-            !matches!(tokens[candidate].token_type, TokenType::Dot | TokenType::As)
+            !matches!(
+                tokens[candidate].token_type,
+                TokenType::Dot
+                    | TokenType::As
+                    | TokenType::Colon
+                    | TokenType::DColon
+                    | TokenType::DotColon
+            )
         })
         && next.is_none_or(|candidate| {
             !matches!(
                 tokens[candidate].token_type,
-                TokenType::Dot | TokenType::LParen
+                TokenType::Dot
+                    | TokenType::LParen
+                    | TokenType::Colon
+                    | TokenType::DColon
+                    | TokenType::DotColon
             )
         }))
     .then_some(index)
@@ -344,10 +430,247 @@ fn relation_names(tokens: &[Token], relation_clause: &[usize]) -> HashSet<String
             names.insert(tokens[alias].text.to_ascii_lowercase());
         }
     }
+    let mut segment_start = 0_usize;
+    for segment_end in relation_clause
+        .iter()
+        .enumerate()
+        .filter_map(|(position, &index)| {
+            matches!(tokens[index].token_type, TokenType::Join | TokenType::Comma)
+                .then_some(position)
+        })
+        .chain(std::iter::once(relation_clause.len()))
+    {
+        let segment = &relation_clause[segment_start..segment_end];
+        segment_start = segment_end + 1;
+        let relation_end = segment
+            .iter()
+            .position(|&index| is_relation_condition_start(&tokens[index]))
+            .unwrap_or(segment.len());
+        if let Some(&implicit_name) = segment[..relation_end]
+            .iter()
+            .rev()
+            .find(|&&index| is_identifier(&tokens[index]))
+        {
+            names.insert(tokens[implicit_name].text.to_ascii_lowercase());
+        }
+    }
     names
 }
 
-fn unused_join_spans(query: &QuerySlice<'_>, references: &[usize]) -> Vec<Span> {
+fn outer_relation_names(
+    tokens: &[Token],
+    depths: &[usize],
+    select_index: usize,
+    depth: usize,
+) -> HashSet<String> {
+    let mut names: HashSet<String> = HashSet::new();
+    for outer_select in (0..select_index).filter(|&index| {
+        tokens[index].token_type == TokenType::Select
+            && depths[index] < depth
+            && query_end(tokens, depths, index, depths[index]) > select_index
+    }) {
+        let outer_depth = depths[outer_select];
+        let outer_end = query_end(tokens, depths, outer_select, outer_depth);
+        let direct: Vec<usize> = direct_indices(depths, outer_select + 1, outer_end, outer_depth)
+            .into_iter()
+            .filter(|&index| !is_layout(&tokens[index]) && !is_comment(&tokens[index]))
+            .collect();
+        let Some(from_position) = direct
+            .iter()
+            .position(|&index| is_query_from(tokens, index))
+        else {
+            continue;
+        };
+        let clause_end = direct[from_position + 1..]
+            .iter()
+            .position(|&index| is_after_relation_clause(tokens[index].token_type))
+            .map_or(direct.len(), |offset| from_position + 1 + offset);
+        names.extend(relation_names(
+            tokens,
+            &direct[from_position + 1..clause_end],
+        ));
+    }
+    names
+}
+
+fn projected_star_spans(tokens: &[Token], projection: &[usize]) -> Vec<Span> {
+    let mut spans: Vec<Span> = Vec::new();
+    for (position, &index) in projection.iter().enumerate() {
+        if tokens[index].token_type != TokenType::Star {
+            continue;
+        }
+        let previous = position.checked_sub(1).map(|value| projection[value]);
+        let qualified =
+            previous.is_some_and(|candidate| tokens[candidate].token_type == TokenType::Dot);
+        let mut item_start = 0_usize;
+        for prior_position in (0..position).rev() {
+            if tokens[projection[prior_position]].token_type == TokenType::Comma {
+                item_start = prior_position + 1;
+                break;
+            }
+        }
+        let bare = is_bare_star_prefix(tokens, &projection[item_start..position]);
+        if qualified || bare {
+            spans.push(tokens[index].span);
+        }
+    }
+    spans
+}
+
+fn is_exists_subquery(tokens: &[Token], select_index: usize) -> bool {
+    let Some(open_index) = significant_before(tokens, select_index) else {
+        return false;
+    };
+    tokens[open_index].token_type == TokenType::LParen
+        && significant_before(tokens, open_index)
+            .is_some_and(|index| tokens[index].token_type == TokenType::Exists)
+}
+
+fn is_set_continuation_select(tokens: &[Token], select_index: usize) -> bool {
+    let mut previous = significant_before(tokens, select_index);
+    if previous.is_some_and(|index| {
+        matches!(
+            tokens[index].token_type,
+            TokenType::All | TokenType::Distinct
+        )
+    }) {
+        previous = previous.and_then(|index| significant_before(tokens, index));
+    }
+    previous.is_some_and(|index| {
+        matches!(
+            tokens[index].token_type,
+            TokenType::Union | TokenType::Intersect | TokenType::Except
+        )
+    })
+}
+
+fn is_bare_star_prefix(tokens: &[Token], prefix: &[usize]) -> bool {
+    let mut position = 0_usize;
+    while prefix.get(position).is_some_and(|&index| {
+        matches!(
+            tokens[index].token_type,
+            TokenType::Distinct | TokenType::All
+        )
+    }) {
+        position += 1;
+    }
+    if position == prefix.len() {
+        return true;
+    }
+    if tokens[prefix[position]].token_type != TokenType::Top {
+        return false;
+    }
+    position += 1;
+    if !prefix
+        .get(position)
+        .is_some_and(|&index| tokens[index].token_type == TokenType::Number)
+    {
+        return false;
+    }
+    position += 1;
+    if prefix
+        .get(position)
+        .is_some_and(|&index| tokens[index].token_type == TokenType::Percent)
+    {
+        position += 1;
+    }
+    if prefix
+        .get(position)
+        .is_some_and(|&index| tokens[index].token_type == TokenType::With)
+        && prefix
+            .get(position + 1)
+            .is_some_and(|&index| tokens[index].token_type == TokenType::Ties)
+    {
+        position += 2;
+    }
+    position == prefix.len()
+}
+
+fn is_scalar_subquery(tokens: &[Token], depths: &[usize], select_index: usize) -> bool {
+    let Some(open_index) = significant_before(tokens, select_index) else {
+        return false;
+    };
+    if tokens[open_index].token_type != TokenType::LParen {
+        return false;
+    }
+    let Some(previous) = significant_before(tokens, open_index) else {
+        return false;
+    };
+    if matches!(
+        tokens[previous].token_type,
+        TokenType::From | TokenType::Join | TokenType::As | TokenType::Exists | TokenType::Lateral
+    ) {
+        return false;
+    }
+    if tokens[previous].token_type != TokenType::Comma {
+        return true;
+    }
+    let parent_depth = depths[previous];
+    let relation_boundary = (0..previous).rev().find(|&index| {
+        depths[index] == parent_depth
+            && (is_query_from(tokens, index)
+                || matches!(
+                    tokens[index].token_type,
+                    TokenType::Join | TokenType::Semicolon
+                ))
+    });
+    !relation_boundary.is_some_and(|index| {
+        is_query_from(tokens, index) || tokens[index].token_type == TokenType::Join
+    })
+}
+
+fn is_ceremonial_select(tokens: &[Token], projection: &[usize], allowed: bool) -> bool {
+    allowed
+        && projection.len() == 1
+        && tokens[projection[0]].token_type == TokenType::Number
+        && tokens[projection[0]].text == COUNT_ONE_LITERAL
+}
+
+fn is_values_relation(tokens: &[Token], relation_clause: &[usize]) -> bool {
+    relation_clause
+        .first()
+        .is_some_and(|&index| tokens[index].token_type == TokenType::Values)
+}
+
+fn is_generated_identifier(token: &Token) -> bool {
+    let normalized = token.text.to_ascii_lowercase();
+    GENERATED_IDENTIFIER_PREFIXES
+        .iter()
+        .any(|prefix| normalized.starts_with(prefix))
+}
+
+fn is_relation_condition_start(token: &Token) -> bool {
+    matches!(
+        token.token_type,
+        TokenType::On | TokenType::Using | TokenType::MatchCondition
+    ) || token.text.eq_ignore_ascii_case("MATCH_CONDITION")
+}
+
+fn is_context_value(token: &Token) -> bool {
+    matches!(
+        token.text.to_ascii_uppercase().as_str(),
+        "CURRENT_CATALOG"
+            | "CURRENT_DATE"
+            | "CURRENT_DATETIME"
+            | "CURRENT_ROLE"
+            | "CURRENT_SCHEMA"
+            | "CURRENT_TIME"
+            | "CURRENT_TIMESTAMP"
+            | "CURRENT_USER"
+    )
+}
+
+fn projection_alias_positions(tokens: &[Token], projection: &[usize]) -> HashMap<String, usize> {
+    let mut aliases: HashMap<String, usize> = HashMap::new();
+    for window in projection.windows(2) {
+        if tokens[window[0]].token_type == TokenType::As && is_identifier(&tokens[window[1]]) {
+            aliases.insert(tokens[window[1]].text.to_ascii_lowercase(), window[1]);
+        }
+    }
+    aliases
+}
+
+fn unused_join_spans(query: &QuerySlice<'_>, query_start: usize, query_end: usize) -> Vec<Span> {
     let QuerySlice {
         tokens,
         direct,
@@ -357,6 +680,12 @@ fn unused_join_spans(query: &QuerySlice<'_>, references: &[usize]) -> Vec<Span> 
     } = query;
     let from_position = *from_position;
     let relation_end = *relation_end;
+    let relation_start_index = direct.get(from_position + 1).copied().unwrap_or(query_end);
+    let relation_end_index = direct.get(relation_end).copied().unwrap_or(query_end);
+    let references: Vec<usize> = (query_start..relation_start_index)
+        .chain(relation_end_index..query_end)
+        .filter(|&index| !is_layout(&tokens[index]) && !is_comment(&tokens[index]))
+        .collect();
     let mut spans: Vec<Span> = Vec::new();
     for position in from_position + 1..relation_end {
         let index = direct[position];
@@ -413,6 +742,9 @@ fn unaliased_calculation_spans(tokens: &[Token], projection: &[usize]) -> Vec<Sp
             || item
                 .iter()
                 .any(|&index| tokens[index].token_type == TokenType::As)
+            || item
+                .iter()
+                .any(|&index| is_generated_identifier(&tokens[index]))
             || simple_projection(tokens, item)
             || implicit_alias_projection(tokens, item)
         {
@@ -434,13 +766,42 @@ fn simple_projection(tokens: &[Token], item: &[usize]) -> bool {
             )
         })
         .collect();
-    trimmed.len() == 1
-        && (is_identifier(&tokens[trimmed[0]]) || tokens[trimmed[0]].token_type == TokenType::Star)
+    let wildcard = trimmed.first().is_some_and(|&index| {
+        tokens[index].token_type == TokenType::Star
+            || (trimmed.len() >= QUALIFIED_REFERENCE_LENGTH
+                && is_identifier(&tokens[index])
+                && tokens[trimmed[1]].token_type == TokenType::Dot
+                && tokens[trimmed[2]].token_type == TokenType::Star)
+    });
+    wildcard
+        || trimmed.len() == 1
+            && (is_bare_column_token(&tokens[trimmed[0]])
+                || tokens[trimmed[0]].token_type == TokenType::Star)
         || trimmed.len() == QUALIFIED_REFERENCE_LENGTH
             && is_identifier(&tokens[trimmed[0]])
             && tokens[trimmed[1]].token_type == TokenType::Dot
-            && (is_identifier(&tokens[trimmed[2]])
+            && (is_bare_column_token(&tokens[trimmed[2]])
                 || tokens[trimmed[2]].token_type == TokenType::Star)
+}
+
+fn is_bare_column_token(token: &Token) -> bool {
+    is_identifier(token)
+        || (!matches!(
+            token.token_type,
+            TokenType::Null
+                | TokenType::True
+                | TokenType::False
+                | TokenType::Number
+                | TokenType::String
+        ) && token
+            .text
+            .chars()
+            .next()
+            .is_some_and(|character| character.is_alphabetic() || character == '_')
+            && token
+                .text
+                .chars()
+                .all(|character| character.is_alphanumeric() || character == '_'))
 }
 
 fn implicit_alias_projection(tokens: &[Token], item: &[usize]) -> bool {
@@ -575,16 +936,19 @@ fn relation_alias_after_join(
     direct: &[usize],
     join_position: usize,
 ) -> Option<String> {
-    let table_position = join_position + 1;
-    let table_index = *direct.get(table_position)?;
-    let as_index = direct.get(table_position + 1).copied();
-    let alias_index = direct.get(table_position + 2).copied();
-    if as_index.is_some_and(|index| tokens[index].token_type == TokenType::As)
-        && alias_index.is_some_and(|index| is_identifier(&tokens[index]))
-    {
-        return alias_index.map(|index| tokens[index].text.to_ascii_lowercase());
-    }
-    is_identifier(&tokens[table_index]).then(|| tokens[table_index].text.to_ascii_lowercase())
+    let relation = &direct[join_position + 1..];
+    let relation_end = relation
+        .iter()
+        .position(|&index| {
+            is_relation_condition_start(&tokens[index])
+                || matches!(tokens[index].token_type, TokenType::Join | TokenType::Comma)
+        })
+        .unwrap_or(relation.len());
+    relation[..relation_end]
+        .iter()
+        .rev()
+        .find(|&&index| is_identifier(&tokens[index]))
+        .map(|&index| tokens[index].text.to_ascii_lowercase())
 }
 
 fn implicit_inner_join_spans(tokens: &[Token], relation_clause: &[usize]) -> Vec<Span> {
@@ -941,7 +1305,7 @@ fn projection_arity(query: &QuerySlice<'_>) -> Option<usize> {
     let end = *end;
     let depth = *depth;
     let projection_end = (select + 1..end)
-        .find(|&index| depths[index] == depth && tokens[index].token_type == TokenType::From)
+        .find(|&index| depths[index] == depth && is_query_from(tokens, index))
         .unwrap_or(end);
     if (select + 1..projection_end)
         .any(|index| depths[index] == depth && tokens[index].token_type == TokenType::Star)

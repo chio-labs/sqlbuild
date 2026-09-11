@@ -15,6 +15,14 @@ class RulesIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class FormatCompileIntegrationTestCase:
+    """One format-to-compile compatibility expectation."""
+
+    description: str
+    expected_literal: str
+
+
+@dataclass(frozen=True)
 class ContractCommandIntegrationTestCase:
     """One target-backed contract CLI expectation."""
 

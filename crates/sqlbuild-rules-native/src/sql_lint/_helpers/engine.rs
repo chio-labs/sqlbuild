@@ -287,6 +287,11 @@ struct DiagnosticContext<'a> {
     enabled: &'a HashSet<String>,
 }
 
+struct FactBuildOptions<'a> {
+    external_identifiers: &'a HashSet<String>,
+    allows_ceremonial_select: bool,
+}
+
 pub(crate) fn lint_json_impl(request_json: &str) -> Result<String, String> {
     let request: LintRequest =
         serde_json::from_str(request_json).map_err(|error| error.to_string())?;
@@ -324,7 +329,16 @@ fn lint(request: LintRequest) -> Result<LintResponse, String> {
         },
     );
     let statements = parser.parse().map_err(|error| error.to_string())?;
-    let facts = build_facts(&statements, &tokens, &request.sql);
+    let external_identifiers: HashSet<String> = request
+        .external_identifiers
+        .iter()
+        .map(|identifier| identifier.to_ascii_lowercase())
+        .collect();
+    let options = FactBuildOptions {
+        external_identifiers: &external_identifiers,
+        allows_ceremonial_select: request.allows_ceremonial_select,
+    };
+    let facts = build_facts(&statements, &tokens, &request.sql, &options);
     let context = DiagnosticContext {
         sql: &request.sql,
         dialect: dialect_type,
@@ -369,10 +383,19 @@ fn expand_rule_selectors(selectors: &[String]) -> Result<HashSet<String>, String
     Ok(selected)
 }
 
-fn build_facts(expressions: &[Expression], tokens: &[Token], sql: &str) -> QueryFacts {
+fn build_facts(
+    expressions: &[Expression],
+    tokens: &[Token],
+    sql: &str,
+    options: &FactBuildOptions<'_>,
+) -> QueryFacts {
     let mut facts: QueryFacts = collect_token_query_facts(tokens, sql);
     facts.null_comparisons = null_comparison_spans(tokens);
-    facts.additional = collect_additional_facts(tokens);
+    facts.additional = collect_additional_facts(
+        tokens,
+        options.external_identifiers,
+        options.allows_ceremonial_select,
+    );
     for expression in expressions {
         facts
             .unused_cte_names
@@ -516,9 +539,7 @@ fn collect_terminal_shape_facts(
         })
         .map(|window| tokens[window[0]].text.to_ascii_lowercase())
         .next_back();
-    let from_position = tail
-        .iter()
-        .position(|&index| tokens[index].token_type == TokenType::From);
+    let from_position = tail.iter().position(|&index| is_query_from(tokens, index));
     let terminal_is_plain = from_position.is_some_and(|position| {
         let projection = &tail[..position];
         let relation = tail.get(position + 1);
@@ -643,6 +664,12 @@ fn first_type(tokens: &[Token], indices: &[usize], token_type: TokenType) -> Opt
         .find(|&index| tokens[index].token_type == token_type)
 }
 
+pub(super) fn is_query_from(tokens: &[Token], index: usize) -> bool {
+    tokens[index].token_type == TokenType::From
+        && significant_before(tokens, index)
+            .is_none_or(|previous| tokens[previous].token_type != TokenType::Distinct)
+}
+
 fn redundant_distinct_span(context: &QueryTokenContext<'_>) -> Option<Span> {
     let QueryTokenContext {
         tokens,
@@ -653,7 +680,10 @@ fn redundant_distinct_span(context: &QueryTokenContext<'_>) -> Option<Span> {
     } = context;
     let group_position = group_by_position(tokens, direct)?;
     let group_index = direct[group_position];
-    let projection_end = first_type(tokens, direct, TokenType::From)
+    let projection_end = direct
+        .iter()
+        .copied()
+        .find(|&index| is_query_from(tokens, index))
         .filter(|index| *index < group_index)
         .unwrap_or(group_index);
     let distinct_position = direct.iter().position(|&index| {
@@ -766,7 +796,7 @@ fn collect_from_and_join_facts(tokens: &[Token], direct: &[usize]) -> (Vec<Span>
     let mut missing_conditions: Vec<Span> = Vec::new();
     let Some(from_position) = direct
         .iter()
-        .position(|&index| tokens[index].token_type == TokenType::From)
+        .position(|&index| is_query_from(tokens, index))
     else {
         return (implicit, missing_conditions);
     };
@@ -774,8 +804,17 @@ fn collect_from_and_join_facts(tokens: &[Token], direct: &[usize]) -> (Vec<Span>
         .iter()
         .position(|&index| is_post_from_clause(tokens[index].token_type))
         .map_or(direct.len(), |offset| from_position + 1 + offset);
-    for &index in &direct[from_position + 1..clause_end] {
-        if tokens[index].token_type == TokenType::Comma {
+    let relation_clause = &direct[from_position + 1..clause_end];
+    let values_relation = relation_clause
+        .first()
+        .is_some_and(|&index| tokens[index].token_type == TokenType::Values);
+    for (position, &index) in relation_clause.iter().enumerate() {
+        if tokens[index].token_type == TokenType::Comma
+            && !values_relation
+            && relation_clause
+                .get(position + 1)
+                .is_none_or(|&next| tokens[next].token_type != TokenType::Lateral)
+        {
             implicit.push(tokens[index].span);
         }
     }
@@ -949,9 +988,7 @@ fn select_after_projects_star(
 
 fn projection_projects_star(tokens: &[Token], depths: &[usize], range: &ExpressionRange) -> bool {
     (range.start + 1..range.end)
-        .take_while(|&index| {
-            depths[index] != range.depth || tokens[index].token_type != TokenType::From
-        })
+        .take_while(|&index| depths[index] != range.depth || !is_query_from(tokens, index))
         .any(|index| depths[index] == range.depth && tokens[index].token_type == TokenType::Star)
 }
 
@@ -1072,12 +1109,9 @@ fn implicit_cartesian_fix(sql: &str, tokens: &[Token], span: Span) -> Option<Lin
     let depth = depths[comma_index];
     let from_index = (0..comma_index).rev().find(|&index| {
         depths[index] == depth
-            && matches!(
-                tokens[index].token_type,
-                TokenType::From | TokenType::Semicolon
-            )
+            && (is_query_from(tokens, index) || tokens[index].token_type == TokenType::Semicolon)
     })?;
-    if tokens[from_index].token_type != TokenType::From {
+    if !is_query_from(tokens, from_index) {
         return None;
     }
     let clause_end = (comma_index + 1..tokens.len())

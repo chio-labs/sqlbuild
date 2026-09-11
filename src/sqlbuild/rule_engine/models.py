@@ -228,6 +228,7 @@ class RuleIgnore:
     rules: tuple[str, ...]
     paths: tuple[str, ...]
     reason: str
+    selectors: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
