@@ -94,7 +94,7 @@ const CONSECUTIVE_SEMICOLON: LintRuleMetadata = LintRuleMetadata {
 const REDUNDANT_SELF_ALIAS: LintRuleMetadata = LintRuleMetadata {
     code: "SQBRSQL016",
     message: "Expression is aliased to its existing name",
-    remediation: "Remove the redundant self-alias.",
+    remediation: "Remove the self-alias when the inferred output identity remains stable.",
 };
 const COUNT_ONE: LintRuleMetadata = LintRuleMetadata {
     code: "SQBRSQL017",
@@ -1432,8 +1432,8 @@ fn additional_style_diagnostics(context: &DiagnosticContext<'_>) -> Vec<LintDiag
             diagnostic(
                 &REDUNDANT_SELF_ALIAS,
                 Some(*span),
-                Some(deletion(*span)),
                 None,
+                Some("removing the alias may change statically inferred output identity"),
             )
         }));
     }
