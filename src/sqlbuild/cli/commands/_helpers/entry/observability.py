@@ -87,9 +87,12 @@ def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> Iterato
         providers: tuple[DiscoveredProvider, ...]
         event_exporters: tuple[DiscoveredEventExporter, ...]
         command_output_sinks: tuple[DiscoveredCommandOutputSink, ...]
-        providers, event_exporters, command_output_sinks = discover_runtime_extensions(
-            project_dir=project_dir
-        )
+        if args.command == LINEAGE_COMMAND:
+            providers, event_exporters, command_output_sinks = (), (), ()
+        else:
+            providers, event_exporters, command_output_sinks = discover_runtime_extensions(
+                project_dir=project_dir
+            )
         if event_exporters or command_output_sinks:
             exporter_delivery: EventExporterDispatcher = EventExporterDispatcher(
                 failure_callback=_log_exporter_failure,

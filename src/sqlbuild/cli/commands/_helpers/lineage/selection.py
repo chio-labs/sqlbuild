@@ -27,6 +27,7 @@ from sqlbuild.cli.commands.models import (
     LineageSelectionAnchors,
     ParsedLineagePathSelector,
     ParsedLineageSelector,
+    RelationLineageIndex,
 )
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
@@ -67,7 +68,7 @@ def parse_depth(raw_depth: str) -> int | None:
 
 def select_target_lineage(
     *,
-    graph: ProjectGraph,
+    graph: ProjectGraph | RelationLineageIndex,
     target: str,
     direction: str,
     depth: int | None,
@@ -84,8 +85,7 @@ def select_target_lineage(
     if direction in {DOWNSTREAM_DIRECTION, BOTH_DIRECTIONS}:
         selected.update(_walk_bounded(anchors=(key,), deps=graph.downstream_deps, max_depth=depth))
     return build_lineage_graph(
-        project=graph.project,
-        upstream_deps=graph.upstream_deps,
+        graph=graph,
         selected_keys=frozenset(selected),
         focus_keys=(key,),
         direction=direction,
@@ -94,7 +94,7 @@ def select_target_lineage(
 
 def select_column_target_lineage(
     *,
-    graph: ProjectGraph,
+    graph: ProjectGraph | RelationLineageIndex,
     target: str,
     direction: str,
     depth: int | None,
@@ -104,6 +104,12 @@ def select_column_target_lineage(
 
     if COLUMN_TARGET_SEPARATOR not in target:
         return None
+    if not isinstance(graph, ProjectGraph):
+        raise CliUserError(
+            "column lineage requires a compiled project graph",
+            code="C307",
+            help="enable SQL analysis or install SQLBuild with Polyglot support",
+        )
     resource_name: str
     column_name: str
     resource_name, column_name = target.rsplit(COLUMN_TARGET_SEPARATOR, 1)
@@ -237,7 +243,7 @@ def _trace_column_with_depth(
 
 def select_selector_lineage(
     *,
-    graph: ProjectGraph,
+    graph: ProjectGraph | RelationLineageIndex,
     select: tuple[str, ...],
     exclude: tuple[str, ...],
     depth: int | None,
@@ -274,8 +280,7 @@ def select_selector_lineage(
         sorted(anchors.upstream | anchors.downstream, key=_sort_key)
     )
     return build_lineage_graph(
-        project=graph.project,
-        upstream_deps=graph.upstream_deps,
+        graph=graph,
         selected_keys=selected_keys,
         focus_keys=focus_keys,
         direction=None,
@@ -284,8 +289,7 @@ def select_selector_lineage(
 
 def build_lineage_graph(
     *,
-    project: CompiledProject,
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    graph: ProjectGraph | RelationLineageIndex,
     selected_keys: frozenset[CompiledObjectKey],
     focus_keys: tuple[CompiledObjectKey, ...] = (),
     direction: str | None = None,
@@ -293,11 +297,11 @@ def build_lineage_graph(
     """Build display nodes and selected edges."""
 
     nodes: tuple[LineageNode, ...] = tuple(
-        _build_node(project=project, key=key) for key in sorted(selected_keys, key=_sort_key)
+        _build_node(graph=graph, key=key) for key in sorted(selected_keys, key=_sort_key)
     )
     selected_edges: list[tuple[CompiledObjectKey, CompiledObjectKey]] = []
     for downstream_key in sorted(selected_keys, key=_sort_key):
-        for upstream_key in upstream_deps.get(downstream_key, ()):
+        for upstream_key in graph.upstream_deps.get(downstream_key, ()):
             if upstream_key in selected_keys:
                 selected_edges.append((upstream_key, downstream_key))
     return LineageGraph(
@@ -685,7 +689,12 @@ def _match_path(
     )
 
 
-def _build_node(*, project: CompiledProject, key: CompiledObjectKey) -> LineageNode:
+def _build_node(
+    *, graph: ProjectGraph | RelationLineageIndex, key: CompiledObjectKey
+) -> LineageNode:
+    if isinstance(graph, RelationLineageIndex):
+        return graph.nodes.get(key, LineageNode(key=key))
+    project: CompiledProject = graph.project
     for model in project.models:
         if model.key == key:
             return LineageNode(

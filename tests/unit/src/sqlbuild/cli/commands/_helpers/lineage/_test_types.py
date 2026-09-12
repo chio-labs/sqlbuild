@@ -56,3 +56,30 @@ class LargeColumnLineageOutputTestCase:
     expected_excluded_fragment: str
     expected_summary_fragment: str
     expected_json_tip_fragment: str
+
+
+@dataclass(frozen=True)
+class LineageCompiledGraphRequirementTestCase:
+    description: str
+    target: str | None
+    select: tuple[str, ...]
+    include_uses: bool
+    expected_compiled_graph_required: bool
+
+
+@dataclass(frozen=True)
+class LineageFingerprintEnvironmentTestCase:
+    description: str
+    config: str
+    environment_name: str
+    first_value: str
+    second_value: str
+    expected_equal: bool
+
+
+@dataclass(frozen=True)
+class LineageFingerprintAvailabilityTestCase:
+    description: str
+    relative_path: str
+    config: str
+    expected_available: bool
