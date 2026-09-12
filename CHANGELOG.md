@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.98.3](https://github.com/chio-labs/sqlbuild/compare/v0.98.2...v0.98.3) (2026-09-12)
+
+
+### Bug Fixes
+
+* count filtered join references ([#634](https://github.com/chio-labs/sqlbuild/issues/634)) ([7e6ba49](https://github.com/chio-labs/sqlbuild/commit/7e6ba49d13b6a36792fd6451964a8512984db4b8))
+
 ## [0.98.2](https://github.com/chio-labs/sqlbuild/compare/v0.98.1...v0.98.2) (2026-09-12)
 
 
