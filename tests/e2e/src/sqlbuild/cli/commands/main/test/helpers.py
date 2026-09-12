@@ -165,8 +165,8 @@ def build_missing_mock_columns_project_files() -> dict[str, str]:
             "    schema: main\n"
             "    table: raw_orders\n"
             "    columns:\n"
-            "      - name: customer_id\n        type: INTEGER\n"
-            "      - name: status\n        type: VARCHAR\n"
+            "      - name: customer_id\n"
+            "      - name: status\n"
         ),
         "tests/unit/test_orders.sql": (
             "TEST();\n\n"
@@ -208,6 +208,17 @@ def build_partial_source_fixture_project_files() -> dict[str, str]:
             "SELECT 1\n"
         ),
     }
+
+
+def build_unspecified_nullability_fixture_project_files() -> dict[str, str]:
+    """Build a typed partial source fixture whose nullability is unspecified."""
+
+    files: dict[str, str] = build_partial_source_fixture_project_files()
+    files["sources/raw_orders.yml"] = files["sources/raw_orders.yml"].replace(
+        "        type: VARCHAR\n        nullable: true\n",
+        "        type: VARCHAR\n",
+    )
+    return files
 
 
 def build_partial_ref_fixture_project_files() -> dict[str, str]:

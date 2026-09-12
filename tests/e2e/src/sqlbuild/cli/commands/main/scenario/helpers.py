@@ -94,7 +94,7 @@ def build_partial_fixture_scenario_project_files() -> dict[str, str]:
             "    table: raw_orders\n"
             "    columns:\n"
             "      - name: order_id\n        type: INTEGER\n        nullable: false\n"
-            "      - name: status\n        type: VARCHAR\n        nullable: true\n"
+            "      - name: status\n        type: VARCHAR\n"
         ),
         "models/orders.sql": ('MODEL ();\n\nSELECT order_id, status FROM __source("raw_orders")\n'),
         "tests/scenarios/partial_orders.sql": (
