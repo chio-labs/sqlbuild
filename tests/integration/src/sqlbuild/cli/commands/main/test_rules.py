@@ -192,6 +192,48 @@ WHERE current_orders.created_at >= start_date
 
 @pytest.mark.parametrize(
     "test_case",
+    [RulesIntegrationTestCase("cross join used by filter is not unused", 0, "SQBRSQL032")],
+    ids=lambda case: case.description,
+)
+def test_given_cross_join_used_by_filter_when_running_unused_join_rule_then_no_finding_is_reported(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "recent_orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        """MODEL (description "Recent orders");
+SELECT orders.order_id
+FROM orders
+CROSS JOIN processing_cutoff AS cutoff
+WHERE orders.created_at < cutoff.created_at
+""",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "rules",
+            "--json",
+            "run",
+            test_case.expected_code,
+        ]
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    captured: CaptureResult[str] = capsys.readouterr()
+    payload: dict[str, object] = json.loads(captured.out)
+    assert payload["findings"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [RulesIntegrationTestCase("ceremonial SQL test select is ignored", 0, "SQBRSQL022")],
     ids=lambda case: case.description,
 )

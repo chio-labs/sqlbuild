@@ -929,6 +929,20 @@ fn given_additional_rule_cases_when_linting_then_findings_and_fixes_match() -> R
             expected_replacement: None,
         },
         test_types::AdditionalLintRuleTestCase {
+            description: "cross joined relation contributes through a filter predicate",
+            sql: "SELECT orders.order_id FROM orders CROSS JOIN processing_cutoff AS cutoff WHERE orders.created_at < cutoff.created_at",
+            rule: "SQBRSQL032",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "lateral relation contributes through a downstream join condition",
+            sql: "SELECT orders.order_id, products.name FROM orders CROSS JOIN LATERAL UNNEST(orders.product_ids) AS item INNER JOIN products ON (products.product_id = item.product_id)",
+            rule: "SQBRSQL032",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
             description: "explicit union is clean",
             sql: "SELECT 1 UNION ALL SELECT 2",
             rule: "SQBRSQL008",

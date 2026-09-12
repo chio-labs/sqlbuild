@@ -695,15 +695,40 @@ fn unused_join_spans(query: &QuerySlice<'_>, query_start: usize, query_end: usiz
         let Some(alias) = relation_alias_after_join(tokens, direct, position) else {
             continue;
         };
-        let used = references.windows(2).any(|window| {
-            tokens[window[0]].text.eq_ignore_ascii_case(&alias)
-                && tokens[window[1]].token_type == TokenType::Dot
+        let used_outside_relation_clause =
+            contains_qualified_reference(tokens, &references, &alias);
+        let downstream_relation_start = direct[position + 1..relation_end]
+            .iter()
+            .position(|&candidate| {
+                matches!(
+                    tokens[candidate].token_type,
+                    TokenType::Join | TokenType::Comma
+                )
+            })
+            .map(|offset| position + 1 + offset);
+        let used_by_downstream_relation = downstream_relation_start.is_some_and(|start| {
+            let downstream_start_index = direct[start];
+            let downstream_end_index = direct.get(relation_end).copied().unwrap_or(query_end);
+            let downstream_references: Vec<usize> = (downstream_start_index..downstream_end_index)
+                .filter(|&candidate| {
+                    !is_layout(&tokens[candidate]) && !is_comment(&tokens[candidate])
+                })
+                .collect();
+            contains_qualified_reference(tokens, &downstream_references, &alias)
         });
+        let used = used_outside_relation_clause || used_by_downstream_relation;
         if !used {
             spans.push(tokens[index].span);
         }
     }
     spans
+}
+
+fn contains_qualified_reference(tokens: &[Token], references: &[usize], alias: &str) -> bool {
+    references.windows(2).any(|window| {
+        tokens[window[0]].text.eq_ignore_ascii_case(alias)
+            && tokens[window[1]].token_type == TokenType::Dot
+    })
 }
 
 fn is_after_relation_clause(token_type: TokenType) -> bool {
@@ -941,6 +966,7 @@ fn relation_alias_after_join(
         .iter()
         .position(|&index| {
             is_relation_condition_start(&tokens[index])
+                || is_after_relation_clause(tokens[index].token_type)
                 || matches!(tokens[index].token_type, TokenType::Join | TokenType::Comma)
         })
         .unwrap_or(relation.len());
