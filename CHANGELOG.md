@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.98.2](https://github.com/chio-labs/sqlbuild/compare/v0.98.1...v0.98.2) (2026-09-12)
+
+
+### Bug Fixes
+
+* withhold unsafe multi-branch case fixes ([#632](https://github.com/chio-labs/sqlbuild/issues/632)) ([87127f2](https://github.com/chio-labs/sqlbuild/commit/87127f2b7d396392074892404e58fcbdbd705c21))
+
 ## [0.98.1](https://github.com/chio-labs/sqlbuild/compare/v0.98.0...v0.98.1) (2026-09-12)
 
 
