@@ -46,7 +46,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     "test_case",
     (
         ScenarioPartialFixtureE2ETestCase(
-            description="required nullable source column receives a typed null",
+            description="required typed source column with unspecified nullability gets a null",
             repo_files=build_partial_fixture_scenario_project_files(),
             expected_stdout_fragment="PASS=1  FAIL=0  TOTAL=1",
             expected_artifact_fragments=(
@@ -57,7 +57,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     ),
     ids=lambda case: case.description,
 )
-def test_given_partial_scenario_fixture_when_required_column_is_nullable_then_typed_null_is_used(
+def test_given_partial_scenario_fixture_when_required_type_is_known_then_typed_null_is_used(
     test_case: ScenarioPartialFixtureE2ETestCase,
     tmp_path: Path,
 ) -> None:

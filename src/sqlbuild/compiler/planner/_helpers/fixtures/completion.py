@@ -31,7 +31,7 @@ def build_relation_fixture_completion(
     ordered_model_names: tuple[str, ...],
     fixture_groups: FixtureGroups,
 ) -> RelationFixtureCompletion:
-    """Complete only required omitted columns with authoritative nullable typed nulls."""
+    """Complete required omitted columns with typed nulls unless explicitly non-nullable."""
 
     model_map: dict[str, CompiledModel] = {model.name: model for model in project.models}
     fixture_sql_by_key: dict[FixtureKey, str] = {}
@@ -94,12 +94,12 @@ def build_relation_fixture_completion(
         non_nullable: list[str] = []
         for name in missing:
             column: FixtureColumnMetadata | None = metadata_by_name.get(name.casefold())
-            if column is None or column.type is None or column.nullable is None:
+            if column is None or column.type is None:
                 unknown.append(name)
-            elif column.nullable:
-                nullable_columns.append(column)
-            else:
+            elif column.nullable is False:
                 non_nullable.append(name)
+            else:
+                nullable_columns.append(column)
         if unknown:
             read_by: tuple[str, ...] = _models_reading_columns(
                 column_names=tuple(unknown),
@@ -110,8 +110,8 @@ def build_relation_fixture_completion(
                     key=key,
                     message=(
                         f"mock {key[0].value} '{key[1]}' is missing required columns: "
-                        f"{', '.join(unknown)}; provide explicit values because their types or "
-                        f"nullability are not authoritative (read by: {', '.join(read_by)})"
+                        f"{', '.join(unknown)}; provide explicit values because their types are "
+                        f"not authoritative (read by: {', '.join(read_by)})"
                     ),
                 )
             )

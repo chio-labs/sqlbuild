@@ -41,6 +41,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     build_star_partial_fixture_project_files,
     build_transformed_collection_project_files,
     build_unsatisfied_leaf_test_project_files,
+    build_unspecified_nullability_fixture_project_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     assert_fragments_in_order,
@@ -56,6 +57,15 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
         PartialFixtureE2ETestCase(
             description="known nullable source column receives an implicit typed null",
             repo_files=build_partial_source_fixture_project_files(),
+            expected_stdout_fragment="PASS=1",
+            expected_artifact_fragments=(
+                'CAST(NULL AS TEXT) AS "status"',
+                "__sqlbuild_partial_fixture",
+            ),
+        ),
+        PartialFixtureE2ETestCase(
+            description="known source type with unspecified nullability receives a typed null",
+            repo_files=build_unspecified_nullability_fixture_project_files(),
             expected_stdout_fragment="PASS=1",
             expected_artifact_fragments=(
                 'CAST(NULL AS TEXT) AS "status"',
@@ -134,7 +144,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     ),
     ids=lambda case: case.description,
 )
-def test_given_required_nullable_column_omitted_when_testing_then_completes_fixture_implicitly(
+def test_given_required_typed_column_omitted_when_testing_then_completes_fixture_implicitly(
     test_case: PartialFixtureE2ETestCase,
     tmp_path: Path,
 ) -> None:
@@ -297,17 +307,7 @@ def test_given_complex_strings_in_values_when_processing_then_literals_remain_in
             ),
             expected_stderr_fragments=(
                 "missing required columns: status",
-                "types or nullability are not authoritative",
-            ),
-        ),
-        SqlTestFixtureValidationE2ETestCase(
-            description="required source column with unknown nullability is not completed",
-            repo_files=build_invalid_partial_fixture_project_files(
-                status_column_attributes="        type: VARCHAR\n"
-            ),
-            expected_stderr_fragments=(
-                "missing required columns: status",
-                "types or nullability are not authoritative",
+                "types are not authoritative",
             ),
         ),
         SqlTestFixtureValidationE2ETestCase(
