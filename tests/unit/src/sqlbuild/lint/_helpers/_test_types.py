@@ -88,6 +88,15 @@ class ReservedCteLintTestCase:
 
 
 @dataclass(frozen=True)
+class NativeSqlFixTestCase:
+    """Native SQL diagnostic whose fix availability is part of the contract."""
+
+    description: str
+    sql: str
+    expected_code: str
+
+
+@dataclass(frozen=True)
 class GeneratedRangeFallbackTestCase:
     """Test case for a diagnostic that crosses generated SQL."""
 

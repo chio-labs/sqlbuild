@@ -899,6 +899,15 @@ fn given_additional_rule_cases_when_linting_then_findings_and_fixes_match() -> R
             expected_replacement: None,
         },
         test_types::AdditionalLintRuleTestCase {
+            description: "multi-branch boolean case is diagnosed without an unsafe partial fix",
+            sql: "SELECT CASE WHEN status = 'open' THEN TRUE WHEN priority = 'high' THEN TRUE ELSE FALSE END AS actionable FROM support_tickets",
+            rule: "SQBRSQL030",
+            expected_anchor: Some(
+                "CASE WHEN status = 'open' THEN TRUE WHEN priority = 'high' THEN TRUE ELSE FALSE END",
+            ),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
             description: "case nested directly in else",
             sql: "SELECT CASE WHEN a THEN 1 ELSE CASE WHEN b THEN 2 END END FROM items",
             rule: "SQBRSQL031",

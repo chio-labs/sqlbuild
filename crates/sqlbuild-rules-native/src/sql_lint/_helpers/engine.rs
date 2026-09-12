@@ -1665,6 +1665,25 @@ fn simple_boolean_case_fix(sql: &str, tokens: &[Token], span: Span) -> Option<Li
     if contains_comment(source) {
         return None;
     }
+    let case_tokens = &tokens[case_index..=end_index];
+    if case_tokens
+        .iter()
+        .filter(|token| token.token_type == TokenType::When)
+        .count()
+        != 1
+        || case_tokens
+            .iter()
+            .filter(|token| token.token_type == TokenType::Then)
+            .count()
+            != 1
+        || case_tokens
+            .iter()
+            .filter(|token| token.token_type == TokenType::Else)
+            .count()
+            != 1
+    {
+        return None;
+    }
     let when_index =
         (case_index + 1..end_index).find(|&index| tokens[index].token_type == TokenType::When)?;
     let then_index =

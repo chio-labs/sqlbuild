@@ -16,6 +16,7 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
     GeneratedRangeFallbackTestCase,
     InvalidNativeSqlResponseTestCase,
     NativeParseIsolationTestCase,
+    NativeSqlFixTestCase,
     NativeSqlReuseTestCase,
     ReservedCteLintTestCase,
 )
@@ -220,6 +221,51 @@ def test_given_reserved_harness_cte_when_linting_then_framework_input_is_not_rep
     )
 
     assert sum(len(entries) for entries in result.values()) == test_case.expected_violation_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativeSqlFixTestCase(
+            description="multi-branch boolean case has no unsafe partial fix",
+            sql=(
+                "SELECT CASE "
+                "WHEN status = 'open' THEN TRUE "
+                "WHEN priority = 'high' THEN TRUE "
+                "ELSE FALSE END AS actionable "
+                "FROM support_tickets"
+            ),
+            expected_code="SQBRSQL030",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_multi_branch_boolean_case_when_linting_then_partial_fix_is_withheld(
+    test_case: NativeSqlFixTestCase,
+    tmp_path: Path,
+) -> None:
+    target: Path = tmp_path / "support_tickets.sql"
+    body: LintBody = LintBody(
+        file_path=target,
+        body_start=0,
+        body_end=len(test_case.sql),
+        lint_text=test_case.sql,
+        passes=(),
+    )
+
+    result: dict[Path, tuple[LintViolation, ...]] = native_sql.run_native_sql_lint(
+        bodies=(body,),
+        contents_by_path={target: test_case.sql},
+        config=LintConfig(
+            dialect="duckdb",
+            enabled_native_rules=(test_case.expected_code,),
+        ),
+    )
+
+    assert len(result[target]) == 1
+    violation: LintViolation = result[target][0]
+    assert violation.code == test_case.expected_code
+    assert violation.fix is None
 
 
 @pytest.mark.parametrize(
