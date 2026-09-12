@@ -10,6 +10,7 @@ use crate::sql_lint::models::AdditionalQueryFacts;
 
 const COUNT_ONE_LITERAL: &str = "1";
 const QUALIFIED_REFERENCE_LENGTH: usize = 3;
+const QUALIFIER_PAIR_LENGTH: usize = 2;
 const IMPLICIT_ALIAS_MINIMUM_LENGTH: usize = 2;
 const GENERATED_IDENTIFIER_PREFIXES: [&str; 3] = [
     "__sqb_lint_",
@@ -100,6 +101,7 @@ pub(super) fn collect_additional_facts(
             && is_identifier(&tokens[alias_index])
             && token.token_type == tokens[alias_index].token_type
             && token.text == tokens[alias_index].text
+            && is_simple_projection_reference(tokens, &depths, &significant, position)
         {
             facts.redundant_self_aliases.push(Span {
                 start: token.span.end,
@@ -167,6 +169,50 @@ pub(super) fn collect_additional_facts(
     facts.ambiguous_order_directions = select_facts.ambiguous_order_directions;
     facts.set_arity_mismatches = set_arity_mismatch_spans(tokens, &depths);
     facts
+}
+
+fn is_simple_projection_reference(
+    tokens: &[Token],
+    depths: &[usize],
+    significant: &[usize],
+    position: usize,
+) -> bool {
+    let index = significant[position];
+    let Some(boundary) = (0..index).rev().find(|&candidate| {
+        depths[candidate] == depths[index]
+            && (tokens[candidate].token_type == TokenType::Select
+                || is_query_from(tokens, candidate)
+                || tokens[candidate].token_type == TokenType::Join)
+    }) else {
+        return false;
+    };
+    if tokens[boundary].token_type != TokenType::Select {
+        return false;
+    }
+    let item_boundary = significant[..position]
+        .iter()
+        .rposition(|&candidate| {
+            candidate > boundary
+                && depths[candidate] == depths[index]
+                && tokens[candidate].token_type == TokenType::Comma
+        })
+        .map_or(boundary, |boundary_position| significant[boundary_position]);
+    let prefix: Vec<usize> = significant[..position]
+        .iter()
+        .copied()
+        .filter(|&candidate| candidate > item_boundary && depths[candidate] == depths[index])
+        .collect();
+    if is_bare_star_prefix(tokens, &prefix) {
+        return true;
+    }
+    let mut qualifier_start = prefix.len();
+    while qualifier_start >= QUALIFIER_PAIR_LENGTH
+        && tokens[prefix[qualifier_start - 1]].token_type == TokenType::Dot
+        && is_identifier(&tokens[prefix[qualifier_start - 2]])
+    {
+        qualifier_start -= 2;
+    }
+    qualifier_start < prefix.len() && is_bare_star_prefix(tokens, &prefix[..qualifier_start])
 }
 
 fn collect_select_additional_facts(
