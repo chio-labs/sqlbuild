@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.98.5](https://github.com/chio-labs/sqlbuild/compare/v0.98.4...v0.98.5) (2026-09-12)
+
+
+### Bug Fixes
+
+* restrict redundant self alias fixes ([#638](https://github.com/chio-labs/sqlbuild/issues/638)) ([da2f968](https://github.com/chio-labs/sqlbuild/commit/da2f968042336232064ee480908c5e77b9b2f5ad))
+
 ## [0.98.4](https://github.com/chio-labs/sqlbuild/compare/v0.98.3...v0.98.4) (2026-09-12)
 
 
