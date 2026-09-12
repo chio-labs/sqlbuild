@@ -26,6 +26,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledRelationLocation,
     FunctionReturnColumn,
+    InferredColumn,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, FunctionLanguage
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, SqlTestParameterDeclaration
@@ -36,6 +37,7 @@ from sqlbuild.compiler.planner.types import (
     ChangeKind,
     CursorGrain,
     CursorWatermarkMode,
+    FixtureKey,
     GraphResourceKind,
     LocalNodePlanAction,
     LocalNodePlanReason,
@@ -82,6 +84,41 @@ from sqlbuild.spec.contracts.types import (
     SourceWriteStrategy,
 )
 from sqlbuild.sql_values.models import SqlValue
+
+
+@dataclass(frozen=True)
+class RelationFixtureDiagnostic:
+    """One statically provable invalid fixture condition."""
+
+    key: FixtureKey
+    message: str
+
+
+@dataclass(frozen=True)
+class RelationFixtureCompletion:
+    """Completed fixture SQL plus metadata reused by SQL-test validation."""
+
+    fixture_sql_by_key: dict[FixtureKey, str]
+    inferred_by_fixture: dict[FixtureKey, tuple[InferredColumn, ...]]
+    expected_types: dict[FixtureKey, dict[str, str]]
+    diagnostics: tuple[RelationFixtureDiagnostic, ...]
+
+
+@dataclass(frozen=True)
+class FixtureColumnMetadata:
+    """Known type and nullability for one relation fixture column."""
+
+    name: str
+    type: str | None
+    nullable: bool | None
+
+
+@dataclass(frozen=True)
+class FixtureRelationMetadata:
+    """Known columns and whether they form an authoritative relation shape."""
+
+    columns: tuple[FixtureColumnMetadata, ...]
+    authoritative_names: bool
 
 
 @dataclass(frozen=True)

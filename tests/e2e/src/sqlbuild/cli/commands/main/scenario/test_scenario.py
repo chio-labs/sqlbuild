@@ -15,12 +15,14 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario._test_types import (
     ScenarioLocalRetainE2ETestCase,
     ScenarioLocalRuntimeArtifactTestCase,
     ScenarioLocalSnapshotSyncE2ETestCase,
+    ScenarioPartialFixtureE2ETestCase,
     ScenarioPythonHooksCliE2ETestCase,
     ScenarioRuntimeArtifactTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     assert_local_duckdb_state,
     assert_runtime_artifact_contains,
+    build_partial_fixture_scenario_project_files,
     build_scenario_project_files,
     build_scenario_python_hooks_project_files,
     list_scenario_relation_names,
@@ -38,6 +40,53 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     query_duckdb,
     run_sqb,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ScenarioPartialFixtureE2ETestCase(
+            description="required nullable source column receives a typed null",
+            repo_files=build_partial_fixture_scenario_project_files(),
+            expected_stdout_fragment="PASS=1  FAIL=0  TOTAL=1",
+            expected_artifact_fragments=(
+                'CAST(NULL AS VARCHAR) AS "status"',
+                "__sqlbuild_partial_fixture",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_partial_scenario_fixture_when_required_column_is_nullable_then_typed_null_is_used(
+    test_case: ScenarioPartialFixtureE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="partial_fixture_scenario_project",
+        repo_files=test_case.repo_files,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "scenario", "test"),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert test_case.expected_stdout_fragment in result.stdout
+    fixture_artifact: Path = (
+        project_dir
+        / "target"
+        / "run"
+        / "scenarios"
+        / "partial_orders"
+        / "fixtures"
+        / "source__raw_orders.sql"
+    )
+    fixture_sql: str = fixture_artifact.read_text(encoding="utf-8")
+    for fragment in test_case.expected_artifact_fragments:
+        assert fragment in fixture_sql
+
 
 SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] = (
     ScenarioLocalRetainE2ETestCase(

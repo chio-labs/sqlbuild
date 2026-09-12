@@ -178,6 +178,248 @@ def build_missing_mock_columns_project_files() -> dict[str, str]:
     }
 
 
+def build_partial_source_fixture_project_files() -> dict[str, str]:
+    """Build a source fixture with one required nullable column omitted."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "partial_source_fixture"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "partial_source_fixture.duckdb"\n'
+        ),
+        "models/orders.sql": ('MODEL ();\n\nSELECT order_id, status FROM __source("raw_orders")\n'),
+        "sources/raw_orders.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n"
+            "    schema: main\n"
+            "    table: raw_orders\n"
+            "    columns:\n"
+            "      - name: order_id\n        type: INTEGER\n        nullable: false\n"
+            "      - name: status\n        type: VARCHAR\n        nullable: true\n"
+        ),
+        "tests/unit/test_orders.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            "__source__raw_orders AS (SELECT 1 AS order_id),\n"
+            "__expected__orders AS (\n"
+            "  SELECT 1 AS order_id, CAST(NULL AS VARCHAR) AS status\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def build_partial_ref_fixture_project_files() -> dict[str, str]:
+    """Build a model-ref fixture with one required nullable column omitted."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "partial_ref_fixture"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "partial_ref_fixture.duckdb"\n'
+        ),
+        "models/stg_orders.sql": (
+            "MODEL ();\n\nSELECT CAST(1 AS INTEGER) AS order_id, CAST(NULL AS VARCHAR) AS status\n"
+        ),
+        "models/orders.sql": ('MODEL ();\n\nSELECT order_id, status FROM __ref("stg_orders")\n'),
+        "tests/unit/test_orders.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id),\n"
+            "__expected__orders AS (\n"
+            "  SELECT 1 AS order_id, CAST(NULL AS VARCHAR) AS status\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def build_partial_seed_fixture_project_files() -> dict[str, str]:
+    """Build a seed fixture with one required nullable column omitted."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "partial_seed_fixture"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "partial_seed_fixture.duckdb"\n'
+        ),
+        "models/countries.sql": (
+            'MODEL ();\n\nSELECT country_code, country_name FROM __seed("country_codes")\n'
+        ),
+        "seeds/country_codes.csv": "country_code,country_name\nUS,United States\n",
+        "seeds/schema.yml": (
+            "seeds:\n"
+            "  - name: country_codes\n"
+            "    columns:\n"
+            "      - name: country_code\n        type: VARCHAR\n        nullable: false\n"
+            "      - name: country_name\n        type: VARCHAR\n        nullable: true\n"
+        ),
+        "tests/unit/test_countries.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            "__seed__country_codes AS (SELECT 'US' AS country_code),\n"
+            "__expected__countries AS (\n"
+            "  SELECT 'US' AS country_code, CAST(NULL AS VARCHAR) AS country_name\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def build_irrelevant_omitted_column_project_files() -> dict[str, str]:
+    """Build a fixture omitting a known nullable column outside the compiled closure."""
+
+    files: dict[str, str] = build_partial_source_fixture_project_files()
+    files["models/orders.sql"] = 'MODEL ();\n\nSELECT order_id FROM __source("raw_orders")\n'
+    files["tests/unit/test_orders.sql"] = (
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__raw_orders AS (SELECT 1 AS order_id),\n"
+        "__expected__orders AS (SELECT 1 AS order_id)\n"
+        "SELECT 1\n"
+    )
+    return files
+
+
+def build_star_partial_fixture_project_files() -> dict[str, str]:
+    """Build a contracted star model requiring the complete known source shape."""
+
+    files: dict[str, str] = build_partial_source_fixture_project_files()
+    files["sources/raw_orders.yml"] = files["sources/raw_orders.yml"].replace(
+        "    columns:\n", "    contract: enforced\n    columns:\n"
+    )
+    files["models/orders.sql"] = 'MODEL ();\n\nSELECT * FROM __source("raw_orders")\n'
+    return files
+
+
+def build_empty_partial_fixture_project_files() -> dict[str, str]:
+    """Build a zero-row fixture that still needs a nullable typed column."""
+
+    files: dict[str, str] = build_partial_source_fixture_project_files()
+    files["tests/unit/test_orders.sql"] = (
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__raw_orders AS (SELECT 1 AS order_id WHERE FALSE),\n"
+        "__expected__orders AS (\n"
+        "  SELECT 1 AS order_id, CAST(NULL AS VARCHAR) AS status WHERE FALSE\n"
+        ")\n"
+        "SELECT 1\n"
+    )
+    return files
+
+
+def build_explicit_typed_null_fixture_project_files() -> dict[str, str]:
+    """Build a complete fixture with an explicit typed null supplied by the author."""
+
+    files: dict[str, str] = build_partial_source_fixture_project_files()
+    files["tests/unit/test_orders.sql"] = (
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__raw_orders AS (\n"
+        "  SELECT 1 AS order_id, CAST(NULL AS VARCHAR) AS status\n"
+        "),\n"
+        "__expected__orders AS (\n"
+        "  SELECT 1 AS order_id, CAST(NULL AS VARCHAR) AS status\n"
+        ")\n"
+        "SELECT 1\n"
+    )
+    return files
+
+
+def build_qualified_star_other_relation_project_files() -> dict[str, str]:
+    """Build a qualified star that does not target the only mocked relation."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "qualified_star_other_relation"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "qualified_star_other_relation.duckdb"\n'
+        ),
+        "models/stg_orders.sql": "MODEL ();\n\nSELECT 1 AS stg_id\n",
+        "models/orders.sql": (
+            "MODEL ();\n\n"
+            "SELECT stg.*, raw.status\n"
+            'FROM __ref("stg_orders") stg\n'
+            'JOIN __source("raw_orders") raw ON TRUE\n'
+        ),
+        "sources/raw_orders.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n"
+            "    schema: main\n"
+            "    table: raw_orders\n"
+            "    contract: enforced\n"
+            "    columns:\n"
+            "      - name: order_id\n        type: INTEGER\n        nullable: false\n"
+            "      - name: status\n        type: VARCHAR\n        nullable: false\n"
+            "      - name: created_at\n        type: TIMESTAMP\n        nullable: false\n"
+        ),
+        "tests/unit/test_orders.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            "__source__raw_orders AS (SELECT 'open' AS status),\n"
+            "__expected__orders AS (SELECT 1 AS stg_id, 'open' AS status)\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def build_mixed_case_partial_fixture_project_files() -> dict[str, str]:
+    """Build a completed fixture with an as-written mixed-case unquoted alias."""
+
+    files: dict[str, str] = build_partial_source_fixture_project_files()
+    files["models/orders.sql"] = 'MODEL ();\n\nSELECT status, note FROM __source("raw_orders")\n'
+    files["sources/raw_orders.yml"] = (
+        "sources:\n"
+        "  - name: raw_orders\n"
+        "    schema: main\n"
+        "    table: raw_orders\n"
+        "    columns:\n"
+        "      - name: status\n        type: VARCHAR\n        nullable: false\n"
+        "      - name: note\n        type: VARCHAR\n        nullable: true\n"
+    )
+    files["tests/unit/test_orders.sql"] = (
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__raw_orders AS (SELECT 'open' AS Status),\n"
+        "__expected__orders AS (\n"
+        "  SELECT 'open' AS status, CAST(NULL AS VARCHAR) AS note\n"
+        ")\n"
+        "SELECT 1\n"
+    )
+    return files
+
+
+def build_invalid_partial_fixture_project_files(
+    *, status_column_attributes: str, supplied_column: str = "order_id"
+) -> dict[str, str]:
+    """Build one partial source fixture that cannot be completed safely."""
+
+    files: dict[str, str] = build_partial_source_fixture_project_files()
+    files["sources/raw_orders.yml"] = (
+        "sources:\n"
+        "  - name: raw_orders\n"
+        "    schema: main\n"
+        "    table: raw_orders\n"
+        "    contract: enforced\n"
+        "    columns:\n"
+        "      - name: order_id\n        type: INTEGER\n        nullable: false\n"
+        "      - name: status\n"
+        f"{status_column_attributes}"
+    )
+    files["tests/unit/test_orders.sql"] = (
+        "TEST();\n\n"
+        "WITH\n"
+        f"__source__raw_orders AS (SELECT 1 AS {supplied_column}),\n"
+        "__expected__orders AS (SELECT 1 AS order_id, 'open' AS status)\n"
+        "SELECT 1\n"
+    )
+    return files
+
+
 def build_incompatible_fixture_type_project_files(*, adapter_name: str) -> dict[str, str]:
     """Build a test whose expected scalar conflicts with an array model column."""
 

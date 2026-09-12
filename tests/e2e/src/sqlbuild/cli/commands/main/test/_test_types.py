@@ -76,6 +76,18 @@ class FixtureCompatibilityE2ETestCase:
 
 
 @dataclass(frozen=True)
+class PartialFixtureE2ETestCase:
+    """Test case for implicit schema-aware partial relation fixtures."""
+
+    description: str
+    repo_files: dict[str, str]
+    expected_stdout_fragment: str
+    expected_artifact_fragments: tuple[str, ...]
+    unexpected_artifact_fragments: tuple[str, ...] = field(default_factory=tuple)
+    artifact_filename: str = "test_orders.sql"
+
+
+@dataclass(frozen=True)
 class SqlTestInspectConflictE2ETestCase:
     """Test case for mutually exclusive inspection output modes."""
 

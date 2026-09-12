@@ -77,6 +77,38 @@ def build_scenario_project_files() -> dict[str, str]:
     }
 
 
+def build_partial_fixture_scenario_project_files() -> dict[str, str]:
+    """Build a scenario whose required nullable source column is omitted."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "partial_fixture_scenario"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "partial_fixture_scenario.duckdb"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n"
+            "    schema: main\n"
+            "    table: raw_orders\n"
+            "    columns:\n"
+            "      - name: order_id\n        type: INTEGER\n        nullable: false\n"
+            "      - name: status\n        type: VARCHAR\n        nullable: true\n"
+        ),
+        "models/orders.sql": ('MODEL ();\n\nSELECT order_id, status FROM __source("raw_orders")\n'),
+        "tests/scenarios/partial_orders.sql": (
+            "SCENARIO ();\n\n"
+            "WITH\n"
+            "__source__raw_orders AS (SELECT 1 AS order_id),\n"
+            "__expected__orders AS (\n"
+            "  SELECT 1 AS order_id, CAST(NULL AS VARCHAR) AS status\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
 def build_scenario_python_hooks_project_files() -> dict[str, str]:
     """Build an inline scenario project with a Python lifecycle hook."""
 

@@ -37,7 +37,9 @@ from sqlbuild.compiler.planner._helpers.sql_tests.comments import (
     uncommented_matches_by_pattern,
     uncommented_pattern_matches,
 )
-from sqlbuild.compiler.planner._helpers.sql_tests.fixture_validation import validate_test_fixtures
+from sqlbuild.compiler.planner._helpers.sql_tests.fixture_validation import (
+    build_validated_test_fixtures,
+)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     ChainStep,
@@ -177,7 +179,7 @@ def plan_test(
         mock_ref_names=frozenset(mock_refs),
     )
     if sql_analysis_enabled and validate_fixtures:
-        validate_test_fixtures(
+        mock_refs, mock_sources, mock_seeds = build_validated_test_fixtures(
             test=test,
             project=project,
             adapter=adapter,

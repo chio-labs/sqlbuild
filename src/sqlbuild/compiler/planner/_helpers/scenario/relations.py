@@ -28,6 +28,9 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlScenarioCte,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner._helpers.fixtures.completion import (
+    build_relation_fixture_completion,
+)
 from sqlbuild.compiler.planner._helpers.graph.core import (
     build_execution_upstream_deps,
     topologically_order_keys,
@@ -41,6 +44,7 @@ from sqlbuild.compiler.planner._helpers.resolve.resolve import resolve_function_
 from sqlbuild.compiler.planner.constants import (
     POLYGLOT_ALIAS_VALUE_KEY,
     SCENARIO_PLAN_INTERNAL,
+    SCENARIO_PLAN_INVALID_FIXTURE,
     SCENARIO_PLAN_MISSING_FIXTURE_SQL,
     SCENARIO_PLAN_MISSING_RELATION_TARGET,
     SCENARIO_PLAN_SQLGLOT_PARSE,
@@ -53,6 +57,7 @@ from sqlbuild.compiler.planner.models import (
     ModelPlanContext,
     ModelPlanEntry,
     PlanWarning,
+    RelationFixtureCompletion,
     ScenarioArtifactIdentity,
     ScenarioAssertionExpectationPlan,
     ScenarioExecutionPlan,
@@ -64,7 +69,11 @@ from sqlbuild.compiler.planner.models import (
     SeedPlanEntry,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import RelationMarkerTargetResolver, ScenarioArtifactKind
+from sqlbuild.compiler.planner.types import (
+    FixtureKey,
+    RelationMarkerTargetResolver,
+    ScenarioArtifactKind,
+)
 from sqlbuild.compiler.references.main._render_source_relation import render_source_relation
 from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import (
     reference_call_prefix_pattern_text,
@@ -297,6 +306,39 @@ def build_scenario_execution_plan(
         for key in topologically_order_keys(upstream=upstream_deps)
         if key.resource_type == CompiledResourceType.MODEL and key.name in scenario_model_names
     )
+    scenario_fixture_groups: tuple[tuple[CompiledResourceType, dict[str, str]], ...] = (
+        (
+            CompiledResourceType.SOURCE,
+            _extract_fixture_ctes(scenario=scenario, prefix=SOURCE_TEST_CTE_PREFIX),
+        ),
+        (
+            CompiledResourceType.MODEL,
+            _extract_fixture_ctes(scenario=scenario, prefix=REF_TEST_CTE_PREFIX),
+        ),
+        (
+            CompiledResourceType.SEED,
+            _extract_fixture_ctes(scenario=scenario, prefix=SEED_TEST_CTE_PREFIX),
+        ),
+    )
+    fixture_sql_overrides: dict[FixtureKey, str] | None = None
+    if sql_analysis_enabled:
+        fixture_completion: RelationFixtureCompletion = build_relation_fixture_completion(
+            project=project,
+            adapter=adapter,
+            ordered_model_names=tuple(key.name for key in ordered_model_keys),
+            fixture_groups=scenario_fixture_groups,
+        )
+        if fixture_completion.diagnostics:
+            source_path: str = str(scenario.source_path or scenario.name)
+            details: str = "\n".join(
+                f"- {diagnostic.message}" for diagnostic in fixture_completion.diagnostics
+            )
+            raise PlannerInputError(
+                f"Scenario '{scenario.name}' has invalid relation fixtures in "
+                f"{source_path}:\n{details}",
+                code=SCENARIO_PLAN_INVALID_FIXTURE,
+            )
+        fixture_sql_overrides = fixture_completion.fixture_sql_by_key
     fixture_plans: tuple[ScenarioFixturePlan, ...] = build_scenario_fixture_plans(
         scenario=scenario,
         graph_plan=graph_plan,
@@ -304,6 +346,7 @@ def build_scenario_execution_plan(
         adapter=adapter,
         sql_analysis_enabled=sql_analysis_enabled,
         sql_analysis_dialect=sql_analysis_dialect,
+        fixture_sql_overrides=fixture_sql_overrides,
     )
     seed_entries: tuple[SeedPlanEntry, ...] = build_scenario_seed_entries(
         project=project,
@@ -446,6 +489,7 @@ def build_scenario_fixture_plans(
     adapter: BaseAdapter,
     sql_analysis_enabled: bool = True,
     sql_analysis_dialect: str | None = None,
+    fixture_sql_overrides: dict[FixtureKey, str] | None = None,
 ) -> tuple[ScenarioFixturePlan, ...]:
     """Build self-contained fixture SQL plans, including shared helper CTEs."""
 
@@ -478,6 +522,22 @@ def build_scenario_fixture_plans(
     dbt_ref_ctes: dict[str, str] = _extract_fixture_ctes(
         scenario=scenario,
         prefix=DBT_REF_TEST_CTE_PREFIX,
+    )
+    overrides: dict[FixtureKey, str] = fixture_sql_overrides or {}
+    source_ctes = _apply_fixture_overrides(
+        resource_type=CompiledResourceType.SOURCE,
+        fixture_sql=source_ctes,
+        overrides=overrides,
+    )
+    ref_ctes = _apply_fixture_overrides(
+        resource_type=CompiledResourceType.MODEL,
+        fixture_sql=ref_ctes,
+        overrides=overrides,
+    )
+    seed_ctes = _apply_fixture_overrides(
+        resource_type=CompiledResourceType.SEED,
+        fixture_sql=seed_ctes,
+        overrides=overrides,
     )
 
     plans: list[ScenarioFixturePlan] = []
@@ -588,6 +648,15 @@ def build_scenario_fixture_plans(
         )
 
     return tuple(plans)
+
+
+def _apply_fixture_overrides(
+    *,
+    resource_type: CompiledResourceType,
+    fixture_sql: dict[str, str],
+    overrides: dict[FixtureKey, str],
+) -> dict[str, str]:
+    return {name: overrides.get((resource_type, name), sql) for name, sql in fixture_sql.items()}
 
 
 def build_scenario_seed_entries(

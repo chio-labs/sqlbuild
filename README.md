@@ -87,6 +87,13 @@ __expected__fact_orders AS (
 SELECT 1
 ```
 
+Relation fixtures can omit a column when the compiled test or scenario closure requires it and
+SQLBuild knows both its adapter type and that it is nullable. SQLBuild completes that test-only
+fixture column with a typed null such as `CAST(NULL AS VARCHAR)`; it never changes model SQL or
+warehouse defaults. Required non-nullable columns and columns with unknown type or nullability must
+be supplied explicitly. When the relation's complete column set is authoritative, misspelled or
+unknown supplied fixture columns are rejected.
+
 See the [documentation](https://docs.sqlbuild.com) for incremental models, scenarios, loaders, and more.
 
 ### Python project layout
