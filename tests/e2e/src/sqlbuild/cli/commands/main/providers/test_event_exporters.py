@@ -13,6 +13,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.providers._test_types import (
     CommandOutputE2ETestCase,
     EventExporterE2ETestCase,
     NoExporterCommandE2ETestCase,
+    ReadOnlyProviderE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
@@ -209,6 +210,60 @@ def test_given_command_output_sink_when_compiling_then_multiline_chunks_reconstr
     assert len(stdout_records) < len(result.stdout.splitlines())
     assert any(str(record["message"]).count("\n") > 1 for record in stdout_records)
     assert all(record["external_context"] == test_case.expected_context for record in records)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ReadOnlyProviderE2ETestCase(
+            description="lineage does not initialize configured providers or output sinks",
+            command=("lineage", "orders", "--format", "json"),
+            expected_exit_code=0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_configured_provider_and_sink_when_lineage_runs_then_skips_extension_initialization(
+    test_case: ReadOnlyProviderE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    provider_marker: Path = tmp_path / "provider-initialized"
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="read_only_lineage_project",
+        repo_files={
+            "sqlbuild_project.toml": 'name = "read_only_lineage_project"\nadapter = "duckdb"\n',
+            "providers/output.py": (
+                "from pathlib import Path\n"
+                "from sqlbuild.providers import Provider\n"
+                "class OutputProvider(Provider):\n"
+                "    def setup(self, ctx):\n"
+                "        del ctx\n"
+                f"        Path({str(provider_marker)!r}).write_text('initialized', encoding='utf-8')\n"
+                "    def write(self, record):\n"
+                "        del record\n"
+                "    def teardown(self):\n"
+                "        pass\n"
+            ),
+            "sinks/output.py": (
+                "from providers.output import OutputProvider\n"
+                "from sqlbuild.sinks import command_output_sink\n"
+                "@command_output_sink\n"
+                "def export_output(record, output_provider: OutputProvider):\n"
+                "    output_provider.write(record)\n"
+            ),
+            "models/orders.sql": "MODEL (materialized view);\n\nSELECT 1 AS order_id\n",
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", *test_case.command),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert '"id": "model:orders"' in result.stdout
+    assert not provider_marker.exists()
 
 
 @pytest.mark.parametrize(

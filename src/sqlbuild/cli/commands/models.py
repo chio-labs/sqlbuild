@@ -917,6 +917,18 @@ class LineageGraph:
 
 
 @dataclass(frozen=True)
+class RelationLineageIndex:
+    """Cacheable structural graph used by relation-level lineage inspection."""
+
+    nodes: dict[CompiledObjectKey, LineageNode]
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+    tag_index: dict[str, frozenset[CompiledObjectKey]]
+    path_index: dict[CompiledObjectKey, str]
+    all_keys: dict[str, CompiledObjectKey]
+
+
+@dataclass(frozen=True)
 class LineageSelectionAnchors:
     """Selector anchors used for optional post-selection depth trimming."""
 

@@ -22,6 +22,13 @@ class NoExporterCommandE2ETestCase:
 
 
 @dataclass(frozen=True)
+class ReadOnlyProviderE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
 class ProviderCommandE2ETestCase:
     description: str
     expected_exit_code: int

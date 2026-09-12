@@ -6,6 +6,11 @@ import json
 from pathlib import Path
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands._helpers.lineage.cache import (
+    read_relation_lineage_cache,
+    relation_lineage_fingerprint,
+    write_relation_lineage_cache,
+)
 from sqlbuild.cli.commands._helpers.lineage.output import (
     format_column_lineage_json,
     format_column_lineage_list,
@@ -21,12 +26,17 @@ from sqlbuild.cli.commands._helpers.lineage.selection import (
     select_target_lineage,
 )
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
-from sqlbuild.cli.commands.constants import JSON_OUTPUT_FORMAT, LIST_OUTPUT_FORMAT
+from sqlbuild.cli.commands.constants import (
+    COLUMN_TARGET_SEPARATOR,
+    JSON_OUTPUT_FORMAT,
+    LIST_OUTPUT_FORMAT,
+)
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import (
     ColumnLineageTrace,
     LineageCommandRequest,
     LineageGraph,
+    RelationLineageIndex,
 )
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -72,10 +82,27 @@ def _validate_request(*, request: LineageCommandRequest) -> None:
 
 def _prepare_graph(
     *, request: LineageCommandRequest
-) -> tuple[ProjectGraph, BaseAdapter, int | None]:
+) -> tuple[ProjectGraph | RelationLineageIndex, BaseAdapter | None, int | None]:
     parsed_depth: int | None = parse_depth(request.depth)
     project_dir: Path = request.project_dir or Path.cwd()
-    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    requires_compiled_graph: bool = _requires_compiled_graph(request=request)
+    fingerprint: str | None = (
+        None
+        if requires_compiled_graph
+        else relation_lineage_fingerprint(project_dir=project_dir, cli_vars=request.cli_vars)
+    )
+    if fingerprint is not None:
+        cached: RelationLineageIndex | None = read_relation_lineage_cache(
+            project_dir=project_dir,
+            fingerprint=fingerprint,
+        )
+        if cached is not None:
+            return cached, None, parsed_depth
+    discovered: DiscoveredProjectInputs = discover_project_inputs(
+        project_dir=project_dir,
+        sql_analysis_enabled_override=(None if requires_compiled_graph else False),
+        extract_output_column_locations=False,
+    )
     adapter: BaseAdapter = resolve_adapter(
         adapter_name=resolve_effective_adapter_name(
             project_config=discovered.project_config,
@@ -86,17 +113,42 @@ def _prepare_graph(
     graph: ProjectGraph = build_project_graph(
         discovered_inputs=discovered,
         adapter=adapter,
-        no_sql_validation=request.no_sql_validation,
+        no_sql_validation=request.no_sql_validation or not requires_compiled_graph,
+        skip_column_inference=not requires_compiled_graph,
         cli_vars=request.cli_vars,
     )
+    if fingerprint is not None:
+        return (
+            write_relation_lineage_cache(
+                project_dir=project_dir,
+                fingerprint=fingerprint,
+                graph=graph,
+            ),
+            None,
+            parsed_depth,
+        )
     return graph, adapter, parsed_depth
 
 
+def _requires_compiled_graph(*, request: LineageCommandRequest) -> bool:
+    return request.include_uses or (
+        request.target is not None and COLUMN_TARGET_SEPARATOR in request.target
+    )
+
+
 def _semantic_uses(
-    *, request: LineageCommandRequest, graph: ProjectGraph, adapter: BaseAdapter
+    *,
+    request: LineageCommandRequest,
+    graph: ProjectGraph | RelationLineageIndex,
+    adapter: BaseAdapter | None,
 ) -> tuple[DirectSemanticColumnUse, ...]:
     if not request.include_uses:
         return ()
+    if not isinstance(graph, ProjectGraph) or adapter is None:
+        raise CliUserError(
+            "semantic uses require a compiled project graph",
+            code="C307",
+        )
     return build_direct_semantic_uses(
         project=graph.project,
         dialect=adapter.sql_analysis_dialect(),
@@ -105,7 +157,10 @@ def _semantic_uses(
 
 
 def _render_lineage(
-    *, request: LineageCommandRequest, graph: ProjectGraph, parsed_depth: int | None
+    *,
+    request: LineageCommandRequest,
+    graph: ProjectGraph | RelationLineageIndex,
+    parsed_depth: int | None,
 ) -> str:
     if request.target is not None:
         column_trace: ColumnLineageTrace | None = select_column_target_lineage(
