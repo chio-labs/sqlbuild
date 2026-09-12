@@ -16,6 +16,7 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
     GeneratedRangeFallbackTestCase,
     InvalidNativeSqlResponseTestCase,
     NativeParseIsolationTestCase,
+    NativeSqlFindingTestCase,
     NativeSqlFixTestCase,
     NativeSqlReuseTestCase,
     ReservedCteLintTestCase,
@@ -266,6 +267,61 @@ def test_given_multi_branch_boolean_case_when_linting_then_partial_fix_is_withhe
     violation: LintViolation = result[target][0]
     assert violation.code == test_case.expected_code
     assert violation.fix is None
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativeSqlFindingTestCase(
+            description="cross joined relation used by filter is not reported as unused",
+            sql=(
+                "SELECT orders.order_id "
+                "FROM orders "
+                "CROSS JOIN processing_cutoff AS cutoff "
+                "WHERE orders.created_at < cutoff.created_at"
+            ),
+            selected_rule="SQBRSQL032",
+            expected_violation_count=0,
+        ),
+        NativeSqlFindingTestCase(
+            description="lateral relation used by parenthesized later join is not reported",
+            sql=(
+                "SELECT orders.order_id, products.name "
+                "FROM orders "
+                "CROSS JOIN LATERAL UNNEST(orders.product_ids) AS item "
+                "INNER JOIN products ON (products.product_id = item.product_id)"
+            ),
+            selected_rule="SQBRSQL032",
+            expected_violation_count=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cross_join_used_downstream_when_linting_then_no_unused_join_is_reported(
+    test_case: NativeSqlFindingTestCase,
+    tmp_path: Path,
+) -> None:
+    target: Path = tmp_path / "orders.sql"
+    body: LintBody = LintBody(
+        file_path=target,
+        body_start=0,
+        body_end=len(test_case.sql),
+        lint_text=test_case.sql,
+        passes=(),
+    )
+
+    result: dict[Path, tuple[LintViolation, ...]] = native_sql.run_native_sql_lint(
+        bodies=(body,),
+        contents_by_path={target: test_case.sql},
+        config=LintConfig(
+            dialect="duckdb",
+            enabled_native_rules=(test_case.selected_rule,),
+        ),
+    )
+
+    assert sum(len(violations) for violations in result.values()) == (
+        test_case.expected_violation_count
+    )
 
 
 @pytest.mark.parametrize(

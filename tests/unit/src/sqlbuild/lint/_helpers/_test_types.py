@@ -97,6 +97,16 @@ class NativeSqlFixTestCase:
 
 
 @dataclass(frozen=True)
+class NativeSqlFindingTestCase:
+    """Native SQL query with an expected finding count for one selected rule."""
+
+    description: str
+    sql: str
+    selected_rule: str
+    expected_violation_count: int
+
+
+@dataclass(frozen=True)
 class GeneratedRangeFallbackTestCase:
     """Test case for a diagnostic that crosses generated SQL."""
 
