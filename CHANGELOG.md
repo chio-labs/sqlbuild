@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.97.2](https://github.com/chio-labs/sqlbuild/compare/v0.97.1...v0.97.2) (2026-09-12)
+
+
+### Performance Improvements
+
+* cache structural lineage graphs ([#626](https://github.com/chio-labs/sqlbuild/issues/626)) ([18bd5cd](https://github.com/chio-labs/sqlbuild/commit/18bd5cd07f2fa0c6d7d798831bbe7aa43357df90))
+
 ## [0.97.1](https://github.com/chio-labs/sqlbuild/compare/v0.97.0...v0.97.1) (2026-09-11)
 
 
