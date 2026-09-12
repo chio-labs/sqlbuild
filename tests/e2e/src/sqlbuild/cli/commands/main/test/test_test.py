@@ -11,6 +11,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
     ComplexValuesFixtureE2ETestCase,
     FixtureCompatibilityE2ETestCase,
     ParameterCaseSelectionE2ETestCase,
+    PartialFixtureE2ETestCase,
     SqlAnalysisChainSqlTestE2ETestCase,
     SqlTestE2ETestCase,
     SqlTestFixtureValidationE2ETestCase,
@@ -21,13 +22,23 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     build_assertion_test_project_files,
     build_chain_test_project_files,
     build_complex_values_fixture_project_files,
+    build_empty_partial_fixture_project_files,
+    build_explicit_typed_null_fixture_project_files,
     build_incompatible_fixture_type_project_files,
+    build_invalid_partial_fixture_project_files,
+    build_irrelevant_omitted_column_project_files,
     build_macro_test_project_files,
     build_missing_mock_columns_project_files,
+    build_mixed_case_partial_fixture_project_files,
     build_mock_boundary_test_project_files,
     build_multiple_invalid_fixtures_project_files,
     build_parameterized_test_project_files,
+    build_partial_ref_fixture_project_files,
+    build_partial_seed_fixture_project_files,
+    build_partial_source_fixture_project_files,
+    build_qualified_star_other_relation_project_files,
     build_star_mock_fixture_project_files,
+    build_star_partial_fixture_project_files,
     build_transformed_collection_project_files,
     build_unsatisfied_leaf_test_project_files,
 )
@@ -37,6 +48,118 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_waffle_shop,
     run_sqb,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        PartialFixtureE2ETestCase(
+            description="known nullable source column receives an implicit typed null",
+            repo_files=build_partial_source_fixture_project_files(),
+            expected_stdout_fragment="PASS=1",
+            expected_artifact_fragments=(
+                'CAST(NULL AS TEXT) AS "status"',
+                "__sqlbuild_partial_fixture",
+            ),
+        ),
+        PartialFixtureE2ETestCase(
+            description="known nullable model-ref column receives an implicit typed null",
+            repo_files=build_partial_ref_fixture_project_files(),
+            expected_stdout_fragment="PASS=1",
+            expected_artifact_fragments=(
+                'CAST(NULL AS TEXT) AS "status"',
+                "__sqlbuild_partial_fixture",
+            ),
+        ),
+        PartialFixtureE2ETestCase(
+            description="known nullable seed column receives an implicit typed null",
+            repo_files=build_partial_seed_fixture_project_files(),
+            expected_stdout_fragment="PASS=1",
+            expected_artifact_fragments=(
+                'CAST(NULL AS TEXT) AS "country_name"',
+                "__sqlbuild_partial_fixture",
+            ),
+            artifact_filename="test_countries.sql",
+        ),
+        PartialFixtureE2ETestCase(
+            description="nullable column outside the closure leaves fixture unchanged",
+            repo_files=build_irrelevant_omitted_column_project_files(),
+            expected_stdout_fragment="PASS=1",
+            expected_artifact_fragments=("__source__raw_orders AS (\n  SELECT\n    1 AS order_id",),
+            unexpected_artifact_fragments=("__sqlbuild_partial_fixture",),
+        ),
+        PartialFixtureE2ETestCase(
+            description="contracted star closure receives all required nullable columns",
+            repo_files=build_star_partial_fixture_project_files(),
+            expected_stdout_fragment="PASS=1",
+            expected_artifact_fragments=(
+                'CAST(NULL AS TEXT) AS "status"',
+                "__sqlbuild_partial_fixture",
+            ),
+        ),
+        PartialFixtureE2ETestCase(
+            description="zero-row partial fixture preserves emptiness after completion",
+            repo_files=build_empty_partial_fixture_project_files(),
+            expected_stdout_fragment="PASS=1",
+            expected_artifact_fragments=(
+                "FALSE",
+                'CAST(NULL AS TEXT) AS "status"',
+                "__sqlbuild_partial_fixture",
+            ),
+        ),
+        PartialFixtureE2ETestCase(
+            description="explicit typed null keeps complete fixture on unchanged path",
+            repo_files=build_explicit_typed_null_fixture_project_files(),
+            expected_stdout_fragment="PASS=1",
+            expected_artifact_fragments=("CAST(NULL AS TEXT) AS status",),
+            unexpected_artifact_fragments=("__sqlbuild_partial_fixture",),
+        ),
+        PartialFixtureE2ETestCase(
+            description="qualified star on real relation does not expand mocked relation",
+            repo_files=build_qualified_star_other_relation_project_files(),
+            expected_stdout_fragment="PASS=1",
+            expected_artifact_fragments=("__source__raw_orders AS (",),
+            unexpected_artifact_fragments=("__sqlbuild_partial_fixture",),
+        ),
+        PartialFixtureE2ETestCase(
+            description="mixed-case unquoted supplied alias remains referenced through star",
+            repo_files=build_mixed_case_partial_fixture_project_files(),
+            expected_stdout_fragment="PASS=1",
+            expected_artifact_fragments=(
+                '"__sqlbuild_partial_fixture".*',
+                'CAST(NULL AS TEXT) AS "note"',
+            ),
+            unexpected_artifact_fragments=('"__sqlbuild_partial_fixture"."Status"',),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_required_nullable_column_omitted_when_testing_then_completes_fixture_implicitly(
+    test_case: PartialFixtureE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="partial_fixture_project",
+        repo_files=test_case.repo_files,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "test"),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert test_case.expected_stdout_fragment in result.stdout
+    artifacts: tuple[Path, ...] = tuple(
+        (project_dir / "target").glob(f"**/{test_case.artifact_filename}")
+    )
+    assert artifacts
+    artifact_sql: str = artifacts[0].read_text(encoding="utf-8")
+    for fragment in test_case.expected_artifact_fragments:
+        assert fragment in artifact_sql
+    for fragment in test_case.unexpected_artifact_fragments:
+        assert fragment not in artifact_sql
 
 
 @pytest.mark.parametrize(
@@ -158,6 +281,44 @@ def test_given_complex_strings_in_values_when_processing_then_literals_remain_in
                 "tests/unit/test_orders.sql:4",
                 "mock source 'raw_orders' is missing required columns: customer_id, status",
                 "read by: orders",
+            ),
+        ),
+        SqlTestFixtureValidationE2ETestCase(
+            description="required non-nullable source column needs an explicit value",
+            repo_files=build_invalid_partial_fixture_project_files(
+                status_column_attributes="        type: VARCHAR\n        nullable: false\n"
+            ),
+            expected_stderr_fragments=("must provide required non-nullable columns: status",),
+        ),
+        SqlTestFixtureValidationE2ETestCase(
+            description="required source column with unknown type is not guessed",
+            repo_files=build_invalid_partial_fixture_project_files(
+                status_column_attributes="        nullable: true\n"
+            ),
+            expected_stderr_fragments=(
+                "missing required columns: status",
+                "types or nullability are not authoritative",
+            ),
+        ),
+        SqlTestFixtureValidationE2ETestCase(
+            description="required source column with unknown nullability is not completed",
+            repo_files=build_invalid_partial_fixture_project_files(
+                status_column_attributes="        type: VARCHAR\n"
+            ),
+            expected_stderr_fragments=(
+                "missing required columns: status",
+                "types or nullability are not authoritative",
+            ),
+        ),
+        SqlTestFixtureValidationE2ETestCase(
+            description="misspelled supplied source column is rejected for authoritative shape",
+            repo_files=build_invalid_partial_fixture_project_files(
+                status_column_attributes="        type: VARCHAR\n        nullable: true\n",
+                supplied_column="order_identifer",
+            ),
+            expected_stderr_fragments=(
+                "supplies unknown columns: order_identifer",
+                "must provide required non-nullable columns: order_id",
             ),
         ),
         SqlTestFixtureValidationE2ETestCase(

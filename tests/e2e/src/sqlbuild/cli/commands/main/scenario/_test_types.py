@@ -20,6 +20,16 @@ class ScenarioCliE2ETestCase:
 
 
 @dataclass(frozen=True)
+class ScenarioPartialFixtureE2ETestCase:
+    """Test case for implicit partial fixture completion in a scenario."""
+
+    description: str
+    repo_files: dict[str, str]
+    expected_stdout_fragment: str
+    expected_artifact_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ScenarioRuntimeArtifactTestCase:
     """Test case for scenario target/run artifact verification."""
 
