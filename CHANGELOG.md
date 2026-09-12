@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.98.0](https://github.com/chio-labs/sqlbuild/compare/v0.97.2...v0.98.0) (2026-09-12)
+
+
+### Features
+
+* support schema-aware partial fixtures ([#628](https://github.com/chio-labs/sqlbuild/issues/628)) ([5384378](https://github.com/chio-labs/sqlbuild/commit/53843785b3e430980ef37ccb8998208948874260))
+
 ## [0.97.2](https://github.com/chio-labs/sqlbuild/compare/v0.97.1...v0.97.2) (2026-09-12)
 
 
