@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.98.1](https://github.com/chio-labs/sqlbuild/compare/v0.98.0...v0.98.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* allow typed nulls without nullability metadata ([#630](https://github.com/chio-labs/sqlbuild/issues/630)) ([1354637](https://github.com/chio-labs/sqlbuild/commit/1354637ba60a4d1795887f53c912d24f7c1a1a25))
+
 ## [0.98.0](https://github.com/chio-labs/sqlbuild/compare/v0.97.2...v0.98.0) (2026-09-12)
 
 
