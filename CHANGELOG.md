@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.98.4](https://github.com/chio-labs/sqlbuild/compare/v0.98.3...v0.98.4) (2026-09-12)
+
+
+### Bug Fixes
+
+* preserve scalar subquery scope ([#636](https://github.com/chio-labs/sqlbuild/issues/636)) ([988dce5](https://github.com/chio-labs/sqlbuild/commit/988dce5bc8eb7d090e9b09eef0a026680ca5a159))
+
 ## [0.98.3](https://github.com/chio-labs/sqlbuild/compare/v0.98.2...v0.98.3) (2026-09-12)
 
 
