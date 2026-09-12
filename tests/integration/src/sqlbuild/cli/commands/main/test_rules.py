@@ -275,6 +275,54 @@ def test_given_ceremonial_test_select_when_running_alias_rule_then_control_proje
 
 @pytest.mark.parametrize(
     "test_case",
+    [RulesIntegrationTestCase("scalar subquery after prior CTE is stable", 0, "SQBRSQL022")],
+    ids=lambda case: case.description,
+)
+def test_given_prior_cte_when_scalar_subquery_is_aliased_then_inner_aggregate_is_not_reported(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "support"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "ticket_totals.sql"
+    model.parent.mkdir()
+    model.write_text(
+        """MODEL (description "Support ticket totals");
+WITH products_used AS (
+    SELECT product_id FROM products
+),
+ticket_totals AS (
+    SELECT
+        ticket.ticket_id,
+        (SELECT MAX(change_id) FROM support_changes) AS latest_change_id
+    FROM support_tickets AS ticket
+)
+SELECT * FROM ticket_totals
+""",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "rules",
+            "--json",
+            "run",
+            test_case.expected_code,
+        ]
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    captured: CaptureResult[str] = capsys.readouterr()
+    payload: dict[str, object] = json.loads(captured.out)
+    assert payload["findings"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [RulesIntegrationTestCase("upstream graph selector scopes an ignore", 1, "SQBRSQL021")],
     ids=lambda case: case.description,
 )

@@ -822,6 +822,13 @@ fn given_additional_rule_cases_when_linting_then_findings_and_fixes_match() -> R
             expected_replacement: None,
         },
         test_types::AdditionalLintRuleTestCase {
+            description: "scalar subquery after a prior CTE relation remains in projection scope",
+            sql: "WITH products_used AS (SELECT product_id FROM products), ticket_totals AS (SELECT ticket.ticket_id, (SELECT MAX(change_id) FROM support_changes) AS latest_change_id FROM support_tickets AS ticket) SELECT * FROM ticket_totals",
+            rule: "SQBRSQL022",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
             description: "comma-derived table calculation still requires an alias",
             sql: "SELECT derived.value FROM items, (SELECT amount + tax FROM totals) AS derived",
             rule: "SQBRSQL022",
