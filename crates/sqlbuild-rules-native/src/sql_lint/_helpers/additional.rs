@@ -608,7 +608,8 @@ fn is_scalar_subquery(tokens: &[Token], depths: &[usize], select_index: usize) -
     let parent_depth = depths[previous];
     let relation_boundary = (0..previous).rev().find(|&index| {
         depths[index] == parent_depth
-            && (is_query_from(tokens, index)
+            && (tokens[index].token_type == TokenType::Select
+                || is_query_from(tokens, index)
                 || matches!(
                     tokens[index].token_type,
                     TokenType::Join | TokenType::Semicolon
