@@ -74,7 +74,18 @@ def test_given_sql_test_string_when_formatting_then_project_still_compiles(
                 "Builds canonical customer records from every\n"
                 "available source while retaining unmatched customers."
             ),
-        )
+        ),
+        DescriptionFormatIntegrationTestCase(
+            description="escaped description content formats and compiles without loss",
+            line_width=100,
+            authored_description=(
+                "Builds order summary.\\nRetains unmatched orders.\\n\\n"
+                "Source \\u2192 canonical orders."
+            ),
+            expected_formatted_description=(
+                "Builds order summary. Retains unmatched orders.\n\nSource → canonical orders."
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
