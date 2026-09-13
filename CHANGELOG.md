@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.100.2](https://github.com/chio-labs/sqlbuild/compare/v0.100.1...v0.100.2) (2026-09-13)
+
+
+### Bug Fixes
+
+* preserve description escapes ([#646](https://github.com/chio-labs/sqlbuild/issues/646)) ([74595b8](https://github.com/chio-labs/sqlbuild/commit/74595b8d4c7c3d46305ee100f53fe79325d9c9cc))
+
 ## [0.100.1](https://github.com/chio-labs/sqlbuild/compare/v0.100.0...v0.100.1) (2026-09-13)
 
 
