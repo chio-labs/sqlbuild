@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.100.0](https://github.com/chio-labs/sqlbuild/compare/v0.99.0...v0.100.0) (2026-09-13)
+
+
+### Features
+
+* group scoped declarations ([#642](https://github.com/chio-labs/sqlbuild/issues/642)) ([ae586be](https://github.com/chio-labs/sqlbuild/commit/ae586bebba9dd6545dcba117b8284df6b0b01ac7))
+
 ## [0.99.0](https://github.com/chio-labs/sqlbuild/compare/v0.98.5...v0.99.0) (2026-09-13)
 
 
