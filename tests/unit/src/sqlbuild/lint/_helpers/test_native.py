@@ -13,6 +13,7 @@ from sqlbuild.lint._helpers.headers import scan_headers
 from sqlbuild.lint._helpers.native import format_native_headers, lint_native_headers
 from sqlbuild.lint.models import LintConfig
 from tests.unit.src.sqlbuild.lint._helpers._test_types import (
+    FormatDescriptionTestCase,
     FormatNativeTestCase,
     LintNativeTestCase,
 )
@@ -40,22 +41,27 @@ DEFAULT_CONFIG: LintConfig = LintConfig()
             expected_codes=(),
         ),
         LintNativeTestCase(
-            description="long single-line scenario description passes",
+            description="long single-line scenario description faults by formatted length",
             contents=(
                 'SCENARIO (description "'
                 + " ".join(f"word{index}" for index in range(400))
                 + '");\nSELECT 1\n'
             ),
-            expected_codes=(),
+            expected_codes=("description-length",),
         ),
         LintNativeTestCase(
-            description="oversized multiline scenario description faults",
+            description="short manually wrapped scenario description passes",
             contents=(
                 'SCENARIO (description "'
                 + "\n ".join(f"line {index}" for index in range(11))
                 + '");\nSELECT 1\n'
             ),
-            expected_codes=("description-length",),
+            expected_codes=(),
+        ),
+        LintNativeTestCase(
+            description="whitespace-only model description faults as missing",
+            contents='MODEL (description "   ");\nSELECT 1\n',
+            expected_codes=("description-present",),
         ),
         LintNativeTestCase(
             description="broken model header faults with parse error",
@@ -130,7 +136,7 @@ def test_given_legacy_scenario_header_when_linting_and_compiling_then_both_rejec
             description="leading line comments relocate into description",
             contents="-- One.\n-- Two.\nMODEL (\n  materialized table\n);\nSELECT 1\n",
             expected_contents=(
-                'MODEL (\n  description "One.\nTwo.",\n  materialized table\n);\nSELECT 1\n'
+                'MODEL (\n  description "One. Two.",\n  materialized table\n);\nSELECT 1\n'
             ),
             expected_fault_codes=(),
         ),
@@ -172,8 +178,91 @@ def test_given_contents_when_formatting_then_contents_match_expected(
 @pytest.mark.parametrize(
     "test_case",
     [
+        FormatDescriptionTestCase(
+            description="long description wraps at the configured line width",
+            contents=(
+                'MODEL (\n  description "Builds canonical customer records from every available '
+                'source while retaining unmatched customers."\n);\nSELECT 1\n'
+            ),
+            line_width=60,
+            expected_contents=(
+                'MODEL (\n  description "Builds canonical customer records from every\n'
+                'available source while retaining unmatched customers."\n);\nSELECT 1\n'
+            ),
+        ),
+        FormatDescriptionTestCase(
+            description="inconsistent authored wrapping normalizes deterministically",
+            contents=(
+                'MODEL (\n  description "Builds canonical customer\nrecords from every available '
+                'source while retaining\nunmatched customers."\n);\nSELECT 1\n'
+            ),
+            line_width=60,
+            expected_contents=(
+                'MODEL (\n  description "Builds canonical customer records from every\n'
+                'available source while retaining unmatched customers."\n);\nSELECT 1\n'
+            ),
+        ),
+        FormatDescriptionTestCase(
+            description="blank lines preserve intentional paragraphs",
+            contents=(
+                'MODEL (\n  description "Builds canonical customer records from every source.\n\n'
+                'Retains unmatched customers for complete downstream coverage."\n);\nSELECT 1\n'
+            ),
+            line_width=60,
+            expected_contents=(
+                'MODEL (\n  description "Builds canonical customer records from every\n'
+                "source.\n\nRetains unmatched customers for complete downstream\n"
+                'coverage."\n);\nSELECT 1\n'
+            ),
+        ),
+        FormatDescriptionTestCase(
+            description="short description remains compact",
+            contents='MODEL (description "Canonical customer records.");\nSELECT 1\n',
+            line_width=60,
+            expected_contents='MODEL (description "Canonical customer records.");\nSELECT 1\n',
+        ),
+        FormatDescriptionTestCase(
+            description="nested column description is not treated as the model description",
+            contents=(
+                'MODEL (\n  columns (\n    customer_id (type BIGINT, description "A deliberately '
+                'long column description that remains authored text.")\n  ),\n  description "Builds '
+                'canonical customer records from every available source."\n);\nSELECT 1\n'
+            ),
+            line_width=60,
+            expected_contents=(
+                'MODEL (\n  columns (\n    customer_id (type BIGINT, description "A deliberately '
+                'long column description that remains authored text.")\n  ),\n  description "Builds '
+                'canonical customer records from every\navailable source."\n);\nSELECT 1\n'
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_description_when_formatting_then_wrapping_is_uniform(
+    test_case: FormatDescriptionTestCase,
+) -> None:
+    updated, faults = format_native_headers(
+        contents=test_case.contents,
+        file_path=FILE_PATH,
+        config=LintConfig(line_width=test_case.line_width),
+    )
+
+    assert updated == test_case.expected_contents
+    assert faults == ()
+    reformatted, reformat_faults = format_native_headers(
+        contents=updated,
+        file_path=FILE_PATH,
+        config=LintConfig(line_width=test_case.line_width),
+    )
+    assert reformatted == updated
+    assert reformat_faults == ()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         FormatNativeTestCase(
-            description="oversized relocated comment faults for a human to trim",
+            description="manually wrapped leading comments reflow as prose",
             contents=(
                 "-- "
                 + "\n-- ".join(f"line {index}" for index in range(11))
@@ -181,15 +270,15 @@ def test_given_contents_when_formatting_then_contents_match_expected(
             ),
             expected_contents=(
                 'MODEL (\n  description "'
-                + "\n".join(f"line {index}" for index in range(11))
+                + " ".join(f"line {index}" for index in range(11))
                 + '",\n  materialized table\n);\nSELECT 1\n'
             ),
-            expected_fault_codes=("leading-comment-description",),
+            expected_fault_codes=(),
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_oversized_leading_comment_when_formatting_then_relocates_and_faults(
+def test_given_wrapped_leading_comment_when_formatting_then_reflows_as_prose(
     test_case: FormatNativeTestCase,
 ) -> None:
     updated: str

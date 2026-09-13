@@ -11,10 +11,12 @@ from sqlbuild.compiler.discovery.constants import LOCAL_CONFIG_FILENAME
 from sqlbuild.lint.constants import (
     ADAPTER_CONFIG_KEY,
     ADAPTER_DIALECT_TRANSLATIONS,
+    DEFAULT_LINE_WIDTH,
     DEFAULT_MAX_DESCRIPTION_LINES,
     FIX_STATUS_APPLIED,
     FIX_STATUS_SKIPPED,
     FORMAT_SECTION_KEY,
+    LINE_WIDTH_KEY,
     MAX_DESCRIPTION_LINES_KEY,
     PROJECT_CONFIG_FILENAME_KEY,
 )
@@ -32,6 +34,7 @@ def resolve_lint_config(*, project_dir: Path) -> LintConfig:
     """Resolve native lint and format configuration from project settings."""
 
     max_description_lines: int = DEFAULT_MAX_DESCRIPTION_LINES
+    line_width: int = DEFAULT_LINE_WIDTH
     dialect: str = "generic"
     config_file: Path = project_dir / PROJECT_CONFIG_FILENAME_KEY
     if config_file.is_file():
@@ -42,6 +45,11 @@ def resolve_lint_config(*, project_dir: Path) -> LintConfig:
         if isinstance(raw_adapter, str):
             dialect = ADAPTER_DIALECT_TRANSLATIONS.get(raw_adapter, raw_adapter)
         if isinstance(format_section, dict):
+            line_width = _resolve_int(
+                section=format_section,
+                key=LINE_WIDTH_KEY,
+                current=line_width,
+            )
             max_description_lines = _resolve_int(
                 section=format_section,
                 key=MAX_DESCRIPTION_LINES_KEY,
@@ -55,6 +63,7 @@ def resolve_lint_config(*, project_dir: Path) -> LintConfig:
         if isinstance(local_adapter, str):
             dialect = ADAPTER_DIALECT_TRANSLATIONS.get(local_adapter, local_adapter)
     return LintConfig(
+        line_width=line_width,
         max_description_lines=max_description_lines,
         dialect=dialect,
     )

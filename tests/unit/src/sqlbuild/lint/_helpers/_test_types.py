@@ -53,6 +53,16 @@ class FormatNativeTestCase:
 
 
 @dataclass(frozen=True)
+class FormatDescriptionTestCase:
+    """Test case for deterministic description wrapping."""
+
+    description: str
+    contents: str
+    line_width: int
+    expected_contents: str
+
+
+@dataclass(frozen=True)
 class InvalidNativeSqlResponseTestCase:
     """Test case for rejecting malformed native SQL lint responses."""
 

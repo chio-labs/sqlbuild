@@ -23,6 +23,16 @@ class FormatCompileIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class DescriptionFormatIntegrationTestCase:
+    """One description wrapping expectation through the real CLI and compiler."""
+
+    description: str
+    line_width: int
+    authored_description: str
+    expected_formatted_description: str
+
+
+@dataclass(frozen=True)
 class ContractCommandIntegrationTestCase:
     """One target-backed contract CLI expectation."""
 

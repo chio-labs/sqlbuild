@@ -137,6 +137,15 @@ selected custom Python rules, before completing compile artifacts. `sqb compile`
 build and execution commands enforce the same configuration. Rules report findings and never rewrite
 SQL. `sqb format` remains a separate source-rewriting command.
 
+Long model and scenario descriptions are reflowed deterministically. Ordinary authored line breaks
+are normalized as spaces, while blank lines preserve paragraph boundaries. Configure the maximum
+physical line width in `sqlbuild_project.toml` (the default is `100`):
+
+```toml
+[format]
+line_width = 100
+```
+
 Select rules in `sqlbuild_project.toml` by exact code or derived family prefix:
 
 ```toml
