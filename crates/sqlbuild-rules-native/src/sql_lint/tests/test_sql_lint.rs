@@ -84,6 +84,24 @@ fn given_sql_cases_when_linting_then_diagnostics_match() -> Result<(), String> {
             expected_anchors: &[("SQBRSQL004", "LIMIT")],
         },
         test_types::LintTestCase {
+            description: "semi-structured limit and offset keys are not row selection clauses",
+            sql: "SELECT payload:Limit::VARCHAR AS order_limit, payload:Offset::NUMBER AS order_offset FROM orders",
+            expected_codes: &[],
+            expected_anchors: &[],
+        },
+        test_types::LintTestCase {
+            description: "semi-structured limit key does not hide a later row limit clause",
+            sql: "SELECT payload:Limit::VARCHAR AS order_limit FROM orders LIMIT 1",
+            expected_codes: &["SQBRSQL004"],
+            expected_anchors: &[("SQBRSQL004", "LIMIT")],
+        },
+        test_types::LintTestCase {
+            description: "semi-structured limit key in a filter is not a row limit clause",
+            sql: "SELECT order_id FROM orders WHERE payload:Limit::NUMBER > 3",
+            expected_codes: &[],
+            expected_anchors: &[],
+        },
+        test_types::LintTestCase {
             description: "unused CTE",
             sql: "WITH unused AS (SELECT 1) SELECT 1",
             expected_codes: &["SQBRSQL005"],
@@ -866,6 +884,27 @@ fn given_additional_rule_cases_when_linting_then_findings_and_fixes_match() -> R
         test_types::AdditionalLintRuleTestCase {
             description: "scalar subquery output does not require an alias inside its scope",
             sql: "SELECT (SELECT MAX(child.value) FROM child WHERE child.id = parent.id) AS maximum_value FROM parent",
+            rule: "SQBRSQL022",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "later scalar function argument does not require an inner alias",
+            sql: "SELECT COALESCE((SELECT MAX(change_id) FROM first_changes), (SELECT MAX(change_id) FROM second_changes), 0) AS latest_change_id FROM support_tickets",
+            rule: "SQBRSQL022",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "scalar aggregate nested in conditional coalesce does not require an inner alias",
+            sql: "SELECT CASE WHEN batch.layout = 'fallback' THEN COALESCE((SELECT MAX(change.line_id) FROM first_changes AS change WHERE change.batch_id = batch.batch_id AND change.line_id < batch.line_id), (SELECT MAX(archive.line_id) FROM archived_changes AS archive WHERE archive.batch_id = batch.batch_id AND archive.line_id < batch.line_id), header.line_id) + 1 ELSE batch.start_line END AS start_line FROM support_batches AS batch LEFT JOIN support_headers AS header ON header.batch_id = batch.batch_id",
+            rule: "SQBRSQL022",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "prior nested relation does not contaminate a later scalar function argument",
+            sql: "WITH prior_changes AS (SELECT (SELECT MAX(change_id) FROM support_changes) AS latest_change_id FROM support_tickets), current_changes AS (SELECT COALESCE((SELECT MAX(change_id) FROM first_changes), (SELECT MAX(change_id) FROM second_changes), 0) AS latest_change_id FROM current_tickets) SELECT * FROM current_changes",
             rule: "SQBRSQL022",
             expected_anchor: None,
             expected_replacement: None,

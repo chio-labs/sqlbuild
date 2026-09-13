@@ -652,7 +652,13 @@ fn is_scalar_subquery(tokens: &[Token], depths: &[usize], select_index: usize) -
         return true;
     }
     let parent_depth = depths[previous];
-    let relation_boundary = (0..previous).rev().find(|&index| {
+    let query_start = (0..previous)
+        .rev()
+        .find(|&index| {
+            tokens[index].token_type == TokenType::Select && depths[index] < parent_depth
+        })
+        .map_or(0, |index| index + 1);
+    let relation_boundary = (query_start..previous).rev().find(|&index| {
         depths[index] == parent_depth
             && (tokens[index].token_type == TokenType::Select
                 || is_query_from(tokens, index)

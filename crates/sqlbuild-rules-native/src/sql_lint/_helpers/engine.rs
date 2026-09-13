@@ -416,8 +416,7 @@ fn collect_token_query_facts(tokens: &[Token], sql: &str) -> QueryFacts {
         let end = query_end(tokens, &depths, select_index, depth);
         let direct = direct_indices(&depths, select_index + 1, end, depth);
         let order = first_type(tokens, &direct, TokenType::Order);
-        let limit = first_type(tokens, &direct, TokenType::Limit)
-            .or_else(|| first_type(tokens, &direct, TokenType::Offset));
+        let limit = first_row_selection_clause(tokens, &direct);
         if order.is_none()
             && let Some(index) = limit
         {
@@ -662,6 +661,25 @@ fn first_type(tokens: &[Token], indices: &[usize], token_type: TokenType) -> Opt
         .iter()
         .copied()
         .find(|&index| tokens[index].token_type == token_type)
+}
+
+fn first_row_selection_clause(tokens: &[Token], direct: &[usize]) -> Option<usize> {
+    let from = direct
+        .iter()
+        .copied()
+        .find(|&index| is_query_from(tokens, index));
+    direct.iter().copied().find(|&index| {
+        matches!(
+            tokens[index].token_type,
+            TokenType::Limit | TokenType::Offset
+        ) && from.is_none_or(|from_index| index > from_index)
+            && significant_before(tokens, index).is_none_or(|previous| {
+                !matches!(
+                    tokens[previous].token_type,
+                    TokenType::Colon | TokenType::DColon | TokenType::Dot | TokenType::DotColon
+                )
+            })
+    })
 }
 
 pub(super) fn is_query_from(tokens: &[Token], index: usize) -> bool {
