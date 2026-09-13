@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.100.1](https://github.com/chio-labs/sqlbuild/compare/v0.100.0...v0.100.1) (2026-09-13)
+
+
+### Bug Fixes
+
+* align scoped macro tests ([#644](https://github.com/chio-labs/sqlbuild/issues/644)) ([b2792c5](https://github.com/chio-labs/sqlbuild/commit/b2792c5d66d568f35bf4cb2378589eb2233e1462))
+
 ## [0.100.0](https://github.com/chio-labs/sqlbuild/compare/v0.99.0...v0.100.0) (2026-09-13)
 
 
