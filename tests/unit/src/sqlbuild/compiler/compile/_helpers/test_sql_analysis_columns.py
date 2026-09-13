@@ -44,6 +44,18 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
             ),
         ),
         InferColumnsTestCase(
+            description="extracts a commented qualified column without a self alias",
+            query_sql=(
+                "SELECT orders.order_id,\n"
+                "-- Current customer status.\n"
+                'orders.status\nFROM __ref("orders") AS orders'
+            ),
+            expected_columns=(
+                InferredColumn(name="order_id"),
+                InferredColumn(name="status"),
+            ),
+        ),
+        InferColumnsTestCase(
             description="extracts cast type from explicit cast",
             query_sql='SELECT CAST(amount AS DECIMAL(10, 2)) AS amount FROM __ref("orders")',
             expected_columns=(InferredColumn(name="amount", type="DECIMAL(10, 2)"),),
@@ -459,6 +471,64 @@ def test_given_ref_query_when_analyzing_columns_and_lineage_then_returns_compact
         references=test_case.references,
         inference_profile=test_case.inference_profile,
         allow_compact_analysis=True,
+    )
+
+    assert result.analysis_succeeded
+    assert result.columns == test_case.expected_columns
+    assert result.lineage_columns == test_case.expected_lineage_columns
+    assert result.has_star is test_case.expected_has_star
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PolyglotAnalysisTestCase(
+            description="preserves fallback lineage for a commented qualified column",
+            query_sql=(
+                "SELECT orders.order_id,\n"
+                "-- Current order status.\n"
+                'orders.status FROM __ref("orders") AS orders'
+            ),
+            references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+            expected_columns=(InferredColumn(name="order_id"), InferredColumn(name="status")),
+            expected_lineage_columns=(
+                CompiledLineageColumnFact(
+                    output_column="order_id",
+                    upstream_columns=(
+                        CompiledLineageSourceFact(
+                            resource_type=CompiledResourceType.MODEL,
+                            resource_name="orders",
+                            column_name="order_id",
+                        ),
+                    ),
+                    transform_kind=ColumnTransformKind.DIRECT,
+                    confidence=ColumnLineageConfidence.HIGH,
+                ),
+                CompiledLineageColumnFact(
+                    output_column="status",
+                    upstream_columns=(
+                        CompiledLineageSourceFact(
+                            resource_type=CompiledResourceType.MODEL,
+                            resource_name="orders",
+                            column_name="status",
+                        ),
+                    ),
+                    transform_kind=ColumnTransformKind.DIRECT,
+                    confidence=ColumnLineageConfidence.HIGH,
+                ),
+            ),
+            expected_has_star=False,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_annotated_projection_when_using_ast_fallback_then_lineage_is_preserved(
+    test_case: PolyglotAnalysisTestCase,
+) -> None:
+    result: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+        query_sql=test_case.query_sql,
+        references=test_case.references,
+        allow_compact_analysis=False,
     )
 
     assert result.analysis_succeeded

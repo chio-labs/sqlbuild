@@ -2091,6 +2091,61 @@ WHERE customer_id = p_customer_id
             expected_audit_references=(),
         ),
         BuildCompileInputsTestCase(
+            description="accepts commented qualified table function outputs without self aliases",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
+                "functions/sql/customer_orders.sql": """
+FUNCTION (
+  returns table (
+    order_id INTEGER,
+    status VARCHAR
+  )
+);
+
+SELECT
+  orders.order_id,
+  -- Current order status.
+  orders.status
+FROM (VALUES (1, 'open')) AS orders(order_id, status)
+""".strip()
+                + "\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(),
+            expected_model_config_values=(),
+            expected_model_path_defaults=(),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_sql_function_names=("customer_orders",),
+            expected_sql_function_arguments=((),),
+            expected_sql_function_returns=("TABLE",),
+            expected_sql_function_return_columns=(
+                (("order_id", "INTEGER"), ("status", "VARCHAR")),
+            ),
+            expected_sql_function_body_sqls=(
+                "SELECT\n"
+                "  orders.order_id,\n"
+                "  -- Current order status.\n"
+                "  orders.status\n"
+                "FROM (VALUES (1, 'open')) AS orders(order_id, status)",
+            ),
+            expected_sql_function_databases=(None,),
+            expected_sql_function_schemas=(None,),
+            expected_sql_function_languages=("sql",),
+            expected_sql_function_runtime_versions=(None,),
+            expected_sql_function_entry_points=(None,),
+            expected_sql_function_packages=((),),
+            expected_sql_function_replay_on_changes=(None,),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_references=(),
+            expected_audit_references=(),
+        ),
+        BuildCompileInputsTestCase(
             description="expands macros across multi block tests and audits",
             repo_files=base_repo_files()
             | {
