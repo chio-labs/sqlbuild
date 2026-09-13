@@ -63,6 +63,7 @@ class GrantKind(StrEnum):
     """Compiler relationships that grant additional public vocabulary."""
 
     EXPECTED_MODEL = "expected_model"
+    TESTED_MACRO = "tested_macro"
 
 
 class VisibilityReason(StrEnum):
@@ -73,6 +74,7 @@ class VisibilityReason(StrEnum):
     LOCAL_OWNER = "local_owner"
     PRIVATE_OWNER = "private_owner"
     EXPECTED_MODEL = "expected_model"
+    TESTED_MACRO = "tested_macro"
 
 
 class InaccessibleReason(StrEnum):

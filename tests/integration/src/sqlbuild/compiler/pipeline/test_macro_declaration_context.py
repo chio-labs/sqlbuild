@@ -19,6 +19,8 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     MacroDeclarationContextErrorTestCase,
     MacroDeclarationRenderingTestCase,
     MacroDeclarationResourceTestCase,
+    MacroTestDiscoveryIntegrationTestCase,
+    SqlTestProductionScopeIntegrationTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
     run_compile_pipeline_for_project,
@@ -141,6 +143,165 @@ def test_given_grouped_declarations_when_compiling_then_scope_resolves_from_owne
 @pytest.mark.parametrize(
     "test_case",
     (
+        MacroTestDiscoveryIntegrationTestCase(
+            description="project macro test is discovered from mirrored macro path",
+            project_files={
+                "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
+                "macros/orders/policy.py": "def order_policy() -> str:\n    return '2'\n",
+                "models/orders/summary.sql": (
+                    'MODEL (description "Order summary.");\nSELECT @order_policy() AS quantity'
+                ),
+                "tests/unit/macros/orders/test_order_policy__returns_quantity.sql": (
+                    'TEST (mode macro, name "order_policy__returns_quantity");\n\n'
+                    "WITH\n"
+                    "__macro_actual__ AS (SELECT @order_policy() AS quantity),\n"
+                    "__macro_expected__ AS (SELECT 2 AS quantity)\n"
+                    "SELECT 1\n"
+                ),
+            },
+            expected_test_name="order_policy__returns_quantity",
+            expected_macro_name="order_policy",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_macro_test_in_mirrored_path_when_compiling_then_test_is_attached(
+    test_case: MacroTestDiscoveryIntegrationTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    result: CompilePipelineResult = run_compile_pipeline_for_project(
+        project_dir=tmp_path, adapter=DuckDbAdapter()
+    )
+
+    assert tuple(test.name for test in result.project.sql_tests) == (test_case.expected_test_name,)
+    tested_macro_names: list[str] = []
+    for test in result.project.sql_tests:
+        tested_macro_names.extend(resource.name for resource in test.tested_resources)
+    assert tuple(tested_macro_names) == (test_case.expected_macro_name,)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SqlTestProductionScopeIntegrationTestCase(
+            description="macro test inherits tested scoped macro declaration context",
+            project_files={
+                "sqlbuild_project.toml": (
+                    'name = "orders"\nadapter = "duckdb"\n[scopes]\nenforce_placement = true\n'
+                ),
+                "models/orders/_sqlbuild/_constants/policy.sql": (
+                    "CONSTANT (name minimum_quantity, value 2);\n"
+                ),
+                "models/orders/_sqlbuild/_macros/policy.py": (
+                    "def order_policy(ctx) -> str:\n"
+                    "    return ctx.render_constant('minimum_quantity')\n"
+                ),
+                "models/orders/summary.sql": (
+                    'MODEL (description "Order summary.");\nSELECT @order_policy() AS quantity'
+                ),
+                "tests/unit/macros/models/orders/test_order_policy__returns_quantity.sql": (
+                    'TEST (mode macro, name "order_policy__returns_quantity");\n\n'
+                    "WITH\n"
+                    "__macro_actual__ AS (SELECT @order_policy() AS quantity),\n"
+                    "__macro_expected__ AS (SELECT 2 AS quantity)\n"
+                    "SELECT 1\n"
+                ),
+            },
+            expected_test_name="order_policy__returns_quantity",
+            expected_sql_fragments=("SELECT 2 AS quantity",),
+        ),
+        SqlTestProductionScopeIntegrationTestCase(
+            description="model test combines target production scope and lexical test helpers",
+            project_files={
+                "sqlbuild_project.toml": (
+                    'name = "orders"\nadapter = "duckdb"\n[scopes]\nenforce_placement = false\n'
+                ),
+                "models/orders/_sqlbuild/_macros/policy.py": (
+                    "def order_policy() -> str:\n    return '2'\n"
+                ),
+                "models/orders/order_summary.sql": (
+                    'MODEL (description "Order summary.");\n'
+                    'SELECT @order_policy() AS quantity FROM __ref("order_input")'
+                ),
+                "models/order_input.sql": (
+                    'MODEL (description "Order input.");\nSELECT 1 AS order_id'
+                ),
+                "tests/unit/orders/_sqlbuild/macros/fixtures.py": (
+                    "def fixture_quantity() -> str:\n    return '2'\n"
+                ),
+                "tests/unit/orders/test_order_summary__uses_policy.sql": (
+                    'TEST (name "order_summary__uses_policy");\n\n'
+                    "WITH\n"
+                    "__ref__order_input AS (SELECT 1 AS order_id),\n"
+                    "__expected__order_summary AS (\n"
+                    "  SELECT @order_policy() + @fixture_quantity() AS quantity\n"
+                    ")\n"
+                    "SELECT 1\n"
+                ),
+            },
+            expected_test_name="order_summary__uses_policy",
+            expected_sql_fragments=("SELECT 2 + 2 AS quantity",),
+        ),
+        SqlTestProductionScopeIntegrationTestCase(
+            description="multi-model test receives union of target production scopes",
+            project_files={
+                "sqlbuild_project.toml": (
+                    'name = "orders"\nadapter = "duckdb"\n[scopes]\nenforce_placement = false\n'
+                ),
+                "models/orders/_sqlbuild/_macros/policy.py": (
+                    "def order_policy() -> str:\n    return '2'\n"
+                ),
+                "models/orders/order_summary.sql": (
+                    'MODEL (description "Order summary.");\n'
+                    'SELECT @order_policy() AS quantity FROM __ref("order_input")'
+                ),
+                "models/order_input.sql": (
+                    'MODEL (description "Order input.");\nSELECT 1 AS order_id'
+                ),
+                "models/products/_sqlbuild/_macros/policy.py": (
+                    "def product_policy() -> str:\n    return '3'\n"
+                ),
+                "models/products/product_summary.sql": (
+                    'MODEL (description "Product summary.");\n'
+                    'SELECT @product_policy() AS quantity FROM __ref("order_input")'
+                ),
+                "tests/unit/test_summaries__use_policies.sql": (
+                    'TEST (name "summaries__use_policies");\n\n'
+                    "WITH\n"
+                    "__ref__order_input AS (SELECT 1 AS order_id),\n"
+                    "__expected__order_summary AS (SELECT @order_policy() AS quantity),\n"
+                    "__expected__product_summary AS (SELECT @product_policy() AS quantity)\n"
+                    "SELECT 1\n"
+                ),
+            },
+            expected_test_name="summaries__use_policies",
+            expected_sql_fragments=("SELECT 2 AS quantity", "SELECT 3 AS quantity"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_inferred_targets_when_compiling_test_then_production_scopes_are_combined(
+    test_case: SqlTestProductionScopeIntegrationTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    result: CompilePipelineResult = run_compile_pipeline_for_project(
+        project_dir=tmp_path, adapter=DuckDbAdapter()
+    )
+
+    assert tuple(test.name for test in result.project.sql_tests) == (test_case.expected_test_name,)
+    for expected_fragment in test_case.expected_sql_fragments:
+        assert expected_fragment in result.project.sql_tests[0].sql_body
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
         MacroDeclarationResourceTestCase(
             description="models tests and audits receive caller-visible constants",
             expected_model_sql_fragment="SELECT 2 AS minimum_quantity",
@@ -224,6 +385,34 @@ def test_given_macro_context_declarations_when_compiling_resources_then_all_expa
                 ),
             },
             expected_error_fragment="Macro '@minimum_quantity'.*is inaccessible",
+        ),
+        MacroDeclarationContextErrorTestCase(
+            description="mocked dependency does not grant its production macro scope",
+            project_files={
+                "sqlbuild_project.toml": (
+                    'name = "demo"\nadapter = "duckdb"\n[scopes]\nenforce_placement = false\n'
+                ),
+                "models/products/_sqlbuild/_macros/policy.py": (
+                    "def product_policy() -> str:\n    return '3'\n"
+                ),
+                "models/products/product_input.sql": (
+                    'MODEL (description "Product input.");\nSELECT 1 AS product_id'
+                ),
+                "models/orders/order_summary.sql": (
+                    'MODEL (description "Order summary.");\n'
+                    'SELECT product_id FROM __ref("product_input")'
+                ),
+                "tests/unit/orders/test_order_summary__uses_input.sql": (
+                    'TEST (name "order_summary__uses_input");\n\n'
+                    "WITH\n"
+                    "__ref__product_input AS (SELECT 1 AS product_id),\n"
+                    "__expected__order_summary AS (\n"
+                    "  SELECT @product_policy() AS product_id\n"
+                    ")\n"
+                    "SELECT 1\n"
+                ),
+            },
+            expected_error_fragment="Macro '@product_policy'.*is inaccessible",
         ),
         MacroDeclarationContextErrorTestCase(
             description="unknown constant reports visible alternatives",

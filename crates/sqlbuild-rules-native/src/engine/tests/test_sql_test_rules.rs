@@ -44,6 +44,37 @@ fn given_sql_test_facts_when_evaluating_project_rules_then_returns_expected_faul
     );
     macro_test["mode"] = json!("macro");
     macro_test["tested_resources"] = json!([{"kind": "macro", "name": "normalize_status"}]);
+    let mut scoped_macro_test = helpers::sql_test_fact(
+        "tests/unit/macros/models/commerce/staging/test_order_policy__applies.sql",
+        Some("order_policy__applies"),
+        json!([]),
+    );
+    scoped_macro_test["mode"] = json!("macro");
+    scoped_macro_test["tested_resources"] = json!([{"kind": "macro", "name": "order_policy"}]);
+    scope["declarations"]
+        .as_array_mut()
+        .ok_or_else(|| "scope declarations must be an array".to_owned())?
+        .push(json!({
+            "identity": "macro:order_policy",
+            "kind": "macro",
+            "name": "order_policy",
+            "owner": null,
+            "path": "models/commerce/staging/_sqlbuild/_macros/policy.py",
+            "line": 1,
+            "column": 1,
+            "scope": "local",
+            "role": "macros",
+            "visibility": "exact_owner_private",
+            "role_root": "models/commerce/staging/_sqlbuild/_macros",
+            "bucket_path": null,
+            "ownership_root": "models",
+            "owning_path": "models/commerce/staging",
+            "metadata": {"macro": {
+                "parameters": [],
+                "dependencies": [],
+                "source_digest": "digest"
+            }}
+        }));
     let test_cases = [
         test_types::SqlTestRulesTestCase {
             description: "canonical roots run without a model anchor",
@@ -113,7 +144,8 @@ fn given_sql_test_facts_when_evaluating_project_rules_then_returns_expected_faul
                     Some("pipeline__calculates_revenue"),
                     json!(["stg_orders", "daily_revenue"])
                 ),
-                macro_test
+                macro_test,
+                scoped_macro_test
             ]),
             scenarios: json!([]),
             scope_index: scope,

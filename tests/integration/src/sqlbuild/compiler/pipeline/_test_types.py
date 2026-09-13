@@ -127,6 +127,26 @@ class GroupedDeclarationCompileTestCase:
 
 
 @dataclass(frozen=True)
+class MacroTestDiscoveryIntegrationTestCase:
+    """Compilation expectation for a macro test stored in its mirrored path."""
+
+    description: str
+    project_files: dict[str, str]
+    expected_test_name: str
+    expected_macro_name: str
+
+
+@dataclass(frozen=True)
+class SqlTestProductionScopeIntegrationTestCase:
+    """Expected production and helper declaration visibility for one SQL test."""
+
+    description: str
+    project_files: dict[str, str]
+    expected_test_name: str
+    expected_sql_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class CompileProgressIntegrationTestCase:
     description: str
     project_files: dict[str, str]

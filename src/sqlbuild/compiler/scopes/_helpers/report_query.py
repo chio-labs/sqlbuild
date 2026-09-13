@@ -48,6 +48,7 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityProvenance,
 )
 from sqlbuild.compiler.scopes.types import (
+    GrantKind,
     ResourceKind,
     ScopeDiagnosticCode,
     ScopeKind,
@@ -295,8 +296,13 @@ def explain_declaration(
                 if grant.declaration == record.identity
             )
             if matching_grants:
+                grant_reason: VisibilityReason = (
+                    VisibilityReason.TESTED_MACRO
+                    if all(grant.kind is GrantKind.TESTED_MACRO for grant in matching_grants)
+                    else VisibilityReason.EXPECTED_MODEL
+                )
                 visibility = VisibilityProvenance(
-                    VisibilityReason.EXPECTED_MODEL.value,
+                    grant_reason.value,
                     ",".join(
                         sorted(format_identity(identity=grant.through) for grant in matching_grants)
                     ),
@@ -418,10 +424,10 @@ def _classify(
     tuple[tuple[DeclarationRecord, str], ...],
 ]:
     grants: tuple[GrantRecord, ...] = lookup.grants_by_resource.get(resource.identity, ())
-    granted: dict[DeclarationIdentity, tuple[str, ...]] = {}
+    granted: dict[DeclarationIdentity, tuple[GrantRecord, ...]] = {}
     for grant in grants:
         granted.setdefault(grant.declaration, ())
-        granted[grant.declaration] += (format_identity(identity=grant.through),)
+        granted[grant.declaration] += (grant,)
     direct: list[tuple[DeclarationRecord, VisibilityProvenance]] = []
     relationships: list[tuple[DeclarationRecord, VisibilityProvenance]] = []
     unavailable: list[tuple[DeclarationRecord, str]] = []
@@ -432,12 +438,23 @@ def _classify(
         if reason is not None:
             direct.append((declaration, VisibilityProvenance(reason.value)))
         if declaration.identity in granted and declaration.scope is not ScopeKind.PRIVATE:
+            declaration_grants: tuple[GrantRecord, ...] = granted[declaration.identity]
+            grant_reason: VisibilityReason = (
+                VisibilityReason.TESTED_MACRO
+                if all(grant.kind is GrantKind.TESTED_MACRO for grant in declaration_grants)
+                else VisibilityReason.EXPECTED_MODEL
+            )
             relationships.append(
                 (
                     declaration,
                     VisibilityProvenance(
-                        VisibilityReason.EXPECTED_MODEL.value,
-                        ",".join(sorted(granted[declaration.identity])),
+                        grant_reason.value,
+                        ",".join(
+                            sorted(
+                                format_identity(identity=grant.through)
+                                for grant in declaration_grants
+                            )
+                        ),
                     ),
                 )
             )

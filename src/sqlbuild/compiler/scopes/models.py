@@ -114,7 +114,7 @@ class UsageRecord:
     consumer: ResourceIdentity | DeclarationIdentity
     declaration: DeclarationIdentity
     kind: UsageKind = UsageKind.RUNTIME
-    through: ResourceIdentity | None = None
+    through: ResourceIdentity | DeclarationIdentity | None = None
     enum_member: str | None = None
 
 
@@ -124,7 +124,7 @@ class GrantRecord:
 
     resource: ResourceIdentity
     declaration: DeclarationIdentity
-    through: ResourceIdentity
+    through: ResourceIdentity | DeclarationIdentity
     kind: GrantKind = GrantKind.EXPECTED_MODEL
 
 
@@ -135,7 +135,7 @@ class VisibilityRecord:
     resource: ResourceIdentity
     declaration: DeclarationIdentity
     reason: VisibilityReason
-    through: ResourceIdentity | None = None
+    through: ResourceIdentity | DeclarationIdentity | None = None
 
 
 @dataclass(frozen=True)
