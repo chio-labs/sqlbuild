@@ -16,10 +16,16 @@ from sqlbuild.compiler.compile.constants import (
     ASSERT_TEST_CTE_PREFIX,
     DBT_REF_TEST_CTE_PREFIX,
     EXPECTED_TEST_CTE_PREFIX,
+    MACRO_ACTUAL_TEST_CTE_NAME,
+    MACRO_EXPECTED_TEST_CTE_NAME,
     MACRO_TEST_CTE_PREFIX,
     REF_TEST_CTE_PREFIX,
     SEED_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
+    TABLE_FN_ACTUAL_TEST_CTE_NAME,
+    TABLE_FN_EXPECTED_TEST_CTE_NAME,
+    UDF_ACTUAL_TEST_CTE_NAME,
+    UDF_EXPECTED_TEST_CTE_NAME,
 )
 from sqlbuild.compiler.compile.main.map_expanded_offset import map_expanded_offset
 from sqlbuild.compiler.compile.models import MappedOffset
@@ -49,11 +55,18 @@ _SQLBUILD_HARNESS_CTE_PREFIXES: tuple[str, ...] = (
     SEED_TEST_CTE_PREFIX,
     DBT_REF_TEST_CTE_PREFIX,
     MACRO_TEST_CTE_PREFIX,
+    MACRO_ACTUAL_TEST_CTE_NAME,
+    MACRO_EXPECTED_TEST_CTE_NAME,
+    UDF_ACTUAL_TEST_CTE_NAME,
+    UDF_EXPECTED_TEST_CTE_NAME,
+    TABLE_FN_ACTUAL_TEST_CTE_NAME,
+    TABLE_FN_EXPECTED_TEST_CTE_NAME,
 )
 type _NativeCacheKey = tuple[
     str,
     str,
     tuple[str, ...] | None,
+    tuple[str, ...],
     tuple[str, ...],
     tuple[str, ...],
     bool,
@@ -86,6 +99,8 @@ def run_native_sql_lint(
             payload["ignored_rules"] = list(config.ignored_native_rules)
         if body.external_identifiers:
             payload["external_identifiers"] = list(body.external_identifiers)
+        if body.externally_referenced_ctes:
+            payload["externally_referenced_ctes"] = list(body.externally_referenced_ctes)
         if body.allows_ceremonial_select:
             payload["allows_ceremonial_select"] = True
         requests[cache_key] = payload
@@ -124,6 +139,7 @@ def _native_cache_key(*, body: LintBody, config: LintConfig) -> _NativeCacheKey:
         config.enabled_native_rules,
         config.ignored_native_rules,
         body.external_identifiers,
+        body.externally_referenced_ctes,
         body.allows_ceremonial_select,
     )
 

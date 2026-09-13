@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
@@ -32,6 +33,42 @@ from sqlbuild.lint.models import InterpolationSite, LintBody
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
+
+_CTE_DEFINITION_PATTERN: re.Pattern[str] = re.compile(
+    r'(?:\bWITH(?:\s+RECURSIVE)?|,)\s*["`\[]?(?P<name>[A-Za-z_][A-Za-z0-9_]*)'
+    r'["`\]]?(?:\s*\([^)]*\))?\s+AS\s*\(',
+    re.IGNORECASE | re.DOTALL,
+)
+_OPAQUE_CTE_PREFIX_PATTERN: re.Pattern[str] = re.compile(
+    r"\b[A-Za-z_][A-Za-z0-9_]*\s+AS\s*\(\s*(?:--[^\n]*\n\s*)?$",
+    re.IGNORECASE,
+)
+
+
+def _externally_referenced_ctes(
+    *,
+    expanded: str,
+    interpolation_sites: tuple[InterpolationSite, ...],
+    pre_expansion_body: str,
+    pre_expansion_sites: tuple[InterpolationSite, ...],
+) -> tuple[str, ...]:
+    names: set[str] = {
+        match.group("name").lower() for match in _CTE_DEFINITION_PATTERN.finditer(expanded)
+    }
+    referenced: set[str] = set()
+    for name in names:
+        for site in interpolation_sites:
+            if re.search(rf"\b{re.escape(name)}\b", site.original_text, re.IGNORECASE) is not None:
+                referenced.add(name)
+                break
+    for site in pre_expansion_sites:
+        prefix: str = pre_expansion_body[: site.neutralized_start]
+        if _OPAQUE_CTE_PREFIX_PATTERN.search(prefix) is None:
+            continue
+        referenced.update(
+            match.group("name").lower() for match in _CTE_DEFINITION_PATTERN.finditer(prefix)
+        )
+    return tuple(sorted(referenced.intersection(names)))
 
 
 def build_lint_expansion_context(
@@ -123,6 +160,12 @@ def prepare_lint_body(
     neutralized: str
     sites: tuple[InterpolationSite, ...]
     neutralized, sites = neutralize_interpolation(body=expanded)
+    externally_referenced_ctes: tuple[str, ...] = _externally_referenced_ctes(
+        expanded=expanded,
+        interpolation_sites=sites,
+        pre_expansion_body=expansion_input,
+        pre_expansion_sites=pre_expansion_sites,
+    )
     return LintBody(
         file_path=file_path,
         body_start=body_start,
@@ -134,6 +177,7 @@ def prepare_lint_body(
             sentinel_spans(sites=sites),
         ),
         external_identifiers=external_identifiers,
+        externally_referenced_ctes=externally_referenced_ctes,
         allows_ceremonial_select=allows_ceremonial_select,
     )
 

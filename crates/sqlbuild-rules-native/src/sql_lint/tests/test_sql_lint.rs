@@ -1182,6 +1182,57 @@ fn given_additional_rule_cases_when_linting_then_findings_and_fixes_match() -> R
 }
 
 #[test]
+fn given_ceremonial_cte_contexts_when_linting_then_only_harness_dependencies_are_reachable()
+-> Result<(), String> {
+    let test_cases = [
+        test_types::CeremonialCteLintTestCase {
+            description: "macro harness outputs keep their helper dependency reachable",
+            sql: "WITH input_values AS (SELECT 7 AS amount), __macro_actual__ AS (SELECT amount FROM input_values), __macro_expected__ AS (SELECT 7 AS amount) SELECT 1",
+            expected_count: 0,
+            expected_start: None,
+        },
+        test_types::CeremonialCteLintTestCase {
+            description: "non-harness double-underscore CTE remains diagnosable",
+            sql: "WITH __scratch AS (SELECT 1), __macro_actual__ AS (SELECT 7 AS amount), __macro_expected__ AS (SELECT 7 AS amount) SELECT 1",
+            expected_count: 1,
+            expected_start: Some(5),
+        },
+    ];
+    for test_case in test_cases {
+        let response = lint_json(
+            &json!({
+                "version": 1,
+                "sql": test_case.sql,
+                "dialect": "duckdb",
+                "enabled_rules": ["SQBRSQL005"],
+                "allows_ceremonial_select": true,
+            })
+            .to_string(),
+        )?;
+        let payload: Value = serde_json::from_str(&response).map_err(|error| error.to_string())?;
+        let diagnostics = payload["diagnostics"]
+            .as_array()
+            .ok_or_else(|| "diagnostics should be an array".to_string())?;
+
+        assert_eq!(
+            diagnostics.len(),
+            test_case.expected_count,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            diagnostics
+                .first()
+                .and_then(|diagnostic| diagnostic["start"].as_u64()),
+            test_case.expected_start,
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn given_tsql_bare_union_when_linting_then_diagnostic_has_no_invalid_fix() -> Result<(), String> {
     let test_cases = [test_types::DialectLintRuleTestCase {
         description: "T-SQL bare UNION is diagnosed without an invalid fix",
