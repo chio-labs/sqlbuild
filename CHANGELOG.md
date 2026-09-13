@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.100.4](https://github.com/chio-labs/sqlbuild/compare/v0.100.3...v0.100.4) (2026-09-13)
+
+
+### Bug Fixes
+
+* preserve framework CTE references ([#650](https://github.com/chio-labs/sqlbuild/issues/650)) ([37b8ed1](https://github.com/chio-labs/sqlbuild/commit/37b8ed100c9f0cc055dd629978b9578d1b56f061))
+
 ## [0.100.3](https://github.com/chio-labs/sqlbuild/compare/v0.100.2...v0.100.3) (2026-09-13)
 
 
