@@ -129,6 +129,29 @@ def active_status_filter(ctx) -> str:
 Callers can still pass explicit `@const(...)` or `@enum(...)` values as macro arguments. Context
 lookups are intended for policy owned by the macro; both forms use the caller's declaration scope.
 
+## Grouped declarations
+
+Keep folder-scoped macros, enums, and constants together without mixing declaration directories into
+resource listings:
+
+```text
+models/orders/
+├── _sqlbuild/
+│   ├── macros/       # visible in orders/ and its descendants
+│   ├── enums/
+│   ├── constants/
+│   ├── _macros/      # visible only to resources directly in orders/
+│   ├── _enums/
+│   └── _constants/
+├── intermediate/
+└── mart/
+```
+
+The containing `orders/` directory remains the declaration owner. Existing declaration directories
+directly below an owner remain supported. Placement diagnostics recommend the grouped layout.
+`_sqlbuild/` is reserved for the six declaration-role directories shown above; other direct entries
+are rejected rather than silently treated as resources.
+
 ## Compiler-integrated Rules
 
 Rules turn repeatable SQL and project review decisions into compile-time diagnostics. Mandatory

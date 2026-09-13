@@ -30,6 +30,7 @@ from sqlbuild.compiler.discovery.models import (
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DiscoverGlobalDeclarationTestCase,
+    DiscoverGroupedDeclarationTestCase,
     DiscoverScopedDeclarationTestCase,
     DiscoveryPathInventoryTestCase,
     InvalidScopedDeclarationRootTestCase,
@@ -95,6 +96,51 @@ def test_given_declaration_below_authored_root_when_discovering_then_records_bou
 @pytest.mark.parametrize(
     "test_case",
     (
+        DiscoverGroupedDeclarationTestCase(
+            "public_macro", "macro", "macros", "inherited", "models/orders"
+        ),
+        DiscoverGroupedDeclarationTestCase(
+            "private_macro", "macro", "_macros", "local", "models/orders"
+        ),
+        DiscoverGroupedDeclarationTestCase(
+            "public_enum", "enum", "enums", "inherited", "models/orders"
+        ),
+        DiscoverGroupedDeclarationTestCase(
+            "private_enum", "enum", "_enums", "local", "models/orders"
+        ),
+        DiscoverGroupedDeclarationTestCase(
+            "public_constant", "constant", "constants", "inherited", "models/orders"
+        ),
+        DiscoverGroupedDeclarationTestCase(
+            "private_constant", "constant", "_constants", "local", "models/orders"
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_grouped_declaration_when_discovering_then_owner_is_above_sqlbuild_group(
+    test_case: DiscoverGroupedDeclarationTestCase,
+    tmp_path: Path,
+) -> None:
+    suffix, contents = declaration_contents(kind=test_case.declaration_kind)
+    declaration_root: Path = Path("models/orders/_sqlbuild") / test_case.directory_name
+    file_path: Path = tmp_path / declaration_root / f"policy{suffix}"
+    file_path.parent.mkdir(parents=True)
+    file_path.write_text(contents, encoding="utf-8")
+
+    discovered: tuple[DiscoveredMacroFile | DiscoveredEnumFile | DiscoveredConstantFile, ...] = (
+        discover_declarations(project_dir=tmp_path, kind=test_case.declaration_kind)
+    )
+
+    assert len(discovered) == 1
+    assert discovered[0].relative_path == declaration_root / f"policy{suffix}"
+    assert discovered[0].scope_kind.value == test_case.expected_scope_kind
+    assert discovered[0].owning_path == Path(test_case.expected_owning_path)
+    assert discovered[0].declaration_root == declaration_root
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
         DiscoverGlobalDeclarationTestCase("macro", "macro", "macros", "global"),
         DiscoverGlobalDeclarationTestCase("enum", "enum", "enums", "global"),
         DiscoverGlobalDeclarationTestCase("constant", "constant", "constants", "global"),
@@ -145,6 +191,21 @@ def test_given_top_level_public_declarations_when_discovering_then_scope_remains
             "global_root_below_scoped_tree",
             "models/macros/organization/enums/value.sql",
             "nested inside another declaration tree",
+        ),
+        InvalidScopedDeclarationRootTestCase(
+            "grouped_root_with_intermediate_folder",
+            "models/orders/_sqlbuild/organization/macros/value.py",
+            "contains unsupported entries",
+        ),
+        InvalidScopedDeclarationRootTestCase(
+            "top_level_grouped_root",
+            "_sqlbuild/_macros/value.py",
+            "must be below a canonical authored root",
+        ),
+        InvalidScopedDeclarationRootTestCase(
+            "grouped_root_with_unsupported_entry",
+            "models/orders/_sqlbuild/notes.py",
+            "contains unsupported entries",
         ),
     ),
     ids=lambda case: case.description,
@@ -227,6 +288,13 @@ def test_given_invalid_scoped_root_when_discovering_project_inputs_then_strict_d
         OrdinaryDiscoveryExclusionTestCase(
             "model",
             "models/domain/_constants/value.sql",
+            "CONSTANT (name scoped_value, value 1);\n",
+            "model",
+            (),
+        ),
+        OrdinaryDiscoveryExclusionTestCase(
+            "grouped_model",
+            "models/domain/_sqlbuild/constants/value.sql",
             "CONSTANT (name scoped_value, value 1);\n",
             "model",
             (),

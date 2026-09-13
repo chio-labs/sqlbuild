@@ -67,6 +67,17 @@ class ExpectedBooleanCase:
 
 
 @dataclass(frozen=True)
+class DeclarationContainerProjectionCase:
+    """Expected report container fields for one declaration path."""
+
+    description: str
+    path: str
+    owning_path: str
+    expected_role_root: str
+    expected_bucket_path: str | None
+
+
+@dataclass(frozen=True)
 class ScopeReportTargetCase:
     """Expected target resolution result for one scope report query."""
 
@@ -127,6 +138,7 @@ class PlacementValidationCase:
     consumer_paths: tuple[str, ...]
     expected_codes: tuple[ScopeDiagnosticCode, ...]
     expected_direct_codes: tuple[ScopeDiagnosticCode, ...] = ()
+    expected_message_fragment: str = ""
 
 
 @dataclass(frozen=True)

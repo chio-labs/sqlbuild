@@ -11,15 +11,20 @@ import pytest
 from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.main.scope_metadata import scope_metadata_projection
 from sqlbuild.compiler.scopes.models import (
+    DeclarationIdentity,
     DeclarationRecord,
+    OwnershipRoot,
     ResourceIdentity,
     ScopeIndex,
     ScopeLookup,
 )
 from sqlbuild.compiler.scopes.types import (
+    DeclarationKind,
     ResourceKind,
+    ScopeKind,
 )
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
+    DeclarationContainerProjectionCase,
     ExpectedBooleanCase,
     ExpectedErrorCase,
 )
@@ -130,6 +135,48 @@ def test_given_typed_constant_when_projecting_default_metadata_then_value_is_abs
     }
     assert projection["complete"] is test_case.expected_result
     assert projection["completeness"]["runtime_usage"] is test_case.expected_result
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DeclarationContainerProjectionCase(
+            description="legacy declaration role has no navigation bucket",
+            path="models/orders/constants/policy.sql",
+            owning_path="models/orders",
+            expected_role_root="models/orders/constants",
+            expected_bucket_path=None,
+        ),
+        DeclarationContainerProjectionCase(
+            description="grouped declaration role has no navigation bucket",
+            path="models/orders/_sqlbuild/constants/policy.sql",
+            owning_path="models/orders",
+            expected_role_root="models/orders/_sqlbuild/constants",
+            expected_bucket_path=None,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_declaration_path_when_projecting_then_role_container_is_canonical(
+    test_case: DeclarationContainerProjectionCase,
+) -> None:
+    declaration: DeclarationRecord = DeclarationRecord(
+        identity=DeclarationIdentity(DeclarationKind.CONSTANT, "policy"),
+        path=test_case.path,
+        line=1,
+        column=1,
+        scope=ScopeKind.INHERITED,
+        ownership_root=OwnershipRoot("models", resource_kind=ResourceKind.MODEL),
+        owning_path=test_case.owning_path,
+    )
+
+    projection: dict[str, Any] = cast(
+        dict[str, Any], scope_metadata_projection(index=ScopeIndex(declarations=(declaration,)))
+    )
+    declaration_projection: dict[str, Any] = projection["declarations"][0]
+
+    assert declaration_projection["role_root"] == test_case.expected_role_root
+    assert declaration_projection["bucket_path"] == test_case.expected_bucket_path
 
 
 if __name__ == "__main__":

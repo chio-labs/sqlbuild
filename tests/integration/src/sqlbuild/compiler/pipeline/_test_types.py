@@ -118,6 +118,15 @@ class MacroDeclarationRenderingTestCase:
 
 
 @dataclass(frozen=True)
+class GroupedDeclarationCompileTestCase:
+    """Compilation expectation for declarations under one _sqlbuild group."""
+
+    description: str
+    project_files: dict[str, str]
+    expected_sql: str
+
+
+@dataclass(frozen=True)
 class CompileProgressIntegrationTestCase:
     description: str
     project_files: dict[str, str]

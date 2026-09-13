@@ -93,6 +93,7 @@ from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
 )
 from sqlbuild.compiler.scopes.constants import (
     DECLARATION_DIRECTORY_FACTS,
+    DECLARATION_GROUP_DIRECTORY,
     GLOBAL_DECLARATION_DIRECTORIES,
     INHERITED_DECLARATION_DIRECTORIES,
     LOCAL_DECLARATION_DIRECTORIES,
@@ -180,6 +181,7 @@ _SCOPED_DECLARATION_DIRECTORIES: frozenset[str] = (
 def _discover_declaration_file_facts(
     *, project_dir: Path, declaration_kind: DeclarationKind | None = None
 ) -> tuple[_DeclarationFileFacts, ...]:
+    _validate_declaration_groups(project_dir=project_dir)
     for directory_name in sorted(LOCAL_DECLARATION_DIRECTORIES):
         directory_kind, _scope_kind = DECLARATION_DIRECTORY_FACTS[directory_name]
         if (declaration_kind is None or directory_kind is declaration_kind) and (
@@ -226,16 +228,50 @@ def _discover_declaration_file_facts(
                     f"Declaration root {relative_directory.as_posix()}/ is nested inside another "
                     "declaration tree"
                 )
+            owning_path: Path = relative_directory.parent
+            if relative_directory.parent.name == DECLARATION_GROUP_DIRECTORY:
+                owning_path = relative_directory.parent.parent
             facts.extend(
                 _declaration_files_under_root(
                     project_dir=project_dir,
                     ownership_root=Path(*root_components),
                     declaration_root=directory,
-                    owning_path=relative_directory.parent,
+                    owning_path=owning_path,
                     scope_kind=directory_scope_kind,
                 )
             )
     return tuple(sorted(facts, key=lambda item: item.relative_path.as_posix()))
+
+
+def _validate_declaration_groups(*, project_dir: Path) -> None:
+    root_group: Path = project_dir / DECLARATION_GROUP_DIRECTORY
+    if root_group.exists():
+        raise DeclarationParseError(
+            f"Grouped declaration root {DECLARATION_GROUP_DIRECTORY}/ must be below a canonical "
+            "authored root"
+        )
+    for root_components in CANONICAL_AUTHORED_ROOTS:
+        authored_root: Path = project_dir.joinpath(*root_components)
+        if not authored_root.is_dir():
+            continue
+        for group in sorted(
+            path for path in authored_root.rglob(DECLARATION_GROUP_DIRECTORY) if path.is_dir()
+        ):
+            unsupported: tuple[Path, ...] = tuple(
+                sorted(
+                    child
+                    for child in group.iterdir()
+                    if not child.is_dir() or child.name not in _SCOPED_DECLARATION_DIRECTORIES
+                )
+            )
+            if unsupported:
+                rendered: str = ", ".join(
+                    path.relative_to(project_dir).as_posix() for path in unsupported
+                )
+                raise DeclarationParseError(
+                    f"Declaration group {group.relative_to(project_dir).as_posix()}/ contains "
+                    f"unsupported entries: {rendered}"
+                )
 
 
 def _declaration_files_under_root(
@@ -284,7 +320,7 @@ def _is_in_scoped_declaration_tree(*, file_path: Path, project_dir: Path) -> boo
         if relative_parts[: len(root_components)] != root_components:
             continue
         return any(
-            component in _SCOPED_DECLARATION_DIRECTORIES
+            component == DECLARATION_GROUP_DIRECTORY or component in _SCOPED_DECLARATION_DIRECTORIES
             for component in relative_parts[len(root_components) : -1]
         )
     return False

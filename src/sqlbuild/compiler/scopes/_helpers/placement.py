@@ -7,6 +7,7 @@ from dataclasses import replace
 from pathlib import PurePosixPath
 
 from sqlbuild.compiler.scopes._helpers.identities import format_identity
+from sqlbuild.compiler.scopes.constants import DECLARATION_GROUP_DIRECTORY
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
@@ -262,7 +263,10 @@ def _message(
         target: str = f"top-level {declaration.identity.kind.value}s/"
     else:
         prefix: str = "_" if required_scope is ScopeKind.LOCAL else ""
-        target = f"{required_path}/{prefix}{declaration.identity.kind.value}s/"
+        target = (
+            f"{required_path}/{DECLARATION_GROUP_DIRECTORY}/"
+            f"{prefix}{declaration.identity.kind.value}s/"
+        )
     return (
         f"Declaration '{format_identity(identity=declaration.identity)}' is currently "
         f"{_scope_label(declaration.scope)} at '{current_path}' ({declaration.path}); required "

@@ -15,6 +15,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
+    GroupedDeclarationCompileTestCase,
     MacroDeclarationContextErrorTestCase,
     MacroDeclarationRenderingTestCase,
     MacroDeclarationResourceTestCase,
@@ -75,6 +76,66 @@ def test_given_active_adapter_when_macro_renders_constant_then_uses_adapter_sql(
     )
 
     assert project.models[0].query_sql == test_case.expected_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        GroupedDeclarationCompileTestCase(
+            description="grouped private macro reads grouped private constant and enum",
+            project_files={
+                "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
+                "models/orders/_sqlbuild/_constants/policy.sql": (
+                    "CONSTANT (name minimum_quantity, value 2);\n"
+                ),
+                "models/orders/_sqlbuild/_enums/status.sql": (
+                    "ENUM (name order_status, members [ACTIVE]);\n"
+                ),
+                "models/orders/_sqlbuild/_macros/policy.py": (
+                    "def order_policy(ctx) -> str:\n"
+                    "    quantity = ctx.render_constant('minimum_quantity')\n"
+                    "    status = ctx.render_enum_member(\n"
+                    "        enum_name='order_status', member_name='ACTIVE'\n"
+                    "    )\n"
+                    '    return f"{quantity} AS minimum_quantity, {status} AS status"\n'
+                ),
+                "models/orders/summary.sql": (
+                    'MODEL (description "Order summary.");\nSELECT @order_policy()'
+                ),
+            },
+            expected_sql="SELECT 2 AS minimum_quantity, 'ACTIVE' AS status",
+        ),
+        GroupedDeclarationCompileTestCase(
+            description="grouped public macro is visible to descendant model",
+            project_files={
+                "sqlbuild_project.toml": (
+                    'name = "orders"\nadapter = "duckdb"\n[scopes]\nenforce_placement = false\n'
+                ),
+                "models/orders/_sqlbuild/macros/policy.py": (
+                    "def minimum_quantity() -> str:\n    return '2'\n"
+                ),
+                "models/orders/history/summary.sql": (
+                    'MODEL (description "Historical order summary.");\n'
+                    "SELECT @minimum_quantity() AS minimum_quantity"
+                ),
+            },
+            expected_sql="SELECT 2 AS minimum_quantity",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_grouped_declarations_when_compiling_then_scope_resolves_from_owner(
+    test_case: GroupedDeclarationCompileTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+
+    result: CompilePipelineResult = run_compile_pipeline_for_project(
+        project_dir=tmp_path, adapter=DuckDbAdapter()
+    )
+
+    assert result.project.models[0].query_sql == test_case.expected_sql
 
 
 @pytest.mark.parametrize(
@@ -149,6 +210,20 @@ def test_given_macro_context_declarations_when_compiling_resources_then_all_expa
                 ),
             },
             expected_error_fragment="Constant 'minimum_quantity'.*is inaccessible",
+        ),
+        MacroDeclarationContextErrorTestCase(
+            description="grouped private macro remains inaccessible to descendant model",
+            project_files={
+                "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
+                "models/orders/_sqlbuild/_macros/policy.py": (
+                    "def minimum_quantity() -> str:\n    return '2'\n"
+                ),
+                "models/orders/history/summary.sql": (
+                    'MODEL (description "Historical order summary.");\n'
+                    "SELECT @minimum_quantity() AS minimum_quantity"
+                ),
+            },
+            expected_error_fragment="Macro '@minimum_quantity'.*is inaccessible",
         ),
         MacroDeclarationContextErrorTestCase(
             description="unknown constant reports visible alternatives",
