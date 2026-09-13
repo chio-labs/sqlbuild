@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.100.5](https://github.com/chio-labs/sqlbuild/compare/v0.100.4...v0.100.5) (2026-09-13)
+
+
+### Bug Fixes
+
+* infer commented projection names ([#652](https://github.com/chio-labs/sqlbuild/issues/652)) ([08f04df](https://github.com/chio-labs/sqlbuild/commit/08f04dfc82190763363a0ec05a03db03eb3a2175))
+
 ## [0.100.4](https://github.com/chio-labs/sqlbuild/compare/v0.100.3...v0.100.4) (2026-09-13)
 
 
