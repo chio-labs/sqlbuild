@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.99.0](https://github.com/chio-labs/sqlbuild/compare/v0.98.5...v0.99.0) (2026-09-13)
+
+
+### Features
+
+* wrap model descriptions ([#640](https://github.com/chio-labs/sqlbuild/issues/640)) ([2de9f15](https://github.com/chio-labs/sqlbuild/commit/2de9f1588a1a00b6d84bc851df442b50e77aff22))
+
 ## [0.98.5](https://github.com/chio-labs/sqlbuild/compare/v0.98.4...v0.98.5) (2026-09-12)
 
 
