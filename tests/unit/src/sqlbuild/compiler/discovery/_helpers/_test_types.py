@@ -144,6 +144,17 @@ class DiscoverScopedDeclarationTestCase:
 
 
 @dataclass(frozen=True)
+class DiscoverGroupedDeclarationTestCase:
+    """Discovery expectation for one declaration inside a grouped root."""
+
+    description: str
+    declaration_kind: str
+    directory_name: str
+    expected_scope_kind: str
+    expected_owning_path: str
+
+
+@dataclass(frozen=True)
 class DiscoverGlobalDeclarationTestCase:
     description: str
     declaration_kind: str

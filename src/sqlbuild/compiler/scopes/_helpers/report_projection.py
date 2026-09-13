@@ -8,6 +8,7 @@ from typing import cast
 from sqlbuild.compiler.scopes._helpers.identities import format_identity
 from sqlbuild.compiler.scopes._helpers.paths import normalize_path
 from sqlbuild.compiler.scopes.constants import (
+    DECLARATION_GROUP_DIRECTORY,
     DEFAULT_ENUM_MEMBER_PREVIEW,
     SCOPE_METADATA_SCHEMA_VERSION,
 )
@@ -257,6 +258,8 @@ def _declaration_container(
     role: str = f"{record.identity.kind.value}s"
     parts: tuple[str, ...] = tuple(safe_scope_path(path=record.path).split("/"))
     role_index: int = len(record.owning_path.split("/")) if record.owning_path else 0
+    if parts[role_index] == DECLARATION_GROUP_DIRECTORY:
+        role_index += 1
     role_root: str = "/".join(parts[: role_index + 1])
     bucket: str = "/".join(parts[role_index + 1 : -1])
     return role, visibility, role_root, bucket or None

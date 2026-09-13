@@ -6345,9 +6345,9 @@ need to execute SQL against controlled data. Use an audit when the answer depend
 A finding contains a stable code, project-relative path, line, column, explanation, and remediation.
 This makes the same requirement usable in a terminal, JSON output, CI annotation, or agent workflow.
 
-Intentional departures remain explicit. Exact exceptions and path-scoped ignores require a reason;
-exact exceptions are stale-checked so obsolete suppressions do not silently accumulate. Mandatory
-compiler correctness cannot be suppressed.
+Intentional departures remain explicit. Exact exceptions and path- or resource-scoped ignores
+require a reason; exact exceptions are stale-checked so obsolete suppressions do not silently
+accumulate. Mandatory compiler correctness cannot be suppressed.
 
 See [Findings and exceptions](/concepts/rules/findings-and-exceptions) for configuration examples.
 
@@ -6475,23 +6475,7 @@ reason = "Examples retain intentionally minimal SQL."
 Path ignores accept exact codes and family prefixes. Keep their scope narrow and explain why the
 project differs from the selected requirement.
 
-Use resource selectors when the exception follows project structure or lineage rather than a
-directory boundary:
-
-```toml
-[[rules.rule_ignores]]
-rules = ["SQBRSQL021"]
-selectors = ["+orders"]
-reason = "The reviewed orders interface preserves its upstream column contract."
-```
-
-Resource ignores use the same selector grammar as other SQLBuild commands, including names, tags,
-paths, graph expansion (`+orders`, `orders+`, or `+orders+`), and lineage paths such as
-`base_orders~customer_orders`. `paths` and `selectors` may be combined in one ignore. Continue to
-use `paths` for SQL tests and audits because those files are not graph resources.
-
-Bare resource names also accept glob patterns. For example, this scopes the ignore to every graph
-resource whose name starts with `intermediate_`:
+Use `selectors` when the exception follows graph-resource identities or lineage rather than files:
 
 ```toml
 [[rules.rule_ignores]]
@@ -6500,8 +6484,9 @@ selectors = ["intermediate_*"]
 reason = "These intermediate interfaces intentionally preserve upstream columns."
 ```
 
-Use `paths` instead when the convention belongs to authored filenames or directories, including
-non-graph SQL files:
+Selectors use the same grammar as SQLBuild commands, including exact names, name globs, tags,
+resource paths, and graph expansion such as `+intermediate_*`. Use `paths` for authored-file glob
+matching, including SQL tests and audits that are not graph resources:
 
 ```toml
 [[rules.rule_ignores]]
@@ -6509,6 +6494,8 @@ rules = ["SQBRSQL021"]
 paths = ["models/**/intermediate_*.sql"]
 reason = "These intermediate SQL files intentionally preserve upstream columns."
 ```
+
+`paths` and `selectors` may be combined in one scoped ignore. Both forms require a reason.
 
 ### Mandatory correctness
 
@@ -7439,11 +7426,22 @@ When no `--select` is provided, all models are selected.
 
 #### Name
 
-Select a single model by name:
+Select a single resource by name:
 
 ```bash
 sqb build --select fact_orders
 ```
+
+Bare names accept glob patterns. This selects every resource whose name starts with
+`intermediate_`:
+
+```bash
+sqb build --select "intermediate_*"
+```
+
+Name globs compose with graph expansion. For example, `+intermediate_*` selects every matching
+resource and all of their upstream dependencies. Quote patterns in shell commands so your shell
+does not expand `*` against files in the current directory.
 
 #### Tag
 
@@ -7547,10 +7545,12 @@ sqb build --select +fact_orders --exclude tag:staging
 
 ### Error handling
 
-Unknown model names, empty paths, and malformed selectors produce clear error messages:
+Unknown resource names, name patterns with no matches, empty paths, and malformed selectors produce
+clear error messages:
 
 ```
 unknown selector name 'nonexistent_model'
+unknown selector pattern 'missing_*'
 no models found under path 'models/nonexistent'.
 no models found with tag 'nonexistent_tag'
 path selector 'fact_orders~' requires names on both sides of '~'
@@ -8157,8 +8157,8 @@ decide which files can access it. No TOML configuration is required.
 | Where the declaration lives | Who can use it |
 |-------------------------------------|--------------------|
 | Top-level `macros/`, `constants/`, or `enums/` | The whole project |
-| Nested `macros/`, `constants/`, or `enums/` | Files in that folder and folders below it |
-| Nested `_macros/`, `_constants/`, or `_enums/` | Files directly in that folder only |
+| Nested `_sqlbuild/macros/`, `_sqlbuild/constants/`, or `_sqlbuild/enums/` | Files in the owner folder and folders below it |
+| Nested `_sqlbuild/_macros/`, `_sqlbuild/_constants/`, or `_sqlbuild/_enums/` | Files directly in the owner folder only |
 | An underscored constant or enum inside `MODEL()` | That model and its inline SQL hooks only |
 
 Macro declarations are Python files (`.py`). Constant and enum declarations are SQL files
@@ -8173,22 +8173,27 @@ models/
 ├── constants/                 published throughout models/
 │   └── warehouse.sql
 └── commerce/
-    ├── macros/                published throughout commerce/
-    │   └── currency.py
-    ├── _enums/                exact commerce/ directory only
-    │   └── grain.sql
+    ├── _sqlbuild/
+    │   ├── macros/            published throughout commerce/
+    │   │   └── currency.py
+    │   └── _enums/            exact commerce/ directory only
+    │       └── grain.sql
     ├── orders.sql              sees warehouse, currency, and grain
     ├── finance/
-    │   ├── macros/            published throughout finance/
-    │   │   └── tax.py
+    │   ├── _sqlbuild/
+    │   │   └── macros/        published throughout finance/
+    │   │       └── tax.py
     │   └── revenue.sql         sees warehouse, currency, and tax
     └── fulfillment/
         └── shipments.sql       sees warehouse and currency
 ```
 
-A nested unprefixed role applies to its folder and everything below it. An underscored role applies
-only to files directly beside it. The same unprefixed role name applies to the whole project only
-when it is at the project root.
+The folder containing `_sqlbuild/` is the declaration owner. An unprefixed role applies to that
+owner and everything below it. An underscored role applies only to files directly in the owner.
+Legacy declaration roles directly below an owner remain supported.
+
+`_sqlbuild/` is reserved for the six declaration-role directories shown above. Other direct files or
+folders are rejected, and a project-root `_sqlbuild/` is invalid because it has no resource owner.
 
 | Resource | Visible from the example tree | Not visible |
 |----------|-------------------------------|-------------|
@@ -8223,8 +8228,8 @@ versioned JSON schema rather than parsing text labels.
 | Where the value is needed | Placement |
 |---------------------------|-----------|
 | One model only | In that model's `MODEL()` header |
-| Files directly in one folder | In an underscored role beside those files |
-| Files across one folder tree | In an unprefixed role at their nearest shared parent folder |
+| Files directly in one folder | In an underscored role under the owner's `_sqlbuild/` folder |
+| Files across one folder tree | In an unprefixed role under the nearest shared owner's `_sqlbuild/` folder |
 | Different resource trees, such as models and tests | In a top-level declaration role |
 
 SQLBuild computes the lowest common owner of every declaration's runtime consumers. A project-wide
@@ -8249,8 +8254,9 @@ See which enums, constants, and macros are available to each SQL file.
 
 For most SQL, the rule is simple:
 
-> A file can use declarations available to the whole project, declarations in unprefixed role
-> folders beside or above it, and declarations in an underscored role folder directly beside it.
+> A file can use declarations available to the whole project, declarations in unprefixed roles
+> under `_sqlbuild/` folders owned beside or above it, and declarations in an underscored role owned
+> directly beside it.
 
 ### Start from the SQL file
 
@@ -8262,10 +8268,11 @@ models/
 ├── constants/                 available throughout models/
 │   └── warehouse.sql
 └── commerce/
-    ├── enums/                 available throughout commerce/
-    │   └── order_status.sql
-    ├── _constants/       available directly in commerce/ only
-    │   └── minimum_value.sql
+    ├── _sqlbuild/
+    │   ├── enums/             available throughout commerce/
+    │   │   └── order_status.sql
+    │   └── _constants/        available directly in commerce/ only
+    │       └── minimum_value.sql
     ├── orders.sql
     └── history/
         └── archived_orders.sql
@@ -8278,12 +8285,12 @@ From this tree:
 | `orders.sql` | `warehouse`, `order_status`, and `minimum_value` |
 | `history/archived_orders.sql` | `warehouse` and `order_status` |
 
-`minimum_value` is not available in `history/` because `_constants/` applies only to files
-directly beside it.
+`minimum_value` is not available in `history/` because `_sqlbuild/_constants/` applies only to files
+directly in the `_sqlbuild/` owner's folder.
 
 ### Supported resource trees
 
-Scoped declaration directories can be placed below these SQL resource roots:
+Grouped declaration directories can be placed below these SQL resource roots:
 
 | Root | Contents |
 |------|----------|
@@ -8300,6 +8307,11 @@ under `tests/`. Put a declaration in the top-level `constants/`, `enums/`, or `m
 when it must be available across different resource trees. Project-root `_constants/`, `_enums/`,
 and `_macros/` directories are invalid because there is no owner folder at the project root for
 them to be private to.
+
+Existing scoped declaration roles directly below an owner remain supported. `_sqlbuild/` is the
+preferred layout because it keeps all declarations together without changing their visibility.
+Only the six public/private declaration-role directories are valid directly under `_sqlbuild/`;
+other entries are rejected. A project-root `_sqlbuild/` is invalid because it has no resource owner.
 
 ### Which file controls visibility?
 
@@ -8407,8 +8419,8 @@ tree.
 | Where it is needed | Location |
 |--------------------|----------|
 | One model only | Inside that model's `MODEL()` header, for enums and constants |
-| SQL files directly in one directory | `_macros/`, `_enums/`, or `_constants/` |
-| A directory and its descendants | `macros/`, `enums/`, or `constants/` |
+| SQL files directly in one directory | `_sqlbuild/_macros/`, `_sqlbuild/_enums/`, or `_sqlbuild/_constants/` |
+| A directory and its descendants | `_sqlbuild/macros/`, `_sqlbuild/enums/`, or `_sqlbuild/constants/` |
 | Different trees, such as models and tests | Top-level `macros/`, `enums/`, or `constants/` |
 
 ### One directory
@@ -8418,13 +8430,14 @@ These two models use the same constant and both sit directly in `commerce/`:
 ```text
 models/
 └── commerce/
-    ├── _constants/
-    │   └── minimum_value.sql
+    ├── _sqlbuild/
+    │   └── _constants/
+    │       └── minimum_value.sql
     ├── orders.sql
     └── customers.sql
 ```
 
-Use `_constants/` because no descendant directory needs the value.
+Use `_sqlbuild/_constants/` because no descendant directory needs the value.
 
 ### One directory tree
 
@@ -8433,15 +8446,16 @@ These models use the same constant across two child directories:
 ```text
 models/
 └── commerce/
-    ├── constants/
-    │   └── reporting_day.sql
+    ├── _sqlbuild/
+    │   └── constants/
+    │       └── reporting_day.sql
     ├── finance/
     │   └── revenue.sql
     └── fulfillment/
         └── shipments.sql
 ```
 
-Use `constants/` in `commerce/` so both child directories can use it.
+Use `_sqlbuild/constants/` in `commerce/` so both child directories can use it.
 
 ### Different resource trees
 
@@ -8633,7 +8647,7 @@ Explanation
      Promotion impact: model:orders
 
 Diagnostics (1)
-  ERROR S008 models/commerce/macros/orders.py: Declaration 'macro:formatted_order_total' is currently descendant-public at 'models/commerce' (models/commerce/macros/orders.py); required exact-owner-private at 'models/commerce'. Consumers: model:orders. Move it to 'models/commerce/_macros/'
+  ERROR S008 models/commerce/macros/orders.py: Declaration 'macro:formatted_order_total' is currently descendant-public at 'models/commerce' (models/commerce/macros/orders.py); required exact-owner-private at 'models/commerce'. Consumers: model:orders. Move it to 'models/commerce/_sqlbuild/_macros/'
 Completeness: complete
 ```
 

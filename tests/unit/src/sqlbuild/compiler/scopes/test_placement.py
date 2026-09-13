@@ -126,12 +126,23 @@ def test_given_non_placement_error_when_placement_enforcement_disabled_then_vali
             None,
             ("models/domain/orders.sql",),
             (ScopeDiagnosticCode.OVER_BROAD_GLOBAL,),
+            expected_message_fragment="models/domain/_sqlbuild/_constants/",
         ),
         PlacementValidationCase(
             "exact local is accepted",
             ScopeKind.LOCAL,
             "models/domain",
             "models/domain/_constants/limit.sql",
+            "models",
+            ResourceKind.MODEL,
+            ("models/domain/orders.sql",),
+            (),
+        ),
+        PlacementValidationCase(
+            "grouped exact local is accepted",
+            ScopeKind.LOCAL,
+            "models/domain",
+            "models/domain/_sqlbuild/_constants/limit.sql",
             "models",
             ResourceKind.MODEL,
             ("models/domain/orders.sql",),
@@ -152,6 +163,16 @@ def test_given_non_placement_error_when_placement_enforcement_disabled_then_vali
             ScopeKind.INHERITED,
             "models/domain",
             "models/domain/constants/limit.sql",
+            "models",
+            ResourceKind.MODEL,
+            ("models/domain/a/orders.sql", "models/domain/b/customers.sql"),
+            (),
+        ),
+        PlacementValidationCase(
+            "grouped inherited multi child lca is accepted",
+            ScopeKind.INHERITED,
+            "models/domain",
+            "models/domain/_sqlbuild/constants/limit.sql",
             "models",
             ResourceKind.MODEL,
             ("models/domain/a/orders.sql", "models/domain/b/customers.sql"),
@@ -209,6 +230,10 @@ def test_given_complete_usage_when_validating_then_exact_placement_is_enforced(
     )
 
     assert tuple(diagnostic.code for diagnostic in result.diagnostics) == test_case.expected_codes
+    assert all(
+        test_case.expected_message_fragment in diagnostic.message
+        for diagnostic in result.diagnostics
+    )
     assert result.completeness.runtime_usage
     assert result.completeness.placement
 

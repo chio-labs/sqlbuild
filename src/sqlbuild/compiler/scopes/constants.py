@@ -59,6 +59,7 @@ METADATA_FIELD: str = "metadata"
 KIND_COUNTS_FIELD: str = "kind_counts"
 DECLARATION_KIND_VALUES: frozenset[str] = frozenset(item.value for item in DeclarationKind)
 
+DECLARATION_GROUP_DIRECTORY: str = "_sqlbuild"
 GLOBAL_DECLARATION_DIRECTORIES: frozenset[str] = frozenset({"macros", "enums", "constants"})
 INHERITED_DECLARATION_DIRECTORIES: frozenset[str] = GLOBAL_DECLARATION_DIRECTORIES
 LOCAL_DECLARATION_DIRECTORIES: frozenset[str] = frozenset({"_macros", "_enums", "_constants"})
