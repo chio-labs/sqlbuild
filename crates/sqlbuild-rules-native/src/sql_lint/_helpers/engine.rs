@@ -21,6 +21,20 @@ const NULL_COMPARISON: LintRuleMetadata = LintRuleMetadata {
     remediation: "Use IS NULL or IS NOT NULL when testing for NULL.",
 };
 const MAX_LINT_FUNCTION_CALL_DEPTH: usize = 128;
+const CEREMONIAL_CTE_PREFIXES: [&str; 11] = [
+    "__expected__",
+    "__assert__",
+    "__ref__",
+    "__source__",
+    "__seed__",
+    "__dbt_ref__",
+    "__macro_actual__",
+    "__macro_expected__",
+    "__udf_actual__",
+    "__udf_expected__",
+    "__table_fn_",
+];
+
 const IMPLICIT_CARTESIAN_JOIN: LintRuleMetadata = LintRuleMetadata {
     code: "SQBRSQL002",
     message: "Comma-separated sources create an implicit cartesian join",
@@ -264,6 +278,12 @@ const ALL_RULE_METADATA: [&LintRuleMetadata; 38] = [
     &CROSS_JOIN,
 ];
 
+fn is_ceremonial_cte_name(name: &str) -> bool {
+    CEREMONIAL_CTE_PREFIXES
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
+}
+
 struct QueryTokenContext<'a> {
     tokens: &'a [Token],
     depths: &'a [usize],
@@ -289,6 +309,7 @@ struct DiagnosticContext<'a> {
 
 struct FactBuildOptions<'a> {
     external_identifiers: &'a HashSet<String>,
+    externally_referenced_ctes: &'a HashSet<String>,
     allows_ceremonial_select: bool,
 }
 
@@ -334,8 +355,14 @@ fn lint(request: LintRequest) -> Result<LintResponse, String> {
         .iter()
         .map(|identifier| identifier.to_ascii_lowercase())
         .collect();
+    let externally_referenced_ctes: HashSet<String> = request
+        .externally_referenced_ctes
+        .iter()
+        .map(|name| name.to_ascii_lowercase())
+        .collect();
     let options = FactBuildOptions {
         external_identifiers: &external_identifiers,
+        externally_referenced_ctes: &externally_referenced_ctes,
         allows_ceremonial_select: request.allows_ceremonial_select,
     };
     let facts = build_facts(&statements, &tokens, &request.sql, &options);
@@ -399,7 +426,7 @@ fn build_facts(
     for expression in expressions {
         facts
             .unused_cte_names
-            .extend(collect_unused_ctes(expression));
+            .extend(collect_unused_ctes(expression, options));
     }
     facts
 }
@@ -1010,32 +1037,48 @@ fn projection_projects_star(tokens: &[Token], depths: &[usize], range: &Expressi
         .any(|index| depths[index] == range.depth && tokens[index].token_type == TokenType::Star)
 }
 
-fn collect_unused_ctes(expression: &Expression) -> Vec<String> {
+fn collect_unused_ctes(expression: &Expression, options: &FactBuildOptions<'_>) -> Vec<String> {
     let mut unused: Vec<String> = Vec::new();
     for node in expression.dfs() {
         match node {
             Expression::Select(select) if select.with.is_some() => {
                 let mut root = select.clone();
                 if let Some(with) = root.with.take() {
-                    unused.extend(collect_unused_for_with(&with, &Expression::Select(root)));
+                    unused.extend(collect_unused_for_with(
+                        &with,
+                        &Expression::Select(root),
+                        options,
+                    ));
                 }
             }
             Expression::Union(operation) if operation.with.is_some() => {
                 let mut root = operation.clone();
                 if let Some(with) = root.with.take() {
-                    unused.extend(collect_unused_for_with(&with, &Expression::Union(root)));
+                    unused.extend(collect_unused_for_with(
+                        &with,
+                        &Expression::Union(root),
+                        options,
+                    ));
                 }
             }
             Expression::Intersect(operation) if operation.with.is_some() => {
                 let mut root = operation.clone();
                 if let Some(with) = root.with.take() {
-                    unused.extend(collect_unused_for_with(&with, &Expression::Intersect(root)));
+                    unused.extend(collect_unused_for_with(
+                        &with,
+                        &Expression::Intersect(root),
+                        options,
+                    ));
                 }
             }
             Expression::Except(operation) if operation.with.is_some() => {
                 let mut root = operation.clone();
                 if let Some(with) = root.with.take() {
-                    unused.extend(collect_unused_for_with(&with, &Expression::Except(root)));
+                    unused.extend(collect_unused_for_with(
+                        &with,
+                        &Expression::Except(root),
+                        options,
+                    ));
                 }
             }
             _ => {}
@@ -1044,7 +1087,11 @@ fn collect_unused_ctes(expression: &Expression) -> Vec<String> {
     unused
 }
 
-fn collect_unused_for_with(with: &With, root: &Expression) -> Vec<String> {
+fn collect_unused_for_with(
+    with: &With,
+    root: &Expression,
+    options: &FactBuildOptions<'_>,
+) -> Vec<String> {
     let names: HashSet<String> = with
         .ctes
         .iter()
@@ -1064,6 +1111,20 @@ fn collect_unused_for_with(with: &With, root: &Expression) -> Vec<String> {
         })
         .collect();
     let mut reachable: HashSet<String> = table_names(root).intersection(&names).cloned().collect();
+    reachable.extend(
+        options
+            .externally_referenced_ctes
+            .intersection(&names)
+            .cloned(),
+    );
+    if options.allows_ceremonial_select {
+        reachable.extend(
+            names
+                .iter()
+                .filter(|name| is_ceremonial_cte_name(name))
+                .cloned(),
+        );
+    }
     let mut queue: VecDeque<String> = reachable.iter().cloned().collect();
     while let Some(name) = queue.pop_front() {
         if let Some(required) = dependencies.get(&name) {

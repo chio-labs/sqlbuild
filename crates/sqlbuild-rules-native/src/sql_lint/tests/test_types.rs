@@ -28,6 +28,13 @@ pub(crate) struct AdditionalLintRuleTestCase {
     pub expected_replacement: Option<&'static str>,
 }
 
+pub(crate) struct CeremonialCteLintTestCase {
+    pub description: &'static str,
+    pub sql: &'static str,
+    pub expected_count: usize,
+    pub expected_start: Option<u64>,
+}
+
 pub(crate) struct PlainSqlLintTestCase {
     pub description: &'static str,
     pub sql: &'static str,
