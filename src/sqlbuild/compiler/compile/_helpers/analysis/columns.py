@@ -141,6 +141,9 @@ from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_KIND_ALIAS as _POLYGLOT_KIND_ALIAS,
 )
 from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_KIND_ANNOTATED as _POLYGLOT_KIND_ANNOTATED,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_KIND_CAST as _POLYGLOT_KIND_CAST,
 )
 from sqlbuild.compiler.sql_analysis.constants import (
@@ -726,6 +729,12 @@ def _compact_transform_kind(
     return ColumnTransformKind.EXPRESSION
 
 
+def _unwrap_polyglot_annotations(expression: Any) -> Any:
+    while str(getattr(expression, "kind", "")) == _POLYGLOT_KIND_ANNOTATED:
+        expression = expression.this
+    return expression
+
+
 def _infer_columns_with_polyglot(
     *,
     cleaned_sql: str,
@@ -773,6 +782,7 @@ def _infer_columns_from_polyglot_ast(
     columns: list[InferredColumn] = []
     projection: Any
     for projection in getattr(select, "expressions", ()):
+        projection = _unwrap_polyglot_annotations(projection)
         if bool(getattr(projection, "is_star", False)):
             continue
         name: str = str(getattr(projection, "output_name", "") or "")
@@ -833,6 +843,7 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
     has_star: bool = False
     projection: Any
     for projection in getattr(select, "expressions", ()):
+        projection = _unwrap_polyglot_annotations(projection)
         if bool(getattr(projection, "is_star", False)):
             has_star = True
             continue
@@ -907,6 +918,7 @@ def _extract_polyglot_lineage_facts(
     has_star: bool = False
     projection: Any
     for projection in getattr(parsed, "expressions", ()):
+        projection = _unwrap_polyglot_annotations(projection)
         if bool(getattr(projection, "is_star", False)):
             has_star = True
             continue
@@ -1554,6 +1566,7 @@ def _extract_columns_from_select(
 
     column_nullability_by_table = dict(column_nullability_by_table)
     star_type: type[Any] = expressions_module.Star
+    annotated_type: type[Any] = expressions_module.Annotated
     alias_type: type[Any] = expressions_module.Alias
     column_type: type[Any] = expressions_module.Column
     cast_type: type[Any] = expressions_module.Cast
@@ -1569,6 +1582,8 @@ def _extract_columns_from_select(
 
     expression: Any
     for expression in projection_list:
+        while isinstance(expression, annotated_type):
+            expression = expression.this
         if isinstance(expression, star_type):
             continue
 
