@@ -8,6 +8,7 @@ import pytest
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    DescriptionFormatIntegrationTestCase,
     FormatCompileIntegrationTestCase,
 )
 
@@ -57,3 +58,46 @@ def test_given_sql_test_string_when_formatting_then_project_still_compiles(
     assert format_exit == 0
     assert compile_exit == 0
     assert test_case.expected_literal in test.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DescriptionFormatIntegrationTestCase(
+            description="configured width wraps and compiles model description",
+            line_width=60,
+            authored_description=(
+                "Builds canonical customer records from every available source while retaining "
+                "unmatched customers."
+            ),
+            expected_formatted_description=(
+                "Builds canonical customer records from every\n"
+                "available source while retaining unmatched customers."
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_description_width_when_formatting_then_wrapped_model_compiles(
+    test_case: DescriptionFormatIntegrationTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "orders"\nadapter = "duckdb"\n[format]\nline_width = {test_case.line_width}\n',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        f'MODEL (\n  description "{test_case.authored_description}"\n);\nSELECT 1 AS order_id\n',
+        encoding="utf-8",
+    )
+
+    format_exit: int = main(["--project-dir", str(tmp_path), "format"])
+    compile_exit: int = main(["--project-dir", str(tmp_path), "compile", "--no-cache"])
+
+    assert format_exit == 0
+    assert compile_exit == 0
+    assert f'description "{test_case.expected_formatted_description}"' in model.read_text(
+        encoding="utf-8"
+    )

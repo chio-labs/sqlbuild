@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+import textwrap
 from bisect import bisect_right
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,11 +11,14 @@ from pathlib import Path
 from sqlbuild.compiler.discovery._helpers.sql.model_files import (
     parse_header_values,  # noqa: FFL102 - the compiler owns the canonical native header grammar
 )
+from sqlbuild.compiler.discovery.exceptions import ModelSqlParseError
 from sqlbuild.lint.constants import (
+    CLOSING_PAREN_CHARACTER,
     DESCRIPTION_HEADER_KINDS,
     DESCRIPTION_REQUIRED_HEADER_KINDS,
     HEADER_KIND_FUNCTION,
     HEADER_KIND_MODEL,
+    IDENTIFIER_SEPARATOR_CHARACTER,
     RULE_DESCRIPTION_LENGTH,
     RULE_DESCRIPTION_PRESENT,
     RULE_HEADER_PARSE,
@@ -94,7 +99,13 @@ def format_native_headers(
         config=config,
         headers=headers,
     )
-    return relocation.contents, relocation.faults
+    relocated_headers: tuple[HeaderSpan, ...] = scan_headers(contents=relocation.contents)
+    wrapped: str = _format_description_wrapping(
+        contents=relocation.contents,
+        headers=relocated_headers,
+        config=config,
+    )
+    return wrapped, relocation.faults
 
 
 def _lint_header_values(
@@ -127,7 +138,9 @@ def _lint_header_values(
 
     violations: list[LintViolation] = []
     description: object | None = values.get(_DESCRIPTION_KEY)
-    if header.kind in DESCRIPTION_REQUIRED_HEADER_KINDS and not isinstance(description, str):
+    if header.kind in DESCRIPTION_REQUIRED_HEADER_KINDS and (
+        not isinstance(description, str) or not description.strip()
+    ):
         violations.append(
             _violation_for_header_start(
                 contents=contents,
@@ -139,7 +152,18 @@ def _lint_header_values(
             )
         )
     if header.kind in DESCRIPTION_HEADER_KINDS and isinstance(description, str):
-        if description.count("\n") + 1 > config.max_description_lines:
+        span: tuple[int, int] | None = _top_level_description_value_span(header_text=header_text)
+        formatted_description: str = (
+            _wrap_header_description(
+                description=description,
+                header_text=header_text,
+                span=span,
+                line_width=config.line_width,
+            )
+            if span is not None
+            else description
+        )
+        if formatted_description.count("\n") + 1 > config.max_description_lines:
             violations.append(
                 _violation_for_header_start(
                     contents=contents,
@@ -221,6 +245,143 @@ def _format_header_whitespace(*, contents: str, headers: tuple[HeaderSpan, ...])
     return "".join(pieces)
 
 
+def _format_description_wrapping(
+    *, contents: str, headers: tuple[HeaderSpan, ...], config: LintConfig
+) -> str:
+    updated: str = contents
+    for header in reversed(headers):
+        if header.kind not in DESCRIPTION_HEADER_KINDS:
+            continue
+        header_text: str = updated[header.start : header.end]
+        span: tuple[int, int] | None = _top_level_description_value_span(header_text=header_text)
+        if span is None:
+            continue
+        try:
+            description: object | None = _parse_header_values(
+                kind=header.kind,
+                header_text=header_text,
+            ).get(_DESCRIPTION_KEY)
+        except ModelSqlParseError:
+            continue
+        if not isinstance(description, str):
+            continue
+        value_start, value_end = span
+        wrapped: str = _wrap_header_description(
+            description=description,
+            header_text=header_text,
+            span=span,
+            line_width=config.line_width,
+        )
+        quote: str = header_text[value_start - 1]
+        escaped: str = _escape_quoted_value(value=wrapped, quote=quote)
+        rewritten_header: str = header_text[:value_start] + escaped + header_text[value_end:]
+        updated = updated[: header.start] + rewritten_header + updated[header.end :]
+    return updated
+
+
+def _wrap_header_description(
+    *, description: str, header_text: str, span: tuple[int, int], line_width: int
+) -> str:
+    value_start, value_end = span
+    line_start: int = header_text.rfind(_NEWLINE, 0, value_start) + 1
+    line_end: int = header_text.find(_NEWLINE, value_end)
+    if line_end < 0:
+        line_end = len(header_text)
+    closing_suffix_width: int = len(header_text[value_end:line_end].rstrip())
+    wrapped_line_width: int = max(1, line_width - closing_suffix_width)
+    first_line_width: int = max(
+        1,
+        line_width - (value_start - line_start) - closing_suffix_width,
+    )
+    return _wrap_description(
+        description=description,
+        first_line_width=first_line_width,
+        line_width=wrapped_line_width,
+    )
+
+
+def _top_level_description_value_span(*, header_text: str) -> tuple[int, int] | None:
+    delimiters: list[str] = []
+    closing_delimiters: dict[str, str] = {"(": ")", "[": "]", "{": "}"}
+    index: int = 0
+    while index < len(header_text):
+        character: str = header_text[index]
+        if character in _QUOTE_CHARACTERS:
+            index = _quoted_value_end(text=header_text, start=index)
+            continue
+        if character in closing_delimiters:
+            delimiters.append(closing_delimiters[character])
+            index += 1
+            continue
+        if delimiters and character == delimiters[-1]:
+            delimiters.pop()
+            index += 1
+            continue
+        if delimiters == [CLOSING_PAREN_CHARACTER] and (
+            character.isalpha() or character == IDENTIFIER_SEPARATOR_CHARACTER
+        ):
+            word_end: int = index + 1
+            while word_end < len(header_text) and (
+                header_text[word_end].isalnum()
+                or header_text[word_end] == IDENTIFIER_SEPARATOR_CHARACTER
+            ):
+                word_end += 1
+            if header_text[index:word_end].lower() == _DESCRIPTION_KEY:
+                quote_start: int = word_end
+                while quote_start < len(header_text) and header_text[quote_start].isspace():
+                    quote_start += 1
+                if quote_start < len(header_text) and header_text[quote_start] in _QUOTE_CHARACTERS:
+                    quote_end: int = _quoted_value_end(text=header_text, start=quote_start)
+                    return quote_start + 1, quote_end - 1
+            index = word_end
+            continue
+        index += 1
+    return None
+
+
+def _quoted_value_end(*, text: str, start: int) -> int:
+    quote: str = text[start]
+    index: int = start + 1
+    while index < len(text):
+        if text[index] == _ESCAPE_CHARACTER and index + 1 < len(text):
+            index += 2
+            continue
+        if text[index] == quote:
+            return index + 1
+        index += 1
+    return len(text)
+
+
+def _wrap_description(*, description: str, first_line_width: int, line_width: int) -> str:
+    normalized: str = description.replace("\r\n", _NEWLINE).strip()
+    paragraphs: list[str] = re.split(r"\n\s*\n", normalized)
+    wrapped_paragraphs: list[str] = []
+    for paragraph_index, paragraph in enumerate(paragraphs):
+        prose: str = " ".join(paragraph.split())
+        if not prose:
+            continue
+        available_first_width: int = first_line_width if paragraph_index == 0 else line_width
+        synthetic_indent: str = " " * max(0, line_width - available_first_width)
+        wrapper: textwrap.TextWrapper = textwrap.TextWrapper(
+            width=line_width,
+            initial_indent=synthetic_indent,
+            subsequent_indent="",
+            break_long_words=False,
+            break_on_hyphens=False,
+        )
+        lines: list[str] = wrapper.wrap(prose)
+        if lines and synthetic_indent:
+            lines[0] = lines[0][len(synthetic_indent) :]
+        wrapped_paragraphs.append(_NEWLINE.join(lines))
+    return f"{_NEWLINE}{_NEWLINE}".join(wrapped_paragraphs)
+
+
+def _escape_quoted_value(*, value: str, quote: str) -> str:
+    return value.replace(_ESCAPE_CHARACTER, _ESCAPE_CHARACTER * 2).replace(
+        quote, _ESCAPE_CHARACTER + quote
+    )
+
+
 def _relocate_leading_comment(
     *, contents: str, file_path: Path, config: LintConfig, headers: tuple[HeaderSpan, ...]
 ) -> _RelocationOutcome:
@@ -239,7 +400,16 @@ def _relocate_leading_comment(
     if isinstance(values.get(_DESCRIPTION_KEY), str):
         return _RelocationOutcome(contents=contents, faults=())
 
-    relocated_description: str = comment_text.strip("\n").strip()
+    description_prefix_width: int = len(_HEADER_INDENT) + len(_DESCRIPTION_KEY) + 2
+    closing_description_syntax_width: int = len('",')
+    relocated_description: str = _wrap_description(
+        description=comment_text,
+        first_line_width=max(
+            1,
+            config.line_width - description_prefix_width - closing_description_syntax_width,
+        ),
+        line_width=max(1, config.line_width - closing_description_syntax_width),
+    )
     faults: list[LintViolation] = []
     if relocated_description.count("\n") + 1 > config.max_description_lines:
         position: tuple[int, int] = _offset_to_position(

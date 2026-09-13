@@ -101,6 +101,7 @@ class LintConfig:
 
     native_enabled: bool = True
     max_description_lines: int = 10
+    line_width: int = 100
     dialect: str = "generic"
     enabled_native_rules: tuple[str, ...] | None = None
     ignored_native_rules: tuple[str, ...] = ()
