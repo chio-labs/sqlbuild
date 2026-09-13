@@ -6,6 +6,7 @@ from collections import deque
 from dataclasses import replace
 from pathlib import PurePosixPath
 
+from sqlbuild.compiler.discovery.constants import CANONICAL_AUTHORED_ROOTS
 from sqlbuild.compiler.scopes._helpers.identities import format_identity
 from sqlbuild.compiler.scopes.constants import DECLARATION_GROUP_DIRECTORY
 from sqlbuild.compiler.scopes.models import (
@@ -32,6 +33,9 @@ _PLACEMENT_CODES: frozenset[ScopeDiagnosticCode] = frozenset(
         ScopeDiagnosticCode.REQUIRES_GLOBAL_PLACEMENT,
         ScopeDiagnosticCode.OVER_BROAD_GLOBAL,
     }
+)
+_AUTHORED_ROOT_PATHS: frozenset[str] = frozenset(
+    PurePosixPath(*parts).as_posix() for parts in CANONICAL_AUTHORED_ROOTS
 )
 
 
@@ -189,13 +193,21 @@ def _required_placement_for_record(
     consumers: tuple[str, ...] = tuple(
         sorted({_consumer_label(usage) for usage in declaration_usages})
     )
-    if len({root for root, _path in anchors}) != 1:
+    roots: set[OwnershipRoot] = {root for root, _path in anchors}
+    if len(roots) != 1:
         return ScopeKind.GLOBAL, None, consumers
+    ownership_root: OwnershipRoot = next(iter(roots))
     paths: tuple[str, ...] = tuple(path for _root, path in anchors)
     distinct: set[str] = set(paths)
     if len(distinct) == 1:
-        return ScopeKind.LOCAL, next(iter(distinct)), consumers
-    return ScopeKind.INHERITED, _lca(paths), consumers
+        required_path: str = next(iter(distinct))
+        return ScopeKind.LOCAL, required_path, consumers
+    required_path = _lca(paths)
+    return (
+        (ScopeKind.GLOBAL, None, consumers)
+        if required_path == ownership_root.path
+        else (ScopeKind.INHERITED, required_path, consumers)
+    )
 
 
 def _anchor_sets(*, index: ScopeIndex, usages_by_declaration: _UsagesByDeclaration) -> _AnchorSets:
@@ -204,11 +216,24 @@ def _anchor_sets(*, index: ScopeIndex, usages_by_declaration: _UsagesByDeclarati
     resources: dict[ResourceIdentity, ResourceRecord] = {
         item.identity: item for item in index.resources
     }
+    declarations: dict[DeclarationIdentity, DeclarationRecord] = {
+        item.identity: item for item in index.declarations
+    }
     anchors: dict[DeclarationIdentity, set[_Anchor]] = {}
     dependents: dict[DeclarationIdentity, set[DeclarationIdentity]] = {}
     for identity, declaration_usages in usages_by_declaration.items():
         direct: set[_Anchor] = anchors.setdefault(identity, set())
         for usage in declaration_usages:
+            if isinstance(usage.through, DeclarationIdentity):
+                through_declaration: DeclarationRecord | None = declarations.get(usage.through)
+                if through_declaration is not None and through_declaration.owning_path is not None:
+                    direct.add(
+                        (
+                            through_declaration.ownership_root,
+                            through_declaration.owning_path,
+                        )
+                    )
+                continue
             resource_identity: ResourceIdentity | None = usage.through
             if resource_identity is None and isinstance(usage.consumer, ResourceIdentity):
                 resource_identity = usage.consumer
@@ -263,9 +288,11 @@ def _message(
         target: str = f"top-level {declaration.identity.kind.value}s/"
     else:
         prefix: str = "_" if required_scope is ScopeKind.LOCAL else ""
+        role: str = f"{prefix}{declaration.identity.kind.value}s/"
         target = (
-            f"{required_path}/{DECLARATION_GROUP_DIRECTORY}/"
-            f"{prefix}{declaration.identity.kind.value}s/"
+            f"{required_path}/{role}"
+            if required_path in _AUTHORED_ROOT_PATHS
+            else f"{required_path}/{DECLARATION_GROUP_DIRECTORY}/{role}"
         )
     return (
         f"Declaration '{format_identity(identity=declaration.identity)}' is currently "

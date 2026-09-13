@@ -30,6 +30,7 @@ from sqlbuild.compiler.scopes.types import (
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
     DeclarationChainPlacementCase,
     DiamondLadderPlacementCase,
+    ExpectedBooleanCase,
     PlacementEnforcementCase,
     PlacementValidationCase,
 )
@@ -53,6 +54,51 @@ def test_given_placement_policy_when_validating_then_diagnostic_severity_matches
 
     assert result.diagnostics[0].code is ScopeDiagnosticCode.UNUSED_DECLARATION
     assert result.diagnostics[0].severity is test_case.expected_severity
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (ExpectedBooleanCase("test usage through scoped macro preserves production anchor", True),),
+    ids=lambda case: case.description,
+)
+def test_given_test_usage_through_macro_when_validating_placement_then_test_path_is_not_anchor(
+    test_case: ExpectedBooleanCase,
+) -> None:
+    macro_identity: DeclarationIdentity = DeclarationIdentity(DeclarationKind.MACRO, "order_policy")
+    model_identity: ResourceIdentity = ResourceIdentity(ResourceKind.MODEL, "orders")
+    test_identity: ResourceIdentity = ResourceIdentity(
+        ResourceKind.TEST, "order_policy__returns_quantity"
+    )
+    ownership_root: OwnershipRoot = OwnershipRoot("models", resource_kind=ResourceKind.MODEL)
+    declaration: DeclarationRecord = DeclarationRecord(
+        identity=macro_identity,
+        path="models/orders/_sqlbuild/_macros/policy.py",
+        line=1,
+        column=1,
+        scope=ScopeKind.LOCAL,
+        ownership_root=ownership_root,
+        owning_path="models/orders",
+    )
+    index: ScopeIndex = ScopeIndex(
+        resources=(
+            ResourceRecord(model_identity, "models/orders/orders.sql", ownership_root),
+            ResourceRecord(
+                test_identity,
+                "tests/unit/macros/models/orders/test_order_policy__returns_quantity.sql",
+                OwnershipRoot("tests/unit", resource_kind=ResourceKind.TEST),
+            ),
+        ),
+        declarations=(declaration,),
+        usages=(
+            UsageRecord(model_identity, macro_identity),
+            UsageRecord(test_identity, macro_identity, through=macro_identity),
+        ),
+        completeness=ScopeCompleteness(runtime_usage=True, placement=False),
+    )
+
+    result: ScopeIndex = get_placement_validated_scope_index(index=index)
+
+    assert (not result.diagnostics) is test_case.expected_result
 
 
 @pytest.mark.parametrize(
@@ -127,6 +173,38 @@ def test_given_non_placement_error_when_placement_enforcement_disabled_then_vali
             ("models/domain/orders.sql",),
             (ScopeDiagnosticCode.OVER_BROAD_GLOBAL,),
             expected_message_fragment="models/domain/_sqlbuild/_constants/",
+        ),
+        PlacementValidationCase(
+            "global across authored root children is accepted",
+            ScopeKind.GLOBAL,
+            None,
+            "constants/limit.sql",
+            "constants",
+            None,
+            ("models/orders/orders.sql", "models/products/products.sql"),
+            (),
+        ),
+        PlacementValidationCase(
+            "global used by authored root model recommends compatible legacy role",
+            ScopeKind.GLOBAL,
+            None,
+            "constants/limit.sql",
+            "constants",
+            None,
+            ("models/orders.sql",),
+            (ScopeDiagnosticCode.OVER_BROAD_GLOBAL,),
+            expected_message_fragment="models/_constants/",
+        ),
+        PlacementValidationCase(
+            "authored root inherited scope must be project global",
+            ScopeKind.INHERITED,
+            "models",
+            "models/constants/limit.sql",
+            "models",
+            ResourceKind.MODEL,
+            ("models/orders/orders.sql", "models/products/products.sql"),
+            (ScopeDiagnosticCode.REQUIRES_GLOBAL_PLACEMENT,),
+            expected_message_fragment="top-level constants/",
         ),
         PlacementValidationCase(
             "exact local is accepted",

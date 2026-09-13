@@ -203,6 +203,11 @@ def test_given_top_level_public_declarations_when_discovering_then_scope_remains
             "must be below a canonical authored root",
         ),
         InvalidScopedDeclarationRootTestCase(
+            "authored_root_grouped_root",
+            "models/_sqlbuild/macros/value.py",
+            "must be below a concrete owner directory",
+        ),
+        InvalidScopedDeclarationRootTestCase(
             "grouped_root_with_unsupported_entry",
             "models/orders/_sqlbuild/notes.py",
             "contains unsupported entries",
@@ -355,10 +360,24 @@ def test_given_invalid_scoped_root_when_discovering_project_inputs_then_strict_d
             "python_hook",
             (),
         ),
+        OrdinaryDiscoveryExclusionTestCase(
+            "project_macro_sql_test",
+            "tests/unit/macros/orders/test_order_policy__returns_quantity.sql",
+            'TEST (mode macro, name "order_policy__returns_quantity");\nSELECT 1\n',
+            "test",
+            ("tests/unit/macros/orders/test_order_policy__returns_quantity.sql",),
+        ),
+        OrdinaryDiscoveryExclusionTestCase(
+            "sql_file_in_test_helper_role",
+            "tests/unit/orders/_sqlbuild/macros/not_a_test.sql",
+            'TEST (mode macro, name "order_policy__returns_quantity");\nSELECT 1\n',
+            "test",
+            (),
+        ),
     ),
     ids=lambda case: case.description,
 )
-def test_given_scoped_declaration_file_when_discovering_resources_then_excludes_it(
+def test_given_file_in_declaration_role_when_discovering_resources_then_returns_expected_files(
     test_case: OrdinaryDiscoveryExclusionTestCase,
     tmp_path: Path,
 ) -> None:

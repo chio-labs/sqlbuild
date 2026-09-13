@@ -176,6 +176,9 @@ class _DeclarationFileFacts:
 _SCOPED_DECLARATION_DIRECTORIES: frozenset[str] = (
     INHERITED_DECLARATION_DIRECTORIES | LOCAL_DECLARATION_DIRECTORIES
 )
+_MACRO_TEST_DIRECTORY: str = f"{DeclarationKind.MACRO.value}s"
+_SQL_FILE_SUFFIX: str = ".sql"
+_SQL_TEST_ROOT_COMPONENTS: tuple[str, ...] = Path(SQL_TESTS_OWNERSHIP_ROOT).parts
 
 
 def _discover_declaration_file_facts(
@@ -257,6 +260,12 @@ def _validate_declaration_groups(*, project_dir: Path) -> None:
         for group in sorted(
             path for path in authored_root.rglob(DECLARATION_GROUP_DIRECTORY) if path.is_dir()
         ):
+            if group.parent == authored_root:
+                raise DeclarationParseError(
+                    f"Grouped declaration root {group.relative_to(project_dir).as_posix()}/ must "
+                    "be below a concrete owner directory; use the project-wide macros/, enums/, "
+                    "or constants/ root instead"
+                )
             unsupported: tuple[Path, ...] = tuple(
                 sorted(
                     child
@@ -319,9 +328,16 @@ def _is_in_scoped_declaration_tree(*, file_path: Path, project_dir: Path) -> boo
     for root_components in CANONICAL_AUTHORED_ROOTS:
         if relative_parts[: len(root_components)] != root_components:
             continue
+        scoped_components: tuple[str, ...] = relative_parts[len(root_components) : -1]
+        if (
+            root_components == _SQL_TEST_ROOT_COMPONENTS
+            and file_path.suffix == _SQL_FILE_SUFFIX
+            and scoped_components[:1] == (_MACRO_TEST_DIRECTORY,)
+        ):
+            return False
         return any(
             component == DECLARATION_GROUP_DIRECTORY or component in _SCOPED_DECLARATION_DIRECTORIES
-            for component in relative_parts[len(root_components) : -1]
+            for component in scoped_components
         )
     return False
 

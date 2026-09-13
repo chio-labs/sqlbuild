@@ -350,6 +350,7 @@ class DeclarationResolutionContext:
     constant_visibility: dict[str, tuple[VisibilityRecord, ...]] = field(default_factory=dict)
     macros: dict[str, LoadedMacro] = field(default_factory=dict)
     macro_records: dict[str, DeclarationRecord] = field(default_factory=dict)
+    macro_visibility: dict[str, tuple[VisibilityRecord, ...]] = field(default_factory=dict)
     inaccessible_macros: dict[str, DeclarationRecord] = field(default_factory=dict)
     consumer: ResourceIdentity | DeclarationIdentity | None = None
 

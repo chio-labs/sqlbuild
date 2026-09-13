@@ -1369,7 +1369,23 @@ def _evaluate_macro_call(
             UsageRecord(stack[-1], identity, UsageKind.DECLARATION_DEPENDENCY),
         )
     elif state.consumer is not None:
-        _ = state.facts.add_usage(UsageRecord(state.consumer, identity, UsageKind.RUNTIME))
+        visibility: tuple[VisibilityRecord, ...] = (
+            declarations.macro_visibility.get(macro_name, ()) if declarations is not None else ()
+        )
+        if visibility:
+            from sqlbuild.compiler.compile._helpers.render.declarations import usage_visibility
+
+            for visible in usage_visibility(visibility=visibility, consumer=state.consumer):
+                _ = state.facts.add_usage(
+                    UsageRecord(
+                        state.consumer,
+                        identity,
+                        UsageKind.RUNTIME,
+                        through=visible.through,
+                    )
+                )
+        else:
+            _ = state.facts.add_usage(UsageRecord(state.consumer, identity, UsageKind.RUNTIME))
     args_source: str = sql[opening_paren_index + 1 : closing_paren_index]
     args: tuple[object, ...]
     kwargs: dict[str, object]

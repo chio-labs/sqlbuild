@@ -8193,7 +8193,9 @@ owner and everything below it. An underscored role applies only to files directl
 Legacy declaration roles directly below an owner remain supported.
 
 `_sqlbuild/` is reserved for the six declaration-role directories shown above. Other direct files or
-folders are rejected, and a project-root `_sqlbuild/` is invalid because it has no resource owner.
+folders are rejected. It must also sit below a concrete owner directory. A project-root
+`_sqlbuild/` or authored-root path such as `models/_sqlbuild/` is invalid; declarations at that
+boundary belong in the project-wide `macros/`, `enums/`, or `constants/` roots.
 
 | Resource | Visible from the example tree | Not visible |
 |----------|-------------------------------|-------------|
@@ -8311,7 +8313,9 @@ them to be private to.
 Existing scoped declaration roles directly below an owner remain supported. `_sqlbuild/` is the
 preferred layout because it keeps all declarations together without changing their visibility.
 Only the six public/private declaration-role directories are valid directly under `_sqlbuild/`;
-other entries are rejected. A project-root `_sqlbuild/` is invalid because it has no resource owner.
+other entries are rejected. `_sqlbuild/` must sit below a concrete owner directory. A project-root
+`_sqlbuild/` or authored-root path such as `models/_sqlbuild/` is invalid; use the project-wide
+`macros/`, `enums/`, or `constants/` roots at that boundary.
 
 ### Which file controls visibility?
 
@@ -8319,7 +8323,8 @@ other entries are rejected. A project-root `_sqlbuild/` is invalid because it ha
 |--------------------|----------------------|
 | Model query | The model file |
 | Inline SQL hook in a model | The model file |
-| Unit test or scenario SQL | The test or scenario file |
+| Unit test SQL | The test file, plus inferred tested-resource relationships |
+| Scenario SQL | The scenario file, plus expected-model enum and constant relationships |
 | Named SQL hook | The hook file under `hooks/sql/` |
 | SQL function | The function file under `functions/sql/` |
 | Audit | The audit file |
@@ -8330,8 +8335,8 @@ hook uses declarations available where the hook itself is stored.
 
 ### Tests and expected output
 
-A test first sees declarations available from its own folder tree. It may also use file-based enums
-and constants available to a model for which it defines expected output.
+A test first sees declarations available from its own folder tree. It may also use file-based
+macros, enums, and constants available to a model for which it defines expected output.
 
 ```sql
 TEST();
@@ -8340,25 +8345,48 @@ WITH
 __expected__orders AS (
   SELECT
     1 AS order_id,
+    @normalize_order_status("'completed'") AS normalized_status,
     @enum("order_status").COMPLETED AS status
 )
 SELECT 1
 ```
 
-Because the test defines `__expected__orders`, the test may use file-based enums and constants
-available to `orders`, including declarations in exact-folder `_enums/` and `_constants/` roles.
+Because the test defines `__expected__orders`, the test may use file-based macros, enums, and
+constants available to `orders`, including declarations in exact-owner-private roles.
 Scope Explorer describes this as **available through expected output for model `orders`**. This is
 an additional relationship, not another visibility level.
 
 This additional access does **not** include:
 
-- Macros available only to the model
 - Enums or constants declared privately inside the model's `MODEL()` header
 - Declarations from a model merely mentioned by filename or directory layout
 
-Only an explicit `__expected__model_name` section adds the model's eligible file-based enums and
-constants. When a test checks several models, SQLBuild combines the declarations available through
-all expected models and makes that deterministic union available while compiling the entire test.
+Only an explicit `__expected__model_name` section adds the model's eligible file-based declarations.
+When a test checks several models, SQLBuild combines the declarations available through all
+expected models and makes that deterministic union available while compiling the entire test.
+
+Macro-mode tests receive the tested macro and the file-based declarations available from that
+macro's production owner. SQLBuild infers tested macros from calls in `__macro_actual__`; the test's
+filename or directory does not grant production visibility.
+
+```text
+models/orders/_sqlbuild/_macros/order_policy.py
+tests/unit/macros/models/orders/test_order_policy__returns_quantity.sql
+```
+
+The macro test can call `order_policy` without promoting it to the project-wide `macros/` root. A
+test can also use helper macros scoped to its own test directory:
+
+```text
+tests/unit/orders/
+├── _sqlbuild/
+│   └── macros/
+│       └── fixtures.py
+└── test_orders__calculates_total.sql
+```
+
+Those helpers remain unavailable to production resources. Mocked model, source, seed, and dbt
+fixture CTEs do not grant declarations from the mocked resource's production scope.
 
 ### Macros importing macros
 
@@ -8689,10 +8717,11 @@ shows whether the declaration is placed more broadly than its real consumers req
 
 ### See declarations available through expected output
 
-Tests and scenarios can use file-based enums and constants available to a model when they define
-that model's expected output. This includes eligible exact-folder declarations, but not declarations
-inside `MODEL()`. The access applies to the whole test or scenario and remains separate from
-declarations visible through its own folder tree. The relevant report sections are:
+Tests can use file-based macros, enums, and constants available to a model when they define that
+model's expected output. Scenarios receive the model's file-based enums and constants but not its
+macros. Neither receives declarations inside `MODEL()`. The access applies to the whole test or
+scenario and remains separate from declarations visible through its own folder tree. The relevant
+report sections are:
 
 ```console
 $ sqb scope test:orders__completed_only --used-only
@@ -8705,8 +8734,11 @@ Relationship grants (1 of 1)
 
 The compact reason `expected_model through model:orders` means **available through expected output
 for model `orders`**. With multiple expected models, SQLBuild combines their eligible file-based
-enums and constants into one deterministic set for the test or scenario. These relationships do
-not grant macros or declarations defined inside a model's `MODEL()` header.
+declarations into one deterministic set. Tests include macros in that union; scenarios include only
+enums and constants. Neither receives declarations defined inside a model's `MODEL()` header.
+
+Macro-mode tests also report `tested_macro through macro:<name>` relationships. Those grants contain
+the tested macro and scoped file-based declarations available from its production owner.
 
 ### Preview a resource move
 
@@ -13278,15 +13310,20 @@ sqb scope model:stg_orders --used-only
 ### Expected-output access
 
 Tests and scenarios have two independent ways to reach declarations. Their own folder paths provide
-ordinary visibility. Each explicit `__expected__<model>` section adds the eligible file-based enums
-and constants available to that model. This includes exact-folder `_enums/` and `_constants/`
-declarations, despite their private visibility label.
+ordinary visibility. For tests, each explicit `__expected__<model>` section adds the eligible
+file-based macros, enums, and constants available to that model. Scenarios receive the model's
+file-based enums and constants but not its macros. These relationships include eligible
+exact-owner-private declarations.
 
 `sqb scope` reports this additional access separately under **Relationship grants** and names the
 model that provides it. With multiple expected models, SQLBuild makes the deterministic union of
 their eligible declarations available while compiling the whole test or scenario. It never includes
-macros or declarations defined inside a model's `MODEL()` header. A test filename, mirrored path,
-or mock does not provide this access by itself.
+declarations defined inside a model's `MODEL()` header. A test filename, mirrored path, or mock does
+not provide this access by itself.
+
+For macro-mode tests, **Relationship grants** also reports
+`tested_macro through macro:<name>`. This grants the tested macro and the scoped file-based
+declarations available from its production owner, as inferred from calls in `__macro_actual__`.
 
 ```bash
 sqb scope test:orders__completed_only

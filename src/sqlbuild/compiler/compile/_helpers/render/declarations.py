@@ -216,6 +216,7 @@ def resolve_declaration_context(
             inaccessible_macros[record.identity.name] = record
     enum_visibility: dict[str, tuple[VisibilityRecord, ...]] = {}
     constant_visibility: dict[str, tuple[VisibilityRecord, ...]] = {}
+    macro_visibility: dict[str, tuple[VisibilityRecord, ...]] = {}
     for record in visible_records:
         records: tuple[VisibilityRecord, ...] = tuple(
             visibility_by_declaration.get(record.identity, ())
@@ -224,6 +225,8 @@ def resolve_declaration_context(
             enum_visibility[record.identity.name] = records
         elif record.identity.kind is DeclarationKind.CONSTANT:
             constant_visibility[record.identity.name] = records
+        elif record.identity.kind is DeclarationKind.MACRO:
+            macro_visibility[record.identity.name] = records
     return DeclarationResolutionContext(
         enums=enums,
         constants=constants,
@@ -233,6 +236,7 @@ def resolve_declaration_context(
         constant_visibility=constant_visibility,
         macros=macros,
         macro_records=macro_records,
+        macro_visibility=macro_visibility,
         inaccessible_macros=inaccessible_macros,
         consumer=(
             resource

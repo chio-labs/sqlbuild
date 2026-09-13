@@ -243,6 +243,7 @@ pub(crate) enum UsageKind {
 #[serde(rename_all = "snake_case")]
 pub(crate) enum GrantKind {
     ExpectedModel,
+    TestedMacro,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -253,6 +254,7 @@ pub(crate) enum VisibilityReason {
     LocalOwner,
     PrivateOwner,
     ExpectedModel,
+    TestedMacro,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

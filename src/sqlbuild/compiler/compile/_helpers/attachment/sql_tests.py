@@ -20,6 +20,7 @@ from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_c
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     declaration_usage_records,
     resolve_declaration_expansion,
+    usage_visibility,
 )
 from sqlbuild.compiler.compile._helpers.render.macros import (
     find_macro_call_names,
@@ -68,7 +69,12 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
-from sqlbuild.compiler.scopes.models import ResourceIdentity, UsageRecord, VisibilityRecord
+from sqlbuild.compiler.scopes.models import (
+    DeclarationIdentity,
+    ResourceIdentity,
+    UsageRecord,
+    VisibilityRecord,
+)
 from sqlbuild.compiler.scopes.types import ResourceKind, ScopeKind, UsageKind
 
 _HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
@@ -316,6 +322,9 @@ def _rebind_test_declarations(
             constant_visibility=_rebind_visibility(
                 visibility=declarations.constant_visibility, consumer=consumer
             ),
+            macro_visibility=_rebind_visibility(
+                visibility=declarations.macro_visibility, consumer=consumer
+            ),
         ),
     )
 
@@ -342,20 +351,28 @@ def _macro_test_declaration_usages(
         resource=resource,
         declarations=declarations,
     )
-    return tuple(
-        dict.fromkeys(
-            (
-                *usages,
-                *(
-                    UsageRecord(
-                        resource, declarations.macro_records[name].identity, UsageKind.RUNTIME
-                    )
-                    for name in find_macro_call_names(sql=sql)
-                    if name in declarations.macro_records
-                ),
-            )
+    macro_usages: list[UsageRecord] = []
+    for name in find_macro_call_names(sql=sql):
+        if name not in declarations.macro_records:
+            continue
+        identity: DeclarationIdentity = declarations.macro_records[name].identity
+        visibility: tuple[VisibilityRecord, ...] = declarations.macro_visibility.get(name, ())
+        visible_records: tuple[VisibilityRecord, ...] = usage_visibility(
+            visibility=visibility, consumer=resource
         )
-    )
+        if visible_records:
+            macro_usages.extend(
+                UsageRecord(
+                    resource,
+                    identity,
+                    UsageKind.RUNTIME,
+                    through=visible.through,
+                )
+                for visible in visible_records
+            )
+        else:
+            macro_usages.append(UsageRecord(resource, identity, UsageKind.RUNTIME))
+    return tuple(dict.fromkeys((*usages, *macro_usages)))
 
 
 def _build_test_input_payload(

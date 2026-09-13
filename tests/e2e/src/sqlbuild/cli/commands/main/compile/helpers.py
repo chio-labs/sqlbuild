@@ -220,7 +220,7 @@ def run_layered_production_compile_benchmark(
         project_dir=project_dir,
         expected_max_seconds=expected_edit_max_seconds,
     )
-    macro_path: Path = project_dir / "models" / "macros" / "macro_00000.py"
+    macro_path: Path = project_dir / "macros" / "macro_00000.py"
     _replace_benchmark_text(
         path=macro_path,
         old='return f"({expression} + 0)"',
@@ -795,7 +795,7 @@ input_value + 1
 
 
 def _layered_write_macros(*, project_dir: Path, macro_count: int) -> None:
-    macros_dir: Path = project_dir / "models" / "macros"
+    macros_dir: Path = project_dir / "macros"
     macros_dir.mkdir(parents=True)
     for index in range(macro_count):
         composed_dependency: str = {

@@ -314,12 +314,9 @@ def _usage(payload: object) -> UsageRecord:
     consumer: ResourceIdentity | DeclarationIdentity = _identity(item.get("consumer"))
     declaration: ResourceIdentity | DeclarationIdentity = _identity(item.get("declaration"))
     through_payload: object = item.get("through")
-    through: ResourceIdentity | None = None
+    through: ResourceIdentity | DeclarationIdentity | None = None
     if through_payload is not None:
-        decoded: ResourceIdentity | DeclarationIdentity = _identity(through_payload)
-        if not isinstance(decoded, ResourceIdentity):
-            raise ScopeCacheDecodeError("Invalid cached usage through identity")
-        through = decoded
+        through = _identity(through_payload)
     if not isinstance(declaration, DeclarationIdentity):
         raise ScopeCacheDecodeError("Invalid cached usage declaration")
     return UsageRecord(
@@ -350,7 +347,9 @@ def _grant(payload: object) -> GrantRecord:
         _identity(item.get("declaration")),
         _identity(item.get("through")),
     )
-    if not isinstance(resource, ResourceIdentity) or not isinstance(through, ResourceIdentity):
+    if not isinstance(resource, ResourceIdentity) or not isinstance(
+        through, ResourceIdentity | DeclarationIdentity
+    ):
         raise ScopeCacheDecodeError("Invalid cached grant resource")
     if not isinstance(declaration, DeclarationIdentity):
         raise ScopeCacheDecodeError("Invalid cached grant declaration")
@@ -378,8 +377,6 @@ def _visibility(payload: object) -> VisibilityRecord:
         declaration, DeclarationIdentity
     ):
         raise ScopeCacheDecodeError("Invalid cached visibility identity")
-    if through is not None and not isinstance(through, ResourceIdentity):
-        raise ScopeCacheDecodeError("Invalid cached visibility through identity")
     return VisibilityRecord(
         resource,
         declaration,

@@ -12,8 +12,13 @@ import pytest
 from sqlbuild.compiler.scopes._helpers.cache import scope_index_fingerprint
 from sqlbuild.compiler.scopes.constants import SCOPE_CACHE_DIRECTORY, SCOPE_CACHE_FILENAME
 from sqlbuild.compiler.scopes.main.load_or_build_scope_index import load_or_build_scope_index
-from sqlbuild.compiler.scopes.models import ScopeIndex
-from sqlbuild.compiler.scopes.types import DiagnosticSeverity, ResourceKind, ScopeDiagnosticCode
+from sqlbuild.compiler.scopes.models import DeclarationIdentity, ScopeIndex
+from sqlbuild.compiler.scopes.types import (
+    DiagnosticSeverity,
+    GrantKind,
+    ResourceKind,
+    ScopeDiagnosticCode,
+)
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
     CacheFaultCase,
     FingerprintMutationCase,
@@ -56,6 +61,46 @@ def test_given_valid_project_when_loading_twice_then_warm_cache_reconstructs_exa
 
     assert (cold == warm and cold.completeness.complete) is test_case.expected_result
     assert cache_path.read_bytes() == first_bytes
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (OfflineScopeCase("tested macro grant round trips through persistent cache"),),
+    ids=lambda case: case.description,
+)
+def test_given_scoped_macro_test_when_loading_warm_cache_then_grant_provenance_is_preserved(
+    test_case: OfflineScopeCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": (
+                'name = "orders"\nadapter = "duckdb"\n[scopes]\nenforce_placement = false\n'
+            ),
+            "models/orders/_sqlbuild/_macros/policy.py": (
+                "def order_policy() -> str:\n    return '2'\n"
+            ),
+            "models/orders/summary.sql": (
+                'MODEL (description "Order summary.");\nSELECT @order_policy() AS quantity'
+            ),
+            "tests/unit/macros/models/orders/test_order_policy__returns_quantity.sql": (
+                'TEST (mode macro, name "order_policy__returns_quantity");\n\n'
+                "WITH\n"
+                "__macro_actual__ AS (SELECT @order_policy() AS quantity),\n"
+                "__macro_expected__ AS (SELECT 2 AS quantity)\n"
+                "SELECT 1\n"
+            ),
+        },
+    )
+
+    cold: ScopeIndex = load_or_build_scope_index(project_dir=tmp_path)
+    warm: ScopeIndex = load_or_build_scope_index(project_dir=tmp_path)
+
+    assert (cold == warm) is test_case.expected_result
+    assert cold.grants[0].kind is GrantKind.TESTED_MACRO
+    assert isinstance(cold.grants[0].through, DeclarationIdentity)
 
 
 @pytest.mark.parametrize(

@@ -25,6 +25,7 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityResolution,
 )
 from sqlbuild.compiler.scopes.types import (
+    GrantKind,
     InaccessibleReason,
     OwnershipRootKind,
     ResourceKind,
@@ -80,7 +81,11 @@ def resolve_visibility(
                     VisibilityRecord(
                         resource.identity,
                         declaration.identity,
-                        VisibilityReason.EXPECTED_MODEL,
+                        (
+                            VisibilityReason.TESTED_MACRO
+                            if grant.kind is GrantKind.TESTED_MACRO
+                            else VisibilityReason.EXPECTED_MODEL
+                        ),
                         grant.through,
                     )
                     for grant in lookup.grants_by_resource.get(resource.identity, ())

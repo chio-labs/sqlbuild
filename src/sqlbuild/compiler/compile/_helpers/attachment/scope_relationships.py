@@ -2,15 +2,31 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from sqlbuild.compiler.compile._helpers.render.macros import find_macro_call_names
 from sqlbuild.compiler.compile._helpers.scenarios.core import (
     extract_sql_scenario_expected_model_names,
 )
-from sqlbuild.compiler.compile._helpers.sql_tests.core import extract_sql_test_expected_model_names
-from sqlbuild.compiler.compile.models import ScopeRelationshipBuild, ScopeRelationshipFault
+from sqlbuild.compiler.compile._helpers.sql_tests.core import (
+    extract_sql_test_expected_model_names,
+    extract_unclassified_sql_test_ctes,
+)
+from sqlbuild.compiler.compile.constants import MACRO_ACTUAL_TEST_CTE_NAME
+from sqlbuild.compiler.compile.models import (
+    CompileSqlTestCte,
+    ScopeRelationshipBuild,
+    ScopeRelationshipFault,
+)
+from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.scopes.main._resolve_scope_path_visibility import (
+    resolve_scope_path_visibility,
+)
 from sqlbuild.compiler.scopes.main._resolve_scope_visibility import resolve_scope_visibility
 from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.models import (
+    DeclarationIdentity,
     DeclarationRecord,
     GrantRecord,
     ResourceIdentity,
@@ -18,7 +34,7 @@ from sqlbuild.compiler.scopes.models import (
     ScopeLookup,
     VisibilityResolution,
 )
-from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind
+from sqlbuild.compiler.scopes.types import DeclarationKind, GrantKind, ResourceKind, ScopeKind
 
 
 def build_scope_relationship_grants(
@@ -59,8 +75,20 @@ def _test_relationship_grants(
                             ResourceKind.TEST, block.name or test_file.relative_path.stem
                         ),
                         expected_model_names=expected_names,
+                        include_macros=True,
                     )
                 )
+                if block.mode is SqlTestMode.MACRO:
+                    grants.extend(
+                        _tested_macro_grants(
+                            lookup=lookup,
+                            resource=ResourceIdentity(
+                                ResourceKind.TEST, block.name or test_file.relative_path.stem
+                            ),
+                            sql=block.sql_body,
+                            file_label=str(test_file.relative_path),
+                        )
+                    )
             except Exception as error:
                 faults.append(ScopeRelationshipFault(test_file.relative_path, str(error)))
     return tuple(grants), tuple(faults)
@@ -93,6 +121,7 @@ def _expected_model_grants(
     lookup: ScopeLookup,
     resource: ResourceIdentity,
     expected_model_names: tuple[str, ...],
+    include_macros: bool = False,
 ) -> list[GrantRecord]:
     grants: list[GrantRecord] = []
     for model_name in expected_model_names:
@@ -105,16 +134,57 @@ def _expected_model_grants(
             if not records:
                 continue
             declaration: DeclarationRecord = records[0]
-            if declaration.scope is ScopeKind.PRIVATE or declaration.identity.kind not in {
-                DeclarationKind.ENUM,
-                DeclarationKind.CONSTANT,
-            }:
+            if declaration.scope is ScopeKind.PRIVATE or (
+                declaration.identity.kind is DeclarationKind.MACRO and not include_macros
+            ):
                 continue
             grants.append(
                 GrantRecord(
                     resource=resource,
                     declaration=declaration.identity,
                     through=through,
+                )
+            )
+    return grants
+
+
+def _tested_macro_grants(
+    *, lookup: ScopeLookup, resource: ResourceIdentity, sql: str, file_label: str
+) -> list[GrantRecord]:
+    test_ctes: tuple[CompileSqlTestCte, ...] = extract_unclassified_sql_test_ctes(
+        sql=sql, file_label=file_label
+    )
+    actual_cte: CompileSqlTestCte | None = next(
+        (cte for cte in test_ctes if cte.name == MACRO_ACTUAL_TEST_CTE_NAME), None
+    )
+    if actual_cte is None:
+        return []
+    tested_macro_names: tuple[str, ...] = find_macro_call_names(actual_cte.sql_body)
+    direct_resolution: VisibilityResolution = resolve_scope_visibility(
+        lookup=lookup, target=resource
+    )
+    directly_visible: frozenset[DeclarationIdentity] = frozenset(
+        visible.declaration for visible in direct_resolution.visible
+    )
+    grants: list[GrantRecord] = []
+    for macro_name in tested_macro_names:
+        records: tuple[DeclarationRecord, ...] = lookup.declarations.get(
+            DeclarationIdentity(DeclarationKind.MACRO, macro_name), ()
+        )
+        if not records:
+            continue
+        tested_macro: DeclarationRecord = records[0]
+        lexical_path: Path = Path(tested_macro.owning_path or ".") / "__macro_test__.sql"
+        visible, _inaccessible = resolve_scope_path_visibility(lookup=lookup, path=lexical_path)
+        for declaration in visible:
+            if declaration.scope is ScopeKind.PRIVATE or declaration.identity in directly_visible:
+                continue
+            grants.append(
+                GrantRecord(
+                    resource=resource,
+                    declaration=declaration.identity,
+                    through=tested_macro.identity,
+                    kind=GrantKind.TESTED_MACRO,
                 )
             )
     return grants

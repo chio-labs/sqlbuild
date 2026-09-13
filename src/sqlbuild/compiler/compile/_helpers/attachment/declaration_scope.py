@@ -38,7 +38,8 @@ def build_declaration_scope(
         raise CompileInputError(str(error)) from error
     has_scoped_relationship_declarations: bool = any(
         declaration.scope is not ScopeKind.GLOBAL
-        and declaration.identity.kind in {DeclarationKind.ENUM, DeclarationKind.CONSTANT}
+        and declaration.identity.kind
+        in {DeclarationKind.ENUM, DeclarationKind.CONSTANT, DeclarationKind.MACRO}
         for declaration in index.declarations
     )
     relationships: ScopeRelationshipBuild = (

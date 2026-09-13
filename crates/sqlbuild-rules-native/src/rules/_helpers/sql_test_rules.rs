@@ -270,10 +270,12 @@ fn macro_parent_components(
             .find(|item| {
                 matches!(item.kind, DeclarationKind::Macro) && item.name == resource.name
             })?;
-        parents.push(direct_parent_components(
-            &declaration.path,
-            &declaration.ownership_root,
-        )?);
+        parents.push(match &declaration.owning_path {
+            Some(owner) => std::iter::once("macros".to_owned())
+                .chain(owner.split('/').map(str::to_owned))
+                .collect(),
+            None => direct_parent_components(&declaration.path, &declaration.ownership_root)?,
+        });
     }
     Some(parents)
 }

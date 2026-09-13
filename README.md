@@ -150,7 +150,14 @@ models/orders/
 The containing `orders/` directory remains the declaration owner. Existing declaration directories
 directly below an owner remain supported. Placement diagnostics recommend the grouped layout.
 `_sqlbuild/` is reserved for the six declaration-role directories shown above; other direct entries
-are rejected rather than silently treated as resources.
+are rejected rather than silently treated as resources. A grouped directory must sit below a
+concrete owner: `models/_sqlbuild/` is invalid because declarations at that boundary belong in the
+project-wide `macros/`, `enums/`, or `constants/` roots.
+
+SQL tests retain their own lexical declaration scope and also receive the deterministic union of
+file-based declarations visible to their inferred tested resources. This lets model and macro tests
+exercise scoped production macros without promoting those macros globally. Mock fixture resources
+do not broaden test visibility.
 
 ## Compiler-integrated Rules
 
