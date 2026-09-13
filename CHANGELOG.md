@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.100.3](https://github.com/chio-labs/sqlbuild/compare/v0.100.2...v0.100.3) (2026-09-13)
+
+
+### Bug Fixes
+
+* isolate nested SQL rule contexts ([#648](https://github.com/chio-labs/sqlbuild/issues/648)) ([dad03f4](https://github.com/chio-labs/sqlbuild/commit/dad03f47c796012b4573d0cc2aedd23f58d0748f))
+
 ## [0.100.2](https://github.com/chio-labs/sqlbuild/compare/v0.100.1...v0.100.2) (2026-09-13)
 
 
