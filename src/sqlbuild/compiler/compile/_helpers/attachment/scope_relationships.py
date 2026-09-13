@@ -9,12 +9,12 @@ from sqlbuild.compiler.compile._helpers.scenarios.core import (
     extract_sql_scenario_expected_model_names,
 )
 from sqlbuild.compiler.compile._helpers.sql_tests.core import (
-    extract_sql_test_ctes,
     extract_sql_test_expected_model_names,
+    extract_unclassified_sql_test_ctes,
 )
+from sqlbuild.compiler.compile.constants import MACRO_ACTUAL_TEST_CTE_NAME
 from sqlbuild.compiler.compile.models import (
-    CompileDirectLogicSqlTestCtes,
-    CompileSqlTestCtes,
+    CompileSqlTestCte,
     ScopeRelationshipBuild,
     ScopeRelationshipFault,
 )
@@ -151,14 +151,15 @@ def _expected_model_grants(
 def _tested_macro_grants(
     *, lookup: ScopeLookup, resource: ResourceIdentity, sql: str, file_label: str
 ) -> list[GrantRecord]:
-    test_ctes: CompileSqlTestCtes = extract_sql_test_ctes(
-        sql=sql, file_label=file_label, mode=SqlTestMode.MACRO
+    test_ctes: tuple[CompileSqlTestCte, ...] = extract_unclassified_sql_test_ctes(
+        sql=sql, file_label=file_label
     )
-    if not isinstance(test_ctes.payload, CompileDirectLogicSqlTestCtes):
+    actual_cte: CompileSqlTestCte | None = next(
+        (cte for cte in test_ctes if cte.name == MACRO_ACTUAL_TEST_CTE_NAME), None
+    )
+    if actual_cte is None:
         return []
-    tested_macro_names: tuple[str, ...] = find_macro_call_names(
-        test_ctes.payload.actual_cte.sql_body
-    )
+    tested_macro_names: tuple[str, ...] = find_macro_call_names(actual_cte.sql_body)
     direct_resolution: VisibilityResolution = resolve_scope_visibility(
         lookup=lookup, target=resource
     )

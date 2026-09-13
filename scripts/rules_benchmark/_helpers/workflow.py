@@ -277,7 +277,7 @@ def _ci_five_thousand_invalidation_results(*, project_dir: Path) -> tuple[Benchm
             project_dir=project_dir,
             iterations=1,
             mutate=lambda iteration: _set_macro_offset(
-                path=project_dir / "models" / "macros" / "macro_00000.py",
+                path=project_dir / "macros" / "macro_00000.py",
                 iteration=iteration,
             ),
         ),
@@ -707,7 +707,7 @@ def _run_scenarios(
             project_dir=project_dir,
             iterations=iterations,
             mutate=lambda iteration: _set_macro_offset(
-                path=project_dir / "models" / "macros" / "macro_00000.py",
+                path=project_dir / "macros" / "macro_00000.py",
                 iteration=iteration,
             ),
         )
@@ -1153,7 +1153,7 @@ def _workload_counts(*, project_dir: Path) -> dict[str, int]:
         "sources": sources_text.count("  - name: source_"),
         "seeds": sum(1 for _ in (project_dir / "seeds").rglob("*.csv")),
         "functions": sum(1 for _ in (project_dir / "functions").rglob("*.sql")),
-        "macros": sum(1 for _ in (project_dir / "models" / "macros").rglob("*.py")),
+        "macros": sum(1 for _ in (project_dir / "macros").rglob("*.py")),
         "tests": sum(path.read_text(encoding="utf-8").count("TEST (") for path in test_paths),
         "audits": sum(path.read_text(encoding="utf-8").count("audits [") for path in model_paths),
         "hooks": sum(1 for _ in (project_dir / "hooks").rglob("*.sql")),
