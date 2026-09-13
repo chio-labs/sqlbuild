@@ -38,6 +38,10 @@ _LINE_COMMENT_PREFIX: str = "--"
 _DESCRIPTION_KEY: str = "description"
 _DESCRIPTION_SENTINEL_PATH: str = "<lint>"
 _HEADER_INDENT: str = "  "
+_UNICODE_MAX_CODEPOINT: int = 0x10FFFF
+_UNICODE_SURROGATE_START: int = 0xD800
+_UNICODE_SURROGATE_END: int = 0xDFFF
+_HEXADECIMAL_CHARACTERS: frozenset[str] = frozenset("0123456789abcdefABCDEF")
 
 
 @dataclass(frozen=True)
@@ -138,8 +142,20 @@ def _lint_header_values(
 
     violations: list[LintViolation] = []
     description: object | None = values.get(_DESCRIPTION_KEY)
+    span: tuple[int, int] | None = (
+        _top_level_description_value_span(header_text=header_text)
+        if header.kind in DESCRIPTION_HEADER_KINDS
+        else None
+    )
+    effective_description: object | None = description
+    if isinstance(description, str) and span is not None:
+        value_start, value_end = span
+        effective_description = _decode_quoted_description(
+            value=header_text[value_start:value_end],
+            quote=header_text[value_start - 1],
+        )
     if header.kind in DESCRIPTION_REQUIRED_HEADER_KINDS and (
-        not isinstance(description, str) or not description.strip()
+        not isinstance(effective_description, str) or not effective_description.strip()
     ):
         violations.append(
             _violation_for_header_start(
@@ -151,17 +167,16 @@ def _lint_header_values(
                 remediation=f"Add a description to the {header.kind}() header.",
             )
         )
-    if header.kind in DESCRIPTION_HEADER_KINDS and isinstance(description, str):
-        span: tuple[int, int] | None = _top_level_description_value_span(header_text=header_text)
+    if header.kind in DESCRIPTION_HEADER_KINDS and isinstance(effective_description, str):
         formatted_description: str = (
             _wrap_header_description(
-                description=description,
+                description=effective_description,
                 header_text=header_text,
                 span=span,
                 line_width=config.line_width,
             )
             if span is not None
-            else description
+            else effective_description
         )
         if formatted_description.count("\n") + 1 > config.max_description_lines:
             violations.append(
@@ -266,13 +281,15 @@ def _format_description_wrapping(
         if not isinstance(description, str):
             continue
         value_start, value_end = span
+        quote: str = header_text[value_start - 1]
         wrapped: str = _wrap_header_description(
-            description=description,
+            description=_decode_quoted_description(
+                value=header_text[value_start:value_end], quote=quote
+            ),
             header_text=header_text,
             span=span,
             line_width=config.line_width,
         )
-        quote: str = header_text[value_start - 1]
         escaped: str = _escape_quoted_value(value=wrapped, quote=quote)
         rewritten_header: str = header_text[:value_start] + escaped + header_text[value_end:]
         updated = updated[: header.start] + rewritten_header + updated[header.end :]
@@ -380,6 +397,54 @@ def _escape_quoted_value(*, value: str, quote: str) -> str:
     return value.replace(_ESCAPE_CHARACTER, _ESCAPE_CHARACTER * 2).replace(
         quote, _ESCAPE_CHARACTER + quote
     )
+
+
+def _decode_quoted_description(*, value: str, quote: str) -> str:
+    decoded: list[str] = []
+    escape_values: dict[str, str] = {
+        "b": "\b",
+        "f": "\f",
+        "n": _NEWLINE,
+        "r": "\r",
+        "t": "\t",
+    }
+    index: int = 0
+    while index < len(value):
+        character: str = value[index]
+        if character != _ESCAPE_CHARACTER or index + 1 >= len(value):
+            decoded.append(character)
+            index += 1
+            continue
+        escaped: str = value[index + 1]
+        if escaped in {_ESCAPE_CHARACTER, quote}:
+            decoded.append(escaped)
+            index += 2
+            continue
+        if escaped in escape_values:
+            decoded.append(escape_values[escaped])
+            index += 2
+            continue
+        unicode_width: int = {"u": 4, "U": 8}.get(escaped, 0)
+        digits: str = value[index + 2 : index + 2 + unicode_width]
+        if (
+            unicode_width
+            and len(digits) == unicode_width
+            and all(character in _HEXADECIMAL_CHARACTERS for character in digits)
+        ):
+            try:
+                codepoint: int = int(digits, 16)
+            except ValueError:
+                pass
+            else:
+                if codepoint <= _UNICODE_MAX_CODEPOINT and not (
+                    _UNICODE_SURROGATE_START <= codepoint <= _UNICODE_SURROGATE_END
+                ):
+                    decoded.append(chr(codepoint))
+                    index += unicode_width + 2
+                    continue
+        decoded.extend((_ESCAPE_CHARACTER, escaped))
+        index += 2
+    return "".join(decoded)
 
 
 def _relocate_leading_comment(

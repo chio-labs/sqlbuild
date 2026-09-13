@@ -64,6 +64,15 @@ DEFAULT_CONFIG: LintConfig = LintConfig()
             expected_codes=("description-present",),
         ),
         LintNativeTestCase(
+            description="escaped paragraphs fault against canonical formatted length",
+            contents=(
+                'MODEL (description "'
+                + "\\n\\n".join(f"paragraph {index}" for index in range(11))
+                + '");\nSELECT 1\n'
+            ),
+            expected_codes=("description-length",),
+        ),
+        LintNativeTestCase(
             description="broken model header faults with parse error",
             contents="MODEL (\n  materialized table,\n  description\n);\nSELECT 1\n",
             expected_codes=("header-parse",),
@@ -213,6 +222,30 @@ def test_given_contents_when_formatting_then_contents_match_expected(
                 'MODEL (\n  description "Builds canonical customer records from every\n'
                 "source.\n\nRetains unmatched customers for complete downstream\n"
                 'coverage."\n);\nSELECT 1\n'
+            ),
+        ),
+        FormatDescriptionTestCase(
+            description="escaped newlines and unicode retain authored meaning",
+            contents=(
+                'MODEL (\n  description "Builds order summary.\\nRetains unmatched orders.'
+                '\\n\\nSource \\u2192 canonical orders."\n);\nSELECT 1\n'
+            ),
+            line_width=100,
+            expected_contents=(
+                'MODEL (\n  description "Builds order summary. Retains unmatched orders.\n\n'
+                'Source → canonical orders."\n);\nSELECT 1\n'
+            ),
+        ),
+        FormatDescriptionTestCase(
+            description="malformed unicode escape is retained losslessly",
+            contents=(
+                'MODEL (\n  description "Builds order summary.\\u-123 retains text."\n);\n'
+                "SELECT 1\n"
+            ),
+            line_width=100,
+            expected_contents=(
+                'MODEL (\n  description "Builds order summary.\\\\u-123 retains text."\n);\n'
+                "SELECT 1\n"
             ),
         ),
         FormatDescriptionTestCase(
