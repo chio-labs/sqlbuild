@@ -14,6 +14,7 @@ use crate::sql_lint::models::{
 };
 
 use crate::sql_lint::_helpers::additional::collect_additional_facts;
+use crate::sql_lint::_helpers::inline_relations::collect_inline_query_relation_spans;
 use crate::sql_lint::_helpers::terminal_shape::collect_terminal_shape_facts;
 
 const NULL_COMPARISON: LintRuleMetadata = LintRuleMetadata {
@@ -221,9 +222,14 @@ const CROSS_JOIN: LintRuleMetadata = LintRuleMetadata {
     message: "CROSS JOIN creates an explicit cartesian product",
     remediation: "Use a keyed JOIN, or suppress this rule with a reason when the cartesian product is intentional.",
 };
+const INLINE_QUERY_RELATION: LintRuleMetadata = LintRuleMetadata {
+    code: "SQBRSQL039",
+    message: "Inline query relation obscures data flow",
+    remediation: "Extract the derived relation into a named top-level CTE; use explicit LATERAL only when the relation must remain correlated.",
+};
 const TRIVIAL_EQUALITY_TOKEN_COUNT: usize = 3;
 
-const DEFAULT_RULES: [&str; 12] = [
+const DEFAULT_RULES: [&str; 13] = [
     NULL_COMPARISON.code,
     IMPLICIT_CARTESIAN_JOIN.code,
     JOIN_WITHOUT_CONDITION.code,
@@ -236,9 +242,10 @@ const DEFAULT_RULES: [&str; 12] = [
     UNSTABLE_ROW_NUMBER.code,
     NULL_NOT_IN.code,
     SET_ARITY_MISMATCH.code,
+    INLINE_QUERY_RELATION.code,
 ];
 
-const ALL_RULE_METADATA: [&LintRuleMetadata; 38] = [
+const ALL_RULE_METADATA: [&LintRuleMetadata; 39] = [
     &NULL_COMPARISON,
     &IMPLICIT_CARTESIAN_JOIN,
     &JOIN_WITHOUT_CONDITION,
@@ -277,6 +284,7 @@ const ALL_RULE_METADATA: [&LintRuleMetadata; 38] = [
     &NESTED_CTE,
     &RECURSIVE_CTE,
     &CROSS_JOIN,
+    &INLINE_QUERY_RELATION,
 ];
 
 fn is_ceremonial_cte_name(name: &str) -> bool {
@@ -512,6 +520,13 @@ fn collect_rule_migration_facts(
             }
         }
     }
+    facts
+        .inline_query_relations
+        .extend(collect_inline_query_relation_spans(
+            tokens,
+            depths,
+            &significant,
+        ));
 
     let (cte_only_bodies, terminal_selects) =
         collect_terminal_shape_facts(tokens, depths, &significant, allows_ceremonial_select);
@@ -1627,6 +1642,13 @@ fn rule_migration_diagnostics(context: &DiagnosticContext<'_>) -> Vec<LintDiagno
             &CROSS_JOIN,
             &facts.cross_joins,
             Some("a keyed relationship requires user intent"),
+        ));
+    }
+    if enabled.contains(INLINE_QUERY_RELATION.code) {
+        diagnostics.extend(diagnostics_for_spans(
+            &INLINE_QUERY_RELATION,
+            &facts.inline_query_relations,
+            Some("extracting a derived relation can change correlation and scope"),
         ));
     }
     diagnostics

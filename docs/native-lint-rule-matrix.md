@@ -138,6 +138,7 @@ SQLBuild has one canonical formatter and does not expose capitalization rule con
 | `SQBRSQL036` | Optional rule | never | CTEs remain at statement top level. |
 | `SQBRSQL037` | Optional rule | never | Recursive CTEs require an explicit alternative design. |
 | `SQBRSQL038` | Optional rule | never | Explicit cartesian products require a reasoned suppression. |
+| `SQBRSQL039` | Core compiler | never | Non-lateral derived relations are named as top-level CTEs instead of being hidden inside `FROM` or `JOIN`. |
 
 Schema-dependent nullable `NOT IN`, inferred join cardinality, denominator safety, integer division,
 timezone comparison, persisted-output rules, and incremental cursor/replay checks remain compiler or
@@ -146,8 +147,8 @@ generic guesses.
 
 ## Current native totals
 
-- 38 SQLBuild-owned generic native rule codes (`SQBRSQL001`–`SQBRSQL038`)
-- 12 core defaults
+- 39 SQLBuild-owned generic native rule codes (`SQBRSQL001`–`SQBRSQL039`)
+- 13 core defaults
 - 26 optional rules selectable by exact code or prefix under `[rules].select`
 - 14 always-or-conditionally formatter-rewritable native analysis types
 - `SQBRSQL000` suppression validation, with stale standalone directives formatter-rewritable

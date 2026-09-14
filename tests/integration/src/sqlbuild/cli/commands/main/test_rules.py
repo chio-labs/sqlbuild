@@ -146,6 +146,55 @@ def test_given_project_when_running_focused_rule_family_then_only_that_family_ru
 
 @pytest.mark.parametrize(
     "test_case",
+    [RulesIntegrationTestCase("inline join query is rejected", 1, "SQBRSQL039")],
+    ids=lambda case: case.description,
+)
+def test_given_inline_query_relation_when_running_readability_rule_then_finding_is_reported(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        """MODEL (description "Orders");
+WITH actual_orders AS (
+  SELECT 1 AS order_id
+)
+SELECT COALESCE(actual.order_id, expected.order_id) AS order_id
+FROM actual_orders AS actual
+FULL OUTER JOIN (
+  SELECT column0 AS order_id
+  FROM VALUES (1), (2)
+) AS expected
+  ON actual.order_id = expected.order_id
+""",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "rules",
+            "--json",
+            "run",
+            test_case.expected_code,
+        ]
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    captured: CaptureResult[str] = capsys.readouterr()
+    payload: dict[str, object] = json.loads(captured.out)
+    assert test_case.expected_code in json.dumps(payload["findings"])
+    assert "Inline query relation obscures data flow" in json.dumps(payload["findings"])
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [RulesIntegrationTestCase("SQL function arguments are not columns", 0, "SQBRSQL027")],
     ids=lambda case: case.description,
 )
