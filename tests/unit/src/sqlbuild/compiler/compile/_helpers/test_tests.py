@@ -69,6 +69,22 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
             expected_assertion_names=("no_negative_orders",),
         ),
         ExtractSqlTestCtesTestCase(
+            description="allows expected result and assertion to share an independent helper",
+            sql="""
+        WITH
+        helper AS (SELECT 1 AS order_id),
+        __source__raw_orders AS (SELECT order_id FROM helper),
+        __expected__orders AS (SELECT order_id FROM helper),
+        __assert__positive_order_id AS (SELECT order_id FROM helper WHERE order_id < 1)
+        SELECT 1
+        """.strip(),
+            expected_authored_cte_names=("helper", "__source__raw_orders"),
+            expected_mock_model_names=(),
+            expected_mock_source_names=("raw_orders",),
+            expected_expected_model_names=("orders",),
+            expected_assertion_names=("positive_order_id",),
+        ),
+        ExtractSqlTestCtesTestCase(
             description="extracts seed mocks from seed-prefixed ctes",
             sql="""
         WITH
@@ -116,20 +132,6 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
             expected_mock_model_names=("orders",),
             expected_mock_source_names=(),
             expected_expected_model_names=("order_items",),
-        ),
-        ExtractSqlTestCtesTestCase(
-            description="extracts ctes with ceremonial select in final result cte",
-            sql="""
-        WITH
-        __source__raw_orders AS (SELECT 1 AS order_id),
-        __expected__orders AS (SELECT 1 AS order_id),
-        test_result AS (SELECT 1)
-        SELECT * FROM test_result
-        """.strip(),
-            expected_authored_cte_names=("__source__raw_orders", "test_result"),
-            expected_mock_model_names=(),
-            expected_mock_source_names=("raw_orders",),
-            expected_expected_model_names=("orders",),
         ),
         ExtractSqlTestCtesTestCase(
             description="extracts ctes with comments strings and nested parentheses",
@@ -254,11 +256,10 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
             sql="""
         WITH
         "__source__raw_orders" AS MATERIALIZED (SELECT 1 AS order_id),
-        "__expected__orders" AS (SELECT order_id FROM "__source__raw_orders"),
-        test_result AS (SELECT 1)
-        SELECT * FROM test_result
+        "__expected__orders" AS (SELECT order_id FROM "__source__raw_orders")
+        SELECT 1
         """.strip(),
-            expected_authored_cte_names=("__source__raw_orders", "test_result"),
+            expected_authored_cte_names=("__source__raw_orders",),
             expected_mock_model_names=(),
             expected_mock_source_names=("raw_orders",),
             expected_expected_model_names=("orders",),
@@ -405,6 +406,104 @@ def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_return
     "test_case",
     [
         ExtractSqlTestCtesErrorTestCase(
+            description="raises when ceremonial select is wrapped in a final result cte",
+            sql="""
+        WITH
+        __source__raw_orders AS (SELECT 1 AS order_id),
+        __expected__orders AS (SELECT 1 AS order_id),
+        test_result AS (SELECT 1)
+        SELECT * FROM test_result
+        """.strip(),
+            expected_error_fragment="must end with a ceremonial top-level `SELECT 1`",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when assertion depends directly on expected result",
+            sql="""
+        WITH
+        __source__raw_orders AS (SELECT 1 AS order_id),
+        __expected__orders AS (SELECT 1 AS order_id),
+        __assert__expected_is_nonempty AS (SELECT * FROM __expected__orders)
+        SELECT 1
+        """.strip(),
+            expected_error_fragment=(
+                "'__assert__expected_is_nonempty' must not depend on '__expected__orders'"
+            ),
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when unparsed assertion uses quoted expected result",
+            sql="""
+        WITH
+        __source__raw_orders AS (SELECT 1 AS order_id),
+        __expected__orders AS (SELECT 1 AS order_id),
+        __assert__expected_is_nonempty AS (
+          SELECT @normalize_order(order_id) FROM "__expected__orders"
+        )
+        SELECT 1
+        """.strip(),
+            expected_error_fragment=(
+                "'__assert__expected_is_nonempty' must not depend on '__expected__orders'"
+            ),
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when assertion defines a shadowing expected result",
+            sql="""
+        WITH
+        __source__raw_orders AS (SELECT 1 AS order_id),
+        __expected__orders AS (SELECT 1 AS order_id),
+        __assert__empty AS (
+          WITH __expected__orders AS (SELECT 2 AS order_id)
+          SELECT * FROM __expected__orders WHERE order_id < 0
+        )
+        SELECT 1
+        """.strip(),
+            expected_error_fragment=(
+                "'__assert__empty' must not define expected result CTE '__expected__orders'"
+            ),
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when lone assertion defines a nested expected result",
+            sql="""
+        WITH
+        __source__raw_orders AS (SELECT 1 AS order_id),
+        __assert__empty AS (
+          WITH __expected__orders AS (SELECT 2 AS order_id)
+          SELECT order_id FROM __expected__orders WHERE order_id < 0
+        )
+        SELECT 1
+        """.strip(),
+            expected_error_fragment=(
+                "'__assert__empty' must not define expected result CTE '__expected__orders'"
+            ),
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when expected result depends directly on assertion",
+            sql="""
+        WITH
+        __source__raw_orders AS (SELECT 1 AS order_id),
+        __assert__positive_order_id AS (SELECT 1 AS order_id WHERE 1 < 1),
+        __expected__orders AS (SELECT order_id FROM __assert__positive_order_id)
+        SELECT 1
+        """.strip(),
+            expected_error_fragment=(
+                "'__expected__orders' must not depend on '__assert__positive_order_id'"
+            ),
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when assertion depends indirectly on expected result",
+            sql="""
+        WITH
+        __source__raw_orders AS (SELECT 1 AS order_id),
+        __expected__orders AS (SELECT 1 AS order_id),
+        expected_helper AS (SELECT * FROM __expected__orders),
+        __assert__expected_is_nonempty AS (SELECT * FROM expected_helper)
+        SELECT 1
+        """.strip(),
+            expected_error_fragment=(
+                "'__assert__expected_is_nonempty' must not depend on "
+                "'__expected__orders' through 'expected_helper'"
+            ),
+        ),
+        ExtractSqlTestCtesErrorTestCase(
             description="raises when macro mock returns multiple columns",
             sql="""
         WITH __macro__country AS (SELECT 'US', 'CA'),
@@ -473,7 +572,7 @@ def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_return
         ExtractSqlTestCtesErrorTestCase(
             description="raises when final select is not ceremonial select one",
             sql="""
-        WITH __source__raw_orders AS (SELECT 1), __expected__orders AS (SELECT 1)
+        WITH __source__raw_orders AS (SELECT 1), __expected__orders AS (SELECT 1 AS order_id)
         SELECT 1 FROM __expected__orders
         """.strip(),
             expected_error_fragment="must end with a ceremonial top-level `SELECT 1`",

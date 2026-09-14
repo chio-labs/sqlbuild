@@ -428,12 +428,19 @@ fn inspect_container(
     entries: &[ContainerEntry],
 ) -> Vec<Fault> {
     let mut faults: Vec<Fault> = Vec::new();
-    let direct: Vec<&ContainerEntry> = entries
+    let mut seen_paths: BTreeSet<&str> = BTreeSet::new();
+    let files: Vec<&ContainerEntry> = entries
         .iter()
+        .filter(|entry| seen_paths.insert(entry.path.as_str()))
+        .collect();
+    let direct: Vec<&ContainerEntry> = files
+        .iter()
+        .copied()
         .filter(|entry| entry.buckets.is_empty())
         .collect();
-    let grouped: Vec<&ContainerEntry> = entries
+    let grouped: Vec<&ContainerEntry> = files
         .iter()
+        .copied()
         .filter(|entry| !entry.buckets.is_empty())
         .collect();
     if let Some(rule) = inspection.evaluation.selected.get("SQBRDECLARATION302")
@@ -452,8 +459,9 @@ fn inspect_container(
         ));
     }
     if let Some(rule) = inspection.evaluation.selected.get("SQBRDECLARATION303") {
-        for entry in entries
+        for entry in files
             .iter()
+            .copied()
             .filter(|entry| entry.buckets.len() as u32 > inspection.max_depth)
         {
             faults.push(path_fault(
@@ -474,7 +482,7 @@ fn inspect_container(
     }
     if let Some(rule) = inspection.evaluation.selected.get("SQBRDECLARATION305") {
         let mut reported: BTreeSet<(String, String)> = BTreeSet::new();
-        for entry in entries {
+        for entry in files.iter().copied() {
             for bucket in &entry.buckets {
                 if (GENERIC_BUCKET_NAMES.contains(&bucket.as_str())
                     || RESERVED_BUCKET_NAMES.contains(&bucket.as_str()))
@@ -492,7 +500,7 @@ fn inspect_container(
     }
     if let Some(rule) = inspection.evaluation.selected.get("SQBRDECLARATION304") {
         let mut buckets: BTreeMap<String, Vec<&ContainerEntry>> = BTreeMap::new();
-        for entry in entries {
+        for entry in files.iter().copied() {
             let key = entry.buckets.first().cloned().unwrap_or_default();
             buckets.entry(key).or_default().push(entry);
         }
@@ -520,7 +528,7 @@ fn inspect_container(
         && let Some(rule) = inspection.evaluation.selected.get("SQBRDECLARATION306")
     {
         let mut locations: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
-        for entry in entries {
+        for entry in files.iter().copied() {
             let location = entry.buckets.join("/");
             locations
                 .entry(location)

@@ -39,9 +39,6 @@ from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
 _CEREMONIAL_SELECT_PATTERN: re.Pattern[str] = re.compile(r"\bSELECT\s+1\s*;?\s*$", re.IGNORECASE)
-_EXACT_CEREMONIAL_SELECT_PATTERN: re.Pattern[str] = re.compile(
-    r"^\s*SELECT\s+1\s*;?\s*$", re.IGNORECASE
-)
 
 
 def extract_top_level_ctes_with_sql_analysis(
@@ -61,6 +58,10 @@ def extract_top_level_ctes_with_sql_analysis(
         )
         return None
     if not isinstance(analysis, dict):
+        return None
+    if _CEREMONIAL_SELECT_PATTERN.search(sql) is None:
+        return None
+    if not _is_ceremonial_select_analysis(analysis):
         return None
     cte_facts: Any = analysis.get(_POLYGLOT_ANALYSIS_CTE_FACTS)
     if not isinstance(cte_facts, list) or not cte_facts:
@@ -84,27 +85,7 @@ def extract_top_level_ctes_with_sql_analysis(
         if not isinstance(body_sql, str) or not body_sql:
             return None
         ctes.append((cte_name, body_sql))
-    if _CEREMONIAL_SELECT_PATTERN.search(sql) is not None and _is_ceremonial_select_analysis(
-        analysis
-    ):
-        return tuple(ctes)
-    final_cte_name, final_cte_sql = ctes[-1]
-    if (
-        analysis.get(_POLYGLOT_ANALYSIS_SHAPE) == _POLYGLOT_ANALYSIS_SHAPE_SELECT
-        and _is_plain_final_cte_read(sql=sql, cte_name=final_cte_name)
-        and (_EXACT_CEREMONIAL_SELECT_PATTERN.fullmatch(final_cte_sql) is not None)
-    ):
-        return tuple(ctes)
-    return None
-
-
-def _is_plain_final_cte_read(*, sql: str, cte_name: str) -> bool:
-    escaped_name: str = re.escape(cte_name)
-    terminal_pattern: re.Pattern[str] = re.compile(
-        rf'\bSELECT\s+\*\s+FROM\s+(?:"{escaped_name}"|{escaped_name})\s*;?\s*$',
-        re.IGNORECASE,
-    )
-    return terminal_pattern.search(sql) is not None
+    return tuple(ctes)
 
 
 def _is_ceremonial_select_analysis(analysis: dict[str, Any]) -> bool:

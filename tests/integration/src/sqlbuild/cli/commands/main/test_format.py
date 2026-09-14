@@ -63,6 +63,53 @@ def test_given_sql_test_string_when_formatting_then_project_still_compiles(
 @pytest.mark.parametrize(
     "test_case",
     [
+        FormatCompileIntegrationTestCase(
+            description="table function arguments survive formatter restoration",
+            expected_literal='__table_fn("expand_order")(source_orders.order_id)',
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_table_function_argument_when_formatting_then_intrinsic_restores_and_compiles(
+    test_case: FormatCompileIntegrationTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    function: Path = tmp_path / "functions" / "sql" / "expand_order.sql"
+    function.parent.mkdir(parents=True)
+    function.write_text(
+        """FUNCTION (
+  description "Expand one order",
+  arguments (order_id INTEGER),
+  returns table (order_id INTEGER)
+);
+
+SELECT order_id
+""",
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "expanded_orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        'MODEL (description "Expanded orders");\nselect expanded.order_id from orders as '
+        'source_orders cross join __table_fn("expand_order")(source_orders.order_id) as expanded\n',
+        encoding="utf-8",
+    )
+
+    format_exit: int = main(["--project-dir", str(tmp_path), "format"])
+    compile_exit: int = main(["--project-dir", str(tmp_path), "compile", "--no-cache"])
+
+    assert format_exit == 0
+    assert compile_exit == 0
+    formatted: str = model.read_text(encoding="utf-8")
+    assert test_case.expected_literal in formatted
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         DescriptionFormatIntegrationTestCase(
             description="configured width wraps and compiles model description",
             line_width=60,

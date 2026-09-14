@@ -242,6 +242,7 @@ fn collect_select_additional_facts(
         if !is_exists_subquery(tokens, select_index)
             && !is_set_continuation_select(tokens, select_index)
             && !is_scalar_subquery(tokens, depths, select_index)
+            && !has_enclosing_cte_column_list(tokens, depths, select_index)
             && !is_ceremonial_select(tokens, &direct[..from_position], allows_ceremonial_select)
         {
             facts
@@ -321,6 +322,24 @@ fn collect_select_additional_facts(
     facts
 }
 
+fn has_enclosing_cte_column_list(tokens: &[Token], depths: &[usize], select_index: usize) -> bool {
+    let select_depth = depths[select_index];
+    let Some(body_open) = (0..select_index).rev().find(|&index| {
+        tokens[index].token_type == TokenType::LParen
+            && depths[index].saturating_add(1) == select_depth
+    }) else {
+        return false;
+    };
+    let Some(as_index) = significant_before(tokens, body_open) else {
+        return false;
+    };
+    if tokens[as_index].token_type != TokenType::As {
+        return false;
+    }
+    significant_before(tokens, as_index)
+        .is_some_and(|index| tokens[index].token_type == TokenType::RParen)
+}
+
 fn collect_reference_facts(context: &ReferenceFactContext<'_>) -> AdditionalQueryFacts {
     let query = context.query;
     let QuerySlice {
@@ -383,11 +402,14 @@ fn collect_reference_facts(context: &ReferenceFactContext<'_>) -> AdditionalQuer
             .filter(|&&index| !known.contains(&tokens[index].text.to_ascii_lowercase()))
             .map(|&index| tokens[index].span),
     );
-    facts.unused_joined_relations.extend(unused_join_spans(
-        query,
-        context.query_start,
-        context.query_end,
-    ));
+    let projects_bare_star = has_bare_projected_star(tokens, &direct[..from_position]);
+    if !projects_bare_star {
+        facts.unused_joined_relations.extend(unused_join_spans(
+            query,
+            context.query_start,
+            context.query_end,
+        ));
+    }
     facts
 }
 
@@ -561,6 +583,22 @@ fn projected_star_spans(tokens: &[Token], projection: &[usize]) -> Vec<Span> {
         }
     }
     spans
+}
+
+fn has_bare_projected_star(tokens: &[Token], projection: &[usize]) -> bool {
+    projection.iter().enumerate().any(|(position, &index)| {
+        if tokens[index].token_type != TokenType::Star {
+            return false;
+        }
+        let mut item_start = 0_usize;
+        for prior_position in (0..position).rev() {
+            if tokens[projection[prior_position]].token_type == TokenType::Comma {
+                item_start = prior_position + 1;
+                break;
+            }
+        }
+        is_bare_star_prefix(tokens, &projection[item_start..position])
+    })
 }
 
 fn is_exists_subquery(tokens: &[Token], select_index: usize) -> bool {
@@ -739,6 +777,9 @@ fn unused_join_spans(query: &QuerySlice<'_>, query_start: usize, query_end: usiz
         .chain(relation_end_index..query_end)
         .filter(|&index| !is_layout(&tokens[index]) && !is_comment(&tokens[index]))
         .collect();
+    if contains_possible_unqualified_reference(tokens, &references) {
+        return Vec::new();
+    }
     let mut spans: Vec<Span> = Vec::new();
     for position in from_position + 1..relation_end {
         let index = direct[position];
@@ -775,6 +816,31 @@ fn unused_join_spans(query: &QuerySlice<'_>, query_start: usize, query_end: usiz
         }
     }
     spans
+}
+
+fn contains_possible_unqualified_reference(tokens: &[Token], references: &[usize]) -> bool {
+    references.iter().enumerate().any(|(position, &index)| {
+        if !is_identifier(&tokens[index])
+            || is_generated_identifier(&tokens[index])
+            || is_context_value(&tokens[index])
+        {
+            return false;
+        }
+        let previous = if position == 0 {
+            None
+        } else {
+            Some(references[position - 1])
+        };
+        let next = references.get(position + 1).copied();
+        previous.is_none_or(|candidate| {
+            !matches!(tokens[candidate].token_type, TokenType::Dot | TokenType::As)
+        }) && next.is_none_or(|candidate| {
+            !matches!(
+                tokens[candidate].token_type,
+                TokenType::Dot | TokenType::LParen
+            )
+        })
+    })
 }
 
 fn contains_qualified_reference(tokens: &[Token], references: &[usize], alias: &str) -> bool {

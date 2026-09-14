@@ -356,6 +356,66 @@ fn given_plain_sql_rules_when_linting_then_project_context_is_not_required() -> 
             expected_count: 0,
         },
         test_types::PlainSqlLintTestCase {
+            description: "plain terminal select from CTE with output column list",
+            sql: "WITH final_rows(id) AS (SELECT 1) SELECT id FROM final_rows",
+            rule: "SQBRSQL035",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "CTE output column list names its calculation",
+            sql: "WITH final_rows(id) AS (SELECT 1) SELECT id FROM final_rows",
+            rule: "SQBRSQL022",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "terminal union remains outside final CTE",
+            sql: "WITH final_rows AS (SELECT 1 AS id) SELECT id FROM final_rows UNION ALL SELECT id FROM final_rows",
+            rule: "SQBRSQL034",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "terminal union is not a plain final CTE read",
+            sql: "WITH final_rows AS (SELECT 1 AS id) SELECT id FROM final_rows UNION ALL SELECT id FROM final_rows",
+            rule: "SQBRSQL035",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "parenthesized terminal union remains outside final CTE",
+            sql: "WITH final_rows AS (SELECT 1 AS id) (SELECT id FROM final_rows) UNION ALL (SELECT id FROM final_rows)",
+            rule: "SQBRSQL034",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "parenthesized terminal union is not a plain final CTE read",
+            sql: "WITH final_rows AS (SELECT 1 AS id) (SELECT id FROM final_rows) UNION ALL (SELECT id FROM final_rows)",
+            rule: "SQBRSQL035",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "mixed parenthesized terminal union remains outside final CTE",
+            sql: "WITH final_rows AS (SELECT 1 AS id) (SELECT id FROM final_rows) UNION ALL SELECT id FROM final_rows",
+            rule: "SQBRSQL034",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "mixed parenthesized terminal union is not a plain final CTE read",
+            sql: "WITH final_rows AS (SELECT 1 AS id) (SELECT id FROM final_rows) UNION ALL SELECT id FROM final_rows",
+            rule: "SQBRSQL035",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "mixed parenthesized terminal intersect is not a plain final CTE read",
+            sql: "WITH final_rows AS (SELECT 1 AS id) (SELECT id FROM final_rows) INTERSECT SELECT id FROM final_rows",
+            rule: "SQBRSQL035",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "mixed parenthesized terminal except is not a plain final CTE read",
+            sql: "WITH final_rows AS (SELECT 1 AS id) (SELECT id FROM final_rows) EXCEPT SELECT id FROM final_rows",
+            rule: "SQBRSQL035",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
             description: "nested CTE",
             sql: "SELECT id FROM (WITH nested_rows AS (SELECT 1 AS id) SELECT id FROM nested_rows)",
             rule: "SQBRSQL036",
@@ -1024,6 +1084,34 @@ fn given_additional_rule_cases_when_linting_then_findings_and_fixes_match() -> R
             expected_replacement: None,
         },
         test_types::AdditionalLintRuleTestCase {
+            description: "bare projected star consumes every joined relation",
+            sql: "SELECT * FROM orders AS o INNER JOIN customers AS c ON o.customer_id = c.customer_id",
+            rule: "SQBRSQL032",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "unqualified projection prevents an unsupported unused relation claim",
+            sql: "SELECT customer_name FROM orders AS o INNER JOIN customers AS c ON o.customer_id = c.customer_id",
+            rule: "SQBRSQL032",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "unqualified aggregate argument prevents an unsupported unused relation claim",
+            sql: "SELECT MAX(customer_name) FROM orders AS o INNER JOIN customers AS c ON o.customer_id = c.customer_id",
+            rule: "SQBRSQL032",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "left qualified star does not consume joined relation",
+            sql: "SELECT o.* FROM orders AS o INNER JOIN customers AS c ON o.customer_id = c.customer_id",
+            rule: "SQBRSQL032",
+            expected_anchor: Some("JOIN"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
             description: "cross joined relation contributes through a filter predicate",
             sql: "SELECT orders.order_id FROM orders CROSS JOIN processing_cutoff AS cutoff WHERE orders.created_at < cutoff.created_at",
             rule: "SQBRSQL032",
@@ -1225,6 +1313,40 @@ fn given_ceremonial_cte_contexts_when_linting_then_only_harness_dependencies_are
                 .first()
                 .and_then(|diagnostic| diagnostic["start"].as_u64()),
             test_case.expected_start,
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn given_ceremonial_select_context_when_linting_terminal_shape_then_rule_035_allows_it()
+-> Result<(), String> {
+    let test_cases = [test_types::PlainSqlLintTestCase {
+        description: "direct ceremonial select is valid in harness context",
+        sql: "WITH __source__raw_orders AS (SELECT 1 AS order_id), __expected__orders AS (SELECT 1 AS order_id) SELECT 1",
+        rule: "SQBRSQL035",
+        expected_count: 0,
+    }];
+    for test_case in test_cases {
+        let response = lint_json(
+            &json!({
+                "version": 1,
+                "sql": test_case.sql,
+                "dialect": "duckdb",
+                "enabled_rules": [test_case.rule],
+                "allows_ceremonial_select": true,
+            })
+            .to_string(),
+        )?;
+        let payload: Value = serde_json::from_str(&response).map_err(|error| error.to_string())?;
+        let diagnostics = payload["diagnostics"]
+            .as_array()
+            .ok_or_else(|| "diagnostics should be an array".to_owned())?;
+        assert_eq!(
+            diagnostics.len(),
+            test_case.expected_count,
             "{}",
             test_case.description
         );

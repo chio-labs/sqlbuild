@@ -192,6 +192,209 @@ WHERE current_orders.created_at >= start_date
 
 @pytest.mark.parametrize(
     "test_case",
+    [RulesIntegrationTestCase("table function argument preserves left alias", 0, "SQBRSQL023")],
+    ids=lambda case: case.description,
+)
+def test_given_table_function_argument_when_running_alias_rule_then_left_alias_is_preserved(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    function: Path = tmp_path / "functions" / "sql" / "expand_order.sql"
+    function.parent.mkdir(parents=True)
+    function.write_text(
+        """FUNCTION (
+  description "Expand one order",
+  arguments (order_id INTEGER),
+  returns table (order_id INTEGER)
+);
+
+SELECT order_id
+""",
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "expanded_orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        """MODEL (description "Expanded orders");
+SELECT expanded.order_id
+FROM orders AS source_orders
+CROSS JOIN __table_fn("expand_order")(source_orders.order_id) AS expanded
+""",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "rules",
+            "--json",
+            "run",
+            test_case.expected_code,
+        ]
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    assert payload["findings"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulesIntegrationTestCase("ceremonial SQL test passes terminal rule", 0, "SQBRSQL035")],
+    ids=lambda case: case.description,
+)
+def test_given_ceremonial_sql_test_when_compiling_with_rule_035_then_project_is_valid(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRSQL035"]\n',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        """MODEL (description "Orders");
+WITH final AS (SELECT 1 AS order_id)
+SELECT order_id FROM final
+""",
+        encoding="utf-8",
+    )
+    test: Path = tmp_path / "tests" / "unit" / "test_orders.sql"
+    test.parent.mkdir(parents=True)
+    test.write_text(
+        """TEST ();
+WITH
+__ref__orders AS (SELECT 1 AS order_id),
+__expected__orders AS (SELECT 1 AS order_id)
+SELECT 1
+""",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
+
+    assert exit_code == test_case.expected_exit_code
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    assert payload["diagnostics"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RulesIntegrationTestCase(
+            "assertion and expected result must be independent",
+            1,
+            "expected results and assertions must be independent",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_assertion_expected_dependency_when_compiling_then_compiler_rejects_test(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text('MODEL (description "Orders");\nSELECT 1 AS order_id\n', encoding="utf-8")
+    test: Path = tmp_path / "tests" / "unit" / "test_orders.sql"
+    test.parent.mkdir(parents=True)
+    test.write_text(
+        """TEST ();
+WITH
+__ref__orders AS (SELECT 1 AS order_id),
+__expected__orders AS (SELECT 1 AS order_id),
+__assert__expected_is_nonempty AS (SELECT * FROM __expected__orders)
+SELECT 1
+""",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
+
+    assert exit_code == test_case.expected_exit_code
+    captured: CaptureResult[str] = capsys.readouterr()
+    assert captured.out == ""
+    assert test_case.expected_code in captured.err
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulesIntegrationTestCase("non-source references are not source tokens", 0, "SQBRPROJECT103")],
+    ids=lambda case: case.description,
+)
+def test_given_seed_and_function_references_when_running_source_rule_then_they_are_not_tokens(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\napproved_source_tokens = ["partner"]\n',
+        encoding="utf-8",
+    )
+    seed: Path = tmp_path / "seeds" / "order_statuses.csv"
+    seed.parent.mkdir()
+    seed.write_text("status\nopen\n", encoding="utf-8")
+    (tmp_path / "seeds" / "schema.yml").write_text(
+        """seeds:
+  - name: order_statuses
+    description: Supported order statuses.
+    columns:
+      - name: status
+        type: VARCHAR
+""",
+        encoding="utf-8",
+    )
+    function: Path = tmp_path / "functions" / "sql" / "normalize_quantity.sql"
+    function.parent.mkdir(parents=True)
+    function.write_text(
+        """FUNCTION (
+  arguments (quantity INTEGER),
+  returns INTEGER,
+);
+
+quantity
+""",
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "sales__stg__orders__partner.sql"
+    model.parent.mkdir()
+    model.write_text(
+        """MODEL (description "Partner orders");
+SELECT __udf("normalize_quantity")(1) AS quantity
+FROM __seed("order_statuses")
+""",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "rules",
+            "--json",
+            "run",
+            test_case.expected_code,
+        ]
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    assert payload["findings"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [RulesIntegrationTestCase("cross join used by filter is not unused", 0, "SQBRSQL032")],
     ids=lambda case: case.description,
 )
@@ -275,10 +478,14 @@ def test_given_ceremonial_test_select_when_running_alias_rule_then_control_proje
 
 @pytest.mark.parametrize(
     "test_case",
-    [RulesIntegrationTestCase("final ceremonial CTE satisfies terminal shape", 0, "SQBRSQL035")],
+    [
+        RulesIntegrationTestCase(
+            "direct ceremonial select satisfies terminal shape", 0, "SQBRSQL035"
+        )
+    ],
     ids=lambda case: case.description,
 )
-def test_given_final_ceremonial_cte_when_running_terminal_rule_then_test_is_accepted(
+def test_given_direct_ceremonial_select_when_running_terminal_rule_then_test_is_accepted(
     test_case: RulesIntegrationTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -293,8 +500,7 @@ def test_given_final_ceremonial_cte_when_running_terminal_rule_then_test_is_acce
     test.parent.mkdir(parents=True)
     test.write_text(
         "TEST();\n\nWITH __ref__orders AS (SELECT 1 AS order_id), "
-        "__expected__orders AS (SELECT 1 AS order_id), "
-        "test_result AS (SELECT 1)\nSELECT * FROM test_result\n",
+        "__expected__orders AS (SELECT 1 AS order_id)\nSELECT 1\n",
         encoding="utf-8",
     )
 

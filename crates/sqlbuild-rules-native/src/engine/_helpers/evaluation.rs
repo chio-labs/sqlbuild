@@ -140,7 +140,6 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
                 config: &request.config,
                 selected: &selected_by_code,
                 request: &request,
-                is_anchor: model_index == 0,
                 threshold_overrides: &threshold_overrides,
             })?;
             if let Some(identity) = fingerprint {
