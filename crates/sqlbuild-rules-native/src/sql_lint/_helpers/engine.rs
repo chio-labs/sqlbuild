@@ -225,7 +225,7 @@ const CROSS_JOIN: LintRuleMetadata = LintRuleMetadata {
 const INLINE_QUERY_RELATION: LintRuleMetadata = LintRuleMetadata {
     code: "SQBRSQL039",
     message: "Inline query relation obscures data flow",
-    remediation: "Extract the derived relation into a named top-level CTE and reference that CTE from FROM or JOIN.",
+    remediation: "Extract the derived relation into a named top-level CTE; use explicit LATERAL only when the relation must remain correlated.",
 };
 const TRIVIAL_EQUALITY_TOKEN_COUNT: usize = 3;
 
