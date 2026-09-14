@@ -395,6 +395,64 @@ FROM __seed("order_statuses")
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        RulesIntegrationTestCase(
+            "dependency import star is compatible with output-shape rule",
+            0,
+            "SQBRSQL021",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_dependency_import_star_when_running_output_shape_rule_then_import_is_accepted(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    staging: Path = tmp_path / "models" / "stg_orders.sql"
+    staging.parent.mkdir()
+    staging.write_text(
+        'MODEL (description "Staged orders");\nSELECT 1 AS order_id\n',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.write_text(
+        """MODEL (description "Orders");
+WITH imported_orders AS (
+  SELECT *
+  FROM __ref("stg_orders")
+),
+final AS (
+  SELECT order_id
+  FROM imported_orders
+)
+SELECT order_id
+FROM final
+""",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "rules",
+            "--json",
+            "run",
+            test_case.expected_code,
+        ]
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    assert payload["findings"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [RulesIntegrationTestCase("cross join used by filter is not unused", 0, "SQBRSQL032")],
     ids=lambda case: case.description,
 )

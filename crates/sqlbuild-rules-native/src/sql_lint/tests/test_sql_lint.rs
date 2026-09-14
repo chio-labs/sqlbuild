@@ -767,6 +767,34 @@ fn given_additional_rule_cases_when_linting_then_findings_and_fixes_match() -> R
             expected_replacement: None,
         },
         test_types::AdditionalLintRuleTestCase {
+            description: "terminal framework dependency star remains uncontrolled",
+            sql: "SELECT * FROM __sqb_lint_0__",
+            rule: "SQBRSQL021",
+            expected_anchor: Some("*"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "transformed framework dependency import star remains uncontrolled",
+            sql: "WITH imported_orders AS (SELECT *, CURRENT_TIMESTAMP AS loaded_at FROM __sqb_lint_0__) SELECT order_id FROM imported_orders",
+            rule: "SQBRSQL021",
+            expected_anchor: Some("*"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "ordinary relation import star remains uncontrolled",
+            sql: "WITH imported_orders AS (SELECT * FROM orders) SELECT order_id FROM imported_orders",
+            rule: "SQBRSQL021",
+            expected_anchor: Some("*"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "nested framework dependency import star remains uncontrolled",
+            sql: "WITH outer_query AS (WITH imported_orders AS (SELECT * FROM __sqb_lint_0__) SELECT order_id FROM imported_orders) SELECT order_id FROM outer_query",
+            rule: "SQBRSQL021",
+            expected_anchor: Some("*"),
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
             description: "unaliased calculated projection",
             sql: "SELECT price * quantity FROM items",
             rule: "SQBRSQL022",
@@ -1313,6 +1341,78 @@ fn given_ceremonial_cte_contexts_when_linting_then_only_harness_dependencies_are
                 .first()
                 .and_then(|diagnostic| diagnostic["start"].as_u64()),
             test_case.expected_start,
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn given_dependency_identity_when_linting_import_stars_then_only_plain_top_level_import_is_accepted()
+-> Result<(), String> {
+    let test_cases = [
+        test_types::DependencyImportLintTestCase {
+            description: "plain top-level dependency import",
+            sql: "WITH imported_orders AS (SELECT * FROM __sqb_lint_0__) SELECT order_id FROM imported_orders",
+            dependency_identifiers: &["__sqb_lint_0__"],
+            expected_count: 0,
+        },
+        test_types::DependencyImportLintTestCase {
+            description: "star without from remains diagnosable",
+            sql: "WITH imported_orders AS (SELECT *) SELECT order_id FROM imported_orders",
+            dependency_identifiers: &["__sqb_lint_0__"],
+            expected_count: 1,
+        },
+        test_types::DependencyImportLintTestCase {
+            description: "set operation import is transformed",
+            sql: "WITH imported_orders AS (SELECT * FROM __sqb_lint_0__ UNION ALL SELECT order_id FROM orders) SELECT order_id FROM imported_orders",
+            dependency_identifiers: &["__sqb_lint_0__"],
+            expected_count: 1,
+        },
+        test_types::DependencyImportLintTestCase {
+            description: "dynamic relation is not a dependency",
+            sql: "WITH imported_orders AS (SELECT * FROM __sqb_lint_0__) SELECT order_id FROM imported_orders",
+            dependency_identifiers: &[],
+            expected_count: 1,
+        },
+        test_types::DependencyImportLintTestCase {
+            description: "terminal dependency star remains uncontrolled",
+            sql: "SELECT * FROM __sqb_lint_0__",
+            dependency_identifiers: &["__sqb_lint_0__"],
+            expected_count: 1,
+        },
+        test_types::DependencyImportLintTestCase {
+            description: "transformed dependency import remains uncontrolled",
+            sql: "WITH imported_orders AS (SELECT *, CURRENT_TIMESTAMP AS loaded_at FROM __sqb_lint_0__) SELECT order_id FROM imported_orders",
+            dependency_identifiers: &["__sqb_lint_0__"],
+            expected_count: 1,
+        },
+        test_types::DependencyImportLintTestCase {
+            description: "nested dependency import remains uncontrolled",
+            sql: "WITH outer_query AS (WITH imported_orders AS (SELECT * FROM __sqb_lint_0__) SELECT order_id FROM imported_orders) SELECT order_id FROM outer_query",
+            dependency_identifiers: &["__sqb_lint_0__"],
+            expected_count: 1,
+        },
+    ];
+    for test_case in test_cases {
+        let response = lint_json(
+            &json!({
+                "version": 1,
+                "sql": test_case.sql,
+                "dialect": "duckdb",
+                "enabled_rules": ["SQBRSQL021"],
+                "dependency_identifiers": test_case.dependency_identifiers,
+            })
+            .to_string(),
+        )?;
+        let payload: Value = serde_json::from_str(&response).map_err(|error| error.to_string())?;
+        let diagnostics = payload["diagnostics"]
+            .as_array()
+            .ok_or_else(|| "diagnostics should be an array".to_owned())?;
+        assert_eq!(
+            diagnostics.len(),
+            test_case.expected_count,
             "{}",
             test_case.description
         );

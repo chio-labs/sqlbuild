@@ -42,9 +42,18 @@ struct ReferenceCandidateContext<'a> {
     projection_aliases: &'a HashMap<String, usize>,
 }
 
+struct SelectFactContext<'a> {
+    tokens: &'a [Token],
+    depths: &'a [usize],
+    external_identifiers: &'a HashSet<String>,
+    dependency_identifiers: &'a HashSet<String>,
+    allows_ceremonial_select: bool,
+}
+
 pub(super) fn collect_additional_facts(
     tokens: &[Token],
     external_identifiers: &HashSet<String>,
+    dependency_identifiers: &HashSet<String>,
     allows_ceremonial_select: bool,
 ) -> AdditionalQueryFacts {
     let mut facts = AdditionalQueryFacts::default();
@@ -147,12 +156,13 @@ pub(super) fn collect_additional_facts(
                 .push(tokens[significant[position + 1]].span);
         }
     }
-    let select_facts = collect_select_additional_facts(
+    let select_facts = collect_select_additional_facts(&SelectFactContext {
         tokens,
-        &depths,
+        depths: &depths,
         external_identifiers,
+        dependency_identifiers,
         allows_ceremonial_select,
-    );
+    });
     facts.duplicate_output_aliases = select_facts.duplicate_output_aliases;
     facts.unaliased_calculations = select_facts.unaliased_calculations;
     facts.projected_stars = select_facts.projected_stars;
@@ -215,12 +225,9 @@ fn is_simple_projection_reference(
     qualifier_start < prefix.len() && is_bare_star_prefix(tokens, &prefix[..qualifier_start])
 }
 
-fn collect_select_additional_facts(
-    tokens: &[Token],
-    depths: &[usize],
-    external_identifiers: &HashSet<String>,
-    allows_ceremonial_select: bool,
-) -> AdditionalQueryFacts {
+fn collect_select_additional_facts(context: &SelectFactContext<'_>) -> AdditionalQueryFacts {
+    let tokens = context.tokens;
+    let depths = context.depths;
     let mut facts = AdditionalQueryFacts::default();
     for (select_index, token) in tokens.iter().enumerate() {
         if token.token_type != TokenType::Select {
@@ -243,7 +250,11 @@ fn collect_select_additional_facts(
             && !is_set_continuation_select(tokens, select_index)
             && !is_scalar_subquery(tokens, depths, select_index)
             && !has_enclosing_cte_column_list(tokens, depths, select_index)
-            && !is_ceremonial_select(tokens, &direct[..from_position], allows_ceremonial_select)
+            && !is_ceremonial_select(
+                tokens,
+                &direct[..from_position],
+                context.allows_ceremonial_select,
+            )
         {
             facts
                 .unaliased_calculations
@@ -252,9 +263,11 @@ fn collect_select_additional_facts(
                     &direct[..from_position],
                 ));
         }
-        facts
-            .projected_stars
-            .extend(projected_star_spans(tokens, &direct[..from_position]));
+        if !is_dependency_import_select(context, select_index, &direct, from_position) {
+            facts
+                .projected_stars
+                .extend(projected_star_spans(tokens, &direct[..from_position]));
+        }
         if from_position < direct.len() {
             let clause_end = direct[from_position + 1..]
                 .iter()
@@ -294,7 +307,7 @@ fn collect_select_additional_facts(
             let reference_context = ReferenceFactContext {
                 query: &reference_slice,
                 outer_relations: &outer_relations,
-                external_identifiers,
+                external_identifiers: context.external_identifiers,
                 query_start: select_index,
                 query_end: end,
             };
@@ -338,6 +351,71 @@ fn has_enclosing_cte_column_list(tokens: &[Token], depths: &[usize], select_inde
     }
     significant_before(tokens, as_index)
         .is_some_and(|index| tokens[index].token_type == TokenType::RParen)
+}
+
+fn is_dependency_import_select(
+    context: &SelectFactContext<'_>,
+    select_index: usize,
+    direct: &[usize],
+    from_position: usize,
+) -> bool {
+    let tokens = context.tokens;
+    let depths = context.depths;
+    if from_position != 1
+        || tokens[direct[0]].token_type != TokenType::Star
+        || !is_top_level_cte_body(tokens, depths, select_index)
+    {
+        return false;
+    }
+    if direct.len() <= from_position + 1 || has_cte_body_set_operation(tokens, depths, select_index)
+    {
+        return false;
+    }
+    let relation = &direct[from_position + 1..];
+    let Some(&relation_index) = relation.first() else {
+        return false;
+    };
+    if !context
+        .dependency_identifiers
+        .contains(&tokens[relation_index].text.to_ascii_lowercase())
+    {
+        return false;
+    }
+    match relation {
+        [_] => true,
+        [_, alias] => is_identifier(&tokens[*alias]),
+        [_, explicit_as, alias] => {
+            tokens[*explicit_as].token_type == TokenType::As && is_identifier(&tokens[*alias])
+        }
+        _ => false,
+    }
+}
+
+fn has_cte_body_set_operation(tokens: &[Token], depths: &[usize], select_index: usize) -> bool {
+    let select_depth = depths[select_index];
+    let body_end = (select_index + 1..tokens.len())
+        .find(|&index| {
+            depths[index] == select_depth && tokens[index].token_type == TokenType::RParen
+        })
+        .unwrap_or(tokens.len());
+    (select_index + 1..body_end).any(|index| {
+        depths[index] == select_depth
+            && matches!(
+                tokens[index].token_type,
+                TokenType::Union | TokenType::Intersect | TokenType::Except
+            )
+    })
+}
+
+fn is_top_level_cte_body(tokens: &[Token], depths: &[usize], select_index: usize) -> bool {
+    let Some(open_index) = significant_before(tokens, select_index) else {
+        return false;
+    };
+    if tokens[open_index].token_type != TokenType::LParen || depths[open_index] != 0 {
+        return false;
+    }
+    significant_before(tokens, open_index)
+        .is_some_and(|index| tokens[index].token_type == TokenType::As)
 }
 
 fn collect_reference_facts(context: &ReferenceFactContext<'_>) -> AdditionalQueryFacts {
