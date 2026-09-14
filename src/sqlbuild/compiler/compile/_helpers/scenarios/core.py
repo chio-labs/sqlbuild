@@ -124,7 +124,13 @@ def _extract_sql_scenario_ctes_with_scanner(
             continue
         break
 
-    _validate_ceremonial_select(sql=sql, start=index, file_label=file_label)
+    _validate_ceremonial_select(
+        sql=sql,
+        start=index,
+        final_cte_name=ctes[-1].name,
+        final_cte_sql=ctes[-1].sql_body,
+        file_label=file_label,
+    )
     return tuple(ctes)
 
 

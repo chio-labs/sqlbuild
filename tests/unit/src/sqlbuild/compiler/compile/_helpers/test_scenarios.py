@@ -119,14 +119,30 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
             expected_assertion_names=(),
         ),
         ExtractSqlScenarioCtesTestCase(
+            description="allows ceremonial select in final scenario result cte",
+            sql="""
+        WITH
+        __ref__orders_base AS (SELECT 1 AS order_id),
+        __expected__fact_orders AS (SELECT 1 AS order_id),
+        scenario_result AS (SELECT 1)
+        SELECT * FROM scenario_result
+        """.strip(),
+            expected_authored_cte_names=("__ref__orders_base", "scenario_result"),
+            expected_source_fixture_names=(),
+            expected_ref_fixture_names=("orders_base",),
+            expected_expected_model_names=("fact_orders",),
+            expected_assertion_names=(),
+        ),
+        ExtractSqlScenarioCtesTestCase(
             description="extracts scenario ctes with sql_analysis fallback syntax",
             sql="""
         WITH
         "__source__raw__orders" AS MATERIALIZED (SELECT 1 AS order_id),
-        "__expected__daily_revenue" AS (SELECT order_id FROM "__source__raw__orders")
-        SELECT 1
+        "__expected__daily_revenue" AS (SELECT order_id FROM "__source__raw__orders"),
+        scenario_result AS (SELECT 1)
+        SELECT * FROM scenario_result
         """.strip(),
-            expected_authored_cte_names=("__source__raw__orders",),
+            expected_authored_cte_names=("__source__raw__orders", "scenario_result"),
             expected_source_fixture_names=("raw__orders",),
             expected_ref_fixture_names=(),
             expected_seed_fixture_names=(),
@@ -211,6 +227,17 @@ def test_given_sql_scenario_cte_variants_when_extracting_then_it_returns_expecte
         SELECT 1
         """.strip(),
             expected_error_fragment="defines duplicate CTE '__source__raw__orders'",
+        ),
+        ExtractSqlScenarioCtesErrorTestCase(
+            description="raises when fallback terminal read follows a set operation",
+            sql="""
+        WITH
+        "__ref__orders_base" AS (SELECT 1 AS order_id),
+        "__expected__fact_orders" AS (SELECT 1 AS order_id),
+        scenario_result AS (SELECT 1)
+        SELECT 2 UNION ALL SELECT * FROM scenario_result
+        """.strip(),
+            expected_error_fragment="expected a CTE name",
         ),
     ],
     ids=lambda case: case.description,
