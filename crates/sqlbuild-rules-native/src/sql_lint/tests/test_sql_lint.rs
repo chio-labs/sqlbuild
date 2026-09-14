@@ -486,6 +486,48 @@ fn given_plain_sql_rules_when_linting_then_project_context_is_not_required() -> 
             expected_count: 0,
         },
         test_types::PlainSqlLintTestCase {
+            description: "scalar subquery containing a derived relation",
+            sql: "SELECT (SELECT derived.order_id FROM (SELECT nested.order_id FROM (SELECT 1 AS order_id) AS nested) AS derived) AS order_id",
+            rule: "SQBRSQL039",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "exists subquery containing a derived relation",
+            sql: "SELECT order_id FROM orders WHERE EXISTS (SELECT 1 FROM (SELECT nested.order_id FROM (SELECT order_id FROM shipments) AS nested) AS shipped_orders WHERE shipped_orders.order_id = orders.order_id)",
+            rule: "SQBRSQL039",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "exists set branch containing a derived relation",
+            sql: "SELECT EXISTS (SELECT 1 UNION ALL SELECT derived.order_id FROM (SELECT 1 AS order_id) AS derived)",
+            rule: "SQBRSQL039",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "scalar with query containing a derived relation in a CTE",
+            sql: "SELECT (WITH derived AS (SELECT nested.order_id FROM (SELECT 1 AS order_id) AS nested) SELECT order_id FROM derived) AS order_id",
+            rule: "SQBRSQL039",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "scalar with query containing a derived terminal relation",
+            sql: "SELECT (WITH orders AS (SELECT 1 AS order_id) SELECT derived.order_id FROM (SELECT order_id FROM orders) AS derived) AS order_id",
+            rule: "SQBRSQL039",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "nested derived relations outside an excluded subquery",
+            sql: "SELECT derived.order_id FROM (SELECT nested.order_id FROM (SELECT 1 AS order_id) AS nested) AS derived",
+            rule: "SQBRSQL039",
+            expected_count: 2,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "nested derived relations inside a parenthesized ordinary relation",
+            sql: "SELECT derived.order_id FROM ((SELECT nested.order_id FROM (SELECT 1 AS order_id) AS nested)) AS derived",
+            rule: "SQBRSQL039",
+            expected_count: 2,
+        },
+        test_types::PlainSqlLintTestCase {
             description: "scalar subquery after projection comma",
             sql: "SELECT 1 AS constant_value, (SELECT MAX(order_id) FROM orders) AS latest_order_id",
             rule: "SQBRSQL039",
@@ -516,6 +558,12 @@ fn given_plain_sql_rules_when_linting_then_project_context_is_not_required() -> 
             expected_count: 0,
         },
         test_types::PlainSqlLintTestCase {
+            description: "scalar subquery with a derived relation after order by comma",
+            sql: "SELECT order_id FROM orders ORDER BY order_id, (SELECT derived.status_id FROM (SELECT 1 AS status_id) AS derived)",
+            rule: "SQBRSQL039",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
             description: "exists subquery",
             sql: "SELECT order_id FROM orders WHERE EXISTS (SELECT 1 FROM shipments WHERE shipments.order_id = orders.order_id)",
             rule: "SQBRSQL039",
@@ -532,6 +580,18 @@ fn given_plain_sql_rules_when_linting_then_project_context_is_not_required() -> 
             sql: "WITH shipped_orders AS (SELECT order_id FROM shipments) SELECT orders.order_id FROM orders INNER JOIN shipped_orders ON orders.order_id = shipped_orders.order_id",
             rule: "SQBRSQL039",
             expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "materialized CTE containing a derived relation",
+            sql: "WITH orders AS MATERIALIZED (SELECT derived.order_id FROM (SELECT 1 AS order_id) AS derived) SELECT order_id FROM orders",
+            rule: "SQBRSQL039",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "not materialized CTE containing a derived relation",
+            sql: "WITH orders AS NOT MATERIALIZED (SELECT derived.order_id FROM (SELECT 1 AS order_id) AS derived) SELECT order_id FROM orders",
+            rule: "SQBRSQL039",
+            expected_count: 1,
         },
         test_types::PlainSqlLintTestCase {
             description: "lateral query relation",
