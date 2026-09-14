@@ -61,6 +61,8 @@ pub(crate) struct LintRequest {
     #[serde(default)]
     pub external_identifiers: Vec<String>,
     #[serde(default)]
+    pub dependency_identifiers: Vec<String>,
+    #[serde(default)]
     pub externally_referenced_ctes: Vec<String>,
     #[serde(default)]
     pub allows_ceremonial_select: bool,

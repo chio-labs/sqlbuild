@@ -310,6 +310,7 @@ struct DiagnosticContext<'a> {
 
 struct FactBuildOptions<'a> {
     external_identifiers: &'a HashSet<String>,
+    dependency_identifiers: &'a HashSet<String>,
     externally_referenced_ctes: &'a HashSet<String>,
     allows_ceremonial_select: bool,
 }
@@ -356,6 +357,11 @@ fn lint(request: LintRequest) -> Result<LintResponse, String> {
         .iter()
         .map(|identifier| identifier.to_ascii_lowercase())
         .collect();
+    let dependency_identifiers: HashSet<String> = request
+        .dependency_identifiers
+        .iter()
+        .map(|identifier| identifier.to_ascii_lowercase())
+        .collect();
     let externally_referenced_ctes: HashSet<String> = request
         .externally_referenced_ctes
         .iter()
@@ -363,6 +369,7 @@ fn lint(request: LintRequest) -> Result<LintResponse, String> {
         .collect();
     let options = FactBuildOptions {
         external_identifiers: &external_identifiers,
+        dependency_identifiers: &dependency_identifiers,
         externally_referenced_ctes: &externally_referenced_ctes,
         allows_ceremonial_select: request.allows_ceremonial_select,
     };
@@ -423,6 +430,7 @@ fn build_facts(
     facts.additional = collect_additional_facts(
         tokens,
         options.external_identifiers,
+        options.dependency_identifiers,
         options.allows_ceremonial_select,
     );
     for expression in expressions {

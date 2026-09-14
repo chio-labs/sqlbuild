@@ -80,6 +80,14 @@ class NativeSqlReuseTestCase:
 
 
 @dataclass(frozen=True)
+class NativeSqlDependencyCacheTestCase:
+    """Dependency identities that must remain part of native lint cache identity."""
+
+    description: str
+    expected_call_count: int
+
+
+@dataclass(frozen=True)
 class NativeParseIsolationTestCase:
     """Native parser fault that must not stop later bodies."""
 

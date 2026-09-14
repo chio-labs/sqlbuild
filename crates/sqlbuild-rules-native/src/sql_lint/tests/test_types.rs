@@ -42,6 +42,13 @@ pub(crate) struct PlainSqlLintTestCase {
     pub expected_count: usize,
 }
 
+pub(crate) struct DependencyImportLintTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) dependency_identifiers: &'static [&'static str],
+    pub(crate) expected_count: usize,
+}
+
 pub(crate) struct DialectLintRuleTestCase {
     pub description: &'static str,
     pub sql: &'static str,

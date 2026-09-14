@@ -34,6 +34,10 @@ from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
 
+_DEPENDENCY_INTRINSIC_PATTERN: re.Pattern[str] = re.compile(
+    r"^__(?:ref|source)\s*\(", re.IGNORECASE
+)
+
 _CTE_DEFINITION_PATTERN: re.Pattern[str] = re.compile(
     r'(?:\bWITH(?:\s+RECURSIVE)?|,)\s*["`\[]?(?P<name>[A-Za-z_][A-Za-z0-9_]*)'
     r'["`\]]?(?:\s*\([^)]*\))?\s+AS\s*\(',
@@ -160,6 +164,11 @@ def prepare_lint_body(
     neutralized: str
     sites: tuple[InterpolationSite, ...]
     neutralized, sites = neutralize_interpolation(body=expanded)
+    dependency_identifiers: tuple[str, ...] = tuple(
+        site.sentinel
+        for site in sites
+        if _DEPENDENCY_INTRINSIC_PATTERN.match(site.original_text) is not None
+    )
     externally_referenced_ctes: tuple[str, ...] = _externally_referenced_ctes(
         expanded=expanded,
         interpolation_sites=sites,
@@ -177,6 +186,7 @@ def prepare_lint_body(
             sentinel_spans(sites=sites),
         ),
         external_identifiers=external_identifiers,
+        dependency_identifiers=dependency_identifiers,
         externally_referenced_ctes=externally_referenced_ctes,
         allows_ceremonial_select=allows_ceremonial_select,
     )

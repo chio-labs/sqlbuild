@@ -42,6 +42,7 @@ class LintBody:
     lint_text: str
     passes: tuple[tuple[ExpansionSpan, ...], ...]
     external_identifiers: tuple[str, ...] = ()
+    dependency_identifiers: tuple[str, ...] = ()
     externally_referenced_ctes: tuple[str, ...] = ()
     allows_ceremonial_select: bool = False
 

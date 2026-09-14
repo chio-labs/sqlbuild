@@ -16,6 +16,7 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
     GeneratedRangeFallbackTestCase,
     InvalidNativeSqlResponseTestCase,
     NativeParseIsolationTestCase,
+    NativeSqlDependencyCacheTestCase,
     NativeSqlFindingTestCase,
     NativeSqlFixTestCase,
     NativeSqlReuseTestCase,
@@ -184,6 +185,58 @@ def test_given_identical_expanded_bodies_when_linting_then_native_analysis_is_re
     result: dict[Path, tuple] = native_sql.run_native_sql_lint(
         bodies=bodies,
         contents_by_path={path: "SELECT 1" for path in paths},
+        config=LintConfig(dialect="duckdb"),
+    )
+
+    assert result == {}
+    assert len(calls) == test_case.expected_call_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativeSqlDependencyCacheTestCase(
+            description="same SQL with different dependency identities",
+            expected_call_count=2,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_different_dependency_identities_when_linting_then_native_cache_is_separate(
+    test_case: NativeSqlDependencyCacheTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[str] = []
+
+    def lint_sql_json(request: str) -> str:
+        calls.append(request)
+        return '{"version":1,"diagnostics":[]}'
+
+    monkeypatch.setattr(native_sql._native, "lint_sql_json", lint_sql_json)
+    sql: str = "WITH imported_orders AS (SELECT * FROM __sqb_lint_0__) SELECT 1"
+    paths: tuple[Path, Path] = (tmp_path / "dependency.sql", tmp_path / "dynamic.sql")
+    bodies: tuple[LintBody, LintBody] = (
+        LintBody(
+            file_path=paths[0],
+            body_start=0,
+            body_end=len(sql),
+            lint_text=sql,
+            passes=(),
+            dependency_identifiers=("__sqb_lint_0__",),
+        ),
+        LintBody(
+            file_path=paths[1],
+            body_start=0,
+            body_end=len(sql),
+            lint_text=sql,
+            passes=(),
+        ),
+    )
+
+    result: dict[Path, tuple] = native_sql.run_native_sql_lint(
+        bodies=bodies,
+        contents_by_path={path: sql for path in paths},
         config=LintConfig(dialect="duckdb"),
     )
 

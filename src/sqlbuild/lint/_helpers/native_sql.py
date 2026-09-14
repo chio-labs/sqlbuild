@@ -69,6 +69,7 @@ type _NativeCacheKey = tuple[
     tuple[str, ...],
     tuple[str, ...],
     tuple[str, ...],
+    tuple[str, ...],
     bool,
 ]
 type _NativeResult = dict[str, Any] | NativeLintError
@@ -99,6 +100,8 @@ def run_native_sql_lint(
             payload["ignored_rules"] = list(config.ignored_native_rules)
         if body.external_identifiers:
             payload["external_identifiers"] = list(body.external_identifiers)
+        if body.dependency_identifiers:
+            payload["dependency_identifiers"] = list(body.dependency_identifiers)
         if body.externally_referenced_ctes:
             payload["externally_referenced_ctes"] = list(body.externally_referenced_ctes)
         if body.allows_ceremonial_select:
@@ -139,6 +142,7 @@ def _native_cache_key(*, body: LintBody, config: LintConfig) -> _NativeCacheKey:
         config.enabled_native_rules,
         config.ignored_native_rules,
         body.external_identifiers,
+        body.dependency_identifiers,
         body.externally_referenced_ctes,
         body.allows_ceremonial_select,
     )
