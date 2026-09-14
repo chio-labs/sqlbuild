@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.101.1](https://github.com/chio-labs/sqlbuild/compare/v0.101.0...v0.101.1) (2026-09-14)
+
+
+### Bug Fixes
+
+* ignore derived relations in scalar queries ([#662](https://github.com/chio-labs/sqlbuild/issues/662)) ([45ae3a4](https://github.com/chio-labs/sqlbuild/commit/45ae3a4920440c087fc35b458fa3a6b489ec00b8))
+
 ## [0.101.0](https://github.com/chio-labs/sqlbuild/compare/v0.100.8...v0.101.0) (2026-09-14)
 
 
