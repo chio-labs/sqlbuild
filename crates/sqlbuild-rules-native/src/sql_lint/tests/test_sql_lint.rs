@@ -158,8 +158,12 @@ fn given_sql_cases_when_linting_then_diagnostics_match() -> Result<(), String> {
         test_types::LintTestCase {
             description: "nested query anchors",
             sql: "SELECT * FROM (SELECT id FROM inner_items ORDER BY id LIMIT 1) safe JOIN outer_items ON TRUE OFFSET 2",
-            expected_codes: &["SQBRSQL003", "SQBRSQL004"],
-            expected_anchors: &[("SQBRSQL003", "JOIN"), ("SQBRSQL004", "OFFSET")],
+            expected_codes: &["SQBRSQL039", "SQBRSQL003", "SQBRSQL004"],
+            expected_anchors: &[
+                ("SQBRSQL039", "SELECT"),
+                ("SQBRSQL003", "JOIN"),
+                ("SQBRSQL004", "OFFSET"),
+            ],
         },
         test_types::LintTestCase {
             description: "safe NULL predicate",
@@ -230,14 +234,14 @@ fn given_sql_cases_when_linting_then_diagnostics_match() -> Result<(), String> {
         test_types::LintTestCase {
             description: "nested star outside set arms",
             sql: "SELECT id, name FROM (SELECT * FROM base) b UNION ALL SELECT id, name FROM other",
-            expected_codes: &[],
-            expected_anchors: &[],
+            expected_codes: &["SQBRSQL039"],
+            expected_anchors: &[("SQBRSQL039", "SELECT")],
         },
         test_types::LintTestCase {
             description: "nested star inside wrapped set arm",
             sql: "(SELECT id FROM (SELECT * FROM base) b) UNION ALL (SELECT id FROM other)",
-            expected_codes: &[],
-            expected_anchors: &[],
+            expected_codes: &["SQBRSQL039"],
+            expected_anchors: &[("SQBRSQL039", "SELECT")],
         },
     ];
 
@@ -432,6 +436,120 @@ fn given_plain_sql_rules_when_linting_then_project_context_is_not_required() -> 
             sql: "SELECT left_rows.id FROM left_rows CROSS JOIN right_rows",
             rule: "SQBRSQL038",
             expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "inline query after from",
+            sql: "SELECT derived.order_id FROM (SELECT order_id FROM orders) AS derived",
+            rule: "SQBRSQL039",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "inline query after join",
+            sql: "SELECT orders.order_id FROM orders INNER JOIN (SELECT order_id FROM shipments) AS shipped_orders ON orders.order_id = shipped_orders.order_id",
+            rule: "SQBRSQL039",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "inline values query after full outer join",
+            sql: "SELECT COALESCE(actual.order_id, expected.order_id) AS order_id FROM actual FULL OUTER JOIN (SELECT column1 AS order_id FROM VALUES (1), (2)) AS expected ON actual.order_id = expected.order_id",
+            rule: "SQBRSQL039",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "inline values relation after join",
+            sql: "SELECT orders.order_id FROM orders INNER JOIN (VALUES (1), (2)) AS expected(order_id) ON orders.order_id = expected.order_id",
+            rule: "SQBRSQL039",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "inline nested with query",
+            sql: "SELECT derived.order_id FROM (WITH imported_orders AS (SELECT order_id FROM orders) SELECT order_id FROM imported_orders) AS derived",
+            rule: "SQBRSQL039",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "redundantly parenthesized inline query",
+            sql: "SELECT derived.order_id FROM (((SELECT order_id FROM orders))) AS derived",
+            rule: "SQBRSQL039",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "comma-separated inline query",
+            sql: "SELECT orders.order_id FROM orders, (SELECT order_id FROM shipments) AS shipped_orders",
+            rule: "SQBRSQL039",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "scalar subquery",
+            sql: "SELECT (SELECT MAX(order_id) FROM orders) AS latest_order_id",
+            rule: "SQBRSQL039",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "scalar subquery after projection comma",
+            sql: "SELECT 1 AS constant_value, (SELECT MAX(order_id) FROM orders) AS latest_order_id",
+            rule: "SQBRSQL039",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "scalar subquery after expression from",
+            sql: "SELECT EXTRACT(YEAR FROM (SELECT MAX(order_date) FROM orders)) AS latest_order_year",
+            rule: "SQBRSQL039",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "scalar subquery after sibling projection subquery",
+            sql: "SELECT (SELECT MAX(order_id) FROM orders), COALESCE(NULL, (SELECT MAX(order_id) FROM orders))",
+            rule: "SQBRSQL039",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "expression from after sibling projection subquery",
+            sql: "SELECT (SELECT MAX(order_id) FROM orders), EXTRACT(YEAR FROM (SELECT MAX(order_date) FROM orders))",
+            rule: "SQBRSQL039",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "scalar subquery after order by comma",
+            sql: "SELECT order_id FROM orders ORDER BY order_id, (SELECT MAX(status_id) FROM statuses)",
+            rule: "SQBRSQL039",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "exists subquery",
+            sql: "SELECT order_id FROM orders WHERE EXISTS (SELECT 1 FROM shipments WHERE shipments.order_id = orders.order_id)",
+            rule: "SQBRSQL039",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "in subquery",
+            sql: "SELECT order_id FROM orders WHERE order_id IN (SELECT order_id FROM shipments)",
+            rule: "SQBRSQL039",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "named CTE relation",
+            sql: "WITH shipped_orders AS (SELECT order_id FROM shipments) SELECT orders.order_id FROM orders INNER JOIN shipped_orders ON orders.order_id = shipped_orders.order_id",
+            rule: "SQBRSQL039",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "lateral query relation",
+            sql: "SELECT orders.order_id FROM orders, LATERAL (SELECT orders.order_id) AS derived",
+            rule: "SQBRSQL039",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "apply query relation",
+            sql: "SELECT orders.order_id FROM orders CROSS APPLY (SELECT orders.order_id) AS derived",
+            rule: "SQBRSQL039",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "table function relation",
+            sql: "SELECT flattened.value FROM TABLE(FLATTEN(input => PARSE_JSON('[1]'))) AS flattened",
+            rule: "SQBRSQL039",
+            expected_count: 0,
         },
     ];
 

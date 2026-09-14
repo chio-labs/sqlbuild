@@ -16,6 +16,7 @@ pub(crate) struct QueryFacts {
     pub nested_ctes: Vec<Span>,
     pub recursive_ctes: Vec<Span>,
     pub invalid_comment_attachments: Vec<Span>,
+    pub inline_query_relations: Vec<Span>,
     pub additional: AdditionalQueryFacts,
 }
 

@@ -60,7 +60,7 @@ RULES_BUILT_IN_CODES: tuple[str, ...] = (
     "SQBRTEST202",
     "SQBRTEST301",
 )
-SQL_CODES: tuple[str, ...] = tuple(f"SQBRSQL{number:03d}" for number in range(1, 39))
+SQL_CODES: tuple[str, ...] = tuple(f"SQBRSQL{number:03d}" for number in range(1, 40))
 BUILT_IN_CODES: tuple[str, ...] = tuple(sorted((*RULES_BUILT_IN_CODES, *SQL_CODES)))
 STRUCTURE_CODES: tuple[str, ...] = (
     "SQBRMODEL101",
