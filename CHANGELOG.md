@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.100.7](https://github.com/chio-labs/sqlbuild/compare/v0.100.6...v0.100.7) (2026-09-14)
+
+
+### Bug Fixes
+
+* respect SQL resource semantics ([#656](https://github.com/chio-labs/sqlbuild/issues/656)) ([4f7e327](https://github.com/chio-labs/sqlbuild/commit/4f7e3274c37e0ba0e131e1841f163a6346680481))
+
 ## [0.100.6](https://github.com/chio-labs/sqlbuild/compare/v0.100.5...v0.100.6) (2026-09-14)
 
 
