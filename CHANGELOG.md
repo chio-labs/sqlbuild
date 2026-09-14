@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.101.0](https://github.com/chio-labs/sqlbuild/compare/v0.100.8...v0.101.0) (2026-09-14)
+
+
+### Features
+
+* require named query relations ([#660](https://github.com/chio-labs/sqlbuild/issues/660)) ([327a4fa](https://github.com/chio-labs/sqlbuild/commit/327a4fa8df234a24ab68de6aa2378c2aa4ab77b4))
+
 ## [0.100.8](https://github.com/chio-labs/sqlbuild/compare/v0.100.7...v0.100.8) (2026-09-14)
 
 
