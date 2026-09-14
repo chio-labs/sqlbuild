@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.100.8](https://github.com/chio-labs/sqlbuild/compare/v0.100.7...v0.100.8) (2026-09-14)
+
+
+### Bug Fixes
+
+* allow stars in dependency imports ([#658](https://github.com/chio-labs/sqlbuild/issues/658)) ([924ba63](https://github.com/chio-labs/sqlbuild/commit/924ba63efaaddbb78b85a491f8dcb45d240eeaa8))
+
 ## [0.100.7](https://github.com/chio-labs/sqlbuild/compare/v0.100.6...v0.100.7) (2026-09-14)
 
 
