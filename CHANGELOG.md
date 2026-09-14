@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.100.6](https://github.com/chio-labs/sqlbuild/compare/v0.100.5...v0.100.6) (2026-09-14)
+
+
+### Bug Fixes
+
+* allow ceremonial final CTE reads ([#654](https://github.com/chio-labs/sqlbuild/issues/654)) ([d620a74](https://github.com/chio-labs/sqlbuild/commit/d620a74bc960c8e4ebb0e0417a29272b45015e18))
+
 ## [0.100.5](https://github.com/chio-labs/sqlbuild/compare/v0.100.4...v0.100.5) (2026-09-13)
 
 
