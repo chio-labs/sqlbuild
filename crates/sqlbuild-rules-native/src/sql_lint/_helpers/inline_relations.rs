@@ -60,6 +60,14 @@ fn inline_query_relation_span(
 }
 
 fn is_query_relation_marker(context: &InlineRelationContext<'_>, marker_position: usize) -> bool {
+    is_query_relation_marker_base(context, marker_position)
+        && !query_or_ancestor_is_ignored(context, marker_position)
+}
+
+fn is_query_relation_marker_base(
+    context: &InlineRelationContext<'_>,
+    marker_position: usize,
+) -> bool {
     let marker = context.significant[marker_position];
     if !(is_query_from(context.tokens, marker)
         || matches!(
@@ -98,6 +106,78 @@ fn is_query_relation_marker(context: &InlineRelationContext<'_>, marker_position
     !query_clause[from_position + 1..].iter().any(|&index| {
         context.scopes[index] == scope && is_post_relation_clause(context.tokens[index].token_type)
     })
+}
+
+fn query_or_ancestor_is_ignored(
+    context: &InlineRelationContext<'_>,
+    marker_position: usize,
+) -> bool {
+    let marker = context.significant[marker_position];
+    let mut scope = context.scopes[marker];
+    while let Some(opening) = scope {
+        if scope_starts_query(context, opening) && query_scope_is_ignored(context, opening) {
+            return true;
+        }
+        scope = context.scopes[opening];
+    }
+    false
+}
+
+fn scope_starts_query(context: &InlineRelationContext<'_>, opening: usize) -> bool {
+    let Ok(mut position) = context.significant.binary_search(&opening) else {
+        return false;
+    };
+    position += 1;
+    let mut expected_depth = context.depths[opening] + 1;
+    loop {
+        let Some(&candidate) = context.significant.get(position) else {
+            return false;
+        };
+        if context.depths[candidate] != expected_depth {
+            return false;
+        }
+        if context.tokens[candidate].token_type == TokenType::LParen {
+            position += 1;
+            expected_depth += 1;
+            continue;
+        }
+        return is_query_start(&context.tokens[candidate]);
+    }
+}
+
+fn query_scope_is_ignored(context: &InlineRelationContext<'_>, opening: usize) -> bool {
+    let Ok(mut opening_position) = context.significant.binary_search(&opening) else {
+        return false;
+    };
+    while opening_position > 0
+        && context.tokens[context.significant[opening_position - 1]].token_type == TokenType::LParen
+    {
+        opening_position -= 1;
+    }
+    let Some(marker_position) = opening_position.checked_sub(1) else {
+        return false;
+    };
+    let marker = context.significant[marker_position];
+    match context.tokens[marker].token_type {
+        TokenType::Exists | TokenType::In => true,
+        TokenType::From | TokenType::Join | TokenType::As => false,
+        TokenType::Comma => !is_query_relation_marker_base(context, marker_position),
+        TokenType::Union
+        | TokenType::Intersect
+        | TokenType::Except
+        | TokenType::All
+        | TokenType::Distinct
+        | TokenType::Semicolon
+        | TokenType::Lateral => false,
+        _ if context.tokens[marker].text.eq_ignore_ascii_case("apply")
+            || context.tokens[marker]
+                .text
+                .eq_ignore_ascii_case("materialized") =>
+        {
+            false
+        }
+        _ => true,
+    }
 }
 
 fn is_query_start(token: &Token) -> bool {

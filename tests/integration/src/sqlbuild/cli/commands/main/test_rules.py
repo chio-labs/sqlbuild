@@ -195,6 +195,51 @@ FULL OUTER JOIN (
 
 @pytest.mark.parametrize(
     "test_case",
+    [RulesIntegrationTestCase("scalar query internals are excluded", 0, "SQBRSQL039")],
+    ids=lambda case: case.description,
+)
+def test_given_scalar_query_with_derived_relation_when_running_readability_rule_then_no_finding_is_reported(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "order_summary.sql"
+    model.parent.mkdir()
+    model.write_text(
+        """MODEL (description "Order summary");
+SELECT (
+  SELECT derived.order_id
+  FROM (
+    SELECT nested.order_id
+    FROM (SELECT 1 AS order_id) AS nested
+  ) AS derived
+) AS order_id
+""",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "rules",
+            "--json",
+            "run",
+            test_case.expected_code,
+        ]
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    captured: CaptureResult[str] = capsys.readouterr()
+    payload: dict[str, object] = json.loads(captured.out)
+    assert test_case.expected_code not in json.dumps(payload["findings"])
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [RulesIntegrationTestCase("SQL function arguments are not columns", 0, "SQBRSQL027")],
     ids=lambda case: case.description,
 )
