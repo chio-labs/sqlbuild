@@ -95,28 +95,30 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
             expected_original_texts=('__ref("@model")',),
         ),
         NeutralizeInterpolationTestCase(
-            description="SQLBuild table function and invocation become one sentinel",
+            description="SQLBuild table function keeps visible invocation arguments",
             body=(
                 'SELECT * FROM __table_fn("events")((SELECT ARRAY_AGG(event_id) FROM event_ids))'
             ),
-            expected_neutralized="SELECT * FROM __sqb_lint_0__",
-            expected_original_texts=(
-                '__table_fn("events")((SELECT ARRAY_AGG(event_id) FROM event_ids))',
+            expected_neutralized=(
+                "SELECT * FROM __sqb_lint_0__((SELECT ARRAY_AGG(event_id) FROM event_ids))"
             ),
+            expected_original_texts=('__table_fn("events")',),
         ),
         NeutralizeInterpolationTestCase(
             description="escaped SQL quote does not hide a later table function",
             body="SELECT 'can''t'; SELECT * FROM __table_fn(\"events\")((SELECT 1))",
-            expected_neutralized="SELECT 'can''t'; SELECT * FROM __sqb_lint_0__",
-            expected_original_texts=('__table_fn("events")((SELECT 1))',),
+            expected_neutralized="SELECT 'can''t'; SELECT * FROM __sqb_lint_0__((SELECT 1))",
+            expected_original_texts=('__table_fn("events")',),
         ),
         NeutralizeInterpolationTestCase(
             description="apostrophe in comment does not hide a later table function",
             body=(
                 '/* Snowflake\'s table function */\nSELECT * FROM __table_fn("events")((SELECT 1))'
             ),
-            expected_neutralized=("/* Snowflake's table function */\nSELECT * FROM __sqb_lint_0__"),
-            expected_original_texts=('__table_fn("events")((SELECT 1))',),
+            expected_neutralized=(
+                "/* Snowflake's table function */\nSELECT * FROM __sqb_lint_0__((SELECT 1))"
+            ),
+            expected_original_texts=('__table_fn("events")',),
         ),
         NeutralizeInterpolationTestCase(
             description="SQLBuild fixture CTE name remains ordinary SQL",
@@ -251,6 +253,21 @@ def test_given_neutralized_offset_when_mapping_then_authored_offset_matches(
             body="SELECT expression, @expression FROM t",
             fixed_neutralized="SELECT expression, __sqb_lint_0__ FROM t",
             expected_restored="SELECT expression, @expression FROM t",
+        ),
+        RestoreInterpolationTestCase(
+            description="formatter-normalized table function sentinel restores case insensitively",
+            body=(
+                "SELECT expanded.order_id FROM orders CROSS JOIN "
+                '__table_fn("expand_order")(orders.order_id) AS expanded'
+            ),
+            fixed_neutralized=(
+                "SELECT expanded.order_id FROM orders CROSS JOIN "
+                "__SQB_LINT_0__(orders.order_id) AS expanded"
+            ),
+            expected_restored=(
+                "SELECT expanded.order_id FROM orders CROSS JOIN "
+                '__table_fn("expand_order")(orders.order_id) AS expanded'
+            ),
         ),
     ],
     ids=lambda case: case.description,

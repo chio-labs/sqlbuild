@@ -40,7 +40,6 @@ _CONTEXT_SENTINEL_TEMPLATE: str = "__sqlbuild_context_parameter_{index}__"
 _LINE_COMMENT_START: str = "--"
 _BLOCK_COMMENT_START: str = "/*"
 _BLOCK_COMMENT_END: str = "*/"
-_TABLE_FUNCTION_INTRINSIC_NAME: str = "__table_fn"
 _SQLBUILD_FUNCTION_PATTERN: str = "|".join(
     re.escape(name) for name in sorted(_SQLBUILD_FUNCTION_NAMES)
 )
@@ -176,14 +175,18 @@ def restore_interpolation(*, fixed: str, sites: tuple[InterpolationSite, ...]) -
     restored: str = fixed
     site: InterpolationSite
     for site in sites:
-        occurrences: int = restored.count(site.sentinel)
+        pattern: re.Pattern[str] = re.compile(re.escape(site.sentinel), re.IGNORECASE)
+        occurrences: int = len(tuple(pattern.finditer(restored)))
         if occurrences != EXPECTED_SENTINEL_OCCURRENCES:
             raise InterpolationRestorationError(
                 f"formatted SQL contains {occurrences} occurrences of sentinel "
                 f"'{site.sentinel}' standing in for '{site.original_text}'; expected "
                 f"exactly {EXPECTED_SENTINEL_OCCURRENCES}"
             )
-        restored = restored.replace(site.sentinel, site.original_text)
+        restored = pattern.sub(
+            lambda _match, original_text=site.original_text: original_text,
+            restored,
+        )
     return restored
 
 
@@ -247,13 +250,6 @@ def _sqlbuild_function_site_end(*, body: str, start: int) -> int | None:
     if name_end >= len(body) or body[name_end] != OPENING_PAREN_CHARACTER:
         return None
     call_end: int | None = _matching_paren_end(body=body, opening_index=name_end)
-    if call_end is None or body[start:name_end] != _TABLE_FUNCTION_INTRINSIC_NAME:
-        return call_end
-    arguments_start: int = call_end
-    while arguments_start < len(body) and body[arguments_start].isspace():
-        arguments_start += 1
-    if arguments_start < len(body) and body[arguments_start] == OPENING_PAREN_CHARACTER:
-        return _matching_paren_end(body=body, opening_index=arguments_start)
     return call_end
 
 

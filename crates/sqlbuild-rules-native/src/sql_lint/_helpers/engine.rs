@@ -14,6 +14,7 @@ use crate::sql_lint::models::{
 };
 
 use crate::sql_lint::_helpers::additional::collect_additional_facts;
+use crate::sql_lint::_helpers::terminal_shape::collect_terminal_shape_facts;
 
 const NULL_COMPARISON: LintRuleMetadata = LintRuleMetadata {
     code: "SQBRSQL001",
@@ -416,7 +417,8 @@ fn build_facts(
     sql: &str,
     options: &FactBuildOptions<'_>,
 ) -> QueryFacts {
-    let mut facts: QueryFacts = collect_token_query_facts(tokens, sql);
+    let mut facts: QueryFacts =
+        collect_token_query_facts(tokens, sql, options.allows_ceremonial_select);
     facts.null_comparisons = null_comparison_spans(tokens);
     facts.additional = collect_additional_facts(
         tokens,
@@ -431,10 +433,13 @@ fn build_facts(
     facts
 }
 
-fn collect_token_query_facts(tokens: &[Token], sql: &str) -> QueryFacts {
-    let mut facts = QueryFacts::default();
+fn collect_token_query_facts(
+    tokens: &[Token],
+    sql: &str,
+    allows_ceremonial_select: bool,
+) -> QueryFacts {
     let depths = token_depths(tokens);
-    facts = collect_rule_migration_facts(tokens, &depths, sql, facts);
+    let mut facts = collect_rule_migration_facts(tokens, &depths, sql, allows_ceremonial_select);
     for (select_index, token) in tokens.iter().enumerate() {
         if token.token_type != TokenType::Select {
             continue;
@@ -471,8 +476,9 @@ fn collect_rule_migration_facts(
     tokens: &[Token],
     depths: &[usize],
     sql: &str,
-    mut facts: QueryFacts,
+    allows_ceremonial_select: bool,
 ) -> QueryFacts {
+    let mut facts = QueryFacts::default();
     let significant: Vec<usize> = (0..tokens.len())
         .filter(|&index| !is_layout(&tokens[index]) && !is_comment(&tokens[index]))
         .collect();
@@ -500,106 +506,13 @@ fn collect_rule_migration_facts(
     }
 
     let (cte_only_bodies, terminal_selects) =
-        collect_terminal_shape_facts(tokens, depths, &significant);
+        collect_terminal_shape_facts(tokens, depths, &significant, allows_ceremonial_select);
     facts.cte_only_bodies.extend(cte_only_bodies);
     facts.terminal_selects.extend(terminal_selects);
     facts
         .invalid_comment_attachments
         .extend(collect_comment_attachment_facts(tokens, sql));
     facts
-}
-
-fn collect_terminal_shape_facts(
-    tokens: &[Token],
-    depths: &[usize],
-    significant: &[usize],
-) -> (Vec<Span>, Vec<Span>) {
-    let mut cte_only_bodies: Vec<Span> = Vec::new();
-    let mut terminal_selects: Vec<Span> = Vec::new();
-    let Some(root_select_position) = significant
-        .iter()
-        .rposition(|&index| depths[index] == 0 && tokens[index].token_type == TokenType::Select)
-    else {
-        return (cte_only_bodies, terminal_selects);
-    };
-    let root_select = significant[root_select_position];
-    let has_top_level_with = significant[..root_select_position]
-        .iter()
-        .any(|&index| depths[index] == 0 && tokens[index].text.eq_ignore_ascii_case("with"));
-    let tail: Vec<usize> = significant[root_select_position + 1..]
-        .iter()
-        .copied()
-        .take_while(|&index| tokens[index].token_type != TokenType::Semicolon)
-        .filter(|&index| depths[index] == 0)
-        .collect();
-    let has_terminal_logic = tail.iter().any(|&index| {
-        matches!(
-            tokens[index].token_type,
-            TokenType::Join
-                | TokenType::Where
-                | TokenType::Group
-                | TokenType::Having
-                | TokenType::Qualify
-                | TokenType::Order
-                | TokenType::Limit
-                | TokenType::Offset
-                | TokenType::Union
-                | TokenType::Intersect
-                | TokenType::Except
-        )
-    });
-    if !has_top_level_with || has_terminal_logic {
-        cte_only_bodies.push(tokens[root_select].span);
-    }
-    if !has_top_level_with {
-        return (cte_only_bodies, terminal_selects);
-    }
-
-    let final_cte = significant[..root_select_position]
-        .windows(3)
-        .filter(|window| {
-            depths[window[0]] == 0
-                && is_lint_identifier(&tokens[window[0]])
-                && tokens[window[1]].token_type == TokenType::As
-                && tokens[window[2]].token_type == TokenType::LParen
-        })
-        .map(|window| tokens[window[0]].text.to_ascii_lowercase())
-        .next_back();
-    let from_position = tail.iter().position(|&index| is_query_from(tokens, index));
-    let terminal_is_plain = from_position.is_some_and(|position| {
-        let projection = &tail[..position];
-        let relation = tail.get(position + 1);
-        let remainder = &tail[position.saturating_add(2)..];
-        !projection.is_empty()
-            && plain_terminal_projection(tokens, projection)
-            && relation.is_some_and(|&index| {
-                final_cte
-                    .as_ref()
-                    .is_some_and(|name| tokens[index].text.eq_ignore_ascii_case(name))
-            })
-            && remainder.is_empty()
-    });
-    if !terminal_is_plain {
-        terminal_selects.push(tokens[root_select].span);
-    }
-    (cte_only_bodies, terminal_selects)
-}
-
-fn plain_terminal_projection(tokens: &[Token], projection: &[usize]) -> bool {
-    projection.iter().all(|&index| {
-        is_lint_identifier(&tokens[index])
-            || matches!(
-                tokens[index].token_type,
-                TokenType::Star | TokenType::Dot | TokenType::Comma | TokenType::As
-            )
-    })
-}
-
-fn is_lint_identifier(token: &Token) -> bool {
-    matches!(
-        token.token_type,
-        TokenType::Identifier | TokenType::QuotedIdentifier | TokenType::Var
-    )
 }
 
 fn collect_comment_attachment_facts(tokens: &[Token], sql: &str) -> Vec<Span> {

@@ -14,6 +14,7 @@ from sqlbuild.compiler.compile._helpers.sql_tests.core import (
     _skip_ignorable,
     _try_consume_keyword,
     _validate_ceremonial_select,
+    validate_independent_expected_and_assertion_ctes,
 )
 from sqlbuild.compiler.compile.constants import (
     ASSERT_SCENARIO_CTE_PREFIX,
@@ -127,8 +128,6 @@ def _extract_sql_scenario_ctes_with_scanner(
     _validate_ceremonial_select(
         sql=sql,
         start=index,
-        final_cte_name=ctes[-1].name,
-        final_cte_sql=ctes[-1].sql_body,
         file_label=file_label,
     )
     return tuple(ctes)
@@ -137,6 +136,13 @@ def _extract_sql_scenario_ctes_with_scanner(
 def _classify_sql_scenario_ctes(
     *, ctes: tuple[CompileSqlScenarioCte, ...], file_label: str
 ) -> CompileSqlScenarioCtes:
+    validate_independent_expected_and_assertion_ctes(
+        ctes=ctes,
+        expected_prefix=EXPECTED_TEST_CTE_PREFIX,
+        assertion_prefix=ASSERT_SCENARIO_CTE_PREFIX,
+        file_label=file_label,
+        context_label="SQL scenario",
+    )
     authored_ctes: list[CompileSqlScenarioCte] = []
     expected_ctes: list[CompileSqlScenarioCte] = []
     assertion_ctes: list[CompileSqlScenarioCte] = []

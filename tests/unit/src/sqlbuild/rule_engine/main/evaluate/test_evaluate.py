@@ -307,6 +307,21 @@ from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_proj
             ),
         ),
         PolicyEvaluationTestCase(
+            description="function and seed references are not source tokens",
+            model_name="sales__stg__orders__partner",
+            relative_path="models/staging/sales__stg__orders__partner.sql",
+            sql="WITH orders AS (SELECT id FROM source_orders) SELECT id FROM orders",
+            config_values={"materialized": "table", "contract": "enforced"},
+            select=("SQBRPROJECT103",),
+            expected_codes=(),
+            rules_config=RulesConfig(approved_source_tokens=("partner",)),
+            references=(
+                CompileSqlReference(ref_kind="seed", ref_name="order_statuses"),
+                CompileSqlReference(ref_kind="udf", ref_name="normalize_quantity"),
+                CompileSqlReference(ref_kind="table_fn", ref_name="expand_order"),
+            ),
+        ),
+        PolicyEvaluationTestCase(
             description="lone star exemption passes",
             model_name="commerce__mart_v__orders",
             relative_path="models/mart/commerce__mart_v__orders.sql",

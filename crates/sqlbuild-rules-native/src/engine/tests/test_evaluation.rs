@@ -80,6 +80,96 @@ fn given_scoped_suppression_when_evaluating_native_fault_then_returns_no_faults(
 }
 
 #[test]
+fn given_declaration_only_project_when_evaluating_project_rule_then_rule_still_runs()
+-> Result<(), String> {
+    let test_cases = [test_types::NativeEvaluationTestCase {
+        description: "duplicate enum rule runs without a model anchor",
+        config: json!({
+            "select": ["SQBRDECLARATION201"],
+            "cache": {"enabled": false}
+        }),
+        expected_faults: json!(["SQBRDECLARATION201"]),
+    }];
+    for test_case in test_cases {
+        let project_dir = TempDir::new().map_err(|error| error.to_string())?;
+        let mut request: Value =
+            serde_json::from_str(&helpers::request(&project_dir, &test_case.config))
+                .map_err(|error| error.to_string())?;
+        request["models"] = json!([]);
+        request["public_enums"] = json!([
+            {
+                "name": "order_status",
+                "relative_path": "enums/orders/order_status.sql",
+                "members": [{"name": "OPEN", "value": "open"}]
+            },
+            {
+                "name": "support_status",
+                "relative_path": "enums/support/support_status.sql",
+                "members": [{"name": "OPEN", "value": "open"}]
+            }
+        ]);
+        let result: Value = serde_json::from_str(&evaluate_json(&request.to_string())?)
+            .map_err(|error| error.to_string())?;
+        let actual_codes = Value::Array(
+            result["faults"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|fault| fault["code"].clone())
+                .collect(),
+        );
+        assert_eq!(
+            actual_codes, test_case.expected_faults,
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn given_scoped_and_global_declarations_when_evaluating_domain_rule_then_only_global_is_checked()
+-> Result<(), String> {
+    let test_cases = [
+        test_types::DeclarationScopeTestCase {
+            description: "local test declaration is outside global domain policy",
+            scope: "local",
+            path: "tests/unit/orders/_sqlbuild/enums/status.sql",
+            expected_fault_count: 0,
+        },
+        test_types::DeclarationScopeTestCase {
+            description: "global declaration without domain remains in policy",
+            scope: "global",
+            path: "enums/status.sql",
+            expected_fault_count: 1,
+        },
+    ];
+    for test_case in test_cases {
+        let project_dir = TempDir::new().map_err(|error| error.to_string())?;
+        let config = json!({
+            "select": ["SQBRDECLARATION301"],
+            "domains": ["orders"],
+            "cache": {"enabled": false}
+        });
+        let mut request: Value = serde_json::from_str(&helpers::request(&project_dir, &config))
+            .map_err(|error| error.to_string())?;
+        request["models"] = json!([]);
+        request["scope_index"] = helpers::scope_index();
+        request["scope_index"]["declarations"][0]["scope"] = json!(test_case.scope);
+        request["scope_index"]["declarations"][0]["path"] = json!(test_case.path);
+        let result: Value = serde_json::from_str(&evaluate_json(&request.to_string())?)
+            .map_err(|error| error.to_string())?;
+        assert_eq!(
+            result["faults"].as_array().map_or(0, Vec::len),
+            test_case.expected_fault_count,
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn given_snowflake_expression_when_evaluating_rules_then_uses_project_dialect() -> Result<(), String>
 {
     let project_dir = TempDir::new().map_err(|error| error.to_string())?;

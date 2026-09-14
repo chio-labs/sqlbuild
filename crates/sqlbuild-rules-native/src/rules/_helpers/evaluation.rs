@@ -1,9 +1,11 @@
 use crate::constants::{
     BOOLEAN_TYPE, DATE_TYPE, DECLARATION_DOMAIN_COMPONENTS, ENFORCED_CONTRACT, NEGATION_OPERATOR,
-    REFERENCE_KIND, TIMESTAMP_TYPE, VIEW_MATERIALIZATION,
+    REFERENCE_KIND, SOURCE_REFERENCE_KIND, TIMESTAMP_TYPE, VIEW_MATERIALIZATION,
 };
 use crate::models::{Declaration, EvaluateRequest, Fault, Model, RuleMetadata, RulesConfig};
-use crate::rules::models::{FaultCollector, ModelEvaluationRequest, ResolvedThresholdOverride};
+use crate::rules::models::{
+    FaultCollector, ModelEvaluationRequest, ProjectEvaluationRequest, ResolvedThresholdOverride,
+};
 use globset::{Glob, GlobSetBuilder};
 use sqlparser::ast::{
     BinaryOperator, Expr, GroupByExpr, JoinConstraint, JoinOperator, Query, Select, SelectItem,
@@ -105,22 +107,10 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
         config,
         selected,
         request,
-        is_anchor,
         threshold_overrides,
     } = request;
     let metadata = |code: &str| selected.get(code).copied();
     let faults = FaultCollector::default();
-    if is_anchor {
-        if let Some(rule) = metadata("SQBRDECLARATION201") {
-            duplicate_enums(request, rule, &faults);
-        }
-        if let Some(rule) = metadata("SQBRDECLARATION301") {
-            declaration_domain_placement(request, config, rule, &faults);
-        }
-        if let Some(rule) = metadata("SQBRTEST301") {
-            custom_rule_test_coverage(request, config, (selected, rule), &faults);
-        }
-    }
     if !requires_parsed_model(selected) {
         return Ok(faults.into_inner());
     }
@@ -188,6 +178,25 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
     });
 
     Ok(faults.into_inner())
+}
+
+pub(crate) fn evaluate_project_rules(request: &ProjectEvaluationRequest<'_>) -> Vec<Fault> {
+    let faults = FaultCollector::default();
+    if let Some(rule) = request.selected.get("SQBRDECLARATION201") {
+        duplicate_enums(request.request, rule, &faults);
+    }
+    if let Some(rule) = request.selected.get("SQBRDECLARATION301") {
+        declaration_domain_placement(request.request, &request.request.config, rule, &faults);
+    }
+    if let Some(rule) = request.selected.get("SQBRTEST301") {
+        custom_rule_test_coverage(
+            request.request,
+            &request.request.config,
+            (request.selected, rule),
+            &faults,
+        );
+    }
+    faults.into_inner()
 }
 
 fn requires_parsed_model(selected: &BTreeMap<String, &RuleMetadata>) -> bool {
@@ -1164,7 +1173,7 @@ fn source_token_rule(
             .model
             .references
             .iter()
-            .filter(|reference| reference.ref_kind != REFERENCE_KIND)
+            .filter(|reference| reference.ref_kind == SOURCE_REFERENCE_KIND)
             .map(|reference| reference.ref_name.clone()),
     );
     let mut retired_token: Option<(&String, &String)> = None;
@@ -1439,12 +1448,36 @@ fn declaration_domain_placement(
     rule: &RuleMetadata,
     faults: &FaultCollector,
 ) {
-    for declaration in request
-        .public_enums
-        .iter()
-        .chain(request.public_constants.iter())
-    {
-        let parts: Vec<_> = declaration.relative_path.split('/').collect();
+    let declarations: Vec<(&str, &str)> = if request.scope_index.completeness.placement {
+        request
+            .scope_index
+            .declarations
+            .iter()
+            .filter(|declaration| {
+                matches!(declaration.scope, crate::models::ScopeKind::Global)
+                    && matches!(
+                        declaration.kind,
+                        crate::models::DeclarationKind::Enum
+                            | crate::models::DeclarationKind::Constant
+                    )
+            })
+            .map(|declaration| (declaration.name.as_str(), declaration.path.as_str()))
+            .collect()
+    } else {
+        request
+            .public_enums
+            .iter()
+            .chain(request.public_constants.iter())
+            .map(|declaration| {
+                (
+                    declaration.name.as_str(),
+                    declaration.relative_path.as_str(),
+                )
+            })
+            .collect()
+    };
+    for (name, path) in declarations {
+        let parts: Vec<_> = path.split('/').collect();
         let domain = (parts.len() >= DECLARATION_DOMAIN_COMPONENTS).then(|| parts[1]);
         if domain.is_some_and(|value| {
             config.domains.is_empty() || config.domains.contains(&value.into())
@@ -1458,11 +1491,11 @@ fn declaration_domain_placement(
         };
         let root = parts.first().copied().unwrap_or("declarations");
         faults.push(path_fault(
-            &declaration.relative_path,
+            path,
             rule,
             format!(
                 "public declaration {:?} has no configured domain folder",
-                declaration.name
+                name
             ),
             format!("Move this declaration under {root}/{expected}/ at this file path."),
         ));

@@ -6,6 +6,13 @@ pub(crate) struct NativeEvaluationTestCase {
     pub(crate) expected_faults: Value,
 }
 
+pub(crate) struct DeclarationScopeTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) scope: &'static str,
+    pub(crate) path: &'static str,
+    pub(crate) expected_fault_count: usize,
+}
+
 pub(crate) struct DialectEvaluationTestCase {
     pub(crate) description: &'static str,
     pub(crate) dialect: &'static str,

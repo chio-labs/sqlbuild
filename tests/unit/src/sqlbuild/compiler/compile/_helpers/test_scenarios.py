@@ -119,30 +119,14 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
             expected_assertion_names=(),
         ),
         ExtractSqlScenarioCtesTestCase(
-            description="allows ceremonial select in final scenario result cte",
-            sql="""
-        WITH
-        __ref__orders_base AS (SELECT 1 AS order_id),
-        __expected__fact_orders AS (SELECT 1 AS order_id),
-        scenario_result AS (SELECT 1)
-        SELECT * FROM scenario_result
-        """.strip(),
-            expected_authored_cte_names=("__ref__orders_base", "scenario_result"),
-            expected_source_fixture_names=(),
-            expected_ref_fixture_names=("orders_base",),
-            expected_expected_model_names=("fact_orders",),
-            expected_assertion_names=(),
-        ),
-        ExtractSqlScenarioCtesTestCase(
             description="extracts scenario ctes with sql_analysis fallback syntax",
             sql="""
         WITH
         "__source__raw__orders" AS MATERIALIZED (SELECT 1 AS order_id),
-        "__expected__daily_revenue" AS (SELECT order_id FROM "__source__raw__orders"),
-        scenario_result AS (SELECT 1)
-        SELECT * FROM scenario_result
+        "__expected__daily_revenue" AS (SELECT order_id FROM "__source__raw__orders")
+        SELECT 1
         """.strip(),
-            expected_authored_cte_names=("__source__raw__orders", "scenario_result"),
+            expected_authored_cte_names=("__source__raw__orders",),
             expected_source_fixture_names=("raw__orders",),
             expected_ref_fixture_names=(),
             expected_seed_fixture_names=(),
@@ -175,6 +159,45 @@ def test_given_sql_scenario_cte_variants_when_extracting_then_it_returns_expecte
 @pytest.mark.parametrize(
     "test_case",
     [
+        ExtractSqlScenarioCtesErrorTestCase(
+            description="raises when ceremonial select is wrapped in a final result cte",
+            sql="""
+        WITH
+        __ref__orders_base AS (SELECT 1 AS order_id),
+        __expected__fact_orders AS (SELECT 1 AS order_id),
+        scenario_result AS (SELECT 1)
+        SELECT * FROM scenario_result
+        """.strip(),
+            expected_error_fragment="must end with a ceremonial top-level `SELECT 1`",
+        ),
+        ExtractSqlScenarioCtesErrorTestCase(
+            description="raises when assertion depends directly on expected result",
+            sql="""
+        WITH
+        __source__raw__orders AS (SELECT 1 AS order_id),
+        __expected__orders AS (SELECT 1 AS order_id),
+        __assert__expected_is_nonempty AS (SELECT * FROM __expected__orders)
+        SELECT 1
+        """.strip(),
+            expected_error_fragment=(
+                "'__assert__expected_is_nonempty' must not depend on '__expected__orders'"
+            ),
+        ),
+        ExtractSqlScenarioCtesErrorTestCase(
+            description="raises when expected result depends indirectly on assertion",
+            sql="""
+        WITH
+        __source__raw__orders AS (SELECT 1 AS order_id),
+        __assert__positive_order_id AS (SELECT 1 AS order_id WHERE order_id < 1),
+        assertion_helper AS (SELECT * FROM __assert__positive_order_id),
+        __expected__orders AS (SELECT * FROM assertion_helper)
+        SELECT 1
+        """.strip(),
+            expected_error_fragment=(
+                "'__expected__orders' must not depend on "
+                "'__assert__positive_order_id' through 'assertion_helper'"
+            ),
+        ),
         ExtractSqlScenarioCtesErrorTestCase(
             description="raises when scenario has no fixture ctes",
             sql="""

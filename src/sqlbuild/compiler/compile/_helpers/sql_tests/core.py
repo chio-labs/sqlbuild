@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Any
 
 from sqlbuild.compiler.compile._helpers.analysis.ctes import (
     extract_top_level_ctes_with_sql_analysis,
@@ -43,6 +44,7 @@ from sqlbuild.compiler.compile.models import (
     CompileDirectLogicSqlTestCtes,
     CompileModelSqlTestCtes,
     CompileSqlReference,
+    CompileSqlScenarioCte,
     CompileSqlTestCte,
     CompileSqlTestCtes,
 )
@@ -58,8 +60,11 @@ from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_com
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import (
     skip_quoted_text,
 )
+from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 
 _CONTEXT: str = "SQL test"
+_DIRECT_DEPENDENCY_PATH_LENGTH: int = 2
+_SQL_IDENTIFIER_QUOTE_TOKENS: frozenset[str] = frozenset({'"', "`"})
 
 
 def extract_sql_test_ctes(
@@ -187,8 +192,6 @@ def _extract_sql_test_ctes_with_scanner(
     _validate_ceremonial_select(
         sql=sql,
         start=index,
-        final_cte_name=ctes[-1].name,
-        final_cte_sql=ctes[-1].sql_body,
         file_label=file_label,
     )
     return tuple(ctes)
@@ -376,6 +379,13 @@ def _classify_table_fn_sql_test_ctes(
 def _classify_model_sql_test_ctes(
     *, ctes: tuple[CompileSqlTestCte, ...], file_label: str
 ) -> CompileSqlTestCtes:
+    validate_independent_expected_and_assertion_ctes(
+        ctes=ctes,
+        expected_prefix=EXPECTED_TEST_CTE_PREFIX,
+        assertion_prefix=ASSERT_TEST_CTE_PREFIX,
+        file_label=file_label,
+        context_label="SQL test",
+    )
     authored_ctes: list[CompileSqlTestCte] = []
     macro_mocks: dict[str, str] = {}
     mock_model_names: list[str] = []
@@ -957,15 +967,9 @@ def _validate_ceremonial_select(
     *,
     sql: str,
     start: int,
-    final_cte_name: str,
-    final_cte_sql: str,
     file_label: str,
 ) -> None:
     if _is_ceremonial_select_statement(sql=sql, start=start):
-        return
-    if _is_plain_final_cte_read(sql=sql, start=start, cte_name=final_cte_name) and (
-        _is_ceremonial_select_statement(sql=final_cte_sql, start=0)
-    ):
         return
     raise CompileInputError(_ceremonial_select_error(file_label))
 
@@ -982,28 +986,6 @@ def _is_ceremonial_select_statement(*, sql: str, start: int) -> bool:
     return _is_statement_end(sql=sql, start=index)
 
 
-def _is_plain_final_cte_read(*, sql: str, start: int, cte_name: str) -> bool:
-    index: int = _skip_ignorable(sql=sql, start=start)
-    select_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="SELECT")
-    if select_end is None:
-        return False
-    index = _skip_ignorable(sql=sql, start=select_end)
-    if index >= len(sql) or sql[index] != SQL_WILDCARD_TOKEN:
-        return False
-    index = _skip_ignorable(sql=sql, start=index + 1)
-    from_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="FROM")
-    if from_end is None:
-        return False
-    index = _skip_ignorable(sql=sql, start=from_end)
-    if index >= len(sql) or not is_identifier_start(sql[index]):
-        return False
-    relation_name, index = _read_identifier(sql=sql, start=index, file_label="terminal SELECT")
-    if relation_name.casefold() != cte_name.casefold():
-        return False
-    index = _skip_ignorable(sql=sql, start=index)
-    return _is_statement_end(sql=sql, start=index)
-
-
 def _is_statement_end(*, sql: str, start: int) -> bool:
     index: int = start
     if index < len(sql) and sql[index] == SQL_STATEMENT_TERMINATOR_TOKEN:
@@ -1012,10 +994,184 @@ def _is_statement_end(*, sql: str, start: int) -> bool:
 
 
 def _ceremonial_select_error(file_label: str) -> str:
-    return (
-        f"SQL test '{file_label}' must end with a ceremonial top-level `SELECT 1` after its CTEs "
-        "or a plain terminal read from a final `SELECT 1` CTE"
+    return f"SQL test '{file_label}' must end with a ceremonial top-level `SELECT 1` after its CTEs"
+
+
+def validate_independent_expected_and_assertion_ctes(
+    *,
+    ctes: tuple[CompileSqlTestCte | CompileSqlScenarioCte, ...],
+    expected_prefix: str,
+    assertion_prefix: str,
+    file_label: str,
+    context_label: str,
+) -> None:
+    """Reject direct and transitive dependencies between expected and assertion checks."""
+
+    names_by_key: dict[str, str] = {cte.name.casefold(): cte.name for cte in ctes}
+    expected_keys: frozenset[str] = frozenset(
+        key for key, name in names_by_key.items() if name.startswith(expected_prefix)
     )
+    assertion_keys: frozenset[str] = frozenset(
+        key for key, name in names_by_key.items() if name.startswith(assertion_prefix)
+    )
+    for cte in ctes:
+        cte_key: str = cte.name.casefold()
+        prohibited_prefix: str | None = None
+        prohibited_label: str | None = None
+        if cte_key in expected_keys:
+            prohibited_prefix = assertion_prefix
+            prohibited_label = "assertion"
+        elif cte_key in assertion_keys:
+            prohibited_prefix = expected_prefix
+            prohibited_label = "expected result"
+        if prohibited_prefix is None or prohibited_label is None:
+            continue
+        nested_name: str | None = next(
+            (
+                name
+                for name in _defined_cte_names(sql=cte.sql_body)
+                if name.startswith(prohibited_prefix)
+            ),
+            None,
+        )
+        if nested_name is not None:
+            raise CompileInputError(
+                f"{context_label} '{file_label}' check CTE '{cte.name}' must not define "
+                f"{prohibited_label} CTE '{nested_name}'; expected results and assertions must "
+                "be independent"
+            )
+
+    if not expected_keys or not assertion_keys:
+        return
+
+    dependencies: dict[str, tuple[str, ...]] = {
+        cte.name.casefold(): _known_cte_references(
+            sql=cte.sql_body,
+            names_by_key=names_by_key,
+        )
+        for cte in ctes
+    }
+    for origins, prohibited in (
+        (expected_keys, assertion_keys),
+        (assertion_keys, expected_keys),
+    ):
+        for origin in sorted(origins):
+            path: tuple[str, ...] | None = _dependency_path(
+                origin=origin,
+                prohibited=prohibited,
+                dependencies=dependencies,
+            )
+            if path is None:
+                continue
+            rendered_path: tuple[str, ...] = tuple(names_by_key[key] for key in path)
+            through: str = (
+                " through " + " -> ".join(f"'{name}'" for name in rendered_path[1:-1])
+                if len(rendered_path) > _DIRECT_DEPENDENCY_PATH_LENGTH
+                else ""
+            )
+            raise CompileInputError(
+                f"{context_label} '{file_label}' check CTE '{rendered_path[0]}' must not depend "
+                f"on '{rendered_path[-1]}'{through}; expected results and assertions must be "
+                "independent"
+            )
+
+
+def _defined_cte_names(*, sql: str) -> tuple[str, ...]:
+    polyglot_module: Any = import_polyglot_sql()
+    try:
+        parsed: Any = polyglot_module.parse_one(sql, dialect="generic")
+    except polyglot_module.PolyglotError:
+        return ()
+
+    def collect(value: Any) -> tuple[str, ...]:
+        names: list[str] = []
+        if isinstance(value, dict):
+            ctes: Any = value.get("ctes")
+            if isinstance(ctes, list):
+                for cte in ctes:
+                    if not isinstance(cte, dict):
+                        continue
+                    alias: Any = cte.get("alias")
+                    if not isinstance(alias, dict):
+                        continue
+                    name: Any = alias.get("name")
+                    if isinstance(name, str) and name not in names:
+                        names.append(name)
+            for child in value.values():
+                names.extend(collect(child))
+        elif isinstance(value, list):
+            for child in value:
+                names.extend(collect(child))
+        return tuple(dict.fromkeys(names))
+
+    return collect(parsed.to_dict())
+
+
+def _known_cte_references(*, sql: str, names_by_key: dict[str, str]) -> tuple[str, ...]:
+    polyglot_module: Any = import_polyglot_sql()
+    try:
+        parsed: Any = polyglot_module.parse_one(sql, dialect="generic")
+    except polyglot_module.PolyglotError:
+        return _known_cte_identifier_references(sql=sql, names_by_key=names_by_key)
+    references: list[str] = []
+    for table in parsed.find_all("table"):
+        key: str = str(getattr(table, "name", "") or "").casefold()
+        if key in names_by_key and key not in references:
+            references.append(key)
+    return tuple(references)
+
+
+def _known_cte_identifier_references(*, sql: str, names_by_key: dict[str, str]) -> tuple[str, ...]:
+    references: list[str] = []
+    index: int = 0
+    while index < len(sql):
+        if sql.startswith("--", index):
+            index = skip_line_comment(sql=sql, start=index)
+            continue
+        if sql.startswith("/*", index):
+            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
+            continue
+        if sql[index] == SQL_SINGLE_QUOTE_TOKEN:
+            index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
+            continue
+        if sql[index] in _SQL_IDENTIFIER_QUOTE_TOKENS:
+            quote: str = sql[index]
+            end: int = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
+            name: str = sql[index + 1 : end - 1].replace(quote * 2, quote)
+            key: str = name.casefold()
+            if key in names_by_key and key not in references:
+                references.append(key)
+            index = end
+            continue
+        if not is_identifier_start(sql[index]):
+            index += 1
+            continue
+        name, index = _read_identifier(sql=sql, start=index, file_label="check CTE")
+        key: str = name.casefold()
+        if key in names_by_key and key not in references:
+            references.append(key)
+    return tuple(references)
+
+
+def _dependency_path(
+    *,
+    origin: str,
+    prohibited: frozenset[str],
+    dependencies: dict[str, tuple[str, ...]],
+) -> tuple[str, ...] | None:
+    pending: list[tuple[str, ...]] = [(origin,)]
+    visited: set[str] = {origin}
+    while pending:
+        path: tuple[str, ...] = pending.pop(0)
+        for dependency in dependencies.get(path[-1], ()):
+            candidate: tuple[str, ...] = (*path, dependency)
+            if dependency in prohibited:
+                return candidate
+            if dependency in visited:
+                continue
+            visited.add(dependency)
+            pending.append(candidate)
+    return None
 
 
 def _consume_keyword(*, sql: str, start: int, keyword: str, file_label: str) -> int:

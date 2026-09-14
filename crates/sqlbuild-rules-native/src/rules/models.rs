@@ -15,7 +15,6 @@ pub(crate) struct ModelEvaluationRequest<'a> {
     pub(crate) config: &'a RulesConfig,
     pub(crate) selected: &'a BTreeMap<String, &'a RuleMetadata>,
     pub(crate) request: &'a EvaluateRequest,
-    pub(crate) is_anchor: bool,
     pub(crate) threshold_overrides: &'a [ResolvedThresholdOverride],
 }
 

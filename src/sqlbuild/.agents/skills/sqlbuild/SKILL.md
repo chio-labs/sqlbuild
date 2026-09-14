@@ -6854,6 +6854,8 @@ SELECT 1
 
 Assertions can be mixed with `__expected__` CTEs in the same test, or used on their own. They are useful when the natural check is "no rows should violate this rule" rather than "the output should exactly equal these rows" - for example, duplicate checks, negative-value constraints, or conditional business rules.
 
+Expected results and assertions are independent checks. They may share fixture or helper CTEs, but an `__expected__*` CTE must not depend on an `__assert__*` CTE, and an `__assert__*` CTE must not depend on an `__expected__*` CTE, directly or through helpers.
+
 During `sqb test` and `sqb build`, assertion results appear as nested check rows alongside expected comparisons.
 
 ### Test modes
@@ -7220,6 +7222,8 @@ SELECT 1
 For sources with two-part identity, use double underscores: `__source__raw__orders`.
 
 Every scenario must have at least one fixture CTE and at least one `__expected__` or `__assert__` CTE.
+
+Expected results and assertions are independent checks. They may share fixture or helper CTEs, but neither check kind may depend on the other directly or through helpers.
 
 Scenario SQL uses macros, enums, and constants available from the scenario file's directory under
 `tests/scenarios/`. Public enums and constants available to a model are also available when the

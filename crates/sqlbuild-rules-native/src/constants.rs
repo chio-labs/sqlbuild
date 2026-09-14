@@ -10,6 +10,7 @@ pub(crate) const GENERIC_CASE_NAME: &str = "case";
 pub(crate) const CUSTOM_RULE_NAMESPACE: &str = "XSQBR";
 pub(crate) const TARGET_DIRECTORY: &str = "target";
 pub(crate) const REFERENCE_KIND: &str = "ref";
+pub(crate) const SOURCE_REFERENCE_KIND: &str = "source";
 pub(crate) const VIEW_MATERIALIZATION: &str = "view";
 pub(crate) const ENFORCED_CONTRACT: &str = "enforced";
 pub(crate) const BOOLEAN_TYPE: &str = "BOOLEAN";

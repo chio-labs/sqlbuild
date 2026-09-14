@@ -1,0 +1,163 @@
+use polyglot_sql::tokens::{Span, Token, TokenType};
+
+const CEREMONIAL_SELECT_LITERAL: &str = "1";
+
+pub(super) fn collect_terminal_shape_facts(
+    tokens: &[Token],
+    depths: &[usize],
+    significant: &[usize],
+    allows_ceremonial_select: bool,
+) -> (Vec<Span>, Vec<Span>) {
+    let mut cte_only_bodies: Vec<Span> = Vec::new();
+    let mut terminal_selects: Vec<Span> = Vec::new();
+    let has_top_level_with = significant
+        .iter()
+        .any(|&index| depths[index] == 0 && tokens[index].text.eq_ignore_ascii_case("with"));
+    let terminal_set_operator = significant.iter().find(|&&index| {
+        depths[index] == 0
+            && matches!(
+                tokens[index].token_type,
+                TokenType::Union | TokenType::Intersect | TokenType::Except
+            )
+    });
+    if let Some(&operator) = terminal_set_operator {
+        cte_only_bodies.push(tokens[operator].span);
+        if has_top_level_with {
+            terminal_selects.push(tokens[operator].span);
+        }
+        return (cte_only_bodies, terminal_selects);
+    }
+    let Some(root_select_position) = significant
+        .iter()
+        .position(|&index| depths[index] == 0 && tokens[index].token_type == TokenType::Select)
+    else {
+        return (cte_only_bodies, terminal_selects);
+    };
+    let root_select = significant[root_select_position];
+    let tail: Vec<usize> = significant[root_select_position + 1..]
+        .iter()
+        .copied()
+        .take_while(|&index| tokens[index].token_type != TokenType::Semicolon)
+        .filter(|&index| depths[index] == 0)
+        .collect();
+    let has_terminal_logic = tail.iter().any(|&index| {
+        matches!(
+            tokens[index].token_type,
+            TokenType::Join
+                | TokenType::Where
+                | TokenType::Group
+                | TokenType::Having
+                | TokenType::Qualify
+                | TokenType::Order
+                | TokenType::Limit
+                | TokenType::Offset
+                | TokenType::Union
+                | TokenType::Intersect
+                | TokenType::Except
+        )
+    });
+    if !has_top_level_with || has_terminal_logic {
+        cte_only_bodies.push(tokens[root_select].span);
+    }
+    if !has_top_level_with {
+        return (cte_only_bodies, terminal_selects);
+    }
+
+    let final_cte = (0..root_select_position)
+        .filter(|&position| {
+            let index = significant[position];
+            depths[index] == 0
+                && tokens[index].token_type == TokenType::As
+                && significant
+                    .get(position + 1)
+                    .is_some_and(|&next| tokens[next].token_type == TokenType::LParen)
+        })
+        .filter_map(|position| cte_name_before_as(tokens, significant, position))
+        .next_back();
+    let from_position = tail
+        .iter()
+        .position(|&index| is_terminal_from(tokens, significant, index));
+    let terminal_is_plain = from_position.is_some_and(|position| {
+        let projection = &tail[..position];
+        let relation = tail.get(position + 1);
+        let remainder = &tail[position.saturating_add(2)..];
+        !projection.is_empty()
+            && plain_terminal_projection(tokens, projection)
+            && relation.is_some_and(|&index| {
+                final_cte
+                    .as_ref()
+                    .is_some_and(|name| tokens[index].text.eq_ignore_ascii_case(name))
+            })
+            && remainder.is_empty()
+    });
+    let terminal_is_ceremonial = allows_ceremonial_select
+        && tail.len() == 1
+        && tokens[tail[0]].text == CEREMONIAL_SELECT_LITERAL;
+    if !terminal_is_plain && !terminal_is_ceremonial {
+        terminal_selects.push(tokens[root_select].span);
+    }
+    (cte_only_bodies, terminal_selects)
+}
+
+fn cte_name_before_as(
+    tokens: &[Token],
+    significant: &[usize],
+    as_position: usize,
+) -> Option<String> {
+    let previous_position = as_position.checked_sub(1)?;
+    let previous = significant[previous_position];
+    if is_lint_identifier(&tokens[previous]) || tokens[previous].text.eq_ignore_ascii_case("final")
+    {
+        return Some(tokens[previous].text.to_ascii_lowercase());
+    }
+    if tokens[previous].token_type != TokenType::RParen {
+        return None;
+    }
+
+    let mut balance = 1_usize;
+    for position in (0..previous_position).rev() {
+        let index = significant[position];
+        match tokens[index].token_type {
+            TokenType::RParen => balance += 1,
+            TokenType::LParen => {
+                balance = balance.saturating_sub(1);
+                if balance == 0 {
+                    let name = position.checked_sub(1).map(|value| significant[value])?;
+                    return (is_lint_identifier(&tokens[name])
+                        || tokens[name].text.eq_ignore_ascii_case("final"))
+                    .then(|| tokens[name].text.to_ascii_lowercase());
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn plain_terminal_projection(tokens: &[Token], projection: &[usize]) -> bool {
+    projection.iter().all(|&index| {
+        is_lint_identifier(&tokens[index])
+            || matches!(
+                tokens[index].token_type,
+                TokenType::Star | TokenType::Dot | TokenType::Comma | TokenType::As
+            )
+    })
+}
+
+fn is_lint_identifier(token: &Token) -> bool {
+    matches!(
+        token.token_type,
+        TokenType::Identifier | TokenType::QuotedIdentifier | TokenType::Var
+    )
+}
+
+fn is_terminal_from(tokens: &[Token], significant: &[usize], index: usize) -> bool {
+    if tokens[index].token_type != TokenType::From {
+        return false;
+    }
+    significant
+        .iter()
+        .position(|&candidate| candidate == index)
+        .and_then(|position| position.checked_sub(1))
+        .is_none_or(|position| tokens[significant[position]].token_type != TokenType::Distinct)
+}

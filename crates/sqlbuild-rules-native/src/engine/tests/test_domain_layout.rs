@@ -9,6 +9,9 @@ fn given_owner_and_declaration_layouts_when_evaluating_then_returns_expected_fau
     let oversized_paths: Vec<String> = (0..11)
         .map(|index| format!("models/commerce/_macros/item_{index}.py"))
         .collect();
+    let repeated_paths: Vec<String> = (0..11)
+        .map(|_| "models/commerce/_macros/orders.py".to_owned())
+        .collect();
     let test_cases = [
         test_types::DomainLayoutTestCase {
             description: "leaf and branch models fault",
@@ -114,6 +117,17 @@ fn given_owner_and_declaration_layouts_when_evaluating_then_returns_expected_fau
             layout: json!({}),
             scope_index: helpers::scope_with_macros(&oversized_paths),
             expected_codes: &["SQBRDECLARATION304"],
+            expected_message_fragments: &[],
+            expected_absent_fragments: &[],
+        },
+        test_types::DomainLayoutTestCase {
+            description: "multiple exports in one declaration file count once",
+            code: "SQBRDECLARATION304",
+            models: json!([]),
+            thresholds: json!({}),
+            layout: json!({}),
+            scope_index: helpers::scope_with_macros(&repeated_paths),
+            expected_codes: &[],
             expected_message_fragments: &[],
             expected_absent_fragments: &[],
         },
