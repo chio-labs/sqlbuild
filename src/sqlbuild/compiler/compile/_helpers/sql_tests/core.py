@@ -184,7 +184,13 @@ def _extract_sql_test_ctes_with_scanner(
             continue
         break
 
-    _validate_ceremonial_select(sql=sql, start=index, file_label=file_label)
+    _validate_ceremonial_select(
+        sql=sql,
+        start=index,
+        final_cte_name=ctes[-1].name,
+        final_cte_sql=ctes[-1].sql_body,
+        file_label=file_label,
+    )
     return tuple(ctes)
 
 
@@ -947,23 +953,69 @@ def _require_prefixed_name(*, cte_name: str, prefix: str, label: str, file_label
     raise CompileInputError(f"SQL test '{file_label}' must use {label} to identify a target")
 
 
-def _validate_ceremonial_select(*, sql: str, start: int, file_label: str) -> None:
+def _validate_ceremonial_select(
+    *,
+    sql: str,
+    start: int,
+    final_cte_name: str,
+    final_cte_sql: str,
+    file_label: str,
+) -> None:
+    if _is_ceremonial_select_statement(sql=sql, start=start):
+        return
+    if _is_plain_final_cte_read(sql=sql, start=start, cte_name=final_cte_name) and (
+        _is_ceremonial_select_statement(sql=final_cte_sql, start=0)
+    ):
+        return
+    raise CompileInputError(_ceremonial_select_error(file_label))
+
+
+def _is_ceremonial_select_statement(*, sql: str, start: int) -> bool:
     index: int = _skip_ignorable(sql=sql, start=start)
     select_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="SELECT")
     if select_end is None:
-        raise CompileInputError(_ceremonial_select_error(file_label))
+        return False
     index = _skip_ignorable(sql=sql, start=select_end)
     if index >= len(sql) or sql[index] != SQL_CEREMONIAL_SELECT_VALUE:
-        raise CompileInputError(_ceremonial_select_error(file_label))
+        return False
     index = _skip_ignorable(sql=sql, start=index + 1)
+    return _is_statement_end(sql=sql, start=index)
+
+
+def _is_plain_final_cte_read(*, sql: str, start: int, cte_name: str) -> bool:
+    index: int = _skip_ignorable(sql=sql, start=start)
+    select_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="SELECT")
+    if select_end is None:
+        return False
+    index = _skip_ignorable(sql=sql, start=select_end)
+    if index >= len(sql) or sql[index] != SQL_WILDCARD_TOKEN:
+        return False
+    index = _skip_ignorable(sql=sql, start=index + 1)
+    from_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="FROM")
+    if from_end is None:
+        return False
+    index = _skip_ignorable(sql=sql, start=from_end)
+    if index >= len(sql) or not is_identifier_start(sql[index]):
+        return False
+    relation_name, index = _read_identifier(sql=sql, start=index, file_label="terminal SELECT")
+    if relation_name.casefold() != cte_name.casefold():
+        return False
+    index = _skip_ignorable(sql=sql, start=index)
+    return _is_statement_end(sql=sql, start=index)
+
+
+def _is_statement_end(*, sql: str, start: int) -> bool:
+    index: int = start
     if index < len(sql) and sql[index] == SQL_STATEMENT_TERMINATOR_TOKEN:
         index = _skip_ignorable(sql=sql, start=index + 1)
-    if index != len(sql):
-        raise CompileInputError(_ceremonial_select_error(file_label))
+    return index == len(sql)
 
 
 def _ceremonial_select_error(file_label: str) -> str:
-    return f"SQL test '{file_label}' must end with a ceremonial top-level `SELECT 1` after its CTEs"
+    return (
+        f"SQL test '{file_label}' must end with a ceremonial top-level `SELECT 1` after its CTEs "
+        "or a plain terminal read from a final `SELECT 1` CTE"
+    )
 
 
 def _consume_keyword(*, sql: str, start: int, keyword: str, file_label: str) -> int:

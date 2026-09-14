@@ -275,6 +275,48 @@ def test_given_ceremonial_test_select_when_running_alias_rule_then_control_proje
 
 @pytest.mark.parametrize(
     "test_case",
+    [RulesIntegrationTestCase("final ceremonial CTE satisfies terminal shape", 0, "SQBRSQL035")],
+    ids=lambda case: case.description,
+)
+def test_given_final_ceremonial_cte_when_running_terminal_rule_then_test_is_accepted(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text('MODEL (description "Orders");\nSELECT 1 AS order_id\n', encoding="utf-8")
+    test: Path = tmp_path / "tests" / "unit" / "orders.sql"
+    test.parent.mkdir(parents=True)
+    test.write_text(
+        "TEST();\n\nWITH __ref__orders AS (SELECT 1 AS order_id), "
+        "__expected__orders AS (SELECT 1 AS order_id), "
+        "test_result AS (SELECT 1)\nSELECT * FROM test_result\n",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "rules",
+            "--json",
+            "run",
+            test_case.expected_code,
+        ]
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    captured: CaptureResult[str] = capsys.readouterr()
+    payload: dict[str, object] = json.loads(captured.out)
+    assert payload["findings"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [RulesIntegrationTestCase("scalar subquery after prior CTE is stable", 0, "SQBRSQL022")],
     ids=lambda case: case.description,
 )

@@ -118,6 +118,20 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
             expected_expected_model_names=("order_items",),
         ),
         ExtractSqlTestCtesTestCase(
+            description="extracts ctes with ceremonial select in final result cte",
+            sql="""
+        WITH
+        __source__raw_orders AS (SELECT 1 AS order_id),
+        __expected__orders AS (SELECT 1 AS order_id),
+        test_result AS (SELECT 1)
+        SELECT * FROM test_result
+        """.strip(),
+            expected_authored_cte_names=("__source__raw_orders", "test_result"),
+            expected_mock_model_names=(),
+            expected_mock_source_names=("raw_orders",),
+            expected_expected_model_names=("orders",),
+        ),
+        ExtractSqlTestCtesTestCase(
             description="extracts ctes with comments strings and nested parentheses",
             sql="""
         WITH /* leading */ helper_orders(order_id, note) AS (
@@ -240,10 +254,11 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
             sql="""
         WITH
         "__source__raw_orders" AS MATERIALIZED (SELECT 1 AS order_id),
-        "__expected__orders" AS (SELECT order_id FROM "__source__raw_orders")
-        SELECT 1
+        "__expected__orders" AS (SELECT order_id FROM "__source__raw_orders"),
+        test_result AS (SELECT 1)
+        SELECT * FROM test_result
         """.strip(),
-            expected_authored_cte_names=("__source__raw_orders",),
+            expected_authored_cte_names=("__source__raw_orders", "test_result"),
             expected_mock_model_names=(),
             expected_mock_source_names=("raw_orders",),
             expected_expected_model_names=("orders",),
@@ -462,6 +477,28 @@ def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_return
         SELECT 1 FROM __expected__orders
         """.strip(),
             expected_error_fragment="must end with a ceremonial top-level `SELECT 1`",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when final result cte is not ceremonial select one",
+            sql="""
+        WITH
+        __source__raw_orders AS (SELECT 1),
+        __expected__orders AS (SELECT 1),
+        test_result AS (SELECT 2)
+        SELECT * FROM test_result
+        """.strip(),
+            expected_error_fragment="must end with a ceremonial top-level `SELECT 1`",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="raises when fallback terminal read follows a set operation",
+            sql="""
+        WITH
+        "__source__raw_orders" AS (SELECT 1),
+        "__expected__orders" AS (SELECT 1),
+        test_result AS (SELECT 1)
+        SELECT 2 UNION ALL SELECT * FROM test_result
+        """.strip(),
+            expected_error_fragment="expected a CTE name",
         ),
         ExtractSqlTestCtesErrorTestCase(
             description="raises when expected cte omits target name",
