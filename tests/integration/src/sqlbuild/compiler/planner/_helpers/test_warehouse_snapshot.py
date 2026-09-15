@@ -38,6 +38,7 @@ from tests.integration.src.sqlbuild.compiler.planner._helpers._test_types import
     GatherSelectedCursorScopeTestCase,
     GatherSharedCursorSnapshotTestCase,
     GatherSourceColumnsTestCase,
+    GatherTimezoneCursorSnapshotTestCase,
     GatherWarehouseSnapshotTestCase,
     GatherWatermarkTypeTestCase,
 )
@@ -649,6 +650,57 @@ def test_given_models_sharing_one_source_when_gathering_snapshot_then_executes_o
         "monthly_events": test_case.expected_cursor_snapshot,
     }
     assert tuple(statements) == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        GatherTimezoneCursorSnapshotTestCase(
+            description="warehouse UTC suffix separator",
+            warehouse_values=(
+                "2026-09-14 00:00:00.000 Z",
+                "2026-09-15 00:00:00.000 Z",
+            ),
+            expected_cursor_snapshot=ModelCursorSnapshot(
+                target_max=None,
+                upstream_mins=(TimestampValue(value=datetime(2026, 9, 14, tzinfo=UTC)),),
+                upstream_maxes=(TimestampValue(value=datetime(2026, 9, 15, tzinfo=UTC)),),
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_timezone_cursor_text_when_gathering_snapshot_then_normalizes_warehouse_bounds(
+    test_case: GatherTimezoneCursorSnapshotTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+    execute: Any,
+) -> None:
+    connection.execute("CREATE TABLE staging.raw_events (event_time VARCHAR)")
+    connection.executemany(
+        "INSERT INTO staging.raw_events VALUES (?)",
+        [(value,) for value in test_case.warehouse_values],
+    )
+    project: CompiledProject = build_project_with_targets(
+        model_locations={"raw_events": "staging"},
+        incremental_models=(
+            _IncrementalModelSpec(
+                name="daily_events",
+                schema="staging",
+                cursor="event_time",
+                ref_names=("raw_events",),
+            ),
+        ),
+    )
+
+    snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        execute=execute,
+    )
+
+    assert snapshot.cursor_snapshots["daily_events"] == test_case.expected_cursor_snapshot
 
 
 @pytest.mark.parametrize(
