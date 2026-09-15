@@ -113,32 +113,32 @@ def model_analysis_cache_key(
 ) -> str:
     """Return the exact analysis identity for one expanded model query."""
 
-    return _payload_digest(
-        {
-            "shared_fingerprint": context.shared_fingerprint,
-            "query_sql": query_sql,
-            "references": [
-                {
-                    "kind": str(reference.ref_kind),
-                    "name": reference.ref_name,
-                    "package": reference.ref_package,
-                    "call_argument_count": reference.call_argument_count,
-                }
-                for reference in references
-            ],
-            "placeholders": dict(sorted((placeholders or {}).items())),
-            "referenced_column_nullability": _referenced_nullability_payload(
-                references=references,
-                column_nullability_by_table=column_nullability_by_table,
-            ),
-            "referenced_column_types": _referenced_types_payload(
-                references=references,
-                column_types_by_table=column_types_by_table,
-            ),
-            "binding_schema": binding_schema,
-            "recover_cte_facts": recover_cte_facts,
-        }
-    )
+    payload: dict[str, object] = {
+        "shared_fingerprint": context.shared_fingerprint,
+        "query_sql": query_sql,
+        "references": [
+            {
+                "kind": str(reference.ref_kind),
+                "name": reference.ref_name,
+                "package": reference.ref_package,
+                "call_argument_count": reference.call_argument_count,
+            }
+            for reference in references
+        ],
+        "placeholders": dict(sorted((placeholders or {}).items())),
+        "referenced_column_nullability": _referenced_nullability_payload(
+            references=references,
+            column_nullability_by_table=column_nullability_by_table,
+        ),
+        "referenced_column_types": _referenced_types_payload(
+            references=references,
+            column_types_by_table=column_types_by_table,
+        ),
+        "binding_schema": binding_schema,
+    }
+    if recover_cte_facts:
+        payload["recover_cte_facts"] = True
+    return _payload_digest(payload)
 
 
 def read_model_analyses(
