@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.101.3](https://github.com/chio-labs/sqlbuild/compare/v0.101.2...v0.101.3) (2026-09-15)
+
+
+### Bug Fixes
+
+* preserve cast types through final CTEs ([#667](https://github.com/chio-labs/sqlbuild/issues/667)) ([0e45708](https://github.com/chio-labs/sqlbuild/commit/0e4570876306c20b1bf0edf7700c172b35095e07))
+
 ## [0.101.2](https://github.com/chio-labs/sqlbuild/compare/v0.101.1...v0.101.2) (2026-09-15)
 
 
