@@ -12,6 +12,8 @@ from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompileAnalysisSelection,
     CompiledDirectLogicSqlTestPayload,
+    CompiledLineageColumnFact,
+    CompiledLineageSourceFact,
     CompiledModel,
     CompiledModelSqlTestPayload,
     CompiledProject,
@@ -23,8 +25,10 @@ from sqlbuild.compiler.compile.models import (
     DeclarationScopeResolver,
     LoadedMacro,
 )
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
+from sqlbuild.compiler.lineage.types import ColumnLineageConfidence, ColumnTransformKind
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.models import (
@@ -54,6 +58,24 @@ DUCKDB_DECLARATION_EXPANSION_CONTEXT: DeclarationExpansionContext = DeclarationE
     value_renderer=DUCKDB_COMPILE_ADAPTER_CONTEXT.value_renderer,
     collection_rendering=DUCKDB_COMPILE_ADAPTER_CONTEXT.collection_rendering,
 )
+
+
+def direct_orders_lineage(*column_names: str) -> tuple[CompiledLineageColumnFact, ...]:
+    return tuple(
+        CompiledLineageColumnFact(
+            output_column=column_name,
+            upstream_columns=(
+                CompiledLineageSourceFact(
+                    resource_type=CompiledResourceType.MODEL,
+                    resource_name="orders",
+                    column_name=column_name,
+                ),
+            ),
+            transform_kind=ColumnTransformKind.DIRECT,
+            confidence=ColumnLineageConfidence.HIGH,
+        )
+        for column_name in column_names
+    )
 
 
 def build_scoped_macro_resolver(

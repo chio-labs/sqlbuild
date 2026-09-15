@@ -109,6 +109,7 @@ def model_analysis_cache_key(
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     column_types_by_table: dict[str, dict[str, str]],
     binding_schema: dict[str, dict[str, str]] | None = None,
+    recover_cte_facts: bool = False,
 ) -> str:
     """Return the exact analysis identity for one expanded model query."""
 
@@ -135,6 +136,7 @@ def model_analysis_cache_key(
                 column_types_by_table=column_types_by_table,
             ),
             "binding_schema": binding_schema,
+            "recover_cte_facts": recover_cte_facts,
         }
     )
 
