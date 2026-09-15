@@ -30,6 +30,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     SubstitutePlaceholderDefaultsTestCase,
     UnexpectedAnalysisFailureTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import direct_orders_lineage
 
 
 @pytest.mark.parametrize(
@@ -188,7 +189,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
             ),
             expected_columns=(
                 InferredColumn(name="order_id"),
-                InferredColumn(name="amount"),
+                InferredColumn(name="amount", type="FLOAT"),
             ),
         ),
         InferColumnsTestCase(
@@ -769,6 +770,174 @@ def test_given_supported_compact_query_when_ast_parse_would_fail_then_returns_an
         references=test_case.references,
         column_nullability_by_table=test_case.column_nullability_by_table,
         allow_compact_analysis=True,
+    )
+
+    assert result.analysis_succeeded
+    assert result.columns == test_case.expected_columns
+    assert result.lineage_columns == test_case.expected_lineage_columns
+    assert result.has_star is test_case.expected_has_star
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PolyglotAnalysisTestCase(
+            description="preserves a cast type through direct cte passthroughs",
+            query_sql=(
+                "WITH transformed AS ("
+                'SELECT CAST(amount AS INTEGER) AS amount FROM __ref("orders")'
+                "), final AS ("
+                "SELECT amount FROM transformed"
+                ") SELECT amount FROM final"
+            ),
+            references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+            column_nullability_by_table={"orders": {"amount": InferredNullability.NON_NULL}},
+            column_types_by_table={"orders": {"amount": "VARCHAR"}},
+            expected_columns=(
+                InferredColumn(
+                    name="amount",
+                    type="INT",
+                    nullability=InferredNullability.NON_NULL,
+                ),
+            ),
+            expected_lineage_columns=direct_orders_lineage("amount"),
+            expected_has_star=False,
+        ),
+        PolyglotAnalysisTestCase(
+            description="does not reuse a source type through a transformed cte",
+            query_sql=(
+                "WITH transformed AS ("
+                "SELECT amount || '0' AS amount FROM __ref(\"orders\")"
+                "), final AS ("
+                "SELECT amount FROM transformed"
+                ") SELECT amount FROM final"
+            ),
+            references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+            column_nullability_by_table={"orders": {"amount": InferredNullability.UNKNOWN}},
+            column_types_by_table={"orders": {"amount": "INTEGER"}},
+            expected_columns=(InferredColumn(name="amount"),),
+            expected_lineage_columns=direct_orders_lineage("amount"),
+            expected_has_star=False,
+        ),
+        PolyglotAnalysisTestCase(
+            description="preserves only matching recursive by-name cte union types",
+            query_sql=(
+                "WITH current_orders AS ("
+                "SELECT CAST(amount AS INTEGER) AS amount, "
+                'CAST(status AS VARCHAR) AS status FROM __ref("orders")'
+                "), archived_orders AS ("
+                "SELECT CAST(amount AS FLOAT) AS amount, "
+                'CAST(status AS VARCHAR) AS status FROM __ref("orders")'
+                "), imported_orders AS ("
+                "SELECT CAST(amount AS INTEGER) AS amount, "
+                'CAST(status AS VARCHAR) AS status FROM __ref("orders")'
+                "), combined AS ("
+                "SELECT amount, status FROM current_orders "
+                "UNION ALL BY NAME SELECT amount, status FROM archived_orders "
+                "UNION ALL BY NAME SELECT amount, status FROM imported_orders"
+                "), final AS ("
+                "SELECT amount, status FROM combined"
+                ") SELECT amount, status FROM final"
+            ),
+            references=(
+                CompileSqlReference(SqlReferenceKind.REF, "orders"),
+                CompileSqlReference(SqlReferenceKind.REF, "orders"),
+                CompileSqlReference(SqlReferenceKind.REF, "orders"),
+            ),
+            column_nullability_by_table={
+                "orders": {
+                    "amount": InferredNullability.UNKNOWN,
+                    "status": InferredNullability.UNKNOWN,
+                }
+            },
+            column_types_by_table={"orders": {"amount": "VARCHAR", "status": "VARCHAR"}},
+            expected_columns=(
+                InferredColumn(name="amount"),
+                InferredColumn(name="status", type="TEXT"),
+            ),
+            expected_lineage_columns=direct_orders_lineage("amount", "status"),
+            expected_has_star=False,
+        ),
+        PolyglotAnalysisTestCase(
+            description="declines cte column-list type recovery",
+            query_sql=(
+                "WITH transformed(amount, status) AS ("
+                "SELECT CAST(amount AS VARCHAR) AS status, "
+                'CAST(amount AS INTEGER) AS amount FROM __ref("orders")'
+                "), final AS ("
+                "SELECT amount FROM transformed"
+                ") SELECT amount FROM final"
+            ),
+            references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+            column_nullability_by_table={"orders": {"amount": InferredNullability.UNKNOWN}},
+            column_types_by_table={"orders": {"amount": "VARCHAR"}},
+            expected_columns=(InferredColumn(name="amount"),),
+            expected_lineage_columns=direct_orders_lineage("amount"),
+            expected_has_star=False,
+        ),
+        PolyglotAnalysisTestCase(
+            description="declines sparse positional union type recovery",
+            query_sql=(
+                "WITH combined AS ("
+                "SELECT CAST(amount AS INTEGER) AS amount, amount || 'x' AS status "
+                'FROM __ref("orders") UNION ALL '
+                "SELECT amount || 'x' AS status, CAST(amount AS INTEGER) AS amount "
+                'FROM __ref("orders")'
+                "), final AS ("
+                "SELECT amount FROM combined"
+                ") SELECT amount FROM final"
+            ),
+            references=(
+                CompileSqlReference(SqlReferenceKind.REF, "orders"),
+                CompileSqlReference(SqlReferenceKind.REF, "orders"),
+            ),
+            column_nullability_by_table={"orders": {"amount": InferredNullability.UNKNOWN}},
+            column_types_by_table={"orders": {"amount": "VARCHAR"}},
+            expected_columns=(InferredColumn(name="amount"),),
+            expected_lineage_columns=direct_orders_lineage("amount"),
+            expected_has_star=False,
+        ),
+        PolyglotAnalysisTestCase(
+            description="declines renamed star type recovery",
+            query_sql=(
+                "WITH typed AS ("
+                "SELECT CAST(amount AS INTEGER) AS amount, "
+                'CAST(amount AS VARCHAR) AS status FROM __ref("orders")'
+                "), renamed AS ("
+                "SELECT * RENAME (amount AS status, status AS amount) FROM typed"
+                "), final AS ("
+                "SELECT amount FROM renamed"
+                ") SELECT amount FROM final"
+            ),
+            references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+            column_nullability_by_table={"orders": {"amount": InferredNullability.UNKNOWN}},
+            column_types_by_table={"orders": {"amount": "VARCHAR"}},
+            inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="snowflake"),
+            expected_columns=(InferredColumn(name="amount"),),
+            expected_lineage_columns=(
+                CompiledLineageColumnFact(
+                    output_column="amount",
+                    upstream_columns=(),
+                    transform_kind=ColumnTransformKind.CONSTANT,
+                    confidence=ColumnLineageConfidence.HIGH,
+                ),
+            ),
+            expected_has_star=False,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cte_chain_when_analyzing_direct_passthrough_then_type_is_conservative(
+    test_case: PolyglotAnalysisTestCase,
+) -> None:
+    result: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+        query_sql=test_case.query_sql,
+        references=test_case.references,
+        column_nullability_by_table=test_case.column_nullability_by_table,
+        column_types_by_table=test_case.column_types_by_table,
+        inference_profile=test_case.inference_profile,
+        allow_compact_analysis=True,
+        recover_cte_facts=True,
     )
 
     assert result.analysis_succeeded

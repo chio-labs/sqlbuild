@@ -836,6 +836,9 @@ def _analyze_model_sql(
         inference_profile=inference_profile,
         allow_compact_analysis=allow_compact_analysis,
         binding_schema=request.binding_schema,
+        recover_cte_facts=(
+            request.model_input.config.values.get("contract") == ContractPolicy.ENFORCED
+        ),
     )
     return _ModelSqlAnalysis(
         polyglot_analysis=polyglot_analysis,
@@ -869,6 +872,9 @@ def _model_sql_analysis_request(
             column_nullability_by_table=column_nullability_by_table,
             column_types_by_table=column_types_by_table,
             binding_schema=binding_schema,
+            recover_cte_facts=(
+                model_input.config.values.get("contract") == ContractPolicy.ENFORCED
+            ),
         )
         if analysis_cache is not None
         else None

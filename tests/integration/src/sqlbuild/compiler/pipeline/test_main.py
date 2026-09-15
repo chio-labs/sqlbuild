@@ -10,9 +10,10 @@ import pytest
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.cli.commands._helpers.compile.target_writer import write_compile_target
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject, InferredColumn
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.pipeline.main import compile as compile_pipeline
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.main.project import compile_project
@@ -22,6 +23,7 @@ from sqlbuild.rule_engine.exceptions import RulesError
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     AppendCursorPipelineIntegrationTestCase,
     CompileProgressIntegrationTestCase,
+    CteTypePropagationIntegrationTestCase,
     DeferToIntegrationTestCase,
     ExpectedModelEntry,
     RulesPipelineIntegrationTestCase,
@@ -36,6 +38,74 @@ from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
 )
 
 _PROJECT_TOML: str = 'name = "demo"\nadapter = "duckdb"\n\n[connection]\ndatabase = ":memory:"\n'
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CteTypePropagationIntegrationTestCase(
+            description="typed cte passthrough satisfies the model contract",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_TOML,
+                "sources/raw.yml": (
+                    "sources:\n"
+                    "  - name: raw_orders\n"
+                    "    expression: SELECT '12' AS amount\n"
+                    "    columns:\n"
+                    "      - name: amount\n"
+                    "        type: VARCHAR\n"
+                    "        nullable: false\n"
+                ),
+                "schemas/orders.sql": (
+                    "SCHEMA (\n"
+                    "  name order_amount,\n"
+                    "  columns (amount (type INTEGER, nullable false)),\n"
+                    ");\n"
+                ),
+                "models/orders.sql": (
+                    "MODEL (\n"
+                    "  contract enforced,\n"
+                    "  model_schema order_amount,\n"
+                    ");\n\n"
+                    "WITH transformed AS (\n"
+                    "  SELECT CAST(amount AS INTEGER) AS amount\n"
+                    '  FROM __source("raw_orders")\n'
+                    "),\n"
+                    "final AS (\n"
+                    "  SELECT amount\n"
+                    "  FROM transformed\n"
+                    ")\n"
+                    "SELECT amount\n"
+                    "FROM final\n"
+                ),
+            },
+            expected_column_name="amount",
+            expected_column_type="INT",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_typed_cte_chain_when_compiling_contract_then_type_remains_proven(
+    test_case: CteTypePropagationIntegrationTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.project_files)
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+
+    project: CompiledProject = compile_project(
+        discovered_inputs=discovered_inputs,
+        adapter=DuckDbAdapter(),
+    )
+
+    assert project.diagnostics == ()
+    assert project.models[0].inferred_columns == (
+        InferredColumn(
+            name=test_case.expected_column_name,
+            type=test_case.expected_column_type,
+            nullability=InferredNullability.NON_NULL,
+        ),
+    )
 
 
 @pytest.mark.parametrize(

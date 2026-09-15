@@ -154,6 +154,14 @@ class CompileProgressIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class CteTypePropagationIntegrationTestCase:
+    description: str
+    project_files: dict[str, str]
+    expected_column_name: str
+    expected_column_type: str
+
+
+@dataclass(frozen=True)
 class DeferToIntegrationTestCase:
     description: str
     project_files: dict[str, str]
