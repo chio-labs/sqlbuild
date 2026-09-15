@@ -61,6 +61,13 @@ class GatherSharedCursorSnapshotTestCase:
 
 
 @dataclass(frozen=True)
+class GatherTimezoneCursorSnapshotTestCase:
+    description: str
+    warehouse_values: tuple[str, ...]
+    expected_cursor_snapshot: ModelCursorSnapshot
+
+
+@dataclass(frozen=True)
 class GatherSelectedCursorScopeTestCase:
     description: str
     expected_cursor_snapshot: ModelCursorSnapshot
