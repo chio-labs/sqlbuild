@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.101.2](https://github.com/chio-labs/sqlbuild/compare/v0.101.1...v0.101.2) (2026-09-15)
+
+
+### Bug Fixes
+
+* accept spaced timezone cursor suffixes ([#664](https://github.com/chio-labs/sqlbuild/issues/664)) ([21d3ab4](https://github.com/chio-labs/sqlbuild/commit/21d3ab47c9b8178a86fddfdd8335fe6eb0ea27a1))
+
 ## [0.101.1](https://github.com/chio-labs/sqlbuild/compare/v0.101.0...v0.101.1) (2026-09-14)
 
 
