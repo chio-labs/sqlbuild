@@ -35,6 +35,7 @@ from tests.integration.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeSchemaDiffTestCase,
     SnowflakeSchemaIntrospectionTestCase,
     SnowflakeTableFreshnessMetadataTestCase,
+    SnowflakeTimestampCursorLiteralTestCase,
 )
 from tests.integration.src.sqlbuild.adapters.snowflake.helpers import (
     build_statement_recorder,
@@ -149,6 +150,47 @@ def test_given_sql_when_querying_then_returns_expected_result(
     )
 
     assert result == test_case.expected_result
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeTimestampCursorLiteralTestCase(
+            description="UTC cursor matches TZ and NTZ columns in Los Angeles session",
+            value="2026-09-14 00:00:00.000Z",
+            expected_row=(True, True),
+        ),
+        SnowflakeTimestampCursorLiteralTestCase(
+            description="offset cursor preserves instant for TZ columns in Los Angeles session",
+            value="2026-09-14T08:00:00+08:00",
+            expected_row=(True, False),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_timezone_cursor_when_rendering_in_los_angeles_session_then_uses_column_semantics(
+    test_case: SnowflakeTimestampCursorLiteralTestCase,
+    adapter: SnowflakeAdapter,
+    connection: Any,
+) -> None:
+    adapter.execute(connection=connection, sql="ALTER SESSION SET TIMEZONE = 'America/Los_Angeles'")
+    literal: str = adapter.render_cursor_bound_literal(
+        value=test_case.value,
+        cursor_type="timestamp",
+    )
+
+    result: QueryResult = adapter.query(
+        connection=connection,
+        sql=(
+            "SELECT TO_TIMESTAMP_TZ('2026-09-14 00:00:00 +00:00') = "
+            f"{literal} AS tz_matches, "
+            "TO_TIMESTAMP_NTZ('2026-09-14 00:00:00') = "
+            f"{literal} AS ntz_matches"
+        ),
+        limit=None,
+    )
+
+    assert result.rows == (test_case.expected_row,)
 
 
 @pytest.mark.parametrize(

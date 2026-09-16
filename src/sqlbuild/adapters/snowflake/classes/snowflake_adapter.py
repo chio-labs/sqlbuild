@@ -2214,7 +2214,8 @@ class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
         if cursor_type == CursorKind.INTEGER:
             return value
         if cursor_type == CursorKind.TIMESTAMP:
-            return f"TIMESTAMP '{value}'"
+            escaped_value: str = value.replace("'", "''")
+            return f"'{escaped_value}'"
         return f"'{value}'"
 
     def supports_zero_copy_clone(self) -> bool:

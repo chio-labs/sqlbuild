@@ -32,6 +32,13 @@ class SnowflakeQueryTestCase:
 
 
 @dataclass(frozen=True)
+class SnowflakeTimestampCursorLiteralTestCase:
+    description: str
+    value: str
+    expected_row: tuple[bool, bool]
+
+
+@dataclass(frozen=True)
 class SnowflakeSchemaIntrospectionTestCase:
     description: str
     setup_sql: tuple[str, ...]
