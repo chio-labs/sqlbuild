@@ -11,8 +11,49 @@ from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    RulePassIntegrationTestCase,
     RulesIntegrationTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulePassIntegrationTestCase("constant-backed numeric decision", 0, ())],
+    ids=lambda case: case.description,
+)
+def test_given_constant_backed_decision_and_numeric_alias_when_compiling_then_rule_passes(
+    test_case: RulePassIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRDECLARATION102"]\n',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        """MODEL (
+  constants (_large_batch 7),
+);
+
+SELECT
+  CASE
+    WHEN item_count > @const("_large_batch") THEN 'tier 7'
+    ELSE 'small'
+  END AS batch_size_7
+FROM (SELECT 8 AS item_count) AS items
+""",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
+    result: dict[str, object] = json.loads(capsys.readouterr().out)
+
+    assert exit_code == test_case.expected_exit_code
+    assert tuple(diagnostic["code"] for diagnostic in result["diagnostics"]) == (
+        test_case.expected_diagnostics
+    )
 
 
 @pytest.mark.parametrize(

@@ -3,6 +3,7 @@ use crate::constants::{
     REFERENCE_KIND, SOURCE_REFERENCE_KIND, TIMESTAMP_TYPE, VIEW_MATERIALIZATION,
 };
 use crate::models::{Declaration, EvaluateRequest, Fault, Model, RuleMetadata, RulesConfig};
+use crate::rules::_helpers::authored_literals::numeric_literal_tokens;
 use crate::rules::_helpers::domain_layout::folder_layer_details;
 use crate::rules::models::{
     FaultCollector, ModelEvaluationRequest, ProjectEvaluationRequest, ResolvedThresholdOverride,
@@ -62,6 +63,7 @@ struct ParsedModel<'a> {
     query: Query,
     model: &'a Model,
     classification: ModelClassification,
+    authored_numeric_literals: BTreeSet<String>,
 }
 
 struct ModelClassification {
@@ -134,10 +136,14 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
     };
     let query = *query;
     let classification = classify_model(&query, model, &request.dialect)?;
+    let authored_dialect = rules_dialect(&request.dialect);
+    let authored_numeric_literals =
+        numeric_literal_tokens(&model.authored_sql, authored_dialect.as_ref())?;
     let parsed = ParsedModel {
         query,
         model,
         classification,
+        authored_numeric_literals,
     };
     if let Some(rule) = metadata("SQBRMODEL101") {
         import_ctes(&parsed, rule, &faults);
@@ -1388,7 +1394,7 @@ fn evaluate_literal_rules(
         if let Some(rule) = selected.get("SQBRDECLARATION102") {
             let magic = comparison.numeric_literals.iter().any(|literal| {
                 !matches!(literal.as_str(), "-1" | "0" | "1")
-                    && parsed.model.authored_sql.contains(literal)
+                    && parsed.authored_numeric_literals.contains(literal)
             });
             if magic {
                 faults.push(fault(parsed.model, rule, comparison.position.as_ref()));

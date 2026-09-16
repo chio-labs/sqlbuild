@@ -1,3 +1,4 @@
+pub(crate) mod authored_literals;
 pub(crate) mod catalogue;
 pub(crate) mod domain_layout;
 pub(crate) mod evaluation;
