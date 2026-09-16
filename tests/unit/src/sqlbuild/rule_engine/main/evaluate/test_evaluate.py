@@ -339,6 +339,55 @@ from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_proj
             ),
         ),
         PolicyEvaluationTestCase(
+            description="lone star over dynamic pivot passes",
+            model_name="commerce__mart__order_totals",
+            relative_path="models/mart/commerce__mart__order_totals.sql",
+            sql=(
+                "SELECT * FROM source_orders "
+                "PIVOT(SUM(amount) FOR category IN (ANY ORDER BY category))"
+            ),
+            config_values={"materialized": "table", "contract": "enforced"},
+            select=("SQBRMODEL102",),
+            expected_codes=(),
+        ),
+        PolicyEvaluationTestCase(
+            description="lone star over static pivot faults",
+            model_name="commerce__mart__order_totals",
+            relative_path="models/mart/commerce__mart__order_totals.sql",
+            sql=(
+                "SELECT * FROM source_orders "
+                "PIVOT(SUM(amount) FOR category IN ('standard', 'priority'))"
+            ),
+            config_values={"materialized": "table", "contract": "enforced"},
+            select=("SQBRMODEL102",),
+            expected_codes=("SQBRMODEL102",),
+        ),
+        PolicyEvaluationTestCase(
+            description="mixed star over dynamic pivot faults",
+            model_name="commerce__mart__order_totals",
+            relative_path="models/mart/commerce__mart__order_totals.sql",
+            sql=(
+                "SELECT *, 1 AS marker FROM source_orders "
+                "PIVOT(SUM(amount) FOR category IN (ANY ORDER BY category))"
+            ),
+            config_values={"materialized": "table", "contract": "enforced"},
+            select=("SQBRMODEL102",),
+            expected_codes=("SQBRMODEL102",),
+        ),
+        PolicyEvaluationTestCase(
+            description="lone star over joined dynamic pivot faults",
+            model_name="commerce__mart__order_totals",
+            relative_path="models/mart/commerce__mart__order_totals.sql",
+            sql=(
+                "SELECT * FROM source_orders "
+                "PIVOT(SUM(amount) FOR category IN (ANY ORDER BY category)) totals "
+                "JOIN customers ON totals.customer_id = customers.customer_id"
+            ),
+            config_values={"materialized": "table", "contract": "enforced"},
+            select=("SQBRMODEL102",),
+            expected_codes=("SQBRMODEL102",),
+        ),
+        PolicyEvaluationTestCase(
             description="valid dependency import passes",
             model_name="commerce__mart__orders",
             relative_path="models/mart/commerce__mart__orders.sql",
