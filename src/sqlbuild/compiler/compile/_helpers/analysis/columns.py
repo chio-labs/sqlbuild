@@ -227,6 +227,9 @@ from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_SET_OPERATION_KINDS as _POLYGLOT_SET_OPERATION_KINDS,
 )
 from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_VARCHAR_DATA_TYPES as _POLYGLOT_VARCHAR_DATA_TYPES,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
     TIMESTAMP_WITH_TIME_ZONE_SQL_TYPE_NAME as _TIMESTAMP_WITH_TIME_ZONE_SQL_TYPE_NAME,
 )
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
@@ -1231,6 +1234,9 @@ def _polyglot_expression_type(
     ):
         return _TIMESTAMP_WITH_TIME_ZONE_SQL_TYPE_NAME
     type_name: str = _polyglot_type_name(raw_type)
+    length: object = target.get("length")
+    if raw_type.lower() in _POLYGLOT_VARCHAR_DATA_TYPES and isinstance(length, int):
+        return f"VARCHAR({length})"
     precision: object = target.get(_POLYGLOT_PAYLOAD_PRECISION)
     scale: object = target.get(_POLYGLOT_PAYLOAD_SCALE)
     if type_name == DECIMAL_SQL_TYPE_NAME and isinstance(precision, int):
