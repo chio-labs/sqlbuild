@@ -50,6 +50,13 @@ struct SelectFactContext<'a> {
     allows_ceremonial_select: bool,
 }
 
+struct ProjectedStarContext<'a> {
+    tokens: &'a [Token],
+    depths: &'a [usize],
+    direct: &'a [usize],
+    query_end: usize,
+}
+
 pub(super) fn collect_additional_facts(
     tokens: &[Token],
     external_identifiers: &HashSet<String>,
@@ -263,7 +270,17 @@ fn collect_select_additional_facts(context: &SelectFactContext<'_>) -> Additiona
                     &direct[..from_position],
                 ));
         }
-        if !is_dependency_import_select(context, select_index, &direct, from_position) {
+        if !is_dependency_import_select(context, select_index, &direct, from_position)
+            && !has_irreducible_projected_star(
+                &ProjectedStarContext {
+                    tokens,
+                    depths,
+                    direct: &direct,
+                    query_end: end,
+                },
+                from_position,
+            )
+        {
             facts
                 .projected_stars
                 .extend(projected_star_spans(tokens, &direct[..from_position]));
@@ -333,6 +350,110 @@ fn collect_select_additional_facts(context: &SelectFactContext<'_>) -> Additiona
             .extend(ambiguous_order_direction_spans(tokens, &direct));
     }
     facts
+}
+
+fn has_irreducible_projected_star(
+    context: &ProjectedStarContext<'_>,
+    from_position: usize,
+) -> bool {
+    let ProjectedStarContext {
+        tokens,
+        depths,
+        direct,
+        query_end,
+    } = context;
+    let projection = &direct[..from_position];
+    if projection.len() != 1 || tokens[projection[0]].token_type != TokenType::Star {
+        return false;
+    }
+
+    let Some(relation_start) = from_position
+        .checked_add(1)
+        .filter(|&start| start < direct.len())
+    else {
+        return false;
+    };
+    let relation_end = direct[relation_start..]
+        .iter()
+        .position(|&index| is_after_relation_clause(tokens[index].token_type))
+        .map_or(direct.len(), |offset| relation_start + offset);
+    let relation = &direct[relation_start..relation_end];
+    if relation
+        .iter()
+        .any(|&index| matches!(tokens[index].token_type, TokenType::Join | TokenType::Comma))
+    {
+        return false;
+    }
+    if is_lone_audit_parameter_relation(tokens, relation) {
+        return true;
+    }
+
+    let mut pivots = relation
+        .iter()
+        .copied()
+        .filter(|&index| tokens[index].text.eq_ignore_ascii_case("PIVOT"));
+    let Some(pivot_index) = pivots.next() else {
+        return false;
+    };
+    if pivots.next().is_some() {
+        return false;
+    }
+    dynamic_pivot_uses_any(tokens, depths, pivot_index, *query_end)
+}
+
+fn is_lone_audit_parameter_relation(tokens: &[Token], relation: &[usize]) -> bool {
+    let Some(&relation_index) = relation.first() else {
+        return false;
+    };
+    let normalized = tokens[relation_index].text.to_ascii_lowercase();
+    let Some(index) = normalized
+        .strip_prefix("__sqlbuild_audit_parameter_")
+        .and_then(|value| value.strip_suffix("__"))
+    else {
+        return false;
+    };
+    if index.is_empty() || !index.chars().all(|character| character.is_ascii_digit()) {
+        return false;
+    }
+    match relation.get(1..) {
+        Some([]) => true,
+        Some([alias]) => is_identifier(&tokens[*alias]),
+        Some([as_index, alias]) => {
+            tokens[*as_index].token_type == TokenType::As && is_identifier(&tokens[*alias])
+        }
+        _ => false,
+    }
+}
+
+fn dynamic_pivot_uses_any(
+    tokens: &[Token],
+    depths: &[usize],
+    pivot_index: usize,
+    query_end: usize,
+) -> bool {
+    let Some(pivot_open) = significant_after(tokens, pivot_index) else {
+        return false;
+    };
+    if tokens[pivot_open].token_type != TokenType::LParen {
+        return false;
+    }
+    let pivot_depth = depths[pivot_open];
+    let Some(pivot_close) = (pivot_open + 1..query_end).find(|&index| {
+        depths[index] == pivot_depth + 1 && tokens[index].token_type == TokenType::RParen
+    }) else {
+        return false;
+    };
+    (pivot_open + 1..pivot_close).any(|in_index| {
+        depths[in_index] == pivot_depth + 1
+            && tokens[in_index].token_type == TokenType::In
+            && significant_after(tokens, in_index).is_some_and(|any_open| {
+                any_open < pivot_close
+                    && tokens[any_open].token_type == TokenType::LParen
+                    && significant_after(tokens, any_open).is_some_and(|any_index| {
+                        any_index < pivot_close && tokens[any_index].token_type == TokenType::Any
+                    })
+            })
+    })
 }
 
 fn has_enclosing_cte_column_list(tokens: &[Token], depths: &[usize], select_index: usize) -> bool {

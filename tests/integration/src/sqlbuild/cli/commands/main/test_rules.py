@@ -601,6 +601,60 @@ FROM final
 
 @pytest.mark.parametrize(
     "test_case",
+    [RulesIntegrationTestCase("invocation-dependent stars are accepted", 0, "SQBRSQL021")],
+    ids=lambda case: case.description,
+)
+def test_given_invocation_dependent_shapes_when_running_output_shape_rule_then_stars_are_accepted(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "snowflake"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "order_totals.sql"
+    model.parent.mkdir()
+    model.write_text(
+        """MODEL (description "Dynamic order totals", database analytics, schema reporting);
+SELECT *
+FROM (
+  SELECT 1 AS customer_id, 'books' AS category, 25 AS amount
+) PIVOT(MAX(amount) FOR category IN (ANY ORDER BY category))
+""",
+        encoding="utf-8",
+    )
+    audit: Path = tmp_path / "audits" / "generic" / "recent_orders.sql"
+    audit.parent.mkdir(parents=True)
+    audit.write_text(
+        """AUDIT ();
+WITH base AS (
+  SELECT *
+  FROM @relation
+)
+SELECT customer_id
+FROM base
+""",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "rules",
+            "--json",
+            "run",
+            test_case.expected_code,
+        ]
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    assert payload["findings"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [RulesIntegrationTestCase("commented dependency calls are ignored", 0, "SQBRMODEL101")],
     ids=lambda case: case.description,
 )
