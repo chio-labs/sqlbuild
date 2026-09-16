@@ -8,6 +8,7 @@ import pytest
 from sqlbuild.compiler.compile.models import CompileSqlReference
 from sqlbuild.rule_engine.main._evaluate import evaluate
 from sqlbuild.rule_engine.models import (
+    Finding,
     RulesConfig,
     RulesResult,
     SelectStarAllow,
@@ -401,6 +402,24 @@ from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_proj
             references=(CompileSqlReference(ref_kind="ref", ref_name="commerce__stg__orders"),),
         ),
         PolicyEvaluationTestCase(
+            description="subject folder after intermediate refinement passes",
+            model_name="commerce__int_clean__orders",
+            relative_path="models/commerce/intermediate/clean/payments/commerce__int_clean__orders.sql",
+            sql="SELECT 1 AS order_id",
+            config_values={"materialized": "table"},
+            select=("SQBRPROJECT102",),
+            expected_codes=(),
+        ),
+        PolicyEvaluationTestCase(
+            description="subject folder before complete intermediate refinement passes",
+            model_name="commerce__int_clean__orders",
+            relative_path="models/commerce/payments/intermediate/clean/commerce__int_clean__orders.sql",
+            sql="SELECT 1 AS order_id",
+            config_values={"materialized": "table"},
+            select=("SQBRPROJECT102",),
+            expected_codes=(),
+        ),
+        PolicyEvaluationTestCase(
             description="commented and quoted dependency text is ignored",
             model_name="commerce__mart__orders",
             relative_path="models/mart/commerce__mart__orders.sql",
@@ -598,3 +617,47 @@ def test_given_selected_rules_when_evaluating_then_reports_expected_faults(
     )
 
     assert tuple(sorted(fault.code for fault in result.findings)) == test_case.expected_codes
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        PolicyEvaluationTestCase(
+            description="architecture-named subject folder before intermediate refinement",
+            model_name="commerce__int_clean__orders",
+            relative_path="models/commerce/intermediate/mart/clean/commerce__int_clean__orders.sql",
+            sql="SELECT 1 AS order_id",
+            config_values={"materialized": "table"},
+            select=("SQBRPROJECT102",),
+            expected_codes=("SQBRPROJECT102",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_subject_before_layer_when_evaluating_then_reports_canonical_path(
+    tmp_path: Path, test_case: PolicyEvaluationTestCase
+) -> None:
+    result: RulesResult = evaluate(
+        project=build_project(
+            name=test_case.model_name,
+            relative_path=test_case.relative_path,
+            sql=test_case.sql,
+            config_values=test_case.config_values,
+        ),
+        config=replace(test_case.rules_config, select=test_case.select),
+        project_dir=tmp_path,
+    )
+
+    assert len(result.findings) == 1
+    finding: Finding = result.findings[0]
+    assert finding.code == test_case.expected_codes[0]
+    assert finding.message == (
+        'int_clean model "commerce__int_clean__orders" must keep layer folder '
+        '"intermediate/clean" contiguous'
+    )
+    assert finding.remediation == (
+        'Move the model to "models/commerce/intermediate/clean/mart/'
+        'commerce__int_clean__orders.sql"; preserve subject folders outside '
+        '"intermediate/clean". Use rules.layout with SQBRPROJECT201-204 to enforce '
+        "domain and subdomain ordering."
+    )

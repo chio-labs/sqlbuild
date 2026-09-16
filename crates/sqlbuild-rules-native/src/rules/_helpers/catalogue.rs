@@ -93,8 +93,8 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
             "SQBRPROJECT102",
             "repository",
             "folder-layer",
-            "model layer names must match their folders",
-            "Move the model beneath staging/, intermediate/, or mart/ to match its name, or rename it for the folder that owns it.",
+            "model layer segments must be contiguous in their folders",
+            "Keep required layer segments contiguous (for example, intermediate/clean); preserve domain and subject folders outside that sequence. Use rules.layout with SQBRPROJECT201-204 to enforce canonical domain and subdomain nesting.",
         ),
         rule!(
             "SQBRPROJECT103",
