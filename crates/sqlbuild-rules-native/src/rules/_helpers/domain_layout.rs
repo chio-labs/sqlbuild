@@ -81,6 +81,48 @@ impl OwnerNode {
     }
 }
 
+pub(crate) fn folder_layer_details(
+    model_name: &str,
+    relative_path: &str,
+    layer: &str,
+) -> Option<(String, String)> {
+    let expected: &[&str] = match layer {
+        "stg" | "stg_v" => &["staging"],
+        "int_clean" => &["intermediate", "clean"],
+        "int_enriched" => &["intermediate", "enriched"],
+        "int_v" => &["intermediate"],
+        _ => &["mart"],
+    };
+    let path: Vec<&str> = relative_path.split('/').collect();
+    let parent = &path[..path.len().saturating_sub(1)];
+    if parent
+        .windows(expected.len())
+        .any(|window| window == expected)
+    {
+        return None;
+    }
+    let layer_position = parent
+        .iter()
+        .position(|component| expected.contains(component))
+        .unwrap_or(parent.len());
+    let subjects = parent[layer_position..]
+        .iter()
+        .copied()
+        .filter(|component| !expected.contains(component));
+    let mut suggested: Vec<&str> = parent[..layer_position].to_vec();
+    suggested.extend(expected.iter().copied());
+    suggested.extend(subjects);
+    suggested.extend(path.last().copied());
+    let expected_path = expected.join("/");
+    Some((
+        format!("{layer} model {model_name:?} must keep layer folder {expected_path:?} contiguous"),
+        format!(
+            "Move the model to {:?}; preserve subject folders outside {expected_path:?}. Use rules.layout with SQBRPROJECT201-204 to enforce domain and subdomain ordering.",
+            suggested.join("/"),
+        ),
+    ))
+}
+
 pub(crate) fn evaluate_project(evaluation: &ProjectEvaluationRequest<'_>) -> Vec<Fault> {
     let mut faults: Vec<Fault> = evaluate_models(evaluation);
     faults.extend(evaluate_containers(evaluation));

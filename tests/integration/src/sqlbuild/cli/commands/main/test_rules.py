@@ -1325,6 +1325,59 @@ def test_given_exception_for_other_model_when_compiling_selection_then_exception
 
 @pytest.mark.parametrize(
     "test_case",
+    [RulesIntegrationTestCase("subject folder precedes model layer", 1, "SQBRPROJECT102")],
+    ids=lambda case: case.description,
+)
+def test_given_subject_before_layer_when_running_folder_rule_then_canonical_move_is_reported(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = (
+        tmp_path
+        / "models"
+        / "commerce"
+        / "intermediate"
+        / "payments"
+        / "clean"
+        / "commerce__int_clean__orders.sql"
+    )
+    model.parent.mkdir(parents=True)
+    model.write_text(
+        'MODEL (description "Clean orders");\nSELECT 1 AS order_id\n', encoding="utf-8"
+    )
+
+    exit_code: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "rules",
+            "--json",
+            "run",
+            test_case.expected_code,
+        ]
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    findings: list[dict[str, object]] = cast(list[dict[str, object]], payload["findings"])
+    assert [finding["message"] for finding in findings] == [
+        'int_clean model "commerce__int_clean__orders" must keep layer folder '
+        '"intermediate/clean" contiguous'
+    ]
+    assert [finding["remediation"] for finding in findings] == [
+        'Move the model to "models/commerce/intermediate/clean/payments/'
+        'commerce__int_clean__orders.sql"; preserve subject folders outside '
+        '"intermediate/clean". Use rules.layout with SQBRPROJECT201-204 to enforce '
+        "domain and subdomain ordering."
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [RulesIntegrationTestCase("relative project path retains cached SQL finding", 1, "SQBRSQL004")],
     ids=lambda case: case.description,
 )

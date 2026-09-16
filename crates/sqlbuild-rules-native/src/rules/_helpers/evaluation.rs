@@ -3,6 +3,7 @@ use crate::constants::{
     REFERENCE_KIND, SOURCE_REFERENCE_KIND, TIMESTAMP_TYPE, VIEW_MATERIALIZATION,
 };
 use crate::models::{Declaration, EvaluateRequest, Fault, Model, RuleMetadata, RulesConfig};
+use crate::rules::_helpers::domain_layout::folder_layer_details;
 use crate::rules::models::{
     FaultCollector, ModelEvaluationRequest, ProjectEvaluationRequest, ResolvedThresholdOverride,
 };
@@ -1201,30 +1202,17 @@ fn folder_layer(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &FaultCol
     let Some(parts) = parse_name(&parsed.model.name) else {
         return;
     };
-    let expected: &[&str] = match parts.layer.as_str() {
-        "stg" | "stg_v" => &["staging"],
-        "int_clean" => &["intermediate", "clean"],
-        "int_enriched" => &["intermediate", "enriched"],
-        "int_v" => &["intermediate"],
-        _ => &["mart"],
-    };
-    let path: Vec<&str> = parsed.model.relative_path.split('/').collect();
-    let parent = &path[..path.len().saturating_sub(1)];
-    if !parent
-        .windows(expected.len())
-        .any(|window| window == expected)
-    {
+    if let Some((message, remediation)) = folder_layer_details(
+        &parsed.model.name,
+        &parsed.model.relative_path,
+        &parts.layer,
+    ) {
         faults.push(custom_fault!(
             parsed.model,
             rule,
             None,
-            format!(
-                "{} model {:?} must live under a {}/ folder",
-                parts.layer,
-                parsed.model.name,
-                expected.join("/")
-            ),
-            None,
+            message,
+            Some(remediation),
         ));
     }
 }
