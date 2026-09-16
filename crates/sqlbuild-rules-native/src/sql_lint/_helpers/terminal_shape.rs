@@ -136,12 +136,25 @@ fn cte_name_before_as(
 
 fn plain_terminal_projection(tokens: &[Token], projection: &[usize]) -> bool {
     projection.iter().all(|&index| {
-        is_lint_identifier(&tokens[index])
+        is_terminal_projection_identifier(&tokens[index])
             || matches!(
                 tokens[index].token_type,
                 TokenType::Star | TokenType::Dot | TokenType::Comma | TokenType::As
             )
     })
+}
+
+fn is_terminal_projection_identifier(token: &Token) -> bool {
+    is_lint_identifier(token)
+        || matches!(
+            token.token_type,
+            TokenType::Comment
+                | TokenType::Date
+                | TokenType::Key
+                | TokenType::Sequence
+                | TokenType::Time
+        )
+        || (token.token_type == TokenType::Percent && token.text.eq_ignore_ascii_case("percent"))
 }
 
 fn is_lint_identifier(token: &Token) -> bool {

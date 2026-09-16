@@ -360,6 +360,24 @@ fn given_plain_sql_rules_when_linting_then_project_context_is_not_required() -> 
             expected_count: 0,
         },
         test_types::PlainSqlLintTestCase {
+            description: "plain terminal select with keyword-named columns",
+            sql: "WITH final_rows AS (SELECT 1 AS date, 2 AS comment, 3 AS key, 4 AS percent, 5 AS sequence, 6 AS time) SELECT date, comment, key, percent, sequence, time FROM final_rows",
+            rule: "SQBRSQL035",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "terminal date literal remains an expression",
+            sql: "WITH final_rows AS (SELECT 1 AS id) SELECT DATE '2026-01-01' FROM final_rows",
+            rule: "SQBRSQL035",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
+            description: "terminal modulo calculation remains an expression",
+            sql: "WITH final_rows AS (SELECT 10 AS quantity, 3 AS pack_size) SELECT quantity % pack_size AS remainder FROM final_rows",
+            rule: "SQBRSQL035",
+            expected_count: 1,
+        },
+        test_types::PlainSqlLintTestCase {
             description: "plain terminal select from CTE with output column list",
             sql: "WITH final_rows(id) AS (SELECT 1) SELECT id FROM final_rows",
             rule: "SQBRSQL035",
