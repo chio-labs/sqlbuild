@@ -601,6 +601,176 @@ FROM final
 
 @pytest.mark.parametrize(
     "test_case",
+    [RulesIntegrationTestCase("commented dependency calls are ignored", 0, "SQBRMODEL101")],
+    ids=lambda case: case.description,
+)
+def test_given_commented_dependency_call_when_running_import_rule_then_comment_is_ignored(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    staging: Path = tmp_path / "models" / "stg_orders.sql"
+    staging.parent.mkdir()
+    staging.write_text(
+        'MODEL (description "Staged orders");\nSELECT 1 AS order_id\n',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.write_text(
+        """MODEL (description "Orders");
+WITH imported_orders AS (
+  SELECT *
+  FROM __ref("stg_orders")
+),
+final AS (
+  SELECT order_id
+  FROM imported_orders
+  -- FROM __ref("retired_orders")
+  /* JOIN __source("archived_orders") */
+)
+SELECT order_id
+FROM final
+""",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "rules",
+            "--json",
+            "run",
+            test_case.expected_code,
+        ]
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    assert payload["findings"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulesIntegrationTestCase("quoted comment marker preserves real call", 1, "SQBRMODEL101")],
+    ids=lambda case: case.description,
+)
+def test_given_bigquery_quoted_comment_marker_when_running_import_rule_then_real_call_is_detected(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "bigquery"\n', encoding="utf-8"
+    )
+    staging: Path = tmp_path / "models" / "stg_orders.sql"
+    staging.parent.mkdir()
+    staging.write_text(
+        'MODEL (description "Staged orders", database warehouse, schema analytics);\n'
+        "SELECT 1 AS order_id\n",
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.write_text(
+        """MODEL (description "Orders", database warehouse, schema analytics);
+WITH imported_orders AS (
+  SELECT
+    order_id,
+    1 AS `--note`
+  FROM __ref("stg_orders")
+),
+final AS (
+  SELECT order_id
+  FROM imported_orders
+)
+SELECT order_id
+FROM final
+""",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "rules",
+            "--json",
+            "run",
+            test_case.expected_code,
+        ]
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    findings: list[dict[str, object]] = cast(list[dict[str, object]], payload["findings"])
+    assert [finding["message"] for finding in findings] == [
+        'import CTE "imported_orders" contains transformation logic'
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulesIntegrationTestCase("nested comment dependency call is ignored", 0, "SQBRMODEL101")],
+    ids=lambda case: case.description,
+)
+def test_given_postgres_nested_comment_when_running_import_rule_then_comment_is_ignored(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "postgres"\n', encoding="utf-8"
+    )
+    staging: Path = tmp_path / "models" / "stg_orders.sql"
+    staging.parent.mkdir()
+    staging.write_text(
+        'MODEL (description "Staged orders", schema analytics);\nSELECT 1 AS order_id\n',
+        encoding="utf-8",
+    )
+    retired: Path = tmp_path / "models" / "retired_orders.sql"
+    retired.write_text(
+        'MODEL (description "Retired orders", schema analytics);\nSELECT 1 AS order_id\n',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.write_text(
+        """MODEL (description "Orders", schema analytics);
+WITH imported_orders AS (
+  SELECT *
+  FROM __ref("stg_orders")
+),
+final AS (
+  SELECT order_id
+  FROM imported_orders
+  /* outer comment /* inner comment */ __ref("retired_orders") */
+)
+SELECT order_id
+FROM final
+""",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "rules",
+            "--json",
+            "run",
+            test_case.expected_code,
+        ]
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    assert payload["findings"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [RulesIntegrationTestCase("cross join used by filter is not unused", 0, "SQBRSQL032")],
     ids=lambda case: case.description,
 )
