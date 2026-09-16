@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.101.12](https://github.com/chio-labs/sqlbuild/compare/v0.101.11...v0.101.12) (2026-09-16)
+
+
+### Bug Fixes
+
+* clarify project layer remediation ([#685](https://github.com/chio-labs/sqlbuild/issues/685)) ([1ee489c](https://github.com/chio-labs/sqlbuild/commit/1ee489cc962a48b4a48b444613f30f1b856dcd3b))
+
 ## [0.101.11](https://github.com/chio-labs/sqlbuild/compare/v0.101.10...v0.101.11) (2026-09-16)
 
 
