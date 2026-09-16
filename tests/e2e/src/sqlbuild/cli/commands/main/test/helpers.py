@@ -247,6 +247,104 @@ def build_partial_ref_fixture_project_files() -> dict[str, str]:
     }
 
 
+def build_open_schema_ref_fixture_project_files() -> dict[str, str]:
+    """Build a fixture with a required column beyond a partial star-model contract."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "open_schema_ref_fixture"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "open_schema_ref_fixture.duckdb"\n'
+        ),
+        "models/stg_orders.sql": (
+            "MODEL (\n"
+            "  contract enforced,\n"
+            "  columns (\n"
+            "    order_id (type INTEGER),\n"
+            "  ),\n"
+            ");\n\n"
+            'SELECT * FROM __source("raw_orders")\n'
+        ),
+        "models/orders.sql": ('MODEL ();\n\nSELECT order_id, status FROM __ref("stg_orders")\n'),
+        "sources/raw_orders.yml": (
+            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+        ),
+        "tests/unit/test_orders.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status),\n"
+            "__expected__orders AS (SELECT 1 AS order_id, 'open' AS status)\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def build_recursive_ref_fixture_project_files() -> dict[str, str]:
+    """Build a fixture for a recursive model with derived output columns."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "recursive_ref_fixture"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "recursive_ref_fixture.duckdb"\n'
+        ),
+        "models/stg_order_links.sql": (
+            "MODEL (\n"
+            "  contract enforced,\n"
+            "  columns (\n"
+            "    order_id (type INTEGER),\n"
+            "    parent_order_id (type INTEGER),\n"
+            "  ),\n"
+            ");\n\n"
+            'SELECT order_id, parent_order_id FROM __source("raw_order_links")\n'
+        ),
+        "models/order_roots.sql": (
+            "MODEL (\n"
+            "  contract enforced,\n"
+            "  columns (\n"
+            "    order_id (type INTEGER),\n"
+            "    root_order_id (type INTEGER),\n"
+            "    link_depth (type INTEGER),\n"
+            "  ),\n"
+            ");\n\n"
+            "WITH RECURSIVE links AS (\n"
+            '  SELECT * FROM __ref("stg_order_links")\n'
+            "), order_chain AS (\n"
+            "  SELECT order_id, order_id AS root_order_id, 0 AS link_depth\n"
+            "  FROM links\n"
+            "  WHERE parent_order_id IS NULL\n"
+            "  UNION ALL\n"
+            "  SELECT child.order_id, parent.root_order_id, parent.link_depth + 1 AS link_depth\n"
+            "  FROM links AS child\n"
+            "  INNER JOIN order_chain AS parent ON child.parent_order_id = parent.order_id\n"
+            ")\n"
+            "SELECT order_id, root_order_id, link_depth FROM order_chain\n"
+        ),
+        "sources/raw_order_links.yml": (
+            "sources:\n"
+            "  - name: raw_order_links\n"
+            "    schema: main\n"
+            "    table: raw_order_links\n"
+            "    columns:\n"
+            "      - name: order_id\n        type: INTEGER\n"
+            "      - name: parent_order_id\n        type: INTEGER\n"
+        ),
+        "tests/unit/test_order_roots.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            "__ref__stg_order_links AS (\n"
+            "  SELECT 1 AS order_id, CAST(NULL AS INTEGER) AS parent_order_id\n"
+            "),\n"
+            "__expected__order_roots AS (\n"
+            "  SELECT 1 AS order_id, 1 AS root_order_id, 0 AS link_depth\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
 def build_partial_seed_fixture_project_files() -> dict[str, str]:
     """Build a seed fixture with one required nullable column omitted."""
 
