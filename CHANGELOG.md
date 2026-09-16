@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.101.4](https://github.com/chio-labs/sqlbuild/compare/v0.101.3...v0.101.4) (2026-09-16)
+
+
+### Bug Fixes
+
+* accept keyword-named terminal columns ([#669](https://github.com/chio-labs/sqlbuild/issues/669)) ([827d19c](https://github.com/chio-labs/sqlbuild/commit/827d19c0e2186950ddbbf1ebc5cfa343e101c525))
+
 ## [0.101.3](https://github.com/chio-labs/sqlbuild/compare/v0.101.2...v0.101.3) (2026-09-15)
 
 
