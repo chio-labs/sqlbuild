@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.101.11](https://github.com/chio-labs/sqlbuild/compare/v0.101.10...v0.101.11) (2026-09-16)
+
+
+### Bug Fixes
+
+* allow irreducible output shapes ([#683](https://github.com/chio-labs/sqlbuild/issues/683)) ([172012a](https://github.com/chio-labs/sqlbuild/commit/172012a9703d70e4293a2ad409a177ef92f87161))
+
 ## [0.101.10](https://github.com/chio-labs/sqlbuild/compare/v0.101.9...v0.101.10) (2026-09-16)
 
 
