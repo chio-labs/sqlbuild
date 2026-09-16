@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.101.6](https://github.com/chio-labs/sqlbuild/compare/v0.101.5...v0.101.6) (2026-09-16)
+
+
+### Bug Fixes
+
+* preserve explicit null ordering during format ([#673](https://github.com/chio-labs/sqlbuild/issues/673)) ([2c5d692](https://github.com/chio-labs/sqlbuild/commit/2c5d692827e61993150f9bd3b8f66b89826c86ca))
+
 ## [0.101.5](https://github.com/chio-labs/sqlbuild/compare/v0.101.4...v0.101.5) (2026-09-16)
 
 
