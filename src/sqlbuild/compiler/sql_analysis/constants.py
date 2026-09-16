@@ -48,6 +48,7 @@ POLYGLOT_AGGREGATE_KINDS: frozenset[str] = frozenset(
 POLYGLOT_PAYLOAD_ALIAS: str = "alias"
 POLYGLOT_PAYLOAD_COLUMN: str = "column"
 POLYGLOT_PAYLOAD_DATA_TYPE: str = "data_type"
+POLYGLOT_VARCHAR_DATA_TYPES: frozenset[str] = frozenset({"var_char", "varchar"})
 POLYGLOT_PAYLOAD_FROM: str = "from"
 POLYGLOT_PAYLOAD_EXPRESSIONS: str = "expressions"
 POLYGLOT_PAYLOAD_JOINS: str = "joins"

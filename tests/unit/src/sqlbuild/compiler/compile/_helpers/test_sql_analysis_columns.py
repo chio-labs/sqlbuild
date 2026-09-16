@@ -62,6 +62,11 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import direct_ord
             expected_columns=(InferredColumn(name="amount", type="DECIMAL(10, 2)"),),
         ),
         InferColumnsTestCase(
+            description="preserves varchar length from explicit cast",
+            query_sql='SELECT CAST(status AS VARCHAR(3)) AS status FROM __ref("orders")',
+            expected_columns=(InferredColumn(name="status", type="VARCHAR(3)"),),
+        ),
+        InferColumnsTestCase(
             description="extracts cast type from try cast",
             query_sql='SELECT TRY_CAST(x AS INT) AS val FROM __ref("orders")',
             expected_columns=(InferredColumn(name="val", type="INT"),),

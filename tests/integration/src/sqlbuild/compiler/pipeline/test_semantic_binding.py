@@ -529,5 +529,44 @@ def test_given_unresolved_star_when_contract_has_additional_column_then_compile_
     assert "error[K001]" not in output
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SemanticBindingIntegrationTestCase(
+            description="varchar cast length remains available through a CTE",
+            expected_exit_code=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_sized_varchar_cast_when_compiling_enforced_contract_then_type_matches(
+    test_case: SemanticBindingIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write_semantic_binding_project(
+        project_dir=tmp_path,
+        upstream_sql=_AUTHORITATIVE_MODEL,
+        downstream_sql=(
+            "MODEL (\n"
+            "  materialized view\n"
+            "  contract enforced\n"
+            "  columns (category (type VARCHAR(3)))\n"
+            ");\n"
+            "WITH final AS (\n"
+            '  SELECT CAST(category AS VARCHAR(3)) AS category FROM __ref("upstream")\n'
+            ")\n"
+            "SELECT final.category FROM final\n"
+        ),
+    )
+
+    exit_code: int = main(["--no-color", "--project-dir", str(tmp_path), "compile", "--no-cache"])
+
+    output: str = capsys.readouterr().out
+    assert exit_code == test_case.expected_exit_code
+    assert "error[K002]" not in output
+    assert "error[K003]" not in output
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-vv"])
