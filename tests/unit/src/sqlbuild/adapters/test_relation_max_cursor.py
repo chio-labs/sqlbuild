@@ -268,7 +268,7 @@ def test_given_cursor_horizon_when_rendering_eligible_max_then_adapter_owns_port
             cursor_start_exclusive="2026-01-01 00:00:00",
             cursor_type="timestamp",
             expected_sql=(
-                'SELECT * FROM prod.events WHERE "EVENT""TIME" > TIMESTAMP \'2026-01-01 00:00:00\''
+                'SELECT * FROM prod.events WHERE "EVENT""TIME" > \'2026-01-01 00:00:00\''
             ),
         ),
         AdapterSeedSelectAfterCursorTestCase(

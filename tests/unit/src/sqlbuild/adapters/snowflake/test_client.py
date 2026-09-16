@@ -664,10 +664,22 @@ def test_given_source_freshness_table_when_rendering_prune_then_snowflake_uses_h
     "test_case",
     [
         SnowflakeRenderCursorBoundLiteralTestCase(
-            description="renders timestamp cursor bounds as typed literals",
+            description="renders naive timestamp cursor bounds for column-directed coercion",
             value="2024-01-15T00:00:00",
             cursor_type=CursorKind.TIMESTAMP,
-            expected_literal="TIMESTAMP '2024-01-15T00:00:00'",
+            expected_literal="'2024-01-15T00:00:00'",
+        ),
+        SnowflakeRenderCursorBoundLiteralTestCase(
+            description="renders UTC timestamp cursor bounds for column-directed coercion",
+            value="2026-09-14 00:00:00.000Z",
+            cursor_type=CursorKind.TIMESTAMP,
+            expected_literal="'2026-09-14 00:00:00.000Z'",
+        ),
+        SnowflakeRenderCursorBoundLiteralTestCase(
+            description="renders nonzero offset cursor bounds for column-directed coercion",
+            value="2026-09-14T08:00:00+08:00",
+            cursor_type=CursorKind.TIMESTAMP,
+            expected_literal="'2026-09-14T08:00:00+08:00'",
         ),
         SnowflakeRenderCursorBoundLiteralTestCase(
             description="renders integer cursor bounds without quotes",
