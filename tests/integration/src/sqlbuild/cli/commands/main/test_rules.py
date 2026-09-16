@@ -381,6 +381,60 @@ SELECT 1
 
 @pytest.mark.parametrize(
     "test_case",
+    [RulesIntegrationTestCase("contextual keywords are plain terminal columns", 0, "SQBRSQL035")],
+    ids=lambda case: case.description,
+)
+def test_given_keyword_named_columns_when_running_terminal_rule_then_projection_is_accepted(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        """MODEL (description "Orders with contextual column names");
+WITH final AS (
+  SELECT
+    CAST('2026-01-01' AS DATE) AS date,
+    'ready' AS comment,
+    'order-1' AS key,
+    50 AS percent,
+    1 AS sequence,
+    CAST('12:00:00' AS TIME) AS time
+)
+SELECT
+  date,
+  comment,
+  key,
+  percent,
+  sequence,
+  time
+FROM final
+""",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "rules",
+            "--json",
+            "run",
+            test_case.expected_code,
+        ]
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    assert payload["findings"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [
         RulesIntegrationTestCase(
             "assertion and expected result must be independent",
