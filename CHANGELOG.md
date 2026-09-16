@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.101.8](https://github.com/chio-labs/sqlbuild/compare/v0.101.7...v0.101.8) (2026-09-16)
+
+
+### Bug Fixes
+
+* allow stars over dynamic pivots ([#677](https://github.com/chio-labs/sqlbuild/issues/677)) ([045d088](https://github.com/chio-labs/sqlbuild/commit/045d088cf9f223febcc7d7eccdae039cd370bf0a))
+
 ## [0.101.7](https://github.com/chio-labs/sqlbuild/compare/v0.101.6...v0.101.7) (2026-09-16)
 
 
