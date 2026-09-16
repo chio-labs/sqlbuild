@@ -836,9 +836,7 @@ def _analyze_model_sql(
         inference_profile=inference_profile,
         allow_compact_analysis=allow_compact_analysis,
         binding_schema=request.binding_schema,
-        recover_cte_facts=(
-            request.model_input.config.values.get("contract") == ContractPolicy.ENFORCED
-        ),
+        recover_cte_facts=_should_recover_cte_facts(request.model_input),
     )
     return _ModelSqlAnalysis(
         polyglot_analysis=polyglot_analysis,
@@ -872,9 +870,7 @@ def _model_sql_analysis_request(
             column_nullability_by_table=column_nullability_by_table,
             column_types_by_table=column_types_by_table,
             binding_schema=binding_schema,
-            recover_cte_facts=(
-                model_input.config.values.get("contract") == ContractPolicy.ENFORCED
-            ),
+            recover_cte_facts=_should_recover_cte_facts(model_input),
         )
         if analysis_cache is not None
         else None
@@ -894,6 +890,12 @@ def _model_placeholders(model_input: CompileModelInput) -> dict[str, str] | None
         {str(k): str(v) for k, v in raw_placeholders.items()}
         if isinstance(raw_placeholders, dict)
         else None
+    )
+
+
+def _should_recover_cte_facts(model_input: CompileModelInput) -> bool:
+    return model_input.config.values.get("contract") == ContractPolicy.ENFORCED or (
+        model_input.schema_entry is not None and bool(model_input.schema_entry.type_enforcement)
     )
 
 
