@@ -170,6 +170,13 @@ def _required_fixture_columns(
 ) -> tuple[dict[FixtureKey, dict[str, set[str]]], frozenset[FixtureKey]]:
     required: dict[FixtureKey, dict[str, set[str]]] = {}
     star_fixture_keys: set[FixtureKey] = set()
+    authoritative_columns: dict[FixtureKey, frozenset[str]] = {}
+    for key, relation in relations.items():
+        if not relation.authoritative_names:
+            continue
+        authoritative_columns[key] = frozenset(
+            column.name.casefold() for column in relation.columns
+        )
     for model_name in ordered_model_names:
         model: CompiledModel | None = model_map.get(model_name)
         if model is None:
@@ -181,6 +188,11 @@ def _required_fixture_columns(
                     upstream.resource_name,
                 )
                 if key not in fixture_keys:
+                    continue
+                if (
+                    key in authoritative_columns
+                    and upstream.column_name.casefold() not in authoritative_columns[key]
+                ):
                     continue
                 required.setdefault(key, {}).setdefault(upstream.column_name, set()).add(model_name)
         if model.fast_lineage_has_star:
@@ -350,8 +362,11 @@ def _model_fixture_metadata(*, model: CompiledModel) -> FixtureRelationMetadata:
     return FixtureRelationMetadata(
         columns=tuple(columns_by_name[key] for key in order),
         authoritative_names=(
-            model.config.values.get("contract") == ContractPolicy.ENFORCED
-            or (model.inferred_columns is not None and not model.fast_lineage_has_star)
+            not model.fast_lineage_has_star
+            and (
+                model.config.values.get("contract") == ContractPolicy.ENFORCED
+                or model.inferred_columns is not None
+            )
         ),
     )
 
