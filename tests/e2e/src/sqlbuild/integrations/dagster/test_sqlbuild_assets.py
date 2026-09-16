@@ -1,5 +1,6 @@
 """E2E tests for executing SQLBuild through Dagster assets."""
 
+import json
 import os
 import runpy
 import subprocess
@@ -7,7 +8,7 @@ import threading
 import time
 from collections.abc import Iterator, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import dagster as dg
 import pytest
@@ -39,6 +40,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     table_exists,
 )
 from tests.e2e.src.sqlbuild.integrations.dagster._test_types import (
+    DagsterColumnAuditChecksE2ETestCase,
     DagsterPlaygroundE2ETestCase,
     DagsterPythonNodesArtifactE2ETestCase,
     DagsterSqlBuildE2ETestCase,
@@ -65,6 +67,79 @@ from tests.e2e.src.sqlbuild.integrations.dagster.helpers import (
 class _NamespacedDagsterTranslator(SqlBuildDagsterTranslator):
     def get_asset_key(self, node: Mapping[str, Any]) -> AssetKey:
         return AssetKey(["translated", str(node["name"])])
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagsterColumnAuditChecksE2ETestCase(
+            description="column arguments produce unique checks while non-column IDs stay stable",
+            expected_check_names=(
+                "audit__model_is_empty__orders",
+                "audit__not_null__customer_id",
+                "audit__not_null__order_id",
+            ),
+            expected_check_ids=(
+                "audit:model_is_empty:model:orders",
+                "audit:not_null:model:orders:customer_id",
+                "audit:not_null:model:orders:order_id",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_model_level_column_audits_when_loading_dagster_assets_then_checks_are_unique(
+    test_case: DagsterColumnAuditChecksE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="column_audit_checks",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "column_audit_checks"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "column_audit_checks.duckdb"\n'
+            ),
+            "models/orders.sql": (
+                "MODEL (\n"
+                "  columns (\n"
+                "    order_id (),\n"
+                "    customer_id (),\n"
+                "  ),\n"
+                "  audits [\n"
+                "    not_null (column order_id, severity error),\n"
+                "    not_null (column customer_id, severity error),\n"
+                "    model_is_empty (severity error),\n"
+                "  ],\n"
+                ");\n\n"
+                "SELECT 1 AS order_id, 2 AS customer_id\n"
+            ),
+            "audits/generic/model_is_empty.sql": ('AUDIT ();\n\nSELECT * FROM __ref("@model")\n'),
+        },
+    )
+    sqlbuild_project: SqlBuildProject = SqlBuildProject(
+        project_dir=project_dir,
+        sqb_command=(str(REPO_ROOT / ".venv" / "bin" / "sqb"),),
+    )
+
+    sqlbuild_project.prepare()
+    dag_payload: dict[str, object] = json.loads(
+        sqlbuild_project.dag_path.read_text(encoding="utf-8")
+    )
+    dag_checks: list[dict[str, object]] = cast(list[dict[str, object]], dag_payload["checks"])
+
+    @sqlbuild_assets(project=sqlbuild_project)
+    def sqlbuild_orders(context: AssetExecutionContext) -> Iterator[object]:
+        del context
+        return
+        yield
+
+    assert {spec.name for spec in sqlbuild_orders.check_specs} == set(
+        test_case.expected_check_names
+    )
+    assert {check["id"] for check in dag_checks} == set(test_case.expected_check_ids)
 
 
 @pytest.mark.parametrize(
