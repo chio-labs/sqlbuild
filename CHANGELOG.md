@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.101.13](https://github.com/chio-labs/sqlbuild/compare/v0.101.12...v0.101.13) (2026-09-16)
+
+
+### Bug Fixes
+
+* identify authored numeric literals ([#687](https://github.com/chio-labs/sqlbuild/issues/687)) ([237343f](https://github.com/chio-labs/sqlbuild/commit/237343f255b7a39c9133c4033bb70771b5657cf1))
+
 ## [0.101.12](https://github.com/chio-labs/sqlbuild/compare/v0.101.11...v0.101.12) (2026-09-16)
 
 
