@@ -110,6 +110,43 @@ SELECT order_id
 @pytest.mark.parametrize(
     "test_case",
     [
+        FormatCompileIntegrationTestCase(
+            description="explicit null ordering survives format and compile",
+            expected_literal="order_id NULLS LAST",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_explicit_null_ordering_when_formatting_then_clause_is_preserved(
+    test_case: FormatCompileIntegrationTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        'MODEL (description "Orders");\n'
+        'select order_id from __ref("stg_orders") order by order_id nulls last\n',
+        encoding="utf-8",
+    )
+    (model.parent / "stg_orders.sql").write_text(
+        'MODEL (description "Staged orders");\nSELECT 1 AS order_id\n',
+        encoding="utf-8",
+    )
+
+    format_exit: int = main(["--project-dir", str(tmp_path), "format"])
+    compile_exit: int = main(["--project-dir", str(tmp_path), "compile", "--no-cache"])
+
+    assert format_exit == 0
+    assert compile_exit == 0
+    assert test_case.expected_literal in model.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         DescriptionFormatIntegrationTestCase(
             description="configured width wraps and compiles model description",
             line_width=60,
