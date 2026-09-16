@@ -767,7 +767,7 @@ fn classify_model(
     let ctes = top_ctes(query)
         .iter()
         .map(|cte| {
-            let dependencies = dependency_calls(&cte.query.to_string(), dialect_name)?;
+            let dependencies = query_dependency_calls(&cte.query);
             let dependency_import = dependency_import(&cte.query);
             let kind = if dependencies.is_empty() {
                 logical_seen = true;
@@ -788,14 +788,14 @@ fn classify_model(
                     rejections,
                 }
             };
-            Ok(CteClassification {
+            CteClassification {
                 name: cte.alias.name.value.clone(),
                 position: location_position(cte.alias.name.span.start),
                 dependency_import,
                 kind,
-            })
+            }
         })
-        .collect::<Result<Vec<_>, String>>()?;
+        .collect::<Vec<_>>();
 
     let passthrough = model.references.len() == 1
         && authored_dependencies.len() == 1
@@ -863,6 +863,45 @@ fn dependency_calls(source: &str, dialect_name: &str) -> Result<Vec<String>, Str
         index = cursor;
     }
     Ok(calls)
+}
+
+fn query_dependency_calls(query: &Query) -> Vec<String> {
+    #[derive(Default)]
+    struct Dependencies {
+        calls: Vec<String>,
+    }
+
+    impl Visitor for Dependencies {
+        type Break = ();
+
+        fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<Self::Break> {
+            let TableFactor::Table {
+                name,
+                args: Some(arguments),
+                ..
+            } = factor
+            else {
+                return ControlFlow::Continue(());
+            };
+            let dependency = name.to_string().to_ascii_lowercase();
+            if !matches!(dependency.as_str(), "__ref" | "__source") {
+                return ControlFlow::Continue(());
+            }
+            let arguments = arguments
+                .args
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+                .to_ascii_lowercase();
+            self.calls.push(format!("{dependency}({arguments})"));
+            ControlFlow::Continue(())
+        }
+    }
+
+    let mut dependencies = Dependencies::default();
+    let _ = query.visit(&mut dependencies);
+    dependencies.calls
 }
 
 fn import_ctes(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &FaultCollector) {
