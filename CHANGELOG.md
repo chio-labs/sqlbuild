@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.101.5](https://github.com/chio-labs/sqlbuild/compare/v0.101.4...v0.101.5) (2026-09-16)
+
+
+### Bug Fixes
+
+* ignore commented dependency calls in model rules ([#671](https://github.com/chio-labs/sqlbuild/issues/671)) ([2bfea0f](https://github.com/chio-labs/sqlbuild/commit/2bfea0f1acc809939fc6042742b0233303cfecf6))
+
 ## [0.101.4](https://github.com/chio-labs/sqlbuild/compare/v0.101.3...v0.101.4) (2026-09-16)
 
 
