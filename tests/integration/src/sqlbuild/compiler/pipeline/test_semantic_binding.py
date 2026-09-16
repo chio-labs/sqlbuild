@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
@@ -566,6 +567,94 @@ def test_given_sized_varchar_cast_when_compiling_enforced_contract_then_type_mat
     assert exit_code == test_case.expected_exit_code
     assert "error[K002]" not in output
     assert "error[K003]" not in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SemanticBindingIntegrationTestCase(
+            description="declared cast type survives CTEs when source columns are untyped",
+            expected_exit_code=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_untyped_source_when_cast_flows_through_ctes_then_declared_type_matches(
+    test_case: SemanticBindingIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _ = (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "semantic_binding"\nadapter = "snowflake"\n', encoding="utf-8"
+    )
+    sources_dir: Path = tmp_path / "sources"
+    models_dir: Path = tmp_path / "models"
+    sources_dir.mkdir()
+    models_dir.mkdir()
+    _ = (sources_dir / "raw.yml").write_text(
+        """sources:
+  - name: raw_orders
+    schema: raw
+    table: orders
+    columns:
+      - name: payload
+""",
+        encoding="utf-8",
+    )
+    model_path: Path = models_dir / "orders.sql"
+    model_sql: str = """MODEL (
+  materialized view
+  database analytics
+  schema analytics
+);
+WITH raw_orders AS (
+  SELECT PARSE_JSON(payload) AS document FROM __source("raw_orders")
+),
+latest_orders AS (
+  SELECT document:data:categories AS categories
+  FROM raw_orders
+  QUALIFY ROW_NUMBER() OVER (ORDER BY document:updated_at::TIMESTAMP DESC) = 1
+),
+flattened AS (
+  SELECT item.value::VARCHAR AS category
+  FROM latest_orders, LATERAL FLATTEN(input => categories) item
+),
+untyped AS (
+  SELECT category FROM flattened
+),
+final AS (
+  SELECT CAST(category AS VARCHAR(3)) AS category FROM untyped
+)
+SELECT category FROM final
+"""
+    _ = model_path.write_text(model_sql, encoding="utf-8")
+
+    initial_exit_code: int = main(
+        ["--no-color", "--project-dir", str(tmp_path), "compile", "--json"]
+    )
+    initial_output: dict[str, object] = json.loads(capsys.readouterr().out)
+    assert initial_exit_code == test_case.expected_exit_code
+    assert isinstance(initial_output.get("diagnostics"), list)
+
+    _ = model_path.write_text(
+        model_sql.replace(
+            "schema analytics\n",
+            "schema analytics\n  columns (category (type VARCHAR(3)))\n",
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(["--no-color", "--project-dir", str(tmp_path), "compile", "--json"])
+
+    captured: CaptureResult[str] = capsys.readouterr()
+    output: dict[str, object] = json.loads(captured.out)
+    diagnostics: object = output.get("diagnostics")
+    assert exit_code == test_case.expected_exit_code
+    assert isinstance(diagnostics, list)
+    assert not any(
+        isinstance(diagnostic, dict) and diagnostic.get("code") in {"K002", "K003"}
+        for diagnostic in diagnostics
+    )
 
 
 if __name__ == "__main__":
