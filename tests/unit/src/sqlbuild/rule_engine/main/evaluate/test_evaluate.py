@@ -258,6 +258,33 @@ from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_proj
             expected_codes=(),
         ),
         PolicyEvaluationTestCase(
+            description="constant-backed numeric decision ignores digits in identifiers and strings",
+            model_name="commerce__mart__orders",
+            relative_path="models/mart/commerce__mart__orders.sql",
+            sql=(
+                "SELECT CASE WHEN item_count > 7 THEN 'tier 7' ELSE 'small' END AS batch_size_7 "
+                "FROM items"
+            ),
+            authored_sql=(
+                'SELECT CASE WHEN item_count > @const("large_batch") '
+                "THEN 'tier 7' ELSE 'small' END AS batch_size_7 FROM items"
+            ),
+            config_values={"materialized": "table", "contract": "enforced"},
+            select=("SQBRDECLARATION102",),
+            expected_codes=(),
+        ),
+        PolicyEvaluationTestCase(
+            description="query-only numeric decision with model alias faults",
+            model_name="commerce__mart__orders",
+            relative_path="models/mart/commerce__mart__orders.sql",
+            sql=(
+                "SELECT CASE WHEN item_count > 7 THEN 'large' ELSE 'small' END AS model FROM items;"
+            ),
+            config_values={"materialized": "table", "contract": "enforced"},
+            select=("SQBRDECLARATION102",),
+            expected_codes=("SQBRDECLARATION102",),
+        ),
+        PolicyEvaluationTestCase(
             description="negative one and one numeric decisions pass",
             model_name="commerce__mart__orders",
             relative_path="models/mart/commerce__mart__orders.sql",

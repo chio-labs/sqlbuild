@@ -15,6 +15,15 @@ class RulesIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class RulePassIntegrationTestCase:
+    """One compiler-integrated Rules command expected to pass."""
+
+    description: str
+    expected_exit_code: int
+    expected_diagnostics: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class FormatCompileIntegrationTestCase:
     """One format-to-compile compatibility expectation."""
 
