@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.101.10](https://github.com/chio-labs/sqlbuild/compare/v0.101.9...v0.101.10) (2026-09-16)
+
+
+### Bug Fixes
+
+* preserve Snowflake cursor timestamp semantics ([#681](https://github.com/chio-labs/sqlbuild/issues/681)) ([8f9680a](https://github.com/chio-labs/sqlbuild/commit/8f9680ad622cefb7897b1a9c8ecdef4c5e6fc015))
+
 ## [0.101.9](https://github.com/chio-labs/sqlbuild/compare/v0.101.8...v0.101.9) (2026-09-16)
 
 
