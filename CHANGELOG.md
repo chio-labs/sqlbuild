@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.101.14](https://github.com/chio-labs/sqlbuild/compare/v0.101.13...v0.101.14) (2026-09-16)
+
+
+### Bug Fixes
+
+* validate open relation fixtures ([#689](https://github.com/chio-labs/sqlbuild/issues/689)) ([a9563ac](https://github.com/chio-labs/sqlbuild/commit/a9563ac47e501ca062a5fbf3e2eaa29eae97e812))
+
 ## [0.101.13](https://github.com/chio-labs/sqlbuild/compare/v0.101.12...v0.101.13) (2026-09-16)
 
 
