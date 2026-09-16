@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.101.9](https://github.com/chio-labs/sqlbuild/compare/v0.101.8...v0.101.9) (2026-09-16)
+
+
+### Bug Fixes
+
+* recover CTE types for typed models ([#679](https://github.com/chio-labs/sqlbuild/issues/679)) ([0d7aac1](https://github.com/chio-labs/sqlbuild/commit/0d7aac1b6ae1fd503eb9892e17534fbdfd3578f7))
+
 ## [0.101.8](https://github.com/chio-labs/sqlbuild/compare/v0.101.7...v0.101.8) (2026-09-16)
 
 
