@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.101.7](https://github.com/chio-labs/sqlbuild/compare/v0.101.6...v0.101.7) (2026-09-16)
+
+
+### Bug Fixes
+
+* preserve varchar cast lengths in inference ([#675](https://github.com/chio-labs/sqlbuild/issues/675)) ([a4bbf02](https://github.com/chio-labs/sqlbuild/commit/a4bbf0298d7b765258ef606d0f0ae7065eff9355))
+
 ## [0.101.6](https://github.com/chio-labs/sqlbuild/compare/v0.101.5...v0.101.6) (2026-09-16)
 
 
