@@ -8,8 +8,8 @@ use crate::rules::models::{
 };
 use globset::{Glob, GlobSetBuilder};
 use sqlparser::ast::{
-    BinaryOperator, Expr, GroupByExpr, JoinConstraint, JoinOperator, Query, Select, SelectItem,
-    SetExpr, Spanned, Statement, TableFactor, Value, Visit, Visitor,
+    BinaryOperator, Expr, GroupByExpr, JoinConstraint, JoinOperator, PivotValueSource, Query,
+    Select, SelectItem, SetExpr, Spanned, Statement, TableFactor, Value, Visit, Visitor,
 };
 use sqlparser::dialect::{
     BigQueryDialect, ClickHouseDialect, DatabricksDialect, Dialect, DuckDbDialect, GenericDialect,
@@ -991,9 +991,22 @@ fn select_star(
         let Some(select) = root_select(query) else {
             continue;
         };
+        let dynamic_pivot_star = select.projection.len() == 1
+            && select.from.len() == 1
+            && select.from[0].joins.is_empty()
+            && matches!(
+                &select.from[0].relation,
+                TableFactor::Pivot {
+                    value_source: PivotValueSource::Any(_),
+                    ..
+                }
+            );
         let stars = stars_in_select(select);
         for at in stars {
             if import_positions.contains(&(at.line, at.column)) {
+                continue;
+            }
+            if dynamic_pivot_star {
                 continue;
             }
             let lone = select.projection.len() == 1;
