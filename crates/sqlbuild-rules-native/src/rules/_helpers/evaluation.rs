@@ -16,6 +16,7 @@ use sqlparser::dialect::{
     MsSqlDialect, PostgreSqlDialect, SnowflakeDialect,
 };
 use sqlparser::parser::{Parser, ParserError, ParserOptions};
+use sqlparser::tokenizer::{Token, Tokenizer};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ops::ControlFlow;
 
@@ -131,7 +132,7 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
         ));
     };
     let query = *query;
-    let classification = classify_model(&query, model);
+    let classification = classify_model(&query, model, &request.dialect)?;
     let parsed = ParsedModel {
         query,
         model,
@@ -756,13 +757,17 @@ fn sole_table_name(query: &Query) -> Option<String> {
     Some(name.to_string())
 }
 
-fn classify_model(query: &Query, model: &Model) -> ModelClassification {
-    let authored_dependencies = dependency_calls(&model.query_sql);
+fn classify_model(
+    query: &Query,
+    model: &Model,
+    dialect_name: &str,
+) -> Result<ModelClassification, String> {
+    let authored_dependencies = dependency_calls(&model.query_sql, dialect_name)?;
     let mut logical_seen = false;
     let ctes = top_ctes(query)
         .iter()
         .map(|cte| {
-            let dependencies = dependency_calls(&cte.query.to_string());
+            let dependencies = query_dependency_calls(&cte.query);
             let dependency_import = dependency_import(&cte.query);
             let kind = if dependencies.is_empty() {
                 logical_seen = true;
@@ -801,49 +806,102 @@ fn classify_model(query: &Query, model: &Model) -> ModelClassification {
                 && root_select(query).is_some_and(|select| plain_select(select, true))
         });
 
-    ModelClassification {
+    Ok(ModelClassification {
         authored_dependencies,
         ctes,
         passthrough,
-    }
+    })
 }
 
-fn dependency_calls(source: &str) -> Vec<String> {
-    let source = source.to_ascii_lowercase();
+fn dependency_calls(source: &str, dialect_name: &str) -> Result<Vec<String>, String> {
+    let dialect = rules_dialect(dialect_name);
+    let tokens = Tokenizer::new(dialect.as_ref(), source)
+        .tokenize()
+        .map_err(|error| format!("could not tokenize model dependencies: {error}"))?;
+    let tokens = tokens
+        .iter()
+        .filter(|token| !matches!(token, Token::Whitespace(_)))
+        .collect::<Vec<_>>();
     let mut calls: Vec<String> = Vec::new();
-    let mut cursor = 0;
-    while cursor < source.len() {
-        let tail = &source[cursor..];
-        let next_ref = tail.find("__ref");
-        let next_source = tail.find("__source");
-        let Some(relative) = (match (next_ref, next_source) {
-            (Some(left), Some(right)) => Some(left.min(right)),
-            (Some(value), None) | (None, Some(value)) => Some(value),
-            (None, None) => None,
-        }) else {
-            break;
+    let mut index = 0_usize;
+    while index < tokens.len() {
+        let Token::Word(word) = tokens[index] else {
+            index += 1;
+            continue;
         };
-        let start = cursor + relative;
-        let name_end = start
-            + if source[start..].starts_with("__source") {
-                "__source".len()
-            } else {
-                "__ref".len()
-            };
-        let arguments = source[name_end..].trim_start();
-        if !arguments.starts_with('(') {
-            cursor = name_end;
+        if word.quote_style.is_some()
+            || !matches!(
+                word.value.to_ascii_lowercase().as_str(),
+                "__ref" | "__source"
+            )
+            || !matches!(tokens.get(index + 1), Some(Token::LParen))
+        {
+            index += 1;
             continue;
         }
-        let Some(relative_end) = source[start..].find(')') else {
-            calls.push(source[start..].to_owned());
-            break;
-        };
-        let end = start + relative_end + 1;
-        calls.push(source[start..end].to_owned());
-        cursor = end;
+
+        let mut call = word.value.to_ascii_lowercase();
+        let mut depth = 0_usize;
+        let mut cursor = index + 1;
+        while cursor < tokens.len() {
+            let token = tokens[cursor];
+            call.push_str(&token.to_string().to_ascii_lowercase());
+            match token {
+                Token::LParen => depth += 1,
+                Token::RParen => {
+                    depth -= 1;
+                    if depth == 0 {
+                        calls.push(call);
+                        cursor += 1;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+            cursor += 1;
+        }
+        index = cursor;
     }
-    calls
+    Ok(calls)
+}
+
+fn query_dependency_calls(query: &Query) -> Vec<String> {
+    #[derive(Default)]
+    struct Dependencies {
+        calls: Vec<String>,
+    }
+
+    impl Visitor for Dependencies {
+        type Break = ();
+
+        fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<Self::Break> {
+            let TableFactor::Table {
+                name,
+                args: Some(arguments),
+                ..
+            } = factor
+            else {
+                return ControlFlow::Continue(());
+            };
+            let dependency = name.to_string().to_ascii_lowercase();
+            if !matches!(dependency.as_str(), "__ref" | "__source") {
+                return ControlFlow::Continue(());
+            }
+            let arguments = arguments
+                .args
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+                .to_ascii_lowercase();
+            self.calls.push(format!("{dependency}({arguments})"));
+            ControlFlow::Continue(())
+        }
+    }
+
+    let mut dependencies = Dependencies::default();
+    let _ = query.visit(&mut dependencies);
+    dependencies.calls
 }
 
 fn import_ctes(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &FaultCollector) {

@@ -352,6 +352,22 @@ from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_proj
             references=(CompileSqlReference(ref_kind="ref", ref_name="commerce__stg__orders"),),
         ),
         PolicyEvaluationTestCase(
+            description="commented and quoted dependency text is ignored",
+            model_name="commerce__mart__orders",
+            relative_path="models/mart/commerce__mart__orders.sql",
+            sql=(
+                'WITH orders AS (SELECT * FROM __ref("commerce__stg__orders")), '
+                "final AS (SELECT id, '__ref(\"ignored_string\")' AS note FROM orders "
+                '-- __ref("ignored_line_comment")\n'
+                '/* __source("ignored_block_comment") */) '
+                "SELECT id FROM final"
+            ),
+            config_values={"materialized": "table", "contract": "enforced"},
+            select=("SQBRMODEL101",),
+            expected_codes=(),
+            references=(CompileSqlReference(ref_kind="ref", ref_name="commerce__stg__orders"),),
+        ),
+        PolicyEvaluationTestCase(
             description="transformed dependency import faults",
             model_name="commerce__mart__orders",
             relative_path="models/mart/commerce__mart__orders.sql",
