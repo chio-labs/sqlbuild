@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.102.4](https://github.com/chio-labs/sqlbuild/compare/v0.102.3...v0.102.4) (2026-09-17)
+
+
+### Bug Fixes
+
+* map final CTE contract outputs by name ([#703](https://github.com/chio-labs/sqlbuild/issues/703)) ([83a3f53](https://github.com/chio-labs/sqlbuild/commit/83a3f5359ce1882c7d7ec459f8e0052e32a7e350))
+
 ## [0.102.3](https://github.com/chio-labs/sqlbuild/compare/v0.102.2...v0.102.3) (2026-09-17)
 
 
