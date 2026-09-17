@@ -42,7 +42,7 @@ def build_sql_test_artifact_identity_context(
         {
             "algorithm": _ALGORITHM_FINGERPRINT,
             "sqlbuild_version": _package_version("sqlbuild"),
-            "polyglot_version": _package_version("polyglot-sql-chio"),
+            "polyglot_version": _package_version("polyglot-sql"),
             "python_version": platform.python_version_tuple()[:2],
             "adapter_class": f"{type(adapter).__module__}.{type(adapter).__qualname__}",
             "set_difference_operator": adapter.render_set_difference_operator(),

@@ -16,14 +16,14 @@ DEPENDENCY_SPECIFIER_PATTERN: re.Pattern[str] = re.compile(r"[\[<>=!~]")
     "test_case",
     [
         ProjectDependencyTestCase(
-            description="scope-fixed polyglot distribution is a core dependency",
-            dependency_name="polyglot-sql-chio",
+            description="upstream polyglot distribution is a core dependency",
+            dependency_name="polyglot-sql",
             expected_in_core_dependencies=True,
             expected_optional_extra_absent=True,
         ),
         ProjectDependencyTestCase(
-            description="upstream polyglot distribution is not a direct project dependency",
-            dependency_name="polyglot-sql",
+            description="legacy polyglot fork is not a direct project dependency",
+            dependency_name="polyglot-sql-chio",
             expected_in_core_dependencies=False,
             expected_optional_extra_absent=True,
         ),

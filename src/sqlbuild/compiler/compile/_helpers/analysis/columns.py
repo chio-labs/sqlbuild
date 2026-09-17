@@ -233,6 +233,9 @@ from sqlbuild.compiler.sql_analysis.constants import (
     TIMESTAMP_WITH_TIME_ZONE_SQL_TYPE_NAME as _TIMESTAMP_WITH_TIME_ZONE_SQL_TYPE_NAME,
 )
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
+from sqlbuild.compiler.sql_analysis.main._normalize_for_polyglot import (
+    normalize_sql_for_polyglot,
+)
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.compiler.sql_analysis.models import (
@@ -268,7 +271,10 @@ def infer_columns_with_sql_analysis(
 
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
 
-    cleaned_sql: str = _replace_refs_with_stubs(query_sql)
+    cleaned_sql: str = _replace_refs_with_stubs(
+        query_sql=query_sql,
+        dialect=profile.sql_analysis_dialect,
+    )
     if placeholders:
         cleaned_sql = substitute_placeholder_defaults(
             query_sql=cleaned_sql, placeholders=placeholders
@@ -295,7 +301,10 @@ def analyze_columns_with_polyglot(
     """Infer columns with one Polyglot parse, returning False when unavailable."""
 
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
-    cleaned_sql: str = _replace_refs_with_stubs(query_sql)
+    cleaned_sql: str = _replace_refs_with_stubs(
+        query_sql=query_sql,
+        dialect=profile.sql_analysis_dialect,
+    )
     if placeholders:
         cleaned_sql = substitute_placeholder_defaults(
             query_sql=cleaned_sql, placeholders=placeholders
@@ -324,7 +333,10 @@ def analyze_columns_and_lineage_with_polyglot(
 
     polyglot_module: Any = import_polyglot_sql()
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
-    cleaned_sql: str = _replace_refs_with_stubs(query_sql)
+    cleaned_sql: str = _replace_refs_with_stubs(
+        query_sql=query_sql,
+        dialect=profile.sql_analysis_dialect,
+    )
     if placeholders:
         cleaned_sql = substitute_placeholder_defaults(
             query_sql=cleaned_sql, placeholders=placeholders
@@ -398,7 +410,7 @@ def get_complete_schema_binding_request(
 ) -> SqlSchemaValidationRequest:
     """Build one stable native schema-validation request."""
 
-    cleaned_sql: str = _replace_refs_with_stubs(query_sql)
+    cleaned_sql: str = _replace_refs_with_stubs(query_sql=query_sql, dialect=dialect)
     if placeholders:
         cleaned_sql = substitute_placeholder_defaults(
             query_sql=cleaned_sql,
@@ -1578,7 +1590,7 @@ def substitute_placeholder_defaults(*, query_sql: str, placeholders: dict[str, s
     return _PLACEHOLDER_PATTERN.sub(_replacer, query_sql)
 
 
-def _replace_refs_with_stubs(query_sql: str) -> str:
+def _replace_refs_with_stubs(*, query_sql: str, dialect: str | None = None) -> str:
     """Replace SQLBuild marker calls with parseable SQL stubs."""
 
     result: str = _REF_PATTERN.sub(r"\1", query_sql)
@@ -1587,7 +1599,7 @@ def _replace_refs_with_stubs(query_sql: str) -> str:
     result = _DBT_REF_PATTERN.sub(r"\1", result)
     result = _UDF_PATTERN.sub(r"__sqlbuild_udf_\1", result)
     result = _replace_table_function_calls_with_stubs(result)
-    return result
+    return normalize_sql_for_polyglot(sql=result, dialect=dialect)
 
 
 def _replace_table_function_calls_with_stubs(query_sql: str) -> str:

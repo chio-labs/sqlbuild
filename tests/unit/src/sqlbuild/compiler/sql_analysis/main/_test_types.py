@@ -10,3 +10,11 @@ class SchemaValidationScopeTestCase:
     schema: dict[str, dict[str, str]]
     dialects: tuple[str, ...]
     expected_diagnostic_count: int
+
+
+@dataclass(frozen=True)
+class PolyglotSqlNormalizationTestCase:
+    description: str
+    sql: str
+    dialect: str | None
+    expected_sql: str
