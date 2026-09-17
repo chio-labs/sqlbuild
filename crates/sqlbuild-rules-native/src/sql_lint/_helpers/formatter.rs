@@ -3,7 +3,9 @@ use std::str::FromStr;
 use polyglot_sql::tokens::Token;
 use polyglot_sql::{Dialect, DialectType, format_by_name};
 
-use crate::sql_lint::constants::LINT_API_VERSION;
+use crate::sql_lint::constants::{
+    CAST_TYPE_SEPARATOR_KEYWORD, CLOSE_PARENTHESIS, LINT_API_VERSION, OPEN_PARENTHESIS,
+};
 use crate::sql_lint::models::{FormatRequest, FormatResponse};
 
 const COMMENT_ATTACHMENT_FAILURE: &str =
@@ -109,6 +111,7 @@ fn format_once(neutral_sql: &str, context: &FormatOnceContext<'_>) -> Result<Str
         .map_err(|error| error.to_string())?
         .join(";\n");
     formatted = restore_string_literals(formatted, context)?;
+    formatted = restore_cast_type_spellings(formatted, context)?;
     if context.comments.is_empty() {
         return Ok(formatted);
     }
@@ -222,6 +225,75 @@ fn restore_string_literals(
         formatted.replace_range(start..end, &original);
     }
     Ok(formatted)
+}
+
+fn restore_cast_type_spellings(
+    mut formatted: String,
+    context: &FormatOnceContext<'_>,
+) -> Result<String, String> {
+    let type_ranges = cast_type_token_ranges(context)?;
+    if type_ranges.is_empty() {
+        return Ok(formatted);
+    }
+    let formatted_tokens = context
+        .dialect
+        .tokenize(&formatted)
+        .map_err(|error| error.to_string())?;
+    if context.original_tokens.len() != formatted_tokens.len() {
+        return Err(UNSUPPORTED_SQL_FAILURE.to_string());
+    }
+    let mut type_indices: Vec<usize> = type_ranges
+        .into_iter()
+        .flat_map(|(start, end)| start..=end)
+        .collect();
+    type_indices.sort_unstable();
+    type_indices.dedup();
+    for index in type_indices.into_iter().rev() {
+        let original_token = &context.original_tokens[index];
+        let formatted_token = &formatted_tokens[index];
+        let original = char_slice(
+            context.original_sql,
+            original_token.span.start,
+            original_token.span.end,
+        )
+        .ok_or_else(|| UNSUPPORTED_SQL_FAILURE.to_string())?;
+        let start = char_to_byte(&formatted, formatted_token.span.start)?;
+        let end = char_to_byte(&formatted, formatted_token.span.end)?;
+        formatted.replace_range(start..end, &original);
+    }
+    Ok(formatted)
+}
+
+fn cast_type_token_ranges(context: &FormatOnceContext<'_>) -> Result<Vec<(usize, usize)>, String> {
+    let mut ranges: Vec<(usize, usize)> = Vec::new();
+    let mut cast_type_starts: Vec<Option<usize>> = Vec::new();
+    let mut previous: Option<String> = None;
+    for (index, token) in context.original_tokens.iter().enumerate() {
+        let text = char_slice(context.original_sql, token.span.start, token.span.end)
+            .ok_or_else(|| UNSUPPORTED_SQL_FAILURE.to_string())?;
+        let normalized = text.to_ascii_uppercase();
+        if normalized == OPEN_PARENTHESIS {
+            let opens_cast = previous
+                .as_deref()
+                .is_some_and(|value| matches!(value, "CAST" | "TRY_CAST"));
+            cast_type_starts.push(opens_cast.then_some(usize::MAX));
+        } else if normalized == CLOSE_PARENTHESIS {
+            if let Some(Some(type_start)) = cast_type_starts.pop()
+                && type_start != usize::MAX
+                && type_start < index
+            {
+                ranges.push((type_start, index - 1));
+            }
+        } else if normalized == CAST_TYPE_SEPARATOR_KEYWORD
+            && let Some(Some(type_start)) = cast_type_starts.last_mut()
+            && *type_start == usize::MAX
+        {
+            *type_start = index + 1;
+        }
+        previous = Some(normalized);
+    }
+    ranges.sort_unstable();
+    Ok(ranges)
 }
 
 fn char_slice(value: &str, start: usize, end: usize) -> Option<String> {

@@ -1808,6 +1808,36 @@ fn given_format_cases_when_formatting_then_output_matches() -> Result<(), String
             expected_changed: true,
         },
         test_types::FormatTestCase {
+            description: "explicit cast type spellings remain authored",
+            sql: "select cast(label as TEXT) as label, cast(id as INTEGER) as id, cast(observed_at as TIMESTAMP_NTZ) as observed_at, cast(amount as NUMERIC(10, 2)) as amount from items",
+            expected_sql: "SELECT\n  CAST(label AS TEXT) AS label,\n  CAST(id AS INTEGER) AS id,\n  CAST(observed_at AS TIMESTAMP_NTZ) AS observed_at,\n  CAST(amount AS NUMERIC(10, 2)) AS amount\nFROM items",
+            expected_changed: true,
+        },
+        test_types::FormatTestCase {
+            description: "nested and try cast type spellings remain authored",
+            sql: "select cast(coalesce(try_cast(raw_id as INTEGER), 0) as NUMERIC(10, 2)) as amount, cast(tags as ARRAY<INTEGER>) as tags from items",
+            expected_sql: "SELECT\n  CAST(COALESCE(TRY_CAST(raw_id AS INTEGER), 0) AS NUMERIC(10, 2)) AS amount,\n  CAST(tags AS ARRAY<INTEGER>) AS tags\nFROM items",
+            expected_changed: true,
+        },
+        test_types::FormatTestCase {
+            description: "commented cast type remains idempotent",
+            sql: "select cast(amount as NUMERIC(/* precision */ 10, 2)) as amount from items",
+            expected_sql: "SELECT\n  CAST(amount AS NUMERIC( /* precision */10, 2)) AS amount\nFROM items",
+            expected_changed: true,
+        },
+        test_types::FormatTestCase {
+            description: "cast-free token expansion remains supported",
+            sql: "select id label from items",
+            expected_sql: "SELECT\n  id AS label\nFROM items",
+            expected_changed: true,
+        },
+        test_types::FormatTestCase {
+            description: "cast-free multiple statements remain supported",
+            sql: "select 1; select 2",
+            expected_sql: "SELECT\n  1;\nSELECT\n  2",
+            expected_changed: true,
+        },
+        test_types::FormatTestCase {
             description: "trailing comment",
             sql: "select a from items; -- retained",
             expected_sql: "SELECT\n  a\nFROM items -- retained\n",

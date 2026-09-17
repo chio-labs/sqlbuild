@@ -147,6 +147,52 @@ def test_given_explicit_null_ordering_when_formatting_then_clause_is_preserved(
 @pytest.mark.parametrize(
     "test_case",
     [
+        FormatCompileIntegrationTestCase(
+            description="exact contract casts retain authored type spellings",
+            expected_literal="CAST('one' AS TEXT) AS order_label",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_exact_contract_casts_when_formatting_then_rule_still_passes(
+    test_case: FormatCompileIntegrationTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRCONTRACT105"]\n',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        "MODEL (\n"
+        '  description "Typed orders",\n'
+        "  contract enforced,\n"
+        "  columns (\n"
+        "    order_label (type TEXT)\n"
+        "    order_id (type INTEGER)\n"
+        "    observed_at (type TIMESTAMP_NTZ)\n"
+        "    amount (type NUMERIC(10, 2))\n"
+        "  )\n"
+        ");\n\n"
+        "select cast('one' as TEXT) as order_label, cast(1 as INTEGER) as order_id, "
+        "cast('2026-01-01' as TIMESTAMP_NTZ) as observed_at, "
+        "cast(12.50 as NUMERIC(10, 2)) as amount\n",
+        encoding="utf-8",
+    )
+
+    format_exit: int = main(["--project-dir", str(tmp_path), "format"])
+    compile_exit: int = main(["--project-dir", str(tmp_path), "compile", "--no-cache"])
+
+    assert format_exit == 0
+    assert compile_exit == 0
+    formatted: str = model.read_text(encoding="utf-8")
+    assert test_case.expected_literal in formatted
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         DescriptionFormatIntegrationTestCase(
             description="configured width wraps and compiles model description",
             line_width=60,
