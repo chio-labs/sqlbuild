@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.103.0](https://github.com/chio-labs/sqlbuild/compare/v0.102.5...v0.103.0) (2026-09-17)
+
+
+### Features
+
+* require types on enforced contract columns ([#707](https://github.com/chio-labs/sqlbuild/issues/707)) ([1a0b340](https://github.com/chio-labs/sqlbuild/commit/1a0b34040451d3e027d0ed662937ea725352c397))
+
 ## [0.102.5](https://github.com/chio-labs/sqlbuild/compare/v0.102.4...v0.102.5) (2026-09-17)
 
 
