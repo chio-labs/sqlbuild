@@ -88,8 +88,10 @@ Projects that require every contract boundary to be statically explicit can sele
 its exact declared type is proven, and requires an outer `CAST` around literals, calculations,
 conditionals, functions, aggregates, windows, semi-structured expressions, and other derived
 outputs. The cast target must use the declared contract type; an alias with different type syntax is
-not treated as an explicit declaration of that contract. Every set-operation branch must cast its
-outputs before common-type coercion. Wildcards are not an explicit contract boundary.
+not treated as an explicit declaration of that contract. An exact outer cast establishes the Rule's
+authored type boundary even when general expression inference remains incomplete. Every
+set-operation branch must cast its outputs before common-type coercion. Wildcards are not an
+explicit contract boundary.
 
 When `SQBRSQL035` is also selected, the final top-level CTE owns these casts and the terminal
 `SELECT` remains a plain read from that CTE:
