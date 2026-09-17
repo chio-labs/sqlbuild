@@ -10,8 +10,8 @@ from sqlbuild.adapter.contract.constants import POLYGLOT_CUSTOM_TYPE_NAME
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule
 from sqlbuild.compiler.compile._helpers.analysis.cte_facts import (
+    _polyglot_cte_passthrough_facts,
     _polyglot_cte_passthrough_nullability_from_parsed,
-    _polyglot_cte_passthrough_type_facts,
     _polyglot_cte_passthrough_types_from_parsed,
 )
 from sqlbuild.compiler.compile.constants import (
@@ -27,6 +27,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
     CompileSqlReference,
+    CteFactResolvers,
     InferredColumn,
     PolyglotAnalysisResult,
 )
@@ -233,6 +234,9 @@ from sqlbuild.compiler.sql_analysis.constants import (
     TIMESTAMP_WITH_TIME_ZONE_SQL_TYPE_NAME as _TIMESTAMP_WITH_TIME_ZONE_SQL_TYPE_NAME,
 )
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
+from sqlbuild.compiler.sql_analysis.main._normalize_for_polyglot import (
+    normalize_sql_for_polyglot,
+)
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.compiler.sql_analysis.models import (
@@ -268,7 +272,10 @@ def infer_columns_with_sql_analysis(
 
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
 
-    cleaned_sql: str = _replace_refs_with_stubs(query_sql)
+    cleaned_sql: str = _replace_refs_with_stubs(
+        query_sql=query_sql,
+        dialect=profile.sql_analysis_dialect,
+    )
     if placeholders:
         cleaned_sql = substitute_placeholder_defaults(
             query_sql=cleaned_sql, placeholders=placeholders
@@ -295,7 +302,10 @@ def analyze_columns_with_polyglot(
     """Infer columns with one Polyglot parse, returning False when unavailable."""
 
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
-    cleaned_sql: str = _replace_refs_with_stubs(query_sql)
+    cleaned_sql: str = _replace_refs_with_stubs(
+        query_sql=query_sql,
+        dialect=profile.sql_analysis_dialect,
+    )
     if placeholders:
         cleaned_sql = substitute_placeholder_defaults(
             query_sql=cleaned_sql, placeholders=placeholders
@@ -324,7 +334,10 @@ def analyze_columns_and_lineage_with_polyglot(
 
     polyglot_module: Any = import_polyglot_sql()
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
-    cleaned_sql: str = _replace_refs_with_stubs(query_sql)
+    cleaned_sql: str = _replace_refs_with_stubs(
+        query_sql=query_sql,
+        dialect=profile.sql_analysis_dialect,
+    )
     if placeholders:
         cleaned_sql = substitute_placeholder_defaults(
             query_sql=cleaned_sql, placeholders=placeholders
@@ -398,7 +411,7 @@ def get_complete_schema_binding_request(
 ) -> SqlSchemaValidationRequest:
     """Build one stable native schema-validation request."""
 
-    cleaned_sql: str = _replace_refs_with_stubs(query_sql)
+    cleaned_sql: str = _replace_refs_with_stubs(query_sql=query_sql, dialect=dialect)
     if placeholders:
         cleaned_sql = substitute_placeholder_defaults(
             query_sql=cleaned_sql,
@@ -470,18 +483,24 @@ def _analyze_columns_and_lineage_with_compact_polyglot(
         return None
     reference_map: dict[str, tuple[CompiledResourceType, str]] = _lineage_reference_map(references)
     relation_alias_by_name: dict[str, str | None] = _compact_relation_alias_by_name(analysis)
-    cte_passthrough_types, direct_cte_outputs = (
-        _polyglot_cte_passthrough_type_facts(
+    cte_passthrough_types, cte_passthrough_nullability, direct_cte_outputs = (
+        _polyglot_cte_passthrough_facts(
             polyglot_module=polyglot_module,
             cleaned_sql=cleaned_sql,
             dialect=dialect,
             column_types_by_table=column_types_by_table,
+            column_nullability_by_table=column_nullability_by_table,
             inference_profile=inference_profile,
             analysis=analysis,
-            expression_type_resolver=_polyglot_expression_type,
+            resolvers=CteFactResolvers(
+                expression_type=_polyglot_expression_type,
+                nullability=_infer_polyglot_nullability,
+                shallow_nullability=_infer_polyglot_shallow_nullability,
+                alias_nullability=_polyglot_alias_nullability_from_select,
+            ),
         )
         if recover_cte_facts
-        else ({}, frozenset())
+        else ({}, {}, frozenset())
     )
     columns: list[InferredColumn] = []
     lineage_columns: list[CompiledLineageColumnFact] = []
@@ -507,9 +526,13 @@ def _analyze_columns_and_lineage_with_compact_polyglot(
                         projection=projection, inference_profile=inference_profile
                     )
                 ),
-                nullability=_compact_projection_nullability(
-                    projection=projection,
-                    infer_nullability=infer_nullability,
+                nullability=(
+                    cte_passthrough_nullability.get(output_column)
+                    if output_column in direct_cte_outputs
+                    else None
+                )
+                or _compact_projection_nullability(
+                    projection=projection, infer_nullability=infer_nullability
                 ),
             )
         )
@@ -1578,7 +1601,7 @@ def substitute_placeholder_defaults(*, query_sql: str, placeholders: dict[str, s
     return _PLACEHOLDER_PATTERN.sub(_replacer, query_sql)
 
 
-def _replace_refs_with_stubs(query_sql: str) -> str:
+def _replace_refs_with_stubs(*, query_sql: str, dialect: str | None = None) -> str:
     """Replace SQLBuild marker calls with parseable SQL stubs."""
 
     result: str = _REF_PATTERN.sub(r"\1", query_sql)
@@ -1587,7 +1610,7 @@ def _replace_refs_with_stubs(query_sql: str) -> str:
     result = _DBT_REF_PATTERN.sub(r"\1", result)
     result = _UDF_PATTERN.sub(r"__sqlbuild_udf_\1", result)
     result = _replace_table_function_calls_with_stubs(result)
-    return result
+    return normalize_sql_for_polyglot(sql=result, dialect=dialect)
 
 
 def _replace_table_function_calls_with_stubs(query_sql: str) -> str:

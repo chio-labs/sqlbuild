@@ -24,7 +24,7 @@ def validate_sql_syntax(
 ) -> None:
     """Validate that the model query SQL is parseable by Polyglot."""
 
-    cleaned_sql: str = _replace_refs_with_stubs(query_sql)
+    cleaned_sql: str = _replace_refs_with_stubs(query_sql=query_sql, dialect=dialect)
     if placeholders:
         cleaned_sql = substitute_placeholder_defaults(
             query_sql=cleaned_sql, placeholders=placeholders
@@ -171,6 +171,7 @@ def _validate_sql_syntax_with_message(
     cleaned_sql: str = _clean_sql_for_validation(
         query_sql=query_sql,
         placeholders=placeholders,
+        dialect=dialect,
     )
     polyglot_module: Any = import_polyglot_sql()
     try:
@@ -194,14 +195,20 @@ def _validate_hook_sql_with_message(
     cleaned_sql: str = _clean_sql_for_validation(
         query_sql=query_sql,
         placeholders=placeholders,
+        dialect=dialect,
     )
     error_message: str | None = _validate_sql_with_polyglot(sql=cleaned_sql, dialect=dialect)
     if error_message is not None:
         _raise_sql_validation_error(error_prefix=error_prefix, error_message=error_message)
 
 
-def _clean_sql_for_validation(*, query_sql: str, placeholders: dict[str, str] | None) -> str:
-    cleaned_sql: str = _replace_refs_with_stubs(query_sql)
+def _clean_sql_for_validation(
+    *,
+    query_sql: str,
+    placeholders: dict[str, str] | None,
+    dialect: str | None,
+) -> str:
+    cleaned_sql: str = _replace_refs_with_stubs(query_sql=query_sql, dialect=dialect)
     if placeholders:
         return substitute_placeholder_defaults(
             query_sql=cleaned_sql,

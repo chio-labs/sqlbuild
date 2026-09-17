@@ -53,6 +53,20 @@ _FILE_PATH: Path = Path("models/test_model.sql")
             query_sql=('SELECT id FROM __ref("orders") UNION ALL SELECT id FROM __ref("returns")'),
             expected_valid=True,
         ),
+        ValidateSqlSyntaxTestCase(
+            description="accepts Snowflake grouping sets",
+            query_sql=(
+                "SELECT category, SUM(amount) FROM orders GROUP BY GROUPING SETS ((category), ())"
+            ),
+            expected_valid=True,
+            dialect="snowflake",
+        ),
+        ValidateSqlSyntaxTestCase(
+            description="accepts Snowflake dynamic brackets after variant paths",
+            query_sql="SELECT attributes:labels[TO_VARCHAR(item_id)] FROM orders",
+            expected_valid=True,
+            dialect="snowflake",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -63,6 +77,7 @@ def test_given_valid_sql_when_validating_syntax_then_does_not_raise(
         query_sql=test_case.query_sql,
         model_name=_MODEL_NAME,
         file_path=_FILE_PATH,
+        dialect=test_case.dialect,
     )
 
     assert test_case.expected_valid is True
@@ -100,6 +115,7 @@ def test_given_invalid_sql_when_validating_syntax_then_raises_compile_error(
             query_sql=test_case.query_sql,
             model_name=_MODEL_NAME,
             file_path=_FILE_PATH,
+            dialect=test_case.dialect,
         )
 
     assert test_case.expected_valid is False

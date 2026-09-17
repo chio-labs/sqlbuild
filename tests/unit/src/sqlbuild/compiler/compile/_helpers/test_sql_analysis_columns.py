@@ -900,19 +900,8 @@ def test_given_supported_compact_query_when_ast_parse_would_fail_then_returns_an
                 InferredColumn(name="status", type="TEXT"),
                 InferredColumn(name="nullable_status", type="TEXT"),
             ),
-            expected_lineage_columns=(
-                CompiledLineageColumnFact(
-                    output_column="amount",
-                    upstream_columns=(),
-                    transform_kind=ColumnTransformKind.CONSTANT,
-                    confidence=ColumnLineageConfidence.HIGH,
-                ),
-                CompiledLineageColumnFact(
-                    output_column="status",
-                    upstream_columns=(),
-                    transform_kind=ColumnTransformKind.CONSTANT,
-                    confidence=ColumnLineageConfidence.HIGH,
-                ),
+            expected_lineage_columns=direct_orders_lineage("amount", "status")
+            + (
                 CompiledLineageColumnFact(
                     output_column="nullable_status",
                     upstream_columns=(
@@ -986,7 +975,7 @@ def test_given_supported_compact_query_when_ast_parse_would_fail_then_returns_an
             expected_has_star=False,
         ),
         PolyglotAnalysisTestCase(
-            description="declines renamed star type recovery",
+            description="preserves renamed star lineage without recovering type",
             query_sql=(
                 "WITH typed AS ("
                 "SELECT CAST(amount AS INTEGER) AS amount, "
@@ -1002,14 +991,7 @@ def test_given_supported_compact_query_when_ast_parse_would_fail_then_returns_an
             column_types_by_table={"orders": {"amount": "VARCHAR"}},
             inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="snowflake"),
             expected_columns=(InferredColumn(name="amount"),),
-            expected_lineage_columns=(
-                CompiledLineageColumnFact(
-                    output_column="amount",
-                    upstream_columns=(),
-                    transform_kind=ColumnTransformKind.CONSTANT,
-                    confidence=ColumnLineageConfidence.HIGH,
-                ),
-            ),
+            expected_lineage_columns=direct_orders_lineage("amount"),
             expected_has_star=False,
         ),
     ],
@@ -1093,7 +1075,10 @@ def test_given_cte_chain_when_analyzing_direct_passthrough_then_type_is_conserva
                 function_return_types={"TO_DATE": "DATE"},
             ),
             expected_columns=(
-                InferredColumn(name="source_name"),
+                InferredColumn(
+                    name="source_name",
+                    nullability=InferredNullability.NON_NULL,
+                ),
                 InferredColumn(name="active", type="BOOLEAN"),
                 InferredColumn(name="selected", type="BOOLEAN"),
                 InferredColumn(name="full_name", type="TEXT"),

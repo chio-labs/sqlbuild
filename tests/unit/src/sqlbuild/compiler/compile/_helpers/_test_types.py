@@ -528,6 +528,7 @@ class ValidateSqlSyntaxTestCase:
     query_sql: str
     expected_valid: bool
     expected_error_fragment: str | None = None
+    dialect: str | None = None
 
 
 @dataclass(frozen=True)

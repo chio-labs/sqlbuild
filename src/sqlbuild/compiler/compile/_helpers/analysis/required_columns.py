@@ -71,7 +71,7 @@ def resolve_required_external_columns(
     polyglot_module: Any = import_polyglot_sql()
     try:
         parsed: Any = polyglot_module.parse_one(
-            _replace_refs_with_stubs(query_sql),
+            _replace_refs_with_stubs(query_sql=query_sql, dialect=dialect),
             dialect=dialect or "generic",
         )
     except polyglot_module.PolyglotError:

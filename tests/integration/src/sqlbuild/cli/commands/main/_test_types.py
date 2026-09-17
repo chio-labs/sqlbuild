@@ -47,6 +47,17 @@ class TypedContractRuleIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class SnowflakeCompileIntegrationTestCase:
+    """One Snowflake SQL compatibility expectation through compile."""
+
+    description: str
+    query_sql: str
+    expected_exit_code: int
+    expected_diagnostics: tuple[str, ...]
+    expected_query_fragment: str
+
+
+@dataclass(frozen=True)
 class FormatCompileIntegrationTestCase:
     """One format-to-compile compatibility expectation."""
 
