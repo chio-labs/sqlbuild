@@ -68,12 +68,7 @@ impl OutputRule<'_> {
                 right,
                 ..
             } => {
-                let operation_by_name = matches!(
-                    set_quantifier,
-                    SetQuantifier::ByName
-                        | SetQuantifier::AllByName
-                        | SetQuantifier::DistinctByName
-                );
+                let operation_by_name = set_quantifier_by_name(set_quantifier);
                 let branch_scope = OutputScope {
                     columns: scope.columns,
                     set_branch: true,
@@ -190,6 +185,12 @@ fn final_cte_output_boundary<'a>(
         return None;
     }
     let select = root_select(query)?;
+    let cte_column_aliases: Vec<String> = final_cte
+        .alias
+        .columns
+        .iter()
+        .map(|column| column.name.value.clone())
+        .collect();
     if select.projection.len() == 1
         && matches!(
             select.projection[0],
@@ -198,7 +199,11 @@ fn final_cte_output_boundary<'a>(
     {
         return Some((
             &final_cte.query,
-            columns_in_output_order(&final_cte.query.body, columns),
+            columns_in_output_order_with_missing(
+                &final_cte.query.body,
+                columns,
+                &cte_column_aliases,
+            ),
         ));
     }
     if select.projection.len() != columns.len() {
@@ -213,8 +218,40 @@ fn final_cte_output_boundary<'a>(
         boundary_column.name = source_name;
         boundary_columns.push(boundary_column);
     }
-    let ordered_columns = columns_in_output_order(&final_cte.query.body, &boundary_columns);
+    let ordered_columns = columns_in_output_order_with_missing(
+        &final_cte.query.body,
+        &boundary_columns,
+        &cte_column_aliases,
+    );
     Some((&final_cte.query, ordered_columns))
+}
+
+fn columns_in_output_order_with_missing(
+    set_expr: &SetExpr,
+    columns: &[Column],
+    cte_column_aliases: &[String],
+) -> Vec<Column> {
+    let Some(output_names) = set_expression_output_names_with_missing(set_expr) else {
+        return columns.to_vec();
+    };
+    output_names
+        .into_iter()
+        .enumerate()
+        .map(|(index, body_name)| {
+            let exposed_name = cte_column_aliases
+                .get(index)
+                .map(String::as_str)
+                .or(body_name.as_deref());
+            let mut column = exposed_name
+                .and_then(|name| column_named(columns, name))
+                .cloned()
+                .unwrap_or_default();
+            if let Some(body_name) = body_name {
+                column.name = body_name;
+            }
+            column
+        })
+        .collect()
 }
 
 fn columns_in_output_order(set_expr: &SetExpr, columns: &[Column]) -> Vec<Column> {
@@ -250,6 +287,49 @@ fn set_expression_output_names(set_expr: &SetExpr) -> Option<Vec<String>> {
         SetExpr::SetOperation { left, .. } => set_expression_output_names(left),
         _ => None,
     }
+}
+
+fn set_expression_output_names_with_missing(set_expr: &SetExpr) -> Option<Vec<Option<String>>> {
+    match set_expr {
+        SetExpr::Select(select) => Some(
+            select
+                .projection
+                .iter()
+                .map(projection_output_name)
+                .collect(),
+        ),
+        SetExpr::Query(query) => set_expression_output_names_with_missing(&query.body),
+        SetExpr::SetOperation {
+            left,
+            right,
+            set_quantifier,
+            ..
+        } => {
+            let mut names = set_expression_output_names_with_missing(left)?;
+            if set_quantifier_by_name(set_quantifier) {
+                for right_name in set_expression_output_names_with_missing(right)? {
+                    let already_present = right_name.as_ref().is_some_and(|right_name| {
+                        names
+                            .iter()
+                            .flatten()
+                            .any(|left_name| left_name.eq_ignore_ascii_case(right_name))
+                    });
+                    if !already_present {
+                        names.push(right_name);
+                    }
+                }
+            }
+            Some(names)
+        }
+        _ => None,
+    }
+}
+
+fn set_quantifier_by_name(set_quantifier: &SetQuantifier) -> bool {
+    matches!(
+        set_quantifier,
+        SetQuantifier::ByName | SetQuantifier::AllByName | SetQuantifier::DistinctByName
+    )
 }
 
 fn projection_output_name(item: &SelectItem) -> Option<String> {

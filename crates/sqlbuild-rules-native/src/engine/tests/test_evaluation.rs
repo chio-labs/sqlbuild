@@ -360,6 +360,17 @@ fn given_enforced_contract_outputs_when_evaluating_explicit_type_rule_then_retur
             expected_message_fragment: "",
         },
         test_types::ExplicitOutputTypeTestCase {
+            description: "wildcard terminal maps explicit final CTE column aliases by name",
+            query_sql: "WITH final(order_id, amount) AS (SELECT CAST(raw_id AS INTEGER) AS raw_id, CAST(raw_amount AS DECIMAL(18, 2)) AS raw_amount FROM orders) SELECT * FROM final",
+            columns: json!([
+                {"name": "amount", "type": "DECIMAL(18, 2)", "type_proven": true},
+                {"name": "order_id", "type": "INTEGER", "type_proven": true}
+            ]),
+            contract: "enforced",
+            expected_fault_count: 0,
+            expected_message_fragment: "",
+        },
+        test_types::ExplicitOutputTypeTestCase {
             description: "renamed and reordered terminal columns map through positional set branches",
             query_sql: "WITH final AS (SELECT CAST(amount AS DECIMAL(18, 2)) AS amount, CAST(order_id AS INTEGER) AS order_id FROM current_orders UNION ALL SELECT CAST(amount AS DECIMAL(18, 2)) AS amount, CAST(order_id AS INTEGER) AS order_id FROM archived_orders) SELECT order_id AS id, amount AS total FROM final",
             columns: json!([
@@ -369,6 +380,48 @@ fn given_enforced_contract_outputs_when_evaluating_explicit_type_rule_then_retur
             contract: "enforced",
             expected_fault_count: 0,
             expected_message_fragment: "",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "terminal subset ignores extra final CTE outputs",
+            query_sql: "WITH final AS (SELECT CAST(order_id AS INTEGER) AS order_id, ignored_count + 1, ignored_label, CAST(amount AS DECIMAL(18, 2)) AS amount FROM orders) SELECT order_id AS id, amount AS total FROM final",
+            columns: json!([
+                {"name": "id", "type": "INTEGER", "type_proven": true},
+                {"name": "total", "type": "DECIMAL(18, 2)", "type_proven": true}
+            ]),
+            contract: "enforced",
+            expected_fault_count: 0,
+            expected_message_fragment: "",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "terminal subset reports the selected calculated final CTE output",
+            query_sql: "WITH final AS (SELECT CAST(order_id AS INTEGER) AS order_id, ignored_count, ignored_label, amount + 1 AS amount FROM orders) SELECT order_id AS id, amount AS total FROM final",
+            columns: json!([
+                {"name": "id", "type": "INTEGER", "type_proven": true},
+                {"name": "total", "type": "DECIMAL(18, 2)", "type_proven": true}
+            ]),
+            contract: "enforced",
+            expected_fault_count: 1,
+            expected_message_fragment: "output \"amount\" is calculated without an outer explicit cast",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "terminal subset maps outputs introduced by right by-name branch",
+            query_sql: "WITH final AS (SELECT CAST(1 AS INTEGER) AS ignored UNION ALL BY NAME SELECT 2 + 1 AS amount) SELECT amount AS total FROM final",
+            columns: json!([
+                {"name": "total", "type": "INTEGER", "type_proven": true}
+            ]),
+            contract: "enforced",
+            expected_fault_count: 1,
+            expected_message_fragment: "output \"amount\" is calculated without an outer explicit cast",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "terminal subset maps explicit final CTE column aliases",
+            query_sql: "WITH final(order_id, ignored) AS (SELECT 1 + 1 AS raw_id, 3 AS extra) SELECT order_id AS id FROM final",
+            columns: json!([
+                {"name": "id", "type": "INTEGER", "type_proven": true}
+            ]),
+            contract: "enforced",
+            expected_fault_count: 1,
+            expected_message_fragment: "output \"raw_id\" is calculated without an outer explicit cast",
         },
     ];
     for test_case in test_cases {
