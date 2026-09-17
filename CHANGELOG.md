@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.102.3](https://github.com/chio-labs/sqlbuild/compare/v0.102.2...v0.102.3) (2026-09-17)
+
+
+### Bug Fixes
+
+* preserve cast type spellings in formatter ([#701](https://github.com/chio-labs/sqlbuild/issues/701)) ([5b0d301](https://github.com/chio-labs/sqlbuild/commit/5b0d301562c7545f216a9f6a1eee8f3238d54cd6))
+
 ## [0.102.2](https://github.com/chio-labs/sqlbuild/compare/v0.102.1...v0.102.2) (2026-09-17)
 
 
