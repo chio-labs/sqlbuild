@@ -9,8 +9,20 @@ from sqlbuild.adapter.contract.types import TypeFamily
 from sqlbuild.adapter.type_system.main.normalize_type import normalize_type
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.constants import SQL_WILDCARD_TOKEN
-from sqlbuild.compiler.compile.models import CteFactResolvers
+from sqlbuild.compiler.compile.models import CteFactResolvers, NonNullFilterContext
 from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_COLUMN_USES as _POLYGLOT_ANALYSIS_COLUMN_USES,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_CONTEXT as _POLYGLOT_ANALYSIS_CONTEXT,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_CONTEXT_FILTER as _POLYGLOT_ANALYSIS_CONTEXT_FILTER,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_ANALYSIS_EXPRESSION_SQL as _POLYGLOT_ANALYSIS_EXPRESSION_SQL,
+)
 from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_BINARY_OPERAND_COUNT as _POLYGLOT_BINARY_OPERAND_COUNT,
 )
@@ -18,10 +30,12 @@ from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_BOOLEAN_RESULT_KINDS as _POLYGLOT_BOOLEAN_RESULT_KINDS,
 )
 from sqlbuild.compiler.sql_analysis.constants import POLYGLOT_KIND_ALIAS as _POLYGLOT_KIND_ALIAS
+from sqlbuild.compiler.sql_analysis.constants import POLYGLOT_KIND_AND as _POLYGLOT_KIND_AND
 from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_KIND_ANNOTATED as _POLYGLOT_KIND_ANNOTATED,
 )
 from sqlbuild.compiler.sql_analysis.constants import POLYGLOT_KIND_CASE as _POLYGLOT_KIND_CASE
+from sqlbuild.compiler.sql_analysis.constants import POLYGLOT_KIND_CAST as _POLYGLOT_KIND_CAST
 from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_KIND_COALESCE as _POLYGLOT_KIND_COALESCE,
 )
@@ -33,8 +47,12 @@ from sqlbuild.compiler.sql_analysis.constants import (
 from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_KIND_IF_FUNC as _POLYGLOT_KIND_IF_FUNC,
 )
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_KIND_IS_NULL as _POLYGLOT_KIND_IS_NULL,
+)
 from sqlbuild.compiler.sql_analysis.constants import POLYGLOT_KIND_LITERAL as _POLYGLOT_KIND_LITERAL
 from sqlbuild.compiler.sql_analysis.constants import POLYGLOT_KIND_NULL as _POLYGLOT_KIND_NULL
+from sqlbuild.compiler.sql_analysis.constants import POLYGLOT_KIND_PAREN as _POLYGLOT_KIND_PAREN
 from sqlbuild.compiler.sql_analysis.constants import POLYGLOT_KIND_SELECT as _POLYGLOT_KIND_SELECT
 from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_KIND_SUBSTRING as _POLYGLOT_KIND_SUBSTRING,
@@ -50,11 +68,26 @@ from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_PAYLOAD_COLUMN as _POLYGLOT_PAYLOAD_COLUMN,
 )
 from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_LEFT as _POLYGLOT_PAYLOAD_LEFT,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_PAYLOAD_LITERAL_TYPE as _POLYGLOT_PAYLOAD_LITERAL_TYPE,
 )
 from sqlbuild.compiler.sql_analysis.constants import POLYGLOT_PAYLOAD_NAME as _POLYGLOT_PAYLOAD_NAME
 from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_NOT as _POLYGLOT_PAYLOAD_NOT,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_RIGHT as _POLYGLOT_PAYLOAD_RIGHT,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_PAYLOAD_TABLE as _POLYGLOT_PAYLOAD_TABLE,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_THIS as _POLYGLOT_PAYLOAD_THIS,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_PAYLOAD_WHERE_CLAUSE as _POLYGLOT_PAYLOAD_WHERE_CLAUSE,
 )
 from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_SET_OPERATION_KINDS as _POLYGLOT_SET_OPERATION_KINDS,
@@ -62,6 +95,7 @@ from sqlbuild.compiler.sql_analysis.constants import (
 from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_TYPE_PASSTHROUGH_KINDS as _POLYGLOT_TYPE_PASSTHROUGH_KINDS,
 )
+from sqlbuild.compiler.sql_analysis.constants import SQL_NULL_KEYWORD as _SQL_NULL_KEYWORD
 
 _NULL_SET_OPERATION_TYPE: str = "__SQLBUILD_NULL_SET_OPERATION_TYPE__"
 
@@ -108,18 +142,18 @@ def _polyglot_cte_passthrough_facts(
     inference_profile: ExpressionInferenceProfile,
     analysis: dict[str, Any],
     resolvers: CteFactResolvers,
-) -> tuple[dict[str, str], dict[str, InferredNullability], frozenset[str]]:
+) -> tuple[dict[str, str], dict[str, InferredNullability], frozenset[str], Any | None]:
     """Recover facts that compact analysis skips across direct CTE reads."""
 
     if not analysis.get("cteFacts") or not (column_types_by_table or column_nullability_by_table):
-        return {}, {}, frozenset()
+        return {}, {}, frozenset(), None
     try:
         parsed: Any = polyglot_module.parse_one(cleaned_sql, dialect=dialect or "generic")
     except polyglot_module.PolyglotError:
-        return {}, {}, frozenset()
+        return {}, {}, frozenset(), None
     ctes: tuple[tuple[str, Any, bool], ...] = _polyglot_top_level_ctes(parsed)
     if not ctes:
-        return {}, {}, frozenset()
+        return {}, {}, frozenset(), parsed
     inferred_types: dict[str, str] = (
         _polyglot_cte_passthrough_types_from_parsed(
             parsed=parsed,
@@ -149,6 +183,7 @@ def _polyglot_cte_passthrough_facts(
             parsed=parsed,
             cte_names=frozenset(name for name, _, _ in ctes),
         ),
+        parsed,
     )
 
 
@@ -303,6 +338,10 @@ def _polyglot_direct_select_output_nullability(
         if has_known_nullability
         else {}
     )
+    non_null_filter_context: NonNullFilterContext | None = _polyglot_non_null_filter_context(
+        select=select,
+        column_nullability_by_table=scoped_nullability,
+    )
     inferred: dict[str, InferredNullability] = {}
     projection: Any
     for raw_projection in getattr(select, "expressions", ()):
@@ -318,21 +357,209 @@ def _polyglot_direct_select_output_nullability(
             else projection
         )
         nullability: InferredNullability = (
-            nullability_resolver(
+            InferredNullability.NON_NULL
+            if _polyglot_expression_is_non_null_after_filter(
                 expression=expression,
-                alias_nullability=alias_nullability,
-                column_nullability_by_table=scoped_nullability,
-                inference_profile=inference_profile,
+                context=non_null_filter_context,
             )
-            if has_known_nullability
-            else shallow_nullability_resolver(
-                expression=expression,
-                inference_profile=inference_profile,
+            else (
+                nullability_resolver(
+                    expression=expression,
+                    alias_nullability=alias_nullability,
+                    column_nullability_by_table=scoped_nullability,
+                    inference_profile=inference_profile,
+                )
+                if has_known_nullability
+                else shallow_nullability_resolver(
+                    expression=expression,
+                    inference_profile=inference_profile,
+                )
             )
         )
         if nullability != InferredNullability.UNKNOWN:
             inferred[output_name] = nullability
     return inferred
+
+
+def _polyglot_filtered_non_null_outputs(
+    *,
+    polyglot_module: Any,
+    cleaned_sql: str,
+    dialect: str | None,
+    analysis: dict[str, Any],
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+    parsed: Any | None = None,
+) -> frozenset[str]:
+    column_uses: object = analysis.get(_POLYGLOT_ANALYSIS_COLUMN_USES)
+    if not isinstance(column_uses, list) or not any(
+        isinstance(value, dict)
+        and value.get(_POLYGLOT_ANALYSIS_CONTEXT) == _POLYGLOT_ANALYSIS_CONTEXT_FILTER
+        and _SQL_NULL_KEYWORD in str(value.get(_POLYGLOT_ANALYSIS_EXPRESSION_SQL) or "").upper()
+        for value in column_uses
+    ):
+        return frozenset()
+    if parsed is None:
+        try:
+            parsed = polyglot_module.parse_one(
+                cleaned_sql,
+                dialect=dialect or "generic",
+            )
+        except polyglot_module.PolyglotError:
+            return frozenset()
+    select: Any | None = parsed
+    if str(getattr(select, "kind", "")) != _POLYGLOT_KIND_SELECT:
+        select = parsed.find(_POLYGLOT_KIND_SELECT)
+    if select is None or str(getattr(select, "kind", "")) != _POLYGLOT_KIND_SELECT:
+        return frozenset()
+    outputs: set[str] = set()
+    context: NonNullFilterContext | None = _polyglot_non_null_filter_context(
+        select=select,
+        column_nullability_by_table=column_nullability_by_table,
+    )
+    for raw_projection in getattr(select, "expressions", ()):
+        projection: Any = _unwrap_polyglot_annotations(raw_projection)
+        output_name: str = str(getattr(projection, "output_name", "") or "")
+        if not output_name or output_name == SQL_WILDCARD_TOKEN:
+            continue
+        expression: Any = (
+            projection.this
+            if str(getattr(projection, "kind", "")) == _POLYGLOT_KIND_ALIAS
+            else projection
+        )
+        if _polyglot_expression_is_non_null_after_filter(
+            expression=expression,
+            context=context,
+        ):
+            outputs.add(output_name)
+    return frozenset(outputs)
+
+
+def _polyglot_expression_is_non_null_after_filter(
+    *,
+    expression: Any,
+    context: NonNullFilterContext | None,
+) -> bool:
+    if context is None:
+        return False
+    expression_reference: tuple[str, str] | None = _polyglot_direct_column_reference(expression)
+    if expression_reference is None:
+        return False
+    resolved_expression: tuple[str, str] | None = _polyglot_resolved_relation_column(
+        reference=expression_reference,
+        relations=context.relations,
+    )
+    return resolved_expression is not None and resolved_expression in context.columns
+
+
+def _polyglot_non_null_filter_context(
+    *,
+    select: Any,
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+) -> NonNullFilterContext | None:
+    select_args: object = getattr(select, "args", None)
+    if not isinstance(select_args, dict):
+        return None
+    select_args_dict: dict[str, object] = cast(dict[str, object], select_args)
+    where_payload: object = select_args_dict.get(_POLYGLOT_PAYLOAD_WHERE_CLAUSE)
+    if not isinstance(where_payload, dict):
+        return None
+    predicate: object = cast(dict[str, object], where_payload).get(_POLYGLOT_PAYLOAD_THIS)
+    non_null_references: tuple[tuple[str, str], ...] = _polyglot_non_null_conjuncts(predicate)
+    if not non_null_references:
+        return None
+    relations: list[tuple[str, dict[str, InferredNullability]]] = []
+    for table in _polyglot_direct_select_tables(select):
+        table_name: str = str(getattr(table, "name", "") or "")
+        alias: str = str(getattr(table, "alias_or_name", "") or "")
+        columns: dict[str, InferredNullability] | None = _case_insensitive_mapping_get(
+            mapping=column_nullability_by_table,
+            key=table_name,
+        )
+        if columns is not None:
+            relations.append((alias or table_name, columns))
+    relation_tuple: tuple[tuple[str, dict[str, InferredNullability]], ...] = tuple(relations)
+    columns: frozenset[tuple[str, str]] = frozenset(
+        resolved
+        for reference in non_null_references
+        if (
+            resolved := _polyglot_resolved_relation_column(
+                reference=reference,
+                relations=relation_tuple,
+            )
+        )
+    )
+    return NonNullFilterContext(relations=relation_tuple, columns=columns) if columns else None
+
+
+def _polyglot_direct_column_reference(expression: Any) -> tuple[str, str] | None:
+    expression = _unwrap_polyglot_annotations(expression)
+    if str(getattr(expression, "kind", "")) == _POLYGLOT_KIND_CAST:
+        expression = _unwrap_polyglot_annotations(getattr(expression, "this", None))
+    if str(getattr(expression, "kind", "")) != _POLYGLOT_KIND_COLUMN:
+        return None
+    column_name: str = str(getattr(expression, "name", "") or "")
+    if not column_name:
+        return None
+    expression_args: object = getattr(expression, "args", None)
+    table_name: str = ""
+    if isinstance(expression_args, dict):
+        table_name = _polyglot_name_payload_value(
+            cast(dict[str, object], expression_args).get(_POLYGLOT_PAYLOAD_TABLE)
+        )
+    return table_name, column_name
+
+
+def _polyglot_resolved_relation_column(
+    *,
+    reference: tuple[str, str],
+    relations: tuple[tuple[str, dict[str, InferredNullability]], ...],
+) -> tuple[str, str] | None:
+    table_name, column_name = reference
+    matching: list[tuple[str, str]] = []
+    for alias, columns in relations:
+        if table_name and alias.casefold() != table_name.casefold():
+            continue
+        column_key: str | None = _case_insensitive_mapping_key(
+            mapping=columns,
+            key=column_name,
+        )
+        if column_key is not None:
+            matching.append((alias.casefold(), column_key.casefold()))
+    return matching[0] if len(matching) == 1 else None
+
+
+def _polyglot_non_null_conjuncts(payload: object) -> tuple[tuple[str, str], ...]:
+    if not isinstance(payload, dict):
+        return ()
+    payload_dict: dict[str, object] = cast(dict[str, object], payload)
+    paren_payload: object = payload_dict.get(_POLYGLOT_KIND_PAREN)
+    if isinstance(paren_payload, dict):
+        paren_payload_dict: dict[str, object] = cast(dict[str, object], paren_payload)
+        return _polyglot_non_null_conjuncts(paren_payload_dict.get(_POLYGLOT_PAYLOAD_THIS))
+    and_payload: object = payload_dict.get(_POLYGLOT_KIND_AND)
+    if isinstance(and_payload, dict):
+        and_payload_dict: dict[str, object] = cast(dict[str, object], and_payload)
+        return (
+            *_polyglot_non_null_conjuncts(and_payload_dict.get(_POLYGLOT_PAYLOAD_LEFT)),
+            *_polyglot_non_null_conjuncts(and_payload_dict.get(_POLYGLOT_PAYLOAD_RIGHT)),
+        )
+    is_null_payload: object = payload_dict.get(_POLYGLOT_KIND_IS_NULL)
+    is_null_payload_dict: dict[str, object] = (
+        cast(dict[str, object], is_null_payload) if isinstance(is_null_payload, dict) else {}
+    )
+    if not is_null_payload_dict or is_null_payload_dict.get(_POLYGLOT_PAYLOAD_NOT) is not True:
+        return ()
+    expression_payload: object = is_null_payload_dict.get(_POLYGLOT_PAYLOAD_THIS)
+    if not isinstance(expression_payload, dict):
+        return ()
+    expression_payload_dict: dict[str, object] = cast(dict[str, object], expression_payload)
+    column_payload: object = expression_payload_dict.get(_POLYGLOT_PAYLOAD_COLUMN)
+    if not isinstance(column_payload, dict):
+        return ()
+    column_payload_dict: dict[str, object] = cast(dict[str, object], column_payload)
+    column_name: str = _polyglot_name_payload_value(column_payload_dict.get(_POLYGLOT_PAYLOAD_NAME))
+    table_name: str = _polyglot_name_payload_value(column_payload_dict.get(_POLYGLOT_PAYLOAD_TABLE))
+    return ((table_name, column_name),) if column_name else ()
 
 
 def _polyglot_star_output_types(
@@ -903,6 +1130,16 @@ def _case_insensitive_mapping_get[T](*, mapping: dict[str, T], key: str) -> T | 
     normalized_key: str = key.casefold()
     matches: list[T] = [
         value for candidate, value in mapping.items() if candidate.casefold() == normalized_key
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _case_insensitive_mapping_key[T](*, mapping: dict[str, T], key: str) -> str | None:
+    if key in mapping:
+        return key
+    normalized_key: str = key.casefold()
+    matches: list[str] = [
+        candidate for candidate in mapping if candidate.casefold() == normalized_key
     ]
     return matches[0] if len(matches) == 1 else None
 
