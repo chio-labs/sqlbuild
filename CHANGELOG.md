@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.102.5](https://github.com/chio-labs/sqlbuild/compare/v0.102.4...v0.102.5) (2026-09-17)
+
+
+### Bug Fixes
+
+* ignore cast type parameters in literal rules ([#705](https://github.com/chio-labs/sqlbuild/issues/705)) ([2d2b8d5](https://github.com/chio-labs/sqlbuild/commit/2d2b8d5784f5fd14e3c70531f2484bfe66321367))
+
 ## [0.102.4](https://github.com/chio-labs/sqlbuild/compare/v0.102.3...v0.102.4) (2026-09-17)
 
 
