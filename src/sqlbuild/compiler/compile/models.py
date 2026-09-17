@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
@@ -141,6 +142,16 @@ class InferredColumn:
     name: str
     type: str | None = None
     nullability: InferredNullability = InferredNullability.UNKNOWN
+
+
+@dataclass(frozen=True)
+class CteFactResolvers:
+    """Expression resolvers used for conservative CTE fact recovery."""
+
+    expression_type: Callable[..., Any]
+    nullability: Callable[..., Any]
+    shallow_nullability: Callable[..., Any]
+    alias_nullability: Callable[..., Any]
 
 
 @dataclass(frozen=True)

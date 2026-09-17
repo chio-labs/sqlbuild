@@ -9,6 +9,7 @@ from sqlbuild.adapter.contract.types import TypeFamily
 from sqlbuild.adapter.type_system.main.normalize_type import normalize_type
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.constants import SQL_WILDCARD_TOKEN
+from sqlbuild.compiler.compile.models import CteFactResolvers
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_BINARY_OPERAND_COUNT as _POLYGLOT_BINARY_OPERAND_COUNT,
@@ -97,36 +98,57 @@ class _AliasNullabilityResolver(Protocol):
     ) -> dict[str, InferredNullability]: ...
 
 
-def _polyglot_cte_passthrough_type_facts(
+def _polyglot_cte_passthrough_facts(
     *,
     polyglot_module: Any,
     cleaned_sql: str,
     dialect: str | None,
     column_types_by_table: dict[str, dict[str, str]],
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     inference_profile: ExpressionInferenceProfile,
     analysis: dict[str, Any],
-    expression_type_resolver: _ExpressionTypeResolver,
-) -> tuple[dict[str, str], frozenset[str]]:
-    """Recover types that compact analysis incorrectly skips across direct CTE reads."""
+    resolvers: CteFactResolvers,
+) -> tuple[dict[str, str], dict[str, InferredNullability], frozenset[str]]:
+    """Recover facts that compact analysis skips across direct CTE reads."""
 
-    if not column_types_by_table or not analysis.get("cteFacts"):
-        return {}, frozenset()
+    if not analysis.get("cteFacts") or not (column_types_by_table or column_nullability_by_table):
+        return {}, {}, frozenset()
     try:
         parsed: Any = polyglot_module.parse_one(cleaned_sql, dialect=dialect or "generic")
     except polyglot_module.PolyglotError:
-        return {}, frozenset()
+        return {}, {}, frozenset()
     ctes: tuple[tuple[str, Any, bool], ...] = _polyglot_top_level_ctes(parsed)
     if not ctes:
-        return {}, frozenset()
-    inferred_types: dict[str, str] = _polyglot_cte_passthrough_types_from_parsed(
-        parsed=parsed,
-        column_types_by_table=column_types_by_table,
-        inference_profile=inference_profile,
-        expression_type_resolver=expression_type_resolver,
+        return {}, {}, frozenset()
+    inferred_types: dict[str, str] = (
+        _polyglot_cte_passthrough_types_from_parsed(
+            parsed=parsed,
+            column_types_by_table=column_types_by_table,
+            inference_profile=inference_profile,
+            expression_type_resolver=resolvers.expression_type,
+        )
+        if column_types_by_table
+        else {}
     )
-    return inferred_types, _polyglot_direct_cte_output_names(
-        parsed=parsed,
-        cte_names=frozenset(name for name, _, _ in ctes),
+    inferred_nullability: dict[str, InferredNullability] = (
+        _polyglot_cte_passthrough_nullability_from_parsed(
+            parsed=parsed,
+            column_nullability_by_table=column_nullability_by_table,
+            inference_profile=inference_profile,
+            nullability_resolver=resolvers.nullability,
+            shallow_nullability_resolver=resolvers.shallow_nullability,
+            alias_nullability_resolver=resolvers.alias_nullability,
+        )
+        if column_nullability_by_table
+        else {}
+    )
+    return (
+        inferred_types,
+        inferred_nullability,
+        _polyglot_direct_cte_output_names(
+            parsed=parsed,
+            cte_names=frozenset(name for name, _, _ in ctes),
+        ),
     )
 
 
