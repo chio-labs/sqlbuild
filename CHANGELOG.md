@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.103.1](https://github.com/chio-labs/sqlbuild/compare/v0.103.0...v0.103.1) (2026-09-17)
+
+
+### Bug Fixes
+
+* use upstream Polyglot parser ([#709](https://github.com/chio-labs/sqlbuild/issues/709)) ([5fc1178](https://github.com/chio-labs/sqlbuild/commit/5fc11781a78f5a2396dc3fa74d7776da39448465))
+
 ## [0.103.0](https://github.com/chio-labs/sqlbuild/compare/v0.102.5...v0.103.0) (2026-09-17)
 
 
