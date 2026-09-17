@@ -167,6 +167,13 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
             "Declare this *_date column as DATE in columns (...), or rename it to match its actual type.",
         ),
         rule!(
+            "SQBRCONTRACT105",
+            "contracts",
+            "explicit-output-types",
+            "contract outputs must establish their declared types explicitly",
+            "Pass through a column whose exact type is proven, or wrap the complete output expression in an explicit CAST to its declared contract type.",
+        ),
+        rule!(
             "SQBRDECLARATION101",
             "declarations",
             "named-enum-decisions",

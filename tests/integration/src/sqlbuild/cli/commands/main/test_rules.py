@@ -11,6 +11,7 @@ from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    ExplicitContractOutputRuleIntegrationTestCase,
     RulePassIntegrationTestCase,
     RulesIntegrationTestCase,
 )
@@ -54,6 +55,136 @@ FROM (SELECT 8 AS item_count) AS items
     assert tuple(diagnostic["code"] for diagnostic in result["diagnostics"]) == (
         test_case.expected_diagnostics
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ExplicitContractOutputRuleIntegrationTestCase(
+            description="proven direct output passes",
+            query_sql=(
+                "WITH typed AS (SELECT CAST(1 AS INTEGER) AS order_id),\n"
+                "final AS (SELECT order_id FROM typed)\n"
+                "SELECT order_id FROM final\n"
+            ),
+            expected_exit_code=0,
+            expected_rule_findings=0,
+        ),
+        ExplicitContractOutputRuleIntegrationTestCase(
+            description="calculated output without outer cast fails",
+            query_sql=(
+                "WITH typed AS (SELECT CAST(1 AS INTEGER) AS order_id),\n"
+                "final AS (SELECT order_id + 1 AS order_id FROM typed)\n"
+                "SELECT order_id FROM final\n"
+            ),
+            expected_exit_code=1,
+            expected_rule_findings=1,
+        ),
+        ExplicitContractOutputRuleIntegrationTestCase(
+            description="calculated output with outer cast passes",
+            query_sql=(
+                "WITH typed AS (SELECT CAST(1 AS INTEGER) AS order_id),\n"
+                "final AS (SELECT CAST(order_id + 1 AS INTEGER) AS order_id FROM typed)\n"
+                "SELECT order_id FROM final\n"
+            ),
+            expected_exit_code=0,
+            expected_rule_findings=0,
+        ),
+        ExplicitContractOutputRuleIntegrationTestCase(
+            description="unproven direct output fails",
+            query_sql="SELECT order_id FROM orders\n",
+            expected_exit_code=1,
+            expected_rule_findings=1,
+        ),
+        ExplicitContractOutputRuleIntegrationTestCase(
+            description="set branch cast to a different contract type fails",
+            query_sql=(
+                "SELECT CAST(1 AS INTEGER) AS order_id\n"
+                "UNION ALL\n"
+                "SELECT CAST(2 AS BIGINT) AS order_id\n"
+            ),
+            expected_exit_code=1,
+            expected_rule_findings=1,
+        ),
+        ExplicitContractOutputRuleIntegrationTestCase(
+            description="contract declarations map by output name",
+            query_sql="SELECT 'ready' AS label, CAST(1 AS INTEGER) AS order_id\n",
+            expected_exit_code=0,
+            expected_rule_findings=0,
+            columns_sql=(
+                'order_id (type INTEGER),\n    label (description "Current processing state")'
+            ),
+        ),
+        ExplicitContractOutputRuleIntegrationTestCase(
+            description="final CTE maps contract declarations by output name",
+            query_sql=(
+                "WITH final AS (\n"
+                "  SELECT 'ready' AS label, CAST(1 AS INTEGER) AS order_id\n"
+                ")\n"
+                "SELECT label, order_id FROM final\n"
+            ),
+            expected_exit_code=0,
+            expected_rule_findings=0,
+            columns_sql=(
+                'order_id (type INTEGER),\n    label (description "Current processing state")'
+            ),
+        ),
+        ExplicitContractOutputRuleIntegrationTestCase(
+            description="uncast set branches fail",
+            query_sql=(
+                "WITH final AS (\n"
+                "  SELECT 1 AS order_id\n"
+                "  UNION ALL\n"
+                "  SELECT 2 AS order_id\n"
+                ")\n"
+                "SELECT order_id FROM final\n"
+            ),
+            expected_exit_code=1,
+            expected_rule_findings=2,
+        ),
+        ExplicitContractOutputRuleIntegrationTestCase(
+            description="set branches require explicit casts",
+            query_sql=(
+                "WITH final AS (\n"
+                "  SELECT CAST(1 AS INTEGER) AS order_id\n"
+                "  UNION ALL\n"
+                "  SELECT CAST(2 AS INTEGER) AS order_id\n"
+                ")\n"
+                "SELECT order_id FROM final\n"
+            ),
+            expected_exit_code=0,
+            expected_rule_findings=0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_enforced_contract_when_compiling_explicit_output_rule_then_enforces_boundary(
+    test_case: ExplicitContractOutputRuleIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRCONTRACT105"]\n',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        "MODEL (\n"
+        "  contract enforced,\n"
+        f"  columns ({test_case.columns_sql}),\n"
+        ");\n\n"
+        f"{test_case.query_sql}",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+    result: dict[str, object] = json.loads(capsys.readouterr().out)
+    diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], result["diagnostics"])
+    diagnostic_codes: tuple[object, ...] = tuple(item["code"] for item in diagnostics)
+
+    assert exit_code == test_case.expected_exit_code
+    assert diagnostic_codes.count("SQBRCONTRACT105") == test_case.expected_rule_findings
 
 
 @pytest.mark.parametrize(

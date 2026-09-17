@@ -182,6 +182,7 @@ pub(crate) struct Column {
     pub data_type: String,
     pub nullable: Option<bool>,
     pub audit_count: u32,
+    pub type_proven: bool,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]

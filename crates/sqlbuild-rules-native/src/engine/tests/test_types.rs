@@ -20,6 +20,15 @@ pub(crate) struct DialectEvaluationTestCase {
     pub(crate) expected_code: &'static str,
 }
 
+pub(crate) struct ExplicitOutputTypeTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) query_sql: &'static str,
+    pub(crate) columns: Value,
+    pub(crate) contract: &'static str,
+    pub(crate) expected_fault_count: usize,
+    pub(crate) expected_message_fragment: &'static str,
+}
+
 pub(crate) struct NormalizationTestCase {
     pub(crate) description: &'static str,
     pub(crate) dialect: &'static str,
