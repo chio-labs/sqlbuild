@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.101.15](https://github.com/chio-labs/sqlbuild/compare/v0.101.14...v0.101.15) (2026-09-17)
+
+
+### Bug Fixes
+
+* distinguish model column audit checks ([#691](https://github.com/chio-labs/sqlbuild/issues/691)) ([3b174d4](https://github.com/chio-labs/sqlbuild/commit/3b174d45389e587362fc7d1f881d209353a45b70))
+
 ## [0.101.14](https://github.com/chio-labs/sqlbuild/compare/v0.101.13...v0.101.14) (2026-09-16)
 
 
