@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.101.16](https://github.com/chio-labs/sqlbuild/compare/v0.101.15...v0.101.16) (2026-09-17)
+
+
+### Bug Fixes
+
+* preserve inferred types through CTEs ([#693](https://github.com/chio-labs/sqlbuild/issues/693)) ([222be68](https://github.com/chio-labs/sqlbuild/commit/222be68b0c75ee5585b74c71f7a9db67d428bb46))
+
 ## [0.101.15](https://github.com/chio-labs/sqlbuild/compare/v0.101.14...v0.101.15) (2026-09-17)
 
 
