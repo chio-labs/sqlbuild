@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.103.2](https://github.com/chio-labs/sqlbuild/compare/v0.103.1...v0.103.2) (2026-09-17)
+
+
+### Bug Fixes
+
+* refine nullability after SQL filters ([#711](https://github.com/chio-labs/sqlbuild/issues/711)) ([55c5a90](https://github.com/chio-labs/sqlbuild/commit/55c5a9042be479deecb07cf487d9de3021ea2362))
+
 ## [0.103.1](https://github.com/chio-labs/sqlbuild/compare/v0.103.0...v0.103.1) (2026-09-17)
 
 
