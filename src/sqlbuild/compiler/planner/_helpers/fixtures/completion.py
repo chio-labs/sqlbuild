@@ -3,13 +3,28 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.main._analyze_columns_and_lineage import (
+    analyze_resolved_column_reads,
+)
 from sqlbuild.compiler.compile.main._infer_fixture_columns import infer_fixture_columns
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, InferredColumn
+from sqlbuild.compiler.compile.models import (
+    CompiledLineageColumnFact,
+    CompiledLineageSourceFact,
+    CompiledModel,
+    CompiledProject,
+    CompileSqlReference,
+    InferredColumn,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.lineage.types import ColumnTransformKind, InferredNullability
+from sqlbuild.compiler.lineage.types import (
+    ColumnLineageConfidence,
+    ColumnTransformKind,
+    InferredNullability,
+)
 from sqlbuild.compiler.planner.models import (
     FixtureColumnMetadata,
     FixtureRelationMetadata,
@@ -18,6 +33,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import ContractPolicy, FixtureGroups, FixtureKey
 from sqlbuild.compiler.references.constants import REF_PATTERN, SEED_PATTERN, SOURCE_PATTERN
+from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 
 _PARTIAL_FIXTURE_ALIAS: str = "__sqlbuild_partial_fixture"
@@ -181,20 +197,25 @@ def _required_fixture_columns(
         model: CompiledModel | None = model_map.get(model_name)
         if model is None:
             continue
-        for lineage_column in model.fast_lineage_columns or ():
-            for upstream in lineage_column.upstream_columns:
-                key: FixtureKey = (
-                    CompiledResourceType(upstream.resource_type),
-                    upstream.resource_name,
-                )
-                if key not in fixture_keys:
-                    continue
-                if (
-                    key in authoritative_columns
-                    and upstream.column_name.casefold() not in authoritative_columns[key]
-                ):
-                    continue
-                required.setdefault(key, {}).setdefault(upstream.column_name, set()).add(model_name)
+        for upstream in _resolved_fixture_reads(
+            query_sql=model.query_sql,
+            references=model.references,
+            fast_lineage=model.fast_lineage_columns or (),
+            fixture_keys=fixture_keys,
+            dialect=adapter.expression_inference_profile().sql_analysis_dialect,
+        ):
+            key: FixtureKey = (
+                CompiledResourceType(upstream.resource_type),
+                upstream.resource_name,
+            )
+            if key not in fixture_keys:
+                continue
+            if (
+                key in authoritative_columns
+                and upstream.column_name.casefold() not in authoritative_columns[key]
+            ):
+                continue
+            required.setdefault(key, {}).setdefault(upstream.column_name, set()).add(model_name)
         if model.fast_lineage_has_star:
             model_star_fixture_keys: frozenset[FixtureKey] = _star_fixture_keys(
                 model=model,
@@ -210,6 +231,56 @@ def _required_fixture_columns(
                 for column in relation.columns:
                     required.setdefault(key, {}).setdefault(column.name, set()).add(model_name)
     return required, frozenset(star_fixture_keys)
+
+
+def _resolved_fixture_reads(
+    *,
+    query_sql: str,
+    references: tuple[CompileSqlReference, ...],
+    fast_lineage: tuple[CompiledLineageColumnFact, ...],
+    fixture_keys: frozenset[FixtureKey],
+    dialect: str | None,
+) -> tuple[CompiledLineageSourceFact, ...]:
+    """Return external model reads without treating fallback lineage as authoritative."""
+
+    high_confidence_reads: list[CompiledLineageSourceFact] = []
+    for fact in fast_lineage:
+        if fact.confidence == ColumnLineageConfidence.HIGH:
+            high_confidence_reads.extend(fact.upstream_columns)
+    needs_resolution: bool = any(
+        _reference_fixture_key(reference) in fixture_keys for reference in references
+    )
+    if not needs_resolution:
+        return tuple(high_confidence_reads)
+    resolved: tuple[CompiledLineageSourceFact, ...] = _cached_resolved_column_reads(
+        query_sql=query_sql,
+        references=references,
+        dialect=dialect,
+    )
+    return tuple(dict.fromkeys([*high_confidence_reads, *resolved]))
+
+
+def _reference_fixture_key(reference: CompileSqlReference) -> FixtureKey | None:
+    resource_type: CompiledResourceType | None = {
+        SqlReferenceKind.REF: CompiledResourceType.MODEL,
+        SqlReferenceKind.SOURCE: CompiledResourceType.SOURCE,
+        SqlReferenceKind.SEED: CompiledResourceType.SEED,
+    }.get(SqlReferenceKind(reference.ref_kind))
+    return (resource_type, reference.ref_name) if resource_type is not None else None
+
+
+@lru_cache(maxsize=4096)
+def _cached_resolved_column_reads(
+    *,
+    query_sql: str,
+    references: tuple[CompileSqlReference, ...],
+    dialect: str | None,
+) -> tuple[CompiledLineageSourceFact, ...]:
+    return analyze_resolved_column_reads(
+        query_sql=query_sql,
+        references=references,
+        dialect=dialect,
+    )
 
 
 def _star_fixture_keys(
