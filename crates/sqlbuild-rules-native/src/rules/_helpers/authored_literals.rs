@@ -2,6 +2,12 @@ use sqlparser::dialect::Dialect;
 use sqlparser::tokenizer::{Token, Tokenizer};
 use std::collections::BTreeSet;
 
+#[derive(Clone, Copy)]
+struct CastScope {
+    depth: usize,
+    in_type: bool,
+}
+
 pub(super) fn numeric_literal_tokens(
     source: &str,
     dialect: &dyn Dialect,
@@ -31,13 +37,51 @@ pub(super) fn numeric_literal_tokens(
         0
     };
     let mut literals: BTreeSet<String> = BTreeSet::new();
+    let mut cast_scopes: Vec<CastScope> = Vec::new();
+    let mut depth = 0_usize;
     for (index, token) in tokens[query_start..].iter().enumerate() {
-        let Token::Number(number, _) = token else {
-            continue;
-        };
-        literals.insert(number.to_string());
-        if index > 0 && matches!(tokens[query_start + index - 1], Token::Minus) {
-            literals.insert(format!("-{number}"));
+        match token {
+            Token::LParen => {
+                depth += 1;
+                if index > 0
+                    && matches!(
+                        tokens[query_start + index - 1],
+                        Token::Word(word)
+                            if word.quote_style.is_none()
+                                && matches!(
+                                    word.value.to_ascii_uppercase().as_str(),
+                                    "CAST" | "TRY_CAST"
+                                )
+                    )
+                {
+                    cast_scopes.push(CastScope {
+                        depth,
+                        in_type: false,
+                    });
+                }
+            }
+            Token::RParen => {
+                if cast_scopes.last().is_some_and(|scope| scope.depth == depth) {
+                    cast_scopes.pop();
+                }
+                depth = depth.saturating_sub(1);
+            }
+            Token::Word(word)
+                if word.quote_style.is_none()
+                    && word.value.eq_ignore_ascii_case("as")
+                    && cast_scopes.last().is_some_and(|scope| scope.depth == depth) =>
+            {
+                if let Some(scope) = cast_scopes.last_mut() {
+                    scope.in_type = true;
+                }
+            }
+            Token::Number(number, _) if !cast_scopes.last().is_some_and(|scope| scope.in_type) => {
+                literals.insert(number.to_string());
+                if index > 0 && matches!(tokens[query_start + index - 1], Token::Minus) {
+                    literals.insert(format!("-{number}"));
+                }
+            }
+            _ => {}
         }
     }
     Ok(literals)

@@ -258,6 +258,34 @@ from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_proj
             expected_codes=(),
         ),
         PolicyEvaluationTestCase(
+            description="cast precision does not authorize expanded constant value",
+            model_name="commerce__mart__orders",
+            relative_path="models/mart/commerce__mart__orders.sql",
+            sql=(
+                "SELECT CAST(CASE WHEN item_count > 38 THEN 1 ELSE 0 END "
+                "AS NUMBER(38, 0)) AS batch_size FROM items"
+            ),
+            authored_sql=(
+                'SELECT CAST(CASE WHEN item_count > @const("large_batch") THEN 1 ELSE 0 END '
+                "AS NUMBER(38, 0)) AS batch_size FROM items"
+            ),
+            config_values={"materialized": "table", "contract": "enforced"},
+            select=("SQBRDECLARATION102",),
+            expected_codes=(),
+        ),
+        PolicyEvaluationTestCase(
+            description="authored numeric decision still faults when it matches cast precision",
+            model_name="commerce__mart__orders",
+            relative_path="models/mart/commerce__mart__orders.sql",
+            sql=(
+                "SELECT CAST(CASE WHEN item_count > 38 THEN 1 ELSE 0 END "
+                "AS NUMBER(38, 0)) AS batch_size FROM items"
+            ),
+            config_values={"materialized": "table", "contract": "enforced"},
+            select=("SQBRDECLARATION102",),
+            expected_codes=("SQBRDECLARATION102",),
+        ),
+        PolicyEvaluationTestCase(
             description="constant-backed numeric decision ignores digits in identifiers and strings",
             model_name="commerce__mart__orders",
             relative_path="models/mart/commerce__mart__orders.sql",
