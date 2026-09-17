@@ -5,7 +5,7 @@ use crate::constants::{
 use crate::models::{Declaration, EvaluateRequest, Fault, Model, RuleMetadata, RulesConfig};
 use crate::rules::_helpers::authored_literals::numeric_literal_tokens;
 use crate::rules::_helpers::domain_layout::folder_layer_details;
-use crate::rules::_helpers::explicit_output_types;
+use crate::rules::_helpers::{explicit_output_types, typed_contract_columns};
 use crate::rules::models::{
     FaultCollector, ModelEvaluationRequest, ProjectEvaluationRequest, ResolvedThresholdOverride,
 };
@@ -175,6 +175,9 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
     }
     if let Some(rule) = metadata("SQBRCONTRACT101") {
         contract_required(&parsed, rule, &faults);
+    }
+    if let Some(rule) = metadata("SQBRCONTRACT106") {
+        typed_contract_columns::evaluate(parsed.model, rule, &faults);
     }
     if let Some(rule) = metadata("SQBRCONTRACT105") {
         explicit_output_types::evaluate(&parsed.query, parsed.model, rule, &faults);

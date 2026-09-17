@@ -174,6 +174,13 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
             "Pass through a column whose exact type is proven, or wrap the complete output expression in an explicit CAST to its declared contract type.",
         ),
         rule!(
+            "SQBRCONTRACT106",
+            "contracts",
+            "typed-contract-columns",
+            "enforced contract columns must declare types",
+            "Declare an adapter type for every column in the enforced contract; fix upstream type inference or cast the SQL output before choosing the type.",
+        ),
+        rule!(
             "SQBRDECLARATION101",
             "declarations",
             "named-enum-decisions",
