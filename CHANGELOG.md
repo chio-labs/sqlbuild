@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.102.1](https://github.com/chio-labs/sqlbuild/compare/v0.102.0...v0.102.1) (2026-09-17)
+
+
+### Bug Fixes
+
+* resolve fixture columns through CTEs ([#697](https://github.com/chio-labs/sqlbuild/issues/697)) ([09feed9](https://github.com/chio-labs/sqlbuild/commit/09feed94ff48b5b75b5c9acd5a3cd8e3af173936))
+
 ## [0.102.0](https://github.com/chio-labs/sqlbuild/compare/v0.101.16...v0.102.0) (2026-09-17)
 
 
