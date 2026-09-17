@@ -14,6 +14,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     ExplicitContractOutputRuleIntegrationTestCase,
     RulePassIntegrationTestCase,
     RulesIntegrationTestCase,
+    TypedContractRuleIntegrationTestCase,
 )
 
 
@@ -238,6 +239,60 @@ def test_given_enforced_contract_when_compiling_explicit_output_rule_then_enforc
 
     assert exit_code == test_case.expected_exit_code
     assert diagnostic_codes.count("SQBRCONTRACT105") == test_case.expected_rule_findings
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        TypedContractRuleIntegrationTestCase(
+            description="enforced contract with an untyped column fails only the typed-column rule",
+            columns_sql='order_id (type INTEGER), status (description "Current status")',
+            expected_exit_code=1,
+            expected_contract_101_findings=0,
+            expected_contract_105_findings=0,
+            expected_contract_106_findings=1,
+        ),
+        TypedContractRuleIntegrationTestCase(
+            description="enforced contract with fully typed explicit outputs passes",
+            columns_sql="order_id (type INTEGER), status (type VARCHAR)",
+            expected_exit_code=0,
+            expected_contract_101_findings=0,
+            expected_contract_105_findings=0,
+            expected_contract_106_findings=0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_contract_rules_when_compiling_then_contract_is_enforced_typed_and_explicit(
+    test_case: TypedContractRuleIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\n'
+        'select = ["SQBRCONTRACT101", "SQBRCONTRACT105", "SQBRCONTRACT106"]\n',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        "MODEL (\n"
+        "  contract enforced,\n"
+        f"  columns ({test_case.columns_sql}),\n"
+        ");\n\n"
+        "SELECT CAST(1 AS INTEGER) AS order_id, CAST('ready' AS VARCHAR) AS status\n",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+    result: dict[str, object] = json.loads(capsys.readouterr().out)
+    diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], result["diagnostics"])
+    diagnostic_codes: tuple[object, ...] = tuple(item["code"] for item in diagnostics)
+
+    assert exit_code == test_case.expected_exit_code
+    assert diagnostic_codes.count("SQBRCONTRACT101") == (test_case.expected_contract_101_findings)
+    assert diagnostic_codes.count("SQBRCONTRACT105") == (test_case.expected_contract_105_findings)
+    assert diagnostic_codes.count("SQBRCONTRACT106") == (test_case.expected_contract_106_findings)
 
 
 @pytest.mark.parametrize(

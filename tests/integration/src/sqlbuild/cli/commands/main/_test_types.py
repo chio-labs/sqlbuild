@@ -35,6 +35,18 @@ class ExplicitContractOutputRuleIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class TypedContractRuleIntegrationTestCase:
+    """One fully typed contract Rule expectation through compile."""
+
+    description: str
+    columns_sql: str
+    expected_exit_code: int
+    expected_contract_101_findings: int
+    expected_contract_105_findings: int
+    expected_contract_106_findings: int
+
+
+@dataclass(frozen=True)
 class FormatCompileIntegrationTestCase:
     """One format-to-compile compatibility expectation."""
 

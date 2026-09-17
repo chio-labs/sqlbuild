@@ -4,3 +4,4 @@ pub(crate) mod domain_layout;
 pub(crate) mod evaluation;
 pub(crate) mod explicit_output_types;
 pub(crate) mod sql_test_rules;
+pub(crate) mod typed_contract_columns;

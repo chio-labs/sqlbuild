@@ -83,6 +83,11 @@ Contract type validation distinguishes evidence from uncertainty:
 - An output whose type cannot be proven reports `K003` when type enforcement is active. This remains
   a warning because incomplete analysis is not proof that otherwise valid SQL violates its contract.
 
+`SQBRCONTRACT106` requires every column in an enforced contract to declare an adapter type. Use it
+with `SQBRCONTRACT101` so every model has an enforced contract and no contract can remain a
+name-only shape. Resolve unknown types at authoritative sources or explicit SQL output boundaries;
+do not choose a type solely to silence the Rule.
+
 Projects that require every contract boundary to be statically explicit can select
 `SQBRCONTRACT105`. Selected Rule findings are enforced. The Rule accepts a direct column only when
 its exact declared type is proven, and requires an outer `CAST` around literals, calculations,

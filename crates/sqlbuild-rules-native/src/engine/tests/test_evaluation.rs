@@ -48,6 +48,78 @@ fn given_repeated_native_evaluation_when_faulting_then_returns_deterministic_com
 }
 
 #[test]
+fn given_enforced_contract_when_column_type_is_missing_then_typed_contract_rule_faults()
+-> Result<(), String> {
+    let test_cases = [
+        test_types::TypedContractColumnTestCase {
+            description: "enforced contract has one untyped column",
+            contract: "enforced",
+            columns: json!([
+                {"name": "order_id", "type": "INTEGER", "type_proven": true},
+                {"name": "status", "type": "", "type_proven": false}
+            ]),
+            expected_fault_count: 1,
+            expected_messages: &["contract column \"status\" has no declared type"],
+        },
+        test_types::TypedContractColumnTestCase {
+            description: "enforced contract has only typed columns",
+            contract: "enforced",
+            columns: json!([
+                {"name": "order_id", "type": "INTEGER", "type_proven": true}
+            ]),
+            expected_fault_count: 0,
+            expected_messages: &[],
+        },
+        test_types::TypedContractColumnTestCase {
+            description: "unenforced column metadata remains outside this rule",
+            contract: "none",
+            columns: json!([
+                {"name": "status", "type": "", "type_proven": false}
+            ]),
+            expected_fault_count: 0,
+            expected_messages: &[],
+        },
+    ];
+
+    for test_case in test_cases {
+        let project_dir = TempDir::new().map_err(|error| error.to_string())?;
+        let mut request: Value = serde_json::from_str(&helpers::request(
+            &project_dir,
+            &json!({
+                "select": ["SQBRCONTRACT106"],
+                "cache": {"enabled": false}
+            }),
+        ))
+        .map_err(|error| error.to_string())?;
+        request["models"][0]["config"] = json!({"contract": test_case.contract});
+        request["models"][0]["columns"] = test_case.columns;
+
+        let result: Value = serde_json::from_str(&evaluate_json(&request.to_string())?)
+            .map_err(|error| error.to_string())?;
+        let faults = result["faults"]
+            .as_array()
+            .ok_or_else(|| "faults must be an array".to_string())?;
+        let messages = faults
+            .iter()
+            .filter_map(|fault| fault["message"].as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            faults.len(),
+            test_case.expected_fault_count,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            messages, test_case.expected_messages,
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn given_scoped_suppression_when_evaluating_native_fault_then_returns_no_faults()
 -> Result<(), String> {
     let test_cases = [test_types::NativeEvaluationTestCase {

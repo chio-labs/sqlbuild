@@ -29,6 +29,14 @@ pub(crate) struct ExplicitOutputTypeTestCase {
     pub(crate) expected_message_fragment: &'static str,
 }
 
+pub(crate) struct TypedContractColumnTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) contract: &'static str,
+    pub(crate) columns: Value,
+    pub(crate) expected_fault_count: usize,
+    pub(crate) expected_messages: &'static [&'static str],
+}
+
 pub(crate) struct NormalizationTestCase {
     pub(crate) description: &'static str,
     pub(crate) dialect: &'static str,
