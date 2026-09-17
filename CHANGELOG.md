@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.102.2](https://github.com/chio-labs/sqlbuild/compare/v0.102.1...v0.102.2) (2026-09-17)
+
+
+### Bug Fixes
+
+* trust exact contract output casts ([#699](https://github.com/chio-labs/sqlbuild/issues/699)) ([3483ab3](https://github.com/chio-labs/sqlbuild/commit/3483ab38f07bf10acb98fc0d7fa873f0d83fb6f9))
+
 ## [0.102.1](https://github.com/chio-labs/sqlbuild/compare/v0.102.0...v0.102.1) (2026-09-17)
 
 
