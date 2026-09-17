@@ -21,7 +21,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     build_assertion_test_project_files,
     build_chain_test_project_files,
+    build_clause_partial_source_fixture_project_files,
     build_complex_values_fixture_project_files,
+    build_cte_derived_output_fixture_project_files,
+    build_cte_partial_source_fixture_project_files,
     build_empty_partial_fixture_project_files,
     build_explicit_typed_null_fixture_project_files,
     build_incompatible_fixture_type_project_files,
@@ -59,6 +62,24 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
         PartialFixtureE2ETestCase(
             description="known nullable source column receives an implicit typed null",
             repo_files=build_partial_source_fixture_project_files(),
+            expected_stdout_fragment="PASS=1",
+            expected_artifact_fragments=(
+                'CAST(NULL AS TEXT) AS "status"',
+                "__sqlbuild_partial_fixture",
+            ),
+        ),
+        PartialFixtureE2ETestCase(
+            description="nullable source column through CTE receives an implicit typed null",
+            repo_files=build_cte_partial_source_fixture_project_files(),
+            expected_stdout_fragment="PASS=1",
+            expected_artifact_fragments=(
+                'CAST(NULL AS TEXT) AS "status"',
+                "__sqlbuild_partial_fixture",
+            ),
+        ),
+        PartialFixtureE2ETestCase(
+            description="nullable source column used by a filter receives an implicit typed null",
+            repo_files=build_clause_partial_source_fixture_project_files(),
             expected_stdout_fragment="PASS=1",
             expected_artifact_fragments=(
                 'CAST(NULL AS TEXT) AS "status"',
@@ -222,6 +243,11 @@ def test_given_inspection_when_requesting_json_file_then_parser_rejects_conflict
         FixtureCompatibilityE2ETestCase(
             description="open star-model contract accepts required fixture payload columns",
             repo_files=build_open_schema_ref_fixture_project_files(),
+            expected_stdout_fragment="PASS=1",
+        ),
+        FixtureCompatibilityE2ETestCase(
+            description="CTE-derived outputs require only their resolved source inputs",
+            repo_files=build_cte_derived_output_fixture_project_files(),
             expected_stdout_fragment="PASS=1",
         ),
     ],

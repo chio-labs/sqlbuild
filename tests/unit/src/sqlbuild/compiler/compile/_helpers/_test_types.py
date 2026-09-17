@@ -515,6 +515,14 @@ class PolyglotAnalysisTestCase:
 
 
 @dataclass(frozen=True)
+class RequiredExternalColumnsTestCase:
+    description: str
+    query_sql: str
+    references: tuple[CompileSqlReference, ...]
+    expected_columns: tuple[tuple[str, str, str], ...]
+
+
+@dataclass(frozen=True)
 class ValidateSqlSyntaxTestCase:
     description: str
     query_sql: str

@@ -393,6 +393,37 @@ def build_irrelevant_omitted_column_project_files() -> dict[str, str]:
     return files
 
 
+def build_cte_partial_source_fixture_project_files() -> dict[str, str]:
+    """Build a partial source fixture read through an import CTE."""
+
+    files: dict[str, str] = build_partial_source_fixture_project_files()
+    files["models/orders.sql"] = (
+        "MODEL ();\n\n"
+        "WITH staged AS (\n"
+        '  SELECT order_id, status FROM __source("raw_orders")\n'
+        ")\n"
+        "SELECT order_id, status FROM staged\n"
+    )
+    return files
+
+
+def build_clause_partial_source_fixture_project_files() -> dict[str, str]:
+    """Build a partial source fixture whose omitted column is read only by a filter."""
+
+    files: dict[str, str] = build_partial_source_fixture_project_files()
+    files["models/orders.sql"] = (
+        'MODEL ();\n\nSELECT order_id FROM __source("raw_orders") WHERE status IS NULL\n'
+    )
+    files["tests/unit/test_orders.sql"] = (
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__raw_orders AS (SELECT 1 AS order_id),\n"
+        "__expected__orders AS (SELECT 1 AS order_id)\n"
+        "SELECT 1\n"
+    )
+    return files
+
+
 def build_star_partial_fixture_project_files() -> dict[str, str]:
     """Build a contracted star model requiring the complete known source shape."""
 
@@ -652,6 +683,46 @@ def build_transformed_collection_project_files() -> dict[str, str]:
             "WITH\n"
             "__source__raw_orders AS (SELECT 'open' AS status),\n"
             "__expected__order_statuses AS (SELECT ['open'] AS statuses)\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def build_cte_derived_output_fixture_project_files() -> dict[str, str]:
+    """Build a fixture where CTE outputs are derived from fewer source columns."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "cte_derived_output_fixture"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "cte_derived_output_fixture.duckdb"\n'
+        ),
+        "models/orders.sql": (
+            "MODEL ();\n\n"
+            "WITH raw_orders AS (\n"
+            '  SELECT * FROM __source("raw_orders")\n'
+            "), derived AS (\n"
+            "  SELECT\n"
+            "    order_id,\n"
+            "    UPPER(payload) AS normalized_status,\n"
+            "    CURRENT_TIMESTAMP AS loaded_at\n"
+            "  FROM raw_orders\n"
+            "), final AS (\n"
+            "  SELECT order_id, normalized_status, loaded_at FROM derived\n"
+            ")\n"
+            "SELECT order_id, normalized_status, loaded_at FROM final\n"
+        ),
+        "sources/raw_orders.yml": (
+            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+        ),
+        "tests/unit/test_orders.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            "__source__raw_orders AS (SELECT 1 AS order_id, 'ready' AS payload),\n"
+            "__assert__orders AS (\n"
+            "  SELECT 1 FROM __ref(\"orders\") WHERE normalized_status <> 'READY'\n"
+            ")\n"
             "SELECT 1\n"
         ),
     }
