@@ -838,7 +838,9 @@ def test_given_supported_compact_query_when_ast_parse_would_fail_then_returns_an
                 'CAST(status AS VARCHAR) AS status FROM __ref("orders")'
                 "), combined AS ("
                 "SELECT amount, status FROM current_orders "
+                "-- include archived rows\n"
                 "UNION ALL BY NAME SELECT amount, status FROM archived_orders "
+                "-- include imported rows\n"
                 "UNION ALL BY NAME SELECT amount, status FROM imported_orders"
                 "), final AS ("
                 "SELECT amount, status FROM combined"
@@ -861,6 +863,87 @@ def test_given_supported_compact_query_when_ast_parse_would_fail_then_returns_an
                 InferredColumn(name="status", type="TEXT"),
             ),
             expected_lineage_columns=direct_orders_lineage("amount", "status"),
+            expected_has_star=False,
+        ),
+        PolyglotAnalysisTestCase(
+            description="preserves matching positional cte union types",
+            query_sql=(
+                "WITH combined AS ("
+                "SELECT CAST(amount AS INTEGER) AS amount, "
+                "CAST(status AS VARCHAR) AS status, "
+                'CAST(status AS VARCHAR) AS nullable_status FROM __ref("orders") '
+                "UNION ALL SELECT amount, status, "
+                'NULL AS nullable_status FROM __ref("orders")'
+                "), final AS ("
+                "SELECT amount, status, nullable_status FROM combined"
+                ") SELECT amount, status, nullable_status FROM final"
+            ),
+            references=(
+                CompileSqlReference(SqlReferenceKind.REF, "orders"),
+                CompileSqlReference(SqlReferenceKind.REF, "orders"),
+            ),
+            column_nullability_by_table={
+                "orders": {
+                    "amount": InferredNullability.UNKNOWN,
+                    "status": InferredNullability.UNKNOWN,
+                }
+            },
+            column_types_by_table={
+                "orders": {
+                    "amount": "NUMBER(38,0)",
+                    "status": "VARCHAR(16777216)",
+                }
+            },
+            inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="snowflake"),
+            expected_columns=(
+                InferredColumn(name="amount", type="INT"),
+                InferredColumn(name="status", type="TEXT"),
+                InferredColumn(name="nullable_status", type="TEXT"),
+            ),
+            expected_lineage_columns=(
+                CompiledLineageColumnFact(
+                    output_column="amount",
+                    upstream_columns=(),
+                    transform_kind=ColumnTransformKind.CONSTANT,
+                    confidence=ColumnLineageConfidence.HIGH,
+                ),
+                CompiledLineageColumnFact(
+                    output_column="status",
+                    upstream_columns=(),
+                    transform_kind=ColumnTransformKind.CONSTANT,
+                    confidence=ColumnLineageConfidence.HIGH,
+                ),
+                CompiledLineageColumnFact(
+                    output_column="nullable_status",
+                    upstream_columns=(
+                        CompiledLineageSourceFact(
+                            resource_type=CompiledResourceType.MODEL,
+                            resource_name="orders",
+                            column_name="status",
+                        ),
+                    ),
+                    transform_kind=ColumnTransformKind.DIRECT,
+                    confidence=ColumnLineageConfidence.HIGH,
+                ),
+            ),
+            expected_has_star=False,
+        ),
+        PolyglotAnalysisTestCase(
+            description="preserves by-name wildcard cte union types",
+            query_sql=(
+                "WITH typed AS ("
+                'SELECT CAST(amount AS INTEGER) AS amount FROM __ref("orders")'
+                "), combined AS ("
+                "SELECT * FROM typed UNION ALL BY NAME SELECT * FROM typed"
+                "), final AS ("
+                "SELECT amount FROM combined"
+                ") SELECT amount FROM final"
+            ),
+            references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+            column_nullability_by_table={"orders": {"amount": InferredNullability.UNKNOWN}},
+            column_types_by_table={"orders": {"amount": "VARCHAR"}},
+            expected_columns=(InferredColumn(name="amount", type="INT"),),
+            expected_lineage_columns=direct_orders_lineage("amount"),
             expected_has_star=False,
         ),
         PolyglotAnalysisTestCase(
@@ -949,6 +1032,100 @@ def test_given_cte_chain_when_analyzing_direct_passthrough_then_type_is_conserva
     assert result.columns == test_case.expected_columns
     assert result.lineage_columns == test_case.expected_lineage_columns
     assert result.has_star is test_case.expected_has_star
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PolyglotAnalysisTestCase(
+            description="preserves safe expression types without over-inferring overloads",
+            query_sql=(
+                "WITH transformed AS ("
+                "SELECT "
+                "'web' AS source_name, "
+                "TRUE AS active, "
+                "order_id IN (1, 2) AS selected, "
+                "first_name || last_name AS full_name, "
+                "COALESCE(status, CAST(NULL AS VARCHAR)) AS status, "
+                "IFF(active, status, NULL) AS maybe_status, "
+                "CASE WHEN active THEN status ELSE NULL END AS case_status, "
+                "NULLIF(status, '') AS clean_status, "
+                "MIN(created_at) OVER (PARTITION BY order_id) AS first_created_at, "
+                "to_date, "
+                "payload || payload AS merged_payload, "
+                "SUBSTRING(payload, 1, 2) AS sliced_payload "
+                'FROM __ref("orders")'
+                "), final AS ("
+                "SELECT source_name, active, selected, full_name, status, maybe_status, "
+                "case_status, clean_status, first_created_at, to_date, merged_payload, "
+                "sliced_payload FROM transformed"
+                ") SELECT source_name, active, selected, full_name, status, maybe_status, "
+                "case_status, clean_status, first_created_at, to_date, merged_payload, "
+                "sliced_payload FROM final"
+            ),
+            references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+            column_nullability_by_table={
+                "orders": {
+                    "order_id": InferredNullability.NON_NULL,
+                    "first_name": InferredNullability.UNKNOWN,
+                    "last_name": InferredNullability.UNKNOWN,
+                    "status": InferredNullability.UNKNOWN,
+                    "active": InferredNullability.UNKNOWN,
+                    "created_at": InferredNullability.UNKNOWN,
+                    "to_date": InferredNullability.UNKNOWN,
+                    "payload": InferredNullability.UNKNOWN,
+                }
+            },
+            column_types_by_table={
+                "orders": {
+                    "order_id": "NUMBER(38,0)",
+                    "first_name": "VARCHAR(16777216)",
+                    "last_name": "VARCHAR(16777216)",
+                    "status": "VARCHAR(16777216)",
+                    "active": "BOOLEAN",
+                    "created_at": "TIMESTAMP_NTZ",
+                    "to_date": "INTEGER",
+                    "payload": "BINARY",
+                }
+            },
+            inference_profile=ExpressionInferenceProfile(
+                sql_analysis_dialect="snowflake",
+                function_return_types={"TO_DATE": "DATE"},
+            ),
+            expected_columns=(
+                InferredColumn(name="source_name"),
+                InferredColumn(name="active", type="BOOLEAN"),
+                InferredColumn(name="selected", type="BOOLEAN"),
+                InferredColumn(name="full_name", type="TEXT"),
+                InferredColumn(name="status", type="VARCHAR(16777216)"),
+                InferredColumn(name="maybe_status", type="VARCHAR(16777216)"),
+                InferredColumn(name="case_status", type="VARCHAR(16777216)"),
+                InferredColumn(name="clean_status", type="VARCHAR(16777216)"),
+                InferredColumn(name="first_created_at", type="TIMESTAMP_NTZ"),
+                InferredColumn(name="to_date", type="INTEGER"),
+                InferredColumn(name="merged_payload"),
+                InferredColumn(name="sliced_payload", type="BINARY"),
+            ),
+            expected_lineage_columns=(),
+            expected_has_star=False,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_typed_cte_expressions_when_recovering_facts_then_safe_result_types_are_preserved(
+    test_case: PolyglotAnalysisTestCase,
+) -> None:
+    result: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+        query_sql=test_case.query_sql,
+        references=test_case.references,
+        column_nullability_by_table=test_case.column_nullability_by_table,
+        column_types_by_table=test_case.column_types_by_table,
+        inference_profile=test_case.inference_profile,
+        allow_compact_analysis=True,
+        recover_cte_facts=True,
+    )
+
+    assert result.columns == test_case.expected_columns
 
 
 @pytest.mark.parametrize(

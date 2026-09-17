@@ -146,6 +146,17 @@ def test_given_table_type_when_rendering_initial_snapshot_then_uses_expected_kin
                 "IFF": InferredNullability.NON_NULL,
                 "UPPER": InferredNullability.NON_NULL,
             },
+            expected_return_types={
+                "DATE_FROM_PARTS": "DATE",
+                "LISTAGG": "TEXT",
+                "LIST_AGG": "TEXT",
+                "OBJECT_AGG": "OBJECT",
+                "STRING_AGG": "TEXT",
+                "TO_JSON": "TEXT",
+                "TO_TIMESTAMP": "TIMESTAMP",
+                "TRY_TO_DATE": "DATE",
+                "TRY_TO_DOUBLE": "FLOAT",
+            },
         )
     ],
     ids=lambda case: case.description,
@@ -174,6 +185,10 @@ def test_given_snowflake_adapter_when_getting_inference_profile_then_returns_exp
         == test_case.expected_rule_results["IFF"]
     )
     assert upper_rule((InferredNullability.NON_NULL,)) == test_case.expected_rule_results["UPPER"]
+    assert {
+        function_name: profile.function_return_type(function_name)
+        for function_name in test_case.expected_return_types
+    } == test_case.expected_return_types
 
 
 @pytest.mark.parametrize(
