@@ -133,16 +133,13 @@ impl OutputRule<'_> {
         let cast_matches_contract = cast_type
             .as_ref()
             .is_some_and(|data_type| type_spelling_equal(data_type, &column.data_type));
-        let passes = column.type_proven && cast_matches_contract
-            || column.type_proven && direct && !scope.set_branch;
+        let passes = cast_matches_contract || column.type_proven && direct && !scope.set_branch;
         if passes {
             return;
         }
         let name = output_name.unwrap_or_else(|| column.name.clone());
         let reason = if explicit_cast && !cast_matches_contract {
             "has an outer cast that does not target its declared contract type"
-        } else if explicit_cast {
-            "has an explicit cast whose result does not prove the declared contract type"
         } else if direct && scope.set_branch {
             "is in a set-operation branch that must cast each output explicitly"
         } else if direct {
