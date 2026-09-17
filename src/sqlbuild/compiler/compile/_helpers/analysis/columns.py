@@ -1208,8 +1208,11 @@ def _polyglot_expression_type(
     *, expression: Any, inference_profile: ExpressionInferenceProfile
 ) -> str | None:
     kind: str = str(getattr(expression, "kind", ""))
-    function_type: str | None = inference_profile.function_return_type(
-        str(getattr(expression, "name", ""))
+    function_name: str = str(getattr(expression, "name", "")) or kind
+    function_type: str | None = (
+        inference_profile.function_return_type(function_name)
+        if kind != _POLYGLOT_KIND_COLUMN
+        else None
     )
     if function_type is not None:
         return function_type

@@ -657,5 +657,76 @@ SELECT category FROM final
     )
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SemanticBindingIntegrationTestCase(
+            description="safe expression and union types survive CTE passthroughs",
+            expected_exit_code=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_typed_union_ctes_when_compiling_enforced_contract_then_types_are_proven(
+    test_case: SemanticBindingIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write_semantic_binding_project(
+        project_dir=tmp_path,
+        upstream_sql=_AUTHORITATIVE_MODEL.replace(
+            "  materialized table\n",
+            "  materialized table\n  database analytics\n  schema analytics\n",
+        ),
+        downstream_sql=(
+            "MODEL (\n"
+            "  materialized view\n"
+            "  database analytics\n"
+            "  schema analytics\n"
+            "  contract enforced\n"
+            "  columns (\n"
+            "    category (type VARCHAR)\n"
+            "    is_selected (type BOOLEAN)\n"
+            "    processed_at (type TIMESTAMP_NTZ)\n"
+            "    notes (type VARCHAR)\n"
+            "  )\n"
+            ");\n"
+            "WITH current_orders AS (\n"
+            "  SELECT CAST(category AS VARCHAR) AS category,\n"
+            "    id IN (1, 2) AS is_selected,\n"
+            "    TO_TIMESTAMP(0) AS processed_at,\n"
+            "    CAST(category AS VARCHAR) AS notes\n"
+            '  FROM __ref("upstream")\n'
+            "), combined AS (\n"
+            "  SELECT category, is_selected, processed_at, notes FROM current_orders\n"
+            "  -- Preserve archived records.\n"
+            "  UNION ALL\n"
+            "  SELECT category, TRUE AS is_selected, CAST(NULL AS TIMESTAMP) AS processed_at,\n"
+            '    NULL AS notes FROM __ref("upstream")\n'
+            "), final AS (\n"
+            "  SELECT category, is_selected, processed_at, notes FROM combined\n"
+            ")\n"
+            "SELECT category, is_selected, processed_at, notes FROM final\n"
+        ),
+    )
+    _ = (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "semantic_binding"\nadapter = "snowflake"\n',
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(
+        ["--no-color", "--project-dir", str(tmp_path), "compile", "--no-cache", "--json"]
+    )
+
+    output: dict[str, object] = json.loads(capsys.readouterr().out)
+    diagnostics: object = output.get("diagnostics")
+    assert exit_code == test_case.expected_exit_code
+    assert isinstance(diagnostics, list)
+    assert not any(
+        isinstance(diagnostic, dict) and diagnostic.get("code") in {"K002", "K003"}
+        for diagnostic in diagnostics
+    )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-vv"])

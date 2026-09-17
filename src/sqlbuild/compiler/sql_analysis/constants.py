@@ -13,11 +13,16 @@ POLYGLOT_KIND_ALIAS: str = "alias"
 POLYGLOT_KIND_ANNOTATED: str = "annotated"
 POLYGLOT_KIND_ARRAY_AGG: str = "array_agg"
 POLYGLOT_KIND_AVG: str = "avg"
+POLYGLOT_KIND_BOOLEAN: str = "boolean"
+POLYGLOT_KIND_CASE: str = "case"
 POLYGLOT_KIND_CAST: str = "cast"
 POLYGLOT_KIND_COALESCE: str = "coalesce"
 POLYGLOT_KIND_COLUMN: str = "column"
+POLYGLOT_KIND_CONCAT: str = "concat"
 POLYGLOT_KIND_COUNT: str = "count"
 POLYGLOT_KIND_EXCEPT: str = "except"
+POLYGLOT_KIND_FUNCTION: str = "function"
+POLYGLOT_KIND_IF_FUNC: str = "if_func"
 POLYGLOT_KIND_INTERSECT: str = "intersect"
 POLYGLOT_KIND_LITERAL: str = "literal"
 POLYGLOT_KIND_MAX: str = "max"
@@ -25,15 +30,47 @@ POLYGLOT_KIND_MIN: str = "min"
 POLYGLOT_KIND_NULL: str = "null"
 POLYGLOT_KIND_SELECT: str = "select"
 POLYGLOT_KIND_STRING_AGG: str = "string_agg"
+POLYGLOT_KIND_SUBSTRING: str = "substring"
 POLYGLOT_KIND_SUM: str = "sum"
 POLYGLOT_KIND_TABLE: str = "table"
 POLYGLOT_KIND_TIMESTAMP: str = "timestamp"
 POLYGLOT_KIND_TRY_CAST: str = "try_cast"
 POLYGLOT_KIND_UNION: str = "union"
+POLYGLOT_KIND_WINDOW_FUNCTION: str = "window_function"
+POLYGLOT_KIND_WITHIN_GROUP: str = "within_group"
+POLYGLOT_BOOLEAN_RESULT_KINDS: frozenset[str] = frozenset(
+    {
+        POLYGLOT_KIND_BOOLEAN,
+        "and",
+        "between",
+        "eq",
+        "exists",
+        "gt",
+        "gte",
+        "ilike",
+        "in",
+        "is",
+        "like",
+        "lt",
+        "lte",
+        "neq",
+        "not",
+        "or",
+        "regexp_like",
+    }
+)
 POLYGLOT_SET_OPERATION_KINDS: frozenset[str] = frozenset(
     {POLYGLOT_KIND_UNION, POLYGLOT_KIND_INTERSECT, POLYGLOT_KIND_EXCEPT}
 )
 POLYGLOT_CAST_KINDS: frozenset[str] = frozenset({POLYGLOT_KIND_CAST, POLYGLOT_KIND_TRY_CAST})
+POLYGLOT_TYPE_PASSTHROUGH_KINDS: frozenset[str] = frozenset(
+    {
+        POLYGLOT_KIND_MAX,
+        POLYGLOT_KIND_MIN,
+        POLYGLOT_KIND_WINDOW_FUNCTION,
+        POLYGLOT_KIND_WITHIN_GROUP,
+    }
+)
 POLYGLOT_AGGREGATE_KINDS: frozenset[str] = frozenset(
     {
         POLYGLOT_KIND_AVG,
@@ -53,6 +90,7 @@ POLYGLOT_PAYLOAD_FROM: str = "from"
 POLYGLOT_PAYLOAD_EXPRESSIONS: str = "expressions"
 POLYGLOT_PAYLOAD_JOINS: str = "joins"
 POLYGLOT_PAYLOAD_KIND: str = "kind"
+POLYGLOT_PAYLOAD_LITERAL_TYPE: str = "literal_type"
 POLYGLOT_PAYLOAD_NAME: str = "name"
 POLYGLOT_PAYLOAD_PRECISION: str = "precision"
 POLYGLOT_PAYLOAD_SCALE: str = "scale"
@@ -65,6 +103,9 @@ TIMESTAMP_WITH_TIME_ZONE_SQL_TYPE_NAME: str = "TIMESTAMPTZ"
 POLYGLOT_JOIN_FULL: str = "FULL"
 POLYGLOT_JOIN_LEFT: str = "LEFT"
 POLYGLOT_JOIN_RIGHT: str = "RIGHT"
+POLYGLOT_LITERAL_TYPE_STRING: str = "string"
+POLYGLOT_NULLIF_FUNCTION_NAME: str = "NULLIF"
+POLYGLOT_BINARY_OPERAND_COUNT: int = 2
 POLYGLOT_ANALYSIS_BASE_TABLES: str = "baseTables"
 POLYGLOT_ANALYSIS_BODY_SQL: str = "bodySql"
 POLYGLOT_ANALYSIS_CAST_TYPE: str = "castType"
