@@ -100,6 +100,15 @@ class DagsterPythonNodesArtifactE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DagsterColumnAuditChecksE2ETestCase:
+    """Test case for model-level column audits exposed as Dagster checks."""
+
+    description: str
+    expected_check_names: tuple[str, ...]
+    expected_check_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class DagsterTranslatorE2ETestCase:
     """Test case for custom translator execution through real SQLBuild and Dagster."""
 

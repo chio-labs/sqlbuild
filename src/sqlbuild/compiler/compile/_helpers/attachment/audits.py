@@ -306,6 +306,9 @@ def build_model_attached_audit_inputs(
     attached_audit_inputs: list[CompileAuditInput] = []
     audit_instance: SchemaAuditInstance
     for audit_instance in model_input.schema_entry.audits:
+        attached_column_name: str | None = _explicit_audit_column_name(
+            audit_instance=audit_instance,
+        )
         attached_audit_inputs.append(
             build_attached_audit_input(
                 audit_instance=audit_instance,
@@ -319,7 +322,7 @@ def build_model_attached_audit_inputs(
                 },
                 attached_target_kind=AttachedAuditTargetKind.MODEL,
                 attached_target_name=model_input.model_file.file_path.stem,
-                attached_column_name=None,
+                attached_column_name=attached_column_name,
                 context=context,
             )
         )
@@ -404,6 +407,14 @@ def build_source_attached_audit_inputs(
                 )
             )
     return tuple(attached_audit_inputs)
+
+
+def _explicit_audit_column_name(
+    *,
+    audit_instance: SchemaAuditInstance,
+) -> str | None:
+    raw_column: object | None = audit_instance.arguments.get("column")
+    return raw_column if isinstance(raw_column, str) else None
 
 
 def _scoped_audit_declarations(
