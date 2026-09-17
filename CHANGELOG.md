@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.102.0](https://github.com/chio-labs/sqlbuild/compare/v0.101.16...v0.102.0) (2026-09-17)
+
+
+### Features
+
+* enforce explicit contract output types ([#695](https://github.com/chio-labs/sqlbuild/issues/695)) ([50f0fa3](https://github.com/chio-labs/sqlbuild/commit/50f0fa3709a96fb73cba208e09eb6ff015560dbd))
+
 ## [0.101.16](https://github.com/chio-labs/sqlbuild/compare/v0.101.15...v0.101.16) (2026-09-17)
 
 
