@@ -130,6 +130,59 @@ FROM (SELECT 8 AS item_count) AS items
             ),
         ),
         ExplicitContractOutputRuleIntegrationTestCase(
+            description="terminal subset ignores extra final CTE outputs",
+            query_sql=(
+                "WITH final AS (\n"
+                "  SELECT CAST(1 AS INTEGER) AS order_id, "
+                "ignored_count + 1, 'unused' AS ignored_label, "
+                "CAST(12.50 AS DECIMAL(18, 2)) AS amount\n"
+                ")\n"
+                "SELECT order_id AS id, amount AS total FROM final\n"
+            ),
+            expected_exit_code=0,
+            expected_rule_findings=0,
+            columns_sql="id (type INTEGER),\n    total (type DECIMAL(18, 2))",
+        ),
+        ExplicitContractOutputRuleIntegrationTestCase(
+            description="terminal subset checks selected final CTE outputs",
+            query_sql=(
+                "WITH final AS (\n"
+                "  SELECT CAST(1 AS INTEGER) AS order_id, "
+                "1 AS ignored_count, 'unused' AS ignored_label, 12.50 + 1 AS amount\n"
+                ")\n"
+                "SELECT order_id AS id, amount AS total FROM final\n"
+            ),
+            expected_exit_code=1,
+            expected_rule_findings=1,
+            columns_sql="id (type INTEGER),\n    total (type DECIMAL(18, 2))",
+        ),
+        ExplicitContractOutputRuleIntegrationTestCase(
+            description="terminal subset checks right by-name branch outputs",
+            query_sql=(
+                "WITH final AS (\n"
+                "  SELECT CAST(1 AS INTEGER) AS ignored\n"
+                "  UNION ALL BY NAME\n"
+                "  SELECT 2 + 1 AS amount\n"
+                ")\n"
+                "SELECT amount AS total FROM final\n"
+            ),
+            expected_exit_code=1,
+            expected_rule_findings=1,
+            columns_sql="total (type INTEGER)",
+        ),
+        ExplicitContractOutputRuleIntegrationTestCase(
+            description="terminal subset checks explicit final CTE column aliases",
+            query_sql=(
+                "WITH final(order_id, ignored) AS (\n"
+                "  SELECT 1 + 1 AS raw_id, 3 AS extra\n"
+                ")\n"
+                "SELECT order_id AS id FROM final\n"
+            ),
+            expected_exit_code=1,
+            expected_rule_findings=1,
+            columns_sql="id (type INTEGER)",
+        ),
+        ExplicitContractOutputRuleIntegrationTestCase(
             description="uncast set branches fail",
             query_sql=(
                 "WITH final AS (\n"
