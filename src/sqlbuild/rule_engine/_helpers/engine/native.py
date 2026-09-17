@@ -17,11 +17,13 @@ from typing import Any, cast
 import orjson
 
 import sqlbuild._native as _native
+from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,
     CompiledSqlScenario,
     CompiledSqlTest,
+    InferredColumn,
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
@@ -53,6 +55,7 @@ from sqlbuild.sql_values.types import SqlValueKind
 
 _CUSTOM_HOST_REQUIRED: str = "selected custom rules require a custom host"
 _NATIVE_CACHE_MISSES_PATTERN: re.Pattern[str] = re.compile(r"native_cache_misses=(\d+)")
+_EXPLICIT_OUTPUT_TYPES_RULE: str = "SQBRCONTRACT105"
 
 
 def evaluate_native(
@@ -76,7 +79,11 @@ def evaluate_native(
         "project_dir": str(project_dir.resolve()),
         "dialect": dialect,
         "config": _config_payload(config),
-        "models": _model_payloads(project),
+        "models": _model_payloads(
+            project=project,
+            dialect=dialect,
+            include_type_proof=_rule_selected(config=config, code=_EXPLICIT_OUTPUT_TYPES_RULE),
+        ),
         "sql_tests": _sql_test_payloads(project),
         "sql_scenarios": _sql_scenario_payloads(project),
         "public_enums": [
@@ -234,7 +241,15 @@ def _config_payload(config: RulesConfig) -> dict[str, object]:
     return asdict(config)
 
 
-def _model_payloads(project: CompiledProject) -> list[dict[str, object]]:
+def _rule_selected(*, config: RulesConfig, code: str) -> bool:
+    selected: bool = any(code.startswith(selector) for selector in config.select)
+    ignored: bool = any(code.startswith(selector) for selector in config.ignore)
+    return selected and not ignored
+
+
+def _model_payloads(
+    *, project: CompiledProject, dialect: str, include_type_proof: bool
+) -> list[dict[str, object]]:
     audit_counts: dict[str, int] = {}
     for audit in project.audits:
         if audit.attached_target_name is not None:
@@ -252,6 +267,8 @@ def _model_payloads(project: CompiledProject) -> list[dict[str, object]]:
             model=model,
             compiled_audit_count=audit_counts.get(model.name, 0),
             targeting_test_count=test_counts.get(model.name, 0),
+            dialect=dialect,
+            include_type_proof=include_type_proof,
         )
         for model in project.models
     ]
@@ -330,23 +347,41 @@ def _sql_scenario_payload(scenario: CompiledSqlScenario) -> dict[str, object]:
 
 
 def _model_payload(
-    *, model: CompiledModel, compiled_audit_count: int, targeting_test_count: int
+    *,
+    model: CompiledModel,
+    compiled_audit_count: int,
+    targeting_test_count: int,
+    dialect: str,
+    include_type_proof: bool,
 ) -> dict[str, object]:
     schema_audit_count: int = 0
     columns: list[dict[str, object]] = []
     if model.schema_entry is not None:
+        inferred_by_name: dict[str, InferredColumn] = {
+            column.name: column for column in (model.inferred_columns or ())
+        }
         schema_audit_count = len(model.schema_entry.audits) + sum(
             len(column.audits) for column in model.schema_entry.columns
         )
-        columns = [
-            {
+        for column in model.schema_entry.columns:
+            payload: dict[str, object] = {
                 "name": column.name,
                 "type": column.type or "",
                 "nullable": column.nullable,
                 "audit_count": len(column.audits),
             }
-            for column in model.schema_entry.columns
-        ]
+            if include_type_proof:
+                payload["type_proven"] = bool(
+                    column.type
+                    and (inferred := inferred_by_name.get(column.name)) is not None
+                    and inferred.type
+                    and types_equal(
+                        left=column.type,
+                        right=inferred.type,
+                        dialect=dialect,
+                    )
+                )
+            columns.append(payload)
     return {
         "name": model.name,
         "relative_path": model.relative_path.as_posix(),

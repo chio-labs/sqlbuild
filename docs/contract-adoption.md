@@ -72,3 +72,37 @@ Compile-time binding does not replace runtime enforcement. Persisted tables and 
 use staged contract/type validation before target mutation. Views receive static validation but do
 not receive runtime cast reconstruction. `sqb plan` remains responsible for online physical drift
 and execution decisions.
+
+## Proven, mismatched, and unknown output types
+
+Contract type validation distinguishes evidence from uncertainty:
+
+- An inferred type equivalent to the declared type passes.
+- A proven incompatible type reports `K002`; it is an error when contract or type enforcement is
+  active.
+- An output whose type cannot be proven reports `K003` when type enforcement is active. This remains
+  a warning because incomplete analysis is not proof that otherwise valid SQL violates its contract.
+
+Projects that require every contract boundary to be statically explicit can select
+`SQBRCONTRACT105`. Selected Rule findings are enforced. The Rule accepts a direct column only when
+its exact declared type is proven, and requires an outer `CAST` around literals, calculations,
+conditionals, functions, aggregates, windows, semi-structured expressions, and other derived
+outputs. The cast target must use the declared contract type; an alias with different type syntax is
+not treated as an explicit declaration of that contract. Every set-operation branch must cast its
+outputs before common-type coercion. Wildcards are not an explicit contract boundary.
+
+When `SQBRSQL035` is also selected, the final top-level CTE owns these casts and the terminal
+`SELECT` remains a plain read from that CTE:
+
+```sql
+WITH final AS (
+    SELECT
+        order_id,
+        CAST(quantity * unit_price AS DECIMAL(18, 2)) AS total_amount
+    FROM prepared_orders
+)
+SELECT
+    order_id,
+    total_amount
+FROM final
+```

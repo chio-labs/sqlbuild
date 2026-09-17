@@ -24,6 +24,17 @@ class RulePassIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class ExplicitContractOutputRuleIntegrationTestCase:
+    """One explicit contract output Rule expectation through compile."""
+
+    description: str
+    query_sql: str
+    expected_exit_code: int
+    expected_rule_findings: int
+    columns_sql: str = "order_id (type INTEGER)"
+
+
+@dataclass(frozen=True)
 class FormatCompileIntegrationTestCase:
     """One format-to-compile compatibility expectation."""
 

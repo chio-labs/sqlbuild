@@ -5,6 +5,7 @@ use crate::constants::{
 use crate::models::{Declaration, EvaluateRequest, Fault, Model, RuleMetadata, RulesConfig};
 use crate::rules::_helpers::authored_literals::numeric_literal_tokens;
 use crate::rules::_helpers::domain_layout::folder_layer_details;
+use crate::rules::_helpers::explicit_output_types;
 use crate::rules::models::{
     FaultCollector, ModelEvaluationRequest, ProjectEvaluationRequest, ResolvedThresholdOverride,
 };
@@ -174,6 +175,9 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
     }
     if let Some(rule) = metadata("SQBRCONTRACT101") {
         contract_required(&parsed, rule, &faults);
+    }
+    if let Some(rule) = metadata("SQBRCONTRACT105") {
+        explicit_output_types::evaluate(&parsed.query, parsed.model, rule, &faults);
     }
     evaluate_naming_rules(&parsed, selected, &faults);
     evaluate_literal_rules(&parsed, selected, &faults);
@@ -667,11 +671,11 @@ fn location_position(location: sqlparser::tokenizer::Location) -> Position {
     }
 }
 
-fn root_select(query: &Query) -> Option<&Select> {
+pub(super) fn root_select(query: &Query) -> Option<&Select> {
     query.body.as_select()
 }
 
-fn top_ctes(query: &Query) -> &[sqlparser::ast::Cte] {
+pub(super) fn top_ctes(query: &Query) -> &[sqlparser::ast::Cte] {
     query
         .with
         .as_ref()
@@ -703,7 +707,7 @@ fn plain_projection(query: &Query, allow_star: bool) -> bool {
     plain_select(select, allow_star)
 }
 
-fn plain_select(select: &Select, allow_star: bool) -> bool {
+pub(super) fn plain_select(select: &Select, allow_star: bool) -> bool {
     if select.projection.is_empty()
         || select.selection.is_some()
         || select.having.is_some()
@@ -750,7 +754,7 @@ fn dependency_import(query: &Query) -> bool {
         && plain_projection(query, true)
 }
 
-fn sole_table_name(query: &Query) -> Option<String> {
+pub(super) fn sole_table_name(query: &Query) -> Option<String> {
     let select = root_select(query)?;
     if select.from.len() != 1 || !select.from[0].joins.is_empty() {
         return None;

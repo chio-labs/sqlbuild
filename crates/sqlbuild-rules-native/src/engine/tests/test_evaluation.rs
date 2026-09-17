@@ -205,6 +205,197 @@ fn given_snowflake_expression_when_evaluating_rules_then_uses_project_dialect() 
 }
 
 #[test]
+fn given_enforced_contract_outputs_when_evaluating_explicit_type_rule_then_returns_expected_faults()
+-> Result<(), String> {
+    let test_cases = [
+        test_types::ExplicitOutputTypeTestCase {
+            description: "proven direct passthrough in final CTE",
+            query_sql: "WITH final AS (SELECT order_id FROM orders) SELECT order_id FROM final",
+            columns: json!([{"name": "order_id", "type": "INTEGER", "type_proven": true}]),
+            contract: "enforced",
+            expected_fault_count: 0,
+            expected_message_fragment: "",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "calculated output without outer cast",
+            query_sql: "WITH final AS (SELECT amount + 1 AS total FROM orders) SELECT total FROM final",
+            columns: json!([{"name": "total", "type": "INTEGER", "type_proven": true}]),
+            contract: "enforced",
+            expected_fault_count: 1,
+            expected_message_fragment: "calculated without an outer explicit cast",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "proven outer cast",
+            query_sql: "WITH final AS (SELECT CAST(amount + 1 AS INTEGER) AS total FROM orders) SELECT total FROM final",
+            columns: json!([{"name": "total", "type": "INTEGER", "type_proven": true}]),
+            contract: "enforced",
+            expected_fault_count: 0,
+            expected_message_fragment: "",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "outer cast whose result remains unproven",
+            query_sql: "SELECT CAST(amount AS INTEGER) AS total FROM orders",
+            columns: json!([{"name": "total", "type": "INTEGER", "type_proven": false}]),
+            contract: "enforced",
+            expected_fault_count: 1,
+            expected_message_fragment: "explicit cast whose result does not prove",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "outer cast targets a different declared type",
+            query_sql: "SELECT CAST(amount AS BIGINT) AS total FROM orders",
+            columns: json!([{"name": "total", "type": "INTEGER", "type_proven": true}]),
+            contract: "enforced",
+            expected_fault_count: 1,
+            expected_message_fragment: "outer cast that does not target",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "unproven direct passthrough",
+            query_sql: "SELECT order_id FROM orders",
+            columns: json!([{"name": "order_id", "type": "INTEGER", "type_proven": false}]),
+            contract: "enforced",
+            expected_fault_count: 1,
+            expected_message_fragment: "passthrough whose type is not proven",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "contract declarations map by output name rather than declaration order",
+            query_sql: "SELECT 'ready' AS label, CAST(1 AS INTEGER) AS order_id",
+            columns: json!([
+                {"name": "order_id", "type": "INTEGER", "type_proven": true},
+                {"name": "label", "type": "", "type_proven": false}
+            ]),
+            contract: "enforced",
+            expected_fault_count: 0,
+            expected_message_fragment: "",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "wildcard output boundary",
+            query_sql: "SELECT * FROM orders",
+            columns: json!([{"name": "order_id", "type": "INTEGER", "type_proven": true}]),
+            contract: "enforced",
+            expected_fault_count: 1,
+            expected_message_fragment: "wildcard output",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "positional set branches require casts",
+            query_sql: "SELECT order_id FROM current_orders UNION ALL SELECT order_id FROM archived_orders",
+            columns: json!([{"name": "order_id", "type": "INTEGER", "type_proven": true}]),
+            contract: "enforced",
+            expected_fault_count: 2,
+            expected_message_fragment: "set-operation branch that must cast",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "positional set branches with proven casts",
+            query_sql: "SELECT CAST(order_id AS INTEGER) AS order_id FROM current_orders UNION ALL SELECT CAST(order_id AS INTEGER) AS order_id FROM archived_orders",
+            columns: json!([{"name": "order_id", "type": "INTEGER", "type_proven": true}]),
+            contract: "enforced",
+            expected_fault_count: 0,
+            expected_message_fragment: "",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "by-name set branches map reordered outputs",
+            query_sql: "SELECT CAST(order_id AS INTEGER) AS order_id, CAST(amount AS DECIMAL(18, 2)) AS amount FROM current_orders UNION ALL BY NAME SELECT CAST(amount AS DECIMAL(18, 2)) AS amount, CAST(order_id AS INTEGER) AS order_id FROM archived_orders",
+            columns: json!([
+                {"name": "order_id", "type": "INTEGER", "type_proven": true},
+                {"name": "amount", "type": "DECIMAL(18, 2)", "type_proven": true}
+            ]),
+            contract: "enforced",
+            expected_fault_count: 0,
+            expected_message_fragment: "",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "cast inside conditional is not outer cast",
+            query_sql: "SELECT CASE WHEN active THEN CAST(amount AS INTEGER) ELSE 0 END AS total FROM orders",
+            columns: json!([{"name": "total", "type": "INTEGER", "type_proven": true}]),
+            contract: "enforced",
+            expected_fault_count: 1,
+            expected_message_fragment: "calculated without an outer explicit cast",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "contract-none model is outside rule scope",
+            query_sql: "SELECT amount + 1 AS total FROM orders",
+            columns: json!([{"name": "total", "type": "INTEGER", "type_proven": true}]),
+            contract: "none",
+            expected_fault_count: 0,
+            expected_message_fragment: "",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "renamed and reordered terminal columns map to the final CTE",
+            query_sql: "WITH final AS (SELECT CAST(amount AS DECIMAL(18, 2)) AS amount, CAST(order_id AS INTEGER) AS order_id FROM orders) SELECT order_id AS id, amount AS total FROM final",
+            columns: json!([
+                {"name": "id", "type": "INTEGER", "type_proven": true},
+                {"name": "total", "type": "DECIMAL(18, 2)", "type_proven": true}
+            ]),
+            contract: "enforced",
+            expected_fault_count: 0,
+            expected_message_fragment: "",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "final CTE maps contract declarations by terminal output name",
+            query_sql: "WITH final AS (SELECT 'ready' AS label, CAST(1 AS INTEGER) AS order_id) SELECT label, order_id FROM final",
+            columns: json!([
+                {"name": "order_id", "type": "INTEGER", "type_proven": true},
+                {"name": "label", "type": "", "type_proven": false}
+            ]),
+            contract: "enforced",
+            expected_fault_count: 0,
+            expected_message_fragment: "",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "wildcard terminal maps contract declarations to final CTE output order",
+            query_sql: "WITH final AS (SELECT 'ready' AS label, CAST(1 AS INTEGER) AS order_id) SELECT * FROM final",
+            columns: json!([
+                {"name": "order_id", "type": "INTEGER", "type_proven": true},
+                {"name": "label", "type": "", "type_proven": false}
+            ]),
+            contract: "enforced",
+            expected_fault_count: 0,
+            expected_message_fragment: "",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "renamed and reordered terminal columns map through positional set branches",
+            query_sql: "WITH final AS (SELECT CAST(amount AS DECIMAL(18, 2)) AS amount, CAST(order_id AS INTEGER) AS order_id FROM current_orders UNION ALL SELECT CAST(amount AS DECIMAL(18, 2)) AS amount, CAST(order_id AS INTEGER) AS order_id FROM archived_orders) SELECT order_id AS id, amount AS total FROM final",
+            columns: json!([
+                {"name": "id", "type": "INTEGER", "type_proven": true},
+                {"name": "total", "type": "DECIMAL(18, 2)", "type_proven": true}
+            ]),
+            contract: "enforced",
+            expected_fault_count: 0,
+            expected_message_fragment: "",
+        },
+    ];
+    for test_case in test_cases {
+        let project_dir = TempDir::new().map_err(|error| error.to_string())?;
+        let config = json!({"select": ["SQBRCONTRACT105"], "cache": {"enabled": false}});
+        let mut request: Value = serde_json::from_str(&helpers::request(&project_dir, &config))
+            .map_err(|error| error.to_string())?;
+        request["models"][0]["query_sql"] = json!(test_case.query_sql);
+        request["models"][0]["authored_sql"] = json!(test_case.query_sql);
+        request["models"][0]["config"] = json!({"contract": test_case.contract});
+        request["models"][0]["columns"] = test_case.columns;
+
+        let result: Value = serde_json::from_str(&evaluate_json(&request.to_string())?)
+            .map_err(|error| error.to_string())?;
+        let faults = result["faults"]
+            .as_array()
+            .ok_or("faults must be an array")?;
+        assert_eq!(
+            faults.len(),
+            test_case.expected_fault_count,
+            "{}",
+            test_case.description
+        );
+        assert!(
+            faults.iter().all(|fault| fault["message"]
+                .as_str()
+                .is_some_and(|message| message.contains(test_case.expected_message_fragment))),
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn given_snowflake_parser_extensions_when_normalizing_then_preserves_source_positions() {
     let test_cases = [test_types::NormalizationTestCase {
         description: "normalization changes syntax only outside strings and comments",
