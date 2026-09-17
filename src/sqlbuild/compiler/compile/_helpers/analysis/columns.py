@@ -13,6 +13,9 @@ from sqlbuild.compiler.compile._helpers.analysis.cte_facts import (
     _polyglot_cte_passthrough_facts,
     _polyglot_cte_passthrough_nullability_from_parsed,
     _polyglot_cte_passthrough_types_from_parsed,
+    _polyglot_expression_is_non_null_after_filter,
+    _polyglot_filtered_non_null_outputs,
+    _polyglot_non_null_filter_context,
 )
 from sqlbuild.compiler.compile.constants import (
     DECIMAL_SQL_TYPE_NAME,
@@ -29,6 +32,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
     CteFactResolvers,
     InferredColumn,
+    NonNullFilterContext,
     PolyglotAnalysisResult,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -483,7 +487,7 @@ def _analyze_columns_and_lineage_with_compact_polyglot(
         return None
     reference_map: dict[str, tuple[CompiledResourceType, str]] = _lineage_reference_map(references)
     relation_alias_by_name: dict[str, str | None] = _compact_relation_alias_by_name(analysis)
-    cte_passthrough_types, cte_passthrough_nullability, direct_cte_outputs = (
+    cte_passthrough_types, cte_passthrough_nullability, direct_cte_outputs, parsed = (
         _polyglot_cte_passthrough_facts(
             polyglot_module=polyglot_module,
             cleaned_sql=cleaned_sql,
@@ -500,7 +504,15 @@ def _analyze_columns_and_lineage_with_compact_polyglot(
             ),
         )
         if recover_cte_facts
-        else ({}, {}, frozenset())
+        else ({}, {}, frozenset(), None)
+    )
+    filtered_non_null_outputs: frozenset[str] = _polyglot_filtered_non_null_outputs(
+        polyglot_module=polyglot_module,
+        cleaned_sql=cleaned_sql,
+        dialect=dialect,
+        analysis=analysis,
+        column_nullability_by_table=column_nullability_by_table,
+        parsed=parsed,
     )
     columns: list[InferredColumn] = []
     lineage_columns: list[CompiledLineageColumnFact] = []
@@ -527,12 +539,19 @@ def _analyze_columns_and_lineage_with_compact_polyglot(
                     )
                 ),
                 nullability=(
-                    cte_passthrough_nullability.get(output_column)
-                    if output_column in direct_cte_outputs
-                    else None
-                )
-                or _compact_projection_nullability(
-                    projection=projection, infer_nullability=infer_nullability
+                    InferredNullability.NON_NULL
+                    if output_column in filtered_non_null_outputs
+                    else (
+                        (
+                            cte_passthrough_nullability.get(output_column)
+                            if output_column in direct_cte_outputs
+                            else None
+                        )
+                        or _compact_projection_nullability(
+                            projection=projection,
+                            infer_nullability=infer_nullability,
+                        )
+                    )
                 ),
             )
         )
@@ -848,6 +867,10 @@ def _infer_columns_from_polyglot_ast(
             alias_nullability_resolver=_polyglot_alias_nullability_from_select,
         )
     )
+    non_null_filter_context: NonNullFilterContext | None = _polyglot_non_null_filter_context(
+        select=select,
+        column_nullability_by_table=column_nullability_by_table,
+    )
     columns: list[InferredColumn] = []
     projection: Any
     for projection in getattr(select, "expressions", ()):
@@ -868,14 +891,21 @@ def _infer_columns_from_polyglot_ast(
         )
         nullability: InferredNullability = InferredNullability.UNKNOWN
         if infer_nullability:
-            nullability = cte_passthrough_nullability.get(
-                name,
-                _infer_polyglot_nullability(
+            nullability = (
+                InferredNullability.NON_NULL
+                if _polyglot_expression_is_non_null_after_filter(
                     expression=inner,
-                    alias_nullability=alias_nullability,
-                    column_nullability_by_table=column_nullability_by_table,
-                    inference_profile=inference_profile,
-                ),
+                    context=non_null_filter_context,
+                )
+                else cte_passthrough_nullability.get(
+                    name,
+                    _infer_polyglot_nullability(
+                        expression=inner,
+                        alias_nullability=alias_nullability,
+                        column_nullability_by_table=column_nullability_by_table,
+                        inference_profile=inference_profile,
+                    ),
+                )
             )
         columns.append(InferredColumn(name=name, type=col_type, nullability=nullability))
     return tuple(columns)
@@ -935,6 +965,10 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
         if recover_cte_facts
         else {}
     )
+    non_null_filter_context: NonNullFilterContext | None = _polyglot_non_null_filter_context(
+        select=select,
+        column_nullability_by_table=column_nullability_by_table,
+    )
     columns: list[InferredColumn] = []
     lineage_columns: list[CompiledLineageColumnFact] = []
     has_star: bool = False
@@ -963,21 +997,28 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
         )
         nullability: InferredNullability = InferredNullability.UNKNOWN
         if infer_nullability:
-            nullability = cte_passthrough_nullability.get(
-                output_column,
-                (
-                    _infer_polyglot_nullability(
-                        expression=inner,
-                        alias_nullability=alias_nullability,
-                        column_nullability_by_table=column_nullability_by_table,
-                        inference_profile=inference_profile,
-                    )
-                    if has_known_nullability
-                    else _infer_polyglot_shallow_nullability(
-                        expression=inner,
-                        inference_profile=inference_profile,
-                    )
-                ),
+            nullability = (
+                InferredNullability.NON_NULL
+                if _polyglot_expression_is_non_null_after_filter(
+                    expression=inner,
+                    context=non_null_filter_context,
+                )
+                else cte_passthrough_nullability.get(
+                    output_column,
+                    (
+                        _infer_polyglot_nullability(
+                            expression=inner,
+                            alias_nullability=alias_nullability,
+                            column_nullability_by_table=column_nullability_by_table,
+                            inference_profile=inference_profile,
+                        )
+                        if has_known_nullability
+                        else _infer_polyglot_shallow_nullability(
+                            expression=inner,
+                            inference_profile=inference_profile,
+                        )
+                    ),
+                )
             )
         columns.append(InferredColumn(name=output_column, type=col_type, nullability=nullability))
 

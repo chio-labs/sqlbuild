@@ -155,6 +155,14 @@ class CteFactResolvers:
 
 
 @dataclass(frozen=True)
+class NonNullFilterContext:
+    """Resolved relations and columns constrained by non-null filters."""
+
+    relations: tuple[tuple[str, dict[str, InferredNullability]], ...]
+    columns: frozenset[tuple[str, str]]
+
+
+@dataclass(frozen=True)
 class CompileModelConfig:
     """Pre-semantic effective config layers attached to a model input."""
 

@@ -280,6 +280,91 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import direct_ord
             ),
         ),
         InferColumnsTestCase(
+            description="refines qualified filtered output nullability",
+            query_sql=(
+                'SELECT o.order_id FROM __ref("orders") AS o WHERE (O.order_id IS NOT NULL)'
+            ),
+            column_nullability_by_table={"orders": {"order_id": InferredNullability.NULLABLE}},
+            expected_columns=(
+                InferredColumn(
+                    name="order_id",
+                    nullability=InferredNullability.NON_NULL,
+                ),
+            ),
+        ),
+        InferColumnsTestCase(
+            description="does not refine nullability through a disjunction",
+            query_sql=(
+                'SELECT order_id FROM __ref("orders") '
+                "WHERE order_id IS NOT NULL OR status = 'ready'"
+            ),
+            column_nullability_by_table={
+                "orders": {
+                    "order_id": InferredNullability.NULLABLE,
+                    "status": InferredNullability.NON_NULL,
+                }
+            },
+            expected_columns=(
+                InferredColumn(
+                    name="order_id",
+                    nullability=InferredNullability.NULLABLE,
+                ),
+            ),
+        ),
+        InferColumnsTestCase(
+            description="does not leak a filtered self join alias",
+            query_sql=(
+                "WITH selected AS ("
+                'SELECT b.order_id FROM __ref("orders") AS a '
+                'CROSS JOIN __ref("orders") AS b '
+                "WHERE a.order_id IS NOT NULL"
+                ") SELECT order_id FROM selected"
+            ),
+            column_nullability_by_table={"orders": {"order_id": InferredNullability.NULLABLE}},
+            expected_columns=(
+                InferredColumn(
+                    name="order_id",
+                    nullability=InferredNullability.NULLABLE,
+                ),
+            ),
+        ),
+        InferColumnsTestCase(
+            description="does not leak an outer filter into a CTE",
+            query_sql=(
+                "WITH selected AS ("
+                'SELECT order_id FROM __ref("orders")'
+                ") SELECT selected.order_id FROM selected "
+                'CROSS JOIN __ref("orders") AS o '
+                "WHERE o.order_id IS NOT NULL"
+            ),
+            column_nullability_by_table={"orders": {"order_id": InferredNullability.NULLABLE}},
+            expected_columns=(
+                InferredColumn(
+                    name="order_id",
+                    nullability=InferredNullability.NULLABLE,
+                ),
+            ),
+        ),
+        InferColumnsTestCase(
+            description="refines a filtered outer join column",
+            query_sql=(
+                'SELECT c.customer_id FROM __ref("orders") AS o '
+                'LEFT JOIN __ref("customers") AS c '
+                "ON o.order_id = c.customer_id "
+                "WHERE c.customer_id IS NOT NULL"
+            ),
+            column_nullability_by_table={
+                "orders": {"order_id": InferredNullability.NON_NULL},
+                "customers": {"customer_id": InferredNullability.NON_NULL},
+            },
+            expected_columns=(
+                InferredColumn(
+                    name="customer_id",
+                    nullability=InferredNullability.NON_NULL,
+                ),
+            ),
+        ),
+        InferColumnsTestCase(
             description="marks right side of left join nullable",
             query_sql=(
                 'SELECT o.order_id, c.name FROM __ref("orders") o '
@@ -345,6 +430,25 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import direct_ord
             expected_columns=(
                 InferredColumn(
                     name="order_id", type="BIGINT", nullability=InferredNullability.NON_NULL
+                ),
+            ),
+        ),
+        InferColumnsTestCase(
+            description="refines filtered CTE output nullability",
+            query_sql=(
+                "WITH mapped AS ("
+                'SELECT order_id FROM __ref("orders")'
+                "), final AS ("
+                "SELECT CAST(order_id AS VARCHAR) AS order_id FROM mapped "
+                "WHERE order_id IS NOT NULL"
+                ") SELECT order_id FROM final"
+            ),
+            column_nullability_by_table={"orders": {"order_id": InferredNullability.NULLABLE}},
+            expected_columns=(
+                InferredColumn(
+                    name="order_id",
+                    type="TEXT",
+                    nullability=InferredNullability.NON_NULL,
                 ),
             ),
         ),
@@ -420,6 +524,65 @@ def test_given_query_sql_when_inferring_columns_then_returns_expected(
             expected_has_star=False,
         ),
         PolyglotAnalysisTestCase(
+            description="refines a compact filtered column across whitespace",
+            query_sql=('SELECT order_id FROM __ref("orders") WHERE order_id IS\nNOT NULL'),
+            references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+            column_nullability_by_table={"orders": {"order_id": InferredNullability.NULLABLE}},
+            column_types_by_table={"orders": {"order_id": "INTEGER"}},
+            expected_columns=(
+                InferredColumn(
+                    name="order_id",
+                    type="INT",
+                    nullability=InferredNullability.NON_NULL,
+                ),
+            ),
+            expected_lineage_columns=direct_orders_lineage("order_id"),
+            expected_has_star=False,
+        ),
+        PolyglotAnalysisTestCase(
+            description="refines a compact filtered outer join across a comment",
+            query_sql=(
+                'SELECT c.customer_id FROM __ref("orders") AS o '
+                'LEFT JOIN __ref("customers") AS c '
+                "ON o.order_id = c.customer_id "
+                "WHERE c.customer_id IS /* required customer */ NOT NULL"
+            ),
+            references=(
+                CompileSqlReference(SqlReferenceKind.REF, "orders"),
+                CompileSqlReference(SqlReferenceKind.REF, "customers"),
+            ),
+            column_nullability_by_table={
+                "orders": {"order_id": InferredNullability.NON_NULL},
+                "customers": {"customer_id": InferredNullability.NON_NULL},
+            },
+            column_types_by_table={
+                "orders": {"order_id": "INTEGER"},
+                "customers": {"customer_id": "INTEGER"},
+            },
+            expected_columns=(
+                InferredColumn(
+                    name="customer_id",
+                    type="INT",
+                    nullability=InferredNullability.NON_NULL,
+                ),
+            ),
+            expected_lineage_columns=(
+                CompiledLineageColumnFact(
+                    output_column="customer_id",
+                    upstream_columns=(
+                        CompiledLineageSourceFact(
+                            resource_type=CompiledResourceType.MODEL,
+                            resource_name="customers",
+                            column_name="customer_id",
+                        ),
+                    ),
+                    transform_kind=ColumnTransformKind.DIRECT,
+                    confidence=ColumnLineageConfidence.HIGH,
+                ),
+            ),
+            expected_has_star=False,
+        ),
+        PolyglotAnalysisTestCase(
             description="terminates direct lineage at a managed table function output",
             query_sql='SELECT order_id FROM __table_fn("customer_orders")(42)',
             references=(
@@ -475,8 +638,11 @@ def test_given_ref_query_when_analyzing_columns_and_lineage_then_returns_compact
     result: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
         query_sql=test_case.query_sql,
         references=test_case.references,
+        column_nullability_by_table=test_case.column_nullability_by_table,
+        column_types_by_table=test_case.column_types_by_table,
         inference_profile=test_case.inference_profile,
         allow_compact_analysis=True,
+        recover_cte_facts=True,
     )
 
     assert result.analysis_succeeded
