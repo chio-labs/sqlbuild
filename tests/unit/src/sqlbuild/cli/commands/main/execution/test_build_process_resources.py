@@ -15,6 +15,9 @@ from tests.unit.src.sqlbuild.cli.commands.main.execution._test_types import (
     BuildPartialTimingOutputTestCase,
     BuildProcessReportTestCase,
 )
+from tests.unit.src.sqlbuild.cli.commands.main.execution.helpers import (
+    stub_resolved_build_invocation,
+)
 
 
 @pytest.mark.parametrize(
@@ -31,6 +34,7 @@ def test_given_successful_debug_build_when_finishing_then_reports_process_resour
     test_case: BuildProcessReportTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    stub_resolved_build_invocation(monkeypatch=monkeypatch, build_module=build_module)
     reporter: Mock = Mock()
     monkeypatch.setattr(build_module, "process_resource_reporting", reporter)
     reporter.return_value = nullcontext()
@@ -56,6 +60,7 @@ def test_given_failed_debug_build_when_unwinding_then_reports_process_resources(
     test_case: BuildProcessReportTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    stub_resolved_build_invocation(monkeypatch=monkeypatch, build_module=build_module)
     reporter: Mock = Mock()
 
     def fail_build(**_kwargs: object) -> int:
@@ -85,6 +90,7 @@ def test_given_interrupted_debug_build_when_unwinding_then_reports_process_resou
     test_case: BuildProcessReportTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    stub_resolved_build_invocation(monkeypatch=monkeypatch, build_module=build_module)
     reporter: Mock = Mock()
 
     def interrupt_build(**_kwargs: object) -> int:
@@ -157,6 +163,7 @@ def test_given_phase_failure_when_building_then_available_partial_timings_are_wr
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    stub_resolved_build_invocation(monkeypatch=monkeypatch, build_module=build_module)
     timing_tracker: Mock = Mock()
     timing_tracker.snapshot.return_value = PartialBuildPhaseTimings(
         compile_seconds=test_case.compile_seconds,
@@ -207,6 +214,7 @@ def test_given_json_cost_failure_when_building_then_partial_timing_only_uses_std
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    stub_resolved_build_invocation(monkeypatch=monkeypatch, build_module=build_module)
     timing_tracker: Mock = Mock()
     timing_tracker.snapshot.return_value = PartialBuildPhaseTimings(
         compile_seconds=test_case.compile_seconds,
