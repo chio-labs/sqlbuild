@@ -12,6 +12,7 @@ class DiffCommandE2ETestCase:
     expected_exit_code: int
     expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_stderr_fragments: tuple[str, ...] = field(default_factory=tuple)
+    unexpected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
     mutation_sql: tuple[str, ...] = field(default_factory=tuple)
 
 
@@ -22,6 +23,18 @@ class SingleDiffE2ETestCase:
     description: str
     expected_exit_code: int
     expected_fragment: str
+
+
+@dataclass(frozen=True)
+class QueryDiffOutcomeE2ETestCase:
+    """One structured query-diff non-pass outcome."""
+
+    description: str
+    left_query: str
+    right_query: str
+    expected_exit_code: int
+    expected_status: str
+    expected_error_fragment: str
 
 
 @dataclass(frozen=True)

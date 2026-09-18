@@ -112,10 +112,15 @@ _DEFAULT_VALUES: dict[str, object] = {
     "left_query_file": None,
     "right_query": None,
     "right_query_file": None,
+    "left_label": None,
+    "right_label": None,
     "key": [],
     "unkeyed": False,
     "exclude_column": [],
     "tolerance": [],
+    "max_value_length": None,
+    "no_example_values": False,
+    "full_example_values": False,
     "reconcile_command": None,
     "reconcile_model": None,
     "reconcile_physical_relation": None,
@@ -277,12 +282,17 @@ class CliNamespace:
     allow_partial_diff: bool
     left_query: str | None
     left_query_file: Path | None
+    left_label: str | None
     right_query: str | None
     right_query_file: Path | None
+    right_label: str | None
     key: list[str]
     unkeyed: bool
     exclude_column: list[str]
     tolerance: list[str]
+    max_value_length: int | None
+    no_example_values: bool
+    full_example_values: bool
     reconcile_command: str | None
     reconcile_model: str | None
     reconcile_physical_relation: str | None

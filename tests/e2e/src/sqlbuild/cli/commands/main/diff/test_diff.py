@@ -16,6 +16,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.diff._test_types import (
     DiffKeyFailureE2ETestCase,
     DiffSamplingPrecedenceE2ETestCase,
     DiffSamplingSeedE2ETestCase,
+    QueryDiffOutcomeE2ETestCase,
     SingleDiffE2ETestCase,
     VirtualDiffE2ETestCase,
 )
@@ -24,6 +25,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.diff.helpers import (
     changed_key_examples,
     execute_duckdb,
     prepare_diff_project,
+    reject_nonfinite_json_constant,
     run_sampled_diff,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
@@ -591,8 +593,12 @@ def test_given_diff_project_when_running_diff_then_behavior_matches_expected(
                 "--key",
                 "order_id",
             ),
-            expected_exit_code=1,
-            expected_stdout_fragments=("schema differences: 1", "added columns: 1"),
+            expected_exit_code=2,
+            expected_stdout_fragments=(
+                "outcome: incomplete",
+                "schema differences: 1",
+                "added columns: 1",
+            ),
         ),
         DiffCommandE2ETestCase(
             description="query tolerance suppresses numeric differences",
@@ -676,8 +682,67 @@ def test_given_diff_project_when_running_diff_then_behavior_matches_expected(
                 "--key",
                 "order_id",
             ),
-            expected_exit_code=1,
+            expected_exit_code=2,
             expected_stderr_fragments=("contains duplicate unique_key values",),
+        ),
+        DiffCommandE2ETestCase(
+            description="query labels and diff aware truncation keep long evidence compact",
+            command=(
+                "--no-color",
+                "diff",
+                "--left-query",
+                "SELECT 1 AS order_id, '" + ("a" * 200) + "left-tail' AS note",
+                "--right-query",
+                "SELECT 1 AS order_id, '" + ("a" * 200) + "right-tail' AS note",
+                "--left-label",
+                "baseline",
+                "--right-label",
+                "candidate",
+                "--key",
+                "order_id",
+            ),
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "baseline vs candidate",
+                "baseline count",
+                "candidate count",
+                "[truncated; 209 chars]",
+                "first difference at character 201",
+            ),
+        ),
+        DiffCommandE2ETestCase(
+            description="query examples can suppress values without suppressing keys",
+            command=(
+                "--no-color",
+                "diff",
+                "--left-query",
+                "SELECT 1 AS order_id, 'left-private-value' AS note",
+                "--right-query",
+                "SELECT 1 AS order_id, 'right-private-value' AS note",
+                "--key",
+                "order_id",
+                "--no-example-values",
+            ),
+            expected_exit_code=1,
+            expected_stdout_fragments=("order_id=1", "<value suppressed; 18 chars>"),
+            unexpected_stdout_fragments=("left-private-value", "right-private-value"),
+        ),
+        DiffCommandE2ETestCase(
+            description="complete example values require explicit opt in",
+            command=(
+                "--no-color",
+                "diff",
+                "--left-query",
+                "SELECT 1 AS order_id, '" + ("a" * 200) + "left-tail' AS note",
+                "--right-query",
+                "SELECT 1 AS order_id, '" + ("a" * 200) + "right-tail' AS note",
+                "--key",
+                "order_id",
+                "--full-example-values",
+            ),
+            expected_exit_code=1,
+            expected_stdout_fragments=("left-tail", "right-tail"),
+            unexpected_stdout_fragments=("[truncated;",),
         ),
     ],
     ids=lambda case: case.description,
@@ -701,6 +766,8 @@ def test_given_raw_queries_when_running_diff_then_comparison_matches_model_diff_
         assert fragment in result.stdout, result.stdout + result.stderr
     for fragment in test_case.expected_stderr_fragments:
         assert fragment in result.stderr, result.stdout + result.stderr
+    for fragment in test_case.unexpected_stdout_fragments:
+        assert fragment not in result.stdout, result.stdout + result.stderr
     connection: duckdb.DuckDBPyConnection = duckdb.connect(str(project_dir / "diff.duckdb"))
     try:
         artifact_row: tuple[int] | None = connection.execute(
@@ -787,7 +854,7 @@ def test_given_query_files_target_and_json_output_when_running_diff_then_all_inp
     [
         SingleDiffE2ETestCase(
             description="mutating CTE rejection",
-            expected_exit_code=1,
+            expected_exit_code=2,
             expected_fragment="must not contain data-changing or administrative statements",
         )
     ],
@@ -822,7 +889,7 @@ def test_given_mutating_cte_when_running_query_diff_then_validation_rejects_it(
     [
         SingleDiffE2ETestCase(
             description="duplicate query column rejection",
-            expected_exit_code=1,
+            expected_exit_code=2,
             expected_fragment="left query returns duplicate column names: order_id",
         )
     ],
@@ -901,6 +968,209 @@ def test_given_unreadable_historical_fingerprint_when_running_query_diff_then_co
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
     assert test_case.expected_fragment in result.stderr
     assert "No changed columns." in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SingleDiffE2ETestCase(
+            description="query JSON stdout", expected_exit_code=1, expected_fragment="findings"
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_json_stdout_when_running_labeled_query_diff_then_stdout_is_one_query_native_document(
+    test_case: SingleDiffE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_diff_project(tmp_path)
+    build_both_environments(project_dir=project_dir)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "diff",
+            "--left-query",
+            "SELECT 'NaN'::DOUBLE AS order_id, '" + ("a" * 30) + "left-tail' AS note",
+            "--right-query",
+            "SELECT 'NaN'::DOUBLE AS order_id, '" + ("a" * 30) + "right-tail' AS note",
+            "--left-label",
+            "baseline",
+            "--right-label",
+            "candidate",
+            "--key",
+            "order_id",
+            "--max-value-length",
+            "12",
+            "--json",
+        ),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    payload: dict[str, object] = cast(
+        dict[str, object],
+        json.loads(result.stdout, parse_constant=reject_nonfinite_json_constant),
+    )
+    assert payload["outcome"] == test_case.expected_fragment
+    assert payload["from"] == "baseline"
+    assert payload["to"] == "candidate"
+    assert payload["input_kind"] == "query"
+    comparisons: list[dict[str, object]] = cast(
+        list[dict[str, object]], payload["query_comparisons"]
+    )
+    rows: dict[str, object] = cast(dict[str, object], comparisons[0]["rows"])
+    assert rows["column_mismatches"] == [{"column": "note", "rows": 1}]
+    examples: dict[str, object] = cast(dict[str, object], comparisons[0]["examples"])
+    assert examples["values_truncated"] is True
+    assert examples["max_value_length"] == 12
+    unequal_rows: list[dict[str, object]] = cast(list[dict[str, object]], examples["unequal_rows"])
+    example_key: dict[str, object] = cast(dict[str, object], unequal_rows[0]["key"])
+    assert example_key["order_id"] == {"kind": "non_finite_number", "value": "NaN"}
+    assert "phase_seconds" in payload
+    assert "Query diff total  OK" in result.stderr
+    assert "SQLBuild Diff Summary" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SingleDiffE2ETestCase(
+            description="query JSON output publication failure",
+            expected_exit_code=3,
+            expected_fragment="failed to publish query diff output",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unwritable_json_path_when_running_query_diff_then_stdout_reports_execution_failure(
+    test_case: SingleDiffE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_diff_project(tmp_path)
+    blocked_parent: Path = project_dir / "blocked-output"
+    blocked_parent.write_text("not a directory\n", encoding="utf-8")
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "diff",
+            "--left-query",
+            "SELECT 1 AS order_id",
+            "--right-query",
+            "SELECT 1 AS order_id",
+            "--key",
+            "order_id",
+            "--json",
+            "--json-output",
+            str(blocked_parent / "result.json"),
+        ),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    payload: dict[str, object] = cast(
+        dict[str, object],
+        json.loads(result.stdout, parse_constant=reject_nonfinite_json_constant),
+    )
+    assert payload["outcome"] == "execution_failed"
+    error: dict[str, object] = cast(dict[str, object], payload["error"])
+    assert test_case.expected_fragment in str(error["message"])
+    assert "Query diff outcome  execution_failed" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SingleDiffE2ETestCase(
+            description="lightweight raw query discovery",
+            expected_exit_code=0,
+            expected_fragment="No changed columns.",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unimportable_project_extension_when_running_raw_query_diff_then_it_is_not_loaded(
+    test_case: SingleDiffE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_diff_project(tmp_path)
+    build_both_environments(project_dir=project_dir)
+    sink_path: Path = project_dir / "sinks" / "broken_sink.py"
+    sink_path.parent.mkdir(parents=True, exist_ok=True)
+    sink_path.write_text("import package_that_is_not_installed\n", encoding="utf-8")
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "diff",
+            "--left-query",
+            "SELECT 1 AS order_id",
+            "--right-query",
+            "SELECT 1 AS order_id",
+            "--key",
+            "order_id",
+        ),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert test_case.expected_fragment in result.stdout
+    assert "package_that_is_not_installed" not in result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        QueryDiffOutcomeE2ETestCase(
+            description="duplicate keys are incomplete evidence",
+            left_query="SELECT * FROM (VALUES (1), (1)) AS orders(order_id)",
+            right_query="SELECT * FROM (VALUES (1)) AS orders(order_id)",
+            expected_exit_code=2,
+            expected_status="incomplete",
+            expected_error_fragment="duplicate unique_key values",
+        ),
+        QueryDiffOutcomeE2ETestCase(
+            description="warehouse query failures are execution failures",
+            left_query="SELECT order_id FROM missing_orders",
+            right_query="SELECT 1 AS order_id",
+            expected_exit_code=3,
+            expected_status="execution_failed",
+            expected_error_fragment="missing_orders",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_query_diff_cannot_complete_when_requesting_json_then_outcome_is_machine_readable(
+    test_case: QueryDiffOutcomeE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_diff_project(tmp_path)
+    build_both_environments(project_dir=project_dir)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "diff",
+            "--left-query",
+            test_case.left_query,
+            "--right-query",
+            test_case.right_query,
+            "--key",
+            "order_id",
+            "--json",
+        ),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    payload: dict[str, object] = cast(dict[str, object], json.loads(result.stdout))
+    assert payload["status"] == test_case.expected_status
+    assert payload["outcome"] == test_case.expected_status
+    error: dict[str, object] = cast(dict[str, object], payload["error"])
+    assert test_case.expected_error_fragment.lower() in str(error["message"]).lower()
+    assert f"Query diff outcome  {test_case.expected_status}" in result.stderr
 
 
 @pytest.mark.parametrize(

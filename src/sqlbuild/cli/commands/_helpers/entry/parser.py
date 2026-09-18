@@ -375,6 +375,10 @@ def _add_data_parsers(
     diff_parser.add_argument(
         "--right-query-file", type=Path, default=None, help="path to right-side SQL query"
     )
+    diff_parser.add_argument("--left-label", default=None, help="display label for the left query")
+    diff_parser.add_argument(
+        "--right-label", default=None, help="display label for the right query"
+    )
     diff_parser.add_argument(
         "--key", action="append", default=[], help="row identity column; repeat for composite keys"
     )
@@ -392,6 +396,30 @@ def _add_data_parsers(
         action="append",
         default=[],
         help="numeric tolerance as COLUMN:absolute=VALUE or COLUMN:relative=VALUE",
+    )
+    diff_parser.add_argument(
+        "--max-value-length",
+        type=int,
+        default=None,
+        help="maximum rendered characters per example value",
+    )
+    diff_parser.add_argument(
+        "--no-example-values",
+        action="store_true",
+        default=False,
+        help="show example keys and counts without values",
+    )
+    diff_parser.add_argument(
+        "--full-example-values",
+        action="store_true",
+        default=False,
+        help="explicitly render complete example values",
+    )
+    diff_parser.add_argument(
+        "--json",
+        action="store_true",
+        default=False,
+        help="write structured diff output to stdout",
     )
     _ = add_execution_json_output_arg(diff_parser)
     _ = add_select_args(diff_parser)

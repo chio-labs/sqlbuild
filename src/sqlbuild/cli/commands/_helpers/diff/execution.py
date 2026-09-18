@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationLookup
@@ -20,12 +21,13 @@ from sqlbuild.cli.commands._helpers.runtime.connection import (
     resolve_target_connection_config,
 )
 from sqlbuild.cli.commands.constants import READ_ONLY_QUERY_ROOT_KEYS
-from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.exceptions import CliUserError, QueryDiffExecutionError
 from sqlbuild.cli.commands.models import (
     DiffCommandRequest,
     DiffInvocation,
     DirectDiffPreparation,
     QueryDiffPreparation,
+    QueryDiffRunOutcome,
     VirtualDiffPreparation,
     VirtualDiffRunOutcome,
 )
@@ -219,6 +221,8 @@ def prepare_query_diff(
         connection_config=connection_config,
         left_sql=left_sql,
         right_sql=right_sql,
+        left_label=(request.left_label or "left query").strip(),
+        right_label=(request.right_label or "right query").strip(),
         selected_target=target_name,
         database=database,
         schema=schema,
@@ -237,99 +241,45 @@ def prepare_query_diff(
 
 def execute_query_diff(
     *, request: DiffCommandRequest, preparation: QueryDiffPreparation
-) -> DiffExecutionResult:
+) -> QueryDiffRunOutcome:
     """Materialize, compare, and clean one raw-query pair."""
 
     adapter: BaseAdapter = preparation.adapter
+    total_started_at: float = time.perf_counter()
+    phase_seconds: dict[str, float] = {}
     print("Query diff connection  START", file=sys.stderr)
+    connection_started_at: float = time.perf_counter()
     try:
         connection: Any = adapter.connect(preparation.connection_config)
     except Exception:
-        print("Query diff connection  ERROR", file=sys.stderr)
+        connection_elapsed: float = time.perf_counter() - connection_started_at
+        print(f"Query diff connection  ERROR  ({connection_elapsed:.2f}s)", file=sys.stderr)
+        print(
+            f"Query diff total  ERROR  ({time.perf_counter() - total_started_at:.2f}s)",
+            file=sys.stderr,
+        )
         raise
-    print("Query diff connection  OK", file=sys.stderr)
-    left: QueryDiffArtifact = QueryDiffArtifactLifecycle.build(
-        adapter=adapter,
-        run_id=preparation.run_id,
-        side="left",
-        database=preparation.database,
-        schema=preparation.schema,
-    )
-    right: QueryDiffArtifact = QueryDiffArtifactLifecycle.build(
-        adapter=adapter,
-        run_id=preparation.run_id,
-        side="right",
-        database=preparation.database,
-        schema=preparation.schema,
-    )
+    phase_seconds["connection"] = time.perf_counter() - connection_started_at
+    print(f"Query diff connection  OK  ({phase_seconds['connection']:.2f}s)", file=sys.stderr)
+    left, right = _build_query_diff_artifacts(adapter=adapter, preparation=preparation)
     created: list[QueryDiffArtifact] = []
     cleanup_errors: list[Exception] = []
+    model_result: ModelDiffResult | None = None
     try:
-        print("Query diff cleanup  START", file=sys.stderr)
-        try:
-            cleanup_result: QueryDiffArtifactCleanupResult = (
-                QueryDiffArtifactLifecycle.cleanup_expired(
-                    adapter=adapter,
-                    connection=connection,
-                    database=preparation.database,
-                    schema=preparation.schema,
-                    now=datetime.now(UTC),
-                )
-            )
-        except Exception as error:
-            print(
-                "Query diff cleanup  WARNING  recovery cleanup could not inspect historical "
-                f"ownership evidence: {error}",
-                file=sys.stderr,
-            )
-        else:
-            print(
-                f"Query diff cleanup  OK  ({len(cleanup_result.cleaned)} expired)",
-                file=sys.stderr,
-            )
-            for relation in cleanup_result.untracked:
-                print(
-                    "Query diff cleanup  WARNING  reserved-name relation lacks matching "
-                    f"ownership evidence: {relation.name}",
-                    file=sys.stderr,
-                )
-        artifact_lookup: RelationLookup = build_relation_lookup(
+        phase_seconds["reconciliation"] = _reconcile_query_diff_artifacts(
             adapter=adapter,
             connection=connection,
-            locations=tuple(
-                (artifact.database, artifact.schema, artifact.name) for artifact in (left, right)
-            ),
+            preparation=preparation,
         )
-        for artifact in (left, right):
-            if artifact_lookup.exists(
-                database=artifact.database,
-                schema=artifact.schema,
-                name=artifact.name,
-            ):
-                raise CliUserError(
-                    f"query-diff artifact already exists: {artifact.relation}",
-                    code="C245",
-                    help="wait for its TTL cleanup or investigate the reserved-name relation",
-                )
-        ttl: Duration | None = Duration.parse(preparation.artifact_ttl)
-        if ttl is None:
-            raise CliUserError("diff.query_artifact_ttl must be a positive duration", code="C228")
-        expires_at: datetime = ttl.add_to(datetime.now(UTC))
-        _preflight_query_columns(
+        expires_at, phase_seconds["inspection"] = _inspect_query_diff_inputs(
             adapter=adapter,
             connection=connection,
-            sql=preparation.left_sql,
-            label="left",
-            max_columns=request.max_columns,
-        )
-        _preflight_query_columns(
-            adapter=adapter,
-            connection=connection,
-            sql=preparation.right_sql,
-            label="right",
+            preparation=preparation,
+            artifacts=(left, right),
             max_columns=request.max_columns,
         )
         print("Query diff materialization  START", file=sys.stderr)
+        materialization_started_at: float = time.perf_counter()
         try:
             QueryDiffArtifactLifecycle.materialize(
                 adapter=adapter,
@@ -348,16 +298,22 @@ def execute_query_diff(
             )
             created.append(right)
         except Exception:
-            print("Query diff materialization  ERROR", file=sys.stderr)
+            phase_seconds["materialization"] = time.perf_counter() - materialization_started_at
+            print(
+                f"Query diff materialization  ERROR  ({phase_seconds['materialization']:.2f}s)",
+                file=sys.stderr,
+            )
             raise
+        phase_seconds["materialization"] = time.perf_counter() - materialization_started_at
         print(
             f"Query diff materialization  OK  ({preparation.schema}; expires "
-            f"{expires_at.isoformat()})",
+            f"{expires_at.isoformat()}; {phase_seconds['materialization']:.2f}s)",
             file=sys.stderr,
         )
         print("Query diff comparison  START", file=sys.stderr)
+        comparison_started_at: float = time.perf_counter()
         try:
-            model_result: ModelDiffResult = execute_prepared_query_diff(
+            model_result = execute_prepared_query_diff(
                 adapter=adapter,
                 connection=connection,
                 left_relation=left.relation,
@@ -375,38 +331,237 @@ def execute_query_diff(
                     tolerance_overrides=parse_cli_tolerance_overrides(
                         values=request.tolerance_overrides
                     ),
+                    comparison_name=(f"{preparation.left_label} vs {preparation.right_label}"),
                 ),
             )
         except Exception:
-            print("Query diff comparison  ERROR", file=sys.stderr)
+            phase_seconds["comparison"] = time.perf_counter() - comparison_started_at
+            print(
+                f"Query diff comparison  ERROR  ({phase_seconds['comparison']:.2f}s)",
+                file=sys.stderr,
+            )
             raise
-        print("Query diff comparison  OK", file=sys.stderr)
-        return DiffExecutionResult(model_results=(model_result,))
+        phase_seconds["comparison"] = time.perf_counter() - comparison_started_at
+        print(f"Query diff comparison  OK  ({phase_seconds['comparison']:.2f}s)", file=sys.stderr)
     finally:
         active_error: BaseException | None = sys.exc_info()[1]
-        print("Query diff immediate cleanup  START", file=sys.stderr)
-        for artifact in reversed(created):
-            try:
-                QueryDiffArtifactLifecycle.cleanup(
-                    adapter=adapter,
-                    connection=connection,
-                    artifact=artifact,
-                )
-            except Exception as error:
-                cleanup_errors.append(error)
+        cleanup_errors, phase_seconds["cleanup"] = _cleanup_query_diff_artifacts(
+            adapter=adapter,
+            connection=connection,
+            created=created,
+        )
+        phase_seconds["total"] = time.perf_counter() - total_started_at
+        total_status: str = "ERROR" if active_error is not None or cleanup_errors else "OK"
+        print(
+            f"Query diff total  {total_status}  ({phase_seconds['total']:.2f}s)",
+            file=sys.stderr,
+        )
         if cleanup_errors:
-            print(
-                f"Query diff immediate cleanup  ERROR  ({len(cleanup_errors)} failed)",
-                file=sys.stderr,
-            )
-        else:
-            print(
-                f"Query diff immediate cleanup  OK  ({len(created)} removed)",
-                file=sys.stderr,
-            )
-        adapter.close(connection)
-        if cleanup_errors and active_error is None:
             raise cleanup_errors[0]
+    if model_result is None:
+        raise QueryDiffExecutionError(
+            "query diff comparison completed without a result", code="C256"
+        )
+    result: DiffExecutionResult = DiffExecutionResult(model_results=(model_result,))
+    outcome, exit_code = _resolve_query_diff_outcome(request=request, result=result)
+    return QueryDiffRunOutcome(
+        result=result,
+        phase_seconds=phase_seconds,
+        outcome=outcome,
+        exit_code=exit_code,
+    )
+
+
+def _build_query_diff_artifacts(
+    *, adapter: BaseAdapter, preparation: QueryDiffPreparation
+) -> tuple[QueryDiffArtifact, QueryDiffArtifact]:
+    return (
+        QueryDiffArtifactLifecycle.build(
+            adapter=adapter,
+            run_id=preparation.run_id,
+            side="left",
+            database=preparation.database,
+            schema=preparation.schema,
+        ),
+        QueryDiffArtifactLifecycle.build(
+            adapter=adapter,
+            run_id=preparation.run_id,
+            side="right",
+            database=preparation.database,
+            schema=preparation.schema,
+        ),
+    )
+
+
+def _cleanup_query_diff_artifacts(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    created: list[QueryDiffArtifact],
+) -> tuple[list[Exception], float]:
+    print("Query diff immediate cleanup  START", file=sys.stderr)
+    started_at: float = time.perf_counter()
+    errors: list[Exception] = []
+    for artifact in reversed(created):
+        try:
+            QueryDiffArtifactLifecycle.cleanup(
+                adapter=adapter,
+                connection=connection,
+                artifact=artifact,
+            )
+        except Exception as error:
+            errors.append(error)
+    try:
+        adapter.close(connection)
+    except Exception as error:
+        errors.append(error)
+    elapsed: float = time.perf_counter() - started_at
+    if errors:
+        print(
+            f"Query diff immediate cleanup  ERROR  ({len(errors)} failed; {elapsed:.2f}s)",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"Query diff immediate cleanup  OK  ({len(created)} removed; {elapsed:.2f}s)",
+            file=sys.stderr,
+        )
+    return errors, elapsed
+
+
+def _resolve_query_diff_outcome(
+    *, request: DiffCommandRequest, result: DiffExecutionResult
+) -> tuple[str, int]:
+    if not request.schema_only and _query_schema_prevented_row_comparison(result=result):
+        return "incomplete", 2
+    if _query_result_has_findings(result=result):
+        return "findings", 1
+    return "pass", 0
+
+
+def _query_schema_prevented_row_comparison(*, result: DiffExecutionResult) -> bool:
+    return any(
+        model.row_result is None
+        and (
+            model.schema_result.added_columns
+            or model.schema_result.removed_columns
+            or model.schema_result.type_changed_columns
+        )
+        for model in result.model_results
+    )
+
+
+def _query_result_has_findings(*, result: DiffExecutionResult) -> bool:
+    return any(
+        model.schema_result.added_columns
+        or model.schema_result.removed_columns
+        or model.schema_result.type_changed_columns
+        or (
+            model.row_result is not None
+            and (
+                model.row_result.unequal_count
+                or model.row_result.left_only_count
+                or model.row_result.right_only_count
+            )
+        )
+        for model in result.model_results
+    )
+
+
+def _inspect_query_diff_inputs(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    preparation: QueryDiffPreparation,
+    artifacts: tuple[QueryDiffArtifact, QueryDiffArtifact],
+    max_columns: int | None,
+) -> tuple[datetime, float]:
+    print("Query diff inspection  START", file=sys.stderr)
+    started_at: float = time.perf_counter()
+    try:
+        artifact_lookup: RelationLookup = build_relation_lookup(
+            adapter=adapter,
+            connection=connection,
+            locations=tuple(
+                (artifact.database, artifact.schema, artifact.name) for artifact in artifacts
+            ),
+        )
+        for artifact in artifacts:
+            if artifact_lookup.exists(
+                database=artifact.database,
+                schema=artifact.schema,
+                name=artifact.name,
+            ):
+                raise CliUserError(
+                    f"query-diff artifact already exists: {artifact.relation}",
+                    code="C245",
+                    help="wait for its TTL cleanup or investigate the reserved-name relation",
+                )
+        ttl: Duration | None = Duration.parse(preparation.artifact_ttl)
+        if ttl is None:
+            raise CliUserError("diff.query_artifact_ttl must be a positive duration", code="C228")
+        _preflight_query_columns(
+            adapter=adapter,
+            connection=connection,
+            sql=preparation.left_sql,
+            label=preparation.left_label,
+            max_columns=max_columns,
+        )
+        _preflight_query_columns(
+            adapter=adapter,
+            connection=connection,
+            sql=preparation.right_sql,
+            label=preparation.right_label,
+            max_columns=max_columns,
+        )
+    except Exception:
+        elapsed: float = time.perf_counter() - started_at
+        print(
+            f"Query diff inspection  ERROR  ({elapsed:.2f}s)",
+            file=sys.stderr,
+        )
+        raise
+    elapsed = time.perf_counter() - started_at
+    print(f"Query diff inspection  OK  ({elapsed:.2f}s)", file=sys.stderr)
+    return ttl.add_to(datetime.now(UTC)), elapsed
+
+
+def _reconcile_query_diff_artifacts(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    preparation: QueryDiffPreparation,
+) -> float:
+    print("Query diff reconciliation  START", file=sys.stderr)
+    started_at: float = time.perf_counter()
+    try:
+        result: QueryDiffArtifactCleanupResult = QueryDiffArtifactLifecycle.cleanup_expired(
+            adapter=adapter,
+            connection=connection,
+            database=preparation.database,
+            schema=preparation.schema,
+            now=datetime.now(UTC),
+        )
+    except Exception as error:
+        elapsed: float = time.perf_counter() - started_at
+        print(
+            "Query diff reconciliation  WARNING  recovery cleanup could not inspect historical "
+            f"ownership evidence: {error} ({elapsed:.2f}s)",
+            file=sys.stderr,
+        )
+        return elapsed
+    elapsed = time.perf_counter() - started_at
+    print(
+        f"Query diff reconciliation  OK  ({len(result.cleaned)} expired; {elapsed:.2f}s)",
+        file=sys.stderr,
+    )
+    for relation in result.untracked:
+        print(
+            "Query diff reconciliation  WARNING  reserved-name relation lacks matching "
+            f"ownership evidence: {relation.name}",
+            file=sys.stderr,
+        )
+    return elapsed
 
 
 def _resolve_query_input(*, inline: str | None, file: Path | None, label: str) -> str:
@@ -494,22 +649,23 @@ def _preflight_query_columns(
     label: str,
     max_columns: int | None,
 ) -> None:
+    display_label: str = label if label.lower().endswith("query") else f"{label} query"
     columns: tuple[str, ...] = adapter.query_column_names(connection=connection, sql=sql)
     if not columns:
-        raise CliUserError(f"{label} query returned no columns", code="C237")
+        raise CliUserError(f"{display_label} returned no columns", code="C237")
     normalized: tuple[str, ...] = tuple(column.lower() for column in columns)
     duplicates: tuple[str, ...] = tuple(
         sorted({column for column in normalized if normalized.count(column) > 1})
     )
     if duplicates:
         raise CliUserError(
-            f"{label} query returns duplicate column names: {', '.join(duplicates)}",
+            f"{display_label} returns duplicate column names: {', '.join(duplicates)}",
             code="C238",
             help="add unique aliases before comparing query results",
         )
     if max_columns is not None and len(columns) > max_columns:
         raise CliUserError(
-            f"{label} query has {len(columns)} columns, exceeding --max-columns {max_columns}",
+            f"{display_label} has {len(columns)} columns, exceeding --max-columns {max_columns}",
             code="C239",
         )
 
@@ -552,8 +708,9 @@ def execute_virtual_diff(
 ) -> VirtualDiffRunOutcome:
     """Execute a virtual environment diff."""
 
+    progress_stream: TextIO = sys.stderr if request.json_output else sys.stdout
     planning_progress: PlanningProgressReporter = PlanningProgressReporter(
-        stream=sys.stdout,
+        stream=progress_stream,
         use_color=preparation.use_color,
     )
     connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
@@ -561,7 +718,7 @@ def execute_virtual_diff(
             project_config=invocation.discovered_inputs.project_config,
             local_config=invocation.discovered_inputs.local_config,
         ),
-        stream=sys.stdout,
+        stream=progress_stream,
         use_color=preparation.use_color,
     )
     (

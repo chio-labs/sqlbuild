@@ -17,7 +17,7 @@ from sqlbuild.observability import create_lifecycle_event
 def dispatch_with_observability(*, args: CliNamespace, handlers: CliEntrypointHandlers) -> int:
     """Dispatch once while publishing canonical invocation and nested run facts."""
 
-    if _creates_project(args=args):
+    if _creates_project(args=args) or _is_raw_query_diff(args=args):
         return dispatch_cli_command(args=args, handlers=handlers)
     project_dir: Path = Path(args.project_dir) if args.project_dir is not None else Path.cwd()
     command: str = "unknown" if args.command is None else str(args.command)
@@ -60,4 +60,16 @@ def dispatch_with_observability(*, args: CliNamespace, handlers: CliEntrypointHa
 def _creates_project(*, args: CliNamespace) -> bool:
     return args.command in {CliCommand.INIT, CliCommand.PLAYGROUND} or (
         args.command == CliCommand.DBT and args.dbt_command == DBT_INIT_COMMAND
+    )
+
+
+def _is_raw_query_diff(*, args: CliNamespace) -> bool:
+    return args.command == CliCommand.DIFF and any(
+        value is not None
+        for value in (
+            args.left_query,
+            args.left_query_file,
+            args.right_query,
+            args.right_query_file,
+        )
     )
