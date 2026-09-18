@@ -61,6 +61,7 @@ def build_source_inputs(
     source_inputs: list[CompileSourceInput] = []
     sql_validation_enabled: bool = effective_settings.sql_analysis and not no_sql_validation
     resolver: DeclarationScopeResolver | None = declaration_expansion.resolver
+    default_contract: str | None = discovered_inputs.project_config.defaults.contract
     reuse_file_scope: bool = (
         resolver is not None
         and not any(
@@ -76,6 +77,12 @@ def build_source_inputs(
     for source_file in discovered_inputs.source_files:
         source_entry: SourceEntry
         for raw_source_entry in source_file.source_entries:
+            effective_source_entry: SourceEntry = raw_source_entry
+            if raw_source_entry.contract is None and default_contract is not None:
+                effective_source_entry = replace(
+                    raw_source_entry,
+                    contract=default_contract,
+                )
             source_resource: ResourceIdentity = ResourceIdentity(
                 ResourceKind.SOURCE, raw_source_entry.name
             )
@@ -95,7 +102,7 @@ def build_source_inputs(
                 if reuse_file_scope:
                     declarations_by_file[source_file.file_path] = scoped_declarations
             source_entry, usages = expand_source_entry_templates(
-                source_entry=raw_source_entry,
+                source_entry=effective_source_entry,
                 file_path=source_file.file_path,
                 effective_vars=effective_vars,
                 loaded_macros=loaded_macros,

@@ -50,6 +50,15 @@ class SemanticBindingIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class SourceContractDefaultIntegrationTestCase:
+    description: str
+    source_contract_yaml: str
+    expected_exit_code: int
+    expected_output_fragment: str
+    expected_absent_output_fragment: str
+
+
+@dataclass(frozen=True)
 class ExpectedModelEntry:
     description: str
     expected_resolved_sql_fragment: str

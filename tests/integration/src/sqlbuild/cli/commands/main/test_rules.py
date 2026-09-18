@@ -270,14 +270,14 @@ def test_given_contract_rules_when_compiling_then_contract_is_enforced_typed_and
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text(
         'name = "orders"\nadapter = "duckdb"\n\n[rules]\n'
-        'select = ["SQBRCONTRACT101", "SQBRCONTRACT105", "SQBRCONTRACT106"]\n',
+        'select = ["SQBRCONTRACT101", "SQBRCONTRACT105", "SQBRCONTRACT106"]\n\n'
+        '[defaults]\ncontract = "enforced"\n',
         encoding="utf-8",
     )
     model: Path = tmp_path / "models" / "orders.sql"
     model.parent.mkdir()
     model.write_text(
         "MODEL (\n"
-        "  contract enforced,\n"
         f"  columns ({test_case.columns_sql}),\n"
         ");\n\n"
         "SELECT CAST(1 AS INTEGER) AS order_id, CAST('ready' AS VARCHAR) AS status\n",

@@ -12,6 +12,7 @@ from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     SemanticBindingClauseIntegrationTestCase,
     SemanticBindingIntegrationTestCase,
+    SourceContractDefaultIntegrationTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.pipeline.helpers import write_semantic_binding_project
 
@@ -198,39 +199,50 @@ def test_given_partial_upstream_when_column_absence_is_unproven_then_compile_suc
 @pytest.mark.parametrize(
     "test_case",
     [
-        SemanticBindingIntegrationTestCase(
-            description="given enforced source contract when column is missing then compile fails",
+        SourceContractDefaultIntegrationTestCase(
+            description="given default enforced source contract when column is missing then compile fails",
+            source_contract_yaml="",
             expected_exit_code=1,
-        )
+            expected_output_fragment="error[B002]: Unknown column 'missing' in table 'raw_orders'",
+            expected_absent_output_fragment="0 errors, 0 warnings",
+        ),
+        SourceContractDefaultIntegrationTestCase(
+            description="given explicit open source contract when default is enforced then compile succeeds",
+            source_contract_yaml="    contract: none\n",
+            expected_exit_code=0,
+            expected_output_fragment="0 errors, 0 warnings",
+            expected_absent_output_fragment="error[B002]",
+        ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_enforced_source_contract_when_column_is_missing_then_compile_fails(
-    test_case: SemanticBindingIntegrationTestCase,
+def test_given_source_contract_default_when_compiling_then_effective_policy_controls_authority(
+    test_case: SourceContractDefaultIntegrationTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _ = (tmp_path / "sqlbuild_project.toml").write_text(
-        'name = "semantic_binding"\nadapter = "duckdb"\n', encoding="utf-8"
+        'name = "semantic_binding"\nadapter = "duckdb"\n\n[defaults]\ncontract = "enforced"\n',
+        encoding="utf-8",
     )
     sources_dir: Path = tmp_path / "sources"
     models_dir: Path = tmp_path / "models"
     sources_dir.mkdir()
     models_dir.mkdir()
     _ = (sources_dir / "raw.yml").write_text(
-        """sources:
+        f"""sources:
   - name: raw_orders
     schema: raw
     table: orders
-    contract: enforced
-    columns:
+{test_case.source_contract_yaml}    columns:
       - name: id
         type: INTEGER
 """,
         encoding="utf-8",
     )
     _ = (models_dir / "downstream.sql").write_text(
-        'MODEL (materialized view);\nSELECT missing FROM __source("raw_orders")\n',
+        "MODEL (materialized view, columns (missing (type INTEGER)));\n"
+        'SELECT CAST(missing AS INTEGER) AS missing FROM __source("raw_orders")\n',
         encoding="utf-8",
     )
 
@@ -238,7 +250,8 @@ def test_given_enforced_source_contract_when_column_is_missing_then_compile_fail
 
     output: str = capsys.readouterr().out
     assert exit_code == test_case.expected_exit_code
-    assert "error[B002]: Unknown column 'missing' in table 'raw_orders'" in output
+    assert test_case.expected_output_fragment in output
+    assert test_case.expected_absent_output_fragment not in output
 
 
 @pytest.mark.parametrize(
