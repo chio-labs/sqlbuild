@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.105.0](https://github.com/chio-labs/sqlbuild/compare/v0.104.1...v0.105.0) (2026-09-18)
+
+
+### Features
+
+* add raw query diff inputs ([#728](https://github.com/chio-labs/sqlbuild/issues/728)) ([af7308c](https://github.com/chio-labs/sqlbuild/commit/af7308cd5e4dbb030209ed16ca6fa9ab0b85fc68))
+
 ## [0.104.1](https://github.com/chio-labs/sqlbuild/compare/v0.104.0...v0.104.1) (2026-09-18)
 
 
