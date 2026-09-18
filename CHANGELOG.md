@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.103.6](https://github.com/chio-labs/sqlbuild/compare/v0.103.5...v0.103.6) (2026-09-18)
+
+
+### Bug Fixes
+
+* normalize contract adoption paths ([#720](https://github.com/chio-labs/sqlbuild/issues/720)) ([2c4e160](https://github.com/chio-labs/sqlbuild/commit/2c4e160d0a97154ad2fee15b106db9cb56537c6f))
+
 ## [0.103.5](https://github.com/chio-labs/sqlbuild/compare/v0.103.4...v0.103.5) (2026-09-18)
 
 
