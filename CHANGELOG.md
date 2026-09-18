@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.110.0](https://github.com/chio-labs/sqlbuild/compare/v0.109.0...v0.110.0) (2026-09-18)
+
+
+### Features
+
+* add target execution limits ([#742](https://github.com/chio-labs/sqlbuild/issues/742)) ([02f0e18](https://github.com/chio-labs/sqlbuild/commit/02f0e181390e127891cb495227a00d1f69bb9fc8))
+
 ## [0.109.0](https://github.com/chio-labs/sqlbuild/compare/v0.108.1...v0.109.0) (2026-09-18)
 
 
