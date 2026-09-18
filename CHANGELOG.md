@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.106.0](https://github.com/chio-labs/sqlbuild/compare/v0.105.0...v0.106.0) (2026-09-18)
+
+
+### Features
+
+* configure authoritative contract name types ([#730](https://github.com/chio-labs/sqlbuild/issues/730)) ([6887bbc](https://github.com/chio-labs/sqlbuild/commit/6887bbc940196bc84619b6e273141904f2ba9069))
+
 ## [0.105.0](https://github.com/chio-labs/sqlbuild/compare/v0.104.1...v0.105.0) (2026-09-18)
 
 
