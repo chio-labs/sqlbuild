@@ -515,12 +515,16 @@ fn collect_rule_migration_facts(
             facts.cross_joins.push(tokens[index].span);
         }
         if text.eq_ignore_ascii_case("with") {
-            if depths[index] > 0 {
+            let starts_hierarchy = position.checked_sub(1).is_some_and(|previous| {
+                tokens[significant[previous]].token_type == TokenType::Start
+            });
+            if depths[index] > 0 && !starts_hierarchy {
                 facts.nested_ctes.push(tokens[index].span);
             }
-            if significant
-                .get(position + 1)
-                .is_some_and(|&next| tokens[next].text.eq_ignore_ascii_case("recursive"))
+            if !starts_hierarchy
+                && significant
+                    .get(position + 1)
+                    .is_some_and(|&next| tokens[next].text.eq_ignore_ascii_case("recursive"))
             {
                 facts.recursive_ctes.push(tokens[index].span);
             }

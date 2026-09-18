@@ -444,6 +444,12 @@ fn given_plain_sql_rules_when_linting_then_project_context_is_not_required() -> 
             expected_count: 1,
         },
         test_types::PlainSqlLintTestCase {
+            description: "Snowflake hierarchy START WITH is not a nested CTE",
+            sql: "WITH entities AS (SELECT id, parent_id FROM source_rows), hierarchy AS (SELECT id FROM entities START WITH parent_id IS NULL CONNECT BY parent_id = PRIOR id) SELECT id FROM hierarchy",
+            rule: "SQBRSQL036",
+            expected_count: 0,
+        },
+        test_types::PlainSqlLintTestCase {
             description: "recursive CTE",
             sql: "WITH RECURSIVE numbers AS (SELECT 1 UNION ALL SELECT 2) SELECT * FROM numbers",
             rule: "SQBRSQL037",
