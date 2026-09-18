@@ -102,6 +102,16 @@ class StateConfig:
 
 
 @dataclass(frozen=True)
+class ExecutionLimitsConfig:
+    """Optional target-scoped build execution limits."""
+
+    max_models: int | None = None
+    max_duration: str | None = None
+    max_duration_seconds: int | None = None
+    remediation: str | None = None
+
+
+@dataclass(frozen=True)
 class LocalStateConfig:
     """Local virtual environment mode state store overrides."""
 
@@ -132,6 +142,7 @@ class TargetConfig:
     owns_time_travel_retention_namespace: bool = False
     default_table_type: TableType | None = None
     table_type_downgrade: TableTypeDowngradePolicy = TableTypeDowngradePolicy.REQUIRE_CONFIRMATION
+    execution_limits: ExecutionLimitsConfig = field(default_factory=ExecutionLimitsConfig)
 
 
 @dataclass(frozen=True)
@@ -154,6 +165,7 @@ class LocalTargetConfig:
     owns_time_travel_retention_namespace: bool | None = None
     default_table_type: TableType | None = None
     table_type_downgrade: TableTypeDowngradePolicy | None = None
+    execution_limits: ExecutionLimitsConfig = field(default_factory=ExecutionLimitsConfig)
 
 
 @dataclass(frozen=True)

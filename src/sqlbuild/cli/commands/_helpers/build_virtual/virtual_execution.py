@@ -30,6 +30,7 @@ from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
+from sqlbuild.spec.contracts.models import ExecutionLimitsConfig, TargetConfig
 from sqlbuild.virtual.executor.main.build import run_virtual_build as run_virtual_build_pipeline
 from sqlbuild.virtual.executor.models import (
     VirtualBuildExecutionHooks,
@@ -72,13 +73,18 @@ def execute_virtual_build(
         local_config=discovered_inputs.local_config,
         selected_target=request.selected_target,
     )
-    unsuffixed_virtual_environment_name: str | None = (
+    physical_target_config: TargetConfig | None = (
         resolve_target_config(
             project_config=discovered_inputs.project_config,
             local_config=discovered_inputs.local_config,
             target_name=physical_target_name,
-        ).state.unsuffixed_virtual_env
+        )
         if physical_target_name is not None
+        else None
+    )
+    unsuffixed_virtual_environment_name: str | None = (
+        physical_target_config.state.unsuffixed_virtual_env
+        if physical_target_config is not None
         else None
     )
     plan_hook: VirtualBuildPlanHook = VirtualBuildPlanHook(
@@ -102,6 +108,12 @@ def execute_virtual_build(
                 request.virtual_environment_name or physical_target_name or "default"
             ),
             unsuffixed_virtual_environment_name=unsuffixed_virtual_environment_name,
+            effective_target_name=physical_target_name,
+            execution_limits=(
+                physical_target_config.execution_limits
+                if physical_target_config is not None
+                else ExecutionLimitsConfig()
+            ),
         ),
     )
     cursor_overrides: CursorOverrides = request.cursor_overrides or CursorOverrides()

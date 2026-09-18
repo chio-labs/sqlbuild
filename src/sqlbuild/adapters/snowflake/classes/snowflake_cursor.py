@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import time
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
@@ -15,6 +16,10 @@ from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.cost.classes.statement_ledger import StatementLedger
 from sqlbuild.cost.constants import SQLBUILD_QUERY_TAG_APP
 from sqlbuild.cost.models import CostResourceContext, StatementExecutionTelemetry
+from sqlbuild.runtime.execution_limits.main.current_execution_deadline import (
+    current_execution_deadline,
+)
+from sqlbuild.runtime.execution_limits.models import ExecutionDeadline
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 from sqlbuild.runtime.observability.main.current_execution_identity import (
     current_execution_identity,
@@ -23,6 +28,7 @@ from sqlbuild.runtime.observability.models import ExecutionIdentity
 
 _LOGGER: logging.Logger = logging.getLogger("sqlbuild.cost")
 _QUERY_TAG_PARAMETER: str = "QUERY_TAG"
+_STATEMENT_TIMEOUT_PARAMETER: str = "STATEMENT_TIMEOUT_IN_SECONDS"
 _STATEMENT_PARAMETER_ERROR_FRAGMENT: str = "STATEMENT PARAMETER"
 _RAW_CURSOR_ATTRIBUTE: str = "raw_cursor"
 _EXECUTEMANY_INTENT: str = "executemany"
@@ -50,8 +56,9 @@ class _SnowflakeCursor:
     def execute(self, sql: str, *args: Any, **kwargs: Any) -> Any:
         context: CostResourceContext | None = CostContext.current()
         statement_id: str = _statement_id()
+        deadline_kwargs: dict[str, Any] = _with_execution_deadline(kwargs=kwargs)
         tagged_kwargs, query_tag_injected = _with_query_tag(
-            kwargs=kwargs, context=context, statement_id=statement_id
+            kwargs=deadline_kwargs, context=context, statement_id=statement_id
         )
         return self._execute_with_telemetry(
             operation=self.raw_cursor.execute,
@@ -67,8 +74,9 @@ class _SnowflakeCursor:
     def executemany(self, sql: str, *args: Any, **kwargs: Any) -> Any:
         context: CostResourceContext | None = CostContext.current()
         statement_id: str = _statement_id()
+        deadline_kwargs: dict[str, Any] = _with_execution_deadline(kwargs=kwargs)
         tagged_kwargs, query_tag_injected = _with_query_tag(
-            kwargs=kwargs, context=context, statement_id=statement_id
+            kwargs=deadline_kwargs, context=context, statement_id=statement_id
         )
         return self._execute_with_telemetry(
             operation=self.raw_cursor.executemany,
@@ -120,7 +128,9 @@ class _SnowflakeCursor:
                         "Snowflake query tagging was rejected before submission; "
                         "continuing without a query tag"
                     )
-                    retry_kwargs: dict[str, Any] = _without_query_tag(kwargs=kwargs)
+                    retry_kwargs: dict[str, Any] = _with_execution_deadline(
+                        kwargs=_without_query_tag(kwargs=kwargs)
+                    )
                     try:
                         result = operation(sql, *args, **retry_kwargs)
                     except Exception as retry_error:
@@ -282,6 +292,20 @@ def _with_query_tag(
     )
     tagged_kwargs["_statement_params"] = statement_params
     return tagged_kwargs, True
+
+
+def _with_execution_deadline(*, kwargs: dict[str, Any]) -> dict[str, Any]:
+    deadline: ExecutionDeadline | None = current_execution_deadline()
+    if deadline is None:
+        return dict(kwargs)
+    deadline.enforce()
+    statement_params: dict[str, str] = dict(kwargs.get("_statement_params") or {})
+    statement_params[_STATEMENT_TIMEOUT_PARAMETER] = str(
+        max(1, math.ceil(deadline.remaining_seconds))
+    )
+    deadline_kwargs: dict[str, Any] = dict(kwargs)
+    deadline_kwargs["_statement_params"] = statement_params
+    return deadline_kwargs
 
 
 def _without_query_tag(*, kwargs: dict[str, Any]) -> dict[str, Any]:

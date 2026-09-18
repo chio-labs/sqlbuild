@@ -10,6 +10,10 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.build_execution.run_context import (
     write_build_run_context,
 )
+from sqlbuild.cli.commands._helpers.build_planning.execution_limits import (
+    enforce_model_execution_limit,
+    executable_model_count,
+)
 from sqlbuild.cli.commands._helpers.build_planning.full_refresh import (
     enforce_snapshot_full_refresh_policy,
 )
@@ -58,6 +62,8 @@ class VirtualBuildPlanHook:
         self._selector_files = config.selector_files
         self._virtual_environment_name = config.virtual_environment_name or "default"
         self._unsuffixed_virtual_environment_name = config.unsuffixed_virtual_environment_name
+        self._effective_target_name = config.effective_target_name
+        self._execution_limits = config.execution_limits
         self.callbacks: BuildProgressCallbacks | None = None
         self._closed: bool = False
 
@@ -85,6 +91,11 @@ class VirtualBuildPlanHook:
         )
         self._stream.write("\n" + plan_text + "\n\n")
         self._stream.flush()
+        enforce_model_execution_limit(
+            model_count=executable_model_count(plan=plan_output),
+            target_name=self._effective_target_name,
+            limits=self._execution_limits,
+        )
         enforce_snapshot_full_refresh_policy(
             plan=plan_output,
             snapshots_config=self._discovered_inputs.project_config.snapshots,

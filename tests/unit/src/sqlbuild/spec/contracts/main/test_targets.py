@@ -8,6 +8,7 @@ from sqlbuild.spec.contracts.main.resolve_effective_changes_only import (
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.models import (
     AuthoredTimeTravelRetention,
+    ExecutionLimitsConfig,
     LocalConfig,
     LocalStateConfig,
     LocalTargetConfig,
@@ -18,6 +19,7 @@ from sqlbuild.spec.contracts.models import (
 )
 from tests.unit.src.sqlbuild.spec.contracts.main._test_types import (
     EffectiveChangesOnlyResolutionTestCase,
+    ExecutionLimitsResolutionTestCase,
     TargetConfigResolutionTestCase,
     TargetRetentionResolutionTestCase,
 )
@@ -236,3 +238,55 @@ def test_given_local_target_retention_when_resolving_then_it_overrides_project_t
 
     assert target_config.time_travel_retention is not None
     assert target_config.time_travel_retention.desired_days == test_case.expected_desired_days
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExecutionLimitsResolutionTestCase(
+            description="local execution fields override project fields independently",
+            project_config=ProjectConfig(
+                name="shop",
+                adapter="duckdb",
+                targets={
+                    "dev": TargetConfig(
+                        execution_limits=ExecutionLimitsConfig(
+                            max_models=100,
+                            max_duration="30m",
+                            max_duration_seconds=1_800,
+                            remediation="Review the project policy.",
+                        )
+                    )
+                },
+            ),
+            local_config=LocalConfig(
+                targets={
+                    "dev": LocalTargetConfig(
+                        execution_limits=ExecutionLimitsConfig(
+                            max_models=150,
+                            remediation="Request approval before continuing.",
+                        )
+                    )
+                }
+            ),
+            target_name="dev",
+            expected_limits=ExecutionLimitsConfig(
+                max_models=150,
+                max_duration="30m",
+                max_duration_seconds=1_800,
+                remediation="Request approval before continuing.",
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_local_execution_limit_fields_when_resolving_then_each_field_overrides_project(
+    test_case: ExecutionLimitsResolutionTestCase,
+) -> None:
+    target_config: TargetConfig = resolve_target_config(
+        project_config=test_case.project_config,
+        local_config=test_case.local_config,
+        target_name=test_case.target_name,
+    )
+
+    assert target_config.execution_limits == test_case.expected_limits

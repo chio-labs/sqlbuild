@@ -11,7 +11,7 @@ from sqlbuild.compiler.discovery._helpers.yml.project import (
 )
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.runtime.event_exporting.types import LifecycleEventKind
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
+from sqlbuild.spec.contracts.models import ExecutionLimitsConfig, LocalConfig, ProjectConfig
 from sqlbuild.sql_values.types import CollectionRendering
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ColumnContractModeConfigErrorTestCase,
@@ -34,6 +34,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     MicrobatchLimitConfigErrorTestCase,
     MicrobatchLimitConfigTestCase,
     StartCursorConfigTestCase,
+    TargetExecutionLimitsConfigTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
     write_project_config_test_files,
@@ -1072,6 +1073,105 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
 @pytest.mark.parametrize(
     "test_case",
     [
+        TargetExecutionLimitsConfigTestCase(
+            description="project target execution limits are typed",
+            contents="""
+name = "shop"
+adapter = "duckdb"
+
+[targets.dev.execution_limits]
+max_models = 125
+max_duration = "45m"
+remediation = "Review the expanded selection before continuing."
+""".strip(),
+            expected_max_models=125,
+            expected_max_duration="45m",
+            expected_max_duration_seconds=2_700,
+            expected_remediation="Review the expanded selection before continuing.",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_project_target_execution_limits_when_loading_then_limits_are_typed(
+    test_case: TargetExecutionLimitsConfigTestCase,
+    tmp_path: Path,
+) -> None:
+    config_path: Path = tmp_path / "sqlbuild_project.toml"
+    config_path.write_text(test_case.contents, encoding="utf-8")
+
+    config: ProjectConfig = load_project_config(project_dir=tmp_path)
+
+    limits: ExecutionLimitsConfig = config.targets["dev"].execution_limits
+    assert limits.max_models == test_case.expected_max_models
+    assert limits.max_duration == test_case.expected_max_duration
+    assert limits.max_duration_seconds == test_case.expected_max_duration_seconds
+    assert limits.remediation == test_case.expected_remediation
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TargetExecutionLimitsConfigTestCase(
+            description="local target execution limits are typed",
+            contents="""
+[targets.dev.execution_limits]
+max_models = 200
+max_duration = "2h"
+remediation = "Automated tools must request approval before changing this policy."
+""".strip(),
+            expected_max_models=200,
+            expected_max_duration="2h",
+            expected_max_duration_seconds=7_200,
+            expected_remediation=(
+                "Automated tools must request approval before changing this policy."
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_local_target_execution_limits_when_loading_then_limits_are_typed(
+    test_case: TargetExecutionLimitsConfigTestCase,
+    tmp_path: Path,
+) -> None:
+    config_path: Path = tmp_path / "sqlbuild_local.toml"
+    config_path.write_text(test_case.contents, encoding="utf-8")
+
+    config: LocalConfig = load_local_config(project_dir=tmp_path)
+
+    limits: ExecutionLimitsConfig = config.targets["dev"].execution_limits
+    assert limits.max_models == test_case.expected_max_models
+    assert limits.max_duration == test_case.expected_max_duration
+    assert limits.max_duration_seconds == test_case.expected_max_duration_seconds
+    assert limits.remediation == test_case.expected_remediation
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadProjectConfigErrorTestCase(
+            description="raises when target maximum model count is not positive",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[targets.dev.execution_limits]
+max_models = 0
+""".strip(),
+            expected_error_fragment=("targets.dev.execution_limits.max_models must be >= 1"),
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when target maximum duration has a calendar component",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[targets.dev.execution_limits]
+max_duration = "1mo"
+""".strip(),
+            expected_error_fragment=(
+                "targets.dev.execution_limits.max_duration must be a positive fixed duration"
+            ),
+        ),
         LoadProjectConfigErrorTestCase(
             description="raises when scope placement enforcement is not a boolean",
             project_file_contents="""

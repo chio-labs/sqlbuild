@@ -1,16 +1,25 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from sqlbuild.cli.commands._helpers.build_planning.defer_clone import (
     defer_clone_boundary_selectors,
     defer_clone_view_chain_selectors,
+    selected_executable_model_count,
 )
-from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.models import (
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledRelationLocation,
+    CompileModelConfig,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import PlannerScope
 from tests.unit.src.sqlbuild.cli.commands.main.build._test_types import (
     DeferCloneBoundaryTestCase,
+    DeferCloneModelCountTestCase,
     FunctionDeferCloneBoundaryTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.build.helpers import (
@@ -103,3 +112,52 @@ def test_given_function_between_model_and_seed_when_resolving_then_recreates_fun
 
     assert defer_clone_boundary_selectors(scope=scope) == test_case.expected_boundary_selectors
     assert defer_clone_view_chain_selectors(scope=scope) == test_case.expected_view_chain_selectors
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DeferCloneModelCountTestCase(
+            description="disabled selected model is excluded from preflight count",
+            enabled_by_name={"a": True, "b": False},
+            expected_model_count=1,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_disabled_model_in_defer_clone_scope_when_counting_then_only_enabled_models_count(
+    test_case: DeferCloneModelCountTestCase,
+) -> None:
+    keys_by_name: dict[str, CompiledObjectKey] = {
+        "a": MODEL_A,
+        "b": MODEL_B,
+    }
+    models_by_name: dict[str, CompiledModel] = {
+        name: CompiledModel(
+            key=keys_by_name[name],
+            deps=(),
+            name=name,
+            relative_path=Path(f"models/{name}.sql"),
+            query_sql="SELECT 1 AS id",
+            config=CompileModelConfig(values={"enabled": enabled}),
+            destination=CompiledRelationLocation(
+                database=None,
+                schema="main",
+                name=name,
+                qualified_name=f"main.{name}",
+            ),
+        )
+        for name, enabled in test_case.enabled_by_name.items()
+    }
+    scope: PlannerScope = PlannerScope(
+        selected_keys=frozenset(keys_by_name.values()),
+        upstream_deps={},
+        downstream_deps={},
+        all_keys=keys_by_name,
+        models_by_name=models_by_name,
+        execution_order=tuple(keys_by_name.values()),
+    )
+
+    result: int = selected_executable_model_count(scope=scope)
+
+    assert result == test_case.expected_model_count

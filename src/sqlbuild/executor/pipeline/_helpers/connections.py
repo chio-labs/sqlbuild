@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
+from contextvars import copy_context
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -27,7 +28,8 @@ def open_worker_connections(
     first_error: BaseException | None = None
     with ThreadPoolExecutor(max_workers=connection_count) as executor:
         futures: tuple[Future[Any], ...] = tuple(
-            executor.submit(adapter.connect, connection_config) for _ in range(connection_count)
+            executor.submit(copy_context().run, adapter.connect, connection_config)
+            for _ in range(connection_count)
         )
         future: Future[Any]
         for future in futures:

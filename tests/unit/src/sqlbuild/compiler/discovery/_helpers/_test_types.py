@@ -60,6 +60,16 @@ class DiffConfigTestCase:
 
 
 @dataclass(frozen=True)
+class TargetExecutionLimitsConfigTestCase:
+    description: str
+    contents: str
+    expected_max_models: int
+    expected_max_duration: str
+    expected_max_duration_seconds: int
+    expected_remediation: str
+
+
+@dataclass(frozen=True)
 class CommandOutputSinkDiscoveryTestCase:
     description: str
     expected_name: str | None = None

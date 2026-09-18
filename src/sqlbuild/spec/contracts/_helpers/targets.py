@@ -6,6 +6,7 @@ from sqlbuild.spec.contracts.constants import CHANGES_ONLY_SETTING_OVERRIDE_KEY
 from sqlbuild.spec.contracts.exceptions import SpecConfigError
 from sqlbuild.spec.contracts.models import (
     ClonePolicy,
+    ExecutionLimitsConfig,
     LocalClonePolicy,
     LocalConfig,
     LocalStateConfig,
@@ -105,6 +106,10 @@ def resolve_target_config(
             if local_target.table_type_downgrade is not None
             else project_target.table_type_downgrade
         ),
+        execution_limits=_merge_execution_limits(
+            project_limits=project_target.execution_limits,
+            local_limits=local_target.execution_limits,
+        ),
         clone=_merge_clone_policy(
             project_clone=project_target.clone,
             local_clone=local_target.clone,
@@ -115,6 +120,33 @@ def resolve_target_config(
         ),
     )
     return target_config
+
+
+def _merge_execution_limits(
+    *, project_limits: ExecutionLimitsConfig, local_limits: ExecutionLimitsConfig
+) -> ExecutionLimitsConfig:
+    return ExecutionLimitsConfig(
+        max_models=(
+            local_limits.max_models
+            if local_limits.max_models is not None
+            else project_limits.max_models
+        ),
+        max_duration=(
+            local_limits.max_duration
+            if local_limits.max_duration is not None
+            else project_limits.max_duration
+        ),
+        max_duration_seconds=(
+            local_limits.max_duration_seconds
+            if local_limits.max_duration is not None
+            else project_limits.max_duration_seconds
+        ),
+        remediation=(
+            local_limits.remediation
+            if local_limits.remediation is not None
+            else project_limits.remediation
+        ),
+    )
 
 
 def resolve_effective_changes_only(

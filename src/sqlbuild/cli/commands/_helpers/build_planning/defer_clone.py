@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands._helpers.build_planning.execution_limits import (
+    enforce_model_execution_limit,
+)
 from sqlbuild.cli.commands._helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
@@ -69,7 +72,7 @@ def build_defer_clone_boundary_selectors(
     cli_vars: dict[str, object] | None,
     project_dir: Path,
     auto_load_sources: bool,
-) -> tuple[CompiledProject, tuple[str, ...], tuple[str, ...]]:
+) -> tuple[CompiledProject, tuple[str, ...], tuple[str, ...], int]:
     """Resolve out-of-selection clone boundaries and the view chain to rebuild over them."""
 
     project: CompiledProject = build_compiled_project(
@@ -94,6 +97,7 @@ def build_defer_clone_boundary_selectors(
         project,
         defer_clone_boundary_selectors(scope=scope),
         defer_clone_view_chain_selectors(scope=scope),
+        selected_executable_model_count(scope=scope),
     )
 
 
@@ -142,6 +146,20 @@ def defer_clone_view_chain_selectors(*, scope: PlannerScope) -> tuple[str, ...]:
     return tuple(sorted(key.name for key in view_keys))
 
 
+def selected_executable_model_count(*, scope: PlannerScope) -> int:
+    """Count selected models except those explicitly disabled."""
+
+    count: int = 0
+    for key in scope.selected_keys:
+        if key.resource_type != CompiledResourceType.MODEL:
+            continue
+        model: CompiledModel | None = scope.models_by_name.get(key.name)
+        if model is not None and model.config.values.get("enabled") is False:
+            continue
+        count += 1
+    return count
+
+
 def run_defer_clone_boundary_prephase(
     *,
     request: BuildCommandRequest,
@@ -153,7 +171,12 @@ def run_defer_clone_boundary_prephase(
     cloned_project: CompiledProject
     boundary_selectors: tuple[str, ...]
     view_chain_selectors: tuple[str, ...]
-    cloned_project, boundary_selectors, view_chain_selectors = build_defer_clone_boundary_selectors(
+    (
+        cloned_project,
+        boundary_selectors,
+        view_chain_selectors,
+        selected_model_count,
+    ) = build_defer_clone_boundary_selectors(
         discovered_inputs=invocation.discovered_inputs,
         adapter=invocation.adapter,
         selected_target=request.selected_target,
@@ -164,6 +187,11 @@ def run_defer_clone_boundary_prephase(
         cli_vars=request.cli_vars,
         project_dir=invocation.effective_project_dir,
         auto_load_sources=invocation.should_load_sources,
+    )
+    enforce_model_execution_limit(
+        model_count=selected_model_count,
+        target_name=invocation.effective_target_name,
+        limits=invocation.execution_limits,
     )
     run_defer_clone_prephase(
         inputs=DeferClonePrephaseInputs(

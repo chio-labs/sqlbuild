@@ -32,7 +32,7 @@ from sqlbuild.spec.contracts.main.resolve_effective_changes_only import (
 )
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
-from sqlbuild.spec.contracts.models import TargetConfig
+from sqlbuild.spec.contracts.models import ExecutionLimitsConfig, TargetConfig
 
 
 def resolve_build_invocation(*, request: BuildCommandRequest) -> BuildInvocation:
@@ -101,6 +101,44 @@ def resolve_build_invocation(*, request: BuildCommandRequest) -> BuildInvocation
         if request.load_sources is not None
         else build_effective_settings_config(discovered_inputs=discovered_inputs).auto_load_sources
     )
+    effective_target_name: str | None = resolve_target_name(
+        project_config=discovered_inputs.project_config,
+        local_config=discovered_inputs.local_config,
+        selected_target=request.selected_target,
+    )
+    execution_limits: ExecutionLimitsConfig = (
+        resolve_target_config(
+            project_config=discovered_inputs.project_config,
+            local_config=discovered_inputs.local_config,
+            target_name=effective_target_name,
+        ).execution_limits
+        if effective_target_name is not None
+        else ExecutionLimitsConfig()
+    )
+    if (
+        execution_limits.max_duration is not None
+        and adapter_context.adapter.execution_duration_limit_seconds is None
+    ):
+        target_label: str = effective_target_name or "default"
+        raise CliUserError(
+            f"Target '{target_label}' configures max_duration, but adapter "
+            f"'{adapter_context.adapter_name}' cannot cancel active statements safely",
+            code="C415",
+            help=execution_limits.remediation,
+        )
+    maximum_duration_seconds: int | None = adapter_context.adapter.execution_duration_limit_seconds
+    if (
+        execution_limits.max_duration_seconds is not None
+        and maximum_duration_seconds is not None
+        and execution_limits.max_duration_seconds > maximum_duration_seconds
+    ):
+        target_label = effective_target_name or "default"
+        raise CliUserError(
+            f"Target '{target_label}' max_duration exceeds the largest duration supported by "
+            f"adapter '{adapter_context.adapter_name}' ({maximum_duration_seconds} seconds)",
+            code="C416",
+            help=execution_limits.remediation,
+        )
     return BuildInvocation(
         effective_project_dir=effective_project_dir,
         discovered_inputs=discovered_inputs,
@@ -115,6 +153,8 @@ def resolve_build_invocation(*, request: BuildCommandRequest) -> BuildInvocation
         planning_progress=reporters.planning,
         should_load_sources=should_load_sources,
         virtual_mode=bool(discovered_inputs.project_config.settings.virtual_environments),
+        effective_target_name=effective_target_name,
+        execution_limits=execution_limits,
     )
 
 

@@ -25,6 +25,10 @@ from sqlbuild.cli.commands._helpers.build_planning.compile_target import write_b
 from sqlbuild.cli.commands._helpers.build_planning.defer_clone import (
     run_defer_clone_boundary_prephase,
 )
+from sqlbuild.cli.commands._helpers.build_planning.execution_limits import (
+    enforce_model_execution_limit,
+    executable_model_count,
+)
 from sqlbuild.cli.commands._helpers.build_planning.full_refresh import (
     enforce_snapshot_full_refresh_policy,
 )
@@ -52,6 +56,10 @@ from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTi
 from sqlbuild.diagnostics.main.process_resource_reporting import process_resource_reporting
 from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult
 from sqlbuild.provider.main.session import build_provider_session
+from sqlbuild.runtime.execution_limits.main.execution_deadline_scope import (
+    execution_deadline_scope,
+)
+from sqlbuild.spec.contracts.models import ExecutionLimitsConfig
 
 
 def run_build(request: BuildCommandRequest) -> int:
@@ -60,7 +68,20 @@ def run_build(request: BuildCommandRequest) -> int:
     timing_tracker: BuildPhaseTimingTracker = BuildPhaseTimingTracker()
     with process_resource_reporting(enabled=request.debug), timing_tracker.scope():
         try:
-            return _run_build(request=request)
+            command_started_at: float = time.monotonic()
+            invocation: BuildInvocation = resolve_build_invocation(request=request)
+            limits: ExecutionLimitsConfig = invocation.execution_limits
+            with execution_deadline_scope(
+                max_duration_seconds=limits.max_duration_seconds,
+                max_duration=limits.max_duration,
+                target_name=invocation.effective_target_name,
+                remediation=limits.remediation,
+            ):
+                return _run_build(
+                    request=request,
+                    invocation=invocation,
+                    command_started_at=command_started_at,
+                )
         except BaseException:
             if request.verbose or request.debug:
                 try:
@@ -74,9 +95,9 @@ def run_build(request: BuildCommandRequest) -> int:
             raise
 
 
-def _run_build(*, request: BuildCommandRequest) -> int:
-    command_started_at: float = time.monotonic()
-    invocation: BuildInvocation = resolve_build_invocation(request=request)
+def _run_build(
+    *, request: BuildCommandRequest, invocation: BuildInvocation, command_started_at: float
+) -> int:
     provider_session: Any = build_provider_session(
         discovered_providers=invocation.discovered_inputs.providers
     )
@@ -137,6 +158,11 @@ def _run_build(*, request: BuildCommandRequest) -> int:
             request=request,
             invocation=invocation,
             pipeline_result=pipeline_result,
+        )
+        enforce_model_execution_limit(
+            model_count=executable_model_count(plan=pipeline_result.plan_output),
+            target_name=invocation.effective_target_name,
+            limits=invocation.execution_limits,
         )
         enforce_snapshot_full_refresh_policy(
             plan=pipeline_result.plan_output,

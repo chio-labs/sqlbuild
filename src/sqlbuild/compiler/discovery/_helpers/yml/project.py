@@ -49,6 +49,7 @@ from sqlbuild.spec.contracts.models import (
     DbtConfig,
     DefaultsConfig,
     DiffConfig,
+    ExecutionLimitsConfig,
     FutureCursorsConfig,
     JanitorConfig,
     LifecycleEventSinkFilterConfig,
@@ -1018,6 +1019,11 @@ def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig
         _validate_state_keys(
             state_mapping=state_mapping, target_name=target_name, file_path=file_path
         )
+        execution_limits: ExecutionLimitsConfig = _load_execution_limits(
+            payload=target_mapping.get("execution_limits"),
+            label=f"targets.{target_name}.execution_limits",
+            file_path=file_path,
+        )
         connection, connection_name = _load_target_connection(
             target_mapping=target_mapping, target_name=target_name, file_path=file_path
         )
@@ -1058,6 +1064,7 @@ def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig
                 )
                 or TableTypeDowngradePolicy.REQUIRE_CONFIRMATION
             ),
+            execution_limits=execution_limits,
             clone=ClonePolicy(
                 allow_as_clone_origin=_optional_bool(
                     mapping=clone_mapping,
@@ -1120,6 +1127,11 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
         _validate_state_keys(
             state_mapping=state_mapping, target_name=target_name, file_path=file_path
         )
+        execution_limits: ExecutionLimitsConfig = _load_execution_limits(
+            payload=target_mapping.get("execution_limits"),
+            label=f"targets.{target_name}.execution_limits",
+            file_path=file_path,
+        )
         connection, connection_name = _load_target_connection(
             target_mapping=target_mapping, target_name=target_name, file_path=file_path
         )
@@ -1156,6 +1168,7 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
                 label=f"targets.{target_name}.table_type_downgrade",
                 file_path=file_path,
             ),
+            execution_limits=execution_limits,
             clone=LocalClonePolicy(
                 allow_as_clone_origin=_optional_nullable_bool(
                     mapping=clone_mapping,
@@ -1234,10 +1247,45 @@ def _validate_target_keys(
                 "table_type_downgrade",
                 "clone",
                 "state",
+                "execution_limits",
             }
         ),
         label=f"targets.{target_name}",
         file_path=file_path,
+    )
+
+
+def _load_execution_limits(
+    *, payload: object, label: str, file_path: Path
+) -> ExecutionLimitsConfig:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload,
+        label=label,
+        file_path=file_path,
+    )
+    _validate_allowed_keys(
+        mapping=mapping,
+        allowed_keys=frozenset({"max_models", "max_duration", "remediation"}),
+        label=label,
+        file_path=file_path,
+    )
+    max_models: int | None = _optional_strict_int(mapping=mapping, key="max_models")
+    if max_models is not None and max_models < 1:
+        raise ProjectConfigError(f"{file_path} {label}.max_models must be >= 1")
+    max_duration: str | None = _optional_str(payload=mapping, key="max_duration")
+    max_duration_seconds: int | None = None
+    if max_duration is not None:
+        duration: Duration | None = Duration.parse(max_duration)
+        if duration is None or duration.has_calendar_component or duration.fixed_seconds <= 0:
+            raise ProjectConfigError(
+                f"{file_path} {label}.max_duration must be a positive fixed duration such as '30m'"
+            )
+        max_duration_seconds = duration.fixed_seconds
+    return ExecutionLimitsConfig(
+        max_models=max_models,
+        max_duration=max_duration,
+        max_duration_seconds=max_duration_seconds,
+        remediation=_optional_str(payload=mapping, key="remediation"),
     )
 
 

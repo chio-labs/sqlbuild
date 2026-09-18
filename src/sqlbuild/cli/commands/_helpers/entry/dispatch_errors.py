@@ -21,6 +21,7 @@ from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.executor.pipeline.exceptions import AuditExecutionError
 from sqlbuild.lint.exceptions import LintError
 from sqlbuild.rule_engine.exceptions import RulesError
+from sqlbuild.runtime.execution_limits.exceptions import ExecutionDurationLimitError
 from sqlbuild.spec.contracts.exceptions import SpecConfigError
 from sqlbuild.virtual.state.exceptions import StateBackendError
 
@@ -68,6 +69,7 @@ def dispatch_and_handle_errors(
     except (
         AuditExecutionError,
         DiscoveryError,
+        ExecutionDurationLimitError,
         SpecConfigError,
         StateBackendError,
         ValueError,
