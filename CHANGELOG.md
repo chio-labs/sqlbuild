@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.103.5](https://github.com/chio-labs/sqlbuild/compare/v0.103.4...v0.103.5) (2026-09-18)
+
+
+### Bug Fixes
+
+* separate audit checks from schema nullability ([#718](https://github.com/chio-labs/sqlbuild/issues/718)) ([5616d37](https://github.com/chio-labs/sqlbuild/commit/5616d375adbb6de841bbb306ae1d3bb731979609))
+
 ## [0.103.4](https://github.com/chio-labs/sqlbuild/compare/v0.103.3...v0.103.4) (2026-09-18)
 
 
