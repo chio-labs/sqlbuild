@@ -133,6 +133,54 @@ _SUPPORTED_SCHEMA_DIALECTS: tuple[str, ...] = (
             dialects=("snowflake",),
             expected_diagnostic_count=1,
         ),
+        SchemaValidationScopeTestCase(
+            description="snowflake order by resolves an output alias before ambiguous inputs",
+            query_sql=(
+                "SELECT COALESCE(placed.customer_id, returned.customer_id) AS customer_id "
+                "FROM placed_orders placed FULL JOIN returned_orders returned "
+                "ON placed.customer_id = returned.customer_id ORDER BY customer_id"
+            ),
+            schema={
+                "placed_orders": {"customer_id": "integer"},
+                "returned_orders": {"customer_id": "integer"},
+            },
+            dialects=("snowflake",),
+            expected_diagnostic_count=0,
+        ),
+        SchemaValidationScopeTestCase(
+            description="snowflake later projection resolves an earlier output alias",
+            query_sql=(
+                "SELECT amount + 1 AS adjusted_amount, adjusted_amount * 2 AS doubled_amount "
+                "FROM orders"
+            ),
+            schema={"orders": {"amount": "integer"}},
+            dialects=("snowflake",),
+            expected_diagnostic_count=0,
+        ),
+        SchemaValidationScopeTestCase(
+            description="snowflake where resolves an output alias",
+            query_sql="SELECT amount > 0 AS is_positive FROM orders WHERE is_positive = TRUE",
+            schema={"orders": {"amount": "integer"}},
+            dialects=("snowflake",),
+            expected_diagnostic_count=0,
+        ),
+        SchemaValidationScopeTestCase(
+            description="snowflake forward output alias reference remains unknown",
+            query_sql=(
+                "SELECT adjusted_amount * 2 AS doubled_amount, "
+                "amount + 1 AS adjusted_amount FROM orders"
+            ),
+            schema={"orders": {"amount": "integer"}},
+            dialects=("snowflake",),
+            expected_diagnostic_count=1,
+        ),
+        SchemaValidationScopeTestCase(
+            description="snowflake unrelated unknown column remains unknown",
+            query_sql="SELECT amount AS order_amount FROM orders WHERE missing_amount > 0",
+            schema={"orders": {"amount": "integer"}},
+            dialects=("snowflake",),
+            expected_diagnostic_count=1,
+        ),
     ],
     ids=lambda case: case.description,
 )
