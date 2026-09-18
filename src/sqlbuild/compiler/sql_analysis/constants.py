@@ -60,6 +60,7 @@ POLYGLOT_BOOLEAN_RESULT_KINDS: frozenset[str] = frozenset(
         "ilike",
         "in",
         "is",
+        POLYGLOT_KIND_IS_NULL,
         "like",
         "lt",
         "lte",
