@@ -68,6 +68,14 @@ class ContractNullabilityCompileIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class ProjectDirectoryCompileIntegrationTestCase:
+    """One project-directory normalization expectation through compile."""
+
+    description: str
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
 class FormatCompileIntegrationTestCase:
     """One format-to-compile compatibility expectation."""
 

@@ -54,7 +54,9 @@ from sqlbuild.integrations.dbt.types import DbtInteropCommand
 def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers) -> int:
     """Route a parsed CLI namespace to its command handler and return its exit code."""
 
-    project_dir: Path | None = None if args.project_dir is None else Path(args.project_dir)
+    project_dir: Path | None = (
+        None if args.project_dir is None else Path(args.project_dir).resolve()
+    )
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     selector_inputs: SelectorInputs = read_selector_file_inputs(args.select_file)
     select: tuple[str, ...] = (*tuple(args.select), *selector_inputs.selectors)
