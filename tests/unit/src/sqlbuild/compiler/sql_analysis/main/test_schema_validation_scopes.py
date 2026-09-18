@@ -109,6 +109,30 @@ _SUPPORTED_SCHEMA_DIALECTS: tuple[str, ...] = (
             dialects=_SUPPORTED_SCHEMA_DIALECTS,
             expected_diagnostic_count=0,
         ),
+        SchemaValidationScopeTestCase(
+            description="snowflake implicit values column resolves in direct projection",
+            query_sql=(
+                "WITH offsets AS (SELECT column1 AS offset_seconds "
+                "FROM VALUES (0), (10)) SELECT offset_seconds FROM offsets"
+            ),
+            schema={"orders": {"order_id": "integer"}},
+            dialects=("snowflake",),
+            expected_diagnostic_count=0,
+        ),
+        SchemaValidationScopeTestCase(
+            description="snowflake values column beyond row width remains unknown",
+            query_sql="SELECT column2 FROM VALUES (0), (10)",
+            schema={"orders": {"order_id": "integer"}},
+            dialects=("snowflake",),
+            expected_diagnostic_count=1,
+        ),
+        SchemaValidationScopeTestCase(
+            description="unknown column outside snowflake values remains unknown",
+            query_sql="SELECT column1 FROM orders",
+            schema={"orders": {"order_id": "integer"}},
+            dialects=("snowflake",),
+            expected_diagnostic_count=1,
+        ),
     ],
     ids=lambda case: case.description,
 )
