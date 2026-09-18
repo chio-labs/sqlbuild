@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.107.0](https://github.com/chio-labs/sqlbuild/compare/v0.106.1...v0.107.0) (2026-09-18)
+
+
+### Features
+
+* polish raw query diff output ([#734](https://github.com/chio-labs/sqlbuild/issues/734)) ([04fc86f](https://github.com/chio-labs/sqlbuild/commit/04fc86fb4df760cbe18990362e15d4aa48b74242))
+
 ## [0.106.1](https://github.com/chio-labs/sqlbuild/compare/v0.106.0...v0.106.1) (2026-09-18)
 
 
