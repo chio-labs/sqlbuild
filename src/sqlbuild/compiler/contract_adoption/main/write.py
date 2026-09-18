@@ -6,7 +6,11 @@ from dataclasses import replace
 from pathlib import Path
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledSource
+from sqlbuild.compiler.compile.models import (
+    CompileAnalysisSelection,
+    CompiledModel,
+    CompiledSource,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.contract_adoption._helpers.repository_edits import (
     edit_model,
@@ -20,7 +24,7 @@ from sqlbuild.compiler.contract_adoption.models import (
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.graph import build_project_graph
+from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.lint.main.write_atomically import write_atomically
 
@@ -32,6 +36,7 @@ def write_contracts(
     result: ContractAdoptionResult,
     overwrite: bool,
     adapter: BaseAdapter | None = None,
+    resolved_connection: dict[str, object] | None = None,
     cli_vars: dict[str, object] | None = None,
 ) -> ContractAdoptionResult:
     """Apply safe source-only edits atomically and validate the resulting project."""
@@ -75,12 +80,13 @@ def write_contracts(
             write_atomically(path=path, contents=contents)
         discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
         if adapter is not None:
-            _ = build_project_graph(
+            _ = build_compiled_project(
                 discovered_inputs=discovered,
                 adapter=adapter,
                 selected_target=result.from_target,
+                resolved_connection=resolved_connection,
                 cli_vars=cli_vars,
-                no_cache=True,
+                analysis_selection=CompileAnalysisSelection(no_cache=True),
             )
     except Exception:
         for path, contents in originals.items():

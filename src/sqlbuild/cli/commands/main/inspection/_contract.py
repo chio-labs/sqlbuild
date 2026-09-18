@@ -16,12 +16,19 @@ from sqlbuild.cli.commands._helpers.runtime.adapter_context import (
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import AdapterConnectionContext, ContractCommandRequest
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey, CompiledSource
+from sqlbuild.compiler.compile.models import (
+    CompileAnalysisSelection,
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledSource,
+)
 from sqlbuild.compiler.contract_adoption.models import ContractAdoptionResult, ContractEvidence
 from sqlbuild.compiler.contract_adoption.types import ContractAction
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.graph import build_project_graph
+from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
+from sqlbuild.compiler.pipeline.main.project_graph import build_project_graph_from_compiled_project
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.main.selection.selection import (
     resolve_project_selectors,
@@ -47,13 +54,15 @@ def run_contract(request: ContractCommandRequest) -> int:
         selected_target=None,
         cli_vars=request.cli_vars,
     )
-    graph: ProjectGraph = build_project_graph(
+    project: CompiledProject = build_compiled_project(
         discovered_inputs=discovered,
         adapter=context.adapter,
         selected_target=request.from_target,
         cli_vars=request.cli_vars,
-        no_cache=True,
+        resolved_connection=context.connection_config,
+        analysis_selection=CompileAnalysisSelection(no_cache=True),
     )
+    graph: ProjectGraph = build_project_graph_from_compiled_project(project=project)
     selected: frozenset[CompiledObjectKey] = resolve_project_selectors(
         select=request.select,
         exclude=request.exclude,
@@ -92,6 +101,7 @@ def run_contract(request: ContractCommandRequest) -> int:
             result=result,
             request=request,
             adapter=context.adapter,
+            resolved_connection=context.connection_config,
             progress_stream=progress_stream,
             use_progress_color=use_progress_color,
         )
