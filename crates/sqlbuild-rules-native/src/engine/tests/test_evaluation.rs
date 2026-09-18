@@ -620,6 +620,85 @@ fn given_contract_name_type_options_when_evaluating_then_accepts_configured_inte
 }
 
 #[test]
+fn given_numeric_comparisons_when_evaluating_named_decisions_then_only_authored_decisions_fault()
+-> Result<(), String> {
+    let project_dir = TempDir::new().map_err(|error| error.to_string())?;
+    let test_cases = [
+        test_types::NumericDecisionTestCase {
+            description: "authored threshold is a named decision finding",
+            query_sql: "SELECT amount FROM orders WHERE amount > 5",
+            authored_sql: "SELECT amount FROM orders WHERE amount > 5",
+            expected_fault_count: 1,
+        },
+        test_types::NumericDecisionTestCase {
+            description: "expanded named constant is not an authored literal finding",
+            query_sql: "SELECT amount FROM orders WHERE amount > 5",
+            authored_sql: "SELECT amount FROM orders WHERE amount > @const(\"_minimum_amount\")",
+            expected_fault_count: 0,
+        },
+        test_types::NumericDecisionTestCase {
+            description: "numeric comparison shown only in a comment is not an authored finding",
+            query_sql: "SELECT amount FROM orders WHERE amount > 5",
+            authored_sql: concat!(
+                "-- The expanded predicate is amount > 5.\n",
+                "SELECT amount FROM orders WHERE amount > @const(\"_minimum_amount\")"
+            ),
+            expected_fault_count: 0,
+        },
+        test_types::NumericDecisionTestCase {
+            description: "fixed output bucket suffix makes equality structural",
+            query_sql: concat!(
+                "SELECT MAX(CASE WHEN offset_seconds = 30 THEN amount END) AS amount_30 ",
+                "FROM orders"
+            ),
+            authored_sql: concat!(
+                "SELECT MAX(CASE WHEN offset_seconds = 30 THEN amount END) AS amount_30 ",
+                "FROM orders"
+            ),
+            expected_fault_count: 0,
+        },
+        test_types::NumericDecisionTestCase {
+            description: "output suffix does not exempt a threshold comparison",
+            query_sql: ("SELECT CASE WHEN amount > 30 THEN 'large' END AS amount_30 FROM orders"),
+            authored_sql: ("SELECT CASE WHEN amount > 30 THEN 'large' END AS amount_30 FROM orders"),
+            expected_fault_count: 1,
+        },
+        test_types::NumericDecisionTestCase {
+            description: "nested comparison reports only its leaf decision",
+            query_sql: ("SELECT CASE WHEN amount > 5 THEN status END = 'ready' AS selected FROM orders"),
+            authored_sql: ("SELECT CASE WHEN amount > 5 THEN status END = 'ready' AS selected FROM orders"),
+            expected_fault_count: 1,
+        },
+    ];
+
+    for test_case in test_cases {
+        let mut request: Value = serde_json::from_str(&helpers::request(
+            &project_dir,
+            &json!({
+                "select": ["SQBRDECLARATION102"],
+                "cache": {"enabled": false}
+            }),
+        ))
+        .map_err(|error| error.to_string())?;
+        request["models"][0]["query_sql"] = json!(test_case.query_sql);
+        request["models"][0]["authored_sql"] = json!(test_case.authored_sql);
+
+        let result: Value = serde_json::from_str(&evaluate_json(&request.to_string())?)
+            .map_err(|error| error.to_string())?;
+        let faults = result["faults"]
+            .as_array()
+            .ok_or_else(|| "faults must be an array".to_string())?;
+        assert_eq!(
+            faults.len(),
+            test_case.expected_fault_count,
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn given_snowflake_parser_extensions_when_normalizing_then_preserves_source_positions() {
     let test_cases = [test_types::NormalizationTestCase {
         description: "normalization changes syntax only outside strings and comments",

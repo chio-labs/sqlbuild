@@ -1,8 +1,8 @@
-pub(crate) mod authored_literals;
 pub(crate) mod catalogue;
 pub(crate) mod contract_name_types;
 pub(crate) mod domain_layout;
 pub(crate) mod evaluation;
 pub(crate) mod explicit_output_types;
+pub(crate) mod numeric_decisions;
 pub(crate) mod sql_test_rules;
 pub(crate) mod typed_contract_columns;

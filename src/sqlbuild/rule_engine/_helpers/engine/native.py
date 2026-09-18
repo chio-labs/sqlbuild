@@ -386,7 +386,7 @@ def _model_payload(
         "name": model.name,
         "relative_path": model.relative_path.as_posix(),
         "query_sql": model.query_sql,
-        "authored_sql": model.authored_sql,
+        "authored_sql": model.authored_query_sql or model.authored_sql,
         "config": model.config.values,
         "references": [
             {

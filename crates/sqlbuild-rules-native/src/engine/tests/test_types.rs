@@ -35,6 +35,13 @@ pub(crate) struct ContractNameTypeOptionsTestCase {
     pub(crate) expected_fault_codes: &'static [&'static str],
 }
 
+pub(crate) struct NumericDecisionTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) query_sql: &'static str,
+    pub(crate) authored_sql: &'static str,
+    pub(crate) expected_fault_count: usize,
+}
+
 pub(crate) struct TypedContractColumnTestCase {
     pub(crate) description: &'static str,
     pub(crate) contract: &'static str,
