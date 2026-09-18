@@ -14,18 +14,24 @@ class PlanTestChainTestCase:
     expected_chain_length: int
     mock_seed_ctes: dict[str, str] = field(default_factory=dict)
     mock_dbt_ref_ctes: dict[str, str] = field(default_factory=dict)
+    mock_table_function_ctes: dict[str, str] = field(default_factory=dict)
     macro_mocks: dict[str, str] = field(default_factory=dict)
     loaded_macro_outputs: dict[str, str] = field(default_factory=dict)
     function_locations: dict[str, str] = field(default_factory=dict)
+    table_function_locations: dict[str, str] = field(default_factory=dict)
     model_macro_source_queries: dict[str, str] = field(default_factory=dict)
     model_query_overrides: dict[str, str] = field(default_factory=dict)
     expected_sql_fragments: dict[str, str] = field(default_factory=dict)
+    unexpected_sql_fragments: dict[str, tuple[str, ...]] = field(default_factory=dict)
     expected_warning_count: int = 0
     expected_warning_severity: WarningSeverity | None = None
     expected_error_fragments: tuple[str, ...] = field(default_factory=tuple)
     sql_body: str = ""
     expected_cte_bodies: dict[str, str] = field(default_factory=dict)
     assertion_ctes: dict[str, str] = field(default_factory=dict)
+    expected_assertion_fragments: dict[str, str] = field(default_factory=dict)
+    expected_function_deps: tuple[str, ...] = ()
+    expected_mock_table_function_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

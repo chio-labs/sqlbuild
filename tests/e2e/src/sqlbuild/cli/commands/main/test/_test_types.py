@@ -94,3 +94,21 @@ class SqlTestInspectConflictE2ETestCase:
     description: str
     expected_exit_code: int
     expected_stderr_fragment: str
+
+
+@dataclass(frozen=True)
+class TableFunctionFixtureE2ETestCase:
+    """Test case for model-mode table-function fixture execution."""
+
+    description: str
+    expected_stdout_fragment: str
+    expected_artifact_fragments: tuple[str, ...]
+    unexpected_artifact_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class UnknownTableFunctionFixtureE2ETestCase:
+    """Test case for rejecting an unknown model-mode table-function fixture."""
+
+    description: str
+    expected_stderr_fragment: str

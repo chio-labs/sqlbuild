@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.constants import (
     REF_TEST_CTE_PREFIX,
     SEED_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
+    TABLE_FN_TEST_CTE_PREFIX,
 )
 from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
@@ -26,6 +27,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.planner._helpers.resolve.refs import (
+    resolve_table_function_fixture_references,
     resolve_table_function_references,
     resolve_udf_references,
 )
@@ -86,6 +88,7 @@ class _TextualChainResolver:
     mock_sources: dict[str, str]
     mock_seeds: dict[str, str]
     mock_dbt_refs: dict[str, str]
+    mock_table_functions: dict[str, str]
     helper_ctes: tuple[CompileSqlTestCte, ...]
     function_locations: dict[str, CompiledRelationLocation]
     adapter: BaseAdapter
@@ -108,6 +111,7 @@ class _TextualChainResolver:
                 mock_sources=self.mock_sources,
                 mock_seeds=self.mock_seeds,
                 mock_dbt_refs=self.mock_dbt_refs,
+                mock_table_functions=self.mock_table_functions,
                 helper_ctes=self.helper_ctes,
                 resolved_chain=self.resolved,
                 function_locations=self.function_locations,
@@ -162,6 +166,7 @@ def plan_test(
     mock_sources: dict[str, str] = _extract_mock_sources(test)
     mock_seeds: dict[str, str] = _extract_mock_seeds(test)
     mock_dbt_refs: dict[str, str] = _extract_mock_dbt_refs(test)
+    mock_table_functions: dict[str, str] = _extract_mock_table_functions(test)
     helper_ctes: tuple[CompileSqlTestCte, ...] = _extract_helper_ctes(test)
     expected_map: dict[str, str] = _extract_expected_ctes(test)
     assertion_map: dict[str, str] = _extract_assertion_ctes(test)
@@ -202,6 +207,7 @@ def plan_test(
         mock_sources=mock_sources,
         mock_seeds=mock_seeds,
         mock_dbt_refs=mock_dbt_refs,
+        mock_table_functions=mock_table_functions,
         helper_ctes=helper_ctes,
         function_locations=function_locations,
         adapter=adapter,
@@ -227,14 +233,24 @@ def plan_test(
             dep
             for dep in model.deps
             if dep.resource_type in {CompiledResourceType.UDF, CompiledResourceType.TABLE_FN}
+            and not (
+                dep.resource_type == CompiledResourceType.TABLE_FN
+                and dep.name in mock_table_functions
+            )
         )
 
         query_sql: str = _resolve_test_model_query_sql(model=model, test=test)
         step_sql: str | None = None
         if sql_analysis_enabled:
+            analysis_query_sql, reached_table_functions = _resolve_table_function_fixtures(
+                query_sql=query_sql,
+                mock_table_functions=mock_table_functions,
+                helper_ctes=helper_ctes,
+            )
+            reachable_mocks.update(reached_table_functions)
             sql_analysis_sql: SqlAnalysisResolvedTestSql | None = (
                 try_resolve_test_model_sql_with_sql_analysis(
-                    query_sql=query_sql,
+                    query_sql=analysis_query_sql,
                     mock_refs=mock_refs,
                     mock_sources=mock_sources,
                     mock_seeds=mock_seeds,
@@ -270,64 +286,33 @@ def plan_test(
             )
         )
 
-    assertion_steps: tuple[SqlTestAssertionStep, ...] = _build_assertion_steps(
+    assertion_steps: tuple[SqlTestAssertionStep, ...]
+    assertion_reached_table_functions: frozenset[str]
+    assertion_steps, assertion_reached_table_functions = _build_assertion_steps(
         assertion_map=assertion_map,
         test=test,
         function_locations=function_locations,
         qualified_function_locations=qualified_function_locations,
         helper_ctes=helper_ctes,
+        mock_table_functions=mock_table_functions,
         textual_chain=textual_chain,
         sql_analysis_resolved=sql_analysis_resolved,
         adapter=adapter,
         sql_analysis_enabled=sql_analysis_enabled,
     )
     reachable_mocks.update(textual_chain.reachable_mocks)
-
-    unreachable_ref: str
-    for unreachable_ref in sorted(set(mock_refs) - reachable_mocks):
-        warnings.append(
-            PlanWarning(
-                model_name=None,
-                severity=WarningSeverity.WARNING,
-                message=(
-                    f"test '{test.name}' mock __ref__{unreachable_ref}"
-                    f" is unreachable because a downstream model is"
-                    f" also in the expected chain"
-                ),
-            )
+    reachable_mocks.update(assertion_reached_table_functions)
+    warnings.extend(
+        _unreachable_mock_warnings(
+            test_name=test.name,
+            reachable_mocks=reachable_mocks,
+            mock_refs=mock_refs,
+            mock_sources=mock_sources,
+            mock_seeds=mock_seeds,
+            mock_dbt_refs=mock_dbt_refs,
+            mock_table_functions=mock_table_functions,
         )
-
-    unreachable_source: str
-    for unreachable_source in sorted(set(mock_sources) - reachable_mocks):
-        warnings.append(
-            PlanWarning(
-                model_name=None,
-                severity=WarningSeverity.WARNING,
-                message=(f"test '{test.name}' mock __source__{unreachable_source} is unreachable"),
-            )
-        )
-
-    unreachable_seed: str
-    for unreachable_seed in sorted(set(mock_seeds) - reachable_mocks):
-        warnings.append(
-            PlanWarning(
-                model_name=None,
-                severity=WarningSeverity.WARNING,
-                message=(f"test '{test.name}' mock __seed__{unreachable_seed} is unreachable"),
-            )
-        )
-
-    unreachable_dbt_ref: str
-    for unreachable_dbt_ref in sorted(set(mock_dbt_refs) - reachable_mocks):
-        warnings.append(
-            PlanWarning(
-                model_name=None,
-                severity=WarningSeverity.WARNING,
-                message=(
-                    f"test '{test.name}' mock __dbt_ref__{unreachable_dbt_ref} is unreachable"
-                ),
-            )
-        )
+    )
 
     entry: SqlTestPlanEntry = SqlTestPlanEntry(
         key=test.key,
@@ -344,6 +329,7 @@ def plan_test(
         mock_source_names=tuple(sorted(mock_sources)),
         mock_seed_names=tuple(sorted(mock_seeds)),
         mock_dbt_ref_names=tuple(sorted(mock_dbt_refs)),
+        mock_table_function_names=tuple(sorted(mock_table_functions)),
         chain=tuple(chain_steps),
         assertions=assertion_steps,
         scope_deps=test.scope_deps,
@@ -351,6 +337,43 @@ def plan_test(
         sql_analysis_enabled=sql_analysis_enabled,
     )
     return entry, tuple(warnings)
+
+
+def _unreachable_mock_warnings(
+    *,
+    test_name: str,
+    reachable_mocks: set[str],
+    mock_refs: dict[str, str],
+    mock_sources: dict[str, str],
+    mock_seeds: dict[str, str],
+    mock_dbt_refs: dict[str, str],
+    mock_table_functions: dict[str, str],
+) -> tuple[PlanWarning, ...]:
+    warnings: list[PlanWarning] = []
+    messages_by_mock: tuple[tuple[set[str], str, str], ...] = (
+        (
+            set(mock_refs),
+            "__ref__",
+            " is unreachable because a downstream model is also in the expected chain",
+        ),
+        (set(mock_sources), "__source__", " is unreachable"),
+        (set(mock_seeds), "__seed__", " is unreachable"),
+        (set(mock_dbt_refs), "__dbt_ref__", " is unreachable"),
+        (set(mock_table_functions), "__table_fn__", " is unreachable"),
+    )
+    names: set[str]
+    prefix: str
+    suffix: str
+    for names, prefix, suffix in messages_by_mock:
+        for name in sorted(names - reachable_mocks):
+            warnings.append(
+                PlanWarning(
+                    model_name=None,
+                    severity=WarningSeverity.WARNING,
+                    message=f"test '{test_name}' mock {prefix}{name}{suffix}",
+                )
+            )
+    return tuple(warnings)
 
 
 def resolve_test_model_chain_names(
@@ -387,24 +410,32 @@ def _build_assertion_steps(
     function_locations: dict[str, CompiledRelationLocation],
     qualified_function_locations: dict[str, str],
     helper_ctes: tuple[CompileSqlTestCte, ...],
+    mock_table_functions: dict[str, str],
     textual_chain: _TextualChainResolver,
     sql_analysis_resolved: dict[str, SqlAnalysisResolvedTestSql],
     adapter: BaseAdapter,
     sql_analysis_enabled: bool,
-) -> tuple[SqlTestAssertionStep, ...]:
+) -> tuple[tuple[SqlTestAssertionStep, ...], frozenset[str]]:
     mock_refs: dict[str, str] = _extract_mock_refs(test)
     mock_sources: dict[str, str] = _extract_mock_sources(test)
     mock_seeds: dict[str, str] = _extract_mock_seeds(test)
     mock_dbt_refs: dict[str, str] = _extract_mock_dbt_refs(test)
     assertion_steps: list[SqlTestAssertionStep] = []
+    reached_table_functions: set[str] = set()
     assertion_name: str
     assertion_sql: str
     for assertion_name, assertion_sql in assertion_map.items():
+        fixture_resolved_assertion_sql, reached = _resolve_table_function_fixtures(
+            query_sql=assertion_sql,
+            mock_table_functions=mock_table_functions,
+            helper_ctes=helper_ctes,
+        )
+        reached_table_functions.update(reached)
         resolved_assertion_sql: str | None = None
         if sql_analysis_enabled:
             analyzed_assertion_sql: SqlAnalysisResolvedTestSql | None = (
                 try_resolve_test_model_sql_with_sql_analysis(
-                    query_sql=assertion_sql,
+                    query_sql=fixture_resolved_assertion_sql,
                     mock_refs=mock_refs,
                     mock_sources=mock_sources,
                     mock_seeds=mock_seeds,
@@ -422,7 +453,7 @@ def _build_assertion_steps(
                 resolved_assertion_sql = analyzed_assertion_sql.resolved_sql
         if resolved_assertion_sql is None:
             resolved_assertion_sql = _resolve_assertion_sql(
-                sql=assertion_sql,
+                sql=fixture_resolved_assertion_sql,
                 resolved_chain=textual_chain.resolve_all(),
                 mock_refs=mock_refs,
                 mock_sources=mock_sources,
@@ -438,7 +469,7 @@ def _build_assertion_steps(
                 resolved_sql=resolved_assertion_sql,
             )
         )
-    return tuple(assertion_steps)
+    return tuple(assertion_steps), frozenset(reached_table_functions)
 
 
 def _plan_direct_logic_test(
@@ -561,6 +592,7 @@ def _resolve_assertion_sql(
         mock_sources=mock_sources,
         mock_seeds=mock_seeds,
         mock_dbt_refs=mock_dbt_refs,
+        mock_table_functions={},
         helper_ctes=helper_ctes,
         resolved_chain=assertion_resolved_chain,
         function_locations=function_locations,
@@ -635,6 +667,7 @@ def _resolve_test_model_sql(
     mock_sources: dict[str, str],
     mock_seeds: dict[str, str],
     mock_dbt_refs: dict[str, str],
+    mock_table_functions: dict[str, str],
     helper_ctes: tuple[CompileSqlTestCte, ...],
     resolved_chain: dict[str, str],
     function_locations: dict[str, CompiledRelationLocation],
@@ -723,6 +756,12 @@ def _resolve_test_model_sql(
     result = replace_uncommented_pattern(
         pattern=_DBT_REF_PATTERN, replacement=_replace_dbt_ref, sql=result
     )
+    result, reached_table_functions = _resolve_table_function_fixtures(
+        query_sql=result,
+        mock_table_functions=mock_table_functions,
+        helper_ctes=helper_ctes,
+    )
+    reachable_mocks.update(reached_table_functions)
     result = resolve_udf_references(
         query_sql=result,
         function_locations=function_locations,
@@ -845,6 +884,20 @@ def _wrap_mock_with_helpers(
     if helper_with:
         return f"({helper_with} {mock_body})"
     return f"({mock_body})"
+
+
+def _resolve_table_function_fixtures(
+    *,
+    query_sql: str,
+    mock_table_functions: dict[str, str],
+    helper_ctes: tuple[CompileSqlTestCte, ...],
+) -> tuple[str, frozenset[str]]:
+    helper_with: str = _build_helper_with_clause(helper_ctes)
+    fixtures: dict[str, str] = {
+        name: _wrap_mock_with_helpers(mock_body=body, helper_with=helper_with)
+        for name, body in mock_table_functions.items()
+    }
+    return resolve_table_function_fixture_references(query_sql=query_sql, fixtures=fixtures)
 
 
 def _build_helper_with_clause(
@@ -973,6 +1026,20 @@ def _extract_mock_dbt_refs(test: CompiledSqlTest) -> dict[str, str]:
     return result
 
 
+def _extract_mock_table_functions(test: CompiledSqlTest) -> dict[str, str]:
+    """Extract mock table-function CTE bodies keyed by function name."""
+
+    result: dict[str, str] = {}
+    if not isinstance(test.payload, CompiledModelSqlTestPayload):
+        return result
+    cte: CompileSqlTestCte
+    for cte in test.payload.authored_ctes:
+        if cte.name.startswith(TABLE_FN_TEST_CTE_PREFIX):
+            name: str = cte.name.removeprefix(TABLE_FN_TEST_CTE_PREFIX)
+            result[name] = cte.sql_body
+    return result
+
+
 def _dbt_ref_fixture_name(*, package_name: str, model_name: str | None) -> str:
     if model_name is None:
         return package_name
@@ -996,6 +1063,8 @@ def _extract_helper_ctes(
         if cte.name.startswith(SEED_TEST_CTE_PREFIX):
             continue
         if cte.name.startswith(DBT_REF_TEST_CTE_PREFIX):
+            continue
+        if cte.name.startswith(TABLE_FN_TEST_CTE_PREFIX):
             continue
         if cte.name.startswith(ASSERT_TEST_CTE_PREFIX):
             continue

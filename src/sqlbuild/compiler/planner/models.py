@@ -1167,6 +1167,7 @@ class SqlTestPlanEntry:
     mock_source_names: tuple[str, ...] = field(default_factory=tuple)
     mock_seed_names: tuple[str, ...] = field(default_factory=tuple)
     mock_dbt_ref_names: tuple[str, ...] = field(default_factory=tuple)
+    mock_table_function_names: tuple[str, ...] = field(default_factory=tuple)
     chain: tuple[ChainStep, ...] = field(default_factory=tuple)
     assertions: tuple[SqlTestAssertionStep, ...] = field(default_factory=tuple)
     scope_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
