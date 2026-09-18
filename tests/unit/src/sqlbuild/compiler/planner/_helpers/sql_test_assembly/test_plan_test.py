@@ -246,10 +246,57 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers
             helper_ctes={},
             expected_model_names=("orders",),
             expected_chain_length=1,
-            function_locations={"customer_orders": "main.customer_orders"},
+            table_function_locations={"customer_orders": "main.customer_orders"},
             expected_sql_fragments={
                 "orders": "FROM main.customer_orders(42)",
             },
+            expected_function_deps=("customer_orders",),
+        ),
+        PlanTestChainTestCase(
+            description="model table function fixture replaces the complete invocation",
+            model_queries={
+                "orders": (
+                    'SELECT order_id FROM __table_fn("customer_orders")('
+                    "COALESCE((SELECT MAX(customer_id) FROM customers), 42))"
+                ),
+            },
+            mock_ref_ctes={},
+            mock_source_ctes={},
+            mock_table_function_ctes={
+                "customer_orders": "SELECT 7 AS order_id",
+            },
+            helper_ctes={},
+            expected_model_names=("orders",),
+            expected_chain_length=1,
+            table_function_locations={"customer_orders": "main.customer_orders"},
+            expected_sql_fragments={"orders": "SELECT 7 AS order_id"},
+            unexpected_sql_fragments={
+                "orders": ("main.customer_orders", "COALESCE", "customer_id"),
+            },
+            expected_mock_table_function_names=("customer_orders",),
+            expected_function_deps=(),
+        ),
+        PlanTestChainTestCase(
+            description="assertion-only table function fixture is reachable",
+            model_queries={},
+            mock_ref_ctes={},
+            mock_source_ctes={},
+            mock_table_function_ctes={
+                "customer_orders": "SELECT 7 AS order_id",
+            },
+            helper_ctes={},
+            expected_model_names=(),
+            expected_chain_length=0,
+            table_function_locations={"customer_orders": "main.customer_orders"},
+            assertion_ctes={
+                "positive_orders": (
+                    'SELECT * FROM __table_fn("customer_orders")(7) WHERE order_id < 0'
+                )
+            },
+            expected_assertion_fragments={
+                "positive_orders": "SELECT 7 AS order_id",
+            },
+            expected_mock_table_function_names=("customer_orders",),
         ),
         PlanTestChainTestCase(
             description="two model chain resolves in dependency order",
@@ -533,6 +580,19 @@ def test_given_test_and_project_when_planning_then_produces_expected_chain(
     assert len(chain_by_model_name) == len(entry.chain)
     for model_name, expected_fragment in test_case.expected_sql_fragments.items():
         assert expected_fragment in chain_by_model_name[model_name].resolved_sql
+    for model_name, unexpected_fragments in test_case.unexpected_sql_fragments.items():
+        for unexpected_fragment in unexpected_fragments:
+            assert unexpected_fragment not in chain_by_model_name[model_name].resolved_sql
+    assertions_by_name: dict[str, str] = {
+        assertion.name: assertion.resolved_sql for assertion in entry.assertions
+    }
+    for assertion_name, expected_fragment in test_case.expected_assertion_fragments.items():
+        assert expected_fragment in assertions_by_name[assertion_name]
+
+    assert entry.mock_table_function_names == test_case.expected_mock_table_function_names
+    assert tuple(dependency.name for dependency in entry.function_deps) == (
+        test_case.expected_function_deps
+    )
 
     assert len(warnings) == test_case.expected_warning_count
     expected_sev: WarningSeverity | None = test_case.expected_warning_severity

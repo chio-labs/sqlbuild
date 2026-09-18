@@ -273,6 +273,7 @@ def build_test_inputs(
                     known_model_names=known_model_names,
                     known_seed_names=known_seed_names,
                     known_source_names=known_source_names,
+                    known_table_function_names=known_table_function_names,
                     loaded_macros=loaded_macros,
                 )
                 test_payload: (
@@ -387,6 +388,7 @@ def _build_test_input_payload(
                 mock_source_names=model_payload.mock_source_names,
                 mock_seed_names=model_payload.mock_seed_names,
                 mock_dbt_ref_names=model_payload.mock_dbt_ref_names,
+                mock_table_function_names=model_payload.mock_table_function_names,
                 expected_ctes=model_payload.expected_ctes,
                 expected_model_names=model_payload.expected_model_names,
                 assertion_ctes=model_payload.assertion_ctes,
@@ -678,6 +680,7 @@ def validate_test_ctes(
     known_model_names: set[str],
     known_seed_names: set[str],
     known_source_names: set[str],
+    known_table_function_names: set[str],
     loaded_macros: dict[str, LoadedMacro],
 ) -> None:
     """Validate SQL-native test CTE targets against discovered inputs."""
@@ -704,6 +707,13 @@ def validate_test_ctes(
         if mock_seed_name not in known_seed_names:
             raise CompileInputError(
                 f"SQL test file {test_file.relative_path} mocks unknown seed '{mock_seed_name}'"
+            )
+    mock_table_function_name: str
+    for mock_table_function_name in model_payload.mock_table_function_names:
+        if mock_table_function_name not in known_table_function_names:
+            raise CompileInputError(
+                f"SQL test file {test_file.relative_path} mocks unknown table function "
+                f"'{mock_table_function_name}'"
             )
     macro_mock_name: str
     for macro_mock_name in model_payload.macro_mocks:

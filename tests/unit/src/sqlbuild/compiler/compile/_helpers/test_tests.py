@@ -36,6 +36,20 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
             expected_mock_dbt_ref_names=("orders", "stripe__payments"),
         ),
         ExtractSqlTestCtesTestCase(
+            description="extracts table function fixtures from model tests",
+            sql="""
+        WITH
+        __table_fn__customer_orders AS (SELECT 1 AS order_id),
+        __expected__orders AS (SELECT 1 AS order_id)
+        SELECT 1
+        """.strip(),
+            expected_authored_cte_names=("__table_fn__customer_orders",),
+            expected_mock_model_names=(),
+            expected_mock_source_names=(),
+            expected_expected_model_names=("orders",),
+            expected_mock_table_function_names=("customer_orders",),
+        ),
+        ExtractSqlTestCtesTestCase(
             description="extracts zero-row assertion ctes",
             sql="""
         WITH
@@ -320,6 +334,10 @@ def test_given_model_sql_test_cte_variants_when_extracting_then_it_returns_expec
     assert extracted_ctes.payload.mock_source_names == test_case.expected_mock_source_names
     assert extracted_ctes.payload.mock_seed_names == test_case.expected_mock_seed_names
     assert extracted_ctes.payload.mock_dbt_ref_names == test_case.expected_mock_dbt_ref_names
+    assert (
+        extracted_ctes.payload.mock_table_function_names
+        == test_case.expected_mock_table_function_names
+    )
     assert extracted_ctes.payload.expected_model_names == test_case.expected_expected_model_names
     assert extracted_ctes.payload.assertion_names == test_case.expected_assertion_names
     assert extracted_ctes.payload.macro_mocks == test_case.expected_macro_mocks

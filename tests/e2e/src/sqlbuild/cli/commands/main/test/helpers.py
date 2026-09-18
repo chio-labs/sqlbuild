@@ -101,6 +101,38 @@ def build_parameterized_test_project_files() -> dict[str, str]:
     }
 
 
+def build_table_function_fixture_project_files() -> dict[str, str]:
+    """Build a model test whose table function is replaced by a relation fixture."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "table_function_fixture_demo"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "table_function_fixture_demo.duckdb"\n'
+        ),
+        "functions/sql/customer_orders.sql": (
+            "FUNCTION (\n"
+            "  arguments (customer_id INTEGER),\n"
+            "  returns table (order_id INTEGER)\n"
+            ");\n\n"
+            "SELECT customer_id * 100 AS order_id\n"
+        ),
+        "models/orders.sql": (
+            "MODEL (columns (order_id (type INTEGER)));\n\n"
+            'SELECT order_id FROM __table_fn("customer_orders")(7)\n'
+        ),
+        "tests/unit/test_orders.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            "fixture_rows AS (SELECT 7 AS order_id),\n"
+            "__table_fn__customer_orders AS (SELECT order_id FROM fixture_rows),\n"
+            "__expected__orders AS (SELECT 7 AS order_id)\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
 def build_mock_boundary_test_project_files() -> dict[str, str]:
     """Build a test whose ref mock intentionally replaces one real model."""
 

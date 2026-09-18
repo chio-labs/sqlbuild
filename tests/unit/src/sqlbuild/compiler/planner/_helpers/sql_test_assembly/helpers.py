@@ -15,6 +15,7 @@ from sqlbuild.compiler.compile.constants import (
     REF_TEST_CTE_PREFIX,
     SEED_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
+    TABLE_FN_TEST_CTE_PREFIX,
 )
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
@@ -96,6 +97,13 @@ def build_test_and_project(
                 sql_body=body,
             )
         )
+    for name, body in test_case.mock_table_function_ctes.items():
+        authored_ctes.append(
+            CompileSqlTestCte(
+                name=f"{TABLE_FN_TEST_CTE_PREFIX}{name}",
+                sql_body=body,
+            )
+        )
     for name, body in test_case.helper_ctes.items():
         authored_ctes.append(CompileSqlTestCte(name=name, sql_body=body))
 
@@ -104,6 +112,7 @@ def build_test_and_project(
         test_case.mock_source_ctes,
         test_case.mock_seed_ctes,
         test_case.mock_dbt_ref_ctes,
+        test_case.mock_table_function_ctes,
         test_case.helper_ctes,
         test_case.expected_cte_bodies,
     )
@@ -134,6 +143,7 @@ def build_test_and_project(
             mock_source_names=tuple(test_case.mock_source_ctes.keys()),
             mock_seed_names=tuple(test_case.mock_seed_ctes.keys()),
             mock_dbt_ref_names=tuple(test_case.mock_dbt_ref_ctes.keys()),
+            mock_table_function_names=tuple(test_case.mock_table_function_ctes.keys()),
             expected_model_names=test_case.expected_model_names,
             assertion_ctes=tuple(
                 CompileSqlTestCte(
@@ -157,12 +167,21 @@ def build_test_and_project(
                     name=model_name,
                 ),
                 deps=tuple(
-                    CompiledObjectKey(
-                        resource_type=CompiledResourceType.MODEL,
-                        name=dependency_name,
-                    )
-                    for dependency_name in _model_dependencies(
-                        query_sql=query_sql,
+                    (
+                        *(
+                            CompiledObjectKey(
+                                resource_type=CompiledResourceType.MODEL,
+                                name=dependency_name,
+                            )
+                            for dependency_name in _model_dependencies(query_sql=query_sql)
+                        ),
+                        *(
+                            CompiledObjectKey(
+                                resource_type=CompiledResourceType.TABLE_FN,
+                                name=dependency_name,
+                            )
+                            for dependency_name in _table_function_dependencies(query_sql=query_sql)
+                        ),
                     )
                 ),
                 name=model_name,
@@ -208,6 +227,33 @@ def build_test_and_project(
                 ),
             )
         )
+    for function_name, qualified_name in test_case.table_function_locations.items():
+        functions.append(
+            CompiledFunction(
+                key=CompiledObjectKey(
+                    resource_type=CompiledResourceType.TABLE_FN,
+                    name=function_name,
+                ),
+                deps=(),
+                name=function_name,
+                relative_path=Path(f"functions/sql/{function_name}.sql"),
+                arguments=(),
+                returns="TABLE",
+                body_sql="SELECT 1 AS order_id",
+                destination=CompiledRelationLocation(
+                    database=None,
+                    schema="main",
+                    name=function_name,
+                    qualified_name=qualified_name,
+                ),
+                fingerprint_destination=CompiledRelationLocation(
+                    database=None,
+                    schema="main",
+                    name=function_name,
+                    qualified_name=qualified_name,
+                ),
+            )
+        )
 
     project: CompiledProject = CompiledProject(
         run_id="test_run",
@@ -227,6 +273,17 @@ def _model_dependencies(*, query_sql: str) -> tuple[str, ...]:
             match.group(1)
             for match in uncommented_pattern_matches(
                 pattern=re.compile(r'__ref\("([^"]+)"\)'), sql=query_sql
+            )
+        )
+    )
+
+
+def _table_function_dependencies(*, query_sql: str) -> tuple[str, ...]:
+    return tuple(
+        dict.fromkeys(
+            match.group(1)
+            for match in uncommented_pattern_matches(
+                pattern=re.compile(r'__table_fn\("([^"]+)"\)'), sql=query_sql
             )
         )
     )
@@ -306,6 +363,7 @@ def _build_test_sql_body(
     mock_sources: dict[str, str],
     mock_seeds: dict[str, str],
     mock_dbt_refs: dict[str, str],
+    mock_table_functions: dict[str, str],
     helpers: dict[str, str],
     expected_bodies: dict[str, str],
 ) -> str:
@@ -322,6 +380,8 @@ def _build_test_sql_body(
         parts.append(f"{SEED_TEST_CTE_PREFIX}{name} AS ({body})")
     for name, body in mock_dbt_refs.items():
         parts.append(f"{DBT_REF_TEST_CTE_PREFIX}{name} AS ({body})")
+    for name, body in mock_table_functions.items():
+        parts.append(f"{TABLE_FN_TEST_CTE_PREFIX}{name} AS ({body})")
     for name, body in helpers.items():
         parts.append(f"{name} AS ({body})")
     for name, body in expected_bodies.items():

@@ -17,6 +17,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
     SqlTestFixtureValidationE2ETestCase,
     SqlTestInspectConflictE2ETestCase,
     SqlTestPlanInspectionE2ETestCase,
+    TableFunctionFixtureE2ETestCase,
+    UnknownTableFunctionFixtureE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     build_assertion_test_project_files,
@@ -44,6 +46,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     build_recursive_ref_fixture_project_files,
     build_star_mock_fixture_project_files,
     build_star_partial_fixture_project_files,
+    build_table_function_fixture_project_files,
     build_transformed_collection_project_files,
     build_unsatisfied_leaf_test_project_files,
     build_unspecified_nullability_fixture_project_files,
@@ -811,3 +814,81 @@ def test_given_assertion_only_sql_test_when_assertion_returns_rows_then_it_fails
     expected_fragment: str
     for expected_fragment in test_case.expected_stdout_fragments:
         assert expected_fragment in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        TableFunctionFixtureE2ETestCase(
+            description="model test replaces complete table function invocation",
+            expected_stdout_fragment="PASS=1",
+            expected_artifact_fragments=(
+                "WITH fixture_rows AS",
+                "FROM fixture_rows",
+                "__actual__orders",
+            ),
+            unexpected_artifact_fragments=("customer_orders(7)", "customer_id * 100"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_table_function_fixture_when_testing_model_then_fixture_replaces_invocation(
+    test_case: TableFunctionFixtureE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="table_function_fixture_project",
+        repo_files=build_table_function_fixture_project_files(),
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "test"),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert test_case.expected_stdout_fragment in result.stdout
+    artifact_paths: tuple[Path, ...] = tuple(
+        (project_dir / "target" / "run" / "tests").rglob("*.sql")
+    )
+    assert len(artifact_paths) == 1
+    artifact_sql: str = artifact_paths[0].read_text(encoding="utf-8")
+    for expected_fragment in test_case.expected_artifact_fragments:
+        assert expected_fragment in artifact_sql
+    for unexpected_fragment in test_case.unexpected_artifact_fragments:
+        assert unexpected_fragment not in artifact_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        UnknownTableFunctionFixtureE2ETestCase(
+            description="unknown table function fixture is rejected",
+            expected_stderr_fragment="mocks unknown table function 'missing_orders'",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_unknown_table_function_fixture_when_testing_model_then_compile_fails(
+    test_case: UnknownTableFunctionFixtureE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    repo_files: dict[str, str] = build_table_function_fixture_project_files()
+    repo_files["tests/unit/test_orders.sql"] = repo_files["tests/unit/test_orders.sql"].replace(
+        "__table_fn__customer_orders", "__table_fn__missing_orders"
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="unknown_table_function_fixture_project",
+        repo_files=repo_files,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "test"),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert test_case.expected_stderr_fragment in result.stderr
+    assert "Connecting to" not in result.stdout

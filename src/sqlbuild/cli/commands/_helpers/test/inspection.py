@@ -21,6 +21,11 @@ def write_test_plan_inspection(*, stream: TextIO, plan_output: PlanOutput) -> in
         _write_names(stream=stream, label="mocked dbt refs", names=entry.mock_dbt_ref_names)
         _write_names(
             stream=stream,
+            label="mocked table functions",
+            names=entry.mock_table_function_names,
+        )
+        _write_names(
+            stream=stream,
             label="real models",
             names=tuple(step.model_name for step in entry.chain),
         )

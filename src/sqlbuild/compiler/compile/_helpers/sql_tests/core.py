@@ -36,6 +36,7 @@ from sqlbuild.compiler.compile.constants import (
     SQL_WITH_KEYWORD,
     TABLE_FN_ACTUAL_TEST_CTE_NAME,
     TABLE_FN_EXPECTED_TEST_CTE_NAME,
+    TABLE_FN_TEST_CTE_PREFIX,
     UDF_ACTUAL_TEST_CTE_NAME,
     UDF_EXPECTED_TEST_CTE_NAME,
 )
@@ -392,6 +393,7 @@ def _classify_model_sql_test_ctes(
     mock_source_names: list[str] = []
     mock_seed_names: list[str] = []
     mock_dbt_ref_names: list[str] = []
+    mock_table_function_names: list[str] = []
     expected_ctes: list[CompileSqlTestCte] = []
     expected_model_names: list[str] = []
     assertion_ctes: list[CompileSqlTestCte] = []
@@ -467,6 +469,17 @@ def _classify_model_sql_test_ctes(
             )
             authored_ctes.append(cte)
             continue
+        if cte.name.startswith(TABLE_FN_TEST_CTE_PREFIX):
+            mock_table_function_names.append(
+                _require_prefixed_name(
+                    cte_name=cte.name,
+                    prefix=TABLE_FN_TEST_CTE_PREFIX,
+                    label="__table_fn__<function>",
+                    file_label=file_label,
+                )
+            )
+            authored_ctes.append(cte)
+            continue
         if cte.name.startswith(EXPECTED_TEST_CTE_PREFIX):
             expected_model_names.append(
                 _require_prefixed_name(
@@ -501,11 +514,12 @@ def _classify_model_sql_test_ctes(
         *mock_source_names,
         *mock_seed_names,
         *mock_dbt_ref_names,
+        *mock_table_function_names,
     )
     if not mock_target_names:
         raise CompileInputError(
             f"SQL test '{file_label}' must define at least one __ref__*, __source__*, "
-            "__seed__*, or __dbt_ref__* mock CTE"
+            "__seed__*, __dbt_ref__*, or __table_fn__* mock CTE"
         )
     check_names: tuple[str, ...] = (*expected_model_names, *assertion_names)
     if not check_names:
@@ -520,6 +534,7 @@ def _classify_model_sql_test_ctes(
         mock_source_names=tuple(mock_source_names),
         mock_seed_names=tuple(mock_seed_names),
         mock_dbt_ref_names=tuple(mock_dbt_ref_names),
+        mock_table_function_names=tuple(mock_table_function_names),
         expected_ctes=tuple(expected_ctes),
         expected_model_names=tuple(expected_model_names),
         assertion_ctes=tuple(assertion_ctes),
@@ -536,6 +551,7 @@ def _is_model_mode_cte(cte_name: str) -> bool:
             SOURCE_TEST_CTE_PREFIX,
             SEED_TEST_CTE_PREFIX,
             DBT_REF_TEST_CTE_PREFIX,
+            TABLE_FN_TEST_CTE_PREFIX,
             EXPECTED_TEST_CTE_PREFIX,
             ASSERT_TEST_CTE_PREFIX,
         )

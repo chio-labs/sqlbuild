@@ -111,6 +111,7 @@ REF_TEST_CTE_PREFIX: str = SqlReferenceKind.REF.fixture_cte_prefix
 SOURCE_TEST_CTE_PREFIX: str = SqlReferenceKind.SOURCE.fixture_cte_prefix
 SEED_TEST_CTE_PREFIX: str = SqlReferenceKind.SEED.fixture_cte_prefix
 DBT_REF_TEST_CTE_PREFIX: str = SqlReferenceKind.DBT_REF.fixture_cte_prefix
+TABLE_FN_TEST_CTE_PREFIX: str = SqlReferenceKind.TABLE_FUNCTION.fixture_cte_prefix
 MACRO_TEST_CTE_PREFIX: str = "__macro__"
 MACRO_ACTUAL_TEST_CTE_NAME: str = "__macro_actual__"
 MACRO_EXPECTED_TEST_CTE_NAME: str = "__macro_expected__"
