@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.103.7](https://github.com/chio-labs/sqlbuild/compare/v0.103.6...v0.103.7) (2026-09-18)
+
+
+### Bug Fixes
+
+* inspect contracts through active connection ([#722](https://github.com/chio-labs/sqlbuild/issues/722)) ([b7a1260](https://github.com/chio-labs/sqlbuild/commit/b7a1260fd7e613224e441ce38111c49d9a846706))
+
 ## [0.103.6](https://github.com/chio-labs/sqlbuild/compare/v0.103.5...v0.103.6) (2026-09-18)
 
 
