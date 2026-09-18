@@ -2,7 +2,9 @@ use crate::constants::ENFORCED_CONTRACT;
 use crate::models::{Column, Fault, Model, RuleMetadata};
 use crate::rules::_helpers::evaluation::{plain_select, root_select, sole_table_name, top_ctes};
 use crate::rules::models::FaultCollector;
-use sqlparser::ast::{Expr, Query, Select, SelectItem, SetExpr, SetQuantifier, Spanned};
+use sqlparser::ast::{
+    Expr, Query, Select, SelectItem, SetExpr, SetQuantifier, Spanned, TableFactor,
+};
 
 #[derive(Clone, Copy)]
 struct OutputScope<'a> {
@@ -95,6 +97,9 @@ impl OutputRule<'_> {
                 item,
                 SelectItem::Wildcard(_) | SelectItem::QualifiedWildcard(_, _)
             ) {
+                if proven_dependency_wildcard(select, scope.columns) {
+                    continue;
+                }
                 self.push(
                     Some(source_position(item)),
                     "wildcard output does not establish enforced contract types explicitly".into(),
@@ -168,6 +173,29 @@ impl OutputRule<'_> {
     }
 }
 
+fn proven_dependency_wildcard(select: &Select, columns: &[Column]) -> bool {
+    let Some(source) = select.from.first().filter(|_| select.from.len() == 1) else {
+        return false;
+    };
+    if !plain_select(select, true) || !source.joins.is_empty() {
+        return false;
+    }
+    let TableFactor::Table {
+        name,
+        args: Some(_),
+        ..
+    } = &source.relation
+    else {
+        return false;
+    };
+    let dependency = name.to_string().to_ascii_lowercase();
+    matches!(dependency.as_str(), "__ref" | "__source")
+        && columns
+            .iter()
+            .filter(|column| !column.data_type.is_empty())
+            .all(|column| column.type_proven)
+}
+
 fn final_cte_output_boundary<'a>(
     query: &'a Query,
     columns: &[Column],
@@ -234,6 +262,9 @@ fn columns_in_output_order_with_missing(
     let Some(output_names) = set_expression_output_names_with_missing(set_expr) else {
         return columns.to_vec();
     };
+    if output_names.len() == 1 && output_names[0].is_none() {
+        return columns.to_vec();
+    }
     output_names
         .into_iter()
         .enumerate()

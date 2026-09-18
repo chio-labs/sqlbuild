@@ -348,6 +348,22 @@ fn given_enforced_contract_outputs_when_evaluating_explicit_type_rule_then_retur
             expected_message_fragment: "wildcard output",
         },
         test_types::ExplicitOutputTypeTestCase {
+            description: "proven dependency import wildcard",
+            query_sql: "WITH final AS (SELECT * FROM __ref(\"orders\")) SELECT order_id FROM final",
+            columns: json!([{"name": "order_id", "type": "INTEGER", "type_proven": true}]),
+            contract: "enforced",
+            expected_fault_count: 0,
+            expected_message_fragment: "",
+        },
+        test_types::ExplicitOutputTypeTestCase {
+            description: "unproven dependency import wildcard",
+            query_sql: "WITH final AS (SELECT * FROM __ref(\"orders\")) SELECT order_id FROM final",
+            columns: json!([{"name": "order_id", "type": "INTEGER", "type_proven": false}]),
+            contract: "enforced",
+            expected_fault_count: 1,
+            expected_message_fragment: "wildcard output",
+        },
+        test_types::ExplicitOutputTypeTestCase {
             description: "positional set branches require casts",
             query_sql: "SELECT order_id FROM current_orders UNION ALL SELECT order_id FROM archived_orders",
             columns: json!([{"name": "order_id", "type": "INTEGER", "type_proven": true}]),
