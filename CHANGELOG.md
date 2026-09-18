@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.108.0](https://github.com/chio-labs/sqlbuild/compare/v0.107.0...v0.108.0) (2026-09-18)
+
+
+### Features
+
+* govern dynamic pivot column families ([#736](https://github.com/chio-labs/sqlbuild/issues/736)) ([0cdcb45](https://github.com/chio-labs/sqlbuild/commit/0cdcb456b8348f8ff32b6d921ab9ceae7a52a564))
+
 ## [0.107.0](https://github.com/chio-labs/sqlbuild/compare/v0.106.1...v0.107.0) (2026-09-18)
 
 
