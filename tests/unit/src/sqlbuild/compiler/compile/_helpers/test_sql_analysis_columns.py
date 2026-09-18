@@ -434,6 +434,18 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import direct_ord
             ),
         ),
         InferColumnsTestCase(
+            description="infers null predicates as non-null booleans",
+            query_sql=('SELECT status IS NOT NULL AS has_status FROM __ref("orders")'),
+            column_nullability_by_table={"orders": {"status": InferredNullability.NULLABLE}},
+            expected_columns=(
+                InferredColumn(
+                    name="has_status",
+                    type="BOOLEAN",
+                    nullability=InferredNullability.NON_NULL,
+                ),
+            ),
+        ),
+        InferColumnsTestCase(
             description="refines filtered CTE output nullability",
             query_sql=(
                 "WITH mapped AS ("

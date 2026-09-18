@@ -136,6 +136,9 @@ from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_ANALYSIS_UPSTREAM as _POLYGLOT_ANALYSIS_UPSTREAM,
 )
 from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_BOOLEAN_RESULT_KINDS as _POLYGLOT_BOOLEAN_RESULT_KINDS,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_CAST_KINDS as _POLYGLOT_CAST_KINDS,
 )
 from sqlbuild.compiler.sql_analysis.constants import (
@@ -164,6 +167,9 @@ from sqlbuild.compiler.sql_analysis.constants import (
 )
 from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_KIND_COUNT as _POLYGLOT_KIND_COUNT,
+)
+from sqlbuild.compiler.sql_analysis.constants import (
+    POLYGLOT_KIND_IS_NULL as _POLYGLOT_KIND_IS_NULL,
 )
 from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_KIND_LITERAL as _POLYGLOT_KIND_LITERAL,
@@ -1280,6 +1286,8 @@ def _polyglot_expression_type(
     )
     if function_type is not None:
         return function_type
+    if kind in _POLYGLOT_BOOLEAN_RESULT_KINDS:
+        return "BOOLEAN"
     if kind not in _POLYGLOT_CAST_KINDS:
         return None
     payload: object = expression.to_dict().get(kind, {})
@@ -1364,6 +1372,8 @@ def _infer_polyglot_nullability(
         return InferredNullability.UNKNOWN
     if kind == _POLYGLOT_KIND_COUNT:
         return InferredNullability.NON_NULL
+    if kind == _POLYGLOT_KIND_IS_NULL:
+        return InferredNullability.NON_NULL
     if kind == _POLYGLOT_KIND_COALESCE:
         child_nullabilities: list[InferredNullability] = [
             _infer_polyglot_nullability(
@@ -1407,6 +1417,8 @@ def _infer_polyglot_shallow_nullability(
     if kind == _POLYGLOT_KIND_LITERAL:
         return InferredNullability.NON_NULL
     if kind == _POLYGLOT_KIND_COUNT:
+        return InferredNullability.NON_NULL
+    if kind == _POLYGLOT_KIND_IS_NULL:
         return InferredNullability.NON_NULL
     if kind == _POLYGLOT_KIND_COLUMN:
         return InferredNullability.UNKNOWN
