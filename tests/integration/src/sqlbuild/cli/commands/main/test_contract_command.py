@@ -534,5 +534,113 @@ def test_given_unresolved_additive_type_conflict_when_writing_then_file_is_not_r
     assert model_path.read_text(encoding="utf-8") == original
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ContractCommandIntegrationTestCase(
+            description="relative project directory preserves private macro scope",
+            expected_exit_code=1,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_relative_project_directory_when_diffing_contract_then_private_macro_is_visible(
+    test_case: ContractCommandIntegrationTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    _ = prepare_contract_project(project_dir)
+    root_model_path: Path = project_dir / "models" / "orders.sql"
+    root_model_path.unlink()
+    model_path: Path = project_dir / "models" / "orders" / "orders.sql"
+    model_path.parent.mkdir()
+    _ = model_path.write_text(
+        "MODEL (materialized table);\nSELECT @order_id() AS id, CAST('a' AS VARCHAR) AS name\n",
+        encoding="utf-8",
+    )
+    macro_path: Path = model_path.parent / "_sqlbuild" / "_macros" / "order_id.py"
+    macro_path.parent.mkdir(parents=True)
+    _ = macro_path.write_text(
+        'def order_id() -> str:\n    return "CAST(1 AS INTEGER)"\n', encoding="utf-8"
+    )
+    monkeypatch.chdir(tmp_path)
+
+    exit_code: int = main(
+        [
+            "--no-color",
+            "--project-dir",
+            project_dir.name,
+            "contract",
+            "diff",
+            "--from",
+            "prod",
+            "--select",
+            "orders",
+        ]
+    )
+
+    captured: CaptureResult[str] = capsys.readouterr()
+    assert exit_code == test_case.expected_exit_code
+    assert "model:orders" in captured.out
+    assert "inaccessible" not in captured.err
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ContractCommandIntegrationTestCase(
+            description="indentless source column sequence receives physical types",
+            expected_exit_code=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_indentless_source_columns_when_generating_then_preserves_metadata_and_adds_types(
+    test_case: ContractCommandIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _ = prepare_contract_project(tmp_path)
+    source_path: Path = tmp_path / "sources" / "raw.yml"
+    _ = source_path.write_text(
+        """sources:
+  - name: raw_orders
+    schema: raw
+    table: orders
+    description: keep source
+    columns:
+    - name: id
+      description: identifier
+""",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(
+        [
+            "--no-color",
+            "--project-dir",
+            str(tmp_path),
+            "contract",
+            "generate",
+            "--from",
+            "prod",
+            "--select",
+            "source:raw_orders",
+            "--write",
+        ]
+    )
+
+    source_yaml: str = source_path.read_text(encoding="utf-8")
+    assert exit_code == test_case.expected_exit_code
+    assert "0 contract difference(s)" in capsys.readouterr().out
+    assert "description: keep source" in source_yaml
+    assert "description: identifier" in source_yaml
+    assert "    - name: id\n      type: 'BIGINT'" in source_yaml
+    assert "    - name: status\n      type: 'VARCHAR'" in source_yaml
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-vv"])

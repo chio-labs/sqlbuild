@@ -283,17 +283,30 @@ def edit_source(
             insertion_lines.extend(_yaml_column_lines(column=column, indent=source_indent + 4))
         lines[source_end:source_end] = insertion_lines
         return "".join(lines), None
+    columns_indent: int = _indent(lines[columns_index])
+    detected_column_indent: int | None = _yaml_sequence_indent(
+        lines=lines,
+        start=columns_index + 1,
+        end=source_end,
+        key_indent=columns_indent,
+    )
+    column_indent: int = (
+        detected_column_indent if detected_column_indent is not None else columns_indent + 2
+    )
     columns_end: int = columns_index + 1
     while columns_end < source_end:
         stripped: str = lines[columns_end].strip()
-        if (
-            stripped
-            and not stripped.startswith("#")
-            and _indent(lines[columns_end]) <= source_indent + 2
-        ):
-            break
+        if stripped and not stripped.startswith("#"):
+            line_indent: int = _indent(lines[columns_end])
+            if line_indent < columns_indent or (
+                line_indent == columns_indent
+                and not (
+                    column_indent == columns_indent
+                    and _yaml_list_name(lines[columns_end]) is not None
+                )
+            ):
+                break
         columns_end += 1
-    column_indent: int = source_indent + 4
     column_blocks: dict[str, tuple[int, int]] = {}
     index: int = columns_index + 1
     while index < columns_end:
@@ -398,6 +411,19 @@ def _yaml_key(line: str) -> str | None:
     if not stripped or stripped.startswith(("#", "-")) or _YAML_KEY_SEPARATOR not in stripped:
         return None
     return stripped.split(_YAML_KEY_SEPARATOR, maxsplit=1)[0].strip()
+
+
+def _yaml_sequence_indent(*, lines: list[str], start: int, end: int, key_indent: int) -> int | None:
+    for index in range(start, end):
+        stripped: str = lines[index].strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        line_indent: int = _indent(lines[index])
+        if _yaml_list_name(lines[index]) is not None and line_indent >= key_indent:
+            return line_indent
+        if line_indent <= key_indent:
+            return None
+    return None
 
 
 def _yaml_comment(line: str) -> str:

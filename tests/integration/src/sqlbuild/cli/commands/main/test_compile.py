@@ -11,6 +11,7 @@ import pytest
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     ContractNullabilityCompileIntegrationTestCase,
+    ProjectDirectoryCompileIntegrationTestCase,
     SnowflakeCompileIntegrationTestCase,
 )
 
@@ -112,3 +113,46 @@ def test_given_nullable_output_when_compiling_contract_then_only_schema_nullabil
 
     assert exit_code == test_case.expected_exit_code
     assert tuple(item["code"] for item in diagnostics) == test_case.expected_diagnostics
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ProjectDirectoryCompileIntegrationTestCase(
+            description="relative project directory preserves private macro scope",
+            expected_exit_code=0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_relative_project_directory_when_compiling_then_private_macro_is_visible(
+    test_case: ProjectDirectoryCompileIntegrationTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    (project_dir / "models" / "orders" / "_sqlbuild" / "_macros").mkdir(parents=True)
+    (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    (project_dir / "models" / "orders" / "_sqlbuild" / "_macros" / "order_id.py").write_text(
+        'def order_id() -> str:\n    return "CAST(1 AS INTEGER)"\n', encoding="utf-8"
+    )
+    (project_dir / "models" / "orders" / "orders.sql").write_text(
+        "MODEL (materialized table);\nSELECT @order_id() AS order_id\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    exit_code: int = main(["--project-dir", project_dir.name, "compile", "--json", "--no-cache"])
+    result: dict[str, object] = json.loads(capsys.readouterr().out)
+    summary: dict[str, object] = cast(dict[str, object], result["summary"])
+
+    assert exit_code == test_case.expected_exit_code
+    assert summary["errors"] == 0
+    assert summary["models"] == 1
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-vv"])
