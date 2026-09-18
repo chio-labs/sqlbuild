@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.104.1](https://github.com/chio-labs/sqlbuild/compare/v0.104.0...v0.104.1) (2026-09-18)
+
+
+### Bug Fixes
+
+* accept proven dependency wildcards ([#726](https://github.com/chio-labs/sqlbuild/issues/726)) ([cb5f01e](https://github.com/chio-labs/sqlbuild/commit/cb5f01e727edac5ccb1c69efb9a80dfbb783a178))
+
 ## [0.104.0](https://github.com/chio-labs/sqlbuild/compare/v0.103.7...v0.104.0) (2026-09-18)
 
 
