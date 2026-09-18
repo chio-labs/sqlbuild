@@ -19,6 +19,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
 )
 from sqlbuild.adapter.contract.classes.microbatch import MicrobatchMixin
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.classes.unkeyed_diff import UnkeyedDiffMixin
 from sqlbuild.adapter.contract.constants import DIFF_LEFT_SIDE, DIFF_RIGHT_SIDE
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
@@ -96,7 +97,7 @@ _EXACT_COLUMN_INSPECTION_LIMIT: int = 32
 _BULK_COLUMN_RELATION_CHUNK_SIZE: int = 200
 
 
-class SnowflakeAdapter(MicrobatchMixin, BaseAdapter):
+class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     """Snowflake adapter backed by snowflake-connector-python."""
 
     adapter_name: ClassVar[str] = BuiltinAdapter.SNOWFLAKE.value

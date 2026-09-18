@@ -38,6 +38,13 @@ class JanitorDeleteCandidate:
 
 
 @dataclass(frozen=True)
+class JanitorQueryDiffArtifactCandidate:
+    """One expired, fingerprint-owned query-diff artifact eligible for deletion."""
+
+    key: JanitorRelationKey
+
+
+@dataclass(frozen=True)
 class JanitorCheckpointCandidate:
     """One retained-history checkpoint eligible for pruning."""
 
@@ -231,6 +238,9 @@ class JanitorPlan:
     retention_days: int
     direct_mode: bool = False
     candidates: tuple[JanitorDeleteCandidate, ...] = field(default_factory=tuple)
+    query_diff_artifact_candidates: tuple[JanitorQueryDiffArtifactCandidate, ...] = field(
+        default_factory=tuple
+    )
     checkpoint_candidates: tuple[JanitorCheckpointCandidate, ...] = field(default_factory=tuple)
     detached_virtual_environment_candidates: tuple[
         JanitorDetachedVirtualEnvironmentCandidate, ...
@@ -258,6 +268,9 @@ class JanitorExecutionResult:
     """Result from deleting janitor candidates."""
 
     deleted: tuple[JanitorDeleteCandidate, ...] = field(default_factory=tuple)
+    deleted_query_diff_artifacts: tuple[JanitorQueryDiffArtifactCandidate, ...] = field(
+        default_factory=tuple
+    )
     deleted_checkpoints: tuple[JanitorCheckpointCandidate, ...] = field(default_factory=tuple)
     deleted_detached_virtual_environments: tuple[
         JanitorDetachedVirtualEnvironmentCandidate, ...

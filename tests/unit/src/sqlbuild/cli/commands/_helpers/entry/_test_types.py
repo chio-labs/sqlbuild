@@ -25,3 +25,13 @@ class VersionFlagTestCase:
     description: str
     argv: tuple[str, ...]
     expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class QueryDiffParsingTestCase:
+    description: str
+    argv: tuple[str, ...]
+    expected_left_query: str | None
+    expected_right_query: str | None
+    expected_keys: tuple[str, ...]
+    expected_unkeyed: bool

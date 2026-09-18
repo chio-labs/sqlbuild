@@ -48,6 +48,7 @@ from sqlbuild.spec.contracts.models import (
     CursorsConfig,
     DbtConfig,
     DefaultsConfig,
+    DiffConfig,
     FutureCursorsConfig,
     JanitorConfig,
     LifecycleEventSinkFilterConfig,
@@ -127,6 +128,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         payload=payload.get("microbatches"), file_path=file_path
     )
     defaults: DefaultsConfig = _load_defaults(payload=payload.get("defaults"), file_path=file_path)
+    diff: DiffConfig = _load_diff(payload=payload.get("diff"), file_path=file_path)
     materialization_defaults: MaterializationDefaultsConfig = _load_materialization_defaults(
         payload=payload.get("materialization_defaults"), file_path=file_path
     )
@@ -167,6 +169,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         cursors=cursors,
         microbatches=microbatches,
         defaults=defaults,
+        diff=diff,
         materialization_defaults=materialization_defaults,
         path_defaults=path_defaults,
         vars=vars_map,
@@ -177,6 +180,24 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         dbt=dbt,
         sinks=sinks,
     )
+
+
+def _load_diff(*, payload: object, file_path: Path) -> DiffConfig:
+    mapping: dict[str, object] = _coerce_mapping(payload=payload, label="diff", file_path=file_path)
+    key: str = "query_artifact_ttl"
+    _validate_allowed_keys(
+        mapping=mapping,
+        allowed_keys=frozenset({key}),
+        label="diff",
+        file_path=file_path,
+    )
+    value: str = _optional_str(payload=mapping, key=key) or "24h"
+    duration: Duration | None = Duration.parse(value)
+    if duration is None or duration.has_calendar_component:
+        raise ProjectConfigError(
+            f"{file_path} diff.{key} must be a positive fixed duration such as '24h'"
+        )
+    return DiffConfig(query_artifact_ttl=value)
 
 
 def _load_sinks(*, payload: object, file_path: Path) -> SinksConfig:

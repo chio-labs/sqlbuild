@@ -7,8 +7,10 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.executor.diff.classes.query_artifact_lifecycle import QueryDiffArtifactLifecycle
 from sqlbuild.executor.janitor._helpers.classification import (
     collect_direct_state_prune_candidates,
+    collect_query_diff_artifact_candidates,
     gather_janitor_warehouse_facts,
 )
 from sqlbuild.executor.janitor._helpers.plan import collect_target_schemas
@@ -50,11 +52,29 @@ def build_janitor_plan(
     target_schemas: set[tuple[str | None, str | None]] = set(managed_target_schemas)
     target_schemas.update((key.database, key.schema) for key in scope.protected_relation_keys)
     target_schemas.update((key.database, key.schema) for key in scope.scan_relation_keys)
+    query_artifact_schemas: set[tuple[str | None, str]] = {
+        (database, schema) for database, schema in target_schemas if schema is not None
+    }
+    if project.effective_target_schema is not None:
+        query_artifact_schemas.add(
+            (project.effective_target_database, project.effective_target_schema)
+        )
+    now: datetime = datetime.now(UTC)
+    (
+        query_diff_artifact_candidates,
+        query_diff_artifact_skipped,
+    ) = collect_query_diff_artifact_candidates(
+        adapter=adapter,
+        connection=connection,
+        target_schemas=query_artifact_schemas,
+        now=now,
+    )
     if not target_schemas:
         return JanitorPlan(
             target_name=project.effective_target_name,
             retention_days=retention_days,
             direct_mode=direct.enabled,
+            query_diff_artifact_candidates=query_diff_artifact_candidates,
             checkpoint_candidates=state.checkpoint_candidates,
             detached_virtual_environment_candidates=(state.detached_virtual_environment_candidates),
             expired_virtual_environment_candidates=(state.expired_virtual_environment_candidates),
@@ -62,6 +82,8 @@ def build_janitor_plan(
             expired_lock_candidates=state.expired_lock_candidates,
             virtual_state_prune_candidates=state.virtual_state_prune_candidates,
             direct_state_prune_candidates=(),
+            skipped_relations=query_diff_artifact_skipped,
+            scanned_schema_count=len(query_artifact_schemas),
             age_metadata_supported=adapter.supports_relation_age_metadata(),
         )
 
@@ -84,7 +106,6 @@ def build_janitor_plan(
             )
         )
         inspection.completed(metadata={"item_count": len(target_schemas)})
-    now: datetime = datetime.now(UTC)
     age_supported: bool = adapter.supports_relation_age_metadata()
     schemas: JanitorSchemaClassification = classify_target_schemas(
         target_schemas=target_schemas,
@@ -104,6 +125,7 @@ def build_janitor_plan(
         retention_days=retention_days,
         direct_mode=direct.enabled,
         candidates=schemas.candidates,
+        query_diff_artifact_candidates=query_diff_artifact_candidates,
         checkpoint_candidates=state.checkpoint_candidates,
         detached_virtual_environment_candidates=state.detached_virtual_environment_candidates,
         expired_virtual_environment_candidates=state.expired_virtual_environment_candidates,
@@ -111,9 +133,16 @@ def build_janitor_plan(
         expired_lock_candidates=state.expired_lock_candidates,
         virtual_state_prune_candidates=state.virtual_state_prune_candidates,
         direct_state_prune_candidates=direct_state_prune_candidates,
-        skipped_relations=schemas.skipped_relations,
+        skipped_relations=(
+            *tuple(
+                skipped
+                for skipped in schemas.skipped_relations
+                if not QueryDiffArtifactLifecycle.is_artifact_name(skipped.key.name)
+            ),
+            *query_diff_artifact_skipped,
+        ),
         skipped_schemas=schemas.skipped_schemas,
         blocked_schemas=schemas.blocked_schemas,
-        scanned_schema_count=len(target_schemas),
+        scanned_schema_count=len(target_schemas | set(query_artifact_schemas)),
         age_metadata_supported=age_supported,
     )

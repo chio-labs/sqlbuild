@@ -298,6 +298,10 @@ def execute_virtual_diff_between_relations(
                 max_models=options.max_models,
                 max_columns=options.max_columns,
                 sampling_override=options.sampling_override,
+                unique_key_override=options.unique_key_override,
+                unkeyed=options.unkeyed,
+                excluded_columns_override=options.excluded_columns_override,
+                tolerance_overrides=options.tolerance_overrides,
             ),
         )
     finally:

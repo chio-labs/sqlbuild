@@ -30,6 +30,7 @@ NODE_TYPE_TASK: str = "task"
 NODE_TYPE_ASSET: str = "asset"
 NODE_TYPE_CHECK: str = "check"
 NODE_TYPE_HOOK: str = "hook"
+NODE_TYPE_QUERY_DIFF_ARTIFACT: str = "query_diff_artifact"
 
 FINGERPRINT_COLUMNS: tuple[str, ...] = (
     COLUMN_NODE_TYPE,

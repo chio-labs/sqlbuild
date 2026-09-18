@@ -94,3 +94,6 @@ SCOPE_PATH_NONE: str = "none"
 SCOPE_GLOBAL_SUMMARY: str = "summary"
 SCOPE_GLOBAL_ALL: str = "all"
 SCOPE_DEFAULT_PAGE_SIZE: int = 100
+READ_ONLY_QUERY_ROOT_KEYS: frozenset[str] = frozenset(
+    {"except", "intersect", "select", "union", "values"}
+)

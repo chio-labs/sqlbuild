@@ -51,6 +51,15 @@ class EventExporterDiscoveryTestCase:
 
 
 @dataclass(frozen=True)
+class DiffConfigTestCase:
+    """One project-level diff configuration case."""
+
+    description: str
+    expected_query_artifact_ttl: str
+    expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
 class CommandOutputSinkDiscoveryTestCase:
     description: str
     expected_name: str | None = None

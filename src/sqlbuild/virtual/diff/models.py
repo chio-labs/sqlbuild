@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from sqlbuild.adapter.contract.models import RowDiffTolerances
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.executor.diff.models import RowDiffSamplingOverride
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
@@ -29,6 +30,10 @@ class VirtualDiffOptions:
     max_models: int | None = None
     max_columns: int | None = None
     sampling_override: RowDiffSamplingOverride = field(default_factory=RowDiffSamplingOverride)
+    unique_key_override: tuple[str, ...] = ()
+    unkeyed: bool = False
+    excluded_columns_override: tuple[str, ...] = ()
+    tolerance_overrides: RowDiffTolerances | None = None
     allow_partial_diff: bool = False
     cli_vars: dict[str, object] | None = None
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None

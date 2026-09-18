@@ -356,9 +356,10 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
             )
         )
     if args.command == CliCommand.DIFF:
-        from_name: str
-        to_name: str
-        from_name, to_name = parse_diff_name_range(args.target_range)
+        from_name: str | None = None
+        to_name: str | None = None
+        if args.target_range is not None:
+            from_name, to_name = parse_diff_name_range(args.target_range)
         return handlers.run_diff(
             DiffCommandRequest(
                 project_dir=project_dir,
@@ -382,6 +383,15 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 verbose=args.verbose,
                 cli_vars=args.vars,
                 allow_partial_diff=args.allow_partial_diff,
+                selected_target=args.target,
+                left_query=args.left_query,
+                left_query_file=args.left_query_file,
+                right_query=args.right_query,
+                right_query_file=args.right_query_file,
+                unique_key_override=tuple(args.key),
+                unkeyed=args.unkeyed,
+                excluded_columns_override=tuple(args.exclude_column),
+                tolerance_overrides=tuple(args.tolerance),
             )
         )
     if args.command == CliCommand.RECONCILE:

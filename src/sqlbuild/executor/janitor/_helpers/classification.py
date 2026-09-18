@@ -15,6 +15,8 @@ from sqlbuild.compiler.planner.main.scenarios.is_scenario_artifact_physical_name
     is_scenario_artifact_physical_name,
 )
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
+from sqlbuild.executor.diff.classes.query_artifact_lifecycle import QueryDiffArtifactLifecycle
+from sqlbuild.executor.diff.models import QueryDiffArtifactInspection
 from sqlbuild.executor.janitor._helpers.plan import (
     collect_desired_keys,
     collect_source_schemas,
@@ -28,11 +30,53 @@ from sqlbuild.executor.janitor._helpers.tracking import collect_tracked_relation
 from sqlbuild.executor.janitor.models import (
     JanitorDeleteCandidate,
     JanitorDirectStatePruneCandidate,
+    JanitorQueryDiffArtifactCandidate,
     JanitorRelationClassification,
     JanitorRelationKey,
     JanitorSkippedRelation,
     JanitorWarehouseFacts,
 )
+
+
+def collect_query_diff_artifact_candidates(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    target_schemas: set[tuple[str | None, str]],
+    now: datetime,
+) -> tuple[tuple[JanitorQueryDiffArtifactCandidate, ...], tuple[JanitorSkippedRelation, ...]]:
+    """Collect expired owned query artifacts and report untracked reserved names."""
+
+    candidates: list[JanitorQueryDiffArtifactCandidate] = []
+    skipped: list[JanitorSkippedRelation] = []
+    for database, schema in sorted(target_schemas, key=lambda value: (value[0] or "", value[1])):
+        inspection: QueryDiffArtifactInspection = QueryDiffArtifactLifecycle.inspect(
+            adapter=adapter,
+            connection=connection,
+            database=database,
+            schema=schema,
+            now=now,
+        )
+        for artifact in inspection.expired:
+            candidates.append(
+                JanitorQueryDiffArtifactCandidate(
+                    key=JanitorRelationKey(
+                        database=artifact.database,
+                        schema=artifact.schema,
+                        name=artifact.name,
+                    )
+                )
+            )
+        for relation in inspection.untracked:
+            key: JanitorRelationKey = build_relation_key(relation)
+            skipped.append(
+                JanitorSkippedRelation(
+                    key=key,
+                    relation=relation,
+                    reason="reserved query-diff name lacks matching ownership evidence",
+                )
+            )
+    return tuple(candidates), tuple(skipped)
 
 
 def gather_janitor_warehouse_facts(
@@ -187,6 +231,8 @@ def _relation_skip_reason(
     effective_exclude_patterns: tuple[str, ...],
     delete_tracked_only: bool,
 ) -> str | None:
+    if QueryDiffArtifactLifecycle.is_artifact_name(relation_key.name):
+        return "query-diff artifacts use fingerprint expiry cleanup"
     if relation_key in protected_relation_keys:
         return protection_reasons.get(
             relation_key,

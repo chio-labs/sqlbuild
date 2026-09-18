@@ -30,6 +30,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
 )
 from sqlbuild.adapter.contract.classes.microbatch import MicrobatchMixin
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.classes.unkeyed_diff import UnkeyedDiffMixin
 from sqlbuild.adapter.contract.constants import (
     DIFF_LEFT_SIDE,
     DIFF_RIGHT_SIDE,
@@ -85,7 +86,7 @@ from sqlbuild.spec.contracts.models import SeedCsvSettings
 from sqlbuild.sql_values.models import SqlValue
 
 
-class PostgresAdapter(MicrobatchMixin, BaseAdapter):
+class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     """PostgreSQL adapter backed by psycopg."""
 
     def get_columns_for_relations(

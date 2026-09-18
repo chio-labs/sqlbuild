@@ -118,6 +118,90 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
 
         return False
 
+    def diff_unkeyed_rows(
+        self,
+        *,
+        connection: Any,
+        left: str,
+        right: str,
+        excluded_columns: tuple[str, ...] = (),
+        cursor_column: str | None = None,
+        start_cursor: CursorValue | None = None,
+        end_cursor: CursorValue | None = None,
+    ) -> RowDiffResult:
+        """Compare complete-row multiplicities without a unique key."""
+
+        left_columns: tuple[ColumnInfo, ...] = self.describe_relation(
+            connection=connection, relation=left
+        )
+        excluded_names: frozenset[str] = frozenset(column.lower() for column in excluded_columns)
+        compared_columns: tuple[ColumnInfo, ...] = tuple(
+            column for column in left_columns if column.name.lower() not in excluded_names
+        )
+        if not compared_columns:
+            raise AdapterUserError(message="unkeyed row diff requires at least one compared column")
+        column_list: str = ", ".join(
+            self.render_identifier(column.name) for column in compared_columns
+        )
+        multiplicity_column: str = "__sqlbuild_count"
+        compared_names: frozenset[str] = frozenset(
+            column.name.lower() for column in compared_columns
+        )
+        while multiplicity_column.lower() in compared_names:
+            multiplicity_column += "_"
+        equal_conditions: str = " AND ".join(
+            self.build_row_diff_equal_expression(
+                column=self.render_identifier(column.name),
+                column_info=column,
+                tolerances=None,
+            )
+            for column in compared_columns
+        )
+        cursor_filter: str = self.build_cursor_filter(
+            cursor_column=cursor_column,
+            start_cursor=start_cursor,
+            end_cursor=end_cursor,
+        )
+        where_clause: str = f" WHERE {cursor_filter}" if cursor_filter else ""
+        sql: str = (
+            f"WITH __left AS (SELECT {column_list}, COUNT(*) AS {multiplicity_column} "
+            f"FROM {left}{where_clause} GROUP BY {column_list}), "
+            f"__right AS (SELECT {column_list}, COUNT(*) AS {multiplicity_column} "
+            f"FROM {right}{where_clause} GROUP BY {column_list}), "
+            "__joined AS (SELECT "
+            f"COALESCE(__left.{multiplicity_column}, 0) AS __left_count, "
+            f"COALESCE(__right.{multiplicity_column}, 0) AS __right_count "
+            f"FROM __left FULL OUTER JOIN __right ON {equal_conditions}) "
+            "SELECT "
+            "COALESCE(SUM(__left_count), 0), "
+            "COALESCE(SUM(__right_count), 0), "
+            "COALESCE(SUM(CASE WHEN __left_count < __right_count "
+            "THEN __left_count ELSE __right_count END), 0), "
+            "COALESCE(SUM(CASE WHEN __left_count > __right_count "
+            "THEN __left_count - __right_count ELSE 0 END), 0), "
+            "COALESCE(SUM(CASE WHEN __right_count > __left_count "
+            "THEN __right_count - __left_count ELSE 0 END), 0) "
+            "FROM __joined"
+        )
+        row: tuple[Any, ...] = self.execute(connection=connection, sql=sql).fetchone()
+        left_count: int = int(row[0])
+        right_count: int = int(row[1])
+        equal_count: int = int(row[2])
+        left_only_count: int = int(row[3])
+        right_only_count: int = int(row[4])
+        population_count: int = equal_count + left_only_count + right_only_count
+        return RowDiffResult(
+            left_count=left_count,
+            right_count=right_count,
+            joined_count=population_count,
+            equal_count=equal_count,
+            unequal_count=0,
+            left_only_count=left_only_count,
+            right_only_count=right_only_count,
+            population_count=population_count,
+            compared_count=population_count,
+        )
+
     def physical_relation_generation(
         self,
         *,

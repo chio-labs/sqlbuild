@@ -12,6 +12,15 @@ class ParseRowDiffTolerancesTestCase:
 
 
 @dataclass(frozen=True)
+class CliToleranceTestCase:
+    """One CLI tolerance parsing case."""
+
+    description: str
+    values: tuple[str, ...]
+    expected_result: RowDiffTolerances
+
+
+@dataclass(frozen=True)
 class ParseRowDiffTolerancesErrorTestCase:
     description: str
     raw: object

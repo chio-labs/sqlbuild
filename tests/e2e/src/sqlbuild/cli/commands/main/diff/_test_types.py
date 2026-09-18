@@ -16,6 +16,15 @@ class DiffCommandE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SingleDiffE2ETestCase:
+    """One named standalone diff behavior case."""
+
+    description: str
+    expected_exit_code: int
+    expected_fragment: str
+
+
+@dataclass(frozen=True)
 class DiffKeyFailureE2ETestCase:
     description: str
     mutation_sql: tuple[str, ...]

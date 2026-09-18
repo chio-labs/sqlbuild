@@ -48,6 +48,21 @@ class DiffMixin(ABC):
         ...
 
     @abstractmethod
+    def diff_unkeyed_rows(
+        self,
+        *,
+        connection: Any,
+        left: str,
+        right: str,
+        excluded_columns: tuple[str, ...] = (),
+        cursor_column: str | None = None,
+        start_cursor: CursorValue | None = None,
+        end_cursor: CursorValue | None = None,
+    ) -> RowDiffResult:
+        """Compare exact full-row multiplicities without a unique key."""
+        ...
+
+    @abstractmethod
     def count_rows(
         self,
         *,

@@ -11,9 +11,65 @@ from sqlbuild.cli.commands._helpers.entry.parsing import parse_cli_invocation
 from sqlbuild.cli.commands.models import ParsedCliInvocation
 from tests.unit.src.sqlbuild.cli.commands._helpers.entry._test_types import (
     AuditConcurrencyParsingTestCase,
+    QueryDiffParsingTestCase,
     VerboseCommandTestCase,
     VersionFlagTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        QueryDiffParsingTestCase(
+            description="inline composite keyed query diff",
+            argv=(
+                "diff",
+                "--left-query",
+                "SELECT order_id FROM old_orders",
+                "--right-query",
+                "SELECT order_id FROM new_orders",
+                "--key",
+                "account_id",
+                "--key",
+                "order_id",
+            ),
+            expected_left_query="SELECT order_id FROM old_orders",
+            expected_right_query="SELECT order_id FROM new_orders",
+            expected_keys=("account_id", "order_id"),
+            expected_unkeyed=False,
+        ),
+        QueryDiffParsingTestCase(
+            description="inline unkeyed query diff",
+            argv=(
+                "diff",
+                "--left-query",
+                "VALUES (1)",
+                "--right-query",
+                "VALUES (1)",
+                "--unkeyed",
+            ),
+            expected_left_query="VALUES (1)",
+            expected_right_query="VALUES (1)",
+            expected_keys=(),
+            expected_unkeyed=True,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_raw_query_diff_arguments_when_parsing_then_inputs_remain_distinct(
+    test_case: QueryDiffParsingTestCase,
+) -> None:
+    parsed: ParsedCliInvocation = parse_cli_invocation(
+        argv=test_case.argv,
+        parser=build_cli_parser(),
+    )
+
+    assert parsed.args is not None
+    assert parsed.args.target_range is None
+    assert parsed.args.left_query == test_case.expected_left_query
+    assert parsed.args.right_query == test_case.expected_right_query
+    assert tuple(parsed.args.key) == test_case.expected_keys
+    assert parsed.args.unkeyed is test_case.expected_unkeyed
 
 
 @pytest.mark.parametrize(
