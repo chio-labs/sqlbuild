@@ -9,13 +9,20 @@ from dataclasses import replace
 from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
+from typing import cast
 
 from sqlbuild.rule_engine._helpers.engine.definition import (
     resolve_rule_signature,
     rule_from_value,
 )
 from sqlbuild.rule_engine._helpers.engine.native import native_catalogue, native_selected_codes
-from sqlbuild.rule_engine.constants import INIT_MODULE_NAME, RULE_DECORATOR_TOKEN
+from sqlbuild.rule_engine.constants import (
+    CONTRACT_BOOLEAN_NAME_CODE,
+    CONTRACT_DATE_NAME_CODE,
+    CONTRACT_TIMESTAMP_NAME_CODE,
+    INIT_MODULE_NAME,
+    RULE_DECORATOR_TOKEN,
+)
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.models import (
     Finding,
@@ -65,12 +72,74 @@ def _builtins() -> tuple[Rule, ...]:
             message=str(item["message"]),
             remediation=str(item["remediation"]),
             check=_native_builtin,
+            options=_builtin_options(str(item["code"])),
             enabled_by_default=bool(item["enabled_by_default"]),
             subject=(RuleSubject.PROJECT if bool(item["project_wide"]) else RuleSubject.MODEL),
             guidance=_guidance(item.get("guidance")),
         )
         for item in native_catalogue()
     )
+
+
+def _builtin_options(code: str) -> tuple[RuleOption[object], ...]:
+    if code == CONTRACT_BOOLEAN_NAME_CODE:
+        return (
+            cast(
+                RuleOption[object],
+                RuleOption.boolean(
+                    name="allow_numeric_indicators",
+                    default=False,
+                    description="Accept numeric is_/has_/can_ indicator columns.",
+                ),
+            ),
+        )
+    if code == CONTRACT_TIMESTAMP_NAME_CODE:
+        return (
+            cast(
+                RuleOption[object],
+                RuleOption.boolean(
+                    name="allow_date_for_at",
+                    default=False,
+                    description="Accept DATE for columns ending in _at.",
+                ),
+            ),
+            cast(
+                RuleOption[object],
+                RuleOption.boolean(
+                    name="allow_numeric_epoch",
+                    default=False,
+                    description="Accept numeric epoch values for timestamp-named columns.",
+                ),
+            ),
+            cast(
+                RuleOption[object],
+                RuleOption.boolean(
+                    name="allow_encoded_values",
+                    default=False,
+                    description="Accept string or variant encoded timestamp values.",
+                ),
+            ),
+        )
+    if code == CONTRACT_DATE_NAME_CODE:
+        return (
+            cast(
+                RuleOption[object],
+                RuleOption.boolean(
+                    name="allow_timestamps",
+                    default=False,
+                    description="Accept timestamp types for columns ending in _date.",
+                ),
+            ),
+            cast(
+                RuleOption[object],
+                RuleOption.boolean(
+                    name="allow_encoded_values",
+                    default=False,
+                    description="Accept string or variant encoded date values.",
+                ),
+            ),
+        )
+    return ()
 
 
 def _guidance(value: object) -> RuleGuidance | None:

@@ -29,6 +29,12 @@ pub(crate) struct ExplicitOutputTypeTestCase {
     pub(crate) expected_message_fragment: &'static str,
 }
 
+pub(crate) struct ContractNameTypeOptionsTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) config: Value,
+    pub(crate) expected_fault_codes: &'static [&'static str],
+}
+
 pub(crate) struct TypedContractColumnTestCase {
     pub(crate) description: &'static str,
     pub(crate) contract: &'static str,

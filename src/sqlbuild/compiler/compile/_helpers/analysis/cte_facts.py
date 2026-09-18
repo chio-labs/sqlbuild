@@ -624,14 +624,10 @@ def _polyglot_top_level_ctes(root: Any) -> tuple[tuple[str, Any, bool], ...]:
     )
     if not isinstance(raw_ctes, list):
         return ()
-    cte_bodies: tuple[Any, ...] = tuple(
-        child
-        for child in root.children()
-        if str(getattr(child, "kind", ""))
-        in {_POLYGLOT_KIND_SELECT, *_POLYGLOT_SET_OPERATION_KINDS}
-    )
-    if len(cte_bodies) != len(raw_ctes):
+    children: tuple[Any, ...] = tuple(root.children())
+    if len(children) < len(raw_ctes):
         return ()
+    cte_bodies: tuple[Any, ...] = children[-len(raw_ctes) :]
     ctes: list[tuple[str, Any, bool]] = []
     for raw_cte, body in zip(raw_ctes, cte_bodies, strict=True):
         if not isinstance(raw_cte, dict):
