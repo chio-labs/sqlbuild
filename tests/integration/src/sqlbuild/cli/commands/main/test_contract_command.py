@@ -337,6 +337,105 @@ def test_given_prod_target_credentials_when_contract_diffing_then_uses_active_co
     "test_case",
     [
         ContractCommandIntegrationTestCase(
+            description="unavailable inspection target credentials do not block diff",
+            expected_exit_code=1,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unavailable_inspection_target_credentials_when_diffing_then_uses_active_connection(
+    test_case: ContractCommandIntegrationTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    missing_variable: str = "SQLBUILD_TEST_UNAVAILABLE_PROD_DATABASE"
+    monkeypatch.delenv(missing_variable, raising=False)
+    _ = prepare_contract_project(
+        tmp_path,
+        prod_connection_toml=(
+            'connection = "prod_inspection"\n\n'
+            "[connections.prod_inspection]\n"
+            f'database = "${{ENV:{missing_variable}}}"\n'
+        ),
+    )
+
+    exit_code: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "contract",
+            "diff",
+            "--from",
+            "prod",
+            "--select",
+            "orders",
+            "--json",
+        ]
+    )
+
+    captured: CaptureResult[str] = capsys.readouterr()
+    payload: dict[str, object] = json.loads(captured.out)
+    assert exit_code == test_case.expected_exit_code
+    assert payload["from_target"] == "prod"
+    assert payload["resources"][0]["relation"].endswith("prod.orders")
+    assert missing_variable not in captured.err
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ContractCommandIntegrationTestCase(
+            description="unavailable inspection target credentials do not block write validation",
+            expected_exit_code=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unavailable_inspection_target_credentials_when_generating_then_validates_with_active_connection(
+    test_case: ContractCommandIntegrationTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    missing_variable: str = "SQLBUILD_TEST_UNAVAILABLE_PROD_DATABASE"
+    monkeypatch.delenv(missing_variable, raising=False)
+    _ = prepare_contract_project(
+        tmp_path,
+        prod_connection_toml=(
+            'connection = "prod_inspection"\n\n'
+            "[connections.prod_inspection]\n"
+            f'database = "${{ENV:{missing_variable}}}"\n'
+        ),
+    )
+    model_path: Path = tmp_path / "models" / "orders.sql"
+
+    exit_code: int = main(
+        [
+            "--no-color",
+            "--project-dir",
+            str(tmp_path),
+            "contract",
+            "generate",
+            "--from",
+            "prod",
+            "--select",
+            "orders",
+            "--write",
+        ]
+    )
+
+    captured: CaptureResult[str] = capsys.readouterr()
+    assert exit_code == test_case.expected_exit_code
+    assert "0 contract difference(s)" in captured.out
+    assert "id (type INTEGER)" in model_path.read_text(encoding="utf-8")
+    assert missing_variable not in captured.err
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ContractCommandIntegrationTestCase(
             description="given shared schema when one binding differs then write fails closed",
             expected_exit_code=1,
         )

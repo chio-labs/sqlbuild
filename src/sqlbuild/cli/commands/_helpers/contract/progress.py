@@ -90,6 +90,7 @@ def write_contract_updates_with_progress(
     result: ContractAdoptionResult,
     request: ContractCommandRequest,
     adapter: BaseAdapter,
+    resolved_connection: dict[str, object],
     progress_stream: TextIO,
     use_progress_color: bool,
 ) -> ContractAdoptionResult:
@@ -110,6 +111,7 @@ def write_contract_updates_with_progress(
             result=result,
             overwrite=request.overwrite,
             adapter=adapter,
+            resolved_connection=resolved_connection,
             cli_vars=request.cli_vars,
         )
     except Exception:
