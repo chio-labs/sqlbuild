@@ -24,6 +24,8 @@ _SQLBUILD_CODE_BY_NATIVE_CODE: dict[str, str] = {
     "E223": "B005",
 }
 _ERROR_SEVERITY: str = "error"
+_NATIVE_UNKNOWN_COLUMN_CODE: str = "E201"
+_NATIVE_AMBIGUOUS_COLUMN_CODE: str = "E221"
 _ORDER_BY_CONTEXT: str = "ORDER BY"
 _WINDOW_ORDER_BY_CONTEXT: str = "WINDOW ORDER BY"
 _SNOWFLAKE_DIALECT: str = "snowflake"
@@ -31,6 +33,12 @@ _SELECT_KIND: str = "select"
 _IMPLICIT_VALUES_COLUMN_PATTERN: re.Pattern[str] = re.compile(
     r"^Unknown column '(column([1-9][0-9]*))'$",
     flags=re.IGNORECASE,
+)
+_UNKNOWN_COLUMN_PATTERN: re.Pattern[str] = re.compile(
+    r"^Unknown column '([^']+)'(?: in table '[^']+'| \(not found in any referenced table\))$"
+)
+_AMBIGUOUS_UNQUALIFIED_COLUMN_PATTERN: re.Pattern[str] = re.compile(
+    r"^Ambiguous unqualified column '([^']+)' found in [0-9]+ referenced tables$"
 )
 
 
@@ -112,6 +120,11 @@ def _binding_result(*, sql: str, dialect: str | None, response: object) -> SqlBi
             message=raw_message,
             line=line,
             column=column,
+        ) or _is_proven_snowflake_output_alias(
+            sql=sql,
+            dialect=dialect,
+            native_code=native_code,
+            message=raw_message,
         ):
             continue
         diagnostics.append(
@@ -257,6 +270,127 @@ def _projection_is_implicit_values_column(
     candidate_line: int = sql.count("\n", 0, start) + 1
     candidate_column: int = start - sql.rfind("\n", 0, start)
     return (candidate_line, candidate_column) == (line, column)
+
+
+def _is_proven_snowflake_output_alias(
+    *, sql: str, dialect: str | None, native_code: str, message: str
+) -> bool:
+    if (dialect or "").lower() != _SNOWFLAKE_DIALECT:
+        return False
+    column_name: str | None = _output_alias_diagnostic_column(
+        native_code=native_code,
+        message=message,
+    )
+    if column_name is None:
+        return False
+    polyglot_module: Any = import_polyglot_sql()
+    try:
+        parsed: Any = polyglot_module.parse_one(sql, dialect=_SNOWFLAKE_DIALECT)
+    except polyglot_module.PolyglotError:
+        return False
+    selects: list[Any] = []
+    if str(getattr(parsed, "kind", "")) == _SELECT_KIND:
+        selects.append(parsed)
+    selects.extend(parsed.find_all(_SELECT_KIND))
+    return any(
+        _select_proves_output_alias(
+            select=select,
+            column_name=column_name,
+            native_code=native_code,
+        )
+        for select in selects
+    )
+
+
+def _output_alias_diagnostic_column(*, native_code: str, message: str) -> str | None:
+    pattern: re.Pattern[str]
+    if native_code == _NATIVE_UNKNOWN_COLUMN_CODE:
+        pattern = _UNKNOWN_COLUMN_PATTERN
+    elif native_code == _NATIVE_AMBIGUOUS_COLUMN_CODE:
+        pattern = _AMBIGUOUS_UNQUALIFIED_COLUMN_PATTERN
+    else:
+        return None
+    match: re.Match[str] | None = pattern.fullmatch(message)
+    return match.group(1) if match is not None else None
+
+
+def _select_proves_output_alias(*, select: Any, column_name: str, native_code: str) -> bool:
+    payload: object = select.to_dict().get(_SELECT_KIND)
+    if not isinstance(payload, dict):
+        return False
+    select_payload: dict[str, object] = cast(dict[str, object], payload)
+    projections: object = select_payload.get("expressions")
+    if not isinstance(projections, list):
+        return False
+    aliases: set[str] = set()
+    for projection in projections:
+        expression, alias = _projection_expression_and_alias(projection)
+        if native_code == _NATIVE_UNKNOWN_COLUMN_CODE and column_name.lower() in aliases:
+            if _payload_contains_unqualified_column(
+                payload=expression,
+                column_name=column_name,
+            ):
+                return True
+        if alias is not None:
+            aliases.add(alias.lower())
+    if column_name.lower() not in aliases:
+        return False
+    if native_code == _NATIVE_UNKNOWN_COLUMN_CODE:
+        return _payload_contains_unqualified_column(
+            payload=select_payload.get("where_clause"),
+            column_name=column_name,
+        )
+    return _payload_contains_unqualified_column(
+        payload=select_payload.get("order_by"),
+        column_name=column_name,
+    )
+
+
+def _projection_expression_and_alias(projection: object) -> tuple[object, str | None]:
+    if not isinstance(projection, dict):
+        return projection, None
+    alias_payload: object = cast(dict[str, object], projection).get("alias")
+    if not isinstance(alias_payload, dict):
+        return projection, None
+    alias_dict: dict[str, object] = cast(dict[str, object], alias_payload)
+    name_payload: object = alias_dict.get("alias")
+    if not isinstance(name_payload, dict):
+        return alias_dict.get("this"), None
+    name_dict: dict[str, object] = cast(dict[str, object], name_payload)
+    alias: str | None = (
+        str(name_dict.get("name"))
+        if name_dict.get("quoted") is not True and name_dict.get("name") is not None
+        else None
+    )
+    return alias_dict.get("this"), alias
+
+
+def _payload_contains_unqualified_column(*, payload: object, column_name: str) -> bool:
+    if isinstance(payload, list | tuple):
+        return any(
+            _payload_contains_unqualified_column(payload=value, column_name=column_name)
+            for value in payload
+        )
+    if not isinstance(payload, dict):
+        return False
+    payload_dict: dict[str, object] = cast(dict[str, object], payload)
+    column_payload: object = payload_dict.get("column")
+    if isinstance(column_payload, dict):
+        column_dict: dict[str, object] = cast(dict[str, object], column_payload)
+        name_payload: object = column_dict.get("name")
+        if isinstance(name_payload, dict):
+            name_dict: dict[str, object] = cast(dict[str, object], name_payload)
+            if (
+                column_dict.get("table") is None
+                and name_dict.get("quoted") is not True
+                and str(name_dict.get("name") or "").lower() == column_name.lower()
+            ):
+                return True
+    return any(
+        key != _SELECT_KIND
+        and _payload_contains_unqualified_column(payload=value, column_name=column_name)
+        for key, value in payload_dict.items()
+    )
 
 
 def _optional_int(value: object) -> int | None:
