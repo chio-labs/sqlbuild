@@ -26,6 +26,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
 )
 from sqlbuild.adapter.contract.classes.microbatch import MicrobatchMixin
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.classes.unkeyed_diff import UnkeyedDiffMixin
 from sqlbuild.adapter.contract.constants import DIFF_LEFT_SIDE, DIFF_RIGHT_SIDE
 from sqlbuild.adapter.contract.exceptions import (
     AdapterUserError,
@@ -87,7 +88,7 @@ from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 
 
-class SqlServerAdapter(MicrobatchMixin, BaseAdapter):
+class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     """Microsoft SQL Server adapter backed by pymssql."""
 
     def get_columns_for_relations(

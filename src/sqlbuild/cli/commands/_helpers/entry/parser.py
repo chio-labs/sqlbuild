@@ -348,7 +348,7 @@ def _add_data_parsers(
     clone_parser.add_argument("--event-output", type=Path, default=None, help=argparse.SUPPRESS)
 
     diff_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DIFF)
-    diff_parser.add_argument("target_range", metavar="FROM:TO")
+    diff_parser.add_argument("target_range", nargs="?", metavar="FROM:TO")
     _add_sql_analysis_override(diff_parser)
     diff_parser.add_argument("--full", action="store_true", default=False)
     diff_parser.add_argument("--schema-only", action="store_true", default=False)
@@ -362,6 +362,37 @@ def _add_data_parsers(
     diff_parser.add_argument("--max-models", type=int, default=None)
     diff_parser.add_argument("--max-columns", type=int, default=None)
     diff_parser.add_argument("--allow-partial-diff", action="store_true", default=False)
+    diff_parser.add_argument(
+        "--target",
+        default=None,
+        help="target connection for raw-query diff (defaults to the active target)",
+    )
+    diff_parser.add_argument("--left-query", default=None, help="literal left-side SQL query")
+    diff_parser.add_argument(
+        "--left-query-file", type=Path, default=None, help="path to left-side SQL query"
+    )
+    diff_parser.add_argument("--right-query", default=None, help="literal right-side SQL query")
+    diff_parser.add_argument(
+        "--right-query-file", type=Path, default=None, help="path to right-side SQL query"
+    )
+    diff_parser.add_argument(
+        "--key", action="append", default=[], help="row identity column; repeat for composite keys"
+    )
+    diff_parser.add_argument(
+        "--unkeyed",
+        action="store_true",
+        default=False,
+        help="compare exact full-row multiplicities without a key",
+    )
+    diff_parser.add_argument(
+        "--exclude-column", action="append", default=[], help="column to omit from row comparison"
+    )
+    diff_parser.add_argument(
+        "--tolerance",
+        action="append",
+        default=[],
+        help="numeric tolerance as COLUMN:absolute=VALUE or COLUMN:relative=VALUE",
+    )
     _ = add_execution_json_output_arg(diff_parser)
     _ = add_select_args(diff_parser)
     _ = add_vars_args(diff_parser)

@@ -11,6 +11,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorExpiredLockCandidate,
     JanitorExpiredVirtualEnvironmentCandidate,
     JanitorPlan,
+    JanitorQueryDiffArtifactCandidate,
     JanitorSkippedRelation,
     JanitorSkippedSchema,
     JanitorStateBackupCandidate,
@@ -52,6 +53,12 @@ def _write_plan_summary(*, plan: JanitorPlan, stream: TextIO, style: CliStyle) -
         style=style,
         label="reported objects" if plan.direct_mode else "eligible for deletion",
         items=plan.candidates,
+    )
+    _write_count_row(
+        stream=stream,
+        style=style,
+        label="query artifacts",
+        items=plan.query_diff_artifact_candidates,
     )
     _write_count_row(
         stream=stream,
@@ -107,6 +114,15 @@ def _write_count_row(
     stream.write(f"  {label:<22} {rendered}\n")
 
 
+def _write_query_artifact_candidates(*, plan: JanitorPlan, stream: TextIO, style: CliStyle) -> None:
+    if not plan.query_diff_artifact_candidates:
+        return
+    stream.write(f"\n{style.success('Eligible expired query artifacts')}\n")
+    query_artifact: JanitorQueryDiffArtifactCandidate
+    for query_artifact in plan.query_diff_artifact_candidates:
+        stream.write(f"  {style.object_name(query_artifact.key.display_name())}\n")
+
+
 def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) -> None:
     """Write a janitor preview."""
 
@@ -151,6 +167,8 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
             stream.write(
                 f"  {style.object_name(candidate.key.display_name())}{style.muted(reason)}\n"
             )
+
+    _write_query_artifact_candidates(plan=plan, stream=stream, style=style)
 
     if plan.checkpoint_candidates:
         stream.write(f"\n{style.success('Eligible checkpoints')}\n")
@@ -238,9 +256,13 @@ def confirmation_text(plan: JanitorPlan) -> str:
         + len(plan.virtual_state_prune_candidates)
     )
     if state_candidate_count == 0:
-        deletion_count: int = 0 if plan.direct_mode else len(plan.candidates)
+        deletion_count: int = (0 if plan.direct_mode else len(plan.candidates)) + len(
+            plan.query_diff_artifact_candidates
+        )
         return f"delete {deletion_count} objects from {environment_label(plan)}"
-    physical_deletion_count: int = 0 if plan.direct_mode else len(plan.candidates)
+    physical_deletion_count: int = (0 if plan.direct_mode else len(plan.candidates)) + len(
+        plan.query_diff_artifact_candidates
+    )
     deletion_count: int = physical_deletion_count + state_candidate_count
     return f"delete {deletion_count} items from {environment_label(plan)}"
 

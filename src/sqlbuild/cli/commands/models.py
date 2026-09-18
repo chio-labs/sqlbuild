@@ -671,8 +671,8 @@ class DiffCommandRequest:
     project_dir: Path | None
     no_color: bool
     no_sql_validation: bool
-    from_name: str
-    to_name: str
+    from_name: str | None
+    to_name: str | None
     full: bool
     schema_only: bool
     bounded: str | None
@@ -689,6 +689,15 @@ class DiffCommandRequest:
     verbose: bool = False
     cli_vars: dict[str, object] | None = None
     allow_partial_diff: bool = False
+    selected_target: str | None = None
+    left_query: str | None = None
+    left_query_file: Path | None = None
+    right_query: str | None = None
+    right_query_file: Path | None = None
+    unique_key_override: tuple[str, ...] = ()
+    unkeyed: bool = False
+    excluded_columns_override: tuple[str, ...] = ()
+    tolerance_overrides: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -711,6 +720,23 @@ class DirectDiffPreparation:
     right_project: Any
     selected_names: tuple[str, ...]
     connection_config: dict[str, object]
+    effective_max_column_examples: int
+    effective_max_row_only_examples: int
+
+
+@dataclass(frozen=True)
+class QueryDiffPreparation:
+    """Resolved raw-query diff adapter, connection, SQL, and limits."""
+
+    adapter: BaseAdapter
+    connection_config: dict[str, object]
+    left_sql: str
+    right_sql: str
+    selected_target: str | None
+    database: str | None
+    schema: str
+    run_id: str
+    artifact_ttl: str
     effective_max_column_examples: int
     effective_max_row_only_examples: int
 

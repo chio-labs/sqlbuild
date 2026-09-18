@@ -39,10 +39,12 @@ def write_diff_json_output(
 def _model_payload(*, model: ModelDiffResult) -> dict[str, object]:
     rows: RowDiffResult | None = model.row_result
     payload: dict[str, object] = {
+        "input_kind": model.input_kind,
         "name": model.name,
         "from_relation": model.left_relation,
         "to_relation": model.right_relation,
         "unique_key": list(model.unique_key),
+        "unkeyed": model.unkeyed,
         "excluded_columns": list(model.excluded_columns),
         "schema": {
             "added_columns": [column.name for column in model.schema_result.added_columns],
@@ -70,8 +72,8 @@ def _model_payload(*, model: ModelDiffResult) -> dict[str, object]:
     payload["sampling"] = {
         "configured_row_limit": rows.sampling.row_limit if rows.sampling is not None else None,
         "seed": rows.sampling.seed if rows.sampling is not None else None,
-        "population_keys": rows.population_count,
-        "compared_keys": rows.compared_count,
+        "population_keys": None if model.unkeyed else rows.population_count,
+        "compared_keys": None if model.unkeyed else rows.compared_count,
         "coverage_ratio": (
             rows.compared_count / rows.population_count if rows.population_count else 1.0
         ),

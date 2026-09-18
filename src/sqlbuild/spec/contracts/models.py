@@ -283,6 +283,13 @@ class DefaultsConfig:
 
 
 @dataclass(frozen=True)
+class DiffConfig:
+    """Project-wide data-diff configuration."""
+
+    query_artifact_ttl: str = "24h"
+
+
+@dataclass(frozen=True)
 class JanitorConfig:
     """Janitor command defaults."""
 
@@ -382,6 +389,7 @@ class ProjectConfig:
     cursors: CursorsConfig = field(default_factory=CursorsConfig)
     microbatches: MicrobatchesConfig = field(default_factory=MicrobatchesConfig)
     defaults: DefaultsConfig = field(default_factory=DefaultsConfig)
+    diff: DiffConfig = field(default_factory=DiffConfig)
     materialization_defaults: MaterializationDefaultsConfig = field(
         default_factory=MaterializationDefaultsConfig
     )

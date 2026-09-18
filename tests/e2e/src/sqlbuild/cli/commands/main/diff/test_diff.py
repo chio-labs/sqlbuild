@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import cast
 
+import duckdb
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.diff._test_types import (
@@ -15,6 +16,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.diff._test_types import (
     DiffKeyFailureE2ETestCase,
     DiffSamplingPrecedenceE2ETestCase,
     DiffSamplingSeedE2ETestCase,
+    SingleDiffE2ETestCase,
     VirtualDiffE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.diff.helpers import (
@@ -434,6 +436,35 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
             expected_stderr_fragments=("model 'daily_revenue' requires unique_key for row diff",),
         ),
         DiffCommandE2ETestCase(
+            description="cli key enables model without declared unique key",
+            command=(
+                "--no-color",
+                "diff",
+                "prod:dev",
+                "--full",
+                "--key",
+                "revenue_date",
+                "--select",
+                "daily_revenue",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=("revenue_date", "No changed columns."),
+        ),
+        DiffCommandE2ETestCase(
+            description="explicit unkeyed mode compares model row multiplicities",
+            command=(
+                "--no-color",
+                "diff",
+                "prod:dev",
+                "--full",
+                "--unkeyed",
+                "--select",
+                "orders_snapshot",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=("<not used>", "multiset rows"),
+        ),
+        DiffCommandE2ETestCase(
             description="environment schemas auto-create through real cli build flow",
             command=(
                 "--no-color",
@@ -472,6 +503,404 @@ def test_given_diff_project_when_running_diff_then_behavior_matches_expected(
         assert fragment in result.stdout, result.stdout + result.stderr
     for fragment in test_case.expected_stderr_fragments:
         assert fragment in result.stderr, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DiffCommandE2ETestCase(
+            description="inline keyed queries report changed values",
+            mutation_sql=("UPDATE dev.orders_snapshot SET amount_cents = 999 WHERE order_id = 1",),
+            command=(
+                "--no-color",
+                "diff",
+                "--left-query",
+                "SELECT order_id, amount_cents FROM prod.orders_snapshot",
+                "--right-query",
+                "SELECT order_id, amount_cents FROM dev.orders_snapshot",
+                "--key",
+                "order_id",
+            ),
+            expected_exit_code=1,
+            expected_stdout_fragments=(
+                "selected query pairs: 1",
+                "order_id=1 | 100 -> 999",
+            ),
+            expected_stderr_fragments=(
+                "Query diff materialization  OK",
+                "Query diff immediate cleanup  OK",
+            ),
+        ),
+        DiffCommandE2ETestCase(
+            description="inline keyed queries support deterministic sampling",
+            mutation_sql=("UPDATE dev.orders_snapshot SET amount_cents = amount_cents + 10",),
+            command=(
+                "--no-color",
+                "diff",
+                "--left-query",
+                "SELECT order_id, amount_cents FROM prod.orders_snapshot",
+                "--right-query",
+                "SELECT order_id, amount_cents FROM dev.orders_snapshot",
+                "--key",
+                "order_id",
+                "--sample-rows",
+                "2",
+                "--sample-seed",
+                "7",
+            ),
+            expected_exit_code=1,
+            expected_stdout_fragments=("sampled 2 of 3 union keys", "seed 7"),
+        ),
+        DiffCommandE2ETestCase(
+            description="unkeyed queries preserve duplicate multiplicity",
+            command=(
+                "--no-color",
+                "diff",
+                "--left-query",
+                "SELECT * FROM (VALUES (1), (1)) AS orders(order_id)",
+                "--right-query",
+                "SELECT * FROM (VALUES (1)) AS orders(order_id)",
+                "--unkeyed",
+            ),
+            expected_exit_code=1,
+            expected_stdout_fragments=("left query only", "1"),
+        ),
+        DiffCommandE2ETestCase(
+            description="unkeyed queries reserve internal multiplicity aliases safely",
+            command=(
+                "--no-color",
+                "diff",
+                "--left-query",
+                "SELECT 0 AS __sqlbuild_count",
+                "--right-query",
+                "SELECT CAST(NULL AS INTEGER) AS __sqlbuild_count WHERE FALSE",
+                "--unkeyed",
+            ),
+            expected_exit_code=1,
+            expected_stdout_fragments=("left query only", "1"),
+        ),
+        DiffCommandE2ETestCase(
+            description="schema drift reports findings without invalid row comparison",
+            command=(
+                "--no-color",
+                "diff",
+                "--left-query",
+                "SELECT 1 AS order_id",
+                "--right-query",
+                "SELECT 1 AS order_id, 100 AS amount_cents",
+                "--key",
+                "order_id",
+            ),
+            expected_exit_code=1,
+            expected_stdout_fragments=("schema differences: 1", "added columns: 1"),
+        ),
+        DiffCommandE2ETestCase(
+            description="query tolerance suppresses numeric differences",
+            mutation_sql=(
+                "UPDATE dev.orders_snapshot SET amount_cents = amount_cents + 5 WHERE order_id = 1",
+            ),
+            command=(
+                "--no-color",
+                "diff",
+                "--left-query",
+                "SELECT order_id, amount_cents FROM prod.orders_snapshot",
+                "--right-query",
+                "SELECT order_id, amount_cents FROM dev.orders_snapshot",
+                "--key",
+                "order_id",
+                "--tolerance",
+                "amount_cents:absolute=5",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=("amount_cents absolute=5", "No changed columns."),
+        ),
+        DiffCommandE2ETestCase(
+            description="query exclusions suppress ignored column differences",
+            mutation_sql=("UPDATE dev.orders_snapshot SET status = 'fulfilled'",),
+            command=(
+                "--no-color",
+                "diff",
+                "--left-query",
+                "SELECT order_id, status FROM prod.orders_snapshot",
+                "--right-query",
+                "SELECT order_id, status FROM dev.orders_snapshot",
+                "--key",
+                "order_id",
+                "--exclude-column",
+                "status",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=("Excluded", "status", "No changed columns."),
+        ),
+        DiffCommandE2ETestCase(
+            description="query composite keys preserve row identity",
+            command=(
+                "--no-color",
+                "diff",
+                "--left-query",
+                "SELECT customer_id, order_id, amount_cents FROM prod.orders_snapshot",
+                "--right-query",
+                "SELECT customer_id, order_id, amount_cents FROM dev.orders_snapshot",
+                "--key",
+                "customer_id",
+                "--key",
+                "order_id",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=("customer_id, order_id", "No changed columns."),
+        ),
+        DiffCommandE2ETestCase(
+            description="read-only set queries are accepted",
+            command=(
+                "--no-color",
+                "diff",
+                "--left-query",
+                "SELECT 1 AS order_id UNION ALL SELECT 2 AS order_id",
+                "--right-query",
+                "SELECT 1 AS order_id UNION ALL SELECT 2 AS order_id",
+                "--key",
+                "order_id",
+            ),
+            expected_exit_code=0,
+            expected_stdout_fragments=("No changed columns.",),
+        ),
+        DiffCommandE2ETestCase(
+            description="query key integrity rejects duplicate identities",
+            command=(
+                "--no-color",
+                "diff",
+                "--left-query",
+                "SELECT * FROM (VALUES (1, 100), (1, 200)) AS orders(order_id, amount_cents)",
+                "--right-query",
+                "SELECT * FROM (VALUES (1, 100)) AS orders(order_id, amount_cents)",
+                "--key",
+                "order_id",
+            ),
+            expected_exit_code=1,
+            expected_stderr_fragments=("contains duplicate unique_key values",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_raw_queries_when_running_diff_then_comparison_matches_model_diff_capabilities(
+    test_case: DiffCommandE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_diff_project(tmp_path)
+    build_both_environments(project_dir=project_dir)
+    for mutation_sql in test_case.mutation_sql:
+        execute_duckdb(db_path=project_dir / "diff.duckdb", sql=mutation_sql)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout, result.stdout + result.stderr
+    for fragment in test_case.expected_stderr_fragments:
+        assert fragment in result.stderr, result.stdout + result.stderr
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(project_dir / "diff.duckdb"))
+    try:
+        artifact_row: tuple[int] | None = connection.execute(
+            "SELECT COUNT(*) FROM duckdb_tables() WHERE table_name LIKE '__sqlbuild_query_diff_%'"
+        ).fetchone()
+        fingerprint_row: tuple[int] | None = connection.execute(
+            "SELECT COUNT(*) FROM dev._sqlbuild_fingerprints "
+            "WHERE node_type = 'query_diff_artifact'"
+        ).fetchone()
+    finally:
+        connection.close()
+    assert artifact_row == (0,)
+    assert fingerprint_row == (2,)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SingleDiffE2ETestCase(
+            description="query files target and JSON output",
+            expected_exit_code=0,
+            expected_fragment="no_differences_found",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_query_files_target_and_json_output_when_running_diff_then_all_inputs_are_honored(
+    test_case: SingleDiffE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_diff_project(tmp_path)
+    build_both_environments(project_dir=project_dir)
+    (project_dir / "left.sql").write_text(
+        "SELECT order_id, amount_cents FROM prod.orders_snapshot;\n",
+        encoding="utf-8",
+    )
+    (project_dir / "right.sql").write_text(
+        "SELECT order_id, amount_cents FROM dev.orders_snapshot;\n",
+        encoding="utf-8",
+    )
+    json_path: Path = project_dir / "query-diff.json"
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "diff",
+            "--left-query-file",
+            str(project_dir / "left.sql"),
+            "--right-query-file",
+            str(project_dir / "right.sql"),
+            "--target",
+            "prod",
+            "--key",
+            "order_id",
+            "--json-output",
+            str(json_path),
+        ),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    payload: dict[str, object] = cast(dict[str, object], json.loads(json_path.read_text()))
+    assert payload["status"] == test_case.expected_fragment
+    models: list[dict[str, object]] = cast(list[dict[str, object]], payload["models"])
+    assert models[0]["input_kind"] == "query"
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(project_dir / "diff.duckdb"))
+    try:
+        prod_fingerprint_row: tuple[int] | None = connection.execute(
+            "SELECT COUNT(*) FROM prod._sqlbuild_fingerprints "
+            "WHERE node_type = 'query_diff_artifact'"
+        ).fetchone()
+        dev_fingerprint_row: tuple[int] | None = connection.execute(
+            "SELECT COUNT(*) FROM dev._sqlbuild_fingerprints "
+            "WHERE node_type = 'query_diff_artifact'"
+        ).fetchone()
+    finally:
+        connection.close()
+    assert prod_fingerprint_row == (2,)
+    assert dev_fingerprint_row == (0,)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SingleDiffE2ETestCase(
+            description="mutating CTE rejection",
+            expected_exit_code=1,
+            expected_fragment="must not contain data-changing or administrative statements",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_mutating_cte_when_running_query_diff_then_validation_rejects_it(
+    test_case: SingleDiffE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_diff_project(tmp_path)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "diff",
+            "--left-query",
+            "WITH changed AS (DELETE FROM orders RETURNING *) SELECT * FROM changed",
+            "--right-query",
+            "SELECT 1 AS order_id",
+            "--key",
+            "order_id",
+        ),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code
+    assert test_case.expected_fragment in result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SingleDiffE2ETestCase(
+            description="duplicate query column rejection",
+            expected_exit_code=1,
+            expected_fragment="left query returns duplicate column names: order_id",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_duplicate_query_columns_when_running_query_diff_then_preflight_rejects_them(
+    test_case: SingleDiffE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_diff_project(tmp_path)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "diff",
+            "--left-query",
+            "SELECT 1 AS order_id, 100 AS order_id",
+            "--right-query",
+            "SELECT 1 AS order_id, 100 AS amount_cents",
+            "--key",
+            "order_id",
+        ),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code
+    assert test_case.expected_fragment in result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SingleDiffE2ETestCase(
+            description="historical fingerprint isolation",
+            expected_exit_code=0,
+            expected_fragment="recovery cleanup could not inspect historical ownership evidence",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unreadable_historical_fingerprint_when_running_query_diff_then_comparison_continues(
+    test_case: SingleDiffE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_diff_project(tmp_path)
+    build_both_environments(project_dir=project_dir)
+    execute_duckdb(
+        db_path=project_dir / "diff.duckdb",
+        sql=(
+            "CREATE TABLE dev.__sqlbuild_query_diff_20260917T120000Z_a1b2c3d4e5f6_left "
+            "AS SELECT 1 AS order_id"
+        ),
+    )
+    execute_duckdb(
+        db_path=project_dir / "diff.duckdb",
+        sql=(
+            "UPDATE dev._sqlbuild_fingerprints SET definition_b64 = 'not-base64' "
+            "WHERE node_type = 'model'"
+        ),
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=(
+            "--no-color",
+            "diff",
+            "--left-query",
+            "SELECT order_id FROM prod.orders_snapshot",
+            "--right-query",
+            "SELECT order_id FROM dev.orders_snapshot",
+            "--key",
+            "order_id",
+        ),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert test_case.expected_fragment in result.stderr
+    assert "No changed columns." in result.stdout
 
 
 @pytest.mark.parametrize(

@@ -38,6 +38,7 @@ def janitor_plan_has_work(planning_result: JanitorPlanningResult) -> bool:
     plan: JanitorPlan = planning_result.plan
     return bool(
         (plan.candidates and not plan.direct_mode)
+        or plan.query_diff_artifact_candidates
         or plan.checkpoint_candidates
         or plan.detached_virtual_environment_candidates
         or plan.expired_virtual_environment_candidates
@@ -65,14 +66,18 @@ def confirm_janitor_plan(*, planning_result: JanitorPlanningResult) -> bool:
         plan.virtual_state_prune_candidates
     )
     if state_candidate_count or prune_count:
-        physical_deletion_count: int = 0 if plan.direct_mode else len(plan.candidates)
+        physical_deletion_count: int = (0 if plan.direct_mode else len(plan.candidates)) + len(
+            plan.query_diff_artifact_candidates
+        )
         deletion_count: int = physical_deletion_count + state_candidate_count + prune_count
         sys.stdout.write(
             f"Janitor will delete {deletion_count} items from {environment_label(plan)}.\n"
         )
     else:
         sys.stdout.write(
-            f"Janitor will delete {len(plan.candidates)} objects from {environment_label(plan)}.\n"
+            "Janitor will delete "
+            f"{len(plan.candidates) + len(plan.query_diff_artifact_candidates)} objects "
+            f"from {environment_label(plan)}.\n"
         )
     if plan.retention_days == 0:
         sys.stdout.write("Retention: disabled (0 days)\n")
@@ -112,6 +117,7 @@ def _deleted_message(*, result: JanitorExecutionResult) -> str:
         + len(result.deleted_state_backups)
         + len(result.deleted_expired_locks)
     )
+    deleted_object_count: int = len(result.deleted) + len(result.deleted_query_diff_artifacts)
     pruned_state_count: int = len(result.pruned_direct_state) + len(result.pruned_virtual_state)
     non_checkpoint_state_count: int = deleted_state_count - len(result.deleted_checkpoints)
     if non_checkpoint_state_count or pruned_state_count:
@@ -119,12 +125,12 @@ def _deleted_message(*, result: JanitorExecutionResult) -> str:
             "state tables" if result.pruned_virtual_state else "direct state tables"
         )
         return (
-            f"Deleted {len(result.deleted)} objects, deleted {deleted_state_count} "
+            f"Deleted {deleted_object_count} objects, deleted {deleted_state_count} "
             f"state items, and pruned {pruned_state_count} {pruned_state_label}."
         )
     if result.deleted_checkpoints:
         return (
-            f"Deleted {len(result.deleted)} objects and "
+            f"Deleted {deleted_object_count} objects and "
             f"{len(result.deleted_checkpoints)} checkpoints."
         )
-    return f"Deleted {len(result.deleted)} objects."
+    return f"Deleted {deleted_object_count} objects."

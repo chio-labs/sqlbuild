@@ -7753,10 +7753,12 @@ Compare schemas and data between targets or virtual environments to validate cha
 
 SQLBuild can compare schemas and row-level data between two build contexts. This lets you validate that changes produce the expected results before promoting them.
 
-`sqb diff FROM:TO` compares:
+`sqb diff` supports two input modes:
 
-- **two targets** (e.g. `prod:dev`) in direct mode, or
-- **two virtual environments** (VDEs) when [virtual environments](/concepts/virtual-environments) are enabled.
+- **model mode:** `sqb diff FROM:TO --select ...` compares two targets (for example `prod:dev`) in
+  direct mode, or two virtual environments when virtual environments are enabled;
+- **raw-query mode:** inline SQL or SQL files identify the two sides and execute through the active
+  target connection or an explicit `--target`.
 
 The mechanics below are identical for both; only what `FROM` and `TO` refer to changes.
 
@@ -7770,9 +7772,30 @@ for that execution connection still fail before warehouse inspection.
 sqb diff prod:dev --full --select customer_status_snapshot
 ```
 
+Raw-query mode omits `FROM:TO` and requires repeated `--key` values or explicit `--unkeyed` for a
+row comparison. Inputs must each be one literal read-only `SELECT`, `WITH`, or `VALUES` expression;
+SQLBuild templates such as `ref()` are not expanded.
+
+```bash
+sqb diff \
+  --left-query 'SELECT order_id, amount_cents FROM analytics.orders_before' \
+  --right-query 'SELECT order_id, amount_cents FROM analytics.orders_after' \
+  --key order_id
+
+sqb diff \
+  --left-query-file queries/orders_before.sql \
+  --right-query-file queries/orders_after.sql \
+  --target dev \
+  --key account_id \
+  --key order_id
+```
+
+Query mode defaults to a full comparison and also supports `--schema-only`. It does not accept
+`--bounded`; put the desired filter in both SQL inputs instead.
+
 ### Comparison modes
 
-Every diff requires exactly one mode:
+Model mode requires exactly one mode. Raw-query mode defaults to full when no mode is supplied:
 
 #### Full diff
 
@@ -7864,7 +7887,9 @@ side.
 
 ### Row matching
 
-Rows are matched between the two sides using the model's `unique_key`. Models without a `unique_key` can use schema-only diff but cannot run full or bounded row comparisons.
+Rows are matched using the model's `unique_key` or repeated invocation-level `--key` overrides.
+For inputs without stable row identity, `--unkeyed` performs an exhaustive exact multiset
+comparison in which duplicate rows retain their multiplicity. SQLBuild never guesses a key.
 
 The diff output categorises rows as:
 - **Equal** - same key, same values on both sides
@@ -7896,6 +7921,10 @@ Tolerance rules support:
 
 Tolerances can be set per-column (`by_column`) or per-type (`by_type`).
 
+Use repeated `--tolerance COLUMN:absolute=VALUE` or `--tolerance COLUMN:relative=VALUE` arguments
+to override per-column rules for one model or raw-query invocation. Unkeyed comparison is exact and
+does not accept tolerances.
+
 ### Excluded columns
 
 Columns that are expected to differ between the two sides (like timestamps or context-specific values) can be excluded from the row comparison:
@@ -7909,6 +7938,29 @@ MODEL (
 ```
 
 Excluded columns are still shown in the schema comparison but skipped during row-level diffing. A column cannot be in both `row_diff_exclude_columns` and `unique_key`.
+
+Use repeated `--exclude-column COLUMN` arguments for invocation-level exclusions.
+
+### Raw-query artifacts and crash recovery
+
+SQLBuild materializes each raw query once in the active target schema, compares the stable results,
+and drops both artifacts in a `finally` path. Every successfully created artifact appends an
+immutable `query_diff_artifact` fingerprint containing ownership and expiry metadata. Query
+execution and comparison never depend on historical fingerprints; they are ownership evidence for
+later cleanup, not workflow status.
+
+Before a query diff, and independently through `sqb janitor`, SQLBuild removes an expired artifact
+only when its exact physical identity and reserved name match its fingerprint. A reserved-name
+relation without matching ownership evidence is reported and retained for manual investigation.
+Configure the crash-recovery TTL, which defaults to 24 hours, in `sqlbuild_project.toml`:
+
+```toml
+[diff]
+query_artifact_ttl = "24h"
+```
+
+Historical ownership inspection failures are warnings and do not prevent the current query pair
+from running. Current-run ownership publication and immediate cleanup remain mandatory.
 
 ### Verbose output
 
@@ -7955,7 +8007,7 @@ observed schema for each model before starting its row comparison.
 
 ### Selectors
 
-Diff requires `--select` in the current version. You can use any selector syntax:
+Model diff requires `--select` in the current version. You can use any selector syntax:
 
 ```bash
 # Diff a single model
@@ -7970,7 +8022,9 @@ sqb diff prod:dev --full --select tag:acceptance
 
 ### Exit codes
 
-`sqb diff` returns exit code `0` when all selected models have no differences, and `1` when any model has schema or row differences. This makes it usable in CI pipelines as a validation gate.
+`sqb diff` returns exit code `0` when no differences are found, and `1` when any input has schema or
+row differences or the comparison cannot execute successfully. This makes it usable in CI pipelines
+as a validation gate.
 
 ## Execution Observability
 
@@ -14448,23 +14502,30 @@ destination. Managed physical sources may bootstrap a destination that has not b
 
 Source: `cli/diff.mdx`
 
-Compare schemas and data between targets or virtual environments.
+Compare schemas and data between targets, virtual environments, or two literal read-only queries.
 
-Compares schemas and optionally row-level data between two build contexts: two targets (e.g. `prod:dev`) in direct mode, or two virtual environments when virtual mode is enabled. See [Data Diffs](/concepts/diff) for detailed usage.
+Compares schemas and optionally row-level data between two build contexts, or materialized results
+from two literal read-only SQL inputs. See [Data Diffs](/concepts/diff) for detailed usage.
 
 ### Usage
 
 ```bash
 sqb diff <FROM>:<TO> <mode> [flags]
+sqb diff (--left-query SQL | --left-query-file PATH) \
+  (--right-query SQL | --right-query-file PATH) (--key COLUMN... | --unkeyed) [flags]
 ```
 
-The first argument is a positional `FROM:TO` range. Exactly one mode is required: `--full`, `--schema-only`, or `--bounded <duration>`.
+Model mode uses a positional `FROM:TO` range and requires exactly one of `--full`, `--schema-only`,
+or `--bounded <duration>`. Raw-query mode does not accept `FROM:TO`; it defaults to full comparison,
+also supports `--schema-only`, and does not support `--bounded`.
 
 In direct mode, `FROM` and `TO` are configured target names. Their database/schema namespaces remain
 authoritative, while the `TO` target's named connection executes the complete comparison and must
 be able to read both namespaces.
 
-Full and bounded row comparisons require the model to define `unique_key`. Bounded mode uses the model's cursor and falls back to a full row comparison when no cursor is configured.
+Full and bounded keyed comparisons use the model's `unique_key` unless repeated `--key` arguments
+override it. `--unkeyed` opts into exact multiset comparison. Bounded mode uses the model's cursor
+and falls back to a full row comparison when no cursor is configured.
 
 ### Flags
 
@@ -14482,6 +14543,15 @@ Full and bounded row comparisons require the model to define `unique_key`. Bound
 | `--json-output` | Write structured comparison scope, coverage, and results to a JSON file |
 | `--max-models` | Fail when the selected scope contains more models than this limit |
 | `--max-columns` | Fail when either side of a model has more columns than this limit |
+| `--left-query` | Literal read-only SQL for the left side |
+| `--left-query-file` | UTF-8 SQL file for the left side |
+| `--right-query` | Literal read-only SQL for the right side |
+| `--right-query-file` | UTF-8 SQL file for the right side |
+| `--target` | Target connection for raw-query mode; defaults to the active target |
+| `--key` | Row identity column; repeat for a composite key or to override model configuration |
+| `--unkeyed` | Compare exact full-row multiplicities without a key |
+| `--exclude-column` | Column to omit from row comparison; repeat as needed |
+| `--tolerance` | Per-column numeric rule such as `amount:absolute=0.01`; repeat as needed |
 | `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 | `--select`, `-s` | Select specific models to diff (required in v1) |
 | `--exclude` | Exclude specific models from diffing |
@@ -14503,11 +14573,19 @@ sqb diff prod:dev --bounded 14d --sample-rows 50000 --sample-seed 7 --select ord
 
 # Force exhaustive comparison despite inherited sampling defaults
 sqb diff prod:dev --bounded 14d --exhaustive --select order_lines
+
+# Compare two raw queries with a composite key
+sqb diff \
+  --left-query-file queries/orders_before.sql \
+  --right-query-file queries/orders_after.sql \
+  --key account_id \
+  --key order_id
 ```
 
 ### Exit codes
 
-Returns `0` when all selected models have no differences, `1` when any model has schema or row differences.
+Returns `0` when no differences are found. Returns `1` when any input has schema or row differences
+or the comparison cannot execute successfully.
 
 ## lineage
 

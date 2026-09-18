@@ -7,16 +7,44 @@ import pytest
 from sqlbuild.adapter.contract.models import RowDiffSampling, RowDiffTolerance, RowDiffTolerances
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.diff._helpers.config import (
+    parse_cli_tolerance_overrides,
     parse_row_diff_tolerances,
     resolve_row_diff_sampling,
 )
 from sqlbuild.executor.diff.models import RowDiffSamplingOverride
 from tests.unit.src.sqlbuild.executor.diff._test_types import (
+    CliToleranceTestCase,
     ParseRowDiffTolerancesErrorTestCase,
     ParseRowDiffTolerancesTestCase,
     ResolveRowDiffSamplingErrorTestCase,
     ResolveRowDiffSamplingTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CliToleranceTestCase(
+            description="absolute and relative rules for one column",
+            values=("amount:absolute=0.01", "amount:relative=0.001"),
+            expected_result=RowDiffTolerances(
+                by_column={
+                    "amount": RowDiffTolerance(
+                        absolute=Decimal("0.01"),
+                        relative=Decimal("0.001"),
+                    )
+                }
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cli_tolerance_specs_when_parsing_then_combines_rules_per_column(
+    test_case: CliToleranceTestCase,
+) -> None:
+    result: RowDiffTolerances = parse_cli_tolerance_overrides(values=test_case.values)
+
+    assert result == test_case.expected_result
 
 
 @pytest.mark.parametrize(

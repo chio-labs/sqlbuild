@@ -108,6 +108,14 @@ _DEFAULT_VALUES: dict[str, object] = {
     "full": False,
     "schema_only": False,
     "allow_partial_diff": False,
+    "left_query": None,
+    "left_query_file": None,
+    "right_query": None,
+    "right_query_file": None,
+    "key": [],
+    "unkeyed": False,
+    "exclude_column": [],
+    "tolerance": [],
     "reconcile_command": None,
     "reconcile_model": None,
     "reconcile_physical_relation": None,
@@ -267,6 +275,14 @@ class CliNamespace:
     full: bool
     schema_only: bool
     allow_partial_diff: bool
+    left_query: str | None
+    left_query_file: Path | None
+    right_query: str | None
+    right_query_file: Path | None
+    key: list[str]
+    unkeyed: bool
+    exclude_column: list[str]
+    tolerance: list[str]
     reconcile_command: str | None
     reconcile_model: str | None
     reconcile_physical_relation: str | None

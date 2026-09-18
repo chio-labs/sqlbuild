@@ -17,6 +17,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorExpiredLockCandidate,
     JanitorExpiredVirtualEnvironmentCandidate,
     JanitorPlan,
+    JanitorQueryDiffArtifactCandidate,
     JanitorStateBackupCandidate,
     JanitorVirtualStatePruneCandidate,
 )
@@ -86,6 +87,24 @@ def _execute_janitor_plan(
                 if_exists=True,
                 statement_recorder=recorder,
             )
+    query_artifact_candidate: JanitorQueryDiffArtifactCandidate
+    for query_artifact_candidate in plan.query_diff_artifact_candidates:
+        with OperationLifecycle(operation_kind="janitor", operation_name="janitor_cleanup_action"):
+            query_artifact_destination: str | None = adapter.render_qualified_name(
+                database=query_artifact_candidate.key.database,
+                schema=query_artifact_candidate.key.schema,
+                name=query_artifact_candidate.key.name,
+            )
+            adapter.drop(
+                connection=connection,
+                destination=(
+                    query_artifact_destination
+                    if query_artifact_destination is not None
+                    else query_artifact_candidate.key.display_name()
+                ),
+                if_exists=True,
+                statement_recorder=recorder,
+            )
     deleted_checkpoints: tuple[JanitorCheckpointCandidate, ...] = apply_janitor_deletions(
         candidates=plan.checkpoint_candidates, delete=delete_checkpoint
     )
@@ -118,6 +137,7 @@ def _execute_janitor_plan(
     )
     return JanitorExecutionResult(
         deleted=() if plan.direct_mode else plan.candidates,
+        deleted_query_diff_artifacts=plan.query_diff_artifact_candidates,
         deleted_checkpoints=deleted_checkpoints,
         deleted_detached_virtual_environments=deleted_detached_virtual_environments,
         deleted_expired_virtual_environments=deleted_expired_virtual_environments,
@@ -130,6 +150,7 @@ def _execute_janitor_plan(
 
 def _janitor_action_count(plan: JanitorPlan) -> int:
     relation_count: int = 0 if plan.direct_mode else len(plan.candidates)
+    relation_count += len(plan.query_diff_artifact_candidates)
     return relation_count + sum(
         len(candidates)
         for candidates in (

@@ -65,6 +65,42 @@ def parse_row_diff_tolerances(
     return RowDiffTolerances(by_type=by_type, by_column=by_column)
 
 
+def parse_cli_tolerance_overrides(*, values: tuple[str, ...]) -> RowDiffTolerances:
+    """Parse repeated COLUMN:KIND=VALUE CLI tolerance specifications."""
+
+    raw_by_column: dict[str, dict[str, str]] = {}
+    for value in values:
+        column_and_kind, separator, amount = value.partition("=")
+        column, kind_separator, kind = column_and_kind.partition(":")
+        if (
+            not separator
+            or not kind_separator
+            or not column
+            or kind not in ROW_DIFF_TOLERANCE_KEYS
+            or not amount
+        ):
+            raise ExecutorInputError(
+                "diff --tolerance must use COLUMN:absolute=VALUE or COLUMN:relative=VALUE",
+                code="X408",
+            )
+        raw_by_column.setdefault(column, {})[kind] = amount
+    return parse_row_diff_tolerances(raw={"by_column": raw_by_column})
+
+
+def merge_row_diff_tolerances(
+    *, base: RowDiffTolerances, override: RowDiffTolerances | None
+) -> RowDiffTolerances:
+    """Overlay invocation tolerance rules on compiled model rules."""
+
+    if override is None:
+        return base
+    return RowDiffTolerances(
+        by_type={**base.by_type, **override.by_type},
+        by_column={**base.by_column, **override.by_column},
+        sampling=base.sampling,
+    )
+
+
 def _parse_tolerance_section(
     *,
     raw: object,

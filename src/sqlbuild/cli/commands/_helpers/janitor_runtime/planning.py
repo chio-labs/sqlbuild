@@ -206,6 +206,7 @@ def _janitor_candidate_count(plan: JanitorPlan) -> int:
         len(candidates)
         for candidates in (
             plan.candidates,
+            plan.query_diff_artifact_candidates,
             plan.checkpoint_candidates,
             plan.detached_virtual_environment_candidates,
             plan.expired_virtual_environment_candidates,

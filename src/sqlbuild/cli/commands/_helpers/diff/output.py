@@ -17,6 +17,7 @@ from sqlbuild.adapter.contract.models import (
     RowDiffSampleRow,
     SchemaDiffResult,
 )
+from sqlbuild.executor.diff.constants import DIFF_INPUT_KIND_QUERY
 from sqlbuild.executor.diff.models import DiffExecutionResult, ModelDiffResult
 
 _WIDTH: int = 110
@@ -56,7 +57,14 @@ def render_diff_output(
             console.print(
                 Text(f"{from_label} vs {to_label}", style=_RICH_OBJECT_STYLE, justify="center")
             )
-            console.print(Text(f"selected models: {len(result.model_results):,}", justify="center"))
+            input_label: str = (
+                "query pairs"
+                if all(item.input_kind == DIFF_INPUT_KIND_QUERY for item in result.model_results)
+                else "models"
+            )
+            console.print(
+                Text(f"selected {input_label}: {len(result.model_results):,}", justify="center")
+            )
             console.print()
             model_result: ModelDiffResult
             for index, model_result in enumerate(result.model_results):
@@ -181,7 +189,10 @@ def _render_overview(*, model_result: ModelDiffResult, mode_label: str) -> Rende
     table: Table = Table.grid(padding=(0, 2))
     table.add_column(style=_RICH_OBJECT_STYLE, justify="right")
     table.add_column()
-    table.add_row("Model", model_result.name)
+    table.add_row(
+        "Input" if model_result.input_kind == DIFF_INPUT_KIND_QUERY else "Model",
+        model_result.name,
+    )
     table.add_row("Key", _primary_key_label(model_result))
     table.add_row("Comparison", _mode_display(model_result=model_result, mode_label=mode_label))
     if model_result.bounded_fallback:
@@ -189,7 +200,10 @@ def _render_overview(*, model_result: ModelDiffResult, mode_label: str) -> Rende
     if model_result.excluded_columns:
         table.add_row("Excluded", ", ".join(model_result.excluded_columns))
     if model_result.row_result is not None:
-        table.add_row("Scope", _row_scope_label(rows=model_result.row_result))
+        table.add_row(
+            "Scope",
+            _row_scope_label(rows=model_result.row_result, unkeyed=model_result.unkeyed),
+        )
     tolerance_label: str | None = _tolerance_label(model_result.row_result)
     if tolerance_label is not None:
         table.add_row("Tolerances", tolerance_label)
@@ -227,7 +241,9 @@ def _tolerance_label(row_result: RowDiffResult | None) -> str | None:
     return ", ".join(labels)
 
 
-def _row_scope_label(*, rows: RowDiffResult) -> str:
+def _row_scope_label(*, rows: RowDiffResult, unkeyed: bool = False) -> str:
+    if unkeyed:
+        return f"exhaustive ({rows.population_count:,} multiset rows)"
     if rows.sampling is None:
         return f"exhaustive ({rows.population_count:,} union keys)"
     if rows.is_exhaustive:

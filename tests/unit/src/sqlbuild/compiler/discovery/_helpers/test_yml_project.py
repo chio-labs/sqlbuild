@@ -16,6 +16,7 @@ from sqlbuild.sql_values.types import CollectionRendering
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ColumnContractModeConfigErrorTestCase,
     ColumnContractModeConfigTestCase,
+    DiffConfigTestCase,
     EffectiveBatchDefaultTestCase,
     FutureCursorConfigErrorTestCase,
     FutureCursorConfigTestCase,
@@ -37,6 +38,51 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
     write_project_config_test_files,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [DiffConfigTestCase(description="positive fixed TTL", expected_query_artifact_ttl="6h")],
+    ids=lambda case: case.description,
+)
+def test_given_query_artifact_ttl_when_loading_project_then_diff_config_is_typed(
+    test_case: DiffConfigTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "demo"\nadapter = "duckdb"\n[diff]\n'
+        f'query_artifact_ttl = "{test_case.expected_query_artifact_ttl}"\n',
+        encoding="utf-8",
+    )
+
+    config: ProjectConfig = load_project_config(project_dir=tmp_path)
+
+    assert config.diff.query_artifact_ttl == test_case.expected_query_artifact_ttl
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DiffConfigTestCase(
+            description="zero TTL",
+            expected_query_artifact_ttl="0h",
+            expected_error_fragment="query_artifact_ttl must be a positive",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_query_artifact_ttl_when_loading_project_then_error_is_actionable(
+    test_case: DiffConfigTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "demo"\nadapter = "duckdb"\n[diff]\n'
+        f'query_artifact_ttl = "{test_case.expected_query_artifact_ttl}"\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProjectConfigError, match=test_case.expected_error_fragment or ""):
+        _ = load_project_config(project_dir=tmp_path)
 
 
 @pytest.mark.parametrize(

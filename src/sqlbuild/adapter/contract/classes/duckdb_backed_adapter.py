@@ -21,6 +21,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
 )
 from sqlbuild.adapter.contract.classes.observed_connection import ObservedConnection
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.classes.unkeyed_diff import UnkeyedDiffMixin
 from sqlbuild.adapter.contract.constants import (
     DIFF_LEFT_SIDE,
     DIFF_RIGHT_SIDE,
@@ -74,7 +75,7 @@ from sqlbuild.spec.contracts.models import SeedCsvSettings
 from sqlbuild.sql_values.models import SqlValue
 
 
-class DuckDbBackedAdapter(BaseAdapter):
+class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
     """Shared adapter implementation for DuckDB-backed connections."""
 
     def get_columns_for_relations(
@@ -1175,9 +1176,7 @@ class DuckDbBackedAdapter(BaseAdapter):
     def query_column_names(self, *, connection: Any, sql: str) -> tuple[str, ...]:
         """Return DuckDB query column names using DESCRIBE SELECT."""
 
-        cursor: Any = self.execute(
-            connection=connection, sql=f"DESCRIBE SELECT * FROM ({sql}) AS __describe_source"
-        )
+        cursor: Any = self.execute(connection=connection, sql=f"DESCRIBE {sql}")
         return tuple(str(row[0]) for row in cursor.fetchall())
 
     def get_relation_max_cursor(
