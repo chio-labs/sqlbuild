@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.109.0](https://github.com/chio-labs/sqlbuild/compare/v0.108.1...v0.109.0) (2026-09-18)
+
+
+### Features
+
+* support table function fixtures in model tests ([#740](https://github.com/chio-labs/sqlbuild/issues/740)) ([d09b53a](https://github.com/chio-labs/sqlbuild/commit/d09b53a110f423b88d034559cd791516b06d59f0))
+
 ## [0.108.1](https://github.com/chio-labs/sqlbuild/compare/v0.108.0...v0.108.1) (2026-09-18)
 
 
