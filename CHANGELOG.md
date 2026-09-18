@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.106.1](https://github.com/chio-labs/sqlbuild/compare/v0.106.0...v0.106.1) (2026-09-18)
+
+
+### Bug Fixes
+
+* evaluate authored numeric decisions structurally ([#732](https://github.com/chio-labs/sqlbuild/issues/732)) ([6753680](https://github.com/chio-labs/sqlbuild/commit/675368088271854ef5087012cba4742f99e530c8))
+
 ## [0.106.0](https://github.com/chio-labs/sqlbuild/compare/v0.105.0...v0.106.0) (2026-09-18)
 
 
