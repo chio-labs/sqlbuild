@@ -11,6 +11,8 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompilerDiagnostic,
+    DynamicColumnContractProof,
+    DynamicColumnFamilyProof,
     InferredColumn,
     RelatedLocation,
 )
@@ -24,7 +26,11 @@ from sqlbuild.compiler.discovery.main._model_output_column_locations import (
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.planner.types import ContractPolicy
-from sqlbuild.spec.contracts.models import SchemaColumn, SourceLocation
+from sqlbuild.spec.contracts.models import (
+    SchemaColumn,
+    SchemaDynamicColumnFamily,
+    SourceLocation,
+)
 
 _MISSING_COLUMN_CODE: str = "K001"
 _TYPE_MISMATCH_CODE: str = "K002"
@@ -32,6 +38,7 @@ _UNKNOWN_TYPE_CODE: str = "K003"
 _NULLABILITY_MISMATCH_CODE: str = "K004"
 _EXTRA_COLUMN_CODE: str = "K005"
 _MISSING_DECLARATIONS_CODE: str = "K006"
+_DYNAMIC_OUTPUT_NOT_PROVEN_CODE: str = "K011"
 
 
 def collect_model_column_contract_diagnostics(
@@ -43,17 +50,20 @@ def collect_model_column_contract_diagnostics(
     """Collect diagnostics for one compiled model's declared column contract."""
 
     contract_enforced: bool = model.config.values.get("contract") == ContractPolicy.ENFORCED
-    if model.schema_entry is None or not model.schema_entry.columns:
+    if model.schema_entry is None or not (
+        model.schema_entry.columns or model.schema_entry.dynamic_columns
+    ):
         if contract_enforced:
             return (_missing_declarations_diagnostic(model),)
         return ()
+    diagnostics: list[CompilerDiagnostic] = []
+    diagnostics.extend(_dynamic_column_diagnostics(model=model, dialect=dialect))
     if model.inferred_columns is None:
-        return ()
+        return tuple(diagnostics)
 
     inferred_by_name: dict[str, InferredColumn] = {
         column.name: column for column in model.inferred_columns
     }
-    diagnostics: list[CompilerDiagnostic] = []
     if contract_enforced:
         diagnostics.extend(_extra_column_diagnostics(model=model))
     declared_column: SchemaColumn
@@ -96,6 +106,82 @@ def collect_model_column_contract_diagnostics(
     return tuple(diagnostics)
 
 
+def _dynamic_column_diagnostics(
+    *, model: CompiledModel, dialect: TypeDialect | str | None
+) -> tuple[CompilerDiagnostic, ...]:
+    if model.schema_entry is None or not model.schema_entry.dynamic_columns:
+        return ()
+    proof: DynamicColumnContractProof | None = model.dynamic_column_contract
+    if proof is None or not proof.output_proven:
+        failure_reason: str = (
+            proof.failure_reason
+            if proof is not None and proof.failure_reason
+            else "no compiler evidence"
+        )
+        return (
+            CompilerDiagnostic(
+                phase=DiagnosticPhase.CONTRACT,
+                severity=DiagnosticSeverity.ERROR,
+                code=_DYNAMIC_OUTPUT_NOT_PROVEN_CODE,
+                message=(
+                    f"model '{model.name}' dynamic column contract is not proven: {failure_reason}"
+                ),
+                resource_type=CompiledResourceType.MODEL,
+                resource_name=model.name,
+                path=model.relative_path,
+                help=(
+                    "project one supported runtime-dynamic pivot through a wildcard output "
+                    "boundary "
+                    "and declare every generated family"
+                ),
+            ),
+        )
+    proof_by_name: dict[str, DynamicColumnFamilyProof] = {
+        family.name.casefold(): family for family in proof.families
+    }
+    diagnostics: list[CompilerDiagnostic] = []
+    family: SchemaDynamicColumnFamily
+    for family in model.schema_entry.dynamic_columns:
+        family_proof: DynamicColumnFamilyProof | None = proof_by_name.get(family.name.casefold())
+        inferred_type: str | None = family_proof.inferred_type if family_proof is not None else None
+        if inferred_type is None:
+            diagnostics.append(
+                CompilerDiagnostic(
+                    phase=DiagnosticPhase.CONTRACT,
+                    severity=DiagnosticSeverity.WARNING,
+                    code=_UNKNOWN_TYPE_CODE,
+                    message=(
+                        f"dynamic column family '{family.name}' type could not be proven against "
+                        f"declared {family.type}"
+                    ),
+                    resource_type=CompiledResourceType.MODEL,
+                    resource_name=model.name,
+                    path=model.relative_path,
+                    help=(
+                        "establish an authoritative type on the pivot value column or CAST the "
+                        "type-preserving aggregate input explicitly"
+                    ),
+                )
+            )
+        elif not types_equal(left=family.type, right=inferred_type, dialect=dialect):
+            diagnostics.append(
+                CompilerDiagnostic(
+                    phase=DiagnosticPhase.CONTRACT,
+                    severity=DiagnosticSeverity.ERROR,
+                    code=_TYPE_MISMATCH_CODE,
+                    message=(
+                        f"dynamic column family '{family.name}' inferred as {inferred_type} "
+                        f"but declared type is {family.type}"
+                    ),
+                    resource_type=CompiledResourceType.MODEL,
+                    resource_name=model.name,
+                    path=model.relative_path,
+                    help="correct the family type or the pivot aggregate input type",
+                )
+            )
+    return tuple(diagnostics)
+
+
 def _missing_declarations_diagnostic(model: CompiledModel) -> CompilerDiagnostic:
     return CompilerDiagnostic(
         phase=DiagnosticPhase.CONTRACT,
@@ -105,7 +191,10 @@ def _missing_declarations_diagnostic(model: CompiledModel) -> CompilerDiagnostic
         resource_type=CompiledResourceType.MODEL,
         resource_name=model.name,
         path=model.relative_path,
-        help="add MODEL(columns (...)) or set contract none for this model",
+        help=(
+            "add MODEL(columns (...)), declare a proven MODEL(dynamic_columns (...)) family, "
+            "or set contract none for this model"
+        ),
     )
 
 

@@ -6,6 +6,7 @@ from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run._helpers.validation.contracts import validate_runtime_contract
+from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 from tests.unit.src.sqlbuild.executor.run._helpers._test_types import (
     RuntimeContractValidationTestCase,
 )
@@ -22,6 +23,26 @@ from tests.unit.src.sqlbuild.executor.run._helpers.helpers import build_contract
             actual_columns=(
                 ColumnInfo(name="id", type="INTEGER"),
                 ColumnInfo(name="extra_column", type="VARCHAR"),
+            ),
+            expected_valid=True,
+        ),
+        RuntimeContractValidationTestCase(
+            description="allows runtime columns covered by one typed dynamic family",
+            contract_enforced=True,
+            contract_columns=(ColumnInfo(name="customer_id", type="INTEGER"),),
+            contract_dynamic_columns=(
+                SchemaDynamicColumnFamily(
+                    name="category_amounts",
+                    pivot_column="category",
+                    value_column="amount",
+                    aggregate="MAX",
+                    type="DECIMAL(12,2)",
+                ),
+            ),
+            actual_columns=(
+                ColumnInfo(name="customer_id", type="INTEGER"),
+                ColumnInfo(name="books", type="DECIMAL(12,2)"),
+                ColumnInfo(name="games", type="DECIMAL(12,2)"),
             ),
             expected_valid=True,
         ),
@@ -54,6 +75,7 @@ def test_given_valid_runtime_contract_when_validating_then_passes(
     entry: ModelPlanEntry = build_contract_model_plan_entry(
         contract_enforced=test_case.contract_enforced,
         contract_columns=test_case.contract_columns,
+        contract_dynamic_columns=test_case.contract_dynamic_columns,
     )
 
     validate_runtime_contract(entry=entry, actual_columns=test_case.actual_columns)
@@ -106,6 +128,27 @@ def test_given_valid_runtime_contract_when_validating_then_passes(
             expected_error_fragment="has type VARCHAR but contract declares INTEGER",
             expected_error_code="K010",
         ),
+        RuntimeContractValidationTestCase(
+            description="rejects runtime dynamic column with incompatible family type",
+            contract_enforced=True,
+            contract_columns=(ColumnInfo(name="customer_id", type="INTEGER"),),
+            contract_dynamic_columns=(
+                SchemaDynamicColumnFamily(
+                    name="category_amounts",
+                    pivot_column="category",
+                    value_column="amount",
+                    aggregate="MAX",
+                    type="DECIMAL(12,2)",
+                ),
+            ),
+            actual_columns=(
+                ColumnInfo(name="customer_id", type="INTEGER"),
+                ColumnInfo(name="books", type="VARCHAR"),
+            ),
+            expected_valid=False,
+            expected_error_fragment="dynamic column 'books' has type VARCHAR",
+            expected_error_code="K010",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -115,6 +158,7 @@ def test_given_invalid_runtime_contract_when_validating_then_raises(
     entry: ModelPlanEntry = build_contract_model_plan_entry(
         contract_enforced=test_case.contract_enforced,
         contract_columns=test_case.contract_columns,
+        contract_dynamic_columns=test_case.contract_dynamic_columns,
     )
     assert test_case.expected_error_fragment is not None
 

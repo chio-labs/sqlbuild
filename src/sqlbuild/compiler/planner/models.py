@@ -74,6 +74,7 @@ from sqlbuild.spec.contracts.models import (
     FutureCursorsConfig,
     LocalConfig,
     ProjectConfig,
+    SchemaDynamicColumnFamily,
     SeedCsvSettings,
     SourceEntry,
     StartCursorsConfig,
@@ -1001,6 +1002,7 @@ class ModelPlanEntry:
     declared_columns: tuple[ColumnInfo, ...] = field(default_factory=tuple)
     contract_enforced: bool = False
     contract_columns: tuple[ColumnInfo, ...] = field(default_factory=tuple)
+    contract_dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = field(default_factory=tuple)
     pre_hooks: object = None
     post_hooks: object = None
     previous_query_sql: str | None = None

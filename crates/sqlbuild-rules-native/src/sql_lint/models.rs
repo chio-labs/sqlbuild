@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use polyglot_sql::tokens::Span;
 use serde::{Deserialize, Serialize};
 
@@ -67,6 +69,16 @@ pub(crate) struct LintRequest {
     pub externally_referenced_ctes: Vec<String>,
     #[serde(default)]
     pub allows_ceremonial_select: bool,
+    #[serde(default)]
+    pub allows_dynamic_output_star: bool,
+}
+
+#[derive(Debug)]
+pub(crate) struct AdditionalFactOptions<'a> {
+    pub external_identifiers: &'a HashSet<String>,
+    pub dependency_identifiers: &'a HashSet<String>,
+    pub allows_ceremonial_select: bool,
+    pub allows_dynamic_output_star: bool,
 }
 
 #[derive(Debug, Serialize)]

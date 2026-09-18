@@ -12,17 +12,30 @@ def contract_output_signature(*, model: CompiledModel) -> dict[str, object] | No
     """Build required model output metadata that participates in execution identity."""
 
     schema_entry: SchemaModelEntry | None = model.schema_entry
-    if schema_entry is None or not schema_entry.columns:
+    if schema_entry is None or not (schema_entry.columns or schema_entry.dynamic_columns):
         return None
     enforced: bool = model.config.values.get("contract") == ContractPolicy.ENFORCED
     if not enforced and schema_entry.model_schema is None:
         return None
-    return {
+    signature: dict[str, object] = {
         "enforced": enforced,
         "columns": [
             _column_output_signature(model=model, column=column) for column in schema_entry.columns
         ],
     }
+    if schema_entry.dynamic_columns:
+        signature["dynamic_columns"] = [
+            {
+                "name": family.name,
+                "pivot_column": family.pivot_column,
+                "value_column": family.value_column,
+                "aggregate": family.aggregate,
+                "type": family.type,
+                "name_pattern": family.name_pattern,
+            }
+            for family in schema_entry.dynamic_columns
+        ]
+    return signature
 
 
 def _column_output_signature(*, model: CompiledModel, column: SchemaColumn) -> dict[str, object]:

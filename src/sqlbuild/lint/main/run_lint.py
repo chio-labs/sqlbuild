@@ -29,6 +29,7 @@ def run_lint(
     value_renderer: TypedSqlValueRenderer | None = None,
     selected_paths: frozenset[Path] | None = None,
     discovered_inputs: DiscoveredProjectInputs | None = None,
+    dynamic_output_paths: frozenset[Path] = frozenset(),
 ) -> LintRunResult:
     """Lint all DSL files in the project without modifying anything."""
 
@@ -73,6 +74,7 @@ def run_lint(
                     headers=headers,
                     context=context,
                     project_dir=project_dir,
+                    allows_dynamic_output_star=file_path.resolve() in dynamic_output_paths,
                 )
             )
 
@@ -117,6 +119,7 @@ def _prepared_bodies(
     headers: tuple[HeaderSpan, ...],
     context: SqlExpansionContext,
     project_dir: Path,
+    allows_dynamic_output_star: bool,
 ) -> tuple[LintBody, ...]:
     bodies: list[LintBody] = []
     external_identifiers: tuple[str, ...] = external_identifiers_for_headers(
@@ -143,6 +146,7 @@ def _prepared_bodies(
                 context=context,
                 external_identifiers=external_identifiers,
                 allows_ceremonial_select=allows_ceremonial_select,
+                allows_dynamic_output_star=allows_dynamic_output_star,
             )
         )
     return tuple(bodies)

@@ -9,6 +9,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledRelationLocation,
     CompileModelConfig,
+    DynamicColumnContractProof,
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -16,6 +17,7 @@ from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.contracts.models import (
     SchemaAuditInstance,
     SchemaColumn,
+    SchemaDynamicColumnFamily,
     SchemaModelEntry,
     SettingsConfig,
     SourceLocation,
@@ -37,6 +39,8 @@ def make_contract_project(
     inferred_nullability_by_column: dict[str, InferredNullability] | None = None,
     fast_lineage_has_star: bool = False,
     authored_sql: str = "",
+    dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = (),
+    dynamic_column_contract: DynamicColumnContractProof | None = None,
 ) -> CompiledProject:
     """Build a compiled project for contract validation tests."""
 
@@ -85,6 +89,7 @@ def make_contract_project(
                         )
                         for name, column_type in declared_columns
                     ),
+                    dynamic_columns=dynamic_columns,
                 ),
                 inferred_columns=(
                     None,
@@ -101,6 +106,7 @@ def make_contract_project(
                 )[inferred_columns is not None],
                 fast_lineage_has_star=fast_lineage_has_star,
                 authored_sql=authored_sql,
+                dynamic_column_contract=dynamic_column_contract,
             ),
         ),
     )

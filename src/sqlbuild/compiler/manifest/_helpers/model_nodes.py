@@ -122,6 +122,29 @@ def _extract_meta(
             sqlbuild_meta["authored_value"] = authored_sqlbuild_meta
         sqlbuild_meta["lifecycle_hooks"] = lifecycle_hooks
         meta["sqlbuild"] = sqlbuild_meta
+    if model.schema_entry is not None and model.schema_entry.dynamic_columns:
+        authored_sqlbuild_meta = meta.get("sqlbuild")
+        sqlbuild_meta: dict[str, object] = {}
+        if isinstance(authored_sqlbuild_meta, dict):
+            authored_key: object
+            authored_value: object
+            for authored_key, authored_value in authored_sqlbuild_meta.items():
+                if isinstance(authored_key, str):
+                    sqlbuild_meta[authored_key] = authored_value
+        if authored_sqlbuild_meta is not None and not isinstance(authored_sqlbuild_meta, dict):
+            sqlbuild_meta["authored_value"] = authored_sqlbuild_meta
+        sqlbuild_meta["dynamic_columns"] = [
+            {
+                "name": family.name,
+                "pivot_column": family.pivot_column,
+                "value_column": family.value_column,
+                "aggregate": family.aggregate,
+                "type": family.type,
+                "name_pattern": family.name_pattern,
+            }
+            for family in model.schema_entry.dynamic_columns
+        ]
+        meta["sqlbuild"] = sqlbuild_meta
     return meta
 
 

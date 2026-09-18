@@ -1564,6 +1564,49 @@ fn given_additional_rule_cases_when_linting_then_findings_and_fixes_match() -> R
 }
 
 #[test]
+fn given_compiler_proven_dynamic_output_when_linting_then_only_terminal_star_is_exempt()
+-> Result<(), String> {
+    let test_cases = [test_types::DynamicOutputStarLintTestCase {
+        description: "unrelated CTE star remains controlled",
+        sql: "WITH pivot_input AS (SELECT customer_id, category, amount FROM orders), \
+final AS (SELECT * FROM pivot_input PIVOT(MAX(amount) FOR category IN (ANY))), \
+unrelated AS (SELECT * FROM pivot_input) SELECT * FROM final",
+        expected_count: 1,
+        expected_prefix: "unrelated AS (SELECT ",
+    }];
+    for test_case in test_cases {
+        let response = lint_json(
+            &json!({
+                "version": 1,
+                "sql": test_case.sql,
+                "dialect": "snowflake",
+                "enabled_rules": ["SQBRSQL021"],
+                "allows_dynamic_output_star": true,
+            })
+            .to_string(),
+        )?;
+        let payload: Value = serde_json::from_str(&response).map_err(|error| error.to_string())?;
+        let diagnostics = payload["diagnostics"]
+            .as_array()
+            .ok_or("diagnostics should be an array")?;
+
+        assert_eq!(
+            diagnostics.len(),
+            test_case.expected_count,
+            "{}",
+            test_case.description
+        );
+        let start = diagnostics[0]["start"].as_u64().unwrap_or_default() as usize;
+        assert!(
+            test_case.sql[..start].ends_with(test_case.expected_prefix),
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn given_ceremonial_cte_contexts_when_linting_then_only_harness_dependencies_are_reachable()
 -> Result<(), String> {
     let test_cases = [

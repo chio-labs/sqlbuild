@@ -8,6 +8,7 @@ from pathlib import Path
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.contract_adoption.types import ContractFindingKind
+from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class ContractEvidence:
     declared_columns: tuple[ColumnInfo, ...]
     physical_columns: tuple[ColumnInfo, ...] | None
     source_path: Path | None
+    dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = field(default_factory=tuple)
     findings: tuple[ContractFinding, ...] = field(default_factory=tuple)
 
 

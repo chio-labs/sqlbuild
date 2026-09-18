@@ -41,3 +41,14 @@ class ContractMissingDeclarationsTestCase:
     contract: str | None
     expected_codes: tuple[str, ...]
     expected_messages: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DynamicContractValidationTestCase:
+    description: str
+    declared_type: str
+    output_proven: bool
+    inferred_type: str | None
+    failure_reason: str | None
+    expected_code: str
+    expected_message: str

@@ -7,6 +7,7 @@ from typing import cast
 
 import pytest
 
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
@@ -25,6 +26,7 @@ from sqlbuild.compiler.planner.main.identity.version_identity_model_metadata imp
 )
 from sqlbuild.spec.contracts.models import SchemaAuditInstance, SourceLocation
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
+    DynamicModelSchemaTestCase,
     ModelSchemaCompilationTestCase,
     ModelSchemaContractDiagnosticTestCase,
     ModelSchemaCursorTestCase,
@@ -314,7 +316,8 @@ SELECT {test_case.projection}
             discovered_inputs=discovered,
             adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
             run_id="test_run",
-        )
+        ),
+        inference_profile=DuckDbAdapter().expression_inference_profile(),
     )
 
     diagnostics: tuple[CompilerDiagnostic, ...] = evaluate_model_contracts(
@@ -324,6 +327,283 @@ SELECT {test_case.projection}
     assert test_case.expected_help_fragment in " ".join(
         diagnostic.help or "" for diagnostic in diagnostics
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DynamicModelSchemaTestCase(
+            description="proven dynamic pivot family",
+            expected_fixed_columns=("customer_id",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_dynamic_pivot_family_when_compiling_then_preserves_closed_contract_metadata(
+    test_case: DynamicModelSchemaTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "models/stg_order_amounts.sql": """
+MODEL (
+  contract enforced,
+  columns (
+    customer_id (type INTEGER),
+    category (type VARCHAR),
+    amount (type "DECIMAL(12,2)"),
+  ),
+);
+SELECT
+  CAST(1 AS INTEGER) AS customer_id,
+  CAST('books' AS VARCHAR) AS category,
+  CAST(10.25 AS DECIMAL(12,2)) AS amount
+""",
+            "models/customer_category_amounts.sql": """
+MODEL (
+  contract enforced,
+  columns (customer_id (type INTEGER)),
+  dynamic_columns (
+    category_amounts (
+      pivot_column category,
+      value_column amount,
+      aggregate MAX,
+      type "DECIMAL(12,2)"
+    )
+  ),
+);
+PIVOT __ref("stg_order_amounts")
+ON category
+USING MAX(amount)
+GROUP BY customer_id
+""",
+            "models/customer_category_amounts_copy.sql": """
+MODEL (
+  contract enforced,
+  columns (customer_id (type INTEGER)),
+  dynamic_columns (
+    category_amounts (
+      pivot_column category,
+      value_column amount,
+      aggregate MAX,
+      type "DECIMAL(12,2)"
+    )
+  ),
+);
+SELECT * FROM __ref("customer_category_amounts")
+""",
+        },
+    )
+    project: CompiledProject = assemble_project(
+        inputs=build_compile_inputs(
+            discovered_inputs=discover_project_inputs(project_dir=tmp_path),
+            adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+            run_id="test_run",
+        ),
+        inference_profile=DuckDbAdapter().expression_inference_profile(),
+    )
+    models_by_name: dict[str, CompiledModel] = {item.name: item for item in project.models}
+    model: CompiledModel = models_by_name["customer_category_amounts"]
+
+    assert model.schema_entry is not None
+    assert tuple(column.name for column in model.inferred_columns or ()) == (
+        test_case.expected_fixed_columns
+    )
+    assert model.dynamic_column_contract is not None
+    assert model.dynamic_column_contract.output_proven is True
+    assert model.dynamic_column_contract.families[0].inferred_type == "DECIMAL(12,2)"
+    assert evaluate_model_contracts(project=project, dialect="duckdb").diagnostics == ()
+    identity: dict[str, object] = json.loads(
+        build_model_version_identity_metadata_json(model=model)
+    )
+    contract_identity: dict[str, object] = cast(
+        dict[str, object], identity["execution_signature"]["contract"]
+    )
+    assert contract_identity["dynamic_columns"] == [
+        {
+            "name": "category_amounts",
+            "pivot_column": "category",
+            "value_column": "amount",
+            "aggregate": "MAX",
+            "type": "DECIMAL(12,2)",
+            "name_pattern": None,
+        }
+    ]
+    manifest_node: dict[str, object] = build_model_node(
+        model=model,
+        plan_entry=None,
+        project_name="demo",
+    )
+    manifest_meta: dict[str, object] = cast(dict[str, object], manifest_node["meta"])
+    sqlbuild_meta: dict[str, object] = cast(dict[str, object], manifest_meta["sqlbuild"])
+    assert sqlbuild_meta["dynamic_columns"] == contract_identity["dynamic_columns"]
+    passthrough: CompiledModel = models_by_name["customer_category_amounts_copy"]
+    assert passthrough.dynamic_column_contract is not None
+    assert passthrough.dynamic_column_contract.output_proven is True
+    assert tuple(column.name for column in passthrough.inferred_columns or ()) == ("customer_id",)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DynamicModelSchemaTestCase(
+            description="partial upstream schema",
+            expected_codes=("K011",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_partial_upstream_schema_when_compiling_dynamic_pivot_then_closure_is_rejected(
+    test_case: DynamicModelSchemaTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "models/order_amounts.sql": """
+MODEL (
+  contract none,
+  columns (
+    customer_id (type INTEGER),
+    category (type VARCHAR),
+    amount (type INTEGER),
+  ),
+);
+SELECT
+  CAST(1 AS INTEGER) AS customer_id,
+  CAST('books' AS VARCHAR) AS category,
+  CAST(10 AS INTEGER) AS amount,
+  CAST(99 AS INTEGER) AS unrelated
+""",
+            "models/customer_category_amounts.sql": """
+MODEL (
+  contract enforced,
+  columns (customer_id (type INTEGER)),
+  dynamic_columns (
+    category_amounts (
+      pivot_column category,
+      value_column amount,
+      aggregate MAX,
+      type INTEGER
+    )
+  ),
+);
+PIVOT __ref("order_amounts")
+ON category
+USING MAX(amount)
+GROUP BY customer_id
+""",
+        },
+    )
+    project: CompiledProject = assemble_project(
+        inputs=build_compile_inputs(
+            discovered_inputs=discover_project_inputs(project_dir=tmp_path),
+            adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+            run_id="test_run",
+        ),
+        inference_profile=DuckDbAdapter().expression_inference_profile(),
+    )
+
+    diagnostics: tuple[CompilerDiagnostic, ...] = evaluate_model_contracts(
+        project=project,
+        dialect="duckdb",
+    ).diagnostics
+
+    assert tuple(diagnostic.code for diagnostic in diagnostics) == test_case.expected_codes
+    assert "authoritative, explicit schema" in diagnostics[0].message
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DynamicModelSchemaTestCase(
+            description="unenforced dynamic upstream",
+            expected_codes=("K011",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_unenforced_dynamic_upstream_when_compiling_passthrough_then_closure_is_rejected(
+    test_case: DynamicModelSchemaTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "models/order_amounts.sql": """
+MODEL (
+  contract enforced,
+  columns (
+    customer_id (type INTEGER),
+    category (type VARCHAR),
+    amount (type INTEGER),
+    unrelated (type INTEGER),
+  ),
+);
+SELECT
+  CAST(1 AS INTEGER) AS customer_id,
+  CAST('books' AS VARCHAR) AS category,
+  CAST(10 AS INTEGER) AS amount,
+  CAST(99 AS INTEGER) AS unrelated
+""",
+            "models/open_category_amounts.sql": """
+MODEL (
+  contract none,
+  columns (customer_id (type INTEGER)),
+  dynamic_columns (
+    category_amounts (
+      pivot_column category,
+      value_column amount,
+      aggregate MAX,
+      type INTEGER
+    )
+  ),
+);
+PIVOT __ref("order_amounts")
+ON category
+USING MAX(amount)
+GROUP BY customer_id
+""",
+            "models/closed_category_amounts.sql": """
+MODEL (
+  contract enforced,
+  columns (customer_id (type INTEGER)),
+  dynamic_columns (
+    category_amounts (
+      pivot_column category,
+      value_column amount,
+      aggregate MAX,
+      type INTEGER
+    )
+  ),
+);
+SELECT * FROM __ref("open_category_amounts")
+""",
+        },
+    )
+    project: CompiledProject = assemble_project(
+        inputs=build_compile_inputs(
+            discovered_inputs=discover_project_inputs(project_dir=tmp_path),
+            adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+            run_id="test_run",
+        ),
+        inference_profile=DuckDbAdapter().expression_inference_profile(),
+    )
+
+    diagnostics: tuple[CompilerDiagnostic, ...] = evaluate_model_contracts(
+        project=project,
+        dialect="duckdb",
+    ).diagnostics
+
+    assert tuple(diagnostic.code for diagnostic in diagnostics) == test_case.expected_codes
+    assert "must redeclare the upstream families exactly" in diagnostics[0].message
 
 
 @pytest.mark.parametrize(

@@ -6,7 +6,7 @@ use crate::sql_lint::_helpers::engine::{
     direct_indices, is_comment, is_layout, is_query_from, query_end, significant_after,
     significant_before, token_depths,
 };
-use crate::sql_lint::models::AdditionalQueryFacts;
+use crate::sql_lint::models::{AdditionalFactOptions, AdditionalQueryFacts};
 
 const COUNT_ONE_LITERAL: &str = "1";
 const QUALIFIED_REFERENCE_LENGTH: usize = 3;
@@ -48,6 +48,7 @@ struct SelectFactContext<'a> {
     external_identifiers: &'a HashSet<String>,
     dependency_identifiers: &'a HashSet<String>,
     allows_ceremonial_select: bool,
+    allows_dynamic_output_star: bool,
 }
 
 struct ProjectedStarContext<'a> {
@@ -59,9 +60,7 @@ struct ProjectedStarContext<'a> {
 
 pub(super) fn collect_additional_facts(
     tokens: &[Token],
-    external_identifiers: &HashSet<String>,
-    dependency_identifiers: &HashSet<String>,
-    allows_ceremonial_select: bool,
+    options: &AdditionalFactOptions<'_>,
 ) -> AdditionalQueryFacts {
     let mut facts = AdditionalQueryFacts::default();
     let depths = token_depths(tokens);
@@ -166,9 +165,10 @@ pub(super) fn collect_additional_facts(
     let select_facts = collect_select_additional_facts(&SelectFactContext {
         tokens,
         depths: &depths,
-        external_identifiers,
-        dependency_identifiers,
-        allows_ceremonial_select,
+        external_identifiers: options.external_identifiers,
+        dependency_identifiers: options.dependency_identifiers,
+        allows_ceremonial_select: options.allows_ceremonial_select,
+        allows_dynamic_output_star: options.allows_dynamic_output_star,
     });
     facts.duplicate_output_aliases = select_facts.duplicate_output_aliases;
     facts.unaliased_calculations = select_facts.unaliased_calculations;
@@ -271,6 +271,12 @@ fn collect_select_additional_facts(context: &SelectFactContext<'_>) -> Additiona
                 ));
         }
         if !is_dependency_import_select(context, select_index, &direct, from_position)
+            && !is_compiler_proven_dynamic_output_select(
+                context,
+                select_index,
+                &direct,
+                from_position,
+            )
             && !has_irreducible_projected_star(
                 &ProjectedStarContext {
                     tokens,
@@ -350,6 +356,25 @@ fn collect_select_additional_facts(context: &SelectFactContext<'_>) -> Additiona
             .extend(ambiguous_order_direction_spans(tokens, &direct));
     }
     facts
+}
+
+fn is_compiler_proven_dynamic_output_select(
+    context: &SelectFactContext<'_>,
+    select_index: usize,
+    direct: &[usize],
+    from_position: usize,
+) -> bool {
+    if !context.allows_dynamic_output_star
+        || context.depths[select_index] != 0
+        || direct[..from_position].len() != 1
+        || context.tokens[direct[0]].token_type != TokenType::Star
+    {
+        return false;
+    }
+    !context.tokens[select_index + 1..]
+        .iter()
+        .zip(&context.depths[select_index + 1..])
+        .any(|(token, depth)| token.token_type == TokenType::Select && *depth == 0)
 }
 
 fn has_irreducible_projected_star(

@@ -325,6 +325,13 @@ class ModelSchemaCursorTestCase:
 
 
 @dataclass(frozen=True)
+class DynamicModelSchemaTestCase:
+    description: str
+    expected_codes: tuple[str, ...] = ()
+    expected_fixed_columns: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class ExtractSqlTestCtesTestCase:
     description: str
     sql: str

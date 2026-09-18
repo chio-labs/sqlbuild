@@ -5,15 +5,16 @@ use crate::constants::{
 use crate::models::{Declaration, EvaluateRequest, Fault, Model, RuleMetadata, RulesConfig};
 use crate::rules::_helpers::domain_layout::folder_layer_details;
 use crate::rules::_helpers::{
-    contract_name_types, explicit_output_types, numeric_decisions, typed_contract_columns,
+    contract_name_types, dynamic_contracts, explicit_output_types, numeric_decisions,
+    typed_contract_columns,
 };
 use crate::rules::models::{
     FaultCollector, ModelEvaluationRequest, ProjectEvaluationRequest, ResolvedThresholdOverride,
 };
 use globset::{Glob, GlobSetBuilder};
 use sqlparser::ast::{
-    BinaryOperator, Expr, GroupByExpr, JoinConstraint, JoinOperator, PivotValueSource, Query,
-    Select, SelectItem, SetExpr, Spanned, Statement, TableFactor, Value, Visit, Visitor,
+    BinaryOperator, Expr, GroupByExpr, JoinConstraint, JoinOperator, Query, Select, SelectItem,
+    SetExpr, Spanned, Statement, TableFactor, Value, Visit, Visitor,
 };
 use sqlparser::dialect::{
     BigQueryDialect, ClickHouseDialect, DatabricksDialect, Dialect, DuckDbDialect, GenericDialect,
@@ -120,6 +121,10 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
     } = request;
     let metadata = |code: &str| selected.get(code).copied();
     let faults = FaultCollector::default();
+    if let Some(dynamic_faults) = dynamic_contracts::evaluate_without_query(model, config, selected)
+    {
+        return Ok(dynamic_faults);
+    }
     if !requires_parsed_model(selected) {
         return Ok(faults.into_inner());
     }
@@ -1006,22 +1011,14 @@ fn select_star(
         let Some(select) = root_select(query) else {
             continue;
         };
-        let dynamic_pivot_star = select.projection.len() == 1
-            && select.from.len() == 1
-            && select.from[0].joins.is_empty()
-            && matches!(
-                &select.from[0].relation,
-                TableFactor::Pivot {
-                    value_source: PivotValueSource::Any(_),
-                    ..
-                }
-            );
+        let dynamic_output_star =
+            dynamic_contracts::allows_output_star(query, &parsed.query, parsed.model);
         let stars = stars_in_select(select);
         for at in stars {
             if import_positions.contains(&(at.line, at.column)) {
                 continue;
             }
-            if dynamic_pivot_star {
+            if dynamic_output_star {
                 continue;
             }
             let lone = select.projection.len() == 1;

@@ -145,6 +145,25 @@ class InferredColumn:
 
 
 @dataclass(frozen=True)
+class DynamicColumnFamilyProof:
+    """Compiler evidence for one declared runtime-generated column family."""
+
+    name: str
+    inferred_type: str | None = None
+
+
+@dataclass(frozen=True)
+class DynamicColumnContractProof:
+    """Closed output-shape evidence for a dynamic column contract."""
+
+    output_proven: bool
+    fixed_columns: tuple[InferredColumn, ...] = field(default_factory=tuple)
+    families: tuple[DynamicColumnFamilyProof, ...] = field(default_factory=tuple)
+    failure_reason: str | None = None
+    bare_dynamic_pivot: bool = False
+
+
+@dataclass(frozen=True)
 class CteFactResolvers:
     """Expression resolvers used for conservative CTE fact recovery."""
 
@@ -740,6 +759,7 @@ class CompiledModel:
     enum_columns: dict[str, EnumDeclaration] = field(default_factory=dict)
     binding_diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
     binding_validated: bool = False
+    dynamic_column_contract: DynamicColumnContractProof | None = None
 
 
 @dataclass(frozen=True)

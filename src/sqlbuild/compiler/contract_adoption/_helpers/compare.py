@@ -11,7 +11,8 @@ from sqlbuild.compiler.compile.models import CompiledModel, CompiledSource
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.contract_adoption.models import ContractEvidence, ContractFinding
 from sqlbuild.compiler.contract_adoption.types import ContractFindingKind
-from sqlbuild.spec.contracts.models import SourceEntry
+from sqlbuild.spec.contracts.main.matching_dynamic_families import matching_dynamic_families
+from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily, SourceEntry
 
 
 def model_evidence(*, model: CompiledModel) -> ContractEvidence:
@@ -27,6 +28,9 @@ def model_evidence(*, model: CompiledModel) -> ContractEvidence:
         ),
         physical_columns=None,
         source_path=model.relative_path,
+        dynamic_columns=(
+            model.schema_entry.dynamic_columns if model.schema_entry is not None else ()
+        ),
     )
 
 
@@ -85,7 +89,33 @@ def compare_evidence(
     }
     for physical in physical_columns:
         declared: ColumnInfo | None = declared_by_name.get(physical.name.casefold())
-        if declared is None or not declared.type:
+        if declared is None:
+            matching: tuple[SchemaDynamicColumnFamily, ...] = matching_dynamic_families(
+                families=item.dynamic_columns,
+                column_name=physical.name,
+            )
+            if len(matching) == 1:
+                family: SchemaDynamicColumnFamily = matching[0]
+                if not types_equal(
+                    left=family.type,
+                    right=physical.type,
+                    dialect=adapter.sql_analysis_dialect(),
+                ):
+                    findings.append(
+                        ContractFinding(
+                            resource_type=item.resource_type,
+                            resource_name=item.resource_name,
+                            kind=ContractFindingKind.TYPE_MISMATCH,
+                            column_name=physical.name,
+                            declared_type=family.type,
+                            physical_type=physical.type,
+                            message=(
+                                f"dynamic column '{physical.name}' is physically {physical.type} "
+                                f"but family '{family.name}' declares {family.type}"
+                            ),
+                        )
+                    )
+                continue
             findings.append(
                 ContractFinding(
                     resource_type=item.resource_type,
@@ -95,9 +125,20 @@ def compare_evidence(
                     physical_type=physical.type,
                     message=(
                         f"physical column '{physical.name}' ({physical.type}) is not declared"
-                        if declared is None
-                        else f"declared column '{declared.name}' has no type; "
-                        f"physical type is {physical.type}"
+                    ),
+                )
+            )
+        elif not declared.type:
+            findings.append(
+                ContractFinding(
+                    resource_type=item.resource_type,
+                    resource_name=item.resource_name,
+                    kind=ContractFindingKind.MISSING_DECLARATION,
+                    column_name=physical.name,
+                    physical_type=physical.type,
+                    message=(
+                        f"declared column '{declared.name}' has no type; physical type is "
+                        f"{physical.type}"
                     ),
                 )
             )

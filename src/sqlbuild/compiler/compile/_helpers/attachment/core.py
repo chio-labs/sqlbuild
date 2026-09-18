@@ -27,6 +27,9 @@ from sqlbuild.compiler.compile._helpers.audit_factories.core import (
     merge_validated_model_audits,
     parse_model_header_audit_factories,
 )
+from sqlbuild.compiler.compile._helpers.config.dynamic_columns import (
+    parse_dynamic_column_families,
+)
 from sqlbuild.compiler.compile._helpers.config.model_validation import (
     validate_contract_config,
     validate_custom_materialization_config,
@@ -132,6 +135,7 @@ from sqlbuild.spec.contracts.models import (
     ProjectConfig,
     SchemaAuditInstance,
     SchemaColumn,
+    SchemaDynamicColumnFamily,
     SchemaModelEntry,
     SchemaSeedEntry,
     SettingsConfig,
@@ -1490,11 +1494,13 @@ def build_model_header_schema_entry(
 
     raw_description: object | None = model_header_values.get("description")
     raw_columns: object | None = model_header_values.get("columns")
+    raw_dynamic_columns: object | None = model_header_values.get("dynamic_columns")
     raw_audits: object | None = model_header_values.get("audits")
     raw_audit_factories: object | None = model_header_values.get("audit_factories")
     if (
         raw_description is None
         and raw_columns is None
+        and raw_dynamic_columns is None
         and raw_audits is None
         and raw_audit_factories is None
         and model_schema_columns is None
@@ -1519,6 +1525,11 @@ def build_model_header_schema_entry(
         model_schema_columns=model_schema_columns,
         local_columns=local_columns,
     )
+    dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = parse_dynamic_column_families(
+        raw_value=raw_dynamic_columns,
+        model_name=model_name,
+        file_path=file_path,
+    )
     audits: tuple[SchemaAuditInstance, ...] = _parse_model_header_audits(
         raw_audits=raw_audits,
         file_path=file_path,
@@ -1537,7 +1548,7 @@ def build_model_header_schema_entry(
         file_path=file_path,
     )
     type_enforcement: bool | None = (
-        True if any(column.type is not None for column in columns) else None
+        True if any(column.type is not None for column in columns) or dynamic_columns else None
     )
     return SchemaModelEntry(
         name=model_name,
@@ -1545,6 +1556,7 @@ def build_model_header_schema_entry(
         description=description,
         type_enforcement=type_enforcement,
         columns=columns,
+        dynamic_columns=dynamic_columns,
         audits=audits,
     )
 

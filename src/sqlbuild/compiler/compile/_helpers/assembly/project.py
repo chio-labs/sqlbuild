@@ -21,7 +21,11 @@ from sqlbuild.compiler.compile._helpers.analysis.columns import (
     analyze_columns_and_lineage_with_polyglot,
     get_complete_schema_binding_request,
     infer_columns_with_sql_analysis,
+    substitute_placeholder_defaults,
     table_function_analysis_name,
+)
+from sqlbuild.compiler.compile._helpers.analysis.dynamic_pivot import (
+    analyze_dynamic_column_contract,
 )
 from sqlbuild.compiler.compile._helpers.analysis.validation import (
     validate_hook_sql_syntax,
@@ -88,6 +92,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlFunctionInput,
     CompileSqlScenarioInput,
     CompileSqlTestInput,
+    DynamicColumnContractProof,
     InferredColumn,
     MacroContext,
     PolyglotAnalysisResult,
@@ -123,6 +128,7 @@ from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     SchemaAuditInstance,
     SchemaColumn,
+    SchemaDynamicColumnFamily,
     SchemaSeedEntry,
     SourceColumnEntry,
     SourceEntry,
@@ -149,6 +155,12 @@ class _ModelSqlAnalysisRequest:
     binding_schema: dict[str, dict[str, str]] | None
 
 
+@dataclass(frozen=True)
+class _DynamicContractAnalysisInputs:
+    families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]]
+    authoritative_column_types_by_table: dict[str, dict[str, str]]
+
+
 def assemble_compiled_project(
     *,
     inputs: CompileProjectInputs,
@@ -170,7 +182,16 @@ def assemble_compiled_project(
         _build_column_nullability_by_table(inputs)
     )
     column_types_by_table: dict[str, dict[str, str]] = _build_column_types_by_table(inputs)
+    dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]] = (
+        _build_dynamic_families_by_table(inputs)
+    )
     complete_binding_schemas: dict[str, dict[str, str]] = _build_complete_binding_schemas(inputs)
+    dynamic_contract_analysis_inputs: _DynamicContractAnalysisInputs = (
+        _DynamicContractAnalysisInputs(
+            families_by_table=dynamic_families_by_table,
+            authoritative_column_types_by_table=complete_binding_schemas,
+        )
+    )
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
     allow_compact_analysis: bool = column_lineage_mode == ColumnLineageMode.RICH
     analysis_cache: AnalysisCacheContext | None = (
@@ -256,6 +277,7 @@ def assemble_compiled_project(
                 seed_names=seed_names,
                 column_nullability_by_table=column_nullability_by_table,
                 column_types_by_table=column_types_by_table,
+                dynamic_contract_analysis_inputs=dynamic_contract_analysis_inputs,
                 inference_profile=profile,
                 sql_analysis=model_sql_analysis_by_name.get(model_input.model_file.file_path.stem),
                 allow_compact_analysis=allow_compact_analysis,
@@ -335,6 +357,7 @@ def _assemble_compiled_model(
     seed_names: frozenset[str] = frozenset(),
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
     column_types_by_table: dict[str, dict[str, str]] | None = None,
+    dynamic_contract_analysis_inputs: _DynamicContractAnalysisInputs | None = None,
     inference_profile: ExpressionInferenceProfile | None = None,
     sql_analysis: _ModelSqlAnalysis | None = None,
     allow_compact_analysis: bool = False,
@@ -402,6 +425,35 @@ def _assemble_compiled_model(
             placeholders=placeholders,
             dialect=profile.sql_analysis_dialect,
         )
+    dynamic_column_contract: DynamicColumnContractProof | None = analyze_dynamic_column_contract(
+        query_sql=(
+            substitute_placeholder_defaults(
+                query_sql=analysis_query_sql,
+                placeholders=placeholders,
+            )
+            if placeholders
+            else analysis_query_sql
+        ),
+        dialect=profile.sql_analysis_dialect,
+        families=(
+            model_input.schema_entry.dynamic_columns if model_input.schema_entry is not None else ()
+        ),
+        column_types_by_table=column_types_by_table or {},
+        authoritative_column_types_by_table=(
+            dynamic_contract_analysis_inputs.authoritative_column_types_by_table
+            if dynamic_contract_analysis_inputs is not None
+            else {}
+        ),
+        column_nullability_by_table=column_nullability_by_table or {},
+        dynamic_families_by_table=(
+            dynamic_contract_analysis_inputs.families_by_table
+            if dynamic_contract_analysis_inputs is not None
+            else {}
+        ),
+    )
+    if dynamic_column_contract is not None and dynamic_column_contract.output_proven:
+        inferred_columns = dynamic_column_contract.fixed_columns
+        fast_lineage_has_star = True
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=model_name),
         deps=model_build_deps(references=model_input.references, seed_names=seed_names),
@@ -428,6 +480,7 @@ def _assemble_compiled_model(
             diagnostics=(polyglot_analysis.binding_diagnostics if sql_analysis_enabled else ()),
         ),
         binding_validated=(polyglot_analysis.binding_validated if sql_analysis_enabled else False),
+        dynamic_column_contract=dynamic_column_contract,
     )
 
 
@@ -955,6 +1008,18 @@ def _build_column_types_by_table(inputs: CompileProjectInputs) -> dict[str, dict
     return facts
 
 
+def _build_dynamic_families_by_table(
+    inputs: CompileProjectInputs,
+) -> dict[str, tuple[SchemaDynamicColumnFamily, ...]]:
+    return {
+        model_input.schema_entry.name: model_input.schema_entry.dynamic_columns
+        for model_input in inputs.model_inputs
+        if model_input.config.values.get("contract") == ContractPolicy.ENFORCED
+        and model_input.schema_entry is not None
+        and model_input.schema_entry.dynamic_columns
+    }
+
+
 def _build_complete_binding_schemas(
     inputs: CompileProjectInputs,
 ) -> dict[str, dict[str, str]]:
@@ -966,6 +1031,7 @@ def _build_complete_binding_schemas(
             model_input.config.values.get("contract") == ContractPolicy.ENFORCED
             and model_input.schema_entry is not None
             and model_input.schema_entry.columns
+            and not model_input.schema_entry.dynamic_columns
         ):
             schemas[_model_name(model_input)] = _typed_schema_columns(
                 model_input.schema_entry.columns

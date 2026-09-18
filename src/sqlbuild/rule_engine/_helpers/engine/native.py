@@ -23,6 +23,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledSqlScenario,
     CompiledSqlTest,
+    DynamicColumnContractProof,
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
@@ -382,6 +383,37 @@ def _model_payload(
                     )
                 )
             columns.append(payload)
+    dynamic_columns: list[dict[str, object]] = []
+    dynamic_columns_proven: bool = False
+    if model.schema_entry is not None and model.schema_entry.dynamic_columns:
+        proof: DynamicColumnContractProof | None = model.dynamic_column_contract
+        dynamic_columns_proven = bool(proof is not None and proof.output_proven)
+        proof_types: dict[str, str | None] = (
+            {family.name.casefold(): family.inferred_type for family in proof.families}
+            if proof is not None
+            else {}
+        )
+        for family in model.schema_entry.dynamic_columns:
+            inferred_type: str | None = proof_types.get(family.name.casefold())
+            dynamic_columns.append(
+                {
+                    "name": family.name,
+                    "pivot_column": family.pivot_column,
+                    "value_column": family.value_column,
+                    "aggregate": family.aggregate,
+                    "type": family.type,
+                    "name_pattern": family.name_pattern,
+                    "type_proven": bool(
+                        include_type_proof
+                        and inferred_type
+                        and types_equal(
+                            left=family.type,
+                            right=inferred_type,
+                            dialect=dialect,
+                        )
+                    ),
+                }
+            )
     return {
         "name": model.name,
         "relative_path": model.relative_path.as_posix(),
@@ -397,6 +429,12 @@ def _model_payload(
             for reference in model.references
         ],
         "columns": columns,
+        "dynamic_columns": dynamic_columns,
+        "dynamic_columns_proven": dynamic_columns_proven,
+        "bare_dynamic_pivot": bool(
+            model.dynamic_column_contract is not None
+            and model.dynamic_column_contract.bare_dynamic_pivot
+        ),
         "enum_columns": list(model.enum_columns),
         "enum_declarations": [
             _enum_payload(declaration) for declaration in model.enum_declarations

@@ -187,6 +187,19 @@ pub(crate) struct Column {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
+pub(crate) struct DynamicColumnFamily {
+    pub name: String,
+    pub pivot_column: String,
+    pub value_column: String,
+    pub aggregate: String,
+    #[serde(rename = "type", alias = "data_type")]
+    pub data_type: String,
+    pub name_pattern: Option<String>,
+    pub type_proven: bool,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
 pub(crate) struct DeclarationMember {
     pub name: String,
     pub value: Value,
@@ -497,6 +510,9 @@ pub(crate) struct Model {
     pub config: BTreeMap<String, Value>,
     pub references: Vec<Reference>,
     pub columns: Vec<Column>,
+    pub dynamic_columns: Vec<DynamicColumnFamily>,
+    pub dynamic_columns_proven: bool,
+    pub bare_dynamic_pivot: bool,
     pub enum_columns: Vec<String>,
     pub enum_declarations: Vec<Declaration>,
     pub constant_declarations: Vec<Declaration>,

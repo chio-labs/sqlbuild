@@ -13,6 +13,7 @@ from sqlbuild.compiler.discovery.main._model_header_spans import (
     get_model_header_spans,
 )
 from sqlbuild.compiler.discovery.models import ModelHeaderColumnSpan, ModelHeaderSpans
+from sqlbuild.spec.contracts.main.matching_dynamic_families import matching_dynamic_families
 from sqlbuild.spec.contracts.models import SchemaColumn, SourceColumnEntry
 
 _HEADER_WHITESPACE: str = " \t"
@@ -46,6 +47,19 @@ def edit_model(
         for column in model.schema_entry.columns
     ):
         return None, "effective columns are owned by an external schema file"
+    if model.schema_entry is not None and model.schema_entry.dynamic_columns:
+        fixed_names: frozenset[str] = frozenset(
+            column.name.casefold() for column in model.schema_entry.columns
+        )
+        physical_columns = tuple(
+            column
+            for column in physical_columns
+            if column.name.casefold() in fixed_names
+            or not matching_dynamic_families(
+                families=model.schema_entry.dynamic_columns,
+                column_name=column.name,
+            )
+        )
     contents: str = model.authored_sql
     header_spans: ModelHeaderSpans = get_model_header_spans(contents=contents)
     span_result: tuple[int, int, dict[str, ModelHeaderColumnSpan]] | None = header_spans.columns

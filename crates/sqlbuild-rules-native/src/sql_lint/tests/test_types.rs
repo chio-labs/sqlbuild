@@ -42,6 +42,13 @@ pub(crate) struct PlainSqlLintTestCase {
     pub expected_count: usize,
 }
 
+pub(crate) struct DynamicOutputStarLintTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_count: usize,
+    pub(crate) expected_prefix: &'static str,
+}
+
 pub(crate) struct DependencyImportLintTestCase {
     pub(crate) description: &'static str,
     pub(crate) sql: &'static str,
