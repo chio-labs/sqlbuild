@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.103.4](https://github.com/chio-labs/sqlbuild/compare/v0.103.3...v0.103.4) (2026-09-18)
+
+
+### Bug Fixes
+
+* resolve Snowflake output aliases ([#716](https://github.com/chio-labs/sqlbuild/issues/716)) ([df68807](https://github.com/chio-labs/sqlbuild/commit/df688074a4cd11dcaedad76eb65e89d12d73a3bc))
+* resolve Snowflake values columns ([#714](https://github.com/chio-labs/sqlbuild/issues/714)) ([02a3f98](https://github.com/chio-labs/sqlbuild/commit/02a3f9895e42def50d719a46cec9ca2e10b184a8))
+
 ## [0.103.3](https://github.com/chio-labs/sqlbuild/compare/v0.103.2...v0.103.3) (2026-09-18)
 
 
