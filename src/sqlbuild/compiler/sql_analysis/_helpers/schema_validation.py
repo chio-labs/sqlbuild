@@ -8,6 +8,7 @@ from typing import Any, cast
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.sql_analysis.exceptions import SqlAnalysisBoundaryError
+from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.compiler.sql_analysis.models import (
     SqlBindingDiagnostic,
     SqlBindingResult,
@@ -25,6 +26,12 @@ _SQLBUILD_CODE_BY_NATIVE_CODE: dict[str, str] = {
 _ERROR_SEVERITY: str = "error"
 _ORDER_BY_CONTEXT: str = "ORDER BY"
 _WINDOW_ORDER_BY_CONTEXT: str = "WINDOW ORDER BY"
+_SNOWFLAKE_DIALECT: str = "snowflake"
+_SELECT_KIND: str = "select"
+_IMPLICIT_VALUES_COLUMN_PATTERN: re.Pattern[str] = re.compile(
+    r"^Unknown column '(column([1-9][0-9]*))'$",
+    flags=re.IGNORECASE,
+)
 
 
 def get_schema_validations(
@@ -43,7 +50,7 @@ def get_schema_validations(
             "native SQL schema validation returned an invalid batch response"
         )
     return tuple(
-        _binding_result(sql=request.sql, response=response)
+        _binding_result(sql=request.sql, dialect=request.dialect, response=response)
         for request, response in zip(requests, responses, strict=True)
     )
 
@@ -73,7 +80,7 @@ def _request_payload(*, request: SqlSchemaValidationRequest) -> dict[str, object
     }
 
 
-def _binding_result(*, sql: str, response: object) -> SqlBindingResult:
+def _binding_result(*, sql: str, dialect: str | None, response: object) -> SqlBindingResult:
     response_dict: dict[str, object] | None = (
         cast(dict[str, object], response) if isinstance(response, dict) else None
     )
@@ -99,6 +106,14 @@ def _binding_result(*, sql: str, response: object) -> SqlBindingResult:
             line=_optional_int(value_dict.get("line")),
             column=_optional_int(value_dict.get("column")),
         )
+        if _is_proven_snowflake_values_column(
+            sql=sql,
+            dialect=dialect,
+            message=raw_message,
+            line=line,
+            column=column,
+        ):
+            continue
         diagnostics.append(
             SqlBindingDiagnostic(
                 code=_SQLBUILD_CODE_BY_NATIVE_CODE[native_code],
@@ -110,6 +125,138 @@ def _binding_result(*, sql: str, response: object) -> SqlBindingResult:
             )
         )
     return SqlBindingResult(diagnostics=tuple(diagnostics))
+
+
+def _is_proven_snowflake_values_column(
+    *,
+    sql: str,
+    dialect: str | None,
+    message: str,
+    line: int | None,
+    column: int | None,
+) -> bool:
+    if (dialect or "").lower() != _SNOWFLAKE_DIALECT or line is None or column is None:
+        return False
+    match: re.Match[str] | None = _IMPLICIT_VALUES_COLUMN_PATTERN.fullmatch(message)
+    if match is None:
+        return False
+    column_name: str = match.group(1)
+    ordinal: int = int(match.group(2))
+    polyglot_module: Any = import_polyglot_sql()
+    try:
+        parsed: Any = polyglot_module.parse_one(sql, dialect=_SNOWFLAKE_DIALECT)
+    except polyglot_module.PolyglotError:
+        return False
+    selects: list[Any] = []
+    if str(getattr(parsed, "kind", "")) == _SELECT_KIND:
+        selects.append(parsed)
+    selects.extend(parsed.find_all(_SELECT_KIND))
+    return any(
+        _select_proves_implicit_values_column(
+            select=select,
+            sql=sql,
+            column_name=column_name,
+            ordinal=ordinal,
+            line=line,
+            column=column,
+        )
+        for select in selects
+    )
+
+
+def _select_proves_implicit_values_column(
+    *,
+    select: Any,
+    sql: str,
+    column_name: str,
+    ordinal: int,
+    line: int,
+    column: int,
+) -> bool:
+    payload: object = select.to_dict().get(_SELECT_KIND)
+    if not isinstance(payload, dict):
+        return False
+    select_payload: dict[str, object] = cast(dict[str, object], payload)
+    if select_payload.get("joins"):
+        return False
+    from_payload: object = select_payload.get("from")
+    if not isinstance(from_payload, dict):
+        return False
+    relations: object = cast(dict[str, object], from_payload).get("expressions")
+    if not isinstance(relations, list) or len(relations) != 1:
+        return False
+    relation: object = relations[0]
+    if not isinstance(relation, dict):
+        return False
+    values: object = cast(dict[str, object], relation).get("values")
+    if not isinstance(values, dict):
+        return False
+    values_payload: dict[str, object] = cast(dict[str, object], values)
+    if values_payload.get("alias") is not None or values_payload.get("column_aliases"):
+        return False
+    rows: object = values_payload.get("expressions")
+    if not isinstance(rows, list) or not rows:
+        return False
+    row_widths: list[int] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            return False
+        expressions: object = cast(dict[str, object], row).get("expressions")
+        if not isinstance(expressions, list):
+            return False
+        row_widths.append(len(expressions))
+    if any(width < ordinal for width in row_widths):
+        return False
+    projections: object = select_payload.get("expressions")
+    if not isinstance(projections, list):
+        return False
+    return any(
+        _projection_is_implicit_values_column(
+            projection=projection,
+            sql=sql,
+            column_name=column_name,
+            line=line,
+            column=column,
+        )
+        for projection in projections
+    )
+
+
+def _projection_is_implicit_values_column(
+    *, projection: object, sql: str, column_name: str, line: int, column: int
+) -> bool:
+    if not isinstance(projection, dict):
+        return False
+    expression: object = projection
+    alias_payload: object = cast(dict[str, object], projection).get("alias")
+    if isinstance(alias_payload, dict):
+        expression = cast(dict[str, object], alias_payload).get("this")
+    if not isinstance(expression, dict):
+        return False
+    column_payload: object = cast(dict[str, object], expression).get("column")
+    if not isinstance(column_payload, dict):
+        return False
+    column_dict: dict[str, object] = cast(dict[str, object], column_payload)
+    if column_dict.get("table") is not None:
+        return False
+    name_payload: object = column_dict.get("name")
+    if not isinstance(name_payload, dict):
+        return False
+    name_dict: dict[str, object] = cast(dict[str, object], name_payload)
+    if (
+        name_dict.get("quoted") is True
+        or str(name_dict.get("name") or "").lower() != column_name.lower()
+    ):
+        return False
+    span: object = column_dict.get("span")
+    if not isinstance(span, dict):
+        return False
+    start: object = cast(dict[str, object], span).get("start")
+    if not isinstance(start, int):
+        return False
+    candidate_line: int = sql.count("\n", 0, start) + 1
+    candidate_column: int = start - sql.rfind("\n", 0, start)
+    return (candidate_line, candidate_column) == (line, column)
 
 
 def _optional_int(value: object) -> int | None:
