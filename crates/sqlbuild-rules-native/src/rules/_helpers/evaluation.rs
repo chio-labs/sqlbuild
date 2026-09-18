@@ -1,11 +1,11 @@
 use crate::constants::{
-    BOOLEAN_TYPE, DATE_TYPE, DECLARATION_DOMAIN_COMPONENTS, ENFORCED_CONTRACT, NEGATION_OPERATOR,
-    REFERENCE_KIND, SOURCE_REFERENCE_KIND, TIMESTAMP_TYPE, VIEW_MATERIALIZATION,
+    DECLARATION_DOMAIN_COMPONENTS, ENFORCED_CONTRACT, NEGATION_OPERATOR, REFERENCE_KIND,
+    SOURCE_REFERENCE_KIND, VIEW_MATERIALIZATION,
 };
 use crate::models::{Declaration, EvaluateRequest, Fault, Model, RuleMetadata, RulesConfig};
 use crate::rules::_helpers::authored_literals::numeric_literal_tokens;
 use crate::rules::_helpers::domain_layout::folder_layer_details;
-use crate::rules::_helpers::{explicit_output_types, typed_contract_columns};
+use crate::rules::_helpers::{contract_name_types, explicit_output_types, typed_contract_columns};
 use crate::rules::models::{
     FaultCollector, ModelEvaluationRequest, ProjectEvaluationRequest, ResolvedThresholdOverride,
 };
@@ -182,7 +182,7 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
     if let Some(rule) = metadata("SQBRCONTRACT105") {
         explicit_output_types::evaluate(&parsed.query, parsed.model, rule, &faults);
     }
-    evaluate_naming_rules(&parsed, selected, &faults);
+    evaluate_naming_rules(&parsed, config, selected, &faults);
     evaluate_literal_rules(&parsed, selected, &faults);
     evaluate_test_rules(TestRuleEvaluation {
         parsed: &parsed,
@@ -1317,51 +1317,12 @@ fn contract_required(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &Fau
 
 fn evaluate_naming_rules(
     parsed: &ParsedModel<'_>,
+    config: &RulesConfig,
     selected: &BTreeMap<String, &RuleMetadata>,
     faults: &FaultCollector,
 ) {
     for column in &parsed.model.columns {
-        let data_type = column.data_type.to_ascii_uppercase();
-        let rule_and_message = if column.name.starts_with("is_")
-            || column.name.starts_with("has_")
-            || column.name.starts_with("can_")
-        {
-            (data_type != BOOLEAN_TYPE).then(|| {
-                (
-                    "SQBRCONTRACT102",
-                    format!(
-                        "column {:?} implies BOOLEAN but is typed {data_type}",
-                        column.name
-                    ),
-                )
-            })
-        } else if column.name.ends_with("_at")
-            || column.name.ends_with("_ts")
-            || column.name.ends_with("_timestamp")
-        {
-            (!data_type.contains(TIMESTAMP_TYPE)).then(|| {
-                (
-                    "SQBRCONTRACT103",
-                    format!(
-                        "column {:?} implies a timestamp but is typed {data_type}",
-                        column.name
-                    ),
-                )
-            })
-        } else if column.name.ends_with("_date") {
-            (data_type != DATE_TYPE).then(|| {
-                (
-                    "SQBRCONTRACT104",
-                    format!(
-                        "column {:?} implies DATE but is typed {data_type}",
-                        column.name
-                    ),
-                )
-            })
-        } else {
-            None
-        };
-        if let Some((code, message)) = rule_and_message
+        if let Some((code, message)) = contract_name_types::finding(column, config)
             && let Some(rule) = selected.get(code)
         {
             faults.push(custom_fault!(parsed.model, rule, None, message, None));

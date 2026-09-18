@@ -545,6 +545,81 @@ fn given_enforced_contract_outputs_when_evaluating_explicit_type_rule_then_retur
 }
 
 #[test]
+fn given_contract_name_type_options_when_evaluating_then_accepts_configured_interfaces()
+-> Result<(), String> {
+    let project_dir = TempDir::new().map_err(|error| error.to_string())?;
+    let test_cases = [
+        test_types::ContractNameTypeOptionsTestCase {
+            description: "configured compatibility types are accepted",
+            config: json!({
+                "select": ["SQBRCONTRACT102", "SQBRCONTRACT103", "SQBRCONTRACT104"],
+                "rule_options": {
+                    "SQBRCONTRACT102": {"allow_numeric_indicators": true},
+                    "SQBRCONTRACT103": {
+                        "allow_date_for_at": true,
+                        "allow_numeric_epoch": true,
+                        "allow_encoded_values": true
+                    },
+                    "SQBRCONTRACT104": {
+                        "allow_timestamps": true,
+                        "allow_encoded_values": true
+                    }
+                },
+                "cache": {"enabled": false}
+            }),
+            expected_fault_codes: &[],
+        },
+        test_types::ContractNameTypeOptionsTestCase {
+            description: "compatibility types remain findings by default",
+            config: json!({
+                "select": ["SQBRCONTRACT102", "SQBRCONTRACT103", "SQBRCONTRACT104"],
+                "cache": {"enabled": false}
+            }),
+            expected_fault_codes: &[
+                "SQBRCONTRACT102",
+                "SQBRCONTRACT103",
+                "SQBRCONTRACT103",
+                "SQBRCONTRACT103",
+                "SQBRCONTRACT104",
+                "SQBRCONTRACT104",
+            ],
+        },
+    ];
+
+    for test_case in test_cases {
+        let mut request: Value =
+            serde_json::from_str(&helpers::request(&project_dir, &test_case.config))
+                .map_err(|error| error.to_string())?;
+        request["models"][0]["query_sql"] = json!(
+            "SELECT is_ready, first_seen_at, source_timestamp, opaque_ts, raw_date, observed_date FROM orders"
+        );
+        request["models"][0]["columns"] = json!([
+            {"name": "is_ready", "type": "INTEGER"},
+            {"name": "first_seen_at", "type": "DATE"},
+            {"name": "source_timestamp", "type": "NUMBER(38,0)"},
+            {"name": "opaque_ts", "type": "VARIANT"},
+            {"name": "raw_date", "type": "VARCHAR"},
+            {"name": "observed_date", "type": "TIMESTAMP_NTZ"}
+        ]);
+
+        let result: Value = serde_json::from_str(&evaluate_json(&request.to_string())?)
+            .map_err(|error| error.to_string())?;
+        let fault_codes: Vec<&str> = result["faults"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|fault| fault["code"].as_str())
+            .collect();
+        assert_eq!(
+            fault_codes, test_case.expected_fault_codes,
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn given_snowflake_parser_extensions_when_normalizing_then_preserves_source_positions() {
     let test_cases = [test_types::NormalizationTestCase {
         description: "normalization changes syntax only outside strings and comments",

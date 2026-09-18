@@ -702,7 +702,34 @@ def test_given_ref_query_when_analyzing_columns_and_lineage_then_returns_compact
                 ),
             ),
             expected_has_star=False,
-        )
+        ),
+        PolyglotAnalysisTestCase(
+            description="preserves a final CTE cast after a values CTE on the AST fallback",
+            query_sql=(
+                "WITH labels(label) AS (VALUES ('web')), transformed AS ("
+                'SELECT CAST(amount AS INTEGER) AS amount FROM __ref("orders")'
+                "), final AS (SELECT amount FROM transformed) SELECT amount FROM final"
+            ),
+            references=(CompileSqlReference(SqlReferenceKind.REF, "orders"),),
+            column_nullability_by_table={"orders": {"amount": InferredNullability.UNKNOWN}},
+            column_types_by_table={"orders": {"amount": "VARCHAR"}},
+            expected_columns=(InferredColumn(name="amount", type="INT"),),
+            expected_lineage_columns=(
+                CompiledLineageColumnFact(
+                    output_column="amount",
+                    upstream_columns=(
+                        CompiledLineageSourceFact(
+                            resource_type=CompiledResourceType.MODEL,
+                            resource_name="orders",
+                            column_name="amount",
+                        ),
+                    ),
+                    transform_kind=ColumnTransformKind.DIRECT,
+                    confidence=ColumnLineageConfidence.MEDIUM,
+                ),
+            ),
+            expected_has_star=False,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -712,7 +739,10 @@ def test_given_annotated_projection_when_using_ast_fallback_then_lineage_is_pres
     result: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
         query_sql=test_case.query_sql,
         references=test_case.references,
+        column_nullability_by_table=test_case.column_nullability_by_table,
+        column_types_by_table=test_case.column_types_by_table,
         allow_compact_analysis=False,
+        recover_cte_facts=True,
     )
 
     assert result.analysis_succeeded
