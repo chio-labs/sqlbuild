@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.104.0](https://github.com/chio-labs/sqlbuild/compare/v0.103.7...v0.104.0) (2026-09-18)
+
+
+### Features
+
+* apply contract defaults to sources ([#724](https://github.com/chio-labs/sqlbuild/issues/724)) ([5ad3e97](https://github.com/chio-labs/sqlbuild/commit/5ad3e9736aadf401ec47033a5af71a723ffc4d73))
+
 ## [0.103.7](https://github.com/chio-labs/sqlbuild/compare/v0.103.6...v0.103.7) (2026-09-18)
 
 
