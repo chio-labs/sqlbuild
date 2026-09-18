@@ -58,6 +58,16 @@ class SnowflakeCompileIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class ContractNullabilityCompileIntegrationTestCase:
+    """One contract nullability expectation through compile."""
+
+    description: str
+    column_sql: str
+    expected_exit_code: int
+    expected_diagnostics: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class FormatCompileIntegrationTestCase:
     """One format-to-compile compatibility expectation."""
 

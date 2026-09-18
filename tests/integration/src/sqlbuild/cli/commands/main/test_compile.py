@@ -10,6 +10,7 @@ import pytest
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    ContractNullabilityCompileIntegrationTestCase,
     SnowflakeCompileIntegrationTestCase,
 )
 
@@ -67,3 +68,47 @@ def test_given_supported_snowflake_aggregation_when_compiling_then_project_succe
     assert exit_code == test_case.expected_exit_code
     assert tuple(item["code"] for item in diagnostics) == test_case.expected_diagnostics
     assert test_case.expected_query_fragment in cast(str, models[0]["query_sql"])
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ContractNullabilityCompileIntegrationTestCase(
+            description="not null audit remains runtime only",
+            column_sql="order_id (type INTEGER, audits [not_null])",
+            expected_exit_code=0,
+            expected_diagnostics=(),
+        ),
+        ContractNullabilityCompileIntegrationTestCase(
+            description="nullable false remains a schema contract",
+            column_sql="order_id (type INTEGER, nullable false)",
+            expected_exit_code=1,
+            expected_diagnostics=("K004",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_nullable_output_when_compiling_contract_then_only_schema_nullability_fails(
+    test_case: ContractNullabilityCompileIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        "MODEL (\n"
+        "  contract enforced,\n"
+        f"  columns ({test_case.column_sql}),\n"
+        ");\n\n"
+        "SELECT CAST(NULL AS INTEGER) AS order_id\n",
+        encoding="utf-8",
+    )
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+    result: dict[str, object] = json.loads(capsys.readouterr().out)
+    diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], result["diagnostics"])
+
+    assert exit_code == test_case.expected_exit_code
+    assert tuple(item["code"] for item in diagnostics) == test_case.expected_diagnostics

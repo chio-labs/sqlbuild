@@ -19,7 +19,6 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticPhase,
     DiagnosticSeverity,
 )
-from sqlbuild.compiler.contracts.constants import NOT_NULL_AUDIT_NAME
 from sqlbuild.compiler.discovery.main._model_output_column_locations import (
     extract_model_output_column_locations,
 )
@@ -175,9 +174,7 @@ def _nullability_diagnostics(
 
 
 def _declares_not_null(column: SchemaColumn) -> bool:
-    if column.nullable is False:
-        return True
-    return any(audit.definition_name == NOT_NULL_AUDIT_NAME for audit in column.audits)
+    return column.nullable is False
 
 
 def _missing_column_diagnostic(

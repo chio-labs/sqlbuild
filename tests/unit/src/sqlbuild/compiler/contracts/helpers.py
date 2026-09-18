@@ -32,7 +32,7 @@ def make_contract_project(
     column_contract_mode: str = "implicit",
     model_name: str = "orders",
     column_locations: dict[str, SourceLocation] | None = None,
-    declared_not_null_columns: tuple[str, ...] = (),
+    not_null_audit_columns: tuple[str, ...] = (),
     declared_nullable_by_column: dict[str, bool | None] | None = None,
     inferred_nullability_by_column: dict[str, InferredNullability] | None = None,
     fast_lineage_has_star: bool = False,
@@ -78,7 +78,7 @@ def make_contract_project(
                             type=column_type,
                             audits=_column_audits(
                                 name=name,
-                                declared_not_null_columns=declared_not_null_columns,
+                                not_null_audit_columns=not_null_audit_columns,
                             ),
                             nullable=(declared_nullable_by_column or {}).get(name),
                             location=(column_locations or {}).get(name),
@@ -107,8 +107,6 @@ def make_contract_project(
 
 
 def _column_audits(
-    *, name: str, declared_not_null_columns: tuple[str, ...]
+    *, name: str, not_null_audit_columns: tuple[str, ...]
 ) -> tuple[SchemaAuditInstance, ...]:
-    return ((), (SchemaAuditInstance(definition_name="not_null"),))[
-        name in declared_not_null_columns
-    ]
+    return ((), (SchemaAuditInstance(definition_name="not_null"),))[name in not_null_audit_columns]
