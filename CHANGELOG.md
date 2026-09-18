@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.103.3](https://github.com/chio-labs/sqlbuild/compare/v0.103.2...v0.103.3) (2026-09-18)
+
+
+### Bug Fixes
+
+* infer SQL predicate output types ([#713](https://github.com/chio-labs/sqlbuild/issues/713)) ([072b7f1](https://github.com/chio-labs/sqlbuild/commit/072b7f1e868c6ac43d1fcfa6325bf17e951ce1d4))
+
 ## [0.103.2](https://github.com/chio-labs/sqlbuild/compare/v0.103.1...v0.103.2) (2026-09-17)
 
 
