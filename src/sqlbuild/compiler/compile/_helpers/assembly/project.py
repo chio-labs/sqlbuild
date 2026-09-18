@@ -416,6 +416,7 @@ def _assemble_compiled_model(
         fast_lineage_columns=fast_lineage_columns,
         fast_lineage_has_star=fast_lineage_has_star,
         authored_sql=model_input.model_file.contents,
+        authored_query_sql=model_input.model_file.query_sql,
         output_column_locations=model_input.model_file.output_column_locations,
         extract_implicit_alias_columns=model_input.model_file.extract_implicit_alias_columns,
         macro_deps=model_input.macro_deps or find_macro_call_names(model_input.macro_source_sql),

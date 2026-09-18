@@ -3,9 +3,10 @@ use crate::constants::{
     SOURCE_REFERENCE_KIND, VIEW_MATERIALIZATION,
 };
 use crate::models::{Declaration, EvaluateRequest, Fault, Model, RuleMetadata, RulesConfig};
-use crate::rules::_helpers::authored_literals::numeric_literal_tokens;
 use crate::rules::_helpers::domain_layout::folder_layer_details;
-use crate::rules::_helpers::{contract_name_types, explicit_output_types, typed_contract_columns};
+use crate::rules::_helpers::{
+    contract_name_types, explicit_output_types, numeric_decisions, typed_contract_columns,
+};
 use crate::rules::models::{
     FaultCollector, ModelEvaluationRequest, ProjectEvaluationRequest, ResolvedThresholdOverride,
 };
@@ -35,6 +36,9 @@ struct Position {
 #[derive(Default)]
 struct ComparisonFact {
     position: Option<Position>,
+    sql: String,
+    equality: bool,
+    output_name: Option<String>,
     columns: BTreeSet<String>,
     string_literals: Vec<String>,
     numeric_literals: Vec<String>,
@@ -64,7 +68,7 @@ struct ParsedModel<'a> {
     query: Query,
     model: &'a Model,
     classification: ModelClassification,
-    authored_numeric_literals: BTreeSet<String>,
+    authored_compact_sql: String,
 }
 
 struct ModelClassification {
@@ -137,14 +141,11 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
     };
     let query = *query;
     let classification = classify_model(&query, model, &request.dialect)?;
-    let authored_dialect = rules_dialect(&request.dialect);
-    let authored_numeric_literals =
-        numeric_literal_tokens(&model.authored_sql, authored_dialect.as_ref())?;
     let parsed = ParsedModel {
         query,
         model,
         classification,
-        authored_numeric_literals,
+        authored_compact_sql: numeric_decisions::compact_sql(&model.authored_sql),
     };
     if let Some(rule) = metadata("SQBRMODEL101") {
         import_ctes(&parsed, rule, &faults);
@@ -1361,11 +1362,22 @@ fn evaluate_literal_rules(
         }
         if let Some(rule) = selected.get("SQBRDECLARATION102") {
             let magic = comparison.numeric_literals.iter().any(|literal| {
-                !matches!(literal.as_str(), "-1" | "0" | "1")
-                    && parsed.authored_numeric_literals.contains(literal)
+                numeric_decisions::is_authored_decision(numeric_decisions::AuthoredDecision {
+                    authored_compact_sql: &parsed.authored_compact_sql,
+                    comparison_sql: &comparison.sql,
+                    equality: comparison.equality,
+                    output_name: comparison.output_name.as_deref(),
+                    literal,
+                })
             });
             if magic {
-                faults.push(fault(parsed.model, rule, comparison.position.as_ref()));
+                faults.push(custom_fault!(
+                    parsed.model,
+                    rule,
+                    comparison.position.as_ref(),
+                    format!("non-canonical numeric comparison: {}", comparison.sql),
+                    None,
+                ));
             }
         }
     }
@@ -1633,11 +1645,24 @@ fn select_facts(query: &Query) -> Vec<SelectFacts> {
             }
             for item in &select.projection {
                 match item {
-                    SelectItem::UnnamedExpr(expression)
-                    | SelectItem::ExprWithAlias {
-                        expr: expression, ..
+                    SelectItem::UnnamedExpr(expression) => {
+                        case_comparison_facts(
+                            expression,
+                            None,
+                            &source_context,
+                            &mut result.comparisons,
+                        );
+                    }
+                    SelectItem::ExprWithAlias {
+                        expr: expression,
+                        alias,
                     } => {
-                        case_comparison_facts(expression, &source_context, &mut result.comparisons);
+                        case_comparison_facts(
+                            expression,
+                            Some(&alias.value),
+                            &source_context,
+                            &mut result.comparisons,
+                        );
                     }
                     SelectItem::QualifiedWildcard(_, _) | SelectItem::Wildcard(_) => {}
                 }
@@ -1738,7 +1763,7 @@ fn join_constraint(operator: &JoinOperator) -> Option<&JoinConstraint> {
 }
 
 fn numeric_value(expression: &Expr) -> Option<String> {
-    match expression {
+    match unwrap_nested(expression) {
         Expr::Value(value) => match &value.value {
             Value::Number(value, _) => Some(value.to_string()),
             _ => None,
@@ -1784,6 +1809,7 @@ fn comparison_facts(root: &Expr, source_context: &SourceContext, output: &mut Ve
 
 fn case_comparison_facts(
     root: &Expr,
+    output_name: Option<&str>,
     source_context: &SourceContext,
     output: &mut Vec<ComparisonFact>,
 ) {
@@ -1815,7 +1841,11 @@ fn case_comparison_facts(
         source_context,
         output,
     };
+    let start = visitor.output.len();
     let _ = root.visit(&mut visitor);
+    for fact in &mut visitor.output[start..] {
+        fact.output_name = output_name.map(str::to_owned);
+    }
 }
 
 fn comparison_fact(root: &Expr, source_context: &SourceContext) -> ComparisonFact {
@@ -1835,9 +1865,6 @@ fn comparison_fact(root: &Expr, source_context: &SourceContext) -> ComparisonFac
                     }
                 }
                 Expr::Value(value) => match &value.value {
-                    Value::Number(number, _) => {
-                        self.fact.numeric_literals.push(number.to_string());
-                    }
                     Value::SingleQuotedString(_)
                     | Value::DoubleQuotedString(_)
                     | Value::TripleSingleQuotedString(_)
@@ -1849,11 +1876,6 @@ fn comparison_fact(root: &Expr, source_context: &SourceContext) -> ComparisonFac
                     }
                     _ => {}
                 },
-                Expr::UnaryOp { op, expr } if op.to_string() == NEGATION_OPERATOR => {
-                    if let Some(number) = numeric_value(expr) {
-                        self.fact.numeric_literals.push(format!("-{number}"));
-                    }
-                }
                 _ => {}
             }
             ControlFlow::Continue(())
@@ -1862,6 +1884,14 @@ fn comparison_fact(root: &Expr, source_context: &SourceContext) -> ComparisonFac
     let mut visitor = Values {
         fact: ComparisonFact {
             position: Some(position(root)),
+            sql: root.to_string(),
+            equality: matches!(
+                root,
+                Expr::BinaryOp {
+                    op: BinaryOperator::Eq,
+                    ..
+                }
+            ),
             source_context: source_context.clone(),
             ..ComparisonFact::default()
         },
@@ -1869,6 +1899,9 @@ fn comparison_fact(root: &Expr, source_context: &SourceContext) -> ComparisonFac
     let _ = root.visit(&mut visitor);
     if let Expr::BinaryOp { left, right, .. } = root {
         for operand in [left.as_ref(), right.as_ref()] {
+            if let Some(number) = numeric_value(operand) {
+                visitor.fact.numeric_literals.push(number);
+            }
             if direct_column(operand).is_none() {
                 visitor.fact.modified_columns.extend(column_facts(operand));
             }
