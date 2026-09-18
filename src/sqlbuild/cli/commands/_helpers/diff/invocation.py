@@ -4,21 +4,35 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.exceptions import CliUserError, QueryDiffIncompleteError
 from sqlbuild.cli.commands.models import DiffCommandRequest, DiffInvocation
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.discovery.main.discover_configuration import (
+    discover_project_configuration,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 
 
 def resolve_diff_invocation(*, request: DiffCommandRequest) -> DiffInvocation:
     """Validate diff flags and discover project inputs."""
 
-    _validate_diff_request(request=request)
+    try:
+        _validate_diff_request(request=request)
+    except CliUserError as error:
+        if is_query_diff_request(request=request):
+            raise QueryDiffIncompleteError(
+                error.message,
+                code=error.code,
+                help=error.help,
+            ) from error
+        raise
     effective_project_dir: Path = (
         request.project_dir if request.project_dir is not None else Path.cwd()
     )
-    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
-        project_dir=effective_project_dir
+    discovered_inputs: DiscoveredProjectInputs = (
+        discover_project_configuration(project_dir=effective_project_dir)
+        if is_query_diff_request(request=request)
+        else discover_project_inputs(project_dir=effective_project_dir)
     )
     is_virtual_mode: bool = discovered_inputs.project_config.settings.virtual_environments
     if not request.select and not is_virtual_mode and not is_query_diff_request(request=request):
@@ -52,6 +66,18 @@ def _validate_diff_request(*, request: DiffCommandRequest) -> None:
         raise CliUserError("diff --max-models must be positive", code="C210")
     if request.max_columns is not None and request.max_columns <= 0:
         raise CliUserError("diff --max-columns must be positive", code="C211")
+    if request.max_value_length is not None and request.max_value_length <= 0:
+        raise CliUserError("diff --max-value-length must be positive", code="C246")
+    if request.full_example_values and request.max_value_length is not None:
+        raise CliUserError(
+            "diff --full-example-values cannot be combined with --max-value-length",
+            code="C247",
+        )
+    if request.full_example_values and request.suppress_example_values:
+        raise CliUserError(
+            "diff --full-example-values cannot be combined with --no-example-values",
+            code="C248",
+        )
     if request.unkeyed and request.unique_key_override:
         raise CliUserError("diff --unkeyed cannot be combined with --key", code="C226")
     if request.unkeyed and (request.sample_rows is not None or request.sample_seed is not None):
@@ -97,6 +123,10 @@ def _validate_query_diff_request(*, request: DiffCommandRequest) -> None:
         raise CliUserError("raw-query diff does not use --allow-partial-diff", code="C215")
     if request.max_models is not None:
         raise CliUserError("raw-query diff does not accept --max-models", code="C243")
+    if request.left_label is not None and not request.left_label.strip():
+        raise CliUserError("raw-query diff --left-label must not be empty", code="C249")
+    if request.right_label is not None and not request.right_label.strip():
+        raise CliUserError("raw-query diff --right-label must not be empty", code="C250")
     if request.left_query is None and request.left_query_file is None:
         raise CliUserError("raw-query diff requires a left query", code="C216")
     if request.left_query is not None and request.left_query_file is not None:
@@ -130,3 +160,5 @@ def _validate_model_diff_request(*, request: DiffCommandRequest) -> None:
         raise CliUserError("model diff requires FROM:TO", code="C224")
     if request.selected_target is not None:
         raise CliUserError("model diff does not accept --target", code="C225")
+    if request.left_label is not None or request.right_label is not None:
+        raise CliUserError("model diff does not accept query labels", code="C251")

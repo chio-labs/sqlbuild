@@ -17,6 +17,13 @@ from sqlbuild.adapter.contract.models import (
     RowDiffSampleRow,
     SchemaDiffResult,
 )
+from sqlbuild.cli.commands._helpers.diff.evidence import (
+    display_example_value,
+    render_example_pair,
+    render_key_value,
+)
+from sqlbuild.cli.commands.constants import DEFAULT_DIFF_MAX_VALUE_LENGTH
+from sqlbuild.cli.commands.models import DiffExampleRenderOptions
 from sqlbuild.executor.diff.constants import DIFF_INPUT_KIND_QUERY
 from sqlbuild.executor.diff.models import DiffExecutionResult, ModelDiffResult
 
@@ -28,6 +35,9 @@ _RICH_SECTION_STYLE: str = "bold"
 _RICH_ADDED_STYLE: str = "green"
 _RICH_REMOVED_STYLE: str = "red"
 _RICH_MUTED_STYLE: str = "dim"
+_DEFAULT_EXAMPLE_RENDER_OPTIONS: DiffExampleRenderOptions = DiffExampleRenderOptions(
+    max_value_length=DEFAULT_DIFF_MAX_VALUE_LENGTH
+)
 
 
 def render_diff_output(
@@ -40,6 +50,8 @@ def render_diff_output(
     verbose: bool,
     max_column_examples: int,
     max_row_only_examples: int,
+    example_render_options: DiffExampleRenderOptions = _DEFAULT_EXAMPLE_RENDER_OPTIONS,
+    outcome: str | None = None,
 ) -> str:
     """Render a concise Rich terminal summary for a diff result."""
 
@@ -65,6 +77,8 @@ def render_diff_output(
             console.print(
                 Text(f"selected {input_label}: {len(result.model_results):,}", justify="center")
             )
+            resolved_outcome: str = outcome or ("findings" if has_diff_failures(result) else "pass")
+            console.print(Text(f"outcome: {resolved_outcome}", justify="center"))
             console.print()
             model_result: ModelDiffResult
             for index, model_result in enumerate(result.model_results):
@@ -81,6 +95,7 @@ def render_diff_output(
                     verbose=verbose,
                     max_column_examples=max_column_examples,
                     max_row_only_examples=max_row_only_examples,
+                    example_render_options=example_render_options,
                 )
     return capture.get().rstrip()
 
@@ -115,6 +130,7 @@ def _render_model_result(
     verbose: bool,
     max_column_examples: int,
     max_row_only_examples: int,
+    example_render_options: DiffExampleRenderOptions,
 ) -> None:
     console.print(
         _render_overview(
@@ -150,12 +166,14 @@ def _render_model_result(
                 model_result=model_result,
                 verbose=verbose,
                 max_column_examples=max_column_examples,
+                example_render_options=example_render_options,
             ),
         )
         if verbose and model_result.unequal_row_samples:
             example_content: RenderableType | None = _render_examples(
                 model_result=model_result,
                 max_column_examples=max_column_examples,
+                example_render_options=example_render_options,
             )
             if example_content is not None:
                 _print_section(
@@ -481,6 +499,7 @@ def _render_changed_columns(
     model_result: ModelDiffResult,
     verbose: bool,
     max_column_examples: int,
+    example_render_options: DiffExampleRenderOptions,
 ) -> RenderableType:
     row_result: RowDiffResult | None = model_result.row_result
     if row_result is None:
@@ -529,6 +548,7 @@ def _render_changed_columns(
             model_result=model_result,
             max_column_examples=max_column_examples,
             visible_column_names=tuple(column.name for column in visible_columns),
+            example_render_options=example_render_options,
         )
         if example_content is not None:
             return Group(
@@ -557,16 +577,31 @@ def _render_examples(
     model_result: ModelDiffResult,
     max_column_examples: int,
     visible_column_names: tuple[str, ...] | None = None,
+    example_render_options: DiffExampleRenderOptions,
 ) -> RenderableType | None:
     blocks: list[RenderableType] = []
     grouped_examples: dict[str, list[str]] = {}
     sample_row: RowDiffSampleRow
     for sample_row in model_result.unequal_row_samples:
-        key_label: str = ", ".join(f"{key}={value}" for key, value in sample_row.key_values)
+        key_label: str = ", ".join(
+            f"{key}={render_key_value(value)}" for key, value in sample_row.key_values
+        )
         cell: RowDiffSampleCell
         for cell in sample_row.changed_cells:
+            left_value, right_value = render_example_pair(
+                left_value=cell.left_value,
+                right_value=cell.right_value,
+                options=example_render_options,
+            )
+            difference_label: str = (
+                f" (first difference at character {left_value.first_difference + 1:,})"
+                if (left_value.truncated or right_value.truncated)
+                and left_value.first_difference is not None
+                else ""
+            )
             grouped_examples.setdefault(cell.name, []).append(
-                f"{key_label} | {cell.left_value} -> {cell.right_value}"
+                f"{key_label} | {display_example_value(left_value)} -> "
+                f"{display_example_value(right_value)}{difference_label}"
             )
     column_name: str
     for column_name in sorted(grouped_examples):
@@ -577,7 +612,7 @@ def _render_examples(
         visible_examples: list[str] = all_examples[:max_column_examples]
         example: str
         for example in visible_examples:
-            blocks.append(f"  - {example}")
+            blocks.append(Text(f"  - {example}"))
         if len(all_examples) > len(visible_examples):
             blocks.append(
                 Text(
@@ -601,7 +636,9 @@ def _render_side_only_samples(
     ]
     sample: tuple[tuple[str, object], ...]
     for sample in visible_samples:
-        blocks.append("  - " + " | ".join(f"{key}={value}" for key, value in sample))
+        blocks.append(
+            Text("  - " + " | ".join(f"{key}={render_key_value(value)}" for key, value in sample))
+        )
     if len(key_samples) > len(visible_samples):
         truncation_message: str = (
             f"  showing {len(visible_samples):,} of {len(key_samples):,} {side_label} only rows"

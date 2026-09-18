@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
 
 import duckdb
 import pytest
 
+from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.cli.commands._helpers.diff.execution import execute_query_diff
+from sqlbuild.cli.commands.models import DiffCommandRequest, QueryDiffPreparation
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_QUERY_DIFF_ARTIFACT
 from sqlbuild.executor.diff.classes.query_artifact_lifecycle import QueryDiffArtifactLifecycle
@@ -20,8 +26,22 @@ from sqlbuild.executor.janitor.models import (
     JanitorPlan,
 )
 from tests.integration.src.sqlbuild.executor.diff._test_types import (
+    QueryArtifactCleanupFailureTestCase,
     QueryArtifactCleanupTestCase,
 )
+
+
+class _CleanupFailingDuckDbAdapter(DuckDbAdapter):
+    def drop(
+        self,
+        *,
+        connection: Any,
+        destination: str,
+        if_exists: bool = True,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        del connection, destination, if_exists, statement_recorder
+        raise AdapterUserError("simulated query artifact cleanup failure")
 
 
 @pytest.mark.parametrize(
@@ -115,5 +135,63 @@ def test_given_expired_owned_and_untracked_artifacts_when_janitor_runs_then_only
             [NODE_TYPE_QUERY_DIFF_ARTIFACT],
         ).fetchone()
         assert fingerprint_row == (test_case.expected_fingerprint_count,)
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        QueryArtifactCleanupFailureTestCase(
+            description="current-run artifacts remain after mandatory cleanup fails",
+            run_id="20260918T142303Z_c1d2e3f4a5b6",
+            expected_error="simulated query artifact cleanup failure",
+            expected_artifact_count=2,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_current_artifact_cleanup_failure_when_executing_query_diff_then_failure_is_mandatory(
+    test_case: QueryArtifactCleanupFailureTestCase,
+    tmp_path: Path,
+) -> None:
+    database_path: Path = tmp_path / "query_diff.duckdb"
+    adapter: DuckDbAdapter = _CleanupFailingDuckDbAdapter()
+    request: DiffCommandRequest = DiffCommandRequest(
+        project_dir=None,
+        no_color=True,
+        no_sql_validation=False,
+        from_name=None,
+        to_name=None,
+        full=False,
+        schema_only=False,
+        bounded=None,
+        unique_key_override=("order_id",),
+    )
+    preparation: QueryDiffPreparation = QueryDiffPreparation(
+        adapter=adapter,
+        connection_config={"database": str(database_path)},
+        left_sql="SELECT 1 AS order_id",
+        right_sql="SELECT 1 AS order_id",
+        left_label="baseline",
+        right_label="candidate",
+        selected_target="dev",
+        database=None,
+        schema="main",
+        run_id=test_case.run_id,
+        artifact_ttl="24h",
+        effective_max_column_examples=3,
+        effective_max_row_only_examples=3,
+    )
+
+    with pytest.raises(AdapterUserError, match=test_case.expected_error):
+        execute_query_diff(request=request, preparation=preparation)
+
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(database_path))
+    try:
+        artifact_count_row: tuple[int] | None = connection.execute(
+            "SELECT COUNT(*) FROM duckdb_tables() WHERE table_name LIKE '__sqlbuild_query_diff_%'"
+        ).fetchone()
+        assert artifact_count_row == (test_case.expected_artifact_count,)
     finally:
         connection.close()

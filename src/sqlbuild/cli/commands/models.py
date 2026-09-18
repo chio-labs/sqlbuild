@@ -681,6 +681,7 @@ class DiffCommandRequest:
     sample_rows: int | None = None
     sample_seed: int | None = None
     exhaustive: bool = False
+    json_output: bool = False
     json_output_path: Path | None = None
     max_models: int | None = None
     max_columns: int | None = None
@@ -692,12 +693,17 @@ class DiffCommandRequest:
     selected_target: str | None = None
     left_query: str | None = None
     left_query_file: Path | None = None
+    left_label: str | None = None
     right_query: str | None = None
     right_query_file: Path | None = None
+    right_label: str | None = None
     unique_key_override: tuple[str, ...] = ()
     unkeyed: bool = False
     excluded_columns_override: tuple[str, ...] = ()
     tolerance_overrides: tuple[str, ...] = ()
+    max_value_length: int | None = None
+    suppress_example_values: bool = False
+    full_example_values: bool = False
 
 
 @dataclass(frozen=True)
@@ -732,6 +738,8 @@ class QueryDiffPreparation:
     connection_config: dict[str, object]
     left_sql: str
     right_sql: str
+    left_label: str
+    right_label: str
     selected_target: str | None
     database: str | None
     schema: str
@@ -739,6 +747,35 @@ class QueryDiffPreparation:
     artifact_ttl: str
     effective_max_column_examples: int
     effective_max_row_only_examples: int
+
+
+@dataclass(frozen=True)
+class DiffExampleRenderOptions:
+    """Bounded example rendering controls independent of comparison execution."""
+
+    max_value_length: int | None
+    suppress_values: bool = False
+
+
+@dataclass(frozen=True)
+class RenderedDiffExampleValue:
+    """One safely bounded value plus explicit information-loss metadata."""
+
+    text: str | None
+    original_length: int
+    truncated: bool
+    suppressed: bool
+    first_difference: int | None
+
+
+@dataclass(frozen=True)
+class QueryDiffRunOutcome:
+    """Raw-query result plus measured lifecycle phase durations."""
+
+    result: DiffExecutionResult
+    phase_seconds: dict[str, float]
+    outcome: str
+    exit_code: int
 
 
 @dataclass(frozen=True)

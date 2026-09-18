@@ -7780,6 +7780,8 @@ SQLBuild templates such as `ref()` are not expanded.
 sqb diff \
   --left-query 'SELECT order_id, amount_cents FROM analytics.orders_before' \
   --right-query 'SELECT order_id, amount_cents FROM analytics.orders_after' \
+  --left-label before \
+  --right-label after \
   --key order_id
 
 sqb diff \
@@ -7792,6 +7794,9 @@ sqb diff \
 
 Query mode defaults to a full comparison and also supports `--schema-only`. It does not accept
 `--bounded`; put the desired filter in both SQL inputs instead.
+
+Raw-query mode loads configuration and the selected adapter without importing unrelated project
+sinks, hooks, loaders, or providers.
 
 ### Comparison modes
 
@@ -7979,19 +7984,47 @@ sqb diff prod:dev --full --select customer_status_snapshot --max-column-examples
 Example limits only control diagnostic values printed after comparison. They are separate from
 `row_diff_sample_rows`, which controls how many unique keys receive the wide value comparison.
 
+Long values default to 160 rendered characters. SQLBuild shows context around the first difference,
+marks truncation, and reports the original length without changing exact comparison counts. Control
+value evidence independently from example counts:
+
+```bash
+sqb diff \
+  --left-query-file queries/orders_before.sql \
+  --right-query-file queries/orders_after.sql \
+  --key order_id \
+  --max-value-length 500
+
+sqb diff \
+  --left-query-file queries/orders_before.sql \
+  --right-query-file queries/orders_after.sql \
+  --key order_id \
+  --no-example-values
+
+sqb diff \
+  --left-query-file queries/orders_before.sql \
+  --right-query-file queries/orders_after.sql \
+  --key order_id \
+  --full-example-values
+```
+
+`--verbose` increases the example count but does not remove the value-length bound.
+
 ### Structured output
 
 Use `--json-output PATH` to write a stable structured result while retaining the normal terminal
-summary:
+summary, or `--json` to write one JSON document to stdout with progress on stderr:
 
 ```bash
 sqb diff prod:dev --bounded 14d --sample-rows 50000 --select order_lines --json-output diff.json
+sqb diff --left-query-file before.sql --right-query-file after.sql --key order_id --json
 ```
 
 Each model records `schema_only`, `exhaustive`, or `sampled` comparison scope; requested and observed
 cursor coverage; bounded population and compared key counts; seed and configured limit; row result
-counts; and changed-column counts. The top-level status distinguishes `no_differences_found` from
-`differences_found`.
+counts; and changed-column counts. Query output additionally includes named inputs,
+`query_comparisons`, sparse nonzero `column_mismatches`, lifecycle timings, and explicit evidence
+truncation metadata. Existing `models` output remains for compatibility.
 
 ### Invocation safety limits
 
@@ -8022,9 +8055,10 @@ sqb diff prod:dev --full --select tag:acceptance
 
 ### Exit codes
 
-`sqb diff` returns exit code `0` when no differences are found, and `1` when any input has schema or
-row differences or the comparison cannot execute successfully. This makes it usable in CI pipelines
-as a validation gate.
+Complete comparisons return `0` when no differences are found and `1` for findings. Raw-query mode
+returns `2` when safety, schema, or key preflight prevents complete value evidence, and `3` for
+setup, connection, materialization, comparison execution, ownership publication, or cleanup
+failure. Human and JSON output carry the same outcome.
 
 ## Execution Observability
 
@@ -14541,17 +14575,23 @@ and falls back to a full row comparison when no cursor is configured.
 | `--sample-seed` | Override the deterministic sample seed |
 | `--exhaustive` | Disable inherited sampling for this invocation |
 | `--json-output` | Write structured comparison scope, coverage, and results to a JSON file |
+| `--json` | Write one structured JSON document to stdout; progress remains on stderr |
 | `--max-models` | Fail when the selected scope contains more models than this limit |
 | `--max-columns` | Fail when either side of a model has more columns than this limit |
 | `--left-query` | Literal read-only SQL for the left side |
 | `--left-query-file` | UTF-8 SQL file for the left side |
 | `--right-query` | Literal read-only SQL for the right side |
 | `--right-query-file` | UTF-8 SQL file for the right side |
+| `--left-label` | Display and structured-output label for the left query |
+| `--right-label` | Display and structured-output label for the right query |
 | `--target` | Target connection for raw-query mode; defaults to the active target |
 | `--key` | Row identity column; repeat for a composite key or to override model configuration |
 | `--unkeyed` | Compare exact full-row multiplicities without a key |
 | `--exclude-column` | Column to omit from row comparison; repeat as needed |
 | `--tolerance` | Per-column numeric rule such as `amount:absolute=0.01`; repeat as needed |
+| `--max-value-length` | Maximum rendered characters per example value (default: 160) |
+| `--no-example-values` | Retain example keys and counts while suppressing values |
+| `--full-example-values` | Explicitly opt in to complete example values |
 | `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 | `--select`, `-s` | Select specific models to diff (required in v1) |
 | `--exclude` | Exclude specific models from diffing |
@@ -14578,6 +14618,8 @@ sqb diff prod:dev --bounded 14d --exhaustive --select order_lines
 sqb diff \
   --left-query-file queries/orders_before.sql \
   --right-query-file queries/orders_after.sql \
+  --left-label before \
+  --right-label after \
   --key account_id \
   --key order_id
 ```

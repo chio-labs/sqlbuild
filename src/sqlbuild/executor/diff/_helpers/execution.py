@@ -135,7 +135,7 @@ def execute_query_diff(
             code="X305",
         )
     result: ModelDiffResult = ModelDiffResult(
-        name="raw queries",
+        name=options.comparison_name or "query comparison",
         left_relation=left_relation,
         right_relation=right_relation,
         unique_key=unique_key,

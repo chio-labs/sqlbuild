@@ -68,6 +68,7 @@ class DiffExecutionOptions:
     unkeyed: bool = False
     excluded_columns_override: tuple[str, ...] = ()
     tolerance_overrides: RowDiffTolerances | None = None
+    comparison_name: str | None = None
 
 
 @dataclass(frozen=True)

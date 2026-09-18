@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from sqlbuild.cli.commands.models import DiffExampleRenderOptions
 from sqlbuild.executor.diff.models import DiffExecutionResult
 
 
@@ -30,3 +31,16 @@ class RenderVirtualDiffHeaderTestCase:
     expected_fragments: tuple[str, ...]
     expected_color_fragments: tuple[str, ...] = ()
     unexpected_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RenderDiffEvidenceTestCase:
+    description: str
+    left_value: object
+    right_value: object
+    options: DiffExampleRenderOptions
+    expected_left_fragment: str
+    expected_right_fragment: str
+    expected_first_difference: int | None
+    expected_truncated: bool
+    expected_suppressed: bool

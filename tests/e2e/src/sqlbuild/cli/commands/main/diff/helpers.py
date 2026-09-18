@@ -10,6 +10,12 @@ from textwrap import dedent
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
 
+def reject_nonfinite_json_constant(value: str) -> object:
+    """Fail strict JSON parsing when a non-standard numeric token appears."""
+
+    raise AssertionError(f"non-standard JSON numeric constant: {value}")
+
+
 def prepare_diff_project(tmp_path: Path) -> Path:
     """Create a small inline project for diff e2e tests."""
 

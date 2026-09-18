@@ -375,6 +375,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 sample_rows=args.sample_rows,
                 sample_seed=args.sample_seed,
                 exhaustive=args.exhaustive,
+                json_output=args.json,
                 json_output_path=args.json_output,
                 max_models=args.max_models,
                 max_columns=args.max_columns,
@@ -386,12 +387,17 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 selected_target=args.target,
                 left_query=args.left_query,
                 left_query_file=args.left_query_file,
+                left_label=args.left_label,
                 right_query=args.right_query,
                 right_query_file=args.right_query_file,
+                right_label=args.right_label,
                 unique_key_override=tuple(args.key),
                 unkeyed=args.unkeyed,
                 excluded_columns_override=tuple(args.exclude_column),
                 tolerance_overrides=tuple(args.tolerance),
+                max_value_length=args.max_value_length,
+                suppress_example_values=args.no_example_values,
+                full_example_values=args.full_example_values,
             )
         )
     if args.command == CliCommand.RECONCILE:
