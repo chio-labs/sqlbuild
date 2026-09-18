@@ -23,4 +23,19 @@ pub(crate) fn evaluate(model: &Model, rule: &RuleMetadata, faults: &FaultCollect
             });
         }
     }
+    for family in &model.dynamic_columns {
+        if family.data_type.trim().is_empty() {
+            faults.push(Fault {
+                code: rule.code.clone(),
+                path: model.relative_path.clone(),
+                line: 1,
+                column: 1,
+                message: format!(
+                    "dynamic contract family {:?} has no declared type",
+                    family.name
+                ),
+                remediation: rule.remediation.clone(),
+            });
+        }
+    }
 }

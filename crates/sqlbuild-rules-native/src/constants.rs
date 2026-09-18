@@ -13,6 +13,7 @@ pub(crate) const REFERENCE_KIND: &str = "ref";
 pub(crate) const SOURCE_REFERENCE_KIND: &str = "source";
 pub(crate) const VIEW_MATERIALIZATION: &str = "view";
 pub(crate) const ENFORCED_CONTRACT: &str = "enforced";
+pub(crate) const SELECT_STAR_MODEL_RULE_CODE: &str = "SQBRMODEL102";
 pub(crate) const BOOLEAN_TYPE: &str = "BOOLEAN";
 pub(crate) const TIMESTAMP_TYPE: &str = "TIMESTAMP";
 pub(crate) const DATE_TYPE: &str = "DATE";

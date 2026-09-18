@@ -1,6 +1,7 @@
 pub(crate) mod catalogue;
 pub(crate) mod contract_name_types;
 pub(crate) mod domain_layout;
+pub(crate) mod dynamic_contracts;
 pub(crate) mod evaluation;
 pub(crate) mod explicit_output_types;
 pub(crate) mod numeric_decisions;

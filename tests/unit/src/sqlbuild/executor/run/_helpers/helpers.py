@@ -21,6 +21,7 @@ from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.models import HookContext
+from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 
 def insert_snapshot_hook_log(ctx: HookContext, phase: str) -> None:
@@ -55,7 +56,10 @@ def build_result_model_plan_entry() -> ModelPlanEntry:
 
 
 def build_contract_model_plan_entry(
-    *, contract_enforced: bool, contract_columns: tuple[ColumnInfo, ...]
+    *,
+    contract_enforced: bool,
+    contract_columns: tuple[ColumnInfo, ...],
+    contract_dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = (),
 ) -> ModelPlanEntry:
     entry: ModelPlanEntry = build_result_model_plan_entry()
     return ModelPlanEntry(
@@ -71,6 +75,7 @@ def build_contract_model_plan_entry(
         logical_ddl=entry.logical_ddl,
         contract_enforced=contract_enforced,
         contract_columns=contract_columns,
+        contract_dynamic_columns=contract_dynamic_columns,
     )
 
 

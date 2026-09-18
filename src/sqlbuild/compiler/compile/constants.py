@@ -28,6 +28,7 @@ MODEL_HEADER_METADATA_KEYS: frozenset[str] = frozenset(
     {
         "description",
         "columns",
+        "dynamic_columns",
         "model_schema",
         "audits",
         "audit_factories",

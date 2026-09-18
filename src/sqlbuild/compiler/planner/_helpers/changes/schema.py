@@ -7,6 +7,8 @@ from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.planner.models import SchemaFinding
 from sqlbuild.compiler.planner.types import SchemaChangeKind, SchemaColumnSource
+from sqlbuild.spec.contracts.main.matching_dynamic_families import matching_dynamic_families
+from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 
 def detect_schema_changes(
@@ -16,6 +18,7 @@ def detect_schema_changes(
     warehouse_columns: tuple[ColumnInfo, ...],
     type_enforcement: bool,
     inferred_schema_complete: bool,
+    dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = (),
 ) -> tuple[SchemaFinding, ...]:
     """Compare yml and inferred columns against warehouse columns and return findings."""
 
@@ -64,6 +67,28 @@ def detect_schema_changes(
         col_ne: ColumnInfo
         for col_ne in yml_columns:
             seen_names.add(col_ne.name)
+
+    for column_name, column_type in warehouse_map.items():
+        if column_name in seen_names:
+            continue
+        matching: tuple[SchemaDynamicColumnFamily, ...] = matching_dynamic_families(
+            families=dynamic_columns,
+            column_name=column_name,
+        )
+        if len(matching) != 1:
+            continue
+        family: SchemaDynamicColumnFamily = matching[0]
+        seen_names.add(column_name)
+        if not types_equal(left=family.type, right=column_type, dialect=None):
+            findings.append(
+                SchemaFinding(
+                    kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
+                    column_name=column_name,
+                    source=SchemaColumnSource.YML,
+                    expected_type=family.type,
+                    actual_type=column_type,
+                )
+            )
 
     if type_enforcement or inferred_schema_complete:
         col_name: str

@@ -1046,3 +1046,10 @@ class RemoveColumnSemanticsBuildE2ETestCase:
     expected_backfill_action: str
     expected_backfill_duration: str | None
     expected_warning_count: int
+
+
+@dataclass(frozen=True)
+class DynamicColumnContractE2ETestCase:
+    description: str
+    project_name: str
+    expected_rows: tuple[tuple[object, ...], ...]

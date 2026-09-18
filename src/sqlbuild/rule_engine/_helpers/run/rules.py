@@ -6,7 +6,7 @@ import hashlib
 import json
 import os
 import time
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
@@ -25,7 +25,7 @@ from sqlbuild.rule_engine._helpers.engine.native import evaluate_native
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.models import Finding, Rule, RulesConfig, RulesResult, RulesRunResult
 
-_SQL_RULE_CACHE_VERSION: str = "sql-rules-v1"
+_SQL_RULE_CACHE_VERSION: str = "sql-rules-v2"
 _SQLBUILD_VERSION: str = version("sqlbuild")
 _SQL_RULE_SUPPRESSION_CODE: str = "SQBRSQL000"
 
@@ -195,6 +195,12 @@ def _run_sql_rules(
             config=LintConfig(dialect=dialect, enabled_native_rules=codes),
             selected_paths=frozenset(selected_paths),
             discovered_inputs=discovered_inputs,
+            dynamic_output_paths=frozenset(
+                (project_dir / model.relative_path).resolve()
+                for model in models_by_path.values()
+                if model.dynamic_column_contract is not None
+                and model.dynamic_column_contract.output_proven
+            ),
         )
         if selected_paths
         else None
@@ -247,6 +253,15 @@ def _sql_rule_identity(*, model: CompiledModel, codes: tuple[str, ...], dialect:
     digest.update("\0".join(codes).encode())
     digest.update(model.authored_sql.encode())
     digest.update(model.query_sql.encode())
+    if model.dynamic_column_contract is not None:
+        digest.update(
+            json.dumps(
+                asdict(model.dynamic_column_contract),
+                sort_keys=True,
+                separators=(",", ":"),
+                default=str,
+            ).encode()
+        )
     return digest.hexdigest()
 
 

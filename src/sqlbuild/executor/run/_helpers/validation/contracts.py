@@ -13,6 +13,8 @@ from sqlbuild.executor.run.constants import (
     RUNTIME_CONTRACT_MISSING_DECLARATIONS_CODE,
     RUNTIME_CONTRACT_TYPE_MISMATCH_CODE,
 )
+from sqlbuild.spec.contracts.main.matching_dynamic_families import matching_dynamic_families
+from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 
 def validate_runtime_contract(
@@ -25,7 +27,7 @@ def validate_runtime_contract(
 
     if not entry.contract_enforced:
         return
-    if not entry.contract_columns:
+    if not entry.contract_columns and not entry.contract_dynamic_columns:
         raise ExecutorInputError(
             f"model '{entry.name}' has contract enforced but declares no columns",
             code=RUNTIME_CONTRACT_MISSING_DECLARATIONS_CODE,
@@ -49,8 +51,19 @@ def validate_runtime_contract(
             code=RUNTIME_CONTRACT_MISSING_COLUMN_CODE,
         )
 
+    extra_columns: tuple[ColumnInfo, ...] = tuple(
+        column for column in actual_columns if column.name.lower() not in declared_by_name
+    )
     extra_names: tuple[str, ...] = tuple(
-        column.name for column in actual_columns if column.name.lower() not in declared_by_name
+        column.name
+        for column in extra_columns
+        if len(
+            matching_dynamic_families(
+                families=entry.contract_dynamic_columns,
+                column_name=column.name,
+            )
+        )
+        != 1
     )
     if extra_names:
         raise ExecutorInputError(
@@ -58,9 +71,26 @@ def validate_runtime_contract(
             code=RUNTIME_CONTRACT_EXTRA_COLUMN_CODE,
         )
 
+    for column in extra_columns:
+        matching: tuple[SchemaDynamicColumnFamily, ...] = matching_dynamic_families(
+            families=entry.contract_dynamic_columns,
+            column_name=column.name,
+        )
+        if len(matching) != 1:
+            continue
+        family: SchemaDynamicColumnFamily = matching[0]
+        if not types_equal(left=family.type, right=column.type, dialect=dialect):
+            raise ExecutorInputError(
+                f"model '{entry.name}' runtime dynamic column '{column.name}' has type "
+                f"{column.type} but family '{family.name}' declares {family.type}",
+                code=RUNTIME_CONTRACT_TYPE_MISMATCH_CODE,
+            )
+
     actual_column: ColumnInfo
     for actual_column in actual_columns:
-        declared_column: ColumnInfo = declared_by_name[actual_column.name.lower()]
+        declared_column: ColumnInfo | None = declared_by_name.get(actual_column.name.lower())
+        if declared_column is None:
+            continue
         if not declared_column.type or not actual_column.type:
             continue
         if types_equal(left=actual_column.type, right=declared_column.type, dialect=dialect):

@@ -6,6 +6,11 @@ pub(crate) struct NativeEvaluationTestCase {
     pub(crate) expected_faults: Value,
 }
 
+pub(crate) struct DynamicPivotEvaluationTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) expected_faults: Value,
+}
+
 pub(crate) struct DeclarationScopeTestCase {
     pub(crate) description: &'static str,
     pub(crate) scope: &'static str,

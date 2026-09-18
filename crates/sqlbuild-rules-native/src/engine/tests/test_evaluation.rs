@@ -545,6 +545,52 @@ fn given_enforced_contract_outputs_when_evaluating_explicit_type_rule_then_retur
 }
 
 #[test]
+fn given_compiler_proven_duckdb_dynamic_pivot_when_evaluating_contract_rules_then_skips_query_parse()
+-> Result<(), String> {
+    let test_cases = [test_types::DynamicPivotEvaluationTestCase {
+        description: "compiler-proven bare DuckDB pivot",
+        expected_faults: json!([]),
+    }];
+    for test_case in test_cases {
+        let project_dir = TempDir::new().map_err(|error| error.to_string())?;
+        let config = json!({
+            "select": ["SQBRMODEL102", "SQBRCONTRACT101", "SQBRCONTRACT105", "SQBRCONTRACT106"],
+            "cache": {"enabled": false}
+        });
+        let mut request: Value = serde_json::from_str(&helpers::request(&project_dir, &config))
+            .map_err(|error| error.to_string())?;
+        request["dialect"] = json!("duckdb");
+        request["models"][0]["query_sql"] =
+            json!("PIVOT orders ON category USING MAX(amount) GROUP BY customer_id");
+        request["models"][0]["authored_sql"] = request["models"][0]["query_sql"].clone();
+        request["models"][0]["config"] = json!({"contract": "enforced"});
+        request["models"][0]["columns"] = json!([
+            {"name": "customer_id", "type": "INTEGER", "type_proven": true}
+        ]);
+        request["models"][0]["dynamic_columns"] = json!([{
+            "name": "category_amounts",
+            "pivot_column": "category",
+            "value_column": "amount",
+            "aggregate": "MAX",
+            "type": "DECIMAL(12,2)",
+            "type_proven": true
+        }]);
+        request["models"][0]["dynamic_columns_proven"] = json!(true);
+        request["models"][0]["bare_dynamic_pivot"] = json!(true);
+
+        let result: Value = serde_json::from_str(&evaluate_json(&request.to_string())?)
+            .map_err(|error| error.to_string())?;
+
+        assert_eq!(
+            result["faults"], test_case.expected_faults,
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn given_contract_name_type_options_when_evaluating_then_accepts_configured_interfaces()
 -> Result<(), String> {
     let project_dir = TempDir::new().map_err(|error| error.to_string())?;

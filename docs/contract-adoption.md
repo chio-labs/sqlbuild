@@ -96,7 +96,51 @@ outputs. The cast target must use the declared contract type; an alias with diff
 not treated as an explicit declaration of that contract. An exact outer cast establishes the Rule's
 authored type boundary even when general expression inference remains incomplete. Every
 set-operation branch must cast its outputs before common-type coercion. Wildcards are not an
-explicit contract boundary.
+explicit contract boundary unless they expose a compiler-proven dynamic family as described below.
+
+### Runtime-dynamic pivot families
+
+An enforced contract can remain closed when a native pivot discovers output names from data at
+runtime. Declare fixed grouping columns normally and declare each generated family separately:
+
+```sql
+MODEL (
+  contract enforced,
+  columns (customer_id (type INTEGER)),
+  dynamic_columns (
+    category_amounts (
+      pivot_column category,
+      value_column amount,
+      aggregate MAX,
+      type "DECIMAL(12,2)"
+    )
+  ),
+);
+
+PIVOT __ref("stg_order_amounts")
+ON category
+USING MAX(amount)
+GROUP BY customer_id
+```
+
+This is not an open wildcard contract. SQLBuild proves that the complete output boundary is either
+one supported runtime-dynamic pivot or an exact wildcard passthrough from an upstream model with the
+same families. It derives the fixed columns from the pivot input, matches every pivot aggregate to
+one family, and proves the generated type from the authoritative input contract or an explicit cast.
+An unproven boundary fails with `K011`; an incompatible family type fails with `K002`; an unknown
+family type reports `K003`. `SQBRCONTRACT105` accepts the wildcard only after this compiler proof.
+
+Snowflake `PIVOT ... IN (ANY ...)` and dynamic subquery pivots are supported. DuckDB and MotherDuck
+native dynamic `PIVOT ... ON ... USING ...` statements are supported. A static `IN` list continues
+to use ordinary exact column declarations. Dynamically constructed SQL strings are not contract
+proof, and adapters without a structurally analyzable native dynamic pivot reject
+`dynamic_columns`.
+
+When more than one family is declared, each requires `name_pattern`, a regular expression matched
+against the complete generated column name. Runtime validation requires every non-fixed physical
+column to match exactly one family and have that family's declared type. Contract inspection applies
+the same classification. Contract generation preserves the family declaration and does not freeze
+the current runtime members into `columns`.
 
 When `SQBRSQL035` is also selected, the final top-level CTE owns these casts and the terminal
 `SELECT` remains a plain read from that CTE:

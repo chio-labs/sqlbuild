@@ -47,6 +47,15 @@ class TypedContractRuleIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class DynamicPivotRulesIntegrationTestCase:
+    description: str
+    expected_valid_exit_code: int
+    expected_invalid_exit_code: int
+    expected_invalid_model_findings: int
+    expected_invalid_sql_findings: int
+
+
+@dataclass(frozen=True)
 class SnowflakeCompileIntegrationTestCase:
     """One Snowflake SQL compatibility expectation through compile."""
 

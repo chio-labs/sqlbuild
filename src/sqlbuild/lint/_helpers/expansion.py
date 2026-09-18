@@ -132,6 +132,7 @@ def prepare_lint_body(
     context: SqlExpansionContext,
     external_identifiers: tuple[str, ...] = (),
     allows_ceremonial_select: bool = False,
+    allows_dynamic_output_star: bool = False,
 ) -> LintBody:
     """Expand one authored body and neutralize whatever interpolation remains."""
 
@@ -189,6 +190,7 @@ def prepare_lint_body(
         dependency_identifiers=dependency_identifiers,
         externally_referenced_ctes=externally_referenced_ctes,
         allows_ceremonial_select=allows_ceremonial_select,
+        allows_dynamic_output_star=allows_dynamic_output_star,
     )
 
 

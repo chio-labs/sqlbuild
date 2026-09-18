@@ -4,6 +4,7 @@ from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.planner.models import BackfillResult, SchemaFinding
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
+from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,7 @@ class DetectSchemaChangesTestCase:
     type_enforcement: bool
     expected_findings: tuple[SchemaFinding, ...]
     inferred_schema_complete: bool = True
+    dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = ()
 
 
 @dataclass(frozen=True)

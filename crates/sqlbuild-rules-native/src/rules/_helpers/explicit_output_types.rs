@@ -25,10 +25,14 @@ pub(crate) fn evaluate(query: &Query, model: &Model, rule: &RuleMetadata, faults
         .get("contract")
         .and_then(serde_json::Value::as_str)
         != Some(ENFORCED_CONTRACT)
-        || !model
+        || (!model
             .columns
             .iter()
             .any(|column| !column.data_type.is_empty())
+            && !model
+                .dynamic_columns
+                .iter()
+                .any(|family| !family.data_type.is_empty()))
     {
         return;
     }
@@ -57,6 +61,49 @@ pub(crate) fn evaluate(query: &Query, model: &Model, rule: &RuleMetadata, faults
             by_name: false,
         },
     );
+}
+
+pub(crate) fn evaluate_proven_dynamic(model: &Model, rule: &RuleMetadata, faults: &FaultCollector) {
+    for column in model
+        .columns
+        .iter()
+        .filter(|column| !column.data_type.is_empty() && !column.type_proven)
+    {
+        faults.push(Fault {
+            code: rule.code.clone(),
+            path: model.relative_path.clone(),
+            line: 1,
+            column: 1,
+            message: format!(
+                "fixed dynamic-pivot output {:?} is not proven against declared type {}",
+                column.name, column.data_type
+            ),
+            remediation: format!(
+                "Establish type {} on the authoritative pivot input column.",
+                column.data_type
+            ),
+        });
+    }
+    for family in model
+        .dynamic_columns
+        .iter()
+        .filter(|family| !family.type_proven)
+    {
+        faults.push(Fault {
+            code: rule.code.clone(),
+            path: model.relative_path.clone(),
+            line: 1,
+            column: 1,
+            message: format!(
+                "dynamic output family {:?} is not proven against declared type {}",
+                family.name, family.data_type
+            ),
+            remediation: format!(
+                "Establish type {} on the authoritative pivot aggregate input.",
+                family.data_type
+            ),
+        });
+    }
 }
 
 impl OutputRule<'_> {
@@ -97,6 +144,15 @@ impl OutputRule<'_> {
                 item,
                 SelectItem::Wildcard(_) | SelectItem::QualifiedWildcard(_, _)
             ) {
+                if self.model.dynamic_columns_proven
+                    && self
+                        .model
+                        .dynamic_columns
+                        .iter()
+                        .all(|family| family.type_proven)
+                {
+                    continue;
+                }
                 if proven_dependency_wildcard(select, scope.columns) {
                     continue;
                 }

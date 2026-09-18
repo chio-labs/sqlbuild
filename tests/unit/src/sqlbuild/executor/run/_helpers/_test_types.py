@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlbuild.adapter.contract.models import ColumnInfo, LifeCycleEvent
 from sqlbuild.executor.run.types import AuditGateReuseReason, AuditGateStatus, ExecutionPhase
+from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 
 @dataclass(frozen=True)
@@ -495,5 +496,6 @@ class RuntimeContractValidationTestCase:
     contract_columns: tuple[ColumnInfo, ...]
     actual_columns: tuple[ColumnInfo, ...]
     expected_valid: bool
+    contract_dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = ()
     expected_error_fragment: str | None = None
     expected_error_code: str | None = None

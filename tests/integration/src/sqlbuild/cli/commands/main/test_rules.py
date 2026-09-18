@@ -11,6 +11,7 @@ from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    DynamicPivotRulesIntegrationTestCase,
     ExplicitContractOutputRuleIntegrationTestCase,
     RulePassIntegrationTestCase,
     RulesIntegrationTestCase,
@@ -239,6 +240,89 @@ def test_given_enforced_contract_when_compiling_explicit_output_rule_then_enforc
 
     assert exit_code == test_case.expected_exit_code
     assert diagnostic_codes.count("SQBRCONTRACT105") == test_case.expected_rule_findings
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DynamicPivotRulesIntegrationTestCase(
+            description="proven family governs only output wildcards",
+            expected_valid_exit_code=0,
+            expected_invalid_exit_code=1,
+            expected_invalid_model_findings=1,
+            expected_invalid_sql_findings=1,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_proven_dynamic_pivot_when_compiling_contract_rules_then_wildcard_is_governed(
+    test_case: DynamicPivotRulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "snowflake"\n\n[rules]\n'
+        'select = ["SQBRMODEL102", "SQBRSQL021", "SQBRCONTRACT101", '
+        '"SQBRCONTRACT105", "SQBRCONTRACT106"]\n\n'
+        "[defaults]\n"
+        'contract = "enforced"\n',
+        encoding="utf-8",
+    )
+    models_dir: Path = tmp_path / "models"
+    models_dir.mkdir()
+    (models_dir / "stg_order_amounts.sql").write_text(
+        "MODEL (database analytics, schema analytics, columns (customer_id (type INTEGER), "
+        "category (type VARCHAR), "
+        'amount (type "DECIMAL(12,2)")));\n'
+        "SELECT CAST(1 AS INTEGER) AS customer_id, "
+        "CAST('books' AS VARCHAR) AS category, "
+        "CAST(10.25 AS DECIMAL(12,2)) AS amount\n",
+        encoding="utf-8",
+    )
+    dynamic_model: Path = models_dir / "customer_category_amounts.sql"
+    dynamic_model.write_text(
+        "MODEL (\n"
+        "  database analytics,\n"
+        "  schema analytics,\n"
+        "  columns (customer_id (type INTEGER)),\n"
+        "  dynamic_columns (category_amounts (pivot_column category, value_column amount, "
+        'aggregate MAX, type "DECIMAL(12,2)")),\n'
+        ");\n"
+        "WITH pivot_input AS (\n"
+        "  SELECT customer_id, category, amount\n"
+        '  FROM __ref("stg_order_amounts")\n'
+        ")\n"
+        "SELECT *\n"
+        "FROM pivot_input PIVOT(MAX(amount) FOR category IN (ANY ORDER BY category))\n",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+    result: dict[str, object] = json.loads(capsys.readouterr().out)
+    diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], result["diagnostics"])
+
+    assert exit_code == test_case.expected_valid_exit_code
+    assert diagnostics == []
+
+    dynamic_model.write_text(
+        dynamic_model.read_text(encoding="utf-8").replace(
+            ")\nSELECT *\nFROM pivot_input PIVOT",
+            "),\nunrelated AS (SELECT * FROM pivot_input)\nSELECT *\nFROM pivot_input PIVOT",
+        ),
+        encoding="utf-8",
+    )
+    invalid_exit_code: int = main(
+        ["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"]
+    )
+    invalid_result: dict[str, object] = json.loads(capsys.readouterr().out)
+    invalid_diagnostics: list[dict[str, object]] = cast(
+        list[dict[str, object]], invalid_result["diagnostics"]
+    )
+    invalid_codes: tuple[object, ...] = tuple(item["code"] for item in invalid_diagnostics)
+
+    assert invalid_exit_code == test_case.expected_invalid_exit_code
+    assert invalid_codes.count("SQBRMODEL102") == test_case.expected_invalid_model_findings
+    assert invalid_codes.count("SQBRSQL021") == test_case.expected_invalid_sql_findings
 
 
 @pytest.mark.parametrize(

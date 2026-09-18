@@ -133,6 +133,7 @@ from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,
     SchemaColumn,
+    SchemaDynamicColumnFamily,
     SourceEntry,
     StartCursorsConfig,
 )
@@ -678,6 +679,9 @@ def plan_model_from_change(
     declared_columns: tuple[ColumnInfo, ...] = _get_declared_columns(model)
     contract_enforced: bool = model.config.values.get("contract") == ContractPolicy.ENFORCED
     contract_columns: tuple[ColumnInfo, ...] = _get_contract_columns(model)
+    contract_dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = (
+        model.schema_entry.dynamic_columns if model.schema_entry is not None else ()
+    )
     unique_key: tuple[str, ...] = _get_unique_key(model)
     warehouse_columns: tuple[ColumnInfo, ...] = snapshot.existing_columns.get(model.name, ())
 
@@ -881,6 +885,7 @@ def plan_model_from_change(
         declared_columns=declared_columns,
         contract_enforced=contract_enforced,
         contract_columns=contract_columns,
+        contract_dynamic_columns=contract_dynamic_columns,
         pre_hooks=pre_hooks,
         post_hooks=post_hooks,
         previous_query_sql=previous_query_sql,

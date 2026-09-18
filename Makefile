@@ -61,6 +61,7 @@ E2E_DUCKDB_BUILD_CORE_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_audit_failures.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_build.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_compile_json_behavior.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_dynamic_column_contract.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_dag_json_behavior.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_enum_contract.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_expression_sources.py \

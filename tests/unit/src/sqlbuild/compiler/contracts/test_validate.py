@@ -5,14 +5,19 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.adapter.contract.types import TypeDialect
+from sqlbuild.compiler.compile.models import (
+    DynamicColumnContractProof,
+    DynamicColumnFamilyProof,
+)
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.spec.contracts.models import SourceLocation
+from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily, SourceLocation
 from tests.unit.src.sqlbuild.compiler.contracts._test_types import (
     ContractLocationTestCase,
     ContractMissingDeclarationsTestCase,
     ContractValidationTestCase,
+    DynamicContractValidationTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.contracts.helpers import make_contract_project
 
@@ -401,3 +406,68 @@ def test_given_contract_without_declared_columns_when_validating_then_returns_ex
         tuple(diagnostic.message for diagnostic in result.diagnostics)
         == test_case.expected_messages
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DynamicContractValidationTestCase(
+            description="unproven family rejects open wildcard",
+            declared_type="DECIMAL(12,2)",
+            output_proven=False,
+            inferred_type=None,
+            failure_reason="output is not a dynamic pivot boundary",
+            expected_code="K011",
+            expected_message=(
+                "model 'orders' dynamic column contract is not proven: "
+                "output is not a dynamic pivot boundary"
+            ),
+        ),
+        DynamicContractValidationTestCase(
+            description="incompatible family type reports mismatch",
+            declared_type="VARCHAR",
+            output_proven=True,
+            inferred_type="DECIMAL(12,2)",
+            failure_reason=None,
+            expected_code="K002",
+            expected_message=(
+                "dynamic column family 'category_amounts' inferred as DECIMAL(12,2) "
+                "but declared type is VARCHAR"
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_dynamic_contract_when_validating_then_reports_expected_diagnostic(
+    test_case: DynamicContractValidationTestCase,
+) -> None:
+    family: SchemaDynamicColumnFamily = SchemaDynamicColumnFamily(
+        name="category_amounts",
+        pivot_column="category",
+        value_column="amount",
+        aggregate="MAX",
+        type=test_case.declared_type,
+    )
+    result: ContractValidationResult = evaluate_model_contracts(
+        project=make_contract_project(
+            declared_columns=(("customer_id", "INTEGER"),),
+            inferred_columns=(("customer_id", "INTEGER"),),
+            type_enforcement=True,
+            contract="enforced",
+            dynamic_columns=(family,),
+            dynamic_column_contract=DynamicColumnContractProof(
+                output_proven=test_case.output_proven,
+                families=(
+                    DynamicColumnFamilyProof(
+                        name="category_amounts",
+                        inferred_type=test_case.inferred_type,
+                    ),
+                ),
+                failure_reason=test_case.failure_reason,
+            ),
+        ),
+        dialect=TypeDialect.DUCKDB,
+    )
+
+    assert tuple(diagnostic.code for diagnostic in result.diagnostics) == (test_case.expected_code,)
+    assert result.diagnostics[0].message == test_case.expected_message

@@ -7,6 +7,7 @@ from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.planner._helpers.changes.schema import detect_schema_changes
 from sqlbuild.compiler.planner.models import SchemaFinding
 from sqlbuild.compiler.planner.types import SchemaChangeKind, SchemaColumnSource
+from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types import (
     DetectSchemaChangesTestCase,
 )
@@ -267,6 +268,28 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types impor
                 ),
             ),
         ),
+        DetectSchemaChangesTestCase(
+            description="typed dynamic members match their family",
+            yml_columns=(ColumnInfo(name="customer_id", type="INTEGER"),),
+            inferred_columns=(InferredColumn(name="customer_id", type="INTEGER"),),
+            warehouse_columns=(
+                ColumnInfo(name="customer_id", type="INTEGER"),
+                ColumnInfo(name="books", type="DECIMAL(12,2)"),
+                ColumnInfo(name="games", type="DECIMAL(12,2)"),
+            ),
+            type_enforcement=True,
+            inferred_schema_complete=False,
+            dynamic_columns=(
+                SchemaDynamicColumnFamily(
+                    name="category_amounts",
+                    pivot_column="category",
+                    value_column="amount",
+                    aggregate="MAX",
+                    type="DECIMAL(12,2)",
+                ),
+            ),
+            expected_findings=(),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -279,6 +302,7 @@ def test_given_columns_when_detecting_schema_changes_then_returns_expected_findi
         warehouse_columns=test_case.warehouse_columns,
         type_enforcement=test_case.type_enforcement,
         inferred_schema_complete=test_case.inferred_schema_complete,
+        dynamic_columns=test_case.dynamic_columns,
     )
 
     assert result == test_case.expected_findings
