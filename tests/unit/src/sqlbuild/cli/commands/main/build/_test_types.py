@@ -18,3 +18,10 @@ class FunctionDeferCloneBoundaryTestCase:
     description: str
     expected_boundary_selectors: tuple[str, ...]
     expected_view_chain_selectors: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DeferCloneModelCountTestCase:
+    description: str
+    enabled_by_name: dict[str, bool]
+    expected_model_count: int

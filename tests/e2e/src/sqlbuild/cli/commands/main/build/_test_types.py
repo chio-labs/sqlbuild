@@ -13,6 +13,13 @@ class AuditFactoryFailureBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class ExecutionLimitBuildE2ETestCase:
+    description: str
+    expected_exit_code: int
+    expected_tables: bool
+
+
+@dataclass(frozen=True)
 class MeasurementAuditCliE2ETestCase:
     description: str
     repo_files: dict[str, str]

@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.spec.contracts.models import LoaderDestinationParts, LocalConfig, ProjectConfig
+from sqlbuild.spec.contracts.models import (
+    ExecutionLimitsConfig,
+    LoaderDestinationParts,
+    LocalConfig,
+    ProjectConfig,
+)
 from sqlbuild.sql_values.types import CollectionRendering
 
 
@@ -46,6 +51,15 @@ class TargetRetentionResolutionTestCase:
     local_config: LocalConfig
     target_name: str
     expected_desired_days: int
+
+
+@dataclass(frozen=True)
+class ExecutionLimitsResolutionTestCase:
+    description: str
+    project_config: ProjectConfig
+    local_config: LocalConfig
+    target_name: str
+    expected_limits: ExecutionLimitsConfig
 
 
 @dataclass(frozen=True)

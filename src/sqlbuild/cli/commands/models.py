@@ -73,7 +73,7 @@ from sqlbuild.presentation.classes.transient_status_reporter import TransientSta
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.runtime.contracts.types import NodeStartCallback
-from sqlbuild.spec.contracts.models import CostConfig, SourceEntry
+from sqlbuild.spec.contracts.models import CostConfig, ExecutionLimitsConfig, SourceEntry
 from sqlbuild.virtual.executor.models import VirtualBuildPipelineResult
 from sqlbuild.virtual.state.models import (
     CheckpointRetentionInspection,
@@ -255,6 +255,8 @@ class BuildInvocation:
     planning_progress: PlanningProgressReporter
     should_load_sources: bool
     virtual_mode: bool
+    effective_target_name: str | None = None
+    execution_limits: ExecutionLimitsConfig = field(default_factory=ExecutionLimitsConfig)
 
 
 @dataclass(frozen=True)
@@ -344,6 +346,8 @@ class VirtualBuildPlanHookConfig:
     selector_files: tuple[SelectorFileSummary, ...] = ()
     virtual_environment_name: str | None = None
     unsuffixed_virtual_environment_name: str | None = None
+    effective_target_name: str | None = None
+    execution_limits: ExecutionLimitsConfig = field(default_factory=ExecutionLimitsConfig)
 
 
 @dataclass(frozen=True)

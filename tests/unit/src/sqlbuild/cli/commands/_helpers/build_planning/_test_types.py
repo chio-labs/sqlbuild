@@ -27,3 +27,21 @@ class TableTypeDowngradePolicyTestCase:
     expected_output: str = ""
     input_text: str = ""
     input_is_tty: bool = False
+
+
+@dataclass(frozen=True)
+class ModelExecutionLimitTestCase:
+    description: str
+    model_count: int
+    maximum_models: int
+    remediation: str | None = None
+    expected_code: str | None = None
+
+
+@dataclass(frozen=True)
+class UnsupportedDurationLimitTestCase:
+    description: str
+    max_duration: str
+    remediation: str
+    expected_code: str
+    expected_error_fragment: str

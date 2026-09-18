@@ -1,5 +1,7 @@
 """Snowflake adapter constants."""
 
+MAX_STATEMENT_TIMEOUT_SECONDS: int = 604_800
+
 BASE_TABLE_METADATA_TYPE: str = "BASE TABLE"
 VIEW_RELATION_TYPE_TOKEN: str = "view"
 EXTERNAL_BROWSER_AUTHENTICATOR: str = "externalbrowser"

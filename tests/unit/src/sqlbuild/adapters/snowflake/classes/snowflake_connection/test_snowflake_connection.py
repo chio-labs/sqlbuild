@@ -19,11 +19,16 @@ from sqlbuild.observability import (
     dispatcher_scope,
     invocation_scope,
 )
+from sqlbuild.runtime.execution_limits.exceptions import ExecutionDurationLimitError
+from sqlbuild.runtime.execution_limits.main.execution_deadline_scope import (
+    execution_deadline_scope,
+)
 from tests.unit.src.sqlbuild.adapters.snowflake.classes.snowflake_connection._test_types import (
     CursorAttributeTestCase,
     CursorContextManagerTestCase,
     CursorIterationTestCase,
     CursorReturnTestCase,
+    ExecutionDeadlineTestCase,
     QueryTagPolicyTestCase,
     SnowflakeConnectionTestCase,
     StatementDiagnosticsTestCase,
@@ -128,6 +133,72 @@ class _SubmittedQueryTagErrorCursor(_Cursor):
         self.calls += 1
         self.sfqid = "01c-submitted-query-id"
         raise RuntimeError("submitted QUERY_TAG statement failed")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExecutionDeadlineTestCase(
+            description="active deadline adds Snowflake statement timeout",
+            max_duration_seconds=30,
+            max_duration="30s",
+            expected_maximum_timeout_seconds=30,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_execution_deadline_when_running_snowflake_statement_then_timeout_is_submitted(
+    test_case: ExecutionDeadlineTestCase,
+) -> None:
+    cursor: _Cursor = _Cursor()
+    connection: _SnowflakeConnection = _SnowflakeConnection(_RawConnection(cursor))
+
+    with execution_deadline_scope(
+        max_duration_seconds=test_case.max_duration_seconds,
+        max_duration=test_case.max_duration,
+        target_name="dev",
+        remediation=None,
+    ):
+        connection.execute("SELECT 1")
+
+    assert cursor.statement_params is not None
+    timeout_seconds: int = int(cursor.statement_params["STATEMENT_TIMEOUT_IN_SECONDS"])
+    assert test_case.expected_maximum_timeout_seconds is not None
+    assert 1 <= timeout_seconds <= test_case.expected_maximum_timeout_seconds
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExecutionDeadlineTestCase(
+            description="expired deadline blocks Snowflake statement submission",
+            max_duration_seconds=0,
+            max_duration="1s",
+            remediation="Request approval before extending the deadline.",
+            expected_cursor_calls=0,
+            expected_error_code="C414",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_expired_execution_deadline_when_running_statement_then_query_is_not_submitted(
+    test_case: ExecutionDeadlineTestCase,
+) -> None:
+    cursor: _Cursor = _Cursor()
+    connection: _SnowflakeConnection = _SnowflakeConnection(_RawConnection(cursor))
+
+    with pytest.raises(ExecutionDurationLimitError) as raised:
+        with execution_deadline_scope(
+            max_duration_seconds=test_case.max_duration_seconds,
+            max_duration=test_case.max_duration,
+            target_name="dev",
+            remediation=test_case.remediation,
+        ):
+            connection.execute("SELECT 1")
+
+    assert cursor.calls == test_case.expected_cursor_calls
+    assert raised.value.code == test_case.expected_error_code
+    assert raised.value.help == test_case.remediation
 
 
 @pytest.mark.parametrize(

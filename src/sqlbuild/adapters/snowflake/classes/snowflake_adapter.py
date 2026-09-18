@@ -70,6 +70,7 @@ from sqlbuild.adapters.snowflake.classes.snowflake_connection import _SnowflakeC
 from sqlbuild.adapters.snowflake.constants import (
     BASE_TABLE_METADATA_TYPE,
     EXTERNAL_BROWSER_AUTHENTICATOR,
+    MAX_STATEMENT_TIMEOUT_SECONDS,
     MFA_AUTHENTICATOR,
     NUMBER_TYPE_NAME,
     OAUTH_AUTHORIZATION_CODE_AUTHENTICATOR,
@@ -102,6 +103,8 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
 
     adapter_name: ClassVar[str] = BuiltinAdapter.SNOWFLAKE.value
     sql_analysis_dialect_name: ClassVar[str | None] = "snowflake"
+    execution_duration_limit_seconds: ClassVar[int | None] = MAX_STATEMENT_TIMEOUT_SECONDS
+
     max_identifier_length: ClassVar[int] = 255
     state_tables_transient: ClassVar[bool] = True
     connection_routing_keys: ClassVar[frozenset[str]] = frozenset(

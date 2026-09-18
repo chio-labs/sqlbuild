@@ -106,6 +106,9 @@ from sqlbuild.microbatches.models import MicrobatchScope
 from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind, NodeStartCallback
+from sqlbuild.runtime.execution_limits.main.enforce_execution_deadline import (
+    enforce_execution_deadline,
+)
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,
 )
@@ -262,6 +265,7 @@ class BuildScheduler:
         else:
             self._run_concurrent()
 
+        enforce_execution_deadline()
         self._skip_remaining()
 
         end_audit_results: tuple[AuditExecutionResult, ...] = ()
@@ -357,6 +361,7 @@ class BuildScheduler:
         connection: Any = self._connection_pool.get()
         try:
             while self._ready:
+                enforce_execution_deadline()
                 if self._stop:
                     break
                 key: CompiledObjectKey = self._ready.popleft()
@@ -392,6 +397,7 @@ class BuildScheduler:
         with ThreadPoolExecutor(max_workers=self._max_concurrency) as pool:
             self._report_scheduler_state()
             while self._ready or self._in_flight:
+                enforce_execution_deadline()
                 if self._stop and not self._in_flight:
                     break
 
@@ -670,6 +676,7 @@ class BuildScheduler:
     def _pre_dispatch(self, key: CompiledObjectKey) -> bool:
         """Run pre-dispatch checks. Returns False if the node should be skipped."""
 
+        enforce_execution_deadline()
         if key.resource_type == CompiledResourceType.SQL_TEST:
             if not self._run_tests:
                 return False

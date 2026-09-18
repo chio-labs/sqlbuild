@@ -9,6 +9,10 @@ from typing import Any, ClassVar
 
 from sqlbuild.adapter.contract.main._attribute_failed_sql import attribute_failed_sql
 from sqlbuild.adapter.contract.models import QueryResult
+from sqlbuild.runtime.execution_limits.exceptions import ExecutionDurationLimitError
+from sqlbuild.runtime.execution_limits.main.enforce_execution_deadline import (
+    enforce_execution_deadline,
+)
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 
 
@@ -27,8 +31,13 @@ class ConnectionMixin(ABC):
 
         with StatementLifecycle(adapter=self.adapter_name, sql=sql, intent="execute") as lifecycle:
             try:
+                enforce_execution_deadline()
                 result: Any = self._execute(connection=connection, sql=sql)
             except Exception as error:
+                try:
+                    enforce_execution_deadline()
+                except ExecutionDurationLimitError as deadline_error:
+                    raise deadline_error from error
                 attributed_error: Exception = attribute_failed_sql(error=error, sql=sql)
                 if attributed_error is error:
                     raise

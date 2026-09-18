@@ -53,3 +53,14 @@ class StatementDiagnosticsTestCase:
     expected_resource_type: str
     expected_resource_name: str
     expected_phase: str
+
+
+@dataclass(frozen=True)
+class ExecutionDeadlineTestCase:
+    description: str
+    max_duration_seconds: int
+    max_duration: str
+    remediation: str | None = None
+    expected_maximum_timeout_seconds: int | None = None
+    expected_cursor_calls: int = 1
+    expected_error_code: str | None = None
