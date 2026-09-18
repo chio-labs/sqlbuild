@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.108.1](https://github.com/chio-labs/sqlbuild/compare/v0.108.0...v0.108.1) (2026-09-18)
+
+
+### Bug Fixes
+
+* distinguish Snowflake START WITH from CTEs ([#738](https://github.com/chio-labs/sqlbuild/issues/738)) ([b39bd91](https://github.com/chio-labs/sqlbuild/commit/b39bd916d2189dc85e8817c0892d31893472ef3a))
+
 ## [0.108.0](https://github.com/chio-labs/sqlbuild/compare/v0.107.0...v0.108.0) (2026-09-18)
 
 
