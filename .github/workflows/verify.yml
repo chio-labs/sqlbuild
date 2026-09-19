@@ -18,6 +18,8 @@ jobs:
     outputs:
       duckdb: ${{ steps.scope.outputs.duckdb }}
       postgres: ${{ steps.scope.outputs.postgres }}
+      performance: ${{ steps.scope.outputs.performance }}
+      rules_performance: ${{ steps.scope.outputs.rules_performance }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,21 +35,43 @@ jobs:
             {
               echo "duckdb=$1"
               echo "postgres=$2"
+              echo "performance=$3"
+              echo "rules_performance=$4"
             } >> "${GITHUB_OUTPUT}"
           }
 
           if [[ "${EVENT_NAME}" != "pull_request" ]]; then
-            write_scope true true
+            write_scope true true true true
             exit 0
           fi
 
           duckdb=false
           postgres=false
+          performance=false
+          rules_performance=false
           broad=false
           changed=false
           while IFS= read -r -d '' path; do
             changed=true
             case "${path}" in
+              crates/*|Cargo.toml|Cargo.lock|pyproject.toml|uv.lock)
+                broad=true
+                performance=true
+                rules_performance=true
+                ;;
+              src/sqlbuild/compiler/*|src/sqlbuild/adapter/type_system/*)
+                broad=true
+                performance=true
+                rules_performance=true
+                ;;
+              src/sqlbuild/cli/commands/_helpers/compile/*|src/sqlbuild/executor/testing/*|tests/e2e/src/sqlbuild/cli/commands/main/compile/*)
+                broad=true
+                performance=true
+                ;;
+              src/sqlbuild/rule_engine/*|src/sqlbuild/lint/*|scripts/rules_benchmark/*|scripts/benchmark_rules_ci.py|tests/performance/*)
+                broad=true
+                rules_performance=true
+                ;;
               tests/e2e/src/sqlbuild/cli/commands/main/postgres/*|tests/integration/src/sqlbuild/adapters/postgres/*|tests/integration/src/sqlbuild/virtual/state/classes/postgres/*|tests/integration/src/sqlbuild/runtime/execution_history/*)
                 postgres=true
                 ;;
@@ -55,6 +79,10 @@ jobs:
                 duckdb=true
                 ;;
               tests/unit/*|tests/integration/*)
+                ;;
+              .github/workflows/verify.yml|Makefile)
+                performance=true
+                rules_performance=true
                 ;;
               .github/*|docs/*|*.md|.gitignore|LICENSE)
                 ;;
@@ -64,12 +92,16 @@ jobs:
             esac
           done < <(git diff --name-only -z "${BASE_SHA}" "${HEAD_SHA}")
 
-          if [[ "${changed}" != "true" || "${broad}" == "true" ]]; then
-            write_scope true true
+          if [[ "${changed}" != "true" ]]; then
+            write_scope true true true true
             exit 0
           fi
 
-          write_scope "${duckdb}" "${postgres}"
+          if [[ "${broad}" == "true" ]]; then
+            duckdb=true
+            postgres=true
+          fi
+          write_scope "${duckdb}" "${postgres}" "${performance}" "${rules_performance}"
 
   lockfile:
     name: Lockfile consistency
@@ -178,9 +210,7 @@ jobs:
   performance:
     name: Performance guards
     needs: [changes, lockfile]
-    # Temporarily disabled while the Blacksmith runner allowance is unavailable.
-    # These budgets are calibrated for the 8-vCPU Blacksmith runner.
-    if: false
+    if: needs.changes.outputs.performance == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -205,9 +235,7 @@ jobs:
   rules_performance:
     name: Rules performance guards
     needs: [changes, lockfile]
-    # Temporarily disabled while the Blacksmith runner allowance is unavailable.
-    # These budgets are calibrated for the 8-vCPU Blacksmith runner.
-    if: false
+    if: needs.changes.outputs.rules_performance == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
