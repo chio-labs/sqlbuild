@@ -50,5 +50,40 @@ def test_given_python_under_unsupported_root_when_compiling_then_command_fails_w
     assert all(fragment in result.stderr for fragment in test_case.expected_stderr_fragments)
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        PythonProjectLayoutCompileTestCase(
+            description="custom Rule harness test path",
+            repo_files={
+                "sqlbuild_project.toml": 'name = "rule_harness_layout"\nadapter = "duckdb"\n',
+                "models/orders.sql": "MODEL ();\nSELECT 1 AS order_id\n",
+                "tests/rules/test_order_policy.py": "def test_order_policy(): pass\n",
+            },
+            expected_exit_code=0,
+            expected_stderr_fragments=(),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_rule_harness_test_when_compiling_then_python_test_path_is_accepted(
+    test_case: PythonProjectLayoutCompileTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="rule_harness_layout",
+        repo_files=test_case.repo_files,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "compile"),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert "Project compiled  1 model" in result.stdout
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-vv"])

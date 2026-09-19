@@ -12,4 +12,5 @@ class DynamicPivotAnalysisTestCase:
     expected_fixed_columns: tuple[str, ...] = ()
     expected_failure_fragment: str = ""
     expected_family_types: tuple[str | None, ...] = ("DECIMAL(12,2)",)
+    expected_input_relations: tuple[str, ...] = ()
     aggregate: str = "MAX"

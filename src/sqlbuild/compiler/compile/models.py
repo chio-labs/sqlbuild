@@ -159,6 +159,7 @@ class DynamicColumnContractProof:
     output_proven: bool
     fixed_columns: tuple[InferredColumn, ...] = field(default_factory=tuple)
     families: tuple[DynamicColumnFamilyProof, ...] = field(default_factory=tuple)
+    input_relations: tuple[str, ...] = field(default_factory=tuple)
     failure_reason: str | None = None
     bare_dynamic_pivot: bool = False
 

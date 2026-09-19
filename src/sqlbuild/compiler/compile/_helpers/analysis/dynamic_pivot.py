@@ -140,6 +140,7 @@ def _analyze_passthrough(
             DynamicColumnFamilyProof(name=family.name, inferred_type=family.type)
             for family in families
         ),
+        input_relations=(name,),
     )
 
 
@@ -174,6 +175,13 @@ def _analyze_pivot(
     )
     if source_columns is None:
         return _failure("dynamic pivot input does not have an authoritative, explicit schema")
+    input_relation: str | None = _external_relation_name(
+        node=source_node,
+        ctes=ctes,
+        seen=frozenset(),
+    )
+    if input_relation is None:
+        return _failure("dynamic pivot input relation could not be resolved")
     pivot_column: str = pivot_columns[0]
     matched_aggregate_indices: set[int] = set()
     family_proofs: list[DynamicColumnFamilyProof] = []
@@ -238,6 +246,7 @@ def _analyze_pivot(
             for name in fixed_names
         ),
         families=tuple(family_proofs),
+        input_relations=(input_relation,),
         bare_dynamic_pivot=bare_dynamic_pivot,
     )
 
@@ -389,6 +398,46 @@ def _relation_schema(
         ctes=ctes,
         column_types_by_table=column_types_by_table,
         column_nullability_by_table=column_nullability_by_table,
+        seen=seen | {normalized_name},
+    )
+
+
+def _external_relation_name(
+    *,
+    node: object,
+    ctes: _CteMap,
+    seen: frozenset[str],
+) -> str | None:
+    key: str = _node_key(node)
+    payload: object = cast(dict[str, object], node).get(key) if isinstance(node, dict) else None
+    if key in _QUERY_AST_KINDS and isinstance(payload, dict):
+        return _external_relation_name(
+            node=cast(dict[str, object], payload).get("this"),
+            ctes=ctes,
+            seen=seen,
+        )
+    if key == _SELECT_AST_KIND and isinstance(payload, dict):
+        payload_dict: dict[str, object] = cast(dict[str, object], payload)
+        if payload_dict.get("joins"):
+            return None
+        relations: tuple[dict[str, object], ...] = _nested_dict_list(
+            node=payload_dict.get("from"), key="expressions"
+        )
+        if len(relations) != 1:
+            return None
+        return _external_relation_name(node=relations[0], ctes=ctes, seen=seen)
+    relation_name: str | None = _relation_name(node)
+    if relation_name is None:
+        return None
+    normalized_name: str = relation_name.casefold()
+    if normalized_name not in ctes:
+        return relation_name
+    cte: dict[str, object] | None = ctes[normalized_name]
+    if cte is None or normalized_name in seen:
+        return None
+    return _external_relation_name(
+        node=cte,
+        ctes=ctes,
         seen=seen | {normalized_name},
     )
 

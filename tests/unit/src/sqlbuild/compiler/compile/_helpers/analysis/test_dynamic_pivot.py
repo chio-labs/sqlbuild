@@ -26,6 +26,20 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.analysis._test_types impo
             ),
             expected_proven=True,
             expected_fixed_columns=("customer_id", "country"),
+            expected_input_relations=("order_amounts",),
+        ),
+        DynamicPivotAnalysisTestCase(
+            description="parenthesized pivot input CTE retains its authoritative relation",
+            dialect="snowflake",
+            query_sql=(
+                "WITH pivot_input AS (("
+                "SELECT customer_id, category, amount, country FROM order_amounts"
+                ")) SELECT * FROM pivot_input "
+                "PIVOT(MAX(amount) FOR category IN (ANY ORDER BY category))"
+            ),
+            expected_proven=True,
+            expected_fixed_columns=("customer_id", "country"),
+            expected_input_relations=("order_amounts",),
         ),
         DynamicPivotAnalysisTestCase(
             description="static pivot list requires exact columns",
@@ -101,6 +115,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.analysis._test_types impo
             expected_proven=True,
             expected_fixed_columns=("customer_id", "country"),
             expected_family_types=("DECIMAL(12, 2)",),
+            expected_input_relations=("order_amounts",),
         ),
         DynamicPivotAnalysisTestCase(
             description="widening aggregate input cast does not prove output type",
@@ -112,6 +127,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.analysis._test_types impo
             expected_proven=True,
             expected_fixed_columns=("customer_id",),
             expected_family_types=(None,),
+            expected_input_relations=("order_amounts",),
             aggregate="SUM",
         ),
         DynamicPivotAnalysisTestCase(
@@ -174,4 +190,5 @@ def test_given_dynamic_family_when_analyzing_output_then_requires_supported_clos
     assert tuple(family.inferred_type for family in proof.families) == (
         test_case.expected_family_types
     )
+    assert proof.input_relations == test_case.expected_input_relations
     assert test_case.expected_failure_fragment in (proof.failure_reason or "")

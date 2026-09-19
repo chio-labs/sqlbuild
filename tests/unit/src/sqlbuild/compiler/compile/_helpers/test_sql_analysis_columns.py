@@ -1106,7 +1106,11 @@ def test_given_supported_compact_query_when_ast_parse_would_fail_then_returns_an
             expected_columns=(
                 InferredColumn(name="amount", type="INT"),
                 InferredColumn(name="status", type="TEXT"),
-                InferredColumn(name="nullable_status", type="TEXT"),
+                InferredColumn(
+                    name="nullable_status",
+                    type="TEXT",
+                    nullability=InferredNullability.NULLABLE,
+                ),
             ),
             expected_lineage_columns=direct_orders_lineage("amount", "status")
             + (
@@ -1287,7 +1291,11 @@ def test_given_cte_chain_when_analyzing_direct_passthrough_then_type_is_conserva
                     name="source_name",
                     nullability=InferredNullability.NON_NULL,
                 ),
-                InferredColumn(name="active", type="BOOLEAN"),
+                InferredColumn(
+                    name="active",
+                    type="BOOLEAN",
+                    nullability=InferredNullability.NON_NULL,
+                ),
                 InferredColumn(name="selected", type="BOOLEAN"),
                 InferredColumn(name="full_name", type="TEXT"),
                 InferredColumn(name="status", type="VARCHAR(16777216)"),
