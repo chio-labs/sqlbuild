@@ -122,6 +122,24 @@ def test_given_sql_test_chain_when_building_comparison_sql_then_uses_readable_ct
         assert unexpected_fragment not in comparison_sql
 
 
+def test_given_actual_sql_ending_in_line_comment_when_executing_then_delimiters_remain_valid(
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    entry: SqlTestPlanEntry = build_sql_test_plan_entry(
+        name="trailing_comment",
+        chain_steps=(("orders", "SELECT 1 AS id -- keep orders", "SELECT 1 AS id"),),
+    )
+
+    result: SqlTestExecutionResult = execute_sql_test(
+        test_entry=entry,
+        adapter=adapter,
+        connection=connection,
+    )
+
+    assert result.outcome == SqlTestOutcome.PASS
+
+
 @pytest.mark.parametrize(
     "test_case",
     (

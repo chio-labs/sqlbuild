@@ -16,6 +16,7 @@ from sqlbuild.compiler.compile._helpers.analysis.cte_facts import (
     _polyglot_expression_is_non_null_after_filter,
     _polyglot_filtered_non_null_outputs,
     _polyglot_non_null_filter_context,
+    _polyglot_top_level_ctes,
 )
 from sqlbuild.compiler.compile.constants import (
     DECIMAL_SQL_TYPE_NAME,
@@ -857,11 +858,22 @@ def _infer_columns_from_polyglot_ast(
             select=select,
             column_nullability_by_table=column_nullability_by_table,
         )
+    top_level_ctes: tuple[tuple[str, Any, bool], ...] = _polyglot_top_level_ctes(parsed)
+    referenced_table_names: tuple[str, ...] = (
+        tuple(
+            str(getattr(table, "name", "") or "")
+            for table in parsed.find_all(_POLYGLOT_KIND_TABLE)
+        )
+        if top_level_ctes
+        else ()
+    )
     cte_passthrough_types: dict[str, str] = _polyglot_cte_passthrough_types_from_parsed(
         parsed=parsed,
         column_types_by_table={},
         inference_profile=inference_profile,
         expression_type_resolver=_polyglot_expression_type,
+        top_level_ctes=top_level_ctes,
+        referenced_table_names=referenced_table_names,
     )
     cte_passthrough_nullability: dict[str, InferredNullability] = (
         _polyglot_cte_passthrough_nullability_from_parsed(
@@ -871,6 +883,8 @@ def _infer_columns_from_polyglot_ast(
             nullability_resolver=_infer_polyglot_nullability,
             shallow_nullability_resolver=_infer_polyglot_shallow_nullability,
             alias_nullability_resolver=_polyglot_alias_nullability_from_select,
+            top_level_ctes=top_level_ctes,
+            referenced_table_names=referenced_table_names,
         )
     )
     non_null_filter_context: NonNullFilterContext | None = _polyglot_non_null_filter_context(
@@ -949,12 +963,25 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
         alias_map
     )
 
+    top_level_ctes: tuple[tuple[str, Any, bool], ...] = (
+        _polyglot_top_level_ctes(parsed) if recover_cte_facts else ()
+    )
+    referenced_table_names: tuple[str, ...] = (
+        tuple(
+            str(getattr(table, "name", "") or "")
+            for table in parsed.find_all(_POLYGLOT_KIND_TABLE)
+        )
+        if top_level_ctes
+        else ()
+    )
     cte_passthrough_types: dict[str, str] = (
         _polyglot_cte_passthrough_types_from_parsed(
             parsed=parsed,
             column_types_by_table=column_types_by_table,
             inference_profile=inference_profile,
             expression_type_resolver=_polyglot_expression_type,
+            top_level_ctes=top_level_ctes,
+            referenced_table_names=referenced_table_names,
         )
         if recover_cte_facts
         else {}
@@ -967,6 +994,8 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
             nullability_resolver=_infer_polyglot_nullability,
             shallow_nullability_resolver=_infer_polyglot_shallow_nullability,
             alias_nullability_resolver=_polyglot_alias_nullability_from_select,
+            top_level_ctes=top_level_ctes,
+            referenced_table_names=referenced_table_names,
         )
         if recover_cte_facts
         else {}

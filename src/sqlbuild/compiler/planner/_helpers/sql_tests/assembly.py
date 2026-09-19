@@ -79,6 +79,7 @@ _TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
     reference_call_prefix_pattern_text(SqlReferenceKind.TABLE_FUNCTION), re.IGNORECASE
 )
 _LEADING_WITH_PATTERN: re.Pattern[str] = re.compile(r"^\s*WITH\b", re.IGNORECASE)
+_TRAILING_LINE_COMMENT_PATTERN: re.Pattern[str] = re.compile(r"--[^\n]*\Z")
 
 
 @dataclass
@@ -298,6 +299,8 @@ def plan_test(
 
         query_sql: str = _resolve_test_model_query_sql(model=model, test=test)
         step_sql: str | None = None
+        step_lifted_ctes: tuple[tuple[str, str], ...] = ()
+        comparison_body_sql: str | None = None
         if sql_analysis_enabled:
             analysis_query_sql, reached_table_functions = _resolve_table_function_fixtures(
                 query_sql=query_sql,
@@ -321,6 +324,8 @@ def plan_test(
             )
             if sql_analysis_sql is not None:
                 step_sql = sql_analysis_sql.resolved_sql
+                step_lifted_ctes = tuple(sql_analysis_sql.generated_ctes.items())
+                comparison_body_sql = sql_analysis_sql.cte_body_sql
                 sql_analysis_resolved[model_name] = sql_analysis_sql
                 reachable_mocks.update(sql_analysis_sql.reachable_mock_names)
         if step_sql is None:
@@ -340,6 +345,8 @@ def plan_test(
                 model_name=model_name,
                 resolved_sql=step_sql,
                 expected_cte_sql=expected_cte_sql or None,
+                lifted_ctes=step_lifted_ctes,
+                comparison_body_sql=comparison_body_sql,
             )
         )
 
@@ -508,6 +515,8 @@ def _build_assertion_steps(
         )
         reached_table_functions.update(reached)
         resolved_assertion_sql: str | None = None
+        assertion_lifted_ctes: tuple[tuple[str, str], ...] = ()
+        assertion_comparison_body_sql: str | None = None
         if sql_analysis_enabled:
             analyzed_assertion_sql: SqlAnalysisResolvedTestSql | None = (
                 try_resolve_test_model_sql_with_sql_analysis(
@@ -527,6 +536,8 @@ def _build_assertion_steps(
                 analyzed_assertion_sql.resolved_sql
             ):
                 resolved_assertion_sql = analyzed_assertion_sql.resolved_sql
+                assertion_lifted_ctes = tuple(analyzed_assertion_sql.generated_ctes.items())
+                assertion_comparison_body_sql = analyzed_assertion_sql.cte_body_sql
         if resolved_assertion_sql is None:
             resolved_assertion_sql = _resolve_assertion_sql(
                 sql=fixture_resolved_assertion_sql,
@@ -543,6 +554,8 @@ def _build_assertion_steps(
             SqlTestAssertionStep(
                 name=assertion_name,
                 resolved_sql=resolved_assertion_sql,
+                lifted_ctes=assertion_lifted_ctes,
+                comparison_body_sql=assertion_comparison_body_sql,
             )
         )
     return tuple(assertion_steps), frozenset(reached_table_functions)
@@ -708,7 +721,7 @@ def _build_assertion_chain_ctes(
                 "with WITH"
             )
         assertion_resolved_chain[name] = cte_name
-        cte_parts.append(f"{cte_name} AS ({resolved_sql})")
+        cte_parts.append(_cte_definition_sql(name=cte_name, sql=resolved_sql))
     return assertion_resolved_chain, tuple(cte_parts)
 
 
@@ -986,8 +999,14 @@ def _build_helper_with_clause(
     parts: list[str] = []
     cte: CompileSqlTestCte
     for cte in helper_ctes:
-        parts.append(f"{cte.name} AS ({cte.sql_body})")
+        parts.append(_cte_definition_sql(name=cte.name, sql=cte.sql_body))
     return "WITH " + ", ".join(parts)
+
+
+def _cte_definition_sql(*, name: str, sql: str) -> str:
+    body: str = sql.rstrip()
+    terminator: str = "\n" if _TRAILING_LINE_COMMENT_PATTERN.search(body) is not None else ""
+    return f"{name} AS ({body}{terminator})"
 
 
 def _topo_sort_model_chain(

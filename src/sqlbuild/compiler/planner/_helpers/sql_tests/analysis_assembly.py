@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections import OrderedDict
 from dataclasses import dataclass
 from functools import lru_cache
@@ -20,15 +21,34 @@ from sqlbuild.compiler.planner._helpers.scenario.relations import (
     _replace_relation_markers_in_polyglot_dict,
 )
 from sqlbuild.compiler.planner._helpers.sql_tests.comments import (
-    restore_sql_test_dialect_function_names,
+    replace_uncommented_pattern,
 )
 from sqlbuild.compiler.planner.models import SqlAnalysisResolvedTestSql
+from sqlbuild.compiler.references.main._quoted_reference_call_pattern import (
+    quoted_reference_call_pattern,
+)
+from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import (
+    reference_call_prefix_pattern_text,
+)
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.constants import SQL_IDENTIFIER_PREFIX
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
+_REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
+_SOURCE_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SOURCE)
+_SEED_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SEED)
+_UDF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.UDF)
+_TABLE_FUNCTION_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(
+    SqlReferenceKind.TABLE_FUNCTION
+)
+_DBT_REF_PATTERN: re.Pattern[str] = re.compile(
+    rf'{reference_call_prefix_pattern_text(SqlReferenceKind.DBT_REF)}\s*"([^"]+)"\s*'
+    r'(?:,\s*"([^"]+)"\s*)?\)',
+    re.IGNORECASE,
+)
+_TRAILING_LINE_COMMENT_PATTERN: re.Pattern[str] = re.compile(r"--[^\n]*\Z")
 
 
 @dataclass(frozen=True)
@@ -48,6 +68,9 @@ class _TemplateMarkerTargetResolver:
 
     def __call__(self, *, function_name: str, referenced_name: str) -> str | None:
         self.calls.append((function_name, referenced_name))
+        return self._targets.get((function_name, referenced_name))
+
+    def target(self, *, function_name: str, referenced_name: str) -> str | None:
         return self._targets.get((function_name, referenced_name))
 
 
@@ -194,7 +217,7 @@ class _TestMarkerResolver:
         helper_parts: list[str] = []
         helper_cte: CompileSqlTestCte
         for helper_cte in self.helper_ctes:
-            helper_parts.append(f"{helper_cte.name} AS ({helper_cte.sql_body})")
+            helper_parts.append(_cte_definition_sql(name=helper_cte.name, sql=helper_cte.sql_body))
         return f"WITH {', '.join(helper_parts)} {mock_body}"
 
 
@@ -314,17 +337,68 @@ def _analyze_test_query_template(
         sql_analysis_dialect=sql_analysis_dialect,
         target_for_marker=target_for_marker,
     )
-    cte_body_sql: str | None = _generate_one(
-        polyglot_module=polyglot_module,
-        expression=parsed_dict,
-        sql_analysis_dialect=sql_analysis_dialect,
+    cte_body_sql: str = _replace_test_query_markers(
+        query_sql=query_sql,
+        resolver=target_for_marker,
     )
-    if cte_body_sql is None:
-        return None
     return _TestSqlAnalysisTemplate(
         existing_cte_names=frozenset(_collect_existing_cte_names(parsed_dict)),
         marker_calls=tuple(target_for_marker.calls),
         cte_body_sql=cte_body_sql,
+    )
+
+
+def _replace_test_query_markers(
+    *, query_sql: str, resolver: _TemplateMarkerTargetResolver
+) -> str:
+    reached: frozenset[tuple[str, str]] = frozenset(resolver.calls)
+
+    def replace_one(
+        *, match: re.Match[str], reference_kind: SqlReferenceKind, referenced_name: str
+    ) -> str:
+        key: tuple[str, str] = (reference_kind.function_name, referenced_name)
+        if key not in reached:
+            return match.group(0)
+        target: str | None = resolver.target(
+            function_name=reference_kind.function_name,
+            referenced_name=referenced_name,
+        )
+        return match.group(0) if target is None else target
+
+    result: str = query_sql
+    for reference_kind, pattern in (
+        (SqlReferenceKind.REF, _REF_PATTERN),
+        (SqlReferenceKind.SOURCE, _SOURCE_PATTERN),
+        (SqlReferenceKind.SEED, _SEED_PATTERN),
+        (SqlReferenceKind.UDF, _UDF_PATTERN),
+        (SqlReferenceKind.TABLE_FUNCTION, _TABLE_FUNCTION_PATTERN),
+    ):
+        result = replace_uncommented_pattern(
+            pattern=pattern,
+            replacement=lambda match, kind=reference_kind: replace_one(
+                match=match,
+                reference_kind=kind,
+                referenced_name=match.group(1),
+            ),
+            sql=result,
+        )
+
+    def replace_dbt_ref(match: re.Match[str]) -> str:
+        first_name: str = match.group(1)
+        second_name: str | None = match.group(2)
+        referenced_name: str = (
+            f"{first_name}__{second_name}" if second_name is not None else first_name
+        )
+        return replace_one(
+            match=match,
+            reference_kind=SqlReferenceKind.DBT_REF,
+            referenced_name=referenced_name,
+        )
+
+    return replace_uncommented_pattern(
+        pattern=_DBT_REF_PATTERN,
+        replacement=replace_dbt_ref,
+        sql=result,
     )
 
 
@@ -358,7 +432,9 @@ def _assemble_resolved_test_sql(
             generated_ctes=generated_ctes,
             reachable_mock_names=frozenset(reachable_mocks),
         )
-    generated_cte_sql: str = ", ".join(f"{name} AS ({sql})" for name, sql in generated_ctes.items())
+    generated_cte_sql: str = ", ".join(
+        _cte_definition_sql(name=name, sql=sql) for name, sql in generated_ctes.items()
+    )
     leading_with_end: int | None = _leading_with_prefix_end(cte_body_sql)
     resolved_sql: str = (
         f"{cte_body_sql[:leading_with_end]}{generated_cte_sql}, {cte_body_sql[leading_with_end:]}"
@@ -414,6 +490,12 @@ def _keyword_end(*, sql: str, start: int, keyword: str) -> int | None:
     return end
 
 
+def _cte_definition_sql(*, name: str, sql: str) -> str:
+    body: str = sql.rstrip()
+    terminator: str = "\n" if _TRAILING_LINE_COMMENT_PATTERN.search(body) is not None else ""
+    return f"{name} AS ({body}{terminator})"
+
+
 def _collect_existing_cte_names(parsed_dict: dict[str, Any]) -> set[str]:
     generated_names: set[str] = set()
     root_select: dict[str, Any] | None = _root_select(parsed_dict)
@@ -435,22 +517,3 @@ def _collect_existing_cte_names(parsed_dict: dict[str, Any]) -> set[str]:
 def _root_select(parsed_dict: dict[str, Any]) -> dict[str, Any] | None:
     select_payload: Any | None = parsed_dict.get("select")
     return select_payload if isinstance(select_payload, dict) else None
-
-
-def _generate_one(
-    *, polyglot_module: Any, expression: Any, sql_analysis_dialect: str | None
-) -> str | None:
-    try:
-        generated: list[str] = polyglot_module.generate(
-            expression, dialect=sql_analysis_dialect or "generic"
-        )
-    except polyglot_module.PolyglotError as error:
-        log_debug_event(
-            logger=_DEBUG_LOGGER,
-            message="sql test assembly generation failed; falling back",
-            sqlbuild_error=str(error),
-        )
-        return None
-    if len(generated) != 1:
-        return None
-    return restore_sql_test_dialect_function_names(sql=generated[0], dialect=sql_analysis_dialect)

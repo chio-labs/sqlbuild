@@ -1150,6 +1150,8 @@ class ChainStep:
     model_name: str
     resolved_sql: str
     expected_cte_sql: str | None = None
+    lifted_ctes: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    comparison_body_sql: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1158,6 +1160,8 @@ class SqlTestAssertionStep:
 
     name: str
     resolved_sql: str
+    lifted_ctes: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    comparison_body_sql: str | None = None
 
 
 @dataclass(frozen=True)

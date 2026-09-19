@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from functools import lru_cache
 from typing import Any
 
 from sqlbuild.adapter.contract.constants import (
@@ -42,6 +43,7 @@ from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.adapter")
 
 
+@lru_cache(maxsize=1024)
 def normalize_type(*, type_sql: str, dialect: TypeDialect | str | None) -> NormalizedType:
     """Normalize one warehouse type string into a semantic comparison shape."""
 

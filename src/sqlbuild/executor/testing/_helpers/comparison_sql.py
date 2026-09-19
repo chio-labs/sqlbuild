@@ -20,6 +20,11 @@ _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 
 _IDENTIFIER_CHAR_PATTERN: re.Pattern[str] = re.compile(r"[^a-zA-Z0-9_]+")
 _BACKTICK_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(r"`[^`]+`(?:\s*\.\s*`[^`]+`)*")
+_LEADING_WITH_PATTERN: re.Pattern[str] = re.compile(
+    r"\A(?:\s|--[^\n]*(?:\n|\Z)|/\*.*?\*/)*WITH\b",
+    flags=re.IGNORECASE | re.DOTALL,
+)
+_TRAILING_LINE_COMMENT_PATTERN: re.Pattern[str] = re.compile(r"--[^\n]*\Z")
 
 
 def lift_step_ctes(
@@ -48,6 +53,48 @@ def lift_step_ctes(
         if existing_name is None:
             updated_ctes[cte_name] = cte_sql
     return body_sql, updated_ctes
+
+
+def merge_lifted_ctes(
+    *, ctes: tuple[tuple[str, str], ...], lifted_ctes: OrderedDict[str, str]
+) -> OrderedDict[str, str]:
+    """Add already analyzed top-level CTEs without reparsing their SQL."""
+
+    updated_ctes: OrderedDict[str, str] = OrderedDict(lifted_ctes)
+    for cte_name, cte_sql in ctes:
+        if _existing_cte_name(lifted_ctes=updated_ctes, cte_name=cte_name) is None:
+            updated_ctes[cte_name] = cte_sql
+    return updated_ctes
+
+
+def lift_preanalyzed_step_ctes(
+    *,
+    sql: str,
+    preanalyzed_ctes: tuple[tuple[str, str], ...],
+    lifted_ctes: OrderedDict[str, str],
+    sql_analysis_enabled: bool,
+) -> tuple[str, OrderedDict[str, str]]:
+    """Reuse generated CTEs while still lifting authored top-level CTEs."""
+
+    updated_ctes: OrderedDict[str, str] = merge_lifted_ctes(
+        ctes=preanalyzed_ctes,
+        lifted_ctes=lifted_ctes,
+    )
+    if not sql_analysis_enabled or _LEADING_WITH_PATTERN.match(sql) is None:
+        return sql, updated_ctes
+    return lift_step_ctes(
+        sql=sql,
+        lifted_ctes=updated_ctes,
+        sql_analysis_enabled=True,
+    )
+
+
+def cte_definition_sql(*, name: str, sql: str) -> str:
+    """Wrap a CTE body without letting a trailing line comment consume delimiters."""
+
+    body: str = sql.rstrip()
+    terminator: str = "\n" if _TRAILING_LINE_COMMENT_PATTERN.search(body) is not None else ""
+    return f"{name} AS ({body}{terminator})"
 
 
 def format_sql(
@@ -124,12 +171,20 @@ def build_chain_comparison_parts(
         ):
             continue
         actual_sql: str
-        actual_sql, lifted_ctes = lift_step_ctes(
-            sql=step.resolved_sql,
-            lifted_ctes=lifted_ctes,
-            sql_analysis_enabled=test_entry.sql_analysis_enabled,
-        )
-        comparison_ctes.append(f"{actual_cte} AS ({actual_sql})")
+        if step.lifted_ctes:
+            actual_sql, lifted_ctes = lift_preanalyzed_step_ctes(
+                sql=step.comparison_body_sql or step.resolved_sql,
+                preanalyzed_ctes=step.lifted_ctes,
+                lifted_ctes=lifted_ctes,
+                sql_analysis_enabled=test_entry.sql_analysis_enabled,
+            )
+        else:
+            actual_sql, lifted_ctes = lift_step_ctes(
+                sql=step.resolved_sql,
+                lifted_ctes=lifted_ctes,
+                sql_analysis_enabled=test_entry.sql_analysis_enabled,
+            )
+        comparison_ctes.append(cte_definition_sql(name=actual_cte, sql=actual_sql))
         if step.expected_cte_sql is None:
             continue
         expected_sql: str
@@ -138,7 +193,7 @@ def build_chain_comparison_parts(
             lifted_ctes=lifted_ctes,
             sql_analysis_enabled=test_entry.sql_analysis_enabled,
         )
-        comparison_ctes.append(f"{expected_cte} AS ({expected_sql})")
+        comparison_ctes.append(cte_definition_sql(name=expected_cte, sql=expected_sql))
         select_parts.append(
             "SELECT "
             f"{step_index} AS step_index, "

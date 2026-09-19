@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.planner.models import ChainStep
 from sqlbuild.executor.testing._helpers import comparison_sql as comparison_sql_helpers
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.executor.testing.main._test_types import (
@@ -290,3 +293,33 @@ def test_given_bigquery_table_fn_when_building_comparison_sql_then_preserves_bac
     for expected_fragment in test_case.expected_fragments:
         assert expected_fragment in comparison_sql
     assert "project-d5f92072-d107-4987-9ef.test.customer_orders(1)" not in comparison_sql
+
+
+def test_given_preanalyzed_step_with_authored_cte_when_building_comparison_then_lifts_both_ctes():
+    entry = build_comparison_test_entry()
+    entry = replace(
+        entry,
+        chain=(
+            ChainStep(
+                model_name="orders",
+                resolved_sql=(
+                    "WITH __ref__raw_orders AS (SELECT 1 AS order_id), "
+                    "picked AS (SELECT * FROM __ref__raw_orders) SELECT * FROM picked"
+                ),
+                comparison_body_sql=(
+                    "WITH picked AS (SELECT * FROM __ref__raw_orders) SELECT * FROM picked"
+                ),
+                lifted_ctes=(("__ref__raw_orders", "SELECT 1 AS order_id"),),
+                expected_cte_sql="SELECT 1 AS order_id",
+            ),
+        ),
+    )
+
+    comparison_sql: str = build_sql_test_comparison_sql(
+        test_entry=entry,
+        sql_analysis_dialect="tsql",
+    )
+
+    assert comparison_sql.index("__ref__raw_orders AS") < comparison_sql.index("picked AS")
+    assert comparison_sql.index("picked AS") < comparison_sql.index("__actual__orders AS")
+    assert "__actual__orders AS (\nWITH picked" not in comparison_sql

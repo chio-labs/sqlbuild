@@ -218,13 +218,18 @@ def _polyglot_cte_passthrough_types_from_parsed(
     column_types_by_table: dict[str, dict[str, str]],
     inference_profile: ExpressionInferenceProfile,
     expression_type_resolver: _ExpressionTypeResolver,
+    top_level_ctes: tuple[tuple[str, Any, bool], ...] | None = None,
+    referenced_table_names: tuple[str, ...] | None = None,
 ) -> dict[str, str]:
-    ctes: tuple[tuple[str, Any, bool], ...] = _polyglot_top_level_ctes(parsed)
+    ctes: tuple[tuple[str, Any, bool], ...] = (
+        _polyglot_top_level_ctes(parsed) if top_level_ctes is None else top_level_ctes
+    )
     if not ctes:
         return {}
     relation_types: dict[str, dict[str, str]] = _polyglot_referenced_relation_facts(
         parsed=parsed,
         facts_by_table=column_types_by_table,
+        table_names=referenced_table_names,
     )
     cte_name: str
     cte_body: Any
@@ -262,14 +267,19 @@ def _polyglot_cte_passthrough_nullability_from_parsed(
     nullability_resolver: _NullabilityResolver,
     shallow_nullability_resolver: _ShallowNullabilityResolver,
     alias_nullability_resolver: _AliasNullabilityResolver,
+    top_level_ctes: tuple[tuple[str, Any, bool], ...] | None = None,
+    referenced_table_names: tuple[str, ...] | None = None,
 ) -> dict[str, InferredNullability]:
-    ctes: tuple[tuple[str, Any, bool], ...] = _polyglot_top_level_ctes(parsed)
+    ctes: tuple[tuple[str, Any, bool], ...] = (
+        _polyglot_top_level_ctes(parsed) if top_level_ctes is None else top_level_ctes
+    )
     if not ctes:
         return {}
     relation_nullability: dict[str, dict[str, InferredNullability]] = (
         _polyglot_referenced_relation_facts(
             parsed=parsed,
             facts_by_table=column_nullability_by_table,
+            table_names=referenced_table_names,
         )
     )
     for cte_name, cte_body, has_column_aliases in ctes:
@@ -296,11 +306,21 @@ def _polyglot_cte_passthrough_nullability_from_parsed(
 
 
 def _polyglot_referenced_relation_facts[T](
-    *, parsed: Any, facts_by_table: dict[str, dict[str, T]]
+    *,
+    parsed: Any,
+    facts_by_table: dict[str, dict[str, T]],
+    table_names: tuple[str, ...] | None = None,
 ) -> dict[str, dict[str, T]]:
     referenced_facts: dict[str, dict[str, T]] = {}
-    for table in parsed.find_all(_POLYGLOT_KIND_TABLE):
-        table_name: str = str(getattr(table, "name", "") or "")
+    names: tuple[str, ...] = (
+        tuple(
+            str(getattr(table, "name", "") or "")
+            for table in parsed.find_all(_POLYGLOT_KIND_TABLE)
+        )
+        if table_names is None
+        else table_names
+    )
+    for table_name in names:
         column_facts: dict[str, T] | None = facts_by_table.get(table_name)
         if column_facts is not None:
             referenced_facts[table_name] = column_facts
@@ -612,6 +632,14 @@ def _polyglot_star_output_types(
 
 
 def _polyglot_top_level_ctes(root: Any) -> tuple[tuple[str, Any, bool], ...]:
+    targeted_ctes: object = getattr(root, "with_ctes", None)
+    if callable(targeted_ctes):
+        values: object = targeted_ctes()
+        if isinstance(values, list):
+            return tuple(
+                (str(name), body, bool(has_column_alias))
+                for name, has_column_alias, body in values
+            )
     with_payload: object = root.arg("with")
     raw_ctes: object = (
         cast(dict[str, object], with_payload).get("ctes")
