@@ -12,17 +12,21 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileScalingGuardTestCase,
     DbtShapedCompilePerformanceGuardTestCase,
     LayeredProductionCompilePerformanceGuardTestCase,
+    SemanticCompilePerformanceGuardTestCase,
     SqlTestHeavyCompilePerformanceGuardTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     CompileBenchmarkMeasurement,
     DbtShapedCompileBenchmarkResult,
     LayeredProductionCompileBenchmarkResult,
+    SemanticCompileBenchmarkResult,
     measure_compiled_test_sql_bytes,
+    measure_declared_model_columns,
     measure_model_sql_bytes,
     run_advanced_compile_benchmark,
     run_dbt_shaped_compile_benchmark,
     run_layered_production_compile_benchmark,
+    run_semantic_compile_benchmark,
     run_test_heavy_compile_benchmark,
 )
 
@@ -278,8 +282,7 @@ def test_given_layered_production_project_when_compiling_and_editing_then_report
             f"{phase}={milliseconds}ms" for phase, milliseconds in measurement.timings_ms.items()
         )
         _LOGGER.info(
-            f"dagster-shaped compile path={label} total={measurement.elapsed_seconds:.3f}s "
-            f"{phase_text}"
+            f"layered compile path={label} total={measurement.elapsed_seconds:.3f}s {phase_text}"
         )
 
     assert result.cold.summary == {
@@ -310,3 +313,81 @@ def test_given_layered_production_project_when_compiling_and_editing_then_report
     assert result.test_edit.elapsed_seconds < test_case.expected_edit_max_seconds
     assert result.macro_edit.elapsed_seconds < test_case.expected_edit_max_seconds
     assert result.project_config_edit.elapsed_seconds < test_case.expected_config_edit_max_seconds
+
+
+@pytest.mark.performance
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SemanticCompilePerformanceGuardTestCase(
+            description="Semantically dense compile stays within cold and warm budgets",
+            model_count=976,
+            source_count=232,
+            seed_count=46,
+            function_count=23,
+            macro_count=12,
+            test_count=958,
+            audit_count=1_645,
+            expected_min_declared_columns=30_000,
+            expected_max_declared_columns=38_000,
+            expected_min_model_sql_bytes=5_500_000,
+            expected_max_model_sql_bytes=7_500_000,
+            expected_min_compiled_test_bytes=10_000_000,
+            expected_max_compiled_test_bytes=20_000_000,
+            expected_cold_max_seconds=60.0,
+            expected_warm_max_seconds=12.0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_semantically_dense_project_when_compiling_then_reports_phased_budgets(
+    tmp_path: Path,
+    test_case: SemanticCompilePerformanceGuardTestCase,
+) -> None:
+    project_dir: Path = tmp_path / "semantic_compile"
+    result: SemanticCompileBenchmarkResult = run_semantic_compile_benchmark(
+        project_dir=project_dir,
+        model_count=test_case.model_count,
+        source_count=test_case.source_count,
+        seed_count=test_case.seed_count,
+        function_count=test_case.function_count,
+        macro_count=test_case.macro_count,
+        test_count=test_case.test_count,
+        audit_count=test_case.audit_count,
+        expected_cold_max_seconds=test_case.expected_cold_max_seconds,
+        expected_warm_max_seconds=test_case.expected_warm_max_seconds,
+    )
+    for label, measurement in {"cold": result.cold, "warm": result.warm}.items():
+        phase_text: str = " ".join(
+            f"{phase}={milliseconds}ms" for phase, milliseconds in measurement.timings_ms.items()
+        )
+        _LOGGER.info(
+            f"semantic compile path={label} total={measurement.elapsed_seconds:.3f}s {phase_text}"
+        )
+
+    assert result.cold.summary == {
+        "models": test_case.model_count,
+        "selected_models": test_case.model_count,
+        "sources": test_case.source_count,
+        "seeds": test_case.seed_count,
+        "selected_seeds": test_case.seed_count,
+        "functions": test_case.function_count,
+        "selected_functions": test_case.function_count,
+        "audits": test_case.audit_count,
+        "tests": test_case.test_count,
+        "hooks": 2,
+        "execution_layers": 54,
+        "errors": 0,
+        "warnings": 0,
+    }
+    declared_columns: int = measure_declared_model_columns(project_dir)
+    model_sql_bytes: int = measure_model_sql_bytes(project_dir)
+    compiled_test_bytes: int = measure_compiled_test_sql_bytes(project_dir)
+    assert test_case.expected_min_declared_columns <= declared_columns
+    assert declared_columns <= test_case.expected_max_declared_columns
+    assert test_case.expected_min_model_sql_bytes <= model_sql_bytes
+    assert model_sql_bytes <= test_case.expected_max_model_sql_bytes
+    assert test_case.expected_min_compiled_test_bytes <= compiled_test_bytes
+    assert compiled_test_bytes <= test_case.expected_max_compiled_test_bytes
+    assert result.cold.elapsed_seconds < test_case.expected_cold_max_seconds
+    assert result.warm.elapsed_seconds < test_case.expected_warm_max_seconds

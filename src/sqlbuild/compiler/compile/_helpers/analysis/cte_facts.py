@@ -456,11 +456,7 @@ def _polyglot_non_null_filter_context(
     select: Any,
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
 ) -> NonNullFilterContext | None:
-    select_args: object = getattr(select, "args", None)
-    if not isinstance(select_args, dict):
-        return None
-    select_args_dict: dict[str, object] = cast(dict[str, object], select_args)
-    where_payload: object = select_args_dict.get(_POLYGLOT_PAYLOAD_WHERE_CLAUSE)
+    where_payload: object = select.arg(_POLYGLOT_PAYLOAD_WHERE_CLAUSE)
     if not isinstance(where_payload, dict):
         return None
     predicate: object = cast(dict[str, object], where_payload).get(_POLYGLOT_PAYLOAD_THIS)
@@ -616,7 +612,7 @@ def _polyglot_star_output_types(
 
 
 def _polyglot_top_level_ctes(root: Any) -> tuple[tuple[str, Any, bool], ...]:
-    with_payload: object = getattr(root, "args", {}).get("with")
+    with_payload: object = root.arg("with")
     raw_ctes: object = (
         cast(dict[str, object], with_payload).get("ctes")
         if isinstance(with_payload, dict)
@@ -678,10 +674,10 @@ def _polyglot_set_operation_output_types(
     inference_profile: ExpressionInferenceProfile,
     expression_type_resolver: _ExpressionTypeResolver,
 ) -> dict[str, str]:
-    if bool(getattr(operation, "args", {}).get("by_name")):
+    if bool(operation.arg("by_name")):
         branch_types: list[dict[str, str]] = []
         for side in ("left", "right"):
-            branch: Any = getattr(operation, "args", {}).get(side)
+            branch: Any = operation.arg(side)
             if branch is None:
                 return {}
             branch_types.append(
@@ -707,7 +703,7 @@ def _polyglot_set_operation_output_types(
         }
     branch_slots: list[tuple[tuple[str, str | None], ...]] = []
     for side in ("left", "right"):
-        branch: Any = getattr(operation, "args", {}).get(side)
+        branch: Any = operation.arg(side)
         if branch is None:
             return {}
         inferred: tuple[tuple[str, str | None], ...] = _polyglot_select_output_type_slots(
@@ -751,7 +747,7 @@ def _polyglot_select_output_type_slots(
     if str(getattr(select, "kind", "")) in _POLYGLOT_SET_OPERATION_KINDS:
         branch_slots: list[tuple[tuple[str, str | None], ...]] = []
         for side in ("left", "right"):
-            branch: Any = getattr(select, "args", {}).get(side)
+            branch: Any = select.arg(side)
             if branch is None:
                 return ()
             slots: tuple[tuple[str, str | None], ...] = _polyglot_select_output_type_slots(
@@ -764,7 +760,7 @@ def _polyglot_select_output_type_slots(
                 return ()
             branch_slots.append(slots)
         left_slots, right_slots = branch_slots
-        if bool(getattr(select, "args", {}).get("by_name")):
+        if bool(select.arg("by_name")):
             right_types: dict[str, str | None] = dict(right_slots)
             return tuple(
                 (
