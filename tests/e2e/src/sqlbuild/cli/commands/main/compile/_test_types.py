@@ -71,6 +71,26 @@ class LayeredProductionCompilePerformanceGuardTestCase:
 
 
 @dataclass(frozen=True)
+class SemanticCompilePerformanceGuardTestCase:
+    description: str
+    model_count: int
+    source_count: int
+    seed_count: int
+    function_count: int
+    macro_count: int
+    test_count: int
+    audit_count: int
+    expected_min_declared_columns: int
+    expected_max_declared_columns: int
+    expected_min_model_sql_bytes: int
+    expected_max_model_sql_bytes: int
+    expected_min_compiled_test_bytes: int
+    expected_max_compiled_test_bytes: int
+    expected_cold_max_seconds: float
+    expected_warm_max_seconds: float
+
+
+@dataclass(frozen=True)
 class NamespaceCompileTestCase:
     description: str
     repo_files: dict[str, str]

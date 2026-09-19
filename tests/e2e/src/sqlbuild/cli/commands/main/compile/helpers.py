@@ -57,6 +57,11 @@ class LayeredProductionCompileBenchmarkResult(NamedTuple):
     project_config_edit: CompileBenchmarkMeasurement
 
 
+class SemanticCompileBenchmarkResult(NamedTuple):
+    cold: CompileBenchmarkMeasurement
+    warm: CompileBenchmarkMeasurement
+
+
 class DbtShapedCompileBenchmarkResult(NamedTuple):
     cold_seconds: float
     warm_median_seconds: float
@@ -258,6 +263,50 @@ def run_layered_production_compile_benchmark(
     )
 
 
+def run_semantic_compile_benchmark(
+    *,
+    project_dir: Path,
+    model_count: int,
+    source_count: int,
+    seed_count: int,
+    function_count: int,
+    macro_count: int,
+    test_count: int,
+    audit_count: int,
+    expected_cold_max_seconds: float,
+    expected_warm_max_seconds: float,
+) -> SemanticCompileBenchmarkResult:
+    """Measure cold and unchanged compiles for a semantically dense generated project."""
+
+    skip_actions: dict[bool, Callable[[], None]] = {
+        False: _continue_compile_benchmark,
+        True: _skip_compile_benchmark,
+    }
+    skip_actions[os.environ.get("SQLBUILD_SKIP_PERFORMANCE_TESTS") == "1"]()
+    warmup_dir: Path = project_dir.parent / "semantic_compile_runtime_warmup"
+    write_advanced_compile_project(project_dir=warmup_dir, model_count=32)
+    _ = _run_compile_benchmark(project_dir=warmup_dir, expected_max_seconds=5.0)
+    write_semantic_compile_project(
+        project_dir=project_dir,
+        model_count=model_count,
+        source_count=source_count,
+        seed_count=seed_count,
+        function_count=function_count,
+        macro_count=macro_count,
+        test_count=test_count,
+        audit_count=audit_count,
+    )
+    cold: CompileBenchmarkMeasurement = _run_profiled_compile_benchmark(
+        project_dir=project_dir,
+        expected_max_seconds=expected_cold_max_seconds,
+    )
+    warm: CompileBenchmarkMeasurement = _run_profiled_compile_benchmark(
+        project_dir=project_dir,
+        expected_max_seconds=expected_warm_max_seconds,
+    )
+    return SemanticCompileBenchmarkResult(cold=cold, warm=warm)
+
+
 def _append_benchmark_edit(path: Path, label: str) -> None:
     path.write_text(
         path.read_text(encoding="utf-8") + f"\n-- one {label} edit\n",
@@ -337,6 +386,13 @@ def measure_model_sql_bytes(project_dir: Path) -> int:
 def measure_compiled_test_sql_bytes(project_dir: Path) -> int:
     compiled_tests_dir: Path = project_dir / "target" / "compiled" / "tests"
     return sum(path.stat().st_size for path in compiled_tests_dir.rglob("*.sql"))
+
+
+def measure_declared_model_columns(project_dir: Path) -> int:
+    return sum(
+        path.read_text(encoding="utf-8").count("(type ")
+        for path in (project_dir / "models").rglob("*.sql")
+    )
 
 
 @contextmanager
@@ -679,6 +735,18 @@ _SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
     (0.999, 260_000),
     (1.0, 520_000),
 )
+_SEMANTIC_COLUMN_COUNT_PROFILE: tuple[tuple[float, int], ...] = (
+    (0.0, 3),
+    (0.25, 9),
+    (0.50, 19),
+    (0.75, 33),
+    (0.90, 58),
+    (0.95, 115),
+    (0.99, 232),
+    (1.0, 538),
+)
+_SEMANTIC_SET_OPERATION_MODEL_INDEX: int = _SPINE_DEPTH
+_SEMANTIC_SET_OPERATION_BRANCH_COUNT: int = 267
 
 
 def write_layered_production_compile_project(
@@ -715,6 +783,43 @@ def write_layered_production_compile_project(
         model_count=model_count,
         test_count=test_count,
         source_count=source_count,
+    )
+
+
+def write_semantic_compile_project(
+    *,
+    project_dir: Path,
+    model_count: int,
+    source_count: int,
+    seed_count: int,
+    function_count: int,
+    macro_count: int,
+    test_count: int,
+    audit_count: int,
+) -> None:
+    """Write a neutral project with broad resources and dense SQL semantics."""
+
+    _layered_write_project_config(project_dir=project_dir)
+    _layered_write_sources(project_dir=project_dir, source_count=source_count)
+    _layered_write_seeds(project_dir=project_dir, seed_count=seed_count)
+    _layered_write_functions(project_dir=project_dir, function_count=function_count)
+    _layered_write_macros(project_dir=project_dir, macro_count=macro_count)
+    _layered_write_hooks(project_dir=project_dir)
+    _semantic_write_models(
+        project_dir=project_dir,
+        model_count=model_count,
+        source_count=source_count,
+        seed_count=seed_count,
+        function_count=function_count,
+        macro_count=macro_count,
+        audit_count=audit_count,
+    )
+    _layered_write_tests(
+        project_dir=project_dir,
+        model_count=model_count,
+        test_count=test_count,
+        source_count=source_count,
+        semantic_fixture_scale=True,
     )
 
 
@@ -1043,8 +1148,196 @@ FROM (
     )
 
 
+def _semantic_write_models(
+    *,
+    project_dir: Path,
+    model_count: int,
+    source_count: int,
+    seed_count: int,
+    function_count: int,
+    macro_count: int,
+    audit_count: int,
+) -> None:
+    for index in range(model_count):
+        model_dir: Path = project_dir / "models" / _layered_model_folder(index=index)
+        model_dir.mkdir(parents=True, exist_ok=True)
+        column_count: int = _semantic_model_column_count(index=index, model_count=model_count)
+        builders: dict[bool, Callable[[], str]] = {
+            True: lambda index=index, column_count=column_count: _semantic_set_operation_model_sql(
+                index=index,
+                source_count=source_count,
+                column_count=column_count,
+                model_count=model_count,
+                audit_count=audit_count,
+            ),
+            False: lambda index=index, column_count=column_count: _semantic_regular_model_sql(
+                index=index,
+                model_count=model_count,
+                source_count=source_count,
+                seed_count=seed_count,
+                function_count=function_count,
+                macro_count=macro_count,
+                audit_count=audit_count,
+                column_count=column_count,
+            ),
+        }
+        sql: str = builders[index == _SEMANTIC_SET_OPERATION_MODEL_INDEX]()
+        (model_dir / f"model_{index:05d}.sql").write_text(sql, encoding="utf-8")
+
+
+def _semantic_model_column_count(*, index: int, model_count: int) -> int:
+    quantile: float = (index + 1) / model_count
+    upper_quantiles: tuple[float, ...] = tuple(item[0] for item in _SEMANTIC_COLUMN_COUNT_PROFILE)
+    upper_index: int = bisect_left(upper_quantiles, quantile)
+    lower_quantile, lower_count = _SEMANTIC_COLUMN_COUNT_PROFILE[upper_index - 1]
+    upper_quantile, upper_count = _SEMANTIC_COLUMN_COUNT_PROFILE[upper_index]
+    position: float = (quantile - lower_quantile) / (upper_quantile - lower_quantile)
+    profile_count: int = max(3, round(lower_count + position * (upper_count - lower_count)))
+    return {
+        False: profile_count,
+        True: 270,
+    }[index == _SEMANTIC_SET_OPERATION_MODEL_INDEX]
+
+
+def _semantic_model_header(
+    *, index: int, model_count: int, audit_count: int, column_count: int
+) -> str:
+    base_audit_count, extra_audit_count = divmod(audit_count, model_count)
+    model_audit_count: int = base_audit_count + int(index < extra_audit_count)
+    base_columns: list[tuple[str, str]] = [
+        ("id", "INTEGER"),
+        ("amount", "DOUBLE"),
+        ("status", "VARCHAR"),
+    ]
+    generated_columns: list[tuple[str, str]] = [
+        (f"metric_{column_index:04d}", "DOUBLE")
+        for column_index in range(column_count - len(base_columns))
+    ]
+    columns: list[tuple[str, str]] = [*base_columns, *generated_columns]
+    declarations: list[str] = []
+    for column_index, (name, data_type) in enumerate(columns):
+        audit_sql: str = {False: "", True: ", audits [not_null]"}[column_index < model_audit_count]
+        nullable_sql: str = {False: "", True: ", nullable false"}[column_index == 0]
+        declarations.append(f"    {name} (type {data_type}{nullable_sql}{audit_sql})")
+    return "MODEL (\n  columns (\n" + ",\n".join(declarations) + "\n  ),\n);"
+
+
+def _semantic_regular_model_sql(
+    *,
+    index: int,
+    model_count: int,
+    source_count: int,
+    seed_count: int,
+    function_count: int,
+    macro_count: int,
+    audit_count: int,
+    column_count: int,
+) -> str:
+    header: str = _semantic_model_header(
+        index=index,
+        model_count=model_count,
+        audit_count=audit_count,
+        column_count=column_count,
+    )
+    source_index: int = _layered_base_source_index(index=index, source_count=source_count)
+    relation_sql: str = {
+        True: f'__source("source_{source_index:05d}")',
+        False: f'__ref("model_{index - 1:05d}")',
+    }[_layered_is_base_model(index=index)]
+    metric_expressions: str = "".join(
+        f",\n  CAST(COALESCE(CASE WHEN id % {column_index % 11 + 2} = 0 "
+        f"THEN amount + {column_index} WHEN status = 'priority' "
+        f"THEN amount * {column_index % 7 + 1} ELSE amount - {column_index} END, 0) AS DOUBLE) "
+        f"AS metric_{column_index:04d}"
+        for column_index in range(column_count - 3)
+    )
+    seed_index: int = index % seed_count
+    seed_join_sql: str = {
+        True: f'\nLEFT JOIN __seed("seed_{seed_index:05d}") AS seed ON seed.id = input.id',
+        False: "",
+    }[index >= _SEED_REFERENCE_START_INDEX and index % _SEED_INTERVAL == 0]
+    function_index: int = index % function_count
+    amount_expression: str = {
+        True: f'__udf("fn_{function_index:05d}")(amount)',
+        False: "amount + CAST(@@benchmark_revision AS INTEGER)",
+    }[index % _FUNCTION_INTERVAL == 0]
+    macro_index: int = (index // _MACRO_INTERVAL) % macro_count
+    id_expression: str = {
+        True: f'@macro_{macro_index:05d}("id")',
+        False: "id",
+    }[index % _MACRO_INTERVAL == 0]
+    direct_sql: str = f"""SELECT
+  CAST({id_expression} AS INTEGER) AS id,
+  CAST({amount_expression} AS DOUBLE) AS amount,
+  CAST(CASE WHEN id % 2 = 0 THEN 'even' ELSE 'odd' END AS VARCHAR) AS status{metric_expressions}
+FROM {relation_sql} AS input{seed_join_sql}
+"""
+    with_sql: str = f"WITH transformed AS (\n{direct_sql.rstrip()}\n)\nSELECT * FROM transformed\n"
+    nested_sql: str = f"SELECT * FROM (\n{direct_sql.rstrip()}\n) AS nested_query\n"
+    query_sql: str = {
+        (True, True): with_sql,
+        (True, False): with_sql,
+        (False, True): nested_sql,
+        (False, False): direct_sql,
+    }[
+        (
+            index % _TOP_LEVEL_WITH_INTERVAL == 0,
+            index % _NESTED_QUERY_INTERVAL == 0,
+        )
+    ]
+    return f"{header}\n\n{query_sql}"
+
+
+def _semantic_set_operation_model_sql(
+    *,
+    index: int,
+    source_count: int,
+    column_count: int,
+    model_count: int,
+    audit_count: int,
+) -> str:
+    header: str = _semantic_model_header(
+        index=index,
+        model_count=model_count,
+        audit_count=audit_count,
+        column_count=column_count,
+    )
+    source_index: int = _layered_base_source_index(index=index, source_count=source_count)
+    branches: str = "\nUNION ALL\n".join(
+        f"SELECT {branch % 5 + 1} AS bucket, {branch * 10} AS offset_seconds, "
+        f"CAST({branch % 13} AS DOUBLE) AS adjustment"
+        for branch in range(_SEMANTIC_SET_OPERATION_BRANCH_COUNT)
+    )
+    metrics: str = "".join(
+        f",\n  CAST(MAX(CASE WHEN bucket = {metric % 5 + 1} "
+        f"AND offset_seconds = {metric * 10} THEN amount + adjustment END) AS DOUBLE) "
+        f"AS metric_{metric:04d}"
+        for metric in range(column_count - 3)
+    )
+    return f"""{header}
+
+WITH offset_grid AS (
+{branches}
+), measurements AS (
+  SELECT source.id, source.amount, source.status, grid.bucket, grid.offset_seconds, grid.adjustment
+  FROM __source("source_{source_index:05d}") AS source
+  CROSS JOIN offset_grid AS grid
+)
+SELECT
+  CAST(MAX(id) AS INTEGER) AS id,
+  CAST(MAX(amount) AS DOUBLE) AS amount,
+  CAST(MAX(status) AS VARCHAR) AS status{metrics}
+FROM measurements
+"""
+
+
 def _layered_write_tests(
-    *, project_dir: Path, model_count: int, test_count: int, source_count: int
+    *,
+    project_dir: Path,
+    model_count: int,
+    test_count: int,
+    source_count: int,
+    semantic_fixture_scale: bool = False,
 ) -> None:
     tests_dir: Path = project_dir / "tests" / "unit"
     tests_dir.mkdir(parents=True)
@@ -1059,6 +1352,7 @@ def _layered_write_tests(
                 model_count=model_count,
                 source_count=source_count,
                 repeated_target_count=repeated_target_count,
+                semantic_fixture_scale=semantic_fixture_scale,
             )
             for test_index in range(
                 first_test_index,
@@ -1074,14 +1368,21 @@ def _layered_test_block(
     model_count: int,
     source_count: int,
     repeated_target_count: int,
+    semantic_fixture_scale: bool = False,
 ) -> str:
     group_count: int = (model_count - _SPINE_DEPTH) // _TEST_CHAIN_DEPTH
-    representative_group_count: int = (group_count * 2) // 3
+    representative_group_count: int = {
+        True: group_count // 3,
+        False: (group_count * 2) // 3,
+    }[semantic_fixture_scale]
     group_index: int = ((test_index // 5) * representative_group_count) // repeated_target_count
     base_index: int = _SPINE_DEPTH + group_index * _TEST_CHAIN_DEPTH
     target_index: int = base_index + _TEST_CHAIN_DEPTH - 1
     source_index: int = _layered_base_source_index(index=base_index, source_count=source_count)
-    fixture_row_count: int = 40 + (test_index % 5) * 40
+    fixture_row_count: int = {
+        True: 5 + (test_index % 5) * 5,
+        False: 40 + (test_index % 5) * 40,
+    }[semantic_fixture_scale]
     return _layered_test_sql(
         test_index=test_index,
         source_index=source_index,
