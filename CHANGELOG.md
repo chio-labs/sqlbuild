@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.110.1](https://github.com/chio-labs/sqlbuild/compare/v0.110.0...v0.110.1) (2026-09-19)
+
+
+### Bug Fixes
+
+* harden SQL analysis for complex projects ([#744](https://github.com/chio-labs/sqlbuild/issues/744)) ([b373c93](https://github.com/chio-labs/sqlbuild/commit/b373c938fa39f0a164ae423accd0d618b1dd7025))
+
 ## [0.110.0](https://github.com/chio-labs/sqlbuild/compare/v0.109.0...v0.110.0) (2026-09-18)
 
 
