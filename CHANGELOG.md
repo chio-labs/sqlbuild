@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.110.2](https://github.com/chio-labs/sqlbuild/compare/v0.110.1...v0.110.2) (2026-09-19)
+
+
+### Performance Improvements
+
+* reduce semantic compile analysis cost ([#746](https://github.com/chio-labs/sqlbuild/issues/746)) ([107ab8f](https://github.com/chio-labs/sqlbuild/commit/107ab8fadefff7b68d76c2892f37692ec7e859cf))
+
 ## [0.110.1](https://github.com/chio-labs/sqlbuild/compare/v0.110.0...v0.110.1) (2026-09-19)
 
 
