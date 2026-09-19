@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict, deque
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -138,6 +138,7 @@ from sqlbuild.spec.contracts.models import (
 _POLYGLOT_ANALYSIS_WORKERS: int = 4
 _POLYGLOT_PARALLEL_ANALYSIS_MIN_MODELS: int = 32
 _POLYGLOT_PARALLEL_REANALYSIS_MIN_MODELS: int = 2
+_POLYGLOT_PROCESS_ANALYSIS_MIN_MODELS: int = 32
 
 
 @dataclass(frozen=True)
@@ -159,6 +160,18 @@ class _ModelSqlAnalysisRequest:
 class _DynamicContractAnalysisInputs:
     families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]]
     authoritative_column_types_by_table: dict[str, dict[str, str]]
+
+
+@dataclass(frozen=True)
+class _ModelSqlAnalysisWorkerContext:
+    cached_analyses: dict[str, PolyglotAnalysisResult]
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]]
+    column_types_by_table: dict[str, dict[str, str]]
+    inference_profile: ExpressionInferenceProfile
+    allow_compact_analysis: bool
+
+
+_PROCESS_ANALYSIS_CONTEXT: _ModelSqlAnalysisWorkerContext | None = None
 
 
 def assemble_compiled_project(
@@ -692,8 +705,52 @@ def _analyze_model_sql_requests(
     if len(requests) < parallel_min_models:
         return tuple(analyze(request) for request in requests)
     workers: int = min(_POLYGLOT_ANALYSIS_WORKERS, len(requests))
+    if len(requests) >= _POLYGLOT_PROCESS_ANALYSIS_MIN_MODELS:
+        with ProcessPoolExecutor(
+            max_workers=workers,
+            initializer=_initialize_model_analysis_worker,
+            initargs=(
+                _ModelSqlAnalysisWorkerContext(
+                    cached_analyses=cached_analyses,
+                    column_nullability_by_table=column_nullability_by_table,
+                    column_types_by_table=column_types_by_table,
+                    inference_profile=ExpressionInferenceProfile(
+                        sql_analysis_dialect=inference_profile.sql_analysis_dialect,
+                        function_nullability_rules=dict(
+                            inference_profile.function_nullability_rules
+                        ),
+                        function_return_types=dict(inference_profile.function_return_types),
+                    ),
+                    allow_compact_analysis=allow_compact_analysis,
+                ),
+            ),
+        ) as executor:
+            return tuple(executor.map(_analyze_model_sql_in_worker, requests, chunksize=8))
     with ThreadPoolExecutor(max_workers=workers) as executor:
         return tuple(executor.map(analyze, requests))
+
+
+def _initialize_model_analysis_worker(context: _ModelSqlAnalysisWorkerContext) -> None:
+    global _PROCESS_ANALYSIS_CONTEXT
+    _PROCESS_ANALYSIS_CONTEXT = context
+
+
+def _analyze_model_sql_in_worker(request: _ModelSqlAnalysisRequest) -> _ModelSqlAnalysis:
+    context: _ModelSqlAnalysisWorkerContext | None = _PROCESS_ANALYSIS_CONTEXT
+    if context is None:
+        raise RuntimeError("model SQL analysis worker context is not initialized")
+    return _analyze_model_sql(
+        request=request,
+        cached_analysis=(
+            context.cached_analyses.get(request.cache_key)
+            if request.cache_key is not None
+            else None
+        ),
+        column_nullability_by_table=context.column_nullability_by_table,
+        column_types_by_table=context.column_types_by_table,
+        inference_profile=context.inference_profile,
+        allow_compact_analysis=context.allow_compact_analysis,
+    )
 
 
 def _complete_inferred_bindings(

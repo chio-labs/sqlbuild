@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import pickle
+from concurrent.futures import ProcessPoolExecutor
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -22,13 +25,13 @@ from sqlbuild.cli.commands.models import (
     WrittenTarget,
 )
 from sqlbuild.cli.paths.main._sql_test_output_path import sql_test_output_path
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompiledSqlTest
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.main.execution.sql_test_assembly import (
     _sql_test_model_chain_names,
     build_sql_test_plan_entry,
 )
-from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput
+from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput, SqlTestPlanEntry
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 
@@ -43,6 +46,17 @@ _SINGULAR_DIR: str = "singular"
 _TESTS_DIR: str = "tests"
 _MANIFEST_FILE: str = "manifest.json"
 _SQL_FILE_SUFFIX: str = ".sql"
+_STATIC_TEST_PROCESS_MIN_TESTS: int = 32
+_STATIC_TEST_WORKERS: int = 4
+
+
+@dataclass(frozen=True)
+class _StaticTestWorkerContext:
+    project: CompiledProject
+    adapter: BaseAdapter
+
+
+_STATIC_TEST_WORKER_CONTEXT: _StaticTestWorkerContext | None = None
 
 
 def write_compile_target(
@@ -275,6 +289,7 @@ def _write_static_tests(
         else None
     )
     model_map: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    pending: list[tuple[CompiledSqlTest, str | None, str | None]] = []
     for test in project.sql_tests:
         record_key: str | None = None
         artifact_identity: str | None = None
@@ -298,20 +313,42 @@ def _write_static_tests(
                     managed_paths.add(cached_path)
                     current_records[record_key] = cached_record
                     continue
+        pending.append((test, record_key, artifact_identity))
+
+    worker_context: _StaticTestWorkerContext = _StaticTestWorkerContext(
+        project=_static_test_worker_project(project),
+        adapter=adapter,
+    )
+    tests: tuple[CompiledSqlTest, ...] = tuple(item[0] for item in pending)
+    compiled: tuple[tuple[SqlTestPlanEntry, str], ...] | None = None
+    if len(tests) >= _STATIC_TEST_PROCESS_MIN_TESTS and _is_picklable(worker_context):
         with record_compile_timing("test_planning_ms"):
-            entry, _warnings = build_sql_test_plan_entry(
-                test=test,
-                project=project,
-                adapter=adapter,
-                sql_analysis_enabled=project.settings.sql_analysis,
-            )
+            workers: int = min(_STATIC_TEST_WORKERS, len(tests))
+            with ProcessPoolExecutor(
+                max_workers=workers,
+                initializer=_initialize_static_test_worker,
+                initargs=(worker_context,),
+            ) as executor:
+                compiled = tuple(executor.map(_compile_static_test_in_worker, tests, chunksize=8))
+
+    for index, (test, record_key, artifact_identity) in enumerate(pending):
+        if compiled is None:
+            with record_compile_timing("test_planning_ms"):
+                entry, _warnings = build_sql_test_plan_entry(
+                    test=test,
+                    project=project,
+                    adapter=adapter,
+                    sql_analysis_enabled=project.settings.sql_analysis,
+                )
+            with record_compile_timing("comparison_render_ms"):
+                comparison_sql: str = build_sql_test_comparison_sql(
+                    test_entry=entry,
+                    set_difference_operator=adapter.render_set_difference_operator(),
+                    sql_analysis_dialect=adapter.sql_analysis_dialect(),
+                )
+        else:
+            entry, comparison_sql = compiled[index]
         test_path: Path = tests_root / sql_test_output_path(entry)
-        with record_compile_timing("comparison_render_ms"):
-            comparison_sql: str = build_sql_test_comparison_sql(
-                test_entry=entry,
-                set_difference_operator=adapter.render_set_difference_operator(),
-                sql_analysis_dialect=adapter.sql_analysis_dialect(),
-            )
         _write_sql(path=test_path, sql=comparison_sql)
         managed_paths.add(test_path)
         if record_key is not None and artifact_identity is not None:
@@ -328,6 +365,56 @@ def _write_static_tests(
             records=current_records,
         )
     return managed_paths
+
+
+def _is_picklable(value: object) -> bool:
+    try:
+        _ = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
+    except (AttributeError, pickle.PickleError, TypeError):
+        return False
+    return True
+
+
+def _static_test_worker_project(project: CompiledProject) -> CompiledProject:
+    """Remove compile-only callable metadata unused by static SQL test planning."""
+
+    return replace(
+        project,
+        audits=(),
+        sql_tests=(),
+        sql_scenarios=(),
+        loader_functions=(),
+        hook_functions=(),
+        sql_hook_files=(),
+        materialization_files=(),
+        public_enums={},
+        public_constants={},
+        loaded_macros={},
+        diagnostics=(),
+        external_sql_reference_resolver=None,
+    )
+
+
+def _initialize_static_test_worker(context: _StaticTestWorkerContext) -> None:
+    global _STATIC_TEST_WORKER_CONTEXT
+    _STATIC_TEST_WORKER_CONTEXT = context
+
+
+def _compile_static_test_in_worker(test: CompiledSqlTest) -> tuple[SqlTestPlanEntry, str]:
+    context: _StaticTestWorkerContext | None = _STATIC_TEST_WORKER_CONTEXT
+    if context is None:
+        raise RuntimeError("static SQL test worker context is not initialized")
+    entry, _warnings = build_sql_test_plan_entry(
+        test=test,
+        project=context.project,
+        adapter=context.adapter,
+        sql_analysis_enabled=context.project.settings.sql_analysis,
+    )
+    return entry, build_sql_test_comparison_sql(
+        test_entry=entry,
+        set_difference_operator=context.adapter.render_set_difference_operator(),
+        sql_analysis_dialect=context.adapter.sql_analysis_dialect(),
+    )
 
 
 def _write_manifest(*, target_dir: Path, manifest: dict[str, object]) -> None:
