@@ -40,6 +40,13 @@ class CompileBenchmarkMeasurement(NamedTuple):
     summary: dict[str, int]
 
 
+def nested_coalesce_expression(*, function_depth: int) -> str:
+    expression: str = "1"
+    for _ in range(function_depth):
+        expression = f"COALESCE({expression}, 0)"
+    return expression
+
+
 class LayeredProductionCompileBenchmarkResult(NamedTuple):
     cold: CompileBenchmarkMeasurement
     warm: CompileBenchmarkMeasurement

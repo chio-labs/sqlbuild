@@ -37,7 +37,7 @@ _DIRECT_PYTHON_ROOTS: frozenset[str] = frozenset(
 _LANGUAGE_PYTHON_ROOTS: frozenset[tuple[str, str]] = frozenset(
     {("functions", "python"), ("hooks", "python")}
 )
-_IGNORED_ROOTS: frozenset[str] = frozenset({"logs", "target", "venv"})
+_IGNORED_ROOTS: frozenset[str] = frozenset({"logs", "target", "tests", "venv"})
 _LEGACY_DIAGNOSTIC_ROOTS: frozenset[str] = frozenset({"event_exporters"})
 _SUPPORTED_ROOT_FILES: frozenset[Path] = frozenset({Path("adapter.py"), Path("definitions.py")})
 _SCOPED_DECLARATION_DIRECTORIES: frozenset[str] = (

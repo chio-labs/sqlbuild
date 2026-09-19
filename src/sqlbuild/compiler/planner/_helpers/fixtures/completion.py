@@ -17,6 +17,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,
     CompileSqlReference,
+    DynamicColumnContractProof,
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -295,6 +296,12 @@ def _star_fixture_keys(
         for dependency in model.deps
         if (CompiledResourceType(dependency.resource_type), dependency.name) in fixture_keys
     )
+    dynamic_contract: DynamicColumnContractProof | None = model.dynamic_column_contract
+    if dynamic_contract is not None and dynamic_contract.output_proven:
+        input_relations: frozenset[str] = frozenset(
+            name.casefold() for name in dynamic_contract.input_relations
+        )
+        return frozenset(key for key in dependency_keys if key[1].casefold() in input_relations)
     schema_tables: list[dict[str, object]] = []
     for key in dependency_keys:
         relation: FixtureRelationMetadata | None = relations.get(key)

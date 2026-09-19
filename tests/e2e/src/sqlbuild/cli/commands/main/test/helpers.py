@@ -3,6 +3,75 @@
 from __future__ import annotations
 
 
+def build_dynamic_pivot_test_project_files() -> dict[str, str]:
+    """Build a Snowflake dynamic-pivot project for offline test-plan inspection."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "dynamic_pivot_test_plan"\n'
+            'adapter = "snowflake"\n\n'
+            "[defaults]\n"
+            'contract = "enforced"\n'
+        ),
+        "models/stg_order_amounts.sql": (
+            "MODEL (\n"
+            "  database analytics,\n"
+            "  schema staging,\n"
+            "  columns (\n"
+            "    customer_id (type INTEGER),\n"
+            "    category (type VARCHAR),\n"
+            '    amount (type "DECIMAL(12,2)"),\n'
+            "    country (type VARCHAR),\n"
+            "  ),\n"
+            ");\n"
+            "SELECT CAST(1 AS INTEGER) AS customer_id, "
+            "CAST('books' AS VARCHAR) AS category, "
+            "CAST(10.25 AS DECIMAL(12,2)) AS amount, "
+            "CAST('US' AS VARCHAR) AS country\n"
+        ),
+        "models/customer_category_amounts.sql": (
+            "MODEL (\n"
+            "  database analytics,\n"
+            "  schema mart,\n"
+            "  columns (\n"
+            "    customer_id (type INTEGER),\n"
+            "    country (type VARCHAR),\n"
+            "  ),\n"
+            "  dynamic_columns (\n"
+            "    category_amounts (\n"
+            "      pivot_column category,\n"
+            "      value_column amount,\n"
+            "      aggregate MAX,\n"
+            '      type "DECIMAL(12,2)"\n'
+            "    )\n"
+            "  ),\n"
+            ");\n"
+            "WITH pivot_input AS (\n"
+            "  SELECT customer_id, category, amount, country\n"
+            '  FROM __ref("stg_order_amounts")\n'
+            "), final AS (\n"
+            "  SELECT *\n"
+            "  FROM pivot_input PIVOT(MAX(amount) FOR category IN (ANY ORDER BY category))\n"
+            ")\n"
+            "SELECT * FROM final\n"
+        ),
+        "tests/unit/test_customer_category_amounts.sql": (
+            'TEST (name "customer_category_amounts__empty_input");\n\n'
+            "WITH __ref__stg_order_amounts AS (\n"
+            "  SELECT\n"
+            "    CAST(NULL AS INTEGER) AS customer_id,\n"
+            "    CAST(NULL AS VARCHAR) AS category,\n"
+            "    CAST(NULL AS DECIMAL(12,2)) AS amount,\n"
+            "    CAST(NULL AS VARCHAR) AS country\n"
+            "  WHERE FALSE\n"
+            "), __assert__empty AS (\n"
+            '  SELECT 1 AS unexpected_row FROM __ref("customer_category_amounts")\n'
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
 def build_chain_test_project_files(*, sql_analysis_enabled: bool) -> dict[str, str]:
     """Build an inline project with a two-model SQL unit-test chain."""
 

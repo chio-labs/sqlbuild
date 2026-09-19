@@ -27,6 +27,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     build_complex_values_fixture_project_files,
     build_cte_derived_output_fixture_project_files,
     build_cte_partial_source_fixture_project_files,
+    build_dynamic_pivot_test_project_files,
     build_empty_partial_fixture_project_files,
     build_explicit_typed_null_fixture_project_files,
     build_incompatible_fixture_type_project_files,
@@ -452,6 +453,15 @@ def test_given_invalid_fixture_when_testing_then_static_diagnostics_prevent_conn
             expected_stdout_fragments=(
                 "mocked refs: stg_order_links",
                 "real models: order_roots",
+                "Test plan inspection complete: 1 selected, 0 errors.",
+            ),
+        ),
+        SqlTestPlanInspectionE2ETestCase(
+            description="dynamic pivot uses compiler-proven fixture closure",
+            repo_files=build_dynamic_pivot_test_project_files(),
+            expected_stdout_fragments=(
+                "mocked refs: stg_order_amounts",
+                "real models: customer_category_amounts",
                 "Test plan inspection complete: 1 selected, 0 errors.",
             ),
         ),

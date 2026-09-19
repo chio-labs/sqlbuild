@@ -18,3 +18,18 @@ class PolyglotSqlNormalizationTestCase:
     sql: str
     dialect: str | None
     expected_sql: str
+
+
+@dataclass(frozen=True)
+class PolyglotDefaultGuardTestCase:
+    description: str
+    function_depth: int
+    expected_kind: str
+
+
+@dataclass(frozen=True)
+class PolyglotExplicitGuardTestCase:
+    description: str
+    function_depth: int
+    maximum_function_depth: int
+    expected_error_pattern: str

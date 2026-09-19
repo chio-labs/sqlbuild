@@ -100,3 +100,10 @@ class CompileSelectionTestCase:
     selection_args: tuple[str, ...]
     expected_stdout_fragments: tuple[str, ...]
     unexpected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DeepSqlAnalysisCompileTestCase:
+    description: str
+    function_depth: int
+    expected_stdout_fragment: str
