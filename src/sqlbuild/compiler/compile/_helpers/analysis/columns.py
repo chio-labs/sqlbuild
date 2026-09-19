@@ -861,8 +861,7 @@ def _infer_columns_from_polyglot_ast(
     top_level_ctes: tuple[tuple[str, Any, bool], ...] = _polyglot_top_level_ctes(parsed)
     referenced_table_names: tuple[str, ...] = (
         tuple(
-            str(getattr(table, "name", "") or "")
-            for table in parsed.find_all(_POLYGLOT_KIND_TABLE)
+            str(getattr(table, "name", "") or "") for table in parsed.find_all(_POLYGLOT_KIND_TABLE)
         )
         if top_level_ctes
         else ()
@@ -968,8 +967,7 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
     )
     referenced_table_names: tuple[str, ...] = (
         tuple(
-            str(getattr(table, "name", "") or "")
-            for table in parsed.find_all(_POLYGLOT_KIND_TABLE)
+            str(getattr(table, "name", "") or "") for table in parsed.find_all(_POLYGLOT_KIND_TABLE)
         )
         if top_level_ctes
         else ()

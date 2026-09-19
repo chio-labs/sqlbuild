@@ -348,9 +348,7 @@ def _analyze_test_query_template(
     )
 
 
-def _replace_test_query_markers(
-    *, query_sql: str, resolver: _TemplateMarkerTargetResolver
-) -> str:
+def _replace_test_query_markers(*, query_sql: str, resolver: _TemplateMarkerTargetResolver) -> str:
     reached: frozenset[tuple[str, str]] = frozenset(resolver.calls)
 
     def replace_one(

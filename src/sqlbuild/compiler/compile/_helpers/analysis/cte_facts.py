@@ -314,8 +314,7 @@ def _polyglot_referenced_relation_facts[T](
     referenced_facts: dict[str, dict[str, T]] = {}
     names: tuple[str, ...] = (
         tuple(
-            str(getattr(table, "name", "") or "")
-            for table in parsed.find_all(_POLYGLOT_KIND_TABLE)
+            str(getattr(table, "name", "") or "") for table in parsed.find_all(_POLYGLOT_KIND_TABLE)
         )
         if table_names is None
         else table_names
@@ -637,8 +636,7 @@ def _polyglot_top_level_ctes(root: Any) -> tuple[tuple[str, Any, bool], ...]:
         values: object = targeted_ctes()
         if isinstance(values, list):
             return tuple(
-                (str(name), body, bool(has_column_alias))
-                for name, has_column_alias, body in values
+                (str(name), body, bool(has_column_alias)) for name, has_column_alias, body in values
             )
     with_payload: object = root.arg("with")
     raw_ctes: object = (
