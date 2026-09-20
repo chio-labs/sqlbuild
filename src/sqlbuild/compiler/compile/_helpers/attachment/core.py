@@ -1818,12 +1818,40 @@ def _parse_model_header_columns(
     ):
         return cached.columns
     return tuple(
-        replace(
-            column,
-            location=(location := column_locations.get(column.name)),
-            audits=tuple(replace(audit, location=location) for audit in column.audits),
+        _schema_column_at_location(
+            column=column,
+            location=column_locations.get(column.name),
         )
         for column in cached.columns
+    )
+
+
+def _schema_column_at_location(
+    *, column: SchemaColumn, location: SourceLocation | None
+) -> SchemaColumn:
+    return SchemaColumn(
+        name=column.name,
+        type=column.type,
+        nullable=column.nullable,
+        description=column.description,
+        meta=column.meta,
+        audits=tuple(
+            SchemaAuditInstance(
+                definition_name=audit.definition_name,
+                arguments=audit.arguments,
+                name=audit.name,
+                description=audit.description,
+                severity=audit.severity,
+                run_scope=audit.run_scope,
+                always_run=audit.always_run,
+                thresholds=audit.thresholds,
+                minimum_samples=audit.minimum_samples,
+                evidence_limit=audit.evidence_limit,
+                location=location,
+            )
+            for audit in column.audits
+        ),
+        location=location,
     )
 
 
