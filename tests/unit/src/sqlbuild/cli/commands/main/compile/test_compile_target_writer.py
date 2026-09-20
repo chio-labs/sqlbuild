@@ -261,8 +261,29 @@ def test_given_unicode_sql_when_writing_static_target_twice_then_bytes_remain_un
         project=project,
     )
 
-    assert model_path.read_bytes() == "SELECT 'café' AS product_name\n".encode()
+    assert model_path.read_text(encoding="utf-8") == "SELECT 'café' AS product_name\n"
     assert model_path.stat().st_mtime_ns == unchanged_mtime_ns
+
+
+def test_given_invalid_utf8_artifact_when_writing_again_then_existing_decode_error_is_preserved(
+    tmp_path: Path,
+) -> None:
+    project: CompiledProject = build_static_target_writer_project()
+    target_dir: Path = tmp_path / "target"
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+    model_path: Path = target_dir / "compiled" / "models" / "staging" / "orders.sql"
+    model_path.write_bytes(b"\xff")
+
+    with pytest.raises(UnicodeDecodeError):
+        write_static_compile_target(
+            target_dir=target_dir,
+            adapter=DuckDbAdapter(),
+            project=project,
+        )
 
 
 @pytest.mark.parametrize(

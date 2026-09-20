@@ -400,9 +400,17 @@ def _write_manifest(*, target_dir: Path, manifest: dict[str, object]) -> None:
 def _write_sql(*, path: Path, sql: str, check_existing: bool = True) -> None:
     """Write one SQL file."""
 
+    contents: str = sql.rstrip() + "\n"
+    if os.linesep != "\n":
+        _write_text_if_changed(
+            path=path,
+            contents=contents,
+            check_existing=check_existing,
+        )
+        return
     _write_bytes_if_changed(
         path=path,
-        contents=sql.rstrip().encode("utf-8") + b"\n",
+        contents=contents.encode("utf-8"),
         check_existing=check_existing,
     )
 
@@ -420,8 +428,11 @@ def _write_text_if_changed(*, path: Path, contents: str, check_existing: bool = 
 
 def _write_bytes_if_changed(*, path: Path, contents: bytes, check_existing: bool = True) -> None:
     with record_compile_timing("physical_write_ms"):
-        if check_existing and path.is_file() and path.read_bytes() == contents:
-            return
+        if check_existing and path.is_file():
+            existing: bytes = path.read_bytes()
+            if existing == contents:
+                return
+            _ = existing.decode("utf-8")
         try:
             _overwrite_bytes(path=path, contents=contents)
         except FileNotFoundError:
@@ -430,7 +441,7 @@ def _write_bytes_if_changed(*, path: Path, contents: bytes, check_existing: bool
 
 
 def _overwrite_text(*, path: Path, contents: str) -> None:
-    _overwrite_bytes(path=path, contents=contents.encode("utf-8"))
+    _ = path.write_text(contents, encoding="utf-8")
 
 
 def _overwrite_bytes(*, path: Path, contents: bytes) -> None:

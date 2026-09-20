@@ -85,7 +85,7 @@ def test_given_unicode_model_when_compiling_twice_then_cli_preserves_unchanged_a
 
     assert first_exit_code == 0
     assert second_exit_code == 0
-    assert artifact_path.read_bytes() == "SELECT 'café' AS product_name\n".encode()
+    assert artifact_path.read_text(encoding="utf-8") == "SELECT 'café' AS product_name\n"
     assert artifact_path.stat().st_mtime_ns == unchanged_mtime_ns
 
 
