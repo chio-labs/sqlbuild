@@ -63,10 +63,28 @@ def write_compile_target(
     remove_stale_files: bool = (target_dir / _COMPILED_DIR).is_dir()
     target_dir.mkdir(parents=True, exist_ok=True)
     managed_paths: set[Path] = set().union(
-        _write_models(target_dir=target_dir, plan_output=plan_output),
-        _write_functions(target_dir=target_dir, adapter=adapter, plan_output=plan_output),
-        _write_audits(target_dir=target_dir, plan_output=plan_output),
-        _write_tests(target_dir=target_dir, adapter=adapter, plan_output=plan_output),
+        _write_models(
+            target_dir=target_dir,
+            plan_output=plan_output,
+            check_existing=remove_stale_files,
+        ),
+        _write_functions(
+            target_dir=target_dir,
+            adapter=adapter,
+            plan_output=plan_output,
+            check_existing=remove_stale_files,
+        ),
+        _write_audits(
+            target_dir=target_dir,
+            plan_output=plan_output,
+            check_existing=remove_stale_files,
+        ),
+        _write_tests(
+            target_dir=target_dir,
+            adapter=adapter,
+            plan_output=plan_output,
+            check_existing=remove_stale_files,
+        ),
     )
     if remove_stale_files:
         with record_compile_timing("stale_traversal_ms"):
@@ -96,10 +114,28 @@ def write_static_compile_target(
     remove_stale_files: bool = (target_dir / _COMPILED_DIR).is_dir()
     target_dir.mkdir(parents=True, exist_ok=True)
     managed_paths: set[Path] = set().union(
-        _write_static_models(target_dir=target_dir, project=project),
-        _write_static_functions(target_dir=target_dir, adapter=adapter, project=project),
-        _write_static_audits(target_dir=target_dir, project=project),
-        _write_static_tests(target_dir=target_dir, adapter=adapter, project=project),
+        _write_static_models(
+            target_dir=target_dir,
+            project=project,
+            check_existing=remove_stale_files,
+        ),
+        _write_static_functions(
+            target_dir=target_dir,
+            adapter=adapter,
+            project=project,
+            check_existing=remove_stale_files,
+        ),
+        _write_static_audits(
+            target_dir=target_dir,
+            project=project,
+            check_existing=remove_stale_files,
+        ),
+        _write_static_tests(
+            target_dir=target_dir,
+            adapter=adapter,
+            project=project,
+            check_existing=remove_stale_files,
+        ),
     )
     if remove_stale_files:
         with record_compile_timing("stale_traversal_ms"):
@@ -117,24 +153,26 @@ def write_static_compile_target(
     )
 
 
-def _write_models(*, target_dir: Path, plan_output: PlanOutput) -> set[Path]:
+def _write_models(*, target_dir: Path, plan_output: PlanOutput, check_existing: bool) -> set[Path]:
     """Write model resolved SQL."""
 
     managed_paths: set[Path] = set()
     for entry in plan_output.model_entries:
         compiled_path: Path = target_dir / _COMPILED_DIR / _model_output_path(entry.relative_path)
-        _write_sql(path=compiled_path, sql=entry.resolved_sql)
+        _write_sql(path=compiled_path, sql=entry.resolved_sql, check_existing=check_existing)
         managed_paths.add(compiled_path)
     return managed_paths
 
 
-def _write_static_models(*, target_dir: Path, project: CompiledProject) -> set[Path]:
+def _write_static_models(
+    *, target_dir: Path, project: CompiledProject, check_existing: bool
+) -> set[Path]:
     """Write offline model query SQL."""
 
     managed_paths: set[Path] = set()
     for model in project.models:
         compiled_path: Path = target_dir / _COMPILED_DIR / _model_output_path(model.relative_path)
-        _write_sql(path=compiled_path, sql=model.query_sql)
+        _write_sql(path=compiled_path, sql=model.query_sql, check_existing=check_existing)
         managed_paths.add(compiled_path)
     return managed_paths
 
@@ -144,6 +182,7 @@ def _write_functions(
     target_dir: Path,
     adapter: BaseAdapter,
     plan_output: PlanOutput,
+    check_existing: bool,
 ) -> set[Path]:
     """Write executable SQL function DDL."""
 
@@ -167,7 +206,11 @@ def _write_functions(
             / _COMPILED_DIR
             / _function_output_path(relative_path=entry.relative_path, language=entry.language)
         )
-        _write_sql(path=function_path, sql=";\n\n".join(statements))
+        _write_sql(
+            path=function_path,
+            sql=";\n\n".join(statements),
+            check_existing=check_existing,
+        )
         managed_paths.add(function_path)
     return managed_paths
 
@@ -177,6 +220,7 @@ def _write_static_functions(
     target_dir: Path,
     adapter: BaseAdapter,
     project: CompiledProject,
+    check_existing: bool,
 ) -> set[Path]:
     """Write offline rendered SQL function DDL."""
 
@@ -202,12 +246,16 @@ def _write_static_functions(
                 relative_path=function.relative_path, language=function.language
             )
         )
-        _write_sql(path=function_path, sql=";\n\n".join(statements))
+        _write_sql(
+            path=function_path,
+            sql=";\n\n".join(statements),
+            check_existing=check_existing,
+        )
         managed_paths.add(function_path)
     return managed_paths
 
 
-def _write_audits(*, target_dir: Path, plan_output: PlanOutput) -> set[Path]:
+def _write_audits(*, target_dir: Path, plan_output: PlanOutput, check_existing: bool) -> set[Path]:
     """Write resolved audit SQL."""
 
     managed_paths: set[Path] = set()
@@ -215,12 +263,14 @@ def _write_audits(*, target_dir: Path, plan_output: PlanOutput) -> set[Path]:
         folder: Path = _audit_folder(entry)
         file_name: str = _audit_file_name(entry)
         audit_path: Path = target_dir / _COMPILED_DIR / _AUDITS_DIR / folder / file_name
-        _write_sql(path=audit_path, sql=entry.resolved_sql)
+        _write_sql(path=audit_path, sql=entry.resolved_sql, check_existing=check_existing)
         managed_paths.add(audit_path)
     return managed_paths
 
 
-def _write_static_audits(*, target_dir: Path, project: CompiledProject) -> set[Path]:
+def _write_static_audits(
+    *, target_dir: Path, project: CompiledProject, check_existing: bool
+) -> set[Path]:
     """Write offline resolved audit SQL."""
 
     managed_paths: set[Path] = set()
@@ -232,7 +282,7 @@ def _write_static_audits(*, target_dir: Path, project: CompiledProject) -> set[P
             attached_column_name=audit.attached_column_name,
         )
         audit_path: Path = target_dir / _COMPILED_DIR / _AUDITS_DIR / folder / file_name
-        _write_sql(path=audit_path, sql=audit.sql_body)
+        _write_sql(path=audit_path, sql=audit.sql_body, check_existing=check_existing)
         managed_paths.add(audit_path)
     return managed_paths
 
@@ -242,6 +292,7 @@ def _write_tests(
     target_dir: Path,
     adapter: BaseAdapter,
     plan_output: PlanOutput,
+    check_existing: bool,
 ) -> set[Path]:
     """Write resolved SQL-native test SQL."""
 
@@ -254,7 +305,7 @@ def _write_tests(
                 set_difference_operator=adapter.render_set_difference_operator(),
                 sql_analysis_dialect=adapter.sql_analysis_dialect(),
             )
-        _write_sql(path=test_path, sql=comparison_sql)
+        _write_sql(path=test_path, sql=comparison_sql, check_existing=check_existing)
         managed_paths.add(test_path)
     return managed_paths
 
@@ -264,6 +315,7 @@ def _write_static_tests(
     target_dir: Path,
     adapter: BaseAdapter,
     project: CompiledProject,
+    check_existing: bool,
 ) -> set[Path]:
     """Write offline SQL-native test SQL."""
 
@@ -320,7 +372,7 @@ def _write_static_tests(
             test=test,
             model_names=artifact.model_names,
         )
-        _write_sql(path=test_path, sql=artifact.sql)
+        _write_sql(path=test_path, sql=artifact.sql, check_existing=check_existing)
         managed_paths.add(test_path)
         if record_key is not None and artifact_identity is not None:
             record: SqlTestArtifactCacheRecord | None = build_sql_test_artifact_cache_record(
@@ -345,15 +397,19 @@ def _write_manifest(*, target_dir: Path, manifest: dict[str, object]) -> None:
     _write_text_if_changed(path=manifest_path, contents=json.dumps(manifest, indent=2) + "\n")
 
 
-def _write_sql(*, path: Path, sql: str) -> None:
+def _write_sql(*, path: Path, sql: str, check_existing: bool = True) -> None:
     """Write one SQL file."""
 
-    _write_text_if_changed(path=path, contents=sql.rstrip() + "\n")
+    _write_text_if_changed(
+        path=path,
+        contents=sql.rstrip() + "\n",
+        check_existing=check_existing,
+    )
 
 
-def _write_text_if_changed(*, path: Path, contents: str) -> None:
+def _write_text_if_changed(*, path: Path, contents: str, check_existing: bool = True) -> None:
     with record_compile_timing("physical_write_ms"):
-        if path.is_file() and path.read_text(encoding="utf-8") == contents:
+        if check_existing and path.is_file() and path.read_text(encoding="utf-8") == contents:
             return
         try:
             path.write_text(contents, encoding="utf-8")
