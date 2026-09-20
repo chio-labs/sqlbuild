@@ -2340,9 +2340,10 @@ def _qualified_reference_names(*, query_sql: str, reference_names: Iterable[str]
         name: str = str(value)
         escaped: str = re.escape(name)
         if re.search(
-            rf'(?<![A-Za-z0-9_$])(?:"{escaped}"|`{escaped}`|\[{escaped}\]|{escaped})\s*\.',
+            rf'(?<![A-Za-z0-9_$])(?:"{escaped}"|`{escaped}`|\[{escaped}\]|{escaped})'
+            r"(?:\s|--[^\r\n]*(?:\r?\n|$)|/\*.*?\*/)*\.",
             query_sql,
-            re.IGNORECASE,
+            re.IGNORECASE | re.DOTALL,
         ):
             qualified.add(name)
     return frozenset(qualified)

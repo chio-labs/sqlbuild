@@ -163,7 +163,20 @@ def test_given_queries_when_batch_analyzing_then_uses_one_ordered_native_request
 
 
 def test_given_qualified_reference_when_batch_analyzing_then_preserves_analysis_facts() -> None:
-    query_sql: str = 'SELECT orders.order_id FROM __ref("orders")'
+    _assert_qualified_reference_analysis_parity(
+        query_sql='SELECT orders.order_id FROM __ref("orders")'
+    )
+
+
+def test_given_commented_qualified_reference_when_batch_analyzing_then_preserves_analysis_facts() -> (
+    None
+):
+    _assert_qualified_reference_analysis_parity(
+        query_sql=('SELECT orders /* column qualifier */ .order_id FROM __ref("orders")')
+    )
+
+
+def _assert_qualified_reference_analysis_parity(*, query_sql: str) -> None:
     references: tuple[CompileSqlReference, ...] = (
         CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
     )

@@ -72,6 +72,15 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
             ),
             mode=SqlTestMode.MODEL,
         ),
+        NativeSqlTestExtractionParityTestCase(
+            description="clause-like qualified column uses its explicit alias",
+            sql=(
+                "WITH __source__raw_orders AS (SELECT 1 AS id), "
+                "sample AS (SELECT 1 AS limit), "
+                "__expected__orders AS (SELECT sample.limit AS id FROM sample) SELECT 1"
+            ),
+            mode=SqlTestMode.MODEL,
+        ),
     ),
     ids=lambda case: case.description,
 )

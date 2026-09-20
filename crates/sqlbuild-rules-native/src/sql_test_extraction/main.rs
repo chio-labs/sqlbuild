@@ -431,7 +431,7 @@ fn projection_names(branch: &str, file: &str) -> Result<Vec<String>, String> {
         "FROM", "WHERE", "GROUP", "HAVING", "QUALIFY", "WINDOW", "ORDER", "LIMIT", "OFFSET",
         "FETCH",
     ] {
-        if let Some(position) = find_top_level_keyword(branch, select_end, keyword)? {
+        if let Some(position) = find_top_level_clause_keyword(branch, select_end, keyword)? {
             end = end.min(position);
         }
     }
@@ -866,6 +866,39 @@ fn find_top_level_keyword(sql: &str, start: usize, keyword: &str) -> Result<Opti
         index += char_len(sql, index);
     }
     Ok(None)
+}
+
+fn find_top_level_clause_keyword(
+    sql: &str,
+    start: usize,
+    keyword: &str,
+) -> Result<Option<usize>, String> {
+    let mut search_start = start;
+    while let Some(position) = find_top_level_keyword(sql, search_start, keyword)? {
+        if previous_code_byte(sql, position)? != Some(b'.') {
+            return Ok(Some(position));
+        }
+        search_start = position + keyword.len();
+    }
+    Ok(None)
+}
+
+fn previous_code_byte(sql: &str, end: usize) -> Result<Option<u8>, String> {
+    let mut previous = None;
+    let mut index = 0;
+    while index < end {
+        let next = skip_non_code(sql, index)?;
+        if next != index {
+            index = next;
+            continue;
+        }
+        let value = byte_at(sql, index);
+        if value.is_some_and(|byte| !byte.is_ascii_whitespace()) {
+            previous = value;
+        }
+        index += char_len(sql, index);
+    }
+    Ok(previous)
 }
 
 fn find_last_top_level_keyword(sql: &str, keyword: &str) -> Result<Option<usize>, String> {
