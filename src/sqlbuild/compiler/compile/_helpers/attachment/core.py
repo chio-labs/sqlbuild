@@ -249,6 +249,13 @@ class _ModelConfigScanCache:
     macro_presence: dict[int, tuple[object, bool]] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class _CachedModelHeaderColumns:
+    raw_columns: object
+    columns: tuple[SchemaColumn, ...]
+    column_locations: dict[str, SourceLocation]
+
+
 @dataclass
 class _ReusableModelConfigCache:
     defaults: DefaultsConfig
@@ -419,7 +426,7 @@ def _build_model_inputs(
         discovered_inputs.sql_hook_files
     )
     model_inputs: list[CompileModelInput] = []
-    model_header_column_cache: dict[int, tuple[object, tuple[SchemaColumn, ...]]] = {}
+    model_header_column_cache: dict[int, _CachedModelHeaderColumns] = {}
     config_scan_cache = _ModelConfigScanCache()
     reusable_config_cache = _ReusableModelConfigCache(
         defaults=discovered_inputs.project_config.defaults,
@@ -1682,7 +1689,7 @@ def build_model_header_schema_entry(
     model_schema_name: str | None = None,
     model_schema_description: str | None = None,
     audit_factories: tuple[DiscoveredAuditFactory, ...] = (),
-    column_cache: dict[int, tuple[object, tuple[SchemaColumn, ...]]] | None = None,
+    column_cache: dict[int, _CachedModelHeaderColumns] | None = None,
 ) -> SchemaModelEntry | None:
     """Normalize model-owned MODEL(...) metadata into the existing schema entry shape."""
 
@@ -1779,7 +1786,7 @@ def _parse_model_header_columns(
     raw_columns: object | None,
     file_path: Path,
     column_locations: dict[str, SourceLocation],
-    column_cache: dict[int, tuple[object, tuple[SchemaColumn, ...]]] | None = None,
+    column_cache: dict[int, _CachedModelHeaderColumns] | None = None,
 ) -> tuple[SchemaColumn, ...]:
     if raw_columns is None or column_cache is None:
         return parse_schema_columns(
@@ -1790,25 +1797,33 @@ def _parse_model_header_columns(
             column_locations=column_locations,
         )
     cache_key: int = id(raw_columns)
-    cached: tuple[object, tuple[SchemaColumn, ...]] | None = column_cache.get(cache_key)
-    if cached is None or cached[0] is not raw_columns:
+    cached: _CachedModelHeaderColumns | None = column_cache.get(cache_key)
+    if cached is None or cached.raw_columns is not raw_columns:
         parsed: tuple[SchemaColumn, ...] = parse_schema_columns(
             raw_columns=raw_columns,
             file_path=file_path,
             label="model",
             error_class=CompileInputError,
+            column_locations=column_locations,
         )
-        cached = (raw_columns, parsed)
+        cached = _CachedModelHeaderColumns(
+            raw_columns=raw_columns,
+            columns=parsed,
+            column_locations=column_locations,
+        )
         column_cache[cache_key] = cached
-    if not column_locations:
-        return cached[1]
+        return parsed
+    if cached.column_locations is column_locations or (
+        not cached.column_locations and not column_locations
+    ):
+        return cached.columns
     return tuple(
         replace(
             column,
             location=(location := column_locations.get(column.name)),
             audits=tuple(replace(audit, location=location) for audit in column.audits),
         )
-        for column in cached[1]
+        for column in cached.columns
     )
 
 

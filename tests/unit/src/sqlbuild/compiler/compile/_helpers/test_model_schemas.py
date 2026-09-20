@@ -48,6 +48,52 @@ sql_validation = true
 """
 
 
+def test_given_identical_contract_headers_when_attaching_then_each_model_keeps_its_locations(
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    model_sql: str = """
+MODEL (
+  columns (order_id (type INTEGER, audits [not_null])),
+);
+SELECT 1::INTEGER AS order_id
+""".strip()
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+sql_analysis = false
+sql_validation = false
+""".strip()
+            + "\n",
+            "models/customers.sql": model_sql,
+            "models/staging/orders.sql": model_sql,
+        },
+    )
+
+    inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discover_project_inputs(project_dir=tmp_path),
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+    )
+
+    locations: tuple[tuple[Path, Path], ...] = tuple(
+        (
+            cast(SourceLocation, model.schema_entry.columns[0].location).path,
+            cast(SourceLocation, model.schema_entry.columns[0].audits[0].location).path,
+        )
+        for model in inputs.model_inputs
+        if model.schema_entry is not None
+    )
+    assert locations == (
+        (Path("models/customers.sql"), Path("models/customers.sql")),
+        (Path("models/staging/orders.sql"), Path("models/staging/orders.sql")),
+    )
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
