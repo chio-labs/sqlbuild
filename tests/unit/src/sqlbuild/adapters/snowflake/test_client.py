@@ -569,14 +569,19 @@ def test_given_33_mixed_relations_when_getting_columns_then_uses_bulk_query(
     "test_case",
     [
         SnowflakeQualifiedColumnInspectionTestCase(
-            description="251 relations use two bounded bulk queries and merge all results",
+            description="251 relations use one bounded bulk query and merge all results",
             relation_count=251,
-            expected_statement_count=2,
+            expected_statement_count=1,
         ),
         SnowflakeQualifiedColumnInspectionTestCase(
-            description="1000 relations use five bounded bulk queries and merge all results",
+            description="1000 relations use one bounded bulk query and merge all results",
             relation_count=1000,
-            expected_statement_count=5,
+            expected_statement_count=1,
+        ),
+        SnowflakeQualifiedColumnInspectionTestCase(
+            description="2001 relations use two bounded bulk queries and merge all results",
+            relation_count=2001,
+            expected_statement_count=2,
         ),
     ],
     ids=lambda case: case.description,
@@ -591,7 +596,7 @@ def test_given_large_relation_set_when_getting_columns_then_chunks_and_merges_bu
         sorted(relations, key=lambda relation: tuple(part or "" for part in relation.identity))
     )
     connection: FakeSnowflakeMetadataSequenceConnection = build_bulk_sequence_connection(
-        relations=ordered_relations, chunk_size=200
+        relations=ordered_relations, chunk_size=2000
     )
 
     columns: dict[tuple[str | None, str | None, str], tuple[ColumnInfo, ...]] = (

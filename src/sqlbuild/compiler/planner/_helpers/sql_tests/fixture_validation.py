@@ -19,6 +19,7 @@ from sqlbuild.compiler.planner.exceptions import SqlTestFixtureValidationError
 from sqlbuild.compiler.planner.models import (
     RelationFixtureCompletion,
     RelationFixtureDiagnostic,
+    RelationFixturePlanningContext,
 )
 
 _COLLECTION_TYPES: frozenset[str] = frozenset(
@@ -36,6 +37,7 @@ def build_validated_test_fixtures(
     mock_sources: dict[str, str],
     mock_seeds: dict[str, str],
     expected_outputs: dict[str, str],
+    planning_context: RelationFixturePlanningContext | None = None,
 ) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
     """Report all statically provable missing columns and collection-type mismatches."""
 
@@ -49,6 +51,7 @@ def build_validated_test_fixtures(
         adapter=adapter,
         ordered_model_names=ordered_model_names,
         fixture_groups=fixture_groups,
+        planning_context=planning_context,
     )
     errors: list[str] = [
         _located_diagnostic(test=test, diagnostic=diagnostic)

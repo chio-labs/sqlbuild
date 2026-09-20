@@ -8,6 +8,12 @@ from sqlbuild.spec.contracts.models import SourceEntry
 
 
 @dataclass(frozen=True)
+class FixturePlanningIntegrationTestCase:
+    description: str
+    expected_sql_fragment: str
+
+
+@dataclass(frozen=True)
 class GatherWatermarkTypeTestCase:
     description: str
     declared_type: str

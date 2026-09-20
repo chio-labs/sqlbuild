@@ -41,6 +41,24 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SourceEntry
+from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
+    PlanTestChainTestCase as PlanTestChainTestCase,
+)
+
+
+@dataclass(frozen=True)
+class FixturePlanningWorkTestCase:
+    description: str
+    test_count: int
+    expected_metadata_builds: int
+    expected_analysis_calls: int
+
+
+@dataclass(frozen=True)
+class CompleteFixturePlanningTestCase:
+    description: str
+    expected_analysis_calls: int
+    expected_fixture_sql: str
 
 
 @dataclass(frozen=True)
