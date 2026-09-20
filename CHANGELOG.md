@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.110.4](https://github.com/chio-labs/sqlbuild/compare/v0.110.3...v0.110.4) (2026-09-20)
+
+
+### Bug Fixes
+
+* **planner:** avoid duplicate planning work ([#750](https://github.com/chio-labs/sqlbuild/issues/750)) ([0219c74](https://github.com/chio-labs/sqlbuild/commit/0219c744bdf89bc63bd4a7f879a8dc2a2ce403c0))
+
 ## [0.110.3](https://github.com/chio-labs/sqlbuild/compare/v0.110.2...v0.110.3) (2026-09-20)
 
 
