@@ -47,6 +47,13 @@ class SqlTestCteCacheTestCase:
 
 
 @dataclass(frozen=True)
+class NativeSqlTestExtractionParityTestCase:
+    description: str
+    sql: str
+    mode: SqlTestMode
+
+
+@dataclass(frozen=True)
 class WatermarkLimitValidationTestCase:
     description: str
     incremental_strategy: str

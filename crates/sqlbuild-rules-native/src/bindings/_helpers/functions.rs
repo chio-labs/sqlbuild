@@ -83,6 +83,12 @@ fn plan_and_render_sql_tests_json(py: Python<'_>, request_json: &str) -> PyResul
 }
 
 #[pyfunction]
+fn extract_sql_tests_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.detach(|| crate::sql_test_extraction::main::extract_batch_json(request_json))
+        .map_err(value_error)
+}
+
+#[pyfunction]
 fn load_config_json(project_dir: &str) -> PyResult<String> {
     load::load_config_json(std::path::Path::new(project_dir)).map_err(value_error)
 }
@@ -139,6 +145,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     module.add_function(wrap_pyfunction!(render_sql_test_comparisons_json, module)?)?;
     module.add_function(wrap_pyfunction!(plan_and_render_sql_tests_json, module)?)?;
+    module.add_function(wrap_pyfunction!(extract_sql_tests_json, module)?)?;
     module.add_function(wrap_pyfunction!(load_config_json, module)?)?;
     module.add_function(wrap_pyfunction!(catalogue_json, module)?)?;
     module.add_function(wrap_pyfunction!(selected_codes_json, module)?)?;
