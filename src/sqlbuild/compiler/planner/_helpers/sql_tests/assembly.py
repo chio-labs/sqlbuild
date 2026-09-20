@@ -46,6 +46,7 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     ChainStep,
     PlanWarning,
+    RelationFixturePlanningContext,
     SqlAnalysisResolvedTestSql,
     SqlTestAssertionStep,
     SqlTestPlanEntry,
@@ -133,6 +134,7 @@ def plan_test(
     adapter: BaseAdapter,
     sql_analysis_enabled: bool = False,
     validate_fixtures: bool = False,
+    fixture_planning_context: RelationFixturePlanningContext | None = None,
 ) -> tuple[SqlTestPlanEntry, tuple[PlanWarning, ...]]:
     """Build a test plan entry with chained resolution."""
 
@@ -193,6 +195,7 @@ def plan_test(
             mock_sources=mock_sources,
             mock_seeds=mock_seeds,
             expected_outputs=expected_map,
+            planning_context=fixture_planning_context,
         )
 
     warnings: list[PlanWarning] = []

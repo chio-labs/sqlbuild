@@ -123,6 +123,16 @@ class FixtureRelationMetadata:
 
 
 @dataclass(frozen=True)
+class RelationFixturePlanningContext:
+    """Project-wide fixture metadata shared across test and scenario planning."""
+
+    models_by_name: dict[str, CompiledModel]
+    relations: dict[FixtureKey, FixtureRelationMetadata]
+    authoritative_columns: dict[FixtureKey, frozenset[str]]
+    expected_types: dict[FixtureKey, dict[str, str]]
+
+
+@dataclass(frozen=True)
 class GraphNodeKey:
     """Neutral graph key matching fingerprint identity fields."""
 

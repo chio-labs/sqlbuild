@@ -20,6 +20,9 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.planner._helpers.fixtures.completion import (
+    build_relation_fixture_context,
+)
 from sqlbuild.compiler.planner._helpers.graph.loader_dag import upstream_loader_dependency_names
 from sqlbuild.compiler.planner._helpers.graph.source_load_nodes import build_source_load_entries
 from sqlbuild.compiler.planner._helpers.output.audit_entry import plan_audit
@@ -49,6 +52,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutputExtras,
     PlanProviderUsage,
     PlanWarning,
+    RelationFixturePlanningContext,
     SeedPlanEntry,
     SourceLoadPlanEntry,
     SqlTestPlanEntry,
@@ -441,12 +445,15 @@ def build_selected_test_entries(
     entries: list[SqlTestPlanEntry] = []
     warnings: list[PlanWarning] = []
     fixture_diagnostics: list[str] = []
+    fixture_planning_context: RelationFixturePlanningContext | None = None
     sql_test: CompiledSqlTest
     for sql_test in project.sql_tests:
         if not scope_overlaps(scope_deps=sql_test.scope_deps, selected_keys=selected_keys):
             continue
         if case_name is not None and sql_test.case_name != case_name:
             continue
+        if project.settings.sql_analysis and fixture_planning_context is None:
+            fixture_planning_context = build_relation_fixture_context(project=project)
         test_entry: SqlTestPlanEntry
         test_warnings: tuple[PlanWarning, ...]
         try:
@@ -456,6 +463,7 @@ def build_selected_test_entries(
                 adapter=adapter,
                 sql_analysis_enabled=project.settings.sql_analysis,
                 validate_fixtures=True,
+                fixture_planning_context=fixture_planning_context,
             )
         except SqlTestFixtureValidationError as error:
             fixture_diagnostics.extend(error.diagnostics)

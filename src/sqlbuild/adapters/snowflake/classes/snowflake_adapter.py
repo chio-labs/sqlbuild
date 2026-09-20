@@ -95,7 +95,7 @@ from sqlbuild.spec.contracts.types import TableType
 from sqlbuild.sql_values.models import SqlValue
 
 _EXACT_COLUMN_INSPECTION_LIMIT: int = 32
-_BULK_COLUMN_RELATION_CHUNK_SIZE: int = 200
+_BULK_COLUMN_RELATION_CHUNK_SIZE: int = 2_000
 
 
 class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):

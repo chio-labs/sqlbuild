@@ -31,6 +31,7 @@ from sqlbuild.compiler.planner.models import (
     FixtureRelationMetadata,
     RelationFixtureCompletion,
     RelationFixtureDiagnostic,
+    RelationFixturePlanningContext,
 )
 from sqlbuild.compiler.planner.types import ContractPolicy, FixtureGroups, FixtureKey
 from sqlbuild.compiler.references.constants import REF_PATTERN, SEED_PATTERN, SOURCE_PATTERN
@@ -47,10 +48,14 @@ def build_relation_fixture_completion(
     adapter: BaseAdapter,
     ordered_model_names: tuple[str, ...],
     fixture_groups: FixtureGroups,
+    planning_context: RelationFixturePlanningContext | None = None,
 ) -> RelationFixtureCompletion:
     """Complete required omitted columns with typed nulls unless explicitly non-nullable."""
 
-    model_map: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    context: RelationFixturePlanningContext = planning_context or build_relation_fixture_context(
+        project=project
+    )
+    model_map: dict[str, CompiledModel] = context.models_by_name
     fixture_sql_by_key: dict[FixtureKey, str] = {}
     inferred_by_fixture: dict[FixtureKey, tuple[InferredColumn, ...]] = {}
     for resource_type, fixtures in fixture_groups:
@@ -64,21 +69,23 @@ def build_relation_fixture_completion(
             if inferred is not None:
                 inferred_by_fixture[key] = inferred
 
-    relations: dict[FixtureKey, FixtureRelationMetadata] = _fixture_relation_metadata(
-        project=project,
-        model_map=model_map,
+    relations: dict[FixtureKey, FixtureRelationMetadata] = context.relations
+    fixture_keys_requiring_analysis: frozenset[FixtureKey] = _fixture_keys_requiring_analysis(
+        inferred_by_fixture=inferred_by_fixture,
+        authoritative_columns=context.authoritative_columns,
     )
     required: dict[FixtureKey, dict[str, set[str]]]
     star_fixture_keys: frozenset[FixtureKey]
     required, star_fixture_keys = _required_fixture_columns(
         ordered_model_names=ordered_model_names,
         model_map=model_map,
-        fixture_keys=frozenset(fixture_sql_by_key),
+        fixture_keys=fixture_keys_requiring_analysis,
         relations=relations,
+        authoritative_columns=context.authoritative_columns,
         adapter=adapter,
     )
     expected_types: dict[FixtureKey, dict[str, str]] = _expected_fixture_types(
-        relations=relations,
+        base_expected_types=context.expected_types,
         ordered_model_names=ordered_model_names,
         model_map=model_map,
     )
@@ -177,23 +184,61 @@ def build_relation_fixture_completion(
     )
 
 
+def _fixture_keys_requiring_analysis(
+    *,
+    inferred_by_fixture: dict[FixtureKey, tuple[InferredColumn, ...]],
+    authoritative_columns: dict[FixtureKey, frozenset[str]],
+) -> frozenset[FixtureKey]:
+    required: set[FixtureKey] = set()
+    for key, inferred in inferred_by_fixture.items():
+        expected_names: frozenset[str] | None = authoritative_columns.get(key)
+        supplied_names: frozenset[str] = frozenset(column.name.casefold() for column in inferred)
+        if expected_names is None or not expected_names.issubset(supplied_names):
+            required.add(key)
+    return frozenset(required)
+
+
+def build_relation_fixture_context(*, project: CompiledProject) -> RelationFixturePlanningContext:
+    """Build immutable project-wide fixture metadata once per planning invocation."""
+
+    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    relations: dict[FixtureKey, FixtureRelationMetadata] = _fixture_relation_metadata(
+        project=project,
+        model_map=models_by_name,
+    )
+    authoritative_columns: dict[FixtureKey, frozenset[str]] = _authoritative_fixture_columns(
+        relations=relations
+    )
+    return RelationFixturePlanningContext(
+        models_by_name=models_by_name,
+        relations=relations,
+        authoritative_columns=authoritative_columns,
+        expected_types=_base_expected_fixture_types(relations=relations),
+    )
+
+
+def _authoritative_fixture_columns(
+    *, relations: dict[FixtureKey, FixtureRelationMetadata]
+) -> dict[FixtureKey, frozenset[str]]:
+    authoritative: dict[FixtureKey, frozenset[str]] = {}
+    for key, relation in relations.items():
+        if relation.authoritative_names:
+            authoritative[key] = frozenset(column.name.casefold() for column in relation.columns)
+    return authoritative
+
+
 def _required_fixture_columns(
     *,
     ordered_model_names: tuple[str, ...],
     model_map: dict[str, CompiledModel],
     fixture_keys: frozenset[FixtureKey],
     relations: dict[FixtureKey, FixtureRelationMetadata],
+    authoritative_columns: dict[FixtureKey, frozenset[str]],
     adapter: BaseAdapter,
 ) -> tuple[dict[FixtureKey, dict[str, set[str]]], frozenset[FixtureKey]]:
     required: dict[FixtureKey, dict[str, set[str]]] = {}
     star_fixture_keys: set[FixtureKey] = set()
-    authoritative_columns: dict[FixtureKey, frozenset[str]] = {}
-    for key, relation in relations.items():
-        if not relation.authoritative_names:
-            continue
-        authoritative_columns[key] = frozenset(
-            column.name.casefold() for column in relation.columns
-        )
+    dialect: str | None = adapter.expression_inference_profile().sql_analysis_dialect
     for model_name in ordered_model_names:
         model: CompiledModel | None = model_map.get(model_name)
         if model is None:
@@ -203,7 +248,7 @@ def _required_fixture_columns(
             references=model.references,
             fast_lineage=model.fast_lineage_columns or (),
             fixture_keys=fixture_keys,
-            dialect=adapter.expression_inference_profile().sql_analysis_dialect,
+            dialect=dialect,
         ):
             key: FixtureKey = (
                 CompiledResourceType(upstream.resource_type),
@@ -451,22 +496,18 @@ def _model_fixture_metadata(*, model: CompiledModel) -> FixtureRelationMetadata:
 
 def _expected_fixture_types(
     *,
-    relations: dict[FixtureKey, FixtureRelationMetadata],
+    base_expected_types: dict[FixtureKey, dict[str, str]],
     ordered_model_names: tuple[str, ...],
     model_map: dict[str, CompiledModel],
 ) -> dict[FixtureKey, dict[str, str]]:
-    expected_types: dict[FixtureKey, dict[str, str]] = {}
-    for key, relation in relations.items():
-        column_types: dict[str, str] = {}
-        for column in relation.columns:
-            if column.type is not None:
-                column_types[column.name.casefold()] = column.type
-        expected_types[key] = column_types
+    expected_types: dict[FixtureKey, dict[str, str]] = dict(base_expected_types)
     for model_name in ordered_model_names:
         model: CompiledModel | None = model_map.get(model_name)
         if model is None:
             continue
-        model_types: dict[str, str] = expected_types[(CompiledResourceType.MODEL, model_name)]
+        model_key: FixtureKey = (CompiledResourceType.MODEL, model_name)
+        model_types: dict[str, str] = dict(expected_types[model_key])
+        expected_types[model_key] = model_types
         for lineage_column in model.fast_lineage_columns or ():
             if lineage_column.transform_kind != ColumnTransformKind.DIRECT:
                 continue
@@ -481,6 +522,19 @@ def _expected_fixture_types(
                 model_types.setdefault(
                     lineage_column.output_column.casefold(), upstream_types.pop()
                 )
+    return expected_types
+
+
+def _base_expected_fixture_types(
+    *, relations: dict[FixtureKey, FixtureRelationMetadata]
+) -> dict[FixtureKey, dict[str, str]]:
+    expected_types: dict[FixtureKey, dict[str, str]] = {}
+    for key, relation in relations.items():
+        column_types: dict[str, str] = {}
+        for column in relation.columns:
+            if column.type is not None:
+                column_types[column.name.casefold()] = column.type
+        expected_types[key] = column_types
     return expected_types
 
 
