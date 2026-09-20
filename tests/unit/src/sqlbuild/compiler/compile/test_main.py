@@ -1115,6 +1115,39 @@ select 1
             expected_audit_references=(),
         ),
         BuildCompileInputsTestCase(
+            description="keeps default model context distinct across empty headers",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+
+[defaults]
+schema = "${CTX:model.name}_schema"
+""".strip()
+                + "\n",
+                "models/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/customers.sql": "MODEL ();\n\nselect 2\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None, None),
+            expected_model_config_values=(
+                {"schema": "customers_schema"},
+                {"schema": "orders_schema"},
+            ),
+            expected_model_query_sqls=("select 2", "select 1"),
+            expected_model_path_defaults=(None, None),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_references=((), ()),
+            expected_audit_references=(),
+        ),
+        BuildCompileInputsTestCase(
             description="expands helper functions in config interpolation",
             repo_files=base_repo_files()
             | {

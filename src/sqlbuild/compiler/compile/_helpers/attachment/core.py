@@ -249,6 +249,59 @@ class _ModelConfigScanCache:
     macro_presence: dict[int, tuple[object, bool]] = field(default_factory=dict)
 
 
+@dataclass
+class _ReusableModelConfigCache:
+    defaults: DefaultsConfig
+    path_defaults: dict[str, dict[str, object]]
+    target_config: TargetConfig | None
+    reusable_by_path_default: dict[str | None, bool] = field(default_factory=dict)
+    configs: dict[str | None, CompileModelConfig] = field(default_factory=dict)
+
+    def get(
+        self,
+        *,
+        matched_path_default: str | None,
+        model_header_values: dict[str, object],
+    ) -> CompileModelConfig | None:
+        if model_header_values or not self._is_reusable(matched_path_default):
+            return None
+        cached: CompileModelConfig | None = self.configs.get(matched_path_default)
+        if cached is None:
+            return None
+        return replace(cached, values=dict(cached.values))
+
+    def remember(
+        self,
+        *,
+        matched_path_default: str | None,
+        model_header_values: dict[str, object],
+        config: CompileModelConfig,
+    ) -> None:
+        if model_header_values or not self._is_reusable(matched_path_default):
+            return
+        self.configs[matched_path_default] = config
+
+    def _is_reusable(self, matched_path_default: str | None) -> bool:
+        cached: bool | None = self.reusable_by_path_default.get(matched_path_default)
+        if cached is not None:
+            return cached
+        layered_values: dict[str, object] = build_layered_model_values(
+            defaults=self.defaults,
+            path_defaults=self.path_defaults,
+            matched_path_default=matched_path_default,
+            model_header_values={},
+        )
+        target_namespace_values: tuple[object, object] = (
+            None if self.target_config is None else self.target_config.database,
+            None if self.target_config is None else self.target_config.schema,
+        )
+        reusable: bool = not contains_template_data(
+            (layered_values, target_namespace_values)
+        )
+        self.reusable_by_path_default[matched_path_default] = reusable
+        return reusable
+
+
 def build_model_inputs(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -322,6 +375,11 @@ def _build_model_inputs(
     model_inputs: list[CompileModelInput] = []
     model_header_column_cache: dict[int, tuple[object, tuple[SchemaColumn, ...]]] = {}
     config_scan_cache = _ModelConfigScanCache()
+    reusable_config_cache = _ReusableModelConfigCache(
+        defaults=discovered_inputs.project_config.defaults,
+        path_defaults=discovered_inputs.project_config.path_defaults,
+        target_config=target_config,
+    )
     declaration_cache: _VisibleModelDeclarationCache = _VisibleModelDeclarationCache.build(context)
     model_file: DiscoveredSqlModelFile
     for model_file in discovered_inputs.model_files:
@@ -335,19 +393,29 @@ def _build_model_inputs(
             model_file=model_file,
             path_defaults=discovered_inputs.project_config.path_defaults,
         )
-        effective_config: CompileModelConfig = build_model_config(
-            defaults=discovered_inputs.project_config.defaults,
-            path_defaults=discovered_inputs.project_config.path_defaults,
+        effective_config: CompileModelConfig | None = reusable_config_cache.get(
             matched_path_default=matched_path_default,
             model_header_values=model_file.header_values,
-            effective_vars=effective_vars,
-            target_config=target_config,
-            model_name=model_file.file_path.stem,
-            effective_target_name=effective_target_name,
-            run_id=run_id,
-            materialization_defaults=discovered_inputs.project_config.materialization_defaults,
-            scan_cache=config_scan_cache,
         )
+        if effective_config is None:
+            effective_config = build_model_config(
+                defaults=discovered_inputs.project_config.defaults,
+                path_defaults=discovered_inputs.project_config.path_defaults,
+                matched_path_default=matched_path_default,
+                model_header_values=model_file.header_values,
+                effective_vars=effective_vars,
+                target_config=target_config,
+                model_name=model_file.file_path.stem,
+                effective_target_name=effective_target_name,
+                run_id=run_id,
+                materialization_defaults=discovered_inputs.project_config.materialization_defaults,
+                scan_cache=config_scan_cache,
+            )
+            reusable_config_cache.remember(
+                matched_path_default=matched_path_default,
+                model_header_values=model_file.header_values,
+                config=effective_config,
+            )
         model_schema: ModelSchemaDeclaration | None = _resolve_model_schema(
             values=effective_config.values,
             model_name=model_file.file_path.stem,
