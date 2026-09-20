@@ -22,6 +22,9 @@ from sqlbuild.compiler.graph.main._build_lineage_downstream_deps import (
 from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import (
     build_lineage_upstream_deps,
 )
+from sqlbuild.compiler.pipeline._helpers.analysis_selection import (
+    resolve_configured_rule_selection,
+)
 from sqlbuild.compiler.pipeline._helpers.deferred_locations import (
     build_deferred_locations,
     gather_deferred_relations,
@@ -106,7 +109,11 @@ def run_compile_pipeline(
         config=rules_config,
         project_dir=project_dir,
         dialect=adapter.sql_analysis_dialect() or "generic",
-        selected_keys=None,
+        selected_keys=resolve_configured_rule_selection(
+            options=resolved_options,
+            discovered_inputs=discovered_inputs,
+            project=project,
+        ),
     )
     if on_progress is not None:
         on_progress(
