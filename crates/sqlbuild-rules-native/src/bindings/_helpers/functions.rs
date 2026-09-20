@@ -36,19 +36,49 @@ fn format_sql_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
 
 #[pyfunction(name = "validate_sql_with_schema_json")]
 fn schema_validation_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::semantic_validation::validation_json(request_json))
+    py.detach(|| crate::semantic_validation::main::validation_json(request_json))
         .map_err(value_error)
 }
 
 #[pyfunction(name = "validate_sql_with_schemas_json")]
 fn schema_validations_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::semantic_validation::validations_json(request_json))
+    py.detach(|| crate::semantic_validation::main::validations_json(request_json))
         .map_err(value_error)
 }
 
 #[pyfunction]
 fn analyze_sql_uses_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::semantic_usage::analyze_json(request_json))
+    py.detach(|| crate::semantic_usage::main::analyze_json(request_json))
+        .map_err(value_error)
+}
+
+#[pyfunction]
+fn analyze_queries_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.detach(|| crate::query_analysis::main::analyze_json(request_json))
+        .map_err(value_error)
+}
+
+#[pyfunction]
+fn analyze_project_queries_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.detach(|| crate::query_analysis::main::analyze_project_json(request_json))
+        .map_err(value_error)
+}
+
+#[pyfunction]
+fn analyze_project_queries_compact_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.detach(|| crate::query_analysis::main::analyze_project_compact_json(request_json))
+        .map_err(value_error)
+}
+
+#[pyfunction]
+fn render_sql_test_comparisons_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.detach(|| crate::sql_test_rendering::main::render_json(request_json))
+        .map_err(value_error)
+}
+
+#[pyfunction]
+fn plan_and_render_sql_tests_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.detach(|| crate::sql_test_planning::main::plan_and_render_json(request_json))
         .map_err(value_error)
 }
 
@@ -101,6 +131,14 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(schema_validation_json, module)?)?;
     module.add_function(wrap_pyfunction!(schema_validations_json, module)?)?;
     module.add_function(wrap_pyfunction!(analyze_sql_uses_json, module)?)?;
+    module.add_function(wrap_pyfunction!(analyze_queries_json, module)?)?;
+    module.add_function(wrap_pyfunction!(analyze_project_queries_json, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        analyze_project_queries_compact_json,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(render_sql_test_comparisons_json, module)?)?;
+    module.add_function(wrap_pyfunction!(plan_and_render_sql_tests_json, module)?)?;
     module.add_function(wrap_pyfunction!(load_config_json, module)?)?;
     module.add_function(wrap_pyfunction!(catalogue_json, module)?)?;
     module.add_function(wrap_pyfunction!(selected_codes_json, module)?)?;

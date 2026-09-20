@@ -25,3 +25,6 @@ pub(crate) const LOGS_DIRECTORY: &str = "logs";
 pub(crate) const GIT_DIRECTORY: &str = ".git";
 pub(crate) const RULES_DIRECTORY: &str = "rules";
 pub(crate) const PYTHON_EXTENSION: &str = "py";
+pub(crate) const SQL_WILDCARD: &str = "*";
+pub(crate) const UNKNOWN_SQL_TYPE: &str = "UNKNOWN";
+pub(crate) const VARCHAR_SQL_TYPE: &str = "VARCHAR";

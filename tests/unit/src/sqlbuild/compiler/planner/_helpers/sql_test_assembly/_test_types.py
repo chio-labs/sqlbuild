@@ -66,3 +66,10 @@ class SqlAnalysisDialectTestCase:
     dialect: str
     expected_sql_fragment: str
     expected_absent_sql_fragment: str
+
+
+@dataclass(frozen=True)
+class NativePlanningDifferentialTestCase:
+    description: str
+    planning_case: PlanTestChainTestCase
+    sql_analysis_enabled: bool = True

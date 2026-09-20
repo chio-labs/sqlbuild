@@ -6,82 +6,90 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, TextIO
+from typing import TYPE_CHECKING, Any, TextIO
 
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.classes.direct_python_lifecycle_state import (
-    DirectPythonLifecycleState,
-)
 from sqlbuild.cli.commands.types import (
     CompileLineageMode,
-    DagCommandHandler,
     DebugCheckStatus,
-    DebugCommandHandler,
-    FormatCommandHandler,
     FreshnessSourceStatus,
-    LineageCommandHandler,
     PlaygroundTemplate,
-    QueryCommandHandler,
-    ReconcileCommandHandler,
-    ScopeCommandHandler,
-    SkillsUpdateCommandHandler,
-    StateCommandHandler,
-)
-from sqlbuild.cli.progress.classes.connection_progress_reporter import (
-    ConnectionProgressReporter,
-)
-from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
-    NestedCommandProgressCallbacks,
-)
-from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
-from sqlbuild.compiler.auditing.types import AuditOutcome
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledSqlScenario,
-    CompilerDiagnostic,
-)
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredCheckFunction,
-    DiscoveredProjectInputs,
-)
-from sqlbuild.compiler.lineage.models import (
-    ColumnLineageEdge,
-    ProjectColumnLineage,
-    QualifiedLineageColumn,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
-from sqlbuild.compiler.pipeline.models import (
-    ClonePipelineResult,
-    CompilePipelineResult,
-    ProjectGraph,
-    PythonPlanEntry,
-)
-from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
-from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 from sqlbuild.cost.types import CostStatus
-from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
-from sqlbuild.executor.clone.models import CloneExecutionResult
-from sqlbuild.executor.diff.models import DiffExecutionResult
-from sqlbuild.executor.janitor.models import JanitorPlan
-from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
-from sqlbuild.integrations.dbt.models import DbtInitRequest
-from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.provider.main.runtime import ProviderContainer
-from sqlbuild.python_nodes.models import SqlResourceRef
-from sqlbuild.runtime.contracts.types import NodeStartCallback
-from sqlbuild.spec.contracts.models import CostConfig, ExecutionLimitsConfig, SourceEntry
-from sqlbuild.virtual.executor.models import VirtualBuildPipelineResult
-from sqlbuild.virtual.state.models import (
-    CheckpointRetentionInspection,
-    DetachedVirtualEnvironmentInspection,
-    ExpiredVirtualEnvironmentInspection,
-    PhysicalRelationRecord,
-    StateJanitorInspection,
-)
+from sqlbuild.spec.contracts.models import ExecutionLimitsConfig
+
+if TYPE_CHECKING:
+    from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+    from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
+    from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
+    from sqlbuild.cli.commands.classes.direct_python_lifecycle_state import (
+        DirectPythonLifecycleState,
+    )
+    from sqlbuild.cli.commands.types import (
+        DagCommandHandler,
+        DebugCommandHandler,
+        FormatCommandHandler,
+        LineageCommandHandler,
+        QueryCommandHandler,
+        ReconcileCommandHandler,
+        ScopeCommandHandler,
+        SkillsUpdateCommandHandler,
+        StateCommandHandler,
+    )
+    from sqlbuild.cli.progress.classes.audit_progress_reporter import AuditProgressReporter
+    from sqlbuild.cli.progress.classes.connection_progress_reporter import (
+        ConnectionProgressReporter,
+    )
+    from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
+        NestedCommandProgressCallbacks,
+    )
+    from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
+    from sqlbuild.compiler.auditing.types import AuditOutcome
+    from sqlbuild.compiler.compile.models import (
+        CompiledObjectKey,
+        CompiledProject,
+        CompiledSqlScenario,
+        CompilerDiagnostic,
+    )
+    from sqlbuild.compiler.discovery.models import (
+        DiscoveredCheckFunction,
+        DiscoveredProjectInputs,
+    )
+    from sqlbuild.compiler.lineage.models import (
+        ColumnLineageEdge,
+        ProjectColumnLineage,
+        QualifiedLineageColumn,
+    )
+    from sqlbuild.compiler.pipeline.models import (
+        ClonePipelineResult,
+        CompilePipelineResult,
+        ProjectGraph,
+        PythonPlanEntry,
+    )
+    from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
+    from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
+    from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
+    from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
+    from sqlbuild.executor.clone.models import CloneExecutionResult
+    from sqlbuild.executor.diff.models import DiffExecutionResult
+    from sqlbuild.executor.janitor.models import JanitorPlan
+    from sqlbuild.executor.load.models import LoadExecutionResult
+    from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
+    from sqlbuild.integrations.dbt.models import DbtInitRequest
+    from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+    from sqlbuild.provider.main.runtime import ProviderContainer
+    from sqlbuild.python_nodes.models import SqlResourceRef
+    from sqlbuild.runtime.contracts.types import NodeStartCallback
+    from sqlbuild.spec.contracts.models import CostConfig, SourceEntry
+    from sqlbuild.virtual.executor.models import VirtualBuildPipelineResult
+    from sqlbuild.virtual.state.models import (
+        CheckpointRetentionInspection,
+        DetachedVirtualEnvironmentInspection,
+        ExpiredVirtualEnvironmentInspection,
+        PhysicalRelationRecord,
+        StateJanitorInspection,
+    )
 
 
 @dataclass(frozen=True)
@@ -1563,12 +1571,3 @@ class CliEntrypointHandlers:
     run_rules: Callable[[RulesCommandRequest], int]
     run_scope: ScopeCommandHandler
     run_contract: Callable[[ContractCommandRequest], int] | None = None
-
-
-from sqlbuild.cli.commands.classes.build_progress_callbacks import (  # noqa: E402,F401
-    BuildProgressCallbacks,
-)
-from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace  # noqa: E402,F401
-from sqlbuild.cli.progress.classes.audit_progress_reporter import (  # noqa: E402,F401
-    AuditProgressReporter,
-)

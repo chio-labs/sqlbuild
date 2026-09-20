@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass, field
 from typing import Any, cast
 
+import orjson
+
+import sqlbuild._native as _native
 from sqlbuild.adapter.contract.constants import POLYGLOT_CUSTOM_TYPE_NAME
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule
@@ -28,6 +32,7 @@ from sqlbuild.compiler.compile.constants import (
     UNKNOWN_SQL_TYPE_NAME,
 )
 from sqlbuild.compiler.compile.models import (
+    CompactLineageFacts,
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
     CompileSqlReference,
@@ -244,6 +249,7 @@ from sqlbuild.compiler.sql_analysis.constants import (
 from sqlbuild.compiler.sql_analysis.constants import (
     TIMESTAMP_WITH_TIME_ZONE_SQL_TYPE_NAME as _TIMESTAMP_WITH_TIME_ZONE_SQL_TYPE_NAME,
 )
+from sqlbuild.compiler.sql_analysis.exceptions import SqlAnalysisBoundaryError
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
 from sqlbuild.compiler.sql_analysis.main._normalize_for_polyglot import (
     normalize_sql_for_polyglot,
@@ -254,6 +260,7 @@ from sqlbuild.compiler.sql_analysis.models import (
     SqlBindingDiagnostic,
     SqlSchemaValidationRequest,
 )
+from sqlbuild.compiler.sql_analysis.types import NativeQueryAnalysisModule
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
@@ -270,6 +277,31 @@ _TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
     r'"([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()'
 )
 _PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(r"@@@(\w+)")
+
+
+@dataclass(frozen=True)
+class NativeCompactAnalysis:
+    """One native compact result prepared for Python contract projection."""
+
+    cleaned_sql: str
+    analysis: dict[str, Any] | None
+    projected: bool = False
+    binding_diagnostics: tuple[SqlBindingDiagnostic, ...] | None = None
+    compact_rows: list[object] | None = None
+    string_pool: tuple[str, ...] = ()
+    compact_column_cache: dict[tuple[int, int | None, int], InferredColumn] | None = None
+    compact_template_index: int | None = None
+    compact_fact_cache: dict[int, _CompactProjectedFacts] | None = None
+    resource_name_indexes: dict[int, int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class _CompactProjectedFacts:
+    columns: tuple[InferredColumn, ...]
+    lineage_rows: tuple[
+        tuple[int, int, int, tuple[tuple[int, int, int], ...]],
+        ...,
+    ]
 
 
 def infer_columns_with_sql_analysis(
@@ -340,20 +372,48 @@ def analyze_columns_and_lineage_with_polyglot(
     allow_compact_analysis: bool = False,
     binding_schema: dict[str, dict[str, str]] | None = None,
     recover_cte_facts: bool = False,
+    precomputed: NativeCompactAnalysis | None = None,
 ) -> PolyglotAnalysisResult:
     """Infer columns and compact lineage facts from one Polyglot parse."""
 
-    polyglot_module: Any = import_polyglot_sql()
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
-    cleaned_sql: str = _replace_refs_with_stubs(
-        query_sql=query_sql,
-        dialect=profile.sql_analysis_dialect,
-    )
-    if placeholders:
-        cleaned_sql = substitute_placeholder_defaults(
-            query_sql=cleaned_sql, placeholders=placeholders
+    cleaned_sql: str = (
+        precomputed.cleaned_sql
+        if precomputed is not None
+        else _cleaned_analysis_sql(
+            query_sql=query_sql,
+            placeholders=placeholders,
+            dialect=profile.sql_analysis_dialect,
         )
-    compact_analysis: (
+    )
+    if precomputed is not None and precomputed.projected:
+        if precomputed.analysis is None and precomputed.compact_rows is None:
+            return PolyglotAnalysisResult(
+                analysis_succeeded=False,
+                binding_diagnostics=precomputed.binding_diagnostics or (),
+                binding_validated=binding_schema is not None,
+            )
+        return _projected_analysis_result(
+            analysis=precomputed.analysis,
+            compact_rows=precomputed.compact_rows,
+            string_pool=precomputed.string_pool,
+            column_cache=precomputed.compact_column_cache,
+            template_index=precomputed.compact_template_index,
+            fact_cache=precomputed.compact_fact_cache,
+            resource_name_indexes=precomputed.resource_name_indexes,
+            binding_diagnostics=(
+                precomputed.binding_diagnostics
+                if precomputed.binding_diagnostics is not None
+                else _validate_complete_binding_schema(
+                    cleaned_sql=cleaned_sql,
+                    dialect=profile.sql_analysis_dialect,
+                    binding_schema=binding_schema,
+                )
+            ),
+            binding_validated=binding_schema is not None,
+        )
+    polyglot_module: Any = import_polyglot_sql()
+    compact_result: (
         tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | None
     ) = _analyze_columns_and_lineage_with_compact_polyglot(
         polyglot_module=polyglot_module,
@@ -365,17 +425,22 @@ def analyze_columns_and_lineage_with_polyglot(
         inference_profile=profile,
         allow_compact_analysis=allow_compact_analysis,
         recover_cte_facts=recover_cte_facts,
+        analysis=precomputed.analysis if precomputed is not None else None,
     )
-    if compact_analysis is not None:
+    if compact_result is not None:
         return PolyglotAnalysisResult(
             analysis_succeeded=True,
-            columns=compact_analysis[0],
-            lineage_columns=compact_analysis[1],
-            has_star=compact_analysis[2],
-            binding_diagnostics=_validate_complete_binding_schema(
-                cleaned_sql=cleaned_sql,
-                dialect=profile.sql_analysis_dialect,
-                binding_schema=binding_schema,
+            columns=compact_result[0],
+            lineage_columns=compact_result[1],
+            has_star=compact_result[2],
+            binding_diagnostics=(
+                precomputed.binding_diagnostics
+                if precomputed is not None and precomputed.binding_diagnostics is not None
+                else _validate_complete_binding_schema(
+                    cleaned_sql=cleaned_sql,
+                    dialect=profile.sql_analysis_dialect,
+                    binding_schema=binding_schema,
+                )
             ),
             binding_validated=binding_schema is not None,
         )
@@ -404,13 +469,505 @@ def analyze_columns_and_lineage_with_polyglot(
         columns=columns,
         lineage_columns=lineage_columns,
         has_star=has_star,
-        binding_diagnostics=_validate_complete_binding_schema(
-            cleaned_sql=cleaned_sql,
-            dialect=profile.sql_analysis_dialect,
-            binding_schema=binding_schema,
+        binding_diagnostics=(
+            precomputed.binding_diagnostics
+            if precomputed is not None and precomputed.binding_diagnostics is not None
+            else _validate_complete_binding_schema(
+                cleaned_sql=cleaned_sql,
+                dialect=profile.sql_analysis_dialect,
+                binding_schema=binding_schema,
+            )
         ),
         binding_validated=binding_schema is not None,
     )
+
+
+def analyze_queries_with_compact_polyglot_batch(  # noqa: PLR0915
+    *,
+    query_sqls: tuple[str, ...],
+    references: tuple[tuple[CompileSqlReference, ...], ...],
+    placeholders: tuple[dict[str, str] | None, ...],
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
+    column_types_by_table: dict[str, dict[str, str]],
+    inference_profile: ExpressionInferenceProfile,
+    recover_cte_facts: tuple[bool, ...],
+) -> tuple[NativeCompactAnalysis, ...]:
+    """Analyze rendered SQL in one bounded native call, preserving input order."""
+
+    if not (len(query_sqls) == len(references) == len(placeholders) == len(recover_cte_facts)):
+        raise ValueError("compact query-analysis batch inputs must have equal lengths")
+    dialect: str | None = inference_profile.sql_analysis_dialect
+    prepared: list[str] = []
+    queries: list[dict[str, object]] = []
+    query_indexes: dict[tuple[str, str, bytes | None], int] = {}
+    templates: list[dict[str, object]] = []
+    template_indexes: dict[
+        tuple[
+            int,
+            tuple[tuple[str, str], ...],
+            tuple[tuple[str, str], ...],
+            tuple[str, ...],
+            bool,
+        ],
+        int,
+    ] = {}
+    projections: list[dict[str, object]] = []
+    function_return_types: dict[str, str] = dict(inference_profile.function_return_types)
+    for query_sql, query_references, query_placeholders, query_recover_cte_facts in zip(
+        query_sqls, references, placeholders, recover_cte_facts, strict=True
+    ):
+        cleaned_sql: str = _cleaned_analysis_sql(
+            query_sql=query_sql,
+            placeholders=query_placeholders,
+            dialect=dialect,
+        )
+        lineage_references: dict[str, tuple[CompiledResourceType, str]] = _lineage_reference_map(
+            query_references
+        )
+        canonical_stubs: dict[str, str] = {
+            name: f"__sqlbuild_project_input_{index}"
+            for index, name in enumerate(lineage_references)
+        }
+        analysis_sql: str = _cleaned_analysis_sql(
+            query_sql=query_sql,
+            placeholders=query_placeholders,
+            dialect=dialect,
+            relation_stubs=canonical_stubs,
+        )
+        query: dict[str, object] = {
+            "sql": analysis_sql,
+            "dialect": dialect or "generic",
+        }
+        schema: dict[str, object] | None = _compact_analysis_schema(
+            column_nullability_by_table=column_nullability_by_table,
+            column_types_by_table=column_types_by_table,
+            table_names=frozenset(
+                _analysis_reference_name(reference) for reference in query_references
+            ),
+            table_name_aliases=canonical_stubs,
+        )
+        if schema is not None:
+            query["schema"] = schema
+        query_key = (
+            analysis_sql,
+            dialect or "generic",
+            (orjson.dumps(schema, option=orjson.OPT_SORT_KEYS) if schema is not None else None),
+        )
+        query_index: int | None = query_indexes.get(query_key)
+        if query_index is None:
+            query_index = len(queries)
+            query_indexes[query_key] = query_index
+            queries.append(query)
+        declared_column_order: tuple[str, ...] = (
+            tuple(
+                column_nullability_by_table.get(_analysis_reference_name(query_references[0]), {})
+            )
+            if len(query_references) == 1
+            else ()
+        )
+        reference_types: tuple[tuple[str, str], ...] = tuple(
+            (canonical_stubs[name], resource_type.value)
+            for name, (resource_type, _) in lineage_references.items()
+        )
+        template_key = (
+            query_index,
+            reference_types,
+            tuple(function_return_types.items()),
+            declared_column_order,
+            query_recover_cte_facts,
+        )
+        template_index: int | None = template_indexes.get(template_key)
+        if template_index is None:
+            template_index = len(templates)
+            template_indexes[template_key] = template_index
+            templates.append(
+                {
+                    "queryIndex": query_index,
+                    "references": {
+                        name: {
+                            "resourceType": resource_type,
+                            "resourceName": name,
+                        }
+                        for name, resource_type in reference_types
+                    },
+                    "functionReturnTypes": function_return_types,
+                    "declaredColumnOrder": list(declared_column_order),
+                    "recoverCteFacts": query_recover_cte_facts,
+                }
+            )
+        projections.append(
+            {
+                "templateIndex": template_index,
+                "resourceNames": {
+                    canonical_stubs[name]: resource_name
+                    for name, (_, resource_name) in lineage_references.items()
+                },
+            }
+        )
+        prepared.append(cleaned_sql)
+    response_payload: object = orjson.loads(
+        cast(NativeQueryAnalysisModule, _native).analyze_project_queries_compact_json(
+            orjson.dumps(
+                {
+                    "queries": queries,
+                    "templates": templates,
+                    "projections": projections,
+                    "workers": 4,
+                },
+                option=orjson.OPT_SORT_KEYS,
+            ).decode()
+        )
+    )
+    if not isinstance(response_payload, dict):
+        raise SqlAnalysisBoundaryError(
+            "native compact query analysis returned an invalid batch response"
+        )
+    raw_strings: object = response_payload.get("strings")
+    templates: object = response_payload.get("templates")
+    responses: object = response_payload.get("analyses")
+    if (
+        not isinstance(raw_strings, list)
+        or not all(isinstance(value, str) for value in raw_strings)
+        or not isinstance(templates, list)
+        or not isinstance(responses, list)
+        or len(responses) != len(prepared)
+    ):
+        raise SqlAnalysisBoundaryError(
+            "native compact query analysis returned an invalid batch response"
+        )
+    string_pool: tuple[str, ...] = tuple(cast(list[str], raw_strings))
+    column_cache: dict[tuple[int, int | None, int], InferredColumn] = {}
+    fact_cache: dict[int, _CompactProjectedFacts] = {}
+    results: list[NativeCompactAnalysis] = []
+    for cleaned_sql, response in zip(prepared, responses, strict=True):
+        if (
+            isinstance(response, list)
+            and len(response) == 2
+            and isinstance(response[0], int)
+            and not isinstance(response[0], bool)
+            and isinstance(response[1], list)
+        ):
+            template_index: int = response[0]
+            if template_index < 0:
+                raise SqlAnalysisBoundaryError(
+                    "native compact query analysis returned an invalid template index"
+                )
+            try:
+                template: object = templates[template_index]
+            except IndexError as error:
+                raise SqlAnalysisBoundaryError(
+                    "native compact query analysis returned an invalid template index"
+                ) from error
+            if isinstance(template, str):
+                log_debug_event(
+                    logger=_DEBUG_LOGGER,
+                    message="native compact query analysis failed",
+                    sqlbuild_error=template,
+                )
+                results.append(
+                    NativeCompactAnalysis(cleaned_sql=cleaned_sql, analysis=None, projected=True)
+                )
+                continue
+            if not (
+                isinstance(template, list)
+                and len(template) == 2
+                and isinstance(template[0], list)
+                and isinstance(template[1], bool)
+            ):
+                raise SqlAnalysisBoundaryError(
+                    "native compact query analysis returned an invalid template"
+                )
+            resource_name_indexes: dict[int, int] = {}
+            for raw_mapping in response[1]:
+                if not (
+                    isinstance(raw_mapping, list)
+                    and len(raw_mapping) == 2
+                    and all(
+                        isinstance(value, int) and not isinstance(value, bool)
+                        for value in raw_mapping
+                    )
+                ):
+                    raise SqlAnalysisBoundaryError(
+                        "native compact query analysis returned an invalid resource mapping"
+                    )
+                canonical_index, resource_index = cast(tuple[int, int], tuple(raw_mapping))
+                try:
+                    _ = string_pool[canonical_index]
+                    _ = string_pool[resource_index]
+                except IndexError as error:
+                    raise SqlAnalysisBoundaryError(
+                        "native compact query analysis returned an out-of-range resource index"
+                    ) from error
+                resource_name_indexes[canonical_index] = resource_index
+            results.append(
+                NativeCompactAnalysis(
+                    cleaned_sql=cleaned_sql,
+                    analysis={"hasStar": template[1]},
+                    projected=True,
+                    compact_rows=cast(list[object], template[0]),
+                    string_pool=string_pool,
+                    compact_column_cache=column_cache,
+                    compact_template_index=template_index,
+                    compact_fact_cache=fact_cache,
+                    resource_name_indexes=resource_name_indexes,
+                )
+            )
+            continue
+        log_debug_event(
+            logger=_DEBUG_LOGGER,
+            message="native compact query analysis failed",
+            sqlbuild_error=str(response or "invalid native response"),
+        )
+        results.append(
+            NativeCompactAnalysis(cleaned_sql=cleaned_sql, analysis=None, projected=True)
+        )
+    return tuple(results)
+
+
+def _projected_analysis_result(
+    *,
+    analysis: dict[str, Any] | None,
+    compact_rows: list[object] | None = None,
+    string_pool: tuple[str, ...] = (),
+    column_cache: dict[tuple[int, int | None, int], InferredColumn] | None = None,
+    template_index: int | None = None,
+    fact_cache: dict[int, _CompactProjectedFacts] | None = None,
+    resource_name_indexes: dict[int, int] | None = None,
+    binding_diagnostics: tuple[SqlBindingDiagnostic, ...],
+    binding_validated: bool,
+) -> PolyglotAnalysisResult:
+    if compact_rows is not None:
+        return _compact_projected_analysis_result(
+            rows=compact_rows,
+            string_pool=string_pool,
+            column_cache=column_cache,
+            template_index=template_index,
+            fact_cache=fact_cache,
+            resource_name_indexes=resource_name_indexes or {},
+            has_star=bool(analysis and analysis.get("hasStar")),
+            binding_diagnostics=binding_diagnostics,
+            binding_validated=binding_validated,
+        )
+    if analysis is None:
+        raise SqlAnalysisBoundaryError("native project query analysis omitted facts")
+    raw_columns: object = analysis.get("columns")
+    raw_lineage: object = analysis.get("lineageColumns")
+    if not isinstance(raw_columns, list) or not isinstance(raw_lineage, list):
+        raise SqlAnalysisBoundaryError("native project query analysis returned invalid facts")
+    columns: list[InferredColumn] = []
+    for raw_column in raw_columns:
+        if not isinstance(raw_column, dict):
+            raise SqlAnalysisBoundaryError("native project query analysis returned invalid columns")
+        name: object = raw_column.get("name")
+        if not isinstance(name, str):
+            raise SqlAnalysisBoundaryError("native project query analysis omitted a column name")
+        data_type: object = raw_column.get("type")
+        columns.append(
+            InferredColumn(
+                name=name,
+                type=data_type if isinstance(data_type, str) else None,
+                nullability=InferredNullability(str(raw_column.get("nullability") or "unknown")),
+            )
+        )
+    lineage_columns: list[CompiledLineageColumnFact] = []
+    for raw_column in raw_lineage:
+        if not isinstance(raw_column, dict):
+            raise SqlAnalysisBoundaryError("native project query analysis returned invalid lineage")
+        output_column: object = raw_column.get("outputColumn")
+        raw_upstream: object = raw_column.get("upstreamColumns")
+        if not isinstance(output_column, str) or not isinstance(raw_upstream, list):
+            raise SqlAnalysisBoundaryError("native project query analysis omitted lineage fields")
+        upstream: list[CompiledLineageSourceFact] = []
+        for raw_source in raw_upstream:
+            if not isinstance(raw_source, dict):
+                raise SqlAnalysisBoundaryError(
+                    "native project query analysis returned invalid upstream lineage"
+                )
+            upstream.append(
+                CompiledLineageSourceFact(
+                    resource_type=str(raw_source.get("resourceType") or ""),
+                    resource_name=str(raw_source.get("resourceName") or ""),
+                    column_name=str(raw_source.get("columnName") or ""),
+                )
+            )
+        lineage_columns.append(
+            CompiledLineageColumnFact(
+                output_column=output_column,
+                upstream_columns=tuple(upstream),
+                transform_kind=ColumnTransformKind(
+                    str(raw_column.get("transformKind") or "unknown")
+                ),
+                confidence=ColumnLineageConfidence(str(raw_column.get("confidence") or "unknown")),
+            )
+        )
+    return PolyglotAnalysisResult(
+        analysis_succeeded=True,
+        columns=tuple(columns),
+        lineage_columns=tuple(lineage_columns),
+        has_star=bool(analysis.get("hasStar")),
+        binding_diagnostics=binding_diagnostics,
+        binding_validated=binding_validated,
+    )
+
+
+def _compact_projected_analysis_result(
+    *,
+    rows: list[object],
+    string_pool: tuple[str, ...],
+    column_cache: dict[tuple[int, int | None, int], InferredColumn] | None,
+    template_index: int | None,
+    fact_cache: dict[int, _CompactProjectedFacts] | None,
+    resource_name_indexes: dict[int, int],
+    has_star: bool,
+    binding_diagnostics: tuple[SqlBindingDiagnostic, ...],
+    binding_validated: bool,
+) -> PolyglotAnalysisResult:
+    cached_facts: _CompactProjectedFacts | None = (
+        fact_cache.get(template_index)
+        if fact_cache is not None and template_index is not None
+        else None
+    )
+    if cached_facts is not None:
+        return PolyglotAnalysisResult(
+            analysis_succeeded=True,
+            columns=cached_facts.columns,
+            lineage_columns=CompactLineageFacts(
+                string_pool=string_pool,
+                rows=cached_facts.lineage_rows,
+                resource_name_indexes=resource_name_indexes,
+            ),
+            has_star=has_star,
+            binding_diagnostics=binding_diagnostics,
+            binding_validated=binding_validated,
+        )
+    nullability_by_code: tuple[InferredNullability, ...] = (
+        InferredNullability.UNKNOWN,
+        InferredNullability.NON_NULL,
+        InferredNullability.NULLABLE,
+    )
+    transform_by_code: tuple[ColumnTransformKind, ...] = (
+        ColumnTransformKind.DIRECT,
+        ColumnTransformKind.CAST,
+        ColumnTransformKind.EXPRESSION,
+        ColumnTransformKind.AGGREGATION,
+        ColumnTransformKind.STAR,
+        ColumnTransformKind.CONSTANT,
+    )
+    confidence_by_code: tuple[ColumnLineageConfidence, ...] = (
+        ColumnLineageConfidence.UNKNOWN,
+        ColumnLineageConfidence.HIGH,
+        ColumnLineageConfidence.MEDIUM,
+    )
+
+    def pooled_string(value: object) -> str:
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise SqlAnalysisBoundaryError("native compact analysis returned an invalid index")
+        try:
+            return string_pool[value]
+        except IndexError as error:
+            raise SqlAnalysisBoundaryError(
+                "native compact analysis returned an out-of-range index"
+            ) from error
+
+    columns: list[InferredColumn] = []
+    compact_lineage_rows: list[tuple[int, int, int, tuple[tuple[int, int, int], ...]]] = []
+    for raw_row in rows:
+        if not isinstance(raw_row, list) or len(raw_row) != 6:
+            raise SqlAnalysisBoundaryError("native compact analysis returned an invalid column")
+        name_index, type_index, nullability_code, transform_code, confidence_code, raw_upstream = (
+            raw_row
+        )
+        if (
+            not isinstance(nullability_code, int)
+            or isinstance(nullability_code, bool)
+            or not isinstance(transform_code, int)
+            or isinstance(transform_code, bool)
+            or not isinstance(confidence_code, int)
+            or isinstance(confidence_code, bool)
+            or not isinstance(raw_upstream, list)
+        ):
+            raise SqlAnalysisBoundaryError("native compact analysis returned invalid column facts")
+        try:
+            nullability = nullability_by_code[nullability_code]
+            _ = transform_by_code[transform_code]
+            _ = confidence_by_code[confidence_code]
+        except IndexError as error:
+            raise SqlAnalysisBoundaryError(
+                "native compact analysis returned an invalid fact code"
+            ) from error
+        if not isinstance(name_index, int) or isinstance(name_index, bool):
+            raise SqlAnalysisBoundaryError("native compact analysis returned an invalid name index")
+        if type_index is not None and (
+            not isinstance(type_index, int) or isinstance(type_index, bool)
+        ):
+            raise SqlAnalysisBoundaryError("native compact analysis returned an invalid type index")
+        column_key = (name_index, type_index, nullability_code)
+        column = column_cache.get(column_key) if column_cache is not None else None
+        if column is None:
+            column = InferredColumn(
+                name=pooled_string(name_index),
+                type=pooled_string(type_index) if type_index is not None else None,
+                nullability=nullability,
+            )
+            if column_cache is not None:
+                column_cache[column_key] = column
+        columns.append(column)
+        upstream: list[tuple[int, int, int]] = []
+        for raw_source in raw_upstream:
+            if not isinstance(raw_source, list) or len(raw_source) != 3:
+                raise SqlAnalysisBoundaryError(
+                    "native compact analysis returned invalid upstream lineage"
+                )
+            if not all(
+                isinstance(value, int) and not isinstance(value, bool) for value in raw_source
+            ):
+                raise SqlAnalysisBoundaryError(
+                    "native compact analysis returned invalid upstream indexes"
+                )
+            source_key = cast(tuple[int, int, int], tuple(raw_source))
+            _ = pooled_string(source_key[0])
+            _ = pooled_string(source_key[1])
+            _ = pooled_string(source_key[2])
+            upstream.append(source_key)
+        compact_lineage_rows.append((name_index, transform_code, confidence_code, tuple(upstream)))
+    compact_facts = _CompactProjectedFacts(
+        columns=tuple(columns),
+        lineage_rows=tuple(compact_lineage_rows),
+    )
+    if fact_cache is not None and template_index is not None:
+        fact_cache[template_index] = compact_facts
+    return PolyglotAnalysisResult(
+        analysis_succeeded=True,
+        columns=compact_facts.columns,
+        lineage_columns=CompactLineageFacts(
+            string_pool=string_pool,
+            rows=compact_facts.lineage_rows,
+            resource_name_indexes=resource_name_indexes,
+        ),
+        has_star=has_star,
+        binding_diagnostics=binding_diagnostics,
+        binding_validated=binding_validated,
+    )
+
+
+def _cleaned_analysis_sql(
+    *,
+    query_sql: str,
+    placeholders: dict[str, str] | None,
+    dialect: str | None,
+    relation_stubs: dict[str, str] | None = None,
+) -> str:
+    cleaned_sql: str = _replace_refs_with_stubs(
+        query_sql=query_sql,
+        dialect=dialect,
+        relation_stubs=relation_stubs,
+    )
+    if placeholders:
+        cleaned_sql = substitute_placeholder_defaults(
+            query_sql=cleaned_sql,
+            placeholders=placeholders,
+        )
+    return cleaned_sql
 
 
 def get_complete_schema_binding_request(
@@ -465,6 +1022,7 @@ def _analyze_columns_and_lineage_with_compact_polyglot(
     inference_profile: ExpressionInferenceProfile,
     allow_compact_analysis: bool,
     recover_cte_facts: bool,
+    analysis: dict[str, Any] | None = None,
 ) -> tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | None:
     if not allow_compact_analysis:
         return None
@@ -477,7 +1035,8 @@ def _analyze_columns_and_lineage_with_compact_polyglot(
         )
         if schema is not None:
             options["schema"] = schema
-        analysis: Any = polyglot_module.analyze_query(cleaned_sql, options)
+        if analysis is None:
+            analysis = polyglot_module.analyze_query(cleaned_sql, options)
     except polyglot_module.PolyglotError as error:
         log_debug_event(
             logger=_DEBUG_LOGGER,
@@ -620,24 +1179,33 @@ def _compact_analysis_schema(
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     column_types_by_table: dict[str, dict[str, str]],
     table_names: frozenset[str] | None = None,
+    table_name_aliases: dict[str, str] | None = None,
 ) -> dict[str, object] | None:
     tables: list[dict[str, object]] = []
     table_name: str
     columns: dict[str, InferredNullability]
-    for table_name, columns in sorted(column_nullability_by_table.items()):
-        if table_names is not None and table_name not in table_names:
-            continue
+    selected_tables: tuple[tuple[str, dict[str, InferredNullability]], ...] = (
+        tuple(sorted(column_nullability_by_table.items()))
+        if table_names is None
+        else tuple(
+            (table_name, column_nullability_by_table.get(table_name, {}))
+            for table_name in sorted(
+                table_names,
+                key=lambda name: (table_name_aliases or {}).get(name, name),
+            )
+        )
+    )
+    for table_name, columns in selected_tables:
         if not columns:
             continue
+        column_types: dict[str, str] = column_types_by_table.get(table_name, {})
         tables.append(
             {
-                "name": table_name,
+                "name": (table_name_aliases or {}).get(table_name, table_name),
                 "columns": [
                     _compact_analysis_schema_column(
                         column_name=column_name,
-                        column_type=column_types_by_table.get(table_name, {}).get(
-                            column_name, "UNKNOWN"
-                        ),
+                        column_type=column_types.get(column_name, "UNKNOWN"),
                         nullability=columns[column_name],
                     )
                     for column_name in columns
@@ -1681,19 +2249,32 @@ def substitute_placeholder_defaults(*, query_sql: str, placeholders: dict[str, s
     return _PLACEHOLDER_PATTERN.sub(_replacer, query_sql)
 
 
-def _replace_refs_with_stubs(*, query_sql: str, dialect: str | None = None) -> str:
+def _replace_refs_with_stubs(
+    *,
+    query_sql: str,
+    dialect: str | None = None,
+    relation_stubs: dict[str, str] | None = None,
+) -> str:
     """Replace SQLBuild marker calls with parseable SQL stubs."""
 
-    result: str = _REF_PATTERN.sub(r"\1", query_sql)
-    result = _SEED_PATTERN.sub(r"\1", result)
-    result = _SOURCE_PATTERN.sub(r"\1", result)
+    stubs: dict[str, str] = relation_stubs or {}
+
+    def relation_stub(match: re.Match[str]) -> str:
+        name: str = match.group(1)
+        return stubs.get(name, name)
+
+    result: str = _REF_PATTERN.sub(relation_stub, query_sql)
+    result = _SEED_PATTERN.sub(relation_stub, result)
+    result = _SOURCE_PATTERN.sub(relation_stub, result)
     result = _DBT_REF_PATTERN.sub(r"\1", result)
     result = _UDF_PATTERN.sub(r"__sqlbuild_udf_\1", result)
-    result = _replace_table_function_calls_with_stubs(result)
+    result = _replace_table_function_calls_with_stubs(result, relation_stubs=stubs)
     return normalize_sql_for_polyglot(sql=result, dialect=dialect)
 
 
-def _replace_table_function_calls_with_stubs(query_sql: str) -> str:
+def _replace_table_function_calls_with_stubs(
+    query_sql: str, *, relation_stubs: dict[str, str] | None = None
+) -> str:
     parts: list[str] = []
     last_index: int = 0
     match: re.Match[str]
@@ -1704,7 +2285,8 @@ def _replace_table_function_calls_with_stubs(query_sql: str) -> str:
             open_paren_index=match.end(),
             context="SQL table function analysis",
         )
-        parts.append(table_function_analysis_name(match.group(1)))
+        table_name: str = table_function_analysis_name(match.group(1))
+        parts.append((relation_stubs or {}).get(table_name, table_name))
         last_index = call_end + 1
     parts.append(query_sql[last_index:])
     return "".join(parts)

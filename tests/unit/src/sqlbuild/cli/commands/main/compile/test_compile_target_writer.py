@@ -256,8 +256,8 @@ def test_given_unchanged_test_artifact_when_writing_again_then_skips_test_plan_r
     )
     artifact_path: Path = next((target_dir / "compiled" / "tests").rglob("*.sql"))
     original_mtime_ns: int = artifact_path.stat().st_mtime_ns
-    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
-    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+    planner_spy: Mock = Mock(wraps=target_writer_module.plan_and_render_sql_test_artifacts)
+    monkeypatch.setattr(target_writer_module, "plan_and_render_sql_test_artifacts", planner_spy)
 
     _ = write_static_compile_target(
         target_dir=target_dir,
@@ -266,7 +266,7 @@ def test_given_unchanged_test_artifact_when_writing_again_then_skips_test_plan_r
     )
 
     assert artifact_path.stat().st_mtime_ns == original_mtime_ns
-    assert builder_spy.call_count == test_case.expected_builder_calls
+    assert planner_spy.call_count == test_case.expected_builder_calls
 
 
 @pytest.mark.parametrize(
@@ -290,8 +290,8 @@ def test_given_changed_model_in_test_closure_when_writing_then_rebuilds_test_art
         adapter=DuckDbAdapter(),
         project=project,
     )
-    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
-    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+    planner_spy: Mock = Mock(wraps=target_writer_module.plan_and_render_sql_test_artifacts)
+    monkeypatch.setattr(target_writer_module, "plan_and_render_sql_test_artifacts", planner_spy)
     changed_project: CompiledProject = replace(
         project,
         models=(replace(project.models[0], query_sql="SELECT 3 AS order_id"),),
@@ -303,7 +303,7 @@ def test_given_changed_model_in_test_closure_when_writing_then_rebuilds_test_art
         project=changed_project,
     )
 
-    assert builder_spy.call_count == test_case.expected_builder_calls
+    assert planner_spy.call_count == test_case.expected_builder_calls
 
 
 @pytest.mark.parametrize(
@@ -334,15 +334,15 @@ def test_given_changed_unrelated_model_when_writing_then_reuses_test_artifact(
         project,
         models=(*project.models, unrelated_model),
     )
-    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
-    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+    planner_spy: Mock = Mock(wraps=target_writer_module.plan_and_render_sql_test_artifacts)
+    monkeypatch.setattr(target_writer_module, "plan_and_render_sql_test_artifacts", planner_spy)
 
     _ = write_static_compile_target(
         target_dir=target_dir,
         adapter=DuckDbAdapter(),
         project=changed_project,
     )
-    assert builder_spy.call_count == test_case.expected_builder_calls
+    assert planner_spy.call_count == test_case.expected_builder_calls
 
 
 @pytest.mark.parametrize(
@@ -362,8 +362,8 @@ def test_given_changed_test_sql_when_writing_then_rebuilds_test_artifact(
         adapter=DuckDbAdapter(),
         project=project,
     )
-    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
-    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+    planner_spy: Mock = Mock(wraps=target_writer_module.plan_and_render_sql_test_artifacts)
+    monkeypatch.setattr(target_writer_module, "plan_and_render_sql_test_artifacts", planner_spy)
     changed_test: CompiledSqlTest = replace(
         project.sql_tests[0], sql_body=project.sql_tests[0].sql_body + "\n-- edit"
     )
@@ -374,7 +374,7 @@ def test_given_changed_test_sql_when_writing_then_rebuilds_test_artifact(
         project=replace(project, sql_tests=(changed_test,)),
     )
 
-    assert builder_spy.call_count == test_case.expected_builder_calls
+    assert planner_spy.call_count == test_case.expected_builder_calls
 
 
 @pytest.mark.parametrize(
@@ -398,8 +398,8 @@ def test_given_changed_compile_target_when_writing_then_rebuilds_test_artifact(
         adapter=DuckDbAdapter(),
         project=project,
     )
-    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
-    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+    planner_spy: Mock = Mock(wraps=target_writer_module.plan_and_render_sql_test_artifacts)
+    monkeypatch.setattr(target_writer_module, "plan_and_render_sql_test_artifacts", planner_spy)
 
     _ = write_static_compile_target(
         target_dir=target_dir,
@@ -407,7 +407,7 @@ def test_given_changed_compile_target_when_writing_then_rebuilds_test_artifact(
         project=replace(project, effective_target_schema="changed_schema"),
     )
 
-    assert builder_spy.call_count == test_case.expected_builder_calls
+    assert planner_spy.call_count == test_case.expected_builder_calls
 
 
 @pytest.mark.parametrize(
@@ -425,8 +425,8 @@ def test_given_compile_cache_disabled_when_writing_twice_then_rebuilds_test_arti
         build_cached_target_writer_project(target_dir=target_dir),
         compile_cache_dir=None,
     )
-    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
-    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+    planner_spy: Mock = Mock(wraps=target_writer_module.plan_and_render_sql_test_artifacts)
+    monkeypatch.setattr(target_writer_module, "plan_and_render_sql_test_artifacts", planner_spy)
 
     for _ in range(2):
         _ = write_static_compile_target(
@@ -435,7 +435,7 @@ def test_given_compile_cache_disabled_when_writing_twice_then_rebuilds_test_arti
             project=project,
         )
 
-    assert builder_spy.call_count == test_case.expected_builder_calls
+    assert planner_spy.call_count == test_case.expected_builder_calls
     assert not (target_dir / "cache" / "compiler" / "sql-test-artifacts.json").exists()
 
 
@@ -459,8 +459,8 @@ def test_given_modified_test_artifact_when_writing_then_rebuilds_expected_sql(
     artifact_path: Path = next((target_dir / "compiled" / "tests").rglob("*.sql"))
     expected_sql: str = artifact_path.read_text(encoding="utf-8")
     artifact_path.write_text("SELECT 'tampered'\n", encoding="utf-8")
-    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
-    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+    planner_spy: Mock = Mock(wraps=target_writer_module.plan_and_render_sql_test_artifacts)
+    monkeypatch.setattr(target_writer_module, "plan_and_render_sql_test_artifacts", planner_spy)
 
     _ = write_static_compile_target(
         target_dir=target_dir,
@@ -468,5 +468,5 @@ def test_given_modified_test_artifact_when_writing_then_rebuilds_expected_sql(
         project=project,
     )
 
-    assert builder_spy.call_count == test_case.expected_builder_calls
+    assert planner_spy.call_count == test_case.expected_builder_calls
     assert artifact_path.read_text(encoding="utf-8") == expected_sql

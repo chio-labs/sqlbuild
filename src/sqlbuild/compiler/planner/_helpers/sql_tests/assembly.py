@@ -32,6 +32,8 @@ from sqlbuild.compiler.planner._helpers.resolve.refs import (
     resolve_udf_references,
 )
 from sqlbuild.compiler.planner._helpers.sql_tests.analysis_assembly import (
+    TestFunctionAnalysisContext,
+    build_test_function_analysis_context,
     try_resolve_test_model_sql_with_sql_analysis,
 )
 from sqlbuild.compiler.planner._helpers.sql_tests.comments import (
@@ -170,15 +172,19 @@ def build_sql_test_planning_context(
             )
             chain_names_by_topology[topology_key] = ordered_names
         chain_names_by_test_key[test.key] = ordered_names
+    qualified_function_locations: dict[str, str] = {
+        name: target.qualified_name
+        for name, target in function_locations.items()
+        if target.qualified_name is not None
+    }
     return SqlTestPlanningContext(
         models_by_name=models_by_name,
         model_dependencies=model_dependencies,
         function_locations=function_locations,
-        qualified_function_locations={
-            name: target.qualified_name
-            for name, target in function_locations.items()
-            if target.qualified_name is not None
-        },
+        qualified_function_locations=qualified_function_locations,
+        function_analysis_context=build_test_function_analysis_context(
+            function_locations=qualified_function_locations
+        ),
         chain_names_by_test_key=chain_names_by_test_key,
     )
 
@@ -215,7 +221,7 @@ def plan_test(
 
     model_map: dict[str, CompiledModel] = context.models_by_name
     function_locations: dict[str, CompiledRelationLocation] = context.function_locations
-    qualified_function_locations: dict[str, str] = context.qualified_function_locations
+    function_analysis_context: TestFunctionAnalysisContext = context.function_analysis_context
     mock_refs: dict[str, str] = _extract_mock_refs(test)
     mock_sources: dict[str, str] = _extract_mock_sources(test)
     mock_seeds: dict[str, str] = _extract_mock_seeds(test)
@@ -315,7 +321,7 @@ def plan_test(
                     mock_sources=mock_sources,
                     mock_seeds=mock_seeds,
                     mock_dbt_refs=mock_dbt_refs,
-                    function_locations=qualified_function_locations,
+                    function_context=function_analysis_context,
                     helper_ctes=helper_ctes,
                     resolved_chain=sql_analysis_resolved,
                     file_label=str(test.test_file.relative_path),
@@ -356,7 +362,7 @@ def plan_test(
         assertion_map=assertion_map,
         test=test,
         function_locations=function_locations,
-        qualified_function_locations=qualified_function_locations,
+        function_analysis_context=function_analysis_context,
         helper_ctes=helper_ctes,
         mock_table_functions=mock_table_functions,
         textual_chain=textual_chain,
@@ -491,7 +497,7 @@ def _build_assertion_steps(
     assertion_map: dict[str, str],
     test: CompiledSqlTest,
     function_locations: dict[str, CompiledRelationLocation],
-    qualified_function_locations: dict[str, str],
+    function_analysis_context: TestFunctionAnalysisContext,
     helper_ctes: tuple[CompileSqlTestCte, ...],
     mock_table_functions: dict[str, str],
     textual_chain: _TextualChainResolver,
@@ -525,7 +531,7 @@ def _build_assertion_steps(
                     mock_sources=mock_sources,
                     mock_seeds=mock_seeds,
                     mock_dbt_refs=mock_dbt_refs,
-                    function_locations=qualified_function_locations,
+                    function_context=function_analysis_context,
                     helper_ctes=helper_ctes,
                     resolved_chain=sql_analysis_resolved,
                     file_label=str(test.test_file.relative_path),

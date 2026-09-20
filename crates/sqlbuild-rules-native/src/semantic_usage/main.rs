@@ -240,6 +240,3 @@ fn dedupe(mut uses: Vec<UsageFact>) -> Vec<UsageFact> {
     });
     uses
 }
-
-#[cfg(test)]
-mod tests;

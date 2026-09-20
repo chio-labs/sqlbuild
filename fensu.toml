@@ -260,6 +260,26 @@ tooling = []
 rule_packs = ["rust"]
 select = ["FPRS"]
 
+[[targets.rust.rule_exceptions]]
+rule = "FPRSR307"
+path = "crates/sqlbuild-rules-native/src/query_analysis/main.rs"
+reason = "This module owns the single coarse native query-analysis boundary and its compact SQLBuild projection contract."
+
+[[targets.rust.rule_exceptions]]
+rule = "FPRSR307"
+path = "crates/sqlbuild-rules-native/src/scope_metadata/main.rs"
+reason = "This focused serde boundary validates the scope metadata schema used by the crate-root wire models."
+
+[[targets.rust.rule_exceptions]]
+rule = "FPRSR307"
+path = "crates/sqlbuild-rules-native/src/semantic_usage/main.rs"
+reason = "This module owns the existing coarse native SQL usage-analysis boundary exposed through PyO3."
+
+[[targets.rust.rule_exceptions]]
+rule = "FPRSR307"
+path = "crates/sqlbuild-rules-native/src/semantic_validation/main.rs"
+reason = "This module owns the existing coarse native schema-validation boundary exposed through PyO3."
+
 [targets.rust.rule_options.FPRSL301]
 forbidden_packages = [
     "sqlbuild-structure-checker",

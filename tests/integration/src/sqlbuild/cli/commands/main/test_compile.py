@@ -154,5 +154,63 @@ def test_given_relative_project_directory_when_compiling_then_private_macro_is_v
     assert summary["models"] == 1
 
 
+def test_given_sql_test_chain_when_compiling_then_native_planner_writes_complete_artifact(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[settings]\nsql_analysis = true\n',
+        encoding="utf-8",
+    )
+    models_dir = tmp_path / "models"
+    models_dir.mkdir()
+    (models_dir / "stg_orders.sql").write_text(
+        'MODEL (materialized table);\nSELECT order_id, amount FROM __source("raw_orders")\n',
+        encoding="utf-8",
+    )
+    (models_dir / "orders.sql").write_text(
+        'MODEL (materialized table);\nSELECT order_id, amount FROM __ref("stg_orders")\n',
+        encoding="utf-8",
+    )
+    sources_dir = tmp_path / "sources"
+    sources_dir.mkdir()
+    (sources_dir / "raw_orders.yml").write_text(
+        "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n",
+        encoding="utf-8",
+    )
+    tests_dir = tmp_path / "tests" / "unit"
+    tests_dir.mkdir(parents=True)
+    (tests_dir / "orders_chain.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__raw_orders AS (SELECT 1 AS order_id, 10 AS amount),\n"
+        "__expected__orders AS (SELECT 1 AS order_id, 10 AS amount)\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+    exit_code = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+    result: dict[str, object] = json.loads(capsys.readouterr().out)
+    artifact_path = (
+        tmp_path
+        / "target"
+        / "compiled"
+        / "tests"
+        / "_chain_"
+        / "orders__stg_orders"
+        / "orders_chain.sql"
+    )
+    artifact_sql = artifact_path.read_text(encoding="utf-8")
+
+    assert exit_code == 0
+    assert cast(dict[str, object], result["summary"])["tests"] == 1
+    assert "__source__raw_orders AS (" in artifact_sql
+    assert "__ref__stg_orders AS (" in artifact_sql
+    assert "__actual__orders AS (" in artifact_sql
+    assert "__expected__orders AS (" in artifact_sql
+    assert '__source("raw_orders")' not in artifact_sql
+    assert '__ref("stg_orders")' not in artifact_sql
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-vv"])

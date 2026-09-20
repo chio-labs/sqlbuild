@@ -577,8 +577,7 @@ def parse_header_values(
     """Parse one SQLBuild parenthesized header into nested Python values."""
 
     try:
-        parser: _ModelHeaderParser = _ModelHeaderParser(header=header)
-        return parser.parse()
+        return dict(_parse_header_values_cached(header))
     except ModelSqlParseError:
         raise
     except ModelHeaderSyntaxError as error:
@@ -586,6 +585,13 @@ def parse_header_values(
             f"{statement_name}(...) in '{file_path}' contains invalid SQLBuild header syntax: "
             f"{error}"
         ) from error
+
+
+@lru_cache(maxsize=4096)
+def _parse_header_values_cached(header: str) -> dict[str, object]:
+    """Parse recurring authored headers once while keeping each top-level result independent."""
+
+    return _ModelHeaderParser(header=header).parse()
 
 
 class _ModelHeaderParser:
@@ -880,7 +886,7 @@ class _ModelHeaderParser:
         return token
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=4096)
 def _tokenize_model_header(header: str) -> list[_ModelHeaderToken]:
     tokens: list[_ModelHeaderToken] = []
     index: int = 0

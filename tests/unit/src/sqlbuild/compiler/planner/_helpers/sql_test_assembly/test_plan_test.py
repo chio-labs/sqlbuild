@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
     CompiledFunction,
+    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
@@ -19,6 +22,9 @@ from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
 from sqlbuild.compiler.planner._helpers.sql_tests import assembly as sql_test_assembly
 from sqlbuild.compiler.planner._helpers.sql_tests.assembly import plan_test
+from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
+    plan_and_render_sql_test_artifacts,
+)
 from sqlbuild.compiler.planner.main.commands._relations import resolve_static_relation_context
 from sqlbuild.compiler.planner.main.commands._scope import resolve_static_command_scope
 from sqlbuild.compiler.planner.main.commands.sql_test import build_test_command_plan
@@ -32,8 +38,10 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
 )
 from sqlbuild.compiler.planner.types import WarningSeverity
+from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     AssertionChainCteErrorTestCase,
+    NativePlanningDifferentialTestCase,
     PlanMacroTestCase,
     PlanTestChainTestCase,
     RepeatedFixturePlanTestCase,
@@ -42,6 +50,39 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_t
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers import (
     build_test_and_project,
 )
+
+
+def _assert_native_artifact_matches_python_plan(
+    *,
+    project: CompiledProject,
+    sql_test: CompiledSqlTest,
+    entry: SqlTestPlanEntry,
+    warnings: tuple[PlanWarning, ...],
+    sql_analysis_enabled: bool,
+) -> None:
+    adapter = DuckDbAdapter()
+    expected_sql = build_sql_test_comparison_sql(
+        test_entry=entry,
+        set_difference_operator=adapter.render_set_difference_operator(),
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
+    )
+    (artifact,) = plan_and_render_sql_test_artifacts(
+        project=project,
+        tests=(sql_test,),
+        adapter=adapter,
+        sql_analysis_enabled=sql_analysis_enabled,
+    )
+
+    assert artifact.sql == expected_sql
+    assert artifact.model_names == tuple(step.model_name for step in entry.chain)
+    assert artifact.warnings == tuple(
+        {
+            "modelName": warning.model_name,
+            "severity": warning.severity.value,
+            "message": warning.message,
+        }
+        for warning in warnings
+    )
 
 
 @pytest.mark.parametrize(
@@ -605,6 +646,110 @@ def test_given_test_and_project_when_planning_then_produces_expected_chain(
 
 @pytest.mark.parametrize(
     "test_case",
+    (
+        NativePlanningDifferentialTestCase(
+            description="analyzed model chain",
+            planning_case=PlanTestChainTestCase(
+                description="analyzed model chain",
+                model_queries={
+                    "stg_orders": 'SELECT * FROM __source("raw_orders")',
+                    "orders": 'SELECT order_id FROM __ref("stg_orders")',
+                },
+                mock_ref_ctes={},
+                mock_source_ctes={"raw_orders": "SELECT 1 AS order_id"},
+                helper_ctes={},
+                expected_model_names=("orders",),
+                expected_chain_length=2,
+                expected_cte_bodies={"orders": "SELECT 1 AS order_id"},
+            ),
+        ),
+        NativePlanningDifferentialTestCase(
+            description="textual udf fallback",
+            planning_case=PlanTestChainTestCase(
+                description="textual udf fallback",
+                model_queries={
+                    "orders": (
+                        'SELECT __udf("is_ready")(status) AS ready FROM __source("raw_orders")'
+                    )
+                },
+                mock_ref_ctes={},
+                mock_source_ctes={"raw_orders": "SELECT 'ready' AS status"},
+                helper_ctes={},
+                expected_model_names=("orders",),
+                expected_chain_length=1,
+                function_locations={"is_ready": "main.is_ready"},
+                expected_cte_bodies={"orders": "SELECT TRUE AS ready"},
+            ),
+        ),
+        NativePlanningDifferentialTestCase(
+            description="table function fixture",
+            planning_case=PlanTestChainTestCase(
+                description="table function fixture",
+                model_queries={"orders": 'SELECT order_id FROM __table_fn("customer_orders")(42)'},
+                mock_ref_ctes={},
+                mock_source_ctes={},
+                mock_table_function_ctes={"customer_orders": "SELECT 7 AS order_id"},
+                helper_ctes={"fixture_helper": "SELECT 7 AS order_id"},
+                expected_model_names=("orders",),
+                expected_chain_length=1,
+                table_function_locations={"customer_orders": "main.customer_orders"},
+                expected_cte_bodies={"orders": "SELECT 7 AS order_id"},
+            ),
+        ),
+        NativePlanningDifferentialTestCase(
+            description="analysis disabled",
+            sql_analysis_enabled=False,
+            planning_case=PlanTestChainTestCase(
+                description="analysis disabled",
+                model_queries={"orders": 'SELECT * FROM __source("raw_orders")'},
+                mock_ref_ctes={},
+                mock_source_ctes={"raw_orders": "SELECT 1 AS order_id"},
+                helper_ctes={"helper": "SELECT 1 AS one"},
+                expected_model_names=("orders",),
+                expected_chain_length=1,
+                expected_cte_bodies={"orders": "SELECT 1 AS order_id"},
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_model_chain_when_native_planning_then_matches_python_artifact_and_warnings(
+    test_case: NativePlanningDifferentialTestCase,
+) -> None:
+    compiled_test, project = build_test_and_project(test_case.planning_case)
+    assert isinstance(compiled_test.payload, CompiledModelSqlTestPayload)
+    compiled_test = replace(
+        compiled_test,
+        payload=replace(
+            compiled_test.payload,
+            expected_ctes=tuple(
+                CompileSqlTestCte(
+                    name=f"__expected__{name}",
+                    sql_body=sql_body,
+                )
+                for name, sql_body in test_case.planning_case.expected_cte_bodies.items()
+            ),
+        ),
+    )
+    project = replace(project, sql_tests=(compiled_test,))
+    adapter = DuckDbAdapter()
+    entry, warnings = plan_test(
+        test=compiled_test,
+        project=project,
+        adapter=adapter,
+        sql_analysis_enabled=test_case.sql_analysis_enabled,
+    )
+    _assert_native_artifact_matches_python_plan(
+        project=project,
+        sql_test=compiled_test,
+        entry=entry,
+        warnings=warnings,
+        sql_analysis_enabled=test_case.sql_analysis_enabled,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [
         PlanTestChainTestCase(
             description="comment and literal refs are ignored without rewriting SQL",
@@ -924,6 +1069,13 @@ def test_given_udf_sql_test_when_planning_then_compares_resolved_actual_to_expec
     assert entry.function_deps == (
         CompiledObjectKey(resource_type=CompiledResourceType.UDF, name="format_cents"),
     )
+    _assert_native_artifact_matches_python_plan(
+        project=project,
+        sql_test=sql_test,
+        entry=entry,
+        warnings=warnings,
+        sql_analysis_enabled=False,
+    )
     scope: PlannerScope = resolve_static_command_scope(
         project=project, selection=PlannerSelection()
     )
@@ -1051,6 +1203,13 @@ def test_given_table_function_sql_test_when_planning_then_compares_resolved_actu
             name="customer_orders",
         ),
     )
+    _assert_native_artifact_matches_python_plan(
+        project=project,
+        sql_test=sql_test,
+        entry=entry,
+        warnings=warnings,
+        sql_analysis_enabled=False,
+    )
     scope: PlannerScope = resolve_static_command_scope(
         project=project, selection=PlannerSelection()
     )
@@ -1162,6 +1321,13 @@ def test_given_sql_analysis_enabled_when_generated_cte_name_conflicts_then_it_ra
             adapter=DuckDbAdapter(),
             sql_analysis_enabled=True,
         )
+    with pytest.raises(CompileInputError, match=test_case.expected_error_fragments[0]):
+        plan_and_render_sql_test_artifacts(
+            project=project,
+            tests=(compiled_test,),
+            adapter=DuckDbAdapter(),
+            sql_analysis_enabled=True,
+        )
 
 
 @pytest.mark.parametrize(
@@ -1245,7 +1411,9 @@ def test_given_assertion_analysis_failure_when_planning_then_textual_chain_stays
             mock_sources=test_case.mock_source_ctes,
             mock_seeds={},
             mock_dbt_refs={},
-            function_locations={},
+            function_context=sql_test_assembly.build_test_function_analysis_context(
+                function_locations={}
+            ),
             helper_ctes=(),
             resolved_chain={},
             file_label="tests/unit/test_chain.sql",
@@ -1301,7 +1469,9 @@ def test_given_adapter_function_when_resolving_with_analysis_then_emits_supporte
             mock_sources={},
             mock_seeds={},
             mock_dbt_refs={},
-            function_locations={},
+            function_context=sql_test_assembly.build_test_function_analysis_context(
+                function_locations={}
+            ),
             helper_ctes=(),
             resolved_chain={},
             file_label="tests/unit/test_dialect.sql",

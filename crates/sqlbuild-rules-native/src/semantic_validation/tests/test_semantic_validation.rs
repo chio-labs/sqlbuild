@@ -1,5 +1,47 @@
-use crate::semantic_validation::tests::test_types::SemanticValidationTestCase;
-use crate::semantic_validation::validation_json;
+use crate::semantic_validation::main::{validation_json, validations_json};
+use crate::semantic_validation::tests::test_types::{
+    SemanticValidationBatchTestCase, SemanticValidationTestCase,
+};
+
+#[test]
+fn given_mixed_validation_requests_when_validating_batch_then_preserves_input_order()
+-> Result<(), String> {
+    let test_cases = [SemanticValidationBatchTestCase {
+        description: "mixed valid and invalid requests retain their input positions",
+        request: r#"[
+            {
+                "sql":"SELECT missing FROM orders",
+                "dialect":"generic",
+                "schema":{"strict":true,"tables":[{"name":"orders","columns":[{"name":"order_id","type":"INTEGER"}]}]},
+                "options":{"check_references":true}
+            },
+            {
+                "sql":"SELECT product_id FROM products",
+                "dialect":"generic",
+                "schema":{"strict":true,"tables":[{"name":"products","columns":[{"name":"product_id","type":"INTEGER"}]}]},
+                "options":{"check_references":true}
+            }
+        ]"#,
+        expected_validity: [false, true],
+    }];
+    for test_case in &test_cases {
+        let response = validations_json(test_case.request)?;
+        let results: serde_json::Value =
+            serde_json::from_str(&response).map_err(|error| error.to_string())?;
+
+        assert_eq!(
+            results[0]["valid"], test_case.expected_validity[0],
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            results[1]["valid"], test_case.expected_validity[1],
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
 
 #[test]
 fn given_unknown_column_when_validating_then_returns_structured_error() -> Result<(), String> {

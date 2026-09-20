@@ -23,7 +23,7 @@ from sqlbuild.compiler.planner._helpers.scenario.relations import (
 from sqlbuild.compiler.planner._helpers.sql_tests.comments import (
     replace_uncommented_pattern,
 )
-from sqlbuild.compiler.planner.models import SqlAnalysisResolvedTestSql
+from sqlbuild.compiler.planner.models import SqlAnalysisResolvedTestSql, TestFunctionAnalysisContext
 from sqlbuild.compiler.references.main._quoted_reference_call_pattern import (
     quoted_reference_call_pattern,
 )
@@ -56,6 +56,15 @@ class _TestSqlAnalysisTemplate:
     existing_cte_names: frozenset[str]
     marker_calls: tuple[tuple[str, str], ...]
     cte_body_sql: str
+
+
+def build_test_function_analysis_context(
+    *, function_locations: dict[str, str]
+) -> TestFunctionAnalysisContext:
+    return TestFunctionAnalysisContext(
+        locations=function_locations,
+        marker_targets=_function_marker_targets(function_locations=function_locations),
+    )
 
 
 class _TemplateMarkerTargetResolver:
@@ -228,7 +237,7 @@ def try_resolve_test_model_sql_with_sql_analysis(
     mock_sources: dict[str, str],
     mock_seeds: dict[str, str],
     mock_dbt_refs: dict[str, str],
-    function_locations: dict[str, str],
+    function_context: TestFunctionAnalysisContext,
     helper_ctes: tuple[CompileSqlTestCte, ...],
     resolved_chain: dict[str, SqlAnalysisResolvedTestSql],
     file_label: str,
@@ -241,7 +250,7 @@ def try_resolve_test_model_sql_with_sql_analysis(
         mock_sources=mock_sources,
         mock_seeds=mock_seeds,
         mock_dbt_refs=mock_dbt_refs,
-        function_locations=function_locations,
+        function_marker_targets=function_context.marker_targets,
         resolved_chain=resolved_chain,
     )
     template: _TestSqlAnalysisTemplate | None = _analyze_test_query_template(
@@ -258,7 +267,7 @@ def try_resolve_test_model_sql_with_sql_analysis(
         mock_sources=mock_sources,
         mock_seeds=mock_seeds,
         mock_dbt_refs=mock_dbt_refs,
-        function_locations=function_locations,
+        function_locations=function_context.locations,
         helper_ctes=helper_ctes,
         resolved_chain=resolved_chain,
         file_label=file_label,
@@ -281,7 +290,7 @@ def _test_marker_targets(
     mock_sources: dict[str, str],
     mock_seeds: dict[str, str],
     mock_dbt_refs: dict[str, str],
-    function_locations: dict[str, str],
+    function_marker_targets: tuple[tuple[str, str, str], ...],
     resolved_chain: dict[str, SqlAnalysisResolvedTestSql],
 ) -> tuple[tuple[str, str, str], ...]:
     targets: list[tuple[str, str, str]] = []
@@ -301,7 +310,7 @@ def _test_marker_targets(
         (SqlReferenceKind.DBT_REF.function_name, name, f"{DBT_REF_TEST_CTE_PREFIX}{name}")
         for name in mock_dbt_refs
     )
-    targets.extend(_function_marker_targets(function_locations=function_locations))
+    targets.extend(function_marker_targets)
     return tuple(sorted(targets))
 
 

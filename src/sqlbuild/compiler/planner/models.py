@@ -133,6 +133,14 @@ class RelationFixturePlanningContext:
 
 
 @dataclass(frozen=True)
+class TestFunctionAnalysisContext:
+    """Function locations and reusable marker targets for SQL-test analysis."""
+
+    locations: dict[str, str]
+    marker_targets: tuple[tuple[str, str, str], ...]
+
+
+@dataclass(frozen=True)
 class SqlTestPlanningContext:
     """Project-wide SQL-test indexes and reusable chain topology."""
 
@@ -140,6 +148,7 @@ class SqlTestPlanningContext:
     model_dependencies: dict[str, frozenset[str]]
     function_locations: dict[str, CompiledRelationLocation]
     qualified_function_locations: dict[str, str]
+    function_analysis_context: TestFunctionAnalysisContext
     chain_names_by_test_key: dict[CompiledObjectKey, tuple[str, ...]]
 
 

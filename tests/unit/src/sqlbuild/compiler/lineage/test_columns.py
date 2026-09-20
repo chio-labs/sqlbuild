@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from sqlbuild.compiler.compile.models import (
+    CompiledLineageColumnFact,
+    CompiledLineageSourceFact,
     CompiledModel,
     CompiledProject,
 )
@@ -429,6 +433,57 @@ def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_
     assert trace == test_case.expected_trace
     assert consumers == test_case.expected_consumers
     assert downstream_trace == test_case.expected_downstream_trace
+
+
+def test_given_compact_analysis_facts_when_building_fast_lineage_then_preserves_public_graph() -> (
+    None
+):
+    upstream = make_compiled_model(
+        name="orders",
+        query_sql="SELECT 1 AS order_id",
+        inferred_columns=("order_id",),
+    )
+    target = replace(
+        make_compiled_model(
+            name="order_summary",
+            query_sql='SELECT order_id FROM __ref("orders")',
+            inferred_columns=("order_id",),
+        ),
+        fast_lineage_columns=(
+            CompiledLineageColumnFact(
+                output_column="order_id",
+                upstream_columns=(
+                    CompiledLineageSourceFact(
+                        resource_type=CompiledResourceType.MODEL,
+                        resource_name="orders",
+                        column_name="order_id",
+                    ),
+                ),
+                transform_kind=ColumnTransformKind.DIRECT,
+                confidence=ColumnLineageConfidence.HIGH,
+            ),
+        ),
+    )
+
+    result = build_project_column_lineage(
+        project=make_compiled_project(models=(upstream, target)),
+        mode=ColumnLineageMode.FAST,
+    )
+
+    assert result is not None
+    assert result.has_model("order_summary")
+    assert not result.model_has_star("order_summary")
+    assert result.edge_count_targeting("order_summary") == 1
+    assert result.models["order_summary"].columns[0].upstream_columns[0].resource_name == "orders"
+    assert tuple(
+        edge_label(
+            edge.source.resource_name,
+            edge.source.column_name,
+            edge.target.resource_name,
+            edge.target.column_name,
+        )
+        for edge in result.edges
+    ) == ("orders.order_id->order_summary.order_id",)
 
 
 @pytest.mark.parametrize(

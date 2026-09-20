@@ -69,6 +69,7 @@ from sqlbuild.compiler.compile._helpers.render.sql_vars import (
     substitute_sql_vars,
 )
 from sqlbuild.compiler.compile._helpers.render.templating import (
+    contains_template_data,
     expand_effective_vars,
     expand_template_data,
 )
@@ -242,6 +243,12 @@ class _HookExpansionFacts:
         self.usages.extend(usages)
 
 
+@dataclass
+class _ModelConfigScanCache:
+    template_presence: dict[int, tuple[object, bool]] = field(default_factory=dict)
+    macro_presence: dict[int, tuple[object, bool]] = field(default_factory=dict)
+
+
 def build_model_inputs(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -313,6 +320,8 @@ def _build_model_inputs(
         discovered_inputs.sql_hook_files
     )
     model_inputs: list[CompileModelInput] = []
+    model_header_column_cache: dict[int, tuple[object, tuple[SchemaColumn, ...]]] = {}
+    config_scan_cache = _ModelConfigScanCache()
     declaration_cache: _VisibleModelDeclarationCache = _VisibleModelDeclarationCache.build(context)
     model_file: DiscoveredSqlModelFile
     for model_file in discovered_inputs.model_files:
@@ -337,6 +346,7 @@ def _build_model_inputs(
             effective_target_name=effective_target_name,
             run_id=run_id,
             materialization_defaults=discovered_inputs.project_config.materialization_defaults,
+            scan_cache=config_scan_cache,
         )
         model_schema: ModelSchemaDeclaration | None = _resolve_model_schema(
             values=effective_config.values,
@@ -463,6 +473,7 @@ def _build_model_inputs(
             model_schema_name=model_schema.name if model_schema is not None else None,
             model_schema_description=model_schema.description if model_schema is not None else None,
             audit_factories=discovered_inputs.audit_factories,
+            column_cache=model_header_column_cache,
         )
         model_config: CompileModelConfig = strip_model_header_metadata_from_config(expanded_config)
         header_schema_entry, enum_columns = resolve_enum_contract_columns(
@@ -819,7 +830,7 @@ def build_effective_vars(
     return expand_effective_vars(values)
 
 
-def build_model_config(
+def build_model_config(  # noqa: PLR0913
     *,
     defaults: DefaultsConfig,
     path_defaults: dict[str, dict[str, object]],
@@ -831,6 +842,7 @@ def build_model_config(
     effective_target_name: str | None,
     run_id: str,
     materialization_defaults: MaterializationDefaultsConfig | None = None,
+    scan_cache: _ModelConfigScanCache | None = None,
 ) -> CompileModelConfig:
     """Build the pre-semantic effective model config layers."""
 
@@ -849,18 +861,24 @@ def build_model_config(
     }
     for hook_key in raw_hook_values:
         del layered_values[hook_key]
-    early_resolved_values: dict[str, object] = resolve_early_model_templates(
-        values=layered_values,
-        effective_vars=effective_vars,
-        effective_target_name=effective_target_name,
-        run_id=run_id,
+    has_authored_templates: bool = _contains_template_data_cached(
+        layered_values, scan_cache.template_presence if scan_cache is not None else None
     )
-    model_resolved_values: dict[str, object] = resolve_chained_model_context_templates(
-        values=early_resolved_values,
-        model_name=model_name,
-        effective_target_name=effective_target_name,
-        run_id=run_id,
-    )
+    if has_authored_templates:
+        early_resolved_values: dict[str, object] = resolve_early_model_templates(
+            values=layered_values,
+            effective_vars=effective_vars,
+            effective_target_name=effective_target_name,
+            run_id=run_id,
+        )
+        model_resolved_values: dict[str, object] = resolve_chained_model_context_templates(
+            values=early_resolved_values,
+            model_name=model_name,
+            effective_target_name=effective_target_name,
+            run_id=run_id,
+        )
+    else:
+        model_resolved_values = layered_values
     raw_logical_schema: object | None = model_resolved_values.get("schema")
     raw_logical_database: object | None = model_resolved_values.get("database")
     logical_schema: str | None = raw_logical_schema if isinstance(raw_logical_schema, str) else None
@@ -885,11 +903,17 @@ def build_model_config(
             include_target_values=False,
         ),
     )
-    target_resolved_values: dict[str, object] = resolve_target_context_templates(
-        values=model_resolved_values,
-        model_name=model_name,
-        effective_target_name=effective_target_name,
-        run_id=run_id,
+    target_resolved_values: dict[str, object] = (
+        resolve_target_context_templates(
+            values=model_resolved_values,
+            model_name=model_name,
+            effective_target_name=effective_target_name,
+            run_id=run_id,
+        )
+        if has_authored_templates
+        or contains_template_data(model_resolved_values.get("database"))
+        or contains_template_data(model_resolved_values.get("schema"))
+        else model_resolved_values
     )
     target_resolved_values.update(raw_hook_values)
     target_resolved_values, retention, table_type = resolve_storage_policies(
@@ -904,7 +928,11 @@ def build_model_config(
         and target_resolved_values.get("materialized") != MaterializationType.INCREMENTAL
     ):
         target_resolved_values.pop(MODEL_FULL_REFRESH_CONFIG_KEY, None)
-    validate_model_config_has_no_macros(values=target_resolved_values)
+    if _contains_model_config_macro_cached(
+        target_resolved_values,
+        scan_cache.macro_presence if scan_cache is not None else None,
+    ):
+        validate_model_config_has_no_macros(values=target_resolved_values)
     return CompileModelConfig(
         values=target_resolved_values,
         matched_path_default=matched_path_default,
@@ -1340,6 +1368,57 @@ def validate_model_config_has_no_macros(*, values: dict[str, object]) -> None:
     validate_no_macros_in_config_value(value=values, path=())
 
 
+def _contains_template_data_cached(
+    value: object,
+    cache: dict[int, tuple[object, bool]] | None,
+) -> bool:
+    if cache is None or not isinstance(value, dict | list | tuple):
+        return contains_template_data(value)
+    cache_key: int = id(value)
+    cached: tuple[object, bool] | None = cache.get(cache_key)
+    if cached is not None and cached[0] is value:
+        return cached[1]
+    if isinstance(value, dict):
+        result = any(_contains_template_data_cached(item, cache) for item in value.values())
+    else:
+        result = any(_contains_template_data_cached(item, cache) for item in value)
+    cache[cache_key] = (value, result)
+    return result
+
+
+def _contains_model_config_macro_cached(
+    values: dict[str, object],
+    cache: dict[int, tuple[object, bool]] | None,
+) -> bool:
+    return any(
+        _contains_macro_data_cached(value, cache)
+        for key, value in values.items()
+        if key not in _MODEL_HOOK_KEYS
+    )
+
+
+def _contains_macro_data_cached(
+    value: object,
+    cache: dict[int, tuple[object, bool]] | None,
+) -> bool:
+    if isinstance(value, str):
+        return MACRO_CALL_PATTERN.search(value) is not None
+    if not isinstance(value, dict | list | tuple):
+        return False
+    cache_key: int = id(value)
+    if cache is not None:
+        cached: tuple[object, bool] | None = cache.get(cache_key)
+        if cached is not None and cached[0] is value:
+            return cached[1]
+    if isinstance(value, dict):
+        result = any(_contains_macro_data_cached(item, cache) for item in value.values())
+    else:
+        result = any(_contains_macro_data_cached(item, cache) for item in value)
+    if cache is not None:
+        cache[cache_key] = (value, result)
+    return result
+
+
 def validate_no_macros_in_config_value(*, value: object, path: tuple[str, ...]) -> None:
     """Recursively reject macro calls outside hook fields."""
 
@@ -1489,6 +1568,7 @@ def build_model_header_schema_entry(
     model_schema_name: str | None = None,
     model_schema_description: str | None = None,
     audit_factories: tuple[DiscoveredAuditFactory, ...] = (),
+    column_cache: dict[int, tuple[object, tuple[SchemaColumn, ...]]] | None = None,
 ) -> SchemaModelEntry | None:
     """Normalize model-owned MODEL(...) metadata into the existing schema entry shape."""
 
@@ -1518,6 +1598,7 @@ def build_model_header_schema_entry(
         raw_columns=raw_columns,
         file_path=file_path,
         column_locations=column_locations or {},
+        column_cache=column_cache,
     )
     columns: tuple[SchemaColumn, ...] = _merge_model_schema_columns(
         model_name=model_name,
@@ -1580,14 +1661,40 @@ def strip_model_header_metadata_from_config(config: CompileModelConfig) -> Compi
 
 
 def _parse_model_header_columns(
-    *, raw_columns: object | None, file_path: Path, column_locations: dict[str, SourceLocation]
+    *,
+    raw_columns: object | None,
+    file_path: Path,
+    column_locations: dict[str, SourceLocation],
+    column_cache: dict[int, tuple[object, tuple[SchemaColumn, ...]]] | None = None,
 ) -> tuple[SchemaColumn, ...]:
-    return parse_schema_columns(
-        raw_columns=raw_columns,
-        file_path=file_path,
-        label="model",
-        error_class=CompileInputError,
-        column_locations=column_locations,
+    if raw_columns is None or column_cache is None:
+        return parse_schema_columns(
+            raw_columns=raw_columns,
+            file_path=file_path,
+            label="model",
+            error_class=CompileInputError,
+            column_locations=column_locations,
+        )
+    cache_key: int = id(raw_columns)
+    cached: tuple[object, tuple[SchemaColumn, ...]] | None = column_cache.get(cache_key)
+    if cached is None or cached[0] is not raw_columns:
+        parsed: tuple[SchemaColumn, ...] = parse_schema_columns(
+            raw_columns=raw_columns,
+            file_path=file_path,
+            label="model",
+            error_class=CompileInputError,
+        )
+        cached = (raw_columns, parsed)
+        column_cache[cache_key] = cached
+    if not column_locations:
+        return cached[1]
+    return tuple(
+        replace(
+            column,
+            location=(location := column_locations.get(column.name)),
+            audits=tuple(replace(audit, location=location) for audit in column.audits),
+        )
+        for column in cached[1]
     )
 
 

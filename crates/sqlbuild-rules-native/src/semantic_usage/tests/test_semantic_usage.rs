@@ -1,4 +1,4 @@
-use crate::semantic_usage::analyze_json;
+use crate::semantic_usage::main::analyze_json;
 use crate::semantic_usage::tests::test_types::SemanticUsageTestCase;
 
 #[test]

@@ -7,7 +7,10 @@ import pytest
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ChainStep
 from sqlbuild.executor.testing._helpers import comparison_sql as comparison_sql_helpers
-from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
+from sqlbuild.executor.testing.main.comparison_sql import (
+    build_sql_test_comparison_sql,
+    build_sql_test_comparison_sql_batch,
+)
 from tests.unit.src.sqlbuild.executor.testing.main._test_types import (
     BuildComparisonSqlTestCase,
 )
@@ -323,3 +326,43 @@ def test_given_preanalyzed_step_with_authored_cte_when_building_comparison_then_
     assert comparison_sql.index("__ref__raw_orders AS") < comparison_sql.index("picked AS")
     assert comparison_sql.index("picked AS") < comparison_sql.index("__actual__orders AS")
     assert "__actual__orders AS (\nWITH picked" not in comparison_sql
+
+
+def test_given_representative_plans_when_rendering_native_batch_then_matches_reference_sql():
+    entries = (
+        build_comparison_test_entry(),
+        build_comparison_test_entry_with_helper_ctes(),
+        build_transitive_comparison_test_entry(),
+        build_assertion_test_entry(),
+    )
+    expected = tuple(
+        build_sql_test_comparison_sql(test_entry=entry, sql_analysis_dialect="duckdb")
+        for entry in entries
+    )
+
+    actual = build_sql_test_comparison_sql_batch(
+        test_entries=entries,
+        sql_analysis_dialect="duckdb",
+    )
+
+    assert actual == expected
+
+
+def test_given_quoted_table_function_when_rendering_native_batch_then_matches_reference_sql():
+    entry = build_table_function_test_entry(
+        resolved_sql="SELECT * FROM `project-d5f92072-d107-4987-9ef.test.customer_orders`(1)"
+    )
+    adapter = build_comparison_test_adapter("bigquery")
+    expected = build_sql_test_comparison_sql(
+        test_entry=entry,
+        set_difference_operator=adapter.render_set_difference_operator(),
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
+    )
+
+    (actual,) = build_sql_test_comparison_sql_batch(
+        test_entries=(entry,),
+        set_difference_operator=adapter.render_set_difference_operator(),
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
+    )
+
+    assert actual == expected

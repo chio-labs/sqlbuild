@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, overload
 
 from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
@@ -500,13 +500,100 @@ class CompiledLineageColumnFact:
     confidence: ColumnLineageConfidence = ColumnLineageConfidence.UNKNOWN
 
 
+@dataclass(frozen=True, eq=False)
+class CompactLineageFacts(Sequence[CompiledLineageColumnFact]):
+    """Indexed native lineage rows with lazy object projection."""
+
+    string_pool: tuple[str, ...]
+    rows: tuple[
+        tuple[int, int, int, tuple[tuple[int, int, int], ...]],
+        ...,
+    ]
+    resource_name_indexes: dict[int, int] = field(default_factory=dict)
+    _cache: dict[int, CompiledLineageColumnFact] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+        compare=False,
+    )
+
+    def __len__(self) -> int:
+        return len(self.rows)
+
+    @overload
+    def __getitem__(self, index: int) -> CompiledLineageColumnFact: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> Sequence[CompiledLineageColumnFact]: ...
+
+    def __getitem__(
+        self, index: int | slice
+    ) -> CompiledLineageColumnFact | Sequence[CompiledLineageColumnFact]:
+        if isinstance(index, slice):
+            return tuple(self[item_index] for item_index in range(*index.indices(len(self))))
+        normalized_index: int = index if index >= 0 else len(self) + index
+        if normalized_index < 0 or normalized_index >= len(self):
+            raise IndexError(index)
+        cached: CompiledLineageColumnFact | None = self._cache.get(normalized_index)
+        if cached is not None:
+            return cached
+        name_index, transform_code, confidence_code, sources = self.rows[normalized_index]
+        fact = CompiledLineageColumnFact(
+            output_column=self.string_pool[name_index],
+            upstream_columns=tuple(
+                CompiledLineageSourceFact(
+                    resource_type=self.string_pool[source[0]],
+                    resource_name=self.resource_name(source[1]),
+                    column_name=self.string_pool[source[2]],
+                )
+                for source in sources
+            ),
+            transform_kind=self.transform_kind(transform_code),
+            confidence=self.confidence(confidence_code),
+        )
+        self._cache[normalized_index] = fact
+        return fact
+
+    def __iter__(self) -> Iterator[CompiledLineageColumnFact]:
+        return (self[index] for index in range(len(self)))
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Sequence):
+            return NotImplemented
+        return tuple(self) == tuple(other)
+
+    def resource_name(self, index: int) -> str:
+        """Resolve a canonical native relation index to this model's resource name."""
+
+        return self.string_pool[self.resource_name_indexes.get(index, index)]
+
+    @staticmethod
+    def transform_kind(code: int) -> ColumnTransformKind:
+        return (
+            ColumnTransformKind.DIRECT,
+            ColumnTransformKind.CAST,
+            ColumnTransformKind.EXPRESSION,
+            ColumnTransformKind.AGGREGATION,
+            ColumnTransformKind.STAR,
+            ColumnTransformKind.CONSTANT,
+        )[code]
+
+    @staticmethod
+    def confidence(code: int) -> ColumnLineageConfidence:
+        return (
+            ColumnLineageConfidence.UNKNOWN,
+            ColumnLineageConfidence.HIGH,
+            ColumnLineageConfidence.MEDIUM,
+        )[code]
+
+
 @dataclass(frozen=True)
 class PolyglotAnalysisResult:
     """Outcome of one Polyglot column and lineage analysis pass."""
 
     analysis_succeeded: bool
     columns: tuple[InferredColumn, ...] | None = None
-    lineage_columns: tuple[CompiledLineageColumnFact, ...] = field(default_factory=tuple)
+    lineage_columns: Sequence[CompiledLineageColumnFact] = field(default_factory=tuple)
     has_star: bool = False
     binding_diagnostics: tuple[SqlBindingDiagnostic, ...] = field(default_factory=tuple)
     binding_validated: bool = False
@@ -757,7 +844,7 @@ class CompiledModel:
     references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
     schema_entry: SchemaModelEntry | None = None
     inferred_columns: tuple[InferredColumn, ...] | None = None
-    fast_lineage_columns: tuple[CompiledLineageColumnFact, ...] | None = None
+    fast_lineage_columns: Sequence[CompiledLineageColumnFact] | None = None
     fast_lineage_has_star: bool = False
     authored_sql: str = ""
     authored_query_sql: str = ""

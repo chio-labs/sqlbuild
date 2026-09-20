@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from functools import lru_cache
 from typing import Any
 
@@ -337,7 +338,7 @@ def _resolved_fixture_reads(
     *,
     query_sql: str,
     references: tuple[CompileSqlReference, ...],
-    fast_lineage: tuple[CompiledLineageColumnFact, ...],
+    fast_lineage: Sequence[CompiledLineageColumnFact],
     fixture_keys: frozenset[FixtureKey],
     dialect: str | None,
 ) -> tuple[CompiledLineageSourceFact, ...]:

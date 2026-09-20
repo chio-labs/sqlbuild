@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import json
+from typing import cast
+from unittest.mock import Mock
+
 import pytest
 from polyglot_sql import ParseError
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.analysis.columns import (
     analyze_columns_and_lineage_with_polyglot,
+    analyze_queries_with_compact_polyglot_batch,
     import_polyglot_sql,
     infer_columns_with_sql_analysis,
     substitute_placeholder_defaults,
@@ -31,6 +36,96 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     UnexpectedAnalysisFailureTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import direct_orders_lineage
+
+
+def test_given_queries_when_batch_analyzing_then_uses_one_ordered_native_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[dict[str, object]] = []
+
+    def analyze_project_queries_compact_json(request_json: str) -> str:
+        request: dict[str, object] = json.loads(request_json)
+        captured.append(request)
+        return json.dumps(
+            {
+                "strings": [],
+                "templates": [
+                    [[], False],
+                    "invalid query",
+                ],
+                "analyses": [
+                    [0, []],
+                    [1, []],
+                ],
+            }
+        )
+
+    monkeypatch.setattr(
+        "sqlbuild.compiler.compile._helpers.analysis.columns._native.analyze_project_queries_compact_json",
+        analyze_project_queries_compact_json,
+        raising=False,
+    )
+
+    results = analyze_queries_with_compact_polyglot_batch(
+        query_sqls=(
+            'SELECT order_id FROM __ref("orders")',
+            "SELECT @@@status AS status",
+        ),
+        references=(
+            (CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),),
+            (),
+        ),
+        placeholders=(None, {"status": "'ready'"}),
+        column_nullability_by_table={"orders": {"order_id": InferredNullability.NON_NULL}},
+        column_types_by_table={"orders": {"order_id": "BIGINT"}},
+        inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="duckdb"),
+        recover_cte_facts=(False, False),
+    )
+
+    assert len(captured) == 1
+    native_queries: list[dict[str, object]] = cast(list[dict[str, object]], captured[0]["queries"])
+    native_templates: list[dict[str, object]] = cast(
+        list[dict[str, object]], captured[0]["templates"]
+    )
+    native_projections: list[dict[str, object]] = cast(
+        list[dict[str, object]], captured[0]["projections"]
+    )
+    assert len(native_queries) == 2
+    assert "__ref" not in str(native_queries[0]["sql"])
+    assert "__sqlbuild_project_input_0" in str(native_queries[0]["sql"])
+    assert native_queries[1]["sql"] == "SELECT 'ready' AS status"
+    assert native_templates[0]["references"] == {
+        "__sqlbuild_project_input_0": {
+            "resourceType": "model",
+            "resourceName": "__sqlbuild_project_input_0",
+        }
+    }
+    assert native_projections[0]["resourceNames"] == {"__sqlbuild_project_input_0": "orders"}
+    assert native_queries[0]["schema"] == {
+        "tables": [
+            {
+                "name": "__sqlbuild_project_input_0",
+                "columns": [{"name": "order_id", "type": "BIGINT", "nullable": False}],
+            }
+        ]
+    }
+    assert "orders" in results[0].cleaned_sql
+    assert results[0].analysis == {"hasStar": False}
+    assert results[0].compact_rows == []
+    assert results[1].analysis is None
+    assert results[1].projected is True
+    monkeypatch.setattr(
+        "sqlbuild.compiler.compile._helpers.analysis.columns.import_polyglot_sql",
+        Mock(side_effect=AssertionError("native failures must not trigger Python reparsing")),
+    )
+
+    failed_analysis: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+        query_sql="SELECT FROM",
+        allow_compact_analysis=True,
+        precomputed=results[1],
+    )
+
+    assert failed_analysis.analysis_succeeded is False
 
 
 @pytest.mark.parametrize(

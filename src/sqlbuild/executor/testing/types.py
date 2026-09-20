@@ -3,6 +3,15 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Protocol
+
+
+class NativeSqlTestRenderingModule(Protocol):
+    """Native SQL-test comparison-rendering boundary."""
+
+    def render_sql_test_comparisons_json(self, request_json: str) -> str: ...
+
+    def plan_and_render_sql_tests_json(self, request_json: str) -> str: ...
 
 
 class SqlTestOutcome(StrEnum):

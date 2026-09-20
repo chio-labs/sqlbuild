@@ -85,7 +85,7 @@ def build_analysis_cache_context(
         "algorithm": _ANALYSIS_ALGORITHM_FINGERPRINT,
         "cache_version": _ANALYSIS_CACHE_VERSION,
         "sqlbuild_version": _package_version("sqlbuild"),
-        "polyglot_version": _package_version("polyglot-sql"),
+        "polyglot_version": _package_version("polyglot-sql-chio"),
         "python_version": platform.python_version_tuple()[:2],
         "allow_compact_analysis": allow_compact_analysis,
         "inference_profile": profile_payload,

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import threading
 from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import Mock
@@ -421,10 +420,10 @@ def test_given_analysis_inputs_when_building_keys_then_all_semantic_inputs_affec
 
 @pytest.mark.parametrize(
     "test_case",
-    (AnalysisCacheTestCase(description="scoped schema invalidation", expected_count=1),),
+    (AnalysisCacheTestCase(description="propagated schema invalidation", expected_count=2),),
     ids=lambda case: case.description,
 )
-def test_given_schema_change_when_compiling_then_only_direct_consumers_miss_cache(
+def test_given_schema_change_when_compiling_then_affected_consumers_miss_cache(
     test_case: AnalysisCacheTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -527,7 +526,7 @@ def test_given_model_output_change_when_compiling_then_downstream_closure_misses
     (AnalysisCacheTestCase(description="parallel downstream invalidation", expected_count=2),),
     ids=lambda case: case.description,
 )
-def test_given_changed_output_signature_when_reanalyzing_downstream_then_uses_parallel_workers(
+def test_given_changed_output_signature_when_reanalyzing_downstream_then_uses_one_native_batch(
     test_case: AnalysisCacheTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -539,46 +538,14 @@ def test_given_changed_output_signature_when_reanalyzing_downstream_then_uses_pa
     original_sql: str = root_path.read_text(encoding="utf-8")
     root_path.write_text("MODEL ();\n\nSELECT 1 AS id, 2 AS extra\n", encoding="utf-8")
     _ = compile_project_with_cache(project_dir=tmp_path)
-    barrier: threading.Barrier = threading.Barrier(test_case.expected_count)
-    worker_ids: set[int] = set()
-    real_analyzer: Callable[..., PolyglotAnalysisResult] = (
-        assembly_project.analyze_columns_and_lineage_with_polyglot
-    )
-
-    def analyze_with_barrier(
-        *,
-        query_sql: str,
-        references: tuple[CompileSqlReference, ...],
-        placeholders: dict[str, str] | None,
-        column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None,
-        column_types_by_table: dict[str, dict[str, str]] | None,
-        inference_profile: ExpressionInferenceProfile | None,
-        allow_compact_analysis: bool,
-        binding_schema: dict[str, dict[str, str]] | None = None,
-        recover_cte_facts: bool = False,
-    ) -> PolyglotAnalysisResult:
-        worker_ids.add(threading.get_ident())
-        _ = barrier.wait(timeout=5)
-        return real_analyzer(
-            query_sql=query_sql,
-            references=references,
-            placeholders=placeholders,
-            column_nullability_by_table=column_nullability_by_table,
-            column_types_by_table=column_types_by_table,
-            inference_profile=inference_profile,
-            allow_compact_analysis=allow_compact_analysis,
-            binding_schema=binding_schema,
-            recover_cte_facts=recover_cte_facts,
-        )
-
-    monkeypatch.setattr(
-        assembly_project, "analyze_columns_and_lineage_with_polyglot", analyze_with_barrier
-    )
+    batcher: Mock = Mock(wraps=assembly_project.analyze_queries_with_compact_polyglot_batch)
+    monkeypatch.setattr(assembly_project, "analyze_queries_with_compact_polyglot_batch", batcher)
     root_path.write_text(original_sql, encoding="utf-8")
 
     _ = compile_project_with_cache(project_dir=tmp_path)
 
-    assert len(worker_ids) == test_case.expected_count
+    assert batcher.call_count == 1
+    assert len(batcher.call_args.kwargs["query_sqls"]) == test_case.expected_count
 
 
 @pytest.mark.parametrize(
