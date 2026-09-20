@@ -237,6 +237,34 @@ def test_given_compiled_project_when_writing_static_target_then_expected_files_a
     assert model_path.stat().st_mtime_ns != unchanged_mtime_ns
 
 
+def test_given_unicode_sql_when_writing_static_target_twice_then_bytes_remain_unchanged(
+    tmp_path: Path,
+) -> None:
+    project: CompiledProject = build_static_target_writer_project()
+    project = replace(
+        project,
+        models=(replace(project.models[0], query_sql="SELECT 'café' AS product_name  \n\n"),),
+    )
+    target_dir: Path = tmp_path / "target"
+
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+    model_path: Path = target_dir / "compiled" / "models" / "staging" / "orders.sql"
+    unchanged_mtime_ns: int = 1_000_000_000
+    os.utime(model_path, ns=(unchanged_mtime_ns, unchanged_mtime_ns))
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+
+    assert model_path.read_bytes() == "SELECT 'café' AS product_name\n".encode()
+    assert model_path.stat().st_mtime_ns == unchanged_mtime_ns
+
+
 @pytest.mark.parametrize(
     "test_case",
     (TargetWriterCacheTestCase(description="unchanged artifact reuse", expected_builder_calls=0),),

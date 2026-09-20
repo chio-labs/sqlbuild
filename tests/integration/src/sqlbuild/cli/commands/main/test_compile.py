@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import cast
 
@@ -54,6 +55,38 @@ def test_given_multiple_typed_model_headers_when_compiling_then_cli_preserves_he
     assert summary["models"] == 2
     assert summary["errors"] == 0
     assert (tmp_path / "target" / "compiled" / "models" / "orders.sql").is_file()
+
+
+def test_given_unicode_model_when_compiling_twice_then_cli_preserves_unchanged_artifact(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "inventory"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model_path: Path = tmp_path / "models" / "products.sql"
+    model_path.parent.mkdir()
+    model_path.write_text(
+        "MODEL (materialized table);\nSELECT 'café' AS product_name  \n\n",
+        encoding="utf-8",
+    )
+
+    first_exit_code: int = main(
+        ["--project-dir", str(tmp_path), "--no-color", "compile", "--no-cache"]
+    )
+    _ = capsys.readouterr()
+    artifact_path: Path = tmp_path / "target" / "compiled" / "models" / "products.sql"
+    unchanged_mtime_ns: int = 1_000_000_000
+    os.utime(artifact_path, ns=(unchanged_mtime_ns, unchanged_mtime_ns))
+    second_exit_code: int = main(
+        ["--project-dir", str(tmp_path), "--no-color", "compile", "--no-cache"]
+    )
+    _ = capsys.readouterr()
+
+    assert first_exit_code == 0
+    assert second_exit_code == 0
+    assert artifact_path.read_bytes() == "SELECT 'café' AS product_name\n".encode()
+    assert artifact_path.stat().st_mtime_ns == unchanged_mtime_ns
 
 
 @pytest.mark.parametrize(

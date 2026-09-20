@@ -400,9 +400,9 @@ def _write_manifest(*, target_dir: Path, manifest: dict[str, object]) -> None:
 def _write_sql(*, path: Path, sql: str, check_existing: bool = True) -> None:
     """Write one SQL file."""
 
-    _write_text_if_changed(
+    _write_bytes_if_changed(
         path=path,
-        contents=sql.rstrip() + "\n",
+        contents=sql.rstrip().encode("utf-8") + b"\n",
         check_existing=check_existing,
     )
 
@@ -418,13 +418,27 @@ def _write_text_if_changed(*, path: Path, contents: str, check_existing: bool = 
             _overwrite_text(path=path, contents=contents)
 
 
+def _write_bytes_if_changed(*, path: Path, contents: bytes, check_existing: bool = True) -> None:
+    with record_compile_timing("physical_write_ms"):
+        if check_existing and path.is_file() and path.read_bytes() == contents:
+            return
+        try:
+            _overwrite_bytes(path=path, contents=contents)
+        except FileNotFoundError:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _overwrite_bytes(path=path, contents=contents)
+
+
 def _overwrite_text(*, path: Path, contents: str) -> None:
-    data: bytes = contents.encode("utf-8")
+    _overwrite_bytes(path=path, contents=contents.encode("utf-8"))
+
+
+def _overwrite_bytes(*, path: Path, contents: bytes) -> None:
     descriptor: int = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)
     try:
         offset: int = 0
-        while offset < len(data):
-            written: int = os.write(descriptor, data[offset:])
+        while offset < len(contents):
+            written: int = os.write(descriptor, contents[offset:])
             if written == 0:
                 raise OSError(f"failed to write compiled artifact '{path}'")
             offset += written
