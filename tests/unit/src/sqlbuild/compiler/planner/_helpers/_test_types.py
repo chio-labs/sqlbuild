@@ -58,7 +58,9 @@ class FixturePlanningWorkTestCase:
 @dataclass(frozen=True)
 class CompleteFixturePlanningTestCase:
     description: str
+    fixture_sql: str
     expected_analysis_calls: int
+    expected_inference_calls: int
     expected_fixture_sql: str
 
 

@@ -51,6 +51,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     build_transformed_collection_project_files,
     build_unsatisfied_leaf_test_project_files,
     build_unspecified_nullability_fixture_project_files,
+    build_untyped_null_fixture_project_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     assert_fragments_in_order,
@@ -150,6 +151,15 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_stdout_fragment="PASS=1",
             expected_artifact_fragments=("CAST(NULL AS TEXT) AS status",),
             unexpected_artifact_fragments=("__sqlbuild_partial_fixture",),
+        ),
+        PartialFixtureE2ETestCase(
+            description="supplied bare null receives authoritative fixture type",
+            repo_files=build_untyped_null_fixture_project_files(),
+            expected_stdout_fragment="PASS=1",
+            expected_artifact_fragments=(
+                'CAST("__sqlbuild_partial_fixture".ordered_at AS DATE) AS ordered_at',
+                "__sqlbuild_partial_fixture",
+            ),
         ),
         PartialFixtureE2ETestCase(
             description="qualified star on real relation does not expand mocked relation",

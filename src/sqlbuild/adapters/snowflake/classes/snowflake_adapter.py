@@ -1064,6 +1064,11 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
 
         return '"' + name.upper().replace('"', '""') + '"'
 
+    def render_exact_identifier(self, name: str) -> str:
+        """Render one explicitly quoted Snowflake identifier with its exact case."""
+
+        return '"' + name.replace('"', '""') + '"'
+
     def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
         match type_name:
             case LoaderLogicalType.BOOLEAN:

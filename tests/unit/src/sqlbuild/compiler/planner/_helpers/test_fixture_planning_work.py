@@ -123,8 +123,68 @@ def test_given_many_tests_when_building_entries_then_project_fixture_metadata_is
     (
         CompleteFixturePlanningTestCase(
             description="complete authoritative fixture",
+            fixture_sql="SELECT 1 AS order_id",
             expected_analysis_calls=0,
+            expected_inference_calls=1,
             expected_fixture_sql="SELECT 1 AS order_id",
+        ),
+        CompleteFixturePlanningTestCase(
+            description="explicit typed null fixture",
+            fixture_sql="SELECT CAST(NULL AS INTEGER) AS order_id WHERE FALSE",
+            expected_analysis_calls=0,
+            expected_inference_calls=1,
+            expected_fixture_sql="SELECT CAST(NULL AS INTEGER) AS order_id WHERE FALSE",
+        ),
+        CompleteFixturePlanningTestCase(
+            description="untyped null fixture",
+            fixture_sql="SELECT NULL AS order_id WHERE FALSE",
+            expected_analysis_calls=0,
+            expected_inference_calls=1,
+            expected_fixture_sql=(
+                'SELECT\n  CAST("__sqlbuild_partial_fixture".order_id AS INTEGER) '
+                "AS order_id\nFROM (\nSELECT NULL AS order_id WHERE FALSE\n) "
+                'AS "__sqlbuild_partial_fixture"'
+            ),
+        ),
+        CompleteFixturePlanningTestCase(
+            description="untyped null before typed union value",
+            fixture_sql=(
+                "SELECT NULL AS order_id UNION ALL SELECT CAST(1.5 AS DOUBLE) AS order_id"
+            ),
+            expected_analysis_calls=0,
+            expected_inference_calls=1,
+            expected_fixture_sql=(
+                "SELECT NULL AS order_id UNION ALL SELECT CAST(1.5 AS DOUBLE) AS order_id"
+            ),
+        ),
+        CompleteFixturePlanningTestCase(
+            description="unquoted mixed-case null fixture",
+            fixture_sql="SELECT NULL AS Order_ID WHERE FALSE",
+            expected_analysis_calls=0,
+            expected_inference_calls=1,
+            expected_fixture_sql=(
+                'SELECT\n  CAST("__sqlbuild_partial_fixture".Order_ID AS INTEGER) '
+                "AS Order_ID\nFROM (\nSELECT NULL AS Order_ID WHERE FALSE\n) "
+                'AS "__sqlbuild_partial_fixture"'
+            ),
+        ),
+        CompleteFixturePlanningTestCase(
+            description="quoted mixed-case null fixture",
+            fixture_sql='SELECT NULL AS "Order_ID" WHERE FALSE',
+            expected_analysis_calls=0,
+            expected_inference_calls=1,
+            expected_fixture_sql=(
+                'SELECT\n  CAST("__sqlbuild_partial_fixture"."Order_ID" AS INTEGER) '
+                'AS "Order_ID"\nFROM (\nSELECT NULL AS "Order_ID" WHERE FALSE\n) '
+                'AS "__sqlbuild_partial_fixture"'
+            ),
+        ),
+        CompleteFixturePlanningTestCase(
+            description="unknown non-null expression fixture",
+            fixture_sql="SELECT custom_value() AS order_id",
+            expected_analysis_calls=0,
+            expected_inference_calls=1,
+            expected_fixture_sql="SELECT custom_value() AS order_id",
         ),
     ),
     ids=lambda case: case.description,
@@ -175,18 +235,25 @@ def test_given_complete_authoritative_fixture_when_completing_then_skips_column_
         "analyze_resolved_column_reads",
         fallback_analyzer,
     )
+    fixture_inference: Mock = Mock(wraps=fixture_completion.infer_fixture_column_facts)
+    monkeypatch.setattr(
+        fixture_completion,
+        "infer_fixture_column_facts",
+        fixture_inference,
+    )
 
     completed: RelationFixtureCompletion = fixture_completion.build_relation_fixture_completion(
         project=replace(project, models=(model,)),
         adapter=PlannerTestAdapter(),
         ordered_model_names=(model.name,),
-        fixture_groups=((CompiledResourceType.SOURCE, {"raw_orders": "SELECT 1 AS order_id"}),),
+        fixture_groups=((CompiledResourceType.SOURCE, {"raw_orders": test_case.fixture_sql}),),
         planning_context=context,
     )
 
     assert completed.diagnostics == ()
     assert completed.fixture_sql_by_key[source_key] == test_case.expected_fixture_sql
     assert fallback_analyzer.call_count == test_case.expected_analysis_calls
+    assert fixture_inference.call_count == test_case.expected_inference_calls
 
 
 if __name__ == "__main__":

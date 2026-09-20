@@ -681,6 +681,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_exact_identifier(self, name: str) -> str:
+        """Render one explicitly quoted identifier without changing its logical spelling."""
+        ...
+
+    @abstractmethod
     def render_framework_type(self, type_name: FrameworkType) -> str:
         """Render one framework-internal logical type for this adapter."""
         ...

@@ -570,6 +570,42 @@ def build_explicit_typed_null_fixture_project_files() -> dict[str, str]:
     return files
 
 
+def build_untyped_null_fixture_project_files() -> dict[str, str]:
+    """Build a complete empty fixture whose bare null needs its contract type."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "untyped_null_fixture"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "untyped_null_fixture.duckdb"\n'
+        ),
+        "models/orders.sql": (
+            "MODEL ();\n\n"
+            "SELECT EXTRACT(YEAR FROM ordered_at) AS order_year\n"
+            'FROM __source("raw_orders")\n'
+        ),
+        "sources/raw_orders.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n"
+            "    schema: main\n"
+            "    table: raw_orders\n"
+            "    contract: enforced\n"
+            "    columns:\n"
+            "      - name: ordered_at\n        type: DATE\n        nullable: true\n"
+        ),
+        "tests/unit/test_orders.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            "__source__raw_orders AS (SELECT NULL AS ordered_at WHERE FALSE),\n"
+            "__expected__orders AS (\n"
+            "  SELECT CAST(NULL AS BIGINT) AS order_year WHERE FALSE\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
 def build_qualified_star_other_relation_project_files() -> dict[str, str]:
     """Build a qualified star that does not target the only mocked relation."""
 

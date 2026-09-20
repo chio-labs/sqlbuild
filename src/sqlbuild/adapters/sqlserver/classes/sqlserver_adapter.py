@@ -954,6 +954,9 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def render_identifier(self, name: str) -> str:
         return "[" + name.replace("]", "]]") + "]"
 
+    def render_exact_identifier(self, name: str) -> str:
+        return self.render_identifier(name)
+
     def render_framework_type(self, type_name: FrameworkType) -> str:
         match type_name:
             case FrameworkType.STRING:

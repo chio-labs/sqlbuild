@@ -972,6 +972,9 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def render_identifier(self, name: str) -> str:
         return "`" + name.replace("`", "``") + "`"
 
+    def render_exact_identifier(self, name: str) -> str:
+        return self.render_identifier(name)
+
     def _quote_sql_string(self, value: str) -> str:
         return "'" + value.replace("'", "''") + "'"
 

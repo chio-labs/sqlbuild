@@ -842,6 +842,27 @@ def test_given_identifier_when_rendering_then_snowflake_quotes_uppercase_identif
 @pytest.mark.parametrize(
     "test_case",
     [
+        SnowflakeRenderIdentifierTestCase(
+            description="preserves explicitly quoted mixed-case identifier",
+            name="Order_ID",
+            expected_identifier='"Order_ID"',
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_exact_identifier_when_rendering_then_snowflake_preserves_case(
+    test_case: SnowflakeRenderIdentifierTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+
+    identifier: str = adapter.render_exact_identifier(test_case.name)
+
+    assert identifier == test_case.expected_identifier
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         SnowflakeMergeExclusionTestCase(
             description="snowflake selective merge",
             expected_update_assignment='"STATUS" = __source."STATUS"',

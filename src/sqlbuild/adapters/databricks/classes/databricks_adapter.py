@@ -728,6 +728,9 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def render_identifier(self, name: str) -> str:
         return "`" + name.replace("`", "``") + "`"
 
+    def render_exact_identifier(self, name: str) -> str:
+        return self.render_identifier(name)
+
     def render_loader_logical_type(self, type_name: LoaderLogicalType) -> str:
         match type_name:
             case LoaderLogicalType.BOOLEAN:
