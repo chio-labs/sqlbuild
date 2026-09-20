@@ -45,15 +45,21 @@ def test_given_unique_model_headers_when_discovering_then_native_tokenization_is
         f"MODEL ({second_header});\nSELECT 2 AS total\n", encoding="utf-8"
     )
     native_calls: list[list[str]] = []
-    native_tokenize = _native.tokenize_model_headers
+    native_parse = _native.parse_model_headers
 
     def recording_tokenize(
         headers: list[str],
-    ) -> list[tuple[list[tuple[int, str, int]] | None, str | None]]:
+    ) -> list[
+        tuple[
+            dict[str, object] | None,
+            list[tuple[str, int, int]] | None,
+            str | None,
+        ]
+    ]:
         native_calls.append(headers)
-        return native_tokenize(headers)
+        return native_parse(headers)
 
-    monkeypatch.setattr(model_file_helpers._native, "tokenize_model_headers", recording_tokenize)
+    monkeypatch.setattr(model_file_helpers._native, "parse_model_headers", recording_tokenize)
 
     discovered = discover_model_files(project_dir=tmp_path)
 
@@ -76,7 +82,7 @@ def test_given_native_pool_construction_error_when_preparing_headers_then_error_
     def rejecting_tokenize(_headers: list[str]) -> object:
         raise ValueError("MODEL header worker pool construction failed")
 
-    monkeypatch.setattr(model_file_helpers._native, "tokenize_model_headers", rejecting_tokenize)
+    monkeypatch.setattr(model_file_helpers._native, "parse_model_headers", rejecting_tokenize)
 
     with pytest.raises(ValueError, match="MODEL header worker pool construction failed"):
         model_file_helpers.prepare_model_header_tokens(["pool_error_marker value"])
@@ -93,6 +99,109 @@ def test_given_cached_model_header_when_parsing_twice_then_top_level_dictionarie
 
     assert first is not second
     assert "added" not in second
+
+
+def test_given_generated_header_corpus_when_native_parsing_then_parent_behavior_is_exact() -> None:
+    headers: list[str] = [
+        "config (columns (nested (type INTEGER))), columns (top (type INTEGER))",
+        "config (columns (nested (type INTEGER)))",
+    ]
+    for index in range(9_998):
+        suffix: str = str(index)
+        variant: int = index % 10
+        if variant == 0:
+            headers.append(
+                f"name model_{suffix}, enabled true, columns (col_{suffix} "
+                '(type DECIMAL(10,2), nullable false, description "Order total"))'
+            )
+        elif variant == 1:
+            headers.append(
+                f"constants (_set_{suffix} {{FR, GB, FR}}, "
+                f"_array_{suffix} constant(value [1, 2], render_as array))"
+            )
+        elif variant == 2:
+            headers.append(
+                f'pre_hooks [inline_sql("select {index}"), sql("record_{suffix}", '
+                'table: "orders"), python("notify", attempts: 2, urgent: true)]'
+            )
+        elif variant == 3:
+            headers.append(
+                f"audits [rate_{suffix} (thresholds (warn (outside -1.5 2.5)))], "
+                f'parent __ref("orders_{suffix}")'
+            )
+        elif variant == 4:
+            headers.append(
+                f"schema dev_${{user_{suffix}}}, tags [core, 'daily orders'], value null"
+            )
+        elif variant == 5:
+            headers.append(
+                f"columns (café_{suffix} (type TIMESTAMP_NTZ(9), audits "
+                "[accepted_values (values [placed, completed])]))"
+            )
+        elif variant == 6:
+            numeric_variant: int = (index // 10) % 6
+            if numeric_variant == 0:
+                headers.append(f"unicode_integer_{suffix} +١٢٣")
+            elif numeric_variant == 1:
+                headers.append(f"unicode_integer_{suffix} -१२३")
+            elif numeric_variant == 2:
+                headers.append(f"unicode_float_{suffix} ١٢.٥")
+            elif numeric_variant == 3:
+                headers.append(f"unicode_float_{suffix} -१२.५")
+            elif numeric_variant == 4:
+                headers.append(f"numeric_character_{suffix} ²")
+            else:
+                headers.append(f"large_{suffix} {10**40 + index}, ratio_{suffix} +.25")
+        elif variant == 7:
+            headers.append(f'description "escaped \\"value_{suffix}\\"", config (x [a, b])')
+        elif variant == 8:
+            if index % 20 == 8:
+                headers.append(f"duplicate_{suffix} one, duplicate_{suffix} two")
+            else:
+                headers.append('post_hooks [python("\u001c")]')
+        else:
+            headers.append(f"columns (col_{suffix} (type DECIMAL(10,2))")
+
+    native_results = _native.parse_model_headers(headers)
+    for header, (native_values, native_offsets, native_error) in zip(
+        headers, native_results, strict=True
+    ):
+        try:
+            parent_values: dict[str, object] | None = model_file_helpers._ModelHeaderParser(
+                header=header
+            ).parse()
+            parent_error: str | None = None
+        except model_file_helpers.ModelHeaderSyntaxError as error:
+            parent_values = None
+            parent_error = str(error)
+        assert native_error == parent_error
+        if native_values is None:
+            assert parent_values is None
+            assert native_offsets is None
+            continue
+        assert model_file_helpers._project_native_header_map(native_values) == parent_values
+        assert native_offsets == _parent_column_offsets(header)
+
+
+def _parent_column_offsets(header: str) -> list[tuple[str, int, int]]:
+    tokens = model_file_helpers._tokenize_model_header_for_spans(header)
+    offsets: list[tuple[str, int, int]] = []
+    depth: int = 0
+    in_columns: bool = False
+    for index, token in enumerate(tokens):
+        if token.kind == "end":
+            break
+        if token.kind == "word" and token.value == "columns" and depth == 0:
+            in_columns = tokens[index + 1].value == "("
+        elif in_columns and token.kind == "word" and depth == 1:
+            offsets.append((token.value, token.position, len(token.value)))
+        if token.kind == "symbol" and token.value == "(":
+            depth += 1
+        elif token.kind == "symbol" and token.value == ")":
+            depth -= 1
+            if in_columns and depth == 0:
+                break
+    return offsets
 
 
 def test_given_multiple_invalid_model_headers_when_discovering_then_fault_order_is_preserved(
@@ -724,6 +833,21 @@ def test_given_invalid_sql_model_contents_when_parsing_then_it_raises_clear_erro
             expected_locations={
                 "status": (Path("models/orders.sql"), 3, 5, 3, 11),
             },
+        ),
+        ModelHeaderColumnLocationTestCase(
+            description="ignores nested columns maps before root model columns",
+            contents=(
+                "MODEL (config (columns (nested (type INTEGER))), "
+                "columns (top (type INTEGER))); SELECT 1"
+            ),
+            expected_locations={
+                "top": (Path("models/orders.sql"), 1, 59, 1, 62),
+            },
+        ),
+        ModelHeaderColumnLocationTestCase(
+            description="ignores nested columns maps without root model columns",
+            contents="MODEL (config (columns (nested (type INTEGER)))); SELECT 1",
+            expected_locations={},
         ),
     ),
     ids=lambda case: case.description,
