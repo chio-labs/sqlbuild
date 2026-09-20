@@ -3,15 +3,71 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.cli.commands._helpers.clone.output import (
+    render_clone_fingerprint_interrupted_line,
+    render_clone_fingerprint_progress_line,
     render_clone_item_line,
     render_clone_output,
 )
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from tests.unit.src.sqlbuild.cli.commands._helpers.clone._test_types import (
+    RenderCloneFingerprintInterruptedTestCase,
+    RenderCloneFingerprintProgressTestCase,
     RenderCloneItemLineTestCase,
     RenderCloneOutputTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        RenderCloneFingerprintProgressTestCase(
+            description="confirmed batch reports cumulative progress",
+            completed=50,
+            total=386,
+            expected_line="  fingerprint[ 50/386] propagated OK",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_confirmed_fingerprint_batch_when_rendering_then_progress_is_explicit(
+    test_case: RenderCloneFingerprintProgressTestCase,
+) -> None:
+    rendered: str = render_clone_fingerprint_progress_line(
+        completed=test_case.completed,
+        total=test_case.total,
+        use_color=False,
+    )
+
+    assert rendered == test_case.expected_line
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        RenderCloneFingerprintInterruptedTestCase(
+            description="interruption bounds pending identity context",
+            completed=50,
+            total=62,
+            pending_identities=tuple(f"model:orders_{index}" for index in range(12)),
+            expected_fragments=("[50/62] FAIL", "model:orders_0", "model:orders_9", "(+2 more)"),
+            unexpected_fragments=("orders_10",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_interrupted_fingerprint_batch_when_rendering_then_pending_context_is_bounded(
+    test_case: RenderCloneFingerprintInterruptedTestCase,
+) -> None:
+    rendered: str = render_clone_fingerprint_interrupted_line(
+        completed=test_case.completed,
+        total=test_case.total,
+        pending_identities=test_case.pending_identities,
+        use_color=False,
+    )
+
+    assert all(fragment in rendered for fragment in test_case.expected_fragments)
+    assert all(fragment not in rendered for fragment in test_case.unexpected_fragments)
 
 
 @pytest.mark.parametrize(

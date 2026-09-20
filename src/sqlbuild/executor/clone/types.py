@@ -13,6 +13,16 @@ class CloneItemCallback(Protocol):
     def __call__(self, *, index: int, total: int, item: CloneItemResult) -> None: ...
 
 
+class CloneFingerprintProgressCallback(Protocol):
+    def __call__(
+        self, *, completed: int, total: int, pending_identities: tuple[str, ...]
+    ) -> None: ...
+
+
+class CloneFingerprintProgressReporter(CloneFingerprintProgressCallback, Protocol):
+    def write_interrupted(self) -> None: ...
+
+
 class CloneStartCallback(Protocol):
     def __call__(
         self, *, origin_target_name: str, destination_target_name: str, total: int

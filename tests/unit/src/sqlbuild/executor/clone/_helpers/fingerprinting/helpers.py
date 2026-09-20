@@ -110,7 +110,7 @@ def patch_fingerprint_io(
     from sqlbuild.executor.clone._helpers import fingerprinting as fingerprinting_module
 
     monkeypatch.setattr(fingerprinting_module, "read_latest_fingerprints", read_latest)
-    monkeypatch.setattr(fingerprinting_module, "write_fingerprint", write)
+    monkeypatch.setattr(fingerprinting_module, "write_fingerprints", write)
 
 
 def build_fingerprint(node_type: str, node_name: str) -> Fingerprint:

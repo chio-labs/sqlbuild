@@ -36,6 +36,13 @@ class WriteCreatesTableTestCase:
 
 
 @dataclass(frozen=True)
+class BatchWriteTestCase:
+    description: str
+    row_count: int
+    expected_last_definition: str
+
+
+@dataclass(frozen=True)
 class LatestResolutionTestCase:
     description: str
     database: str | None

@@ -58,6 +58,23 @@ class WriteFingerprintRetryExhaustionTestCase:
 
 
 @dataclass(frozen=True)
+class WriteFingerprintBatchTestCase:
+    description: str
+    fingerprint_count: int
+    definition_size: int
+    expected_rows_per_insert: tuple[int, ...]
+    expected_progress: tuple[tuple[int, int], ...]
+
+
+@dataclass(frozen=True)
+class WriteFingerprintPartialFailureTestCase:
+    description: str
+    fingerprint_count: int
+    expected_execute_count: int
+    expected_progress: tuple[tuple[int, int], ...]
+
+
+@dataclass(frozen=True)
 class NormalizeQuerySqlTestCase:
     description: str
     query_sql: str

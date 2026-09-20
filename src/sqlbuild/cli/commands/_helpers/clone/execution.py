@@ -6,6 +6,9 @@ import time
 from typing import TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands._helpers.clone.fingerprint_progress import (
+    create_clone_fingerprint_progress_reporter,
+)
 from sqlbuild.cli.commands._helpers.clone.output import (
     clone_relation_flow_text,
     render_clone_item_line,
@@ -37,7 +40,7 @@ from sqlbuild.executor.clone.models import (
     CloneItemResult,
     CloneSourceEntries,
 )
-from sqlbuild.executor.clone.types import CloneItemCallback
+from sqlbuild.executor.clone.types import CloneFingerprintProgressReporter, CloneItemCallback
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.models import SourceEntry
@@ -104,18 +107,28 @@ def execute_clone_plan(
         )
     finally:
         event_writer.close()
-    with OperationLifecycle(operation_kind="clone", operation_name="clone_finalization"):
-        copy_clone_fingerprints(
-            result=result,
-            origin_model_entries=preparation.pipeline_result.origin_model_entries,
-            destination_model_entries=preparation.pipeline_result.destination_model_entries,
-            origin_seed_entries=preparation.pipeline_result.origin_seed_entries,
-            destination_seed_entries=preparation.pipeline_result.destination_seed_entries,
-            adapter=invocation.adapter,
-            destination_connection=connection_context.destination_connection,
-            run_id=preparation.pipeline_result.destination_project.run_id,
-            query_change_tracking=preparation.pipeline_result.destination_project.settings.query_change_tracking,
+    fingerprint_progress: CloneFingerprintProgressReporter = (
+        create_clone_fingerprint_progress_reporter(
+            stream=invocation.progress_stream, use_color=invocation.use_color
         )
+    )
+    try:
+        with OperationLifecycle(operation_kind="clone", operation_name="clone_finalization"):
+            copy_clone_fingerprints(
+                result=result,
+                origin_model_entries=preparation.pipeline_result.origin_model_entries,
+                destination_model_entries=preparation.pipeline_result.destination_model_entries,
+                origin_seed_entries=preparation.pipeline_result.origin_seed_entries,
+                destination_seed_entries=preparation.pipeline_result.destination_seed_entries,
+                adapter=invocation.adapter,
+                destination_connection=connection_context.destination_connection,
+                run_id=preparation.pipeline_result.destination_project.run_id,
+                query_change_tracking=preparation.pipeline_result.destination_project.settings.query_change_tracking,
+                on_progress=fingerprint_progress,
+            )
+    except BaseException:
+        fingerprint_progress.write_interrupted()
+        raise
     return CloneRunOutcome(result=result, elapsed=time.monotonic() - clone_start)
 
 

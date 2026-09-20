@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.compiler.fingerprints.constants import (
@@ -113,25 +113,31 @@ def build_insert_sql(
 ) -> str:
     """Build a complete INSERT statement for appending one fingerprint row."""
 
-    run_id: str = fingerprint.run_id
-    definition_hash: str = fingerprint.definition_hash
-    version_hash: str = fingerprint.version_hash
-    schema_fingerprint: str = fingerprint.schema_fingerprint
-    ts: str = fingerprint.ts.isoformat()
+    return build_insert_many_sql(
+        database=database,
+        schema=schema,
+        fingerprints=(fingerprint,),
+        render_qualified_name=render_qualified_name,
+    )
+
+
+def build_insert_many_sql(
+    *,
+    database: str | None,
+    schema: str,
+    fingerprints: Sequence[Fingerprint],
+    render_qualified_name: Callable[..., str | None],
+) -> str:
+    """Build one append-only INSERT for a non-empty fingerprint batch."""
+
+    if not fingerprints:
+        raise FingerprintInputError("fingerprint insert requires at least one row")
     qualified_name: str = build_qualified_table_name(
         database=database,
         schema=schema,
         render_qualified_name=render_qualified_name,
     )
-    encoded_definition: str = _encode_definition_storage(fingerprint.definition).replace("'", "''")
-    encoded_metadata_json: str = _encode_definition_storage(fingerprint.metadata_json).replace(
-        "'", "''"
-    )
-    node_type_literal: str = _required_string_literal(fingerprint.node_type)
-    node_name_literal: str = _required_string_literal(fingerprint.node_name)
-    target_database_literal: str = _optional_string_literal(fingerprint.target_database)
-    target_schema_literal: str = _optional_string_literal(fingerprint.target_schema)
-    target_name_literal: str = _optional_string_literal(fingerprint.target_name)
+    rows: str = ", ".join(_fingerprint_values(fingerprint) for fingerprint in fingerprints)
     return (
         f"INSERT INTO {qualified_name} ("
         f"{COLUMN_NODE_TYPE}, "
@@ -146,7 +152,27 @@ def build_insert_sql(
         f"{COLUMN_DEFINITION_B64}, "
         f"{COLUMN_METADATA_JSON_B64}, "
         f"{COLUMN_TIMESTAMP}"
-        f") VALUES ("
+        f") VALUES {rows}"
+    )
+
+
+def _fingerprint_values(fingerprint: Fingerprint) -> str:
+    run_id: str = fingerprint.run_id
+    definition_hash: str = fingerprint.definition_hash
+    version_hash: str = fingerprint.version_hash
+    schema_fingerprint: str = fingerprint.schema_fingerprint
+    ts: str = fingerprint.ts.isoformat()
+    encoded_definition: str = _encode_definition_storage(fingerprint.definition).replace("'", "''")
+    encoded_metadata_json: str = _encode_definition_storage(fingerprint.metadata_json).replace(
+        "'", "''"
+    )
+    node_type_literal: str = _required_string_literal(fingerprint.node_type)
+    node_name_literal: str = _required_string_literal(fingerprint.node_name)
+    target_database_literal: str = _optional_string_literal(fingerprint.target_database)
+    target_schema_literal: str = _optional_string_literal(fingerprint.target_schema)
+    target_name_literal: str = _optional_string_literal(fingerprint.target_name)
+    return (
+        "("
         f"{node_type_literal}, "
         f"{node_name_literal}, "
         f"{target_database_literal}, "

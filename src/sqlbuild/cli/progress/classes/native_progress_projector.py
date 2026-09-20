@@ -17,6 +17,7 @@ from sqlbuild.runtime.observability.constants import (
 from sqlbuild.runtime.observability.models import LifecycleEvent
 
 _VISIBLE_OPERATION_LABELS: Mapping[str, str] = {
+    "clone_finalization": "Clone finalization",
     "discovery_declaration_parse": "Declaration parsing",
     "discovery_filesystem_walk": "Filesystem discovery",
     "discovery_project_assembly": "Project assembly",
