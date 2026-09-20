@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
@@ -534,8 +535,14 @@ def analyze_queries_with_compact_polyglot_batch(  # noqa: PLR0915
         lineage_references: dict[str, tuple[CompiledResourceType, str]] = _lineage_reference_map(
             query_references
         )
+        qualified_reference_names: frozenset[str] = _qualified_reference_names(
+            query_sql=cleaned_sql,
+            reference_names=lineage_references.keys(),
+        )
         canonical_stubs: dict[str, str] = {
-            name: f"__sqlbuild_project_input_{index}"
+            name: (
+                name if name in qualified_reference_names else f"__sqlbuild_project_input_{index}"
+            )
             for index, name in enumerate(lineage_references)
         }
         analysis_sql: str = _cleaned_analysis_sql(
@@ -2325,6 +2332,20 @@ def _replace_refs_with_stubs(
     result = _UDF_PATTERN.sub(r"__sqlbuild_udf_\1", result)
     result = _replace_table_function_calls_with_stubs(result, relation_stubs=stubs)
     return normalize_sql_for_polyglot(sql=result, dialect=dialect)
+
+
+def _qualified_reference_names(*, query_sql: str, reference_names: Iterable[str]) -> frozenset[str]:
+    qualified: set[str] = set()
+    for value in reference_names:
+        name: str = str(value)
+        escaped: str = re.escape(name)
+        if re.search(
+            rf'(?<![A-Za-z0-9_$])(?:"{escaped}"|`{escaped}`|\[{escaped}\]|{escaped})\s*\.',
+            query_sql,
+            re.IGNORECASE,
+        ):
+            qualified.add(name)
+    return frozenset(qualified)
 
 
 def _replace_table_function_calls_with_stubs(

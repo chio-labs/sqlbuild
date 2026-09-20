@@ -426,7 +426,15 @@ fn validate_expected(cte: &Cte, file: &str, label: &str) -> Result<(), String> {
 fn projection_names(branch: &str, file: &str) -> Result<Vec<String>, String> {
     let start = skip_ignorable(branch, 0)?;
     let select_end = consume_keyword(branch, start, "SELECT").ok_or_else(|| format!("SQL test '{file}' must define each __expected__<model> set-operation branch as a SELECT query"))?;
-    let end = find_top_level_keyword(branch, select_end, "FROM")?.unwrap_or(branch.len());
+    let mut end = branch.len();
+    for keyword in [
+        "FROM", "WHERE", "GROUP", "HAVING", "QUALIFY", "WINDOW", "ORDER", "LIMIT", "OFFSET",
+        "FETCH",
+    ] {
+        if let Some(position) = find_top_level_keyword(branch, select_end, keyword)? {
+            end = end.min(position);
+        }
+    }
     let expressions = split_top_level(&branch[select_end..end], b',')?;
     if expressions.is_empty() {
         return Err(format!(
@@ -452,12 +460,32 @@ fn projection_name(expression: &str, file: &str) -> Result<String, String> {
     if read_identifier(value, 0).is_some_and(|(_, end)| end == value.len()) {
         return Ok(value.to_owned());
     }
+    if let Some(name) = qualified_projection_name(value) {
+        return Ok(name);
+    }
     if let Some(alias) = implicit_projection_alias(value) {
         return Ok(alias);
     }
     Err(format!(
         "SQL test '{file}' must alias every non-trivial __expected__<model> projection"
     ))
+}
+
+fn qualified_projection_name(expression: &str) -> Option<String> {
+    let (mut name, mut end) = read_identifier(expression, 0)?;
+    let mut qualified = false;
+    loop {
+        end = skip_ignorable(expression, end).ok()?;
+        if byte_at(expression, end) != Some(b'.') {
+            break;
+        }
+        let part_start = skip_ignorable(expression, end + 1).ok()?;
+        let (part, part_end) = read_identifier(expression, part_start)?;
+        name = part;
+        end = part_end;
+        qualified = true;
+    }
+    (qualified && expression[end..].trim().is_empty()).then_some(name)
 }
 
 fn implicit_projection_alias(expression: &str) -> Option<String> {
@@ -609,26 +637,78 @@ fn nested_cte_names(sql: &str) -> Result<Vec<String>, String> {
 fn known_relation_names(sql: &str, names: &HashMap<String, String>) -> Result<Vec<String>, String> {
     let mut refs = Vec::new();
     let mut index = 0;
+    let mut depth = 0_usize;
+    let mut from_depths = HashSet::new();
+    let mut expected_relation_depths = HashSet::new();
     while index < sql.len() {
-        index = skip_non_code(sql, index)?;
+        index = skip_ignorable(sql, index)?;
         if index >= sql.len() {
             break;
         }
-        let keyword = if consume_keyword(sql, index, "FROM").is_some()
-            || consume_keyword(sql, index, "JOIN").is_some()
-        {
-            Some(4)
-        } else {
-            None
-        };
-        if let Some(length) = keyword {
-            let start = skip_ignorable(sql, index + length)?;
-            if let Some((name, _)) = read_identifier(sql, start) {
+        if expected_relation_depths.remove(&depth) {
+            if let Some((name, end)) = read_identifier(sql, index) {
                 let key = name.to_lowercase();
                 if names.contains_key(&key) && !refs.contains(&key) {
                     refs.push(key);
                 }
+                index = end;
+                continue;
             }
+        }
+
+        let next = skip_non_code(sql, index)?;
+        if next != index {
+            index = next;
+            continue;
+        }
+        if byte_at(sql, index) == Some(b'(') {
+            depth += 1;
+            index += 1;
+            continue;
+        }
+        if byte_at(sql, index) == Some(b')') {
+            from_depths.remove(&depth);
+            expected_relation_depths.remove(&depth);
+            depth = depth.saturating_sub(1);
+            index += 1;
+            continue;
+        }
+        if consume_keyword(sql, index, "FROM").is_some() {
+            from_depths.insert(depth);
+            expected_relation_depths.insert(depth);
+            index += 4;
+            continue;
+        }
+        if consume_keyword(sql, index, "JOIN").is_some() {
+            expected_relation_depths.insert(depth);
+            index += 4;
+            continue;
+        }
+        if from_depths.contains(&depth) && byte_at(sql, index) == Some(b',') {
+            expected_relation_depths.insert(depth);
+            index += 1;
+            continue;
+        }
+        if from_depths.contains(&depth)
+            && [
+                "WHERE",
+                "GROUP",
+                "HAVING",
+                "QUALIFY",
+                "WINDOW",
+                "ORDER",
+                "LIMIT",
+                "OFFSET",
+                "FETCH",
+                "UNION",
+                "EXCEPT",
+                "INTERSECT",
+            ]
+            .into_iter()
+            .any(|keyword| consume_keyword(sql, index, keyword).is_some())
+        {
+            from_depths.remove(&depth);
+            expected_relation_depths.remove(&depth);
         }
         index += char_len(sql, index);
     }

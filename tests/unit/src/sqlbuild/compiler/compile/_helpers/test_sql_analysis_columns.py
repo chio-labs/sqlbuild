@@ -116,6 +116,7 @@ def test_given_queries_when_batch_analyzing_then_uses_one_ordered_native_request
             }
         ]
     }
+
     assert "orders" in results[0].cleaned_sql
     assert results[0].analysis == {"hasStar": False}
     assert results[0].compact_rows == [0]
@@ -159,6 +160,48 @@ def test_given_queries_when_batch_analyzing_then_uses_one_ordered_native_request
     )
 
     assert failed_analysis.analysis_succeeded is False
+
+
+def test_given_qualified_reference_when_batch_analyzing_then_preserves_analysis_facts() -> None:
+    query_sql: str = 'SELECT orders.order_id FROM __ref("orders")'
+    references: tuple[CompileSqlReference, ...] = (
+        CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
+    )
+    nullability = {"orders": {"order_id": InferredNullability.NON_NULL}}
+    types = {"orders": {"order_id": "BIGINT"}}
+    profile = ExpressionInferenceProfile(sql_analysis_dialect="duckdb")
+    expected: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+        query_sql=query_sql,
+        references=references,
+        placeholders=None,
+        column_nullability_by_table=nullability,
+        column_types_by_table=types,
+        inference_profile=profile,
+        allow_compact_analysis=True,
+    )
+    prepared = analyze_queries_with_compact_polyglot_batch(
+        query_sqls=(query_sql,),
+        references=(references,),
+        placeholders=(None,),
+        column_nullability_by_table=nullability,
+        column_types_by_table=types,
+        inference_profile=profile,
+        recover_cte_facts=(False,),
+    )[0]
+
+    actual: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+        query_sql=query_sql,
+        references=references,
+        placeholders=None,
+        column_nullability_by_table=nullability,
+        column_types_by_table=types,
+        inference_profile=profile,
+        allow_compact_analysis=True,
+        precomputed=prepared,
+    )
+
+    assert actual.columns == expected.columns
+    assert tuple(actual.lineage_columns) == expected.lineage_columns
 
 
 @pytest.mark.parametrize(

@@ -47,11 +47,30 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
         NativeSqlTestExtractionParityTestCase(
             description="table function direct logic retains actual and expected payloads",
             sql=(
-                '__table_fn_actual__ AS (SELECT order_id FROM '
+                "__table_fn_actual__ AS (SELECT order_id FROM "
                 '__table_fn("customer_orders")(1)), '
                 "__table_fn_expected__ AS (SELECT 1 AS order_id) SELECT 1"
             ).join(("WITH ", "")),
             mode=SqlTestMode.TABLE_FN,
+        ),
+        NativeSqlTestExtractionParityTestCase(
+            description="expected projection before where without from is accepted",
+            sql=(
+                "WITH __source__raw_orders AS (SELECT 1 AS id), "
+                "__expected__orders AS ("
+                "SELECT CAST(NULL AS INTEGER) AS id WHERE 1 = 0"
+                ") SELECT 1"
+            ),
+            mode=SqlTestMode.MODEL,
+        ),
+        NativeSqlTestExtractionParityTestCase(
+            description="qualified expected projection uses the column name",
+            sql=(
+                "WITH __source__raw_orders AS (SELECT 1 AS id), "
+                "sample AS (SELECT 1 AS id), "
+                "__expected__orders AS (SELECT sample.id FROM sample) SELECT 1"
+            ),
+            mode=SqlTestMode.MODEL,
         ),
     ),
     ids=lambda case: case.description,
@@ -80,6 +99,29 @@ def test_given_cross_check_dependency_when_native_batch_extracting_then_matches_
         "__expected__orders AS (SELECT 1 AS order_id), "
         "helper AS (SELECT order_id FROM __expected__orders), "
         "__assert__same AS (SELECT order_id FROM helper) SELECT 1"
+    )
+    with pytest.raises(ValueError) as reference_error:
+        extract_sql_test_ctes(
+            sql=sql,
+            file_label="tests/unit/example.sql",
+            mode=SqlTestMode.MODEL,
+        )
+
+    with pytest.raises(ValueError) as native_error:
+        extract_expanded_sql_tests(((sql, "tests/unit/example.sql", SqlTestMode.MODEL),))
+
+    assert str(native_error.value) == str(reference_error.value)
+
+
+def test_given_comma_separated_cross_check_dependency_when_extracting_then_native_matches_reference_diagnostic() -> (
+    None
+):
+    sql: str = (
+        "WITH __source__orders AS (SELECT 1 AS id), "
+        "__expected__orders AS (SELECT 1 AS id), "
+        "__assert__valid AS ("
+        "SELECT expected.id FROM __source__orders source, __expected__orders expected"
+        ") SELECT 1"
     )
     with pytest.raises(ValueError) as reference_error:
         extract_sql_test_ctes(
