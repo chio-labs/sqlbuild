@@ -6,11 +6,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledProject,
-)
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
+from sqlbuild.compiler.pipeline.project_graph import ProjectGraph as ProjectGraph
 from sqlbuild.compiler.planner.models import (
     CloneSourcePlanEntry,
     CursorOverrides,
@@ -143,15 +141,3 @@ class ClonePipelineResult:
     origin_model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)
     origin_seed_entries: tuple[SeedPlanEntry, ...] = field(default_factory=tuple)
     origin_source_entries: tuple[CloneSourcePlanEntry, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class ProjectGraph:
-    """Static compiled project graph without warehouse state."""
-
-    project: CompiledProject
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
-    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
-    tag_index: dict[str, frozenset[CompiledObjectKey]]
-    path_index: dict[CompiledObjectKey, str]
-    all_keys: dict[str, CompiledObjectKey]

@@ -47,7 +47,6 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
-from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 
 
@@ -136,6 +135,8 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
             cli_vars=args.vars,
         )
     if args.command == CliCommand.PLAN:
+        from sqlbuild.compiler.planner.models import CursorOverrides
+
         return handlers.run_plan(
             PlanCommandRequest(
                 project_dir=project_dir,
@@ -174,6 +175,8 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
             effective_project_dir=effective_project_dir,
         )
     if args.command == CliCommand.BUILD:
+        from sqlbuild.compiler.planner.models import CursorOverrides
+
         return handlers.run_build(
             BuildCommandRequest(
                 project_dir=project_dir,
@@ -284,6 +287,8 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
             )
         )
     if args.command == CliCommand.LOAD:
+        from sqlbuild.compiler.planner.models import CursorOverrides
+
         return handlers.run_load(
             LoadCommandRequest(
                 project_dir=project_dir,

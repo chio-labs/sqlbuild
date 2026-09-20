@@ -20,7 +20,8 @@ from sqlbuild.cli.output.classes.terminal_event_index import (
     current_terminal_event_index,
 )
 from sqlbuild.cli.output.constants import INTEGRATION_RESULT_PATH_ENV
-from sqlbuild.cli.output.models import IntegrationResultEnvelope, TerminalEventClaim
+from sqlbuild.cli.output.models import IntegrationResultEnvelope
+from sqlbuild.cli.output.terminal_event_claim import TerminalEventClaim
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.clone.models import CloneItemResult
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError

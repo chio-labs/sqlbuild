@@ -25,7 +25,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType, DiagnosticSeverity
 from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
-from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.pipeline.project_graph import ProjectGraph
 from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
 from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
 from sqlbuild.presentation.classes.cli_style import CliStyle

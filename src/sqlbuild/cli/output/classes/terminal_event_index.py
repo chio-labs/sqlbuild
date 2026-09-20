@@ -8,7 +8,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 
-from sqlbuild.cli.output.models import TerminalEventClaim
+from sqlbuild.cli.output.terminal_event_claim import TerminalEventClaim
 from sqlbuild.runtime.observability.constants import RESOURCE_TERMINALS
 from sqlbuild.runtime.observability.models import LifecycleEvent
 
