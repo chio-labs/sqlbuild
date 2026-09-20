@@ -55,6 +55,9 @@ def test_given_slow_planning_connection_when_compiling_then_direct_phases_are_di
     monkeypatch.setattr(compile_module, "_build_result", Mock(return_value=pipeline_result))
     monkeypatch.setattr(compile_module, "load_rules_config", Mock(return_value=RulesConfig()))
     monkeypatch.setattr(
+        compile_module, "resolve_configured_rule_selection", Mock(return_value=None)
+    )
+    monkeypatch.setattr(
         compile_module,
         "run_rules",
         Mock(

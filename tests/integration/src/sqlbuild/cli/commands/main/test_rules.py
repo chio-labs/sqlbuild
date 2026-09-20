@@ -1689,6 +1689,66 @@ def test_given_exception_for_other_model_when_compiling_selection_then_exception
 
 @pytest.mark.parametrize(
     "test_case",
+    [RulesIntegrationTestCase("typed unselected model stays outside rule scope", 0, "")],
+    ids=lambda case: case.description,
+)
+def test_given_typed_unselected_model_when_planning_selection_then_rules_use_selected_scope(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRCONTRACT105"]\n',
+        encoding="utf-8",
+    )
+    sources: Path = tmp_path / "sources"
+    sources.mkdir()
+    (sources / "customers.yml").write_text(
+        """sources:
+  - name: raw_customers
+    schema: raw
+    table: customers
+    columns:
+      - name: customer_id
+        type: VARCHAR
+""",
+        encoding="utf-8",
+    )
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "orders.sql").write_text(
+        "MODEL (contract enforced, columns (order_id (type INTEGER)));\n"
+        "SELECT CAST(1 AS INTEGER) AS order_id\n",
+        encoding="utf-8",
+    )
+    (models / "customers.sql").write_text(
+        """MODEL (
+  contract enforced,
+  columns (customer_id (type VARCHAR)),
+);
+
+WITH source_rows AS (
+  SELECT customer_id FROM __source("raw_customers")
+), final AS (
+  SELECT customer_id FROM source_rows
+)
+SELECT customer_id FROM final
+""",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "plan", "--json", "--select", "orders"])
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+
+    assert exit_code == test_case.expected_exit_code
+    assert payload["selected_count"] == 1
+    assert [model["name"] for model in cast(list[dict[str, object]], payload["models"])] == [
+        "orders"
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [RulesIntegrationTestCase("subject folder precedes model layer", 1, "SQBRPROJECT102")],
     ids=lambda case: case.description,
 )
