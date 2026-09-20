@@ -412,10 +412,24 @@ def _write_text_if_changed(*, path: Path, contents: str, check_existing: bool = 
         if check_existing and path.is_file() and path.read_text(encoding="utf-8") == contents:
             return
         try:
-            path.write_text(contents, encoding="utf-8")
+            _overwrite_text(path=path, contents=contents)
         except FileNotFoundError:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(contents, encoding="utf-8")
+            _overwrite_text(path=path, contents=contents)
+
+
+def _overwrite_text(*, path: Path, contents: str) -> None:
+    data: bytes = contents.encode("utf-8")
+    descriptor: int = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)
+    try:
+        offset: int = 0
+        while offset < len(data):
+            written: int = os.write(descriptor, data[offset:])
+            if written == 0:
+                raise OSError(f"failed to write compiled artifact '{path}'")
+            offset += written
+    finally:
+        os.close(descriptor)
 
 
 def _remove_stale_compiled_files(*, target_dir: Path, managed_paths: set[Path]) -> None:
