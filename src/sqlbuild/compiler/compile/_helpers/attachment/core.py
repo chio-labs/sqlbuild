@@ -263,12 +263,15 @@ class _ReusableModelConfigCache:
         matched_path_default: str | None,
         model_header_values: dict[str, object],
     ) -> CompileModelConfig | None:
-        if model_header_values or not self._is_reusable(matched_path_default):
+        reusable_metadata: dict[str, object] | None = self._reusable_metadata(model_header_values)
+        if reusable_metadata is None or not self._is_reusable(matched_path_default):
             return None
         cached: CompileModelConfig | None = self.configs.get(matched_path_default)
         if cached is None:
             return None
-        return replace(cached, values=dict(cached.values))
+        values: dict[str, object] = dict(cached.values)
+        values.update(reusable_metadata)
+        return replace(cached, values=values)
 
     def remember(
         self,
@@ -277,9 +280,25 @@ class _ReusableModelConfigCache:
         model_header_values: dict[str, object],
         config: CompileModelConfig,
     ) -> None:
-        if model_header_values or not self._is_reusable(matched_path_default):
+        reusable_metadata: dict[str, object] | None = self._reusable_metadata(model_header_values)
+        if reusable_metadata is None or not self._is_reusable(matched_path_default):
             return
-        self.configs[matched_path_default] = config
+        reusable_values: dict[str, object] = {
+            key: value for key, value in config.values.items() if key not in reusable_metadata
+        }
+        self.configs[matched_path_default] = replace(config, values=reusable_values)
+
+    @staticmethod
+    def _reusable_metadata(
+        model_header_values: dict[str, object],
+    ) -> dict[str, object] | None:
+        if not model_header_values:
+            return {}
+        if model_header_values.keys() != {"columns"}:
+            return None
+        if _contains_dynamic_or_unsupported_reusable_metadata(model_header_values):
+            return None
+        return model_header_values
 
     def _is_reusable(self, matched_path_default: str | None) -> bool:
         cached: bool | None = self.reusable_by_path_default.get(matched_path_default)
@@ -297,9 +316,36 @@ class _ReusableModelConfigCache:
         )
         reusable: bool = not contains_template_data(
             (layered_values, target_namespace_values)
-        )
+        ) and not _contains_mutable_nested_config(layered_values)
         self.reusable_by_path_default[matched_path_default] = reusable
         return reusable
+
+
+def _contains_mutable_nested_config(values: dict[str, object]) -> bool:
+    if any(key in values for key in _MODEL_HOOK_KEYS):
+        return True
+
+    def is_mutable(value: object) -> bool:
+        if isinstance(value, dict | list | set):
+            return True
+        if isinstance(value, tuple):
+            return any(is_mutable(item) for item in value)
+        return value is not None and not isinstance(value, str | int | float | bool)
+
+    return any(is_mutable(value) for value in values.values())
+
+
+def _contains_dynamic_or_unsupported_reusable_metadata(value: object) -> bool:
+    if isinstance(value, str):
+        return contains_template_data(value) or MACRO_CALL_PATTERN.search(value) is not None
+    if isinstance(value, dict):
+        return any(
+            not isinstance(key, str) or _contains_dynamic_or_unsupported_reusable_metadata(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, list | tuple):
+        return any(_contains_dynamic_or_unsupported_reusable_metadata(item) for item in value)
+    return value is not None and not isinstance(value, int | float | bool)
 
 
 def build_model_inputs(
