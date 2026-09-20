@@ -1756,8 +1756,10 @@ def test_given_compact_query_analysis_safe_shape_when_analyzing_then_matches_ast
     assert fallback_result.analysis_succeeded
     assert compact_result.columns == fallback_result.columns
     assert compact_result.has_star == fallback_result.has_star
-    compact_lineage_columns: tuple[CompiledLineageColumnFact, ...] = compact_result.lineage_columns
-    fallback_lineage_columns: tuple[CompiledLineageColumnFact, ...] = (
+    compact_lineage_columns: tuple[CompiledLineageColumnFact, ...] = tuple(
+        compact_result.lineage_columns
+    )
+    fallback_lineage_columns: tuple[CompiledLineageColumnFact, ...] = tuple(
         fallback_result.lineage_columns
     )
     assert len(compact_lineage_columns) == len(fallback_lineage_columns)
