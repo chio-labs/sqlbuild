@@ -7,6 +7,7 @@ from pathlib import Path
 from sqlbuild.cli.commands._helpers.diff.validation import parse_diff_name_range
 from sqlbuild.cli.commands._helpers.entry.parsing import read_selector_file_inputs
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
+from sqlbuild.cli.commands.compile_models import CompileCommandRequest, CompileProfileFlags
 from sqlbuild.cli.commands.constants import (
     DBT_INIT_COMMAND,
     SCENARIO_CAPTURE_COMMAND,
@@ -15,36 +16,11 @@ from sqlbuild.cli.commands.constants import (
     SCENARIO_CLI_MISSING_SUBCOMMAND,
     SCENARIO_TEST_COMMAND,
 )
-from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.models import (
-    AuditCommandRequest,
-    BuildCommandRequest,
-    CheckCommandRequest,
+from sqlbuild.cli.commands.entry_models import (
     CliEntrypointHandlers,
-    CloneCommandRequest,
-    CompileCommandRequest,
-    CompileProfileFlags,
-    ContractCommandRequest,
-    CostCommandRequest,
-    DbtInitCommandRequest,
-    DiffCommandRequest,
-    FreshnessCommandRequest,
-    JanitorCommandRequest,
-    LineageCommandRequest,
-    LoadCommandRequest,
-    PlanCommandRequest,
-    PlaygroundCommandRequest,
-    PromoteCommandRequest,
-    RollbackCommandRequest,
-    RulesCommandRequest,
-    ScenarioCaptureCommandRequest,
-    ScenarioSnapshotLimitInputs,
-    ScenarioTestCommandRequest,
-    ScopeCommandRequest,
-    SeedCommandRequest,
     SelectorInputs,
-    TestCommandRequest,
 )
+from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
@@ -60,6 +36,8 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
     selector_inputs: SelectorInputs = read_selector_file_inputs(args.select_file)
     select: tuple[str, ...] = (*tuple(args.select), *selector_inputs.selectors)
     if args.command == CliCommand.CONTRACT:
+        from sqlbuild.cli.commands.models import ContractCommandRequest
+
         if handlers.run_contract is None:
             raise CliUserError("contract command handler is unavailable", code="C470")
         if args.contract_command is None or args.contract_from is None:
@@ -102,6 +80,25 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 ),
             )
         )
+    from sqlbuild.cli.commands.models import (
+        AuditCommandRequest,
+        BuildCommandRequest,
+        CheckCommandRequest,
+        CloneCommandRequest,
+        CostCommandRequest,
+        DiffCommandRequest,
+        FreshnessCommandRequest,
+        JanitorCommandRequest,
+        LineageCommandRequest,
+        LoadCommandRequest,
+        PlanCommandRequest,
+        PromoteCommandRequest,
+        RollbackCommandRequest,
+        ScopeCommandRequest,
+        SeedCommandRequest,
+        TestCommandRequest,
+    )
+
     if args.command == CliCommand.SCOPE:
         return handlers.run_scope(
             request=ScopeCommandRequest(
@@ -524,6 +521,8 @@ def _dispatch_local_command(
     project_dir: Path | None,
     select: tuple[str, ...],
 ) -> int:
+    from sqlbuild.cli.commands.models import PlaygroundCommandRequest
+
     if args.command == CliCommand.INIT:
         return handlers.run_init(project_dir)
     if args.command == CliCommand.PLAYGROUND:
@@ -563,6 +562,8 @@ def _dispatch_local_command(
 def _dispatch_rules_command(
     *, args: CliNamespace, handlers: CliEntrypointHandlers, project_dir: Path | None
 ) -> int:
+    from sqlbuild.cli.commands.models import RulesCommandRequest
+
     return handlers.run_rules(
         RulesCommandRequest(
             project_dir=project_dir,
@@ -604,6 +605,8 @@ def _dispatch_dbt_command(
     project_dir: Path | None,
     effective_project_dir: Path,
 ) -> int:
+    from sqlbuild.cli.commands.models import DbtInitCommandRequest
+
     if args.dbt_command == DBT_INIT_COMMAND:
         return handlers.run_dbt_init(
             DbtInitCommandRequest(
@@ -636,6 +639,12 @@ def _dispatch_scenario_command(
     project_dir: Path | None,
     select: tuple[str, ...],
 ) -> int:
+    from sqlbuild.cli.commands.models import (
+        ScenarioCaptureCommandRequest,
+        ScenarioSnapshotLimitInputs,
+        ScenarioTestCommandRequest,
+    )
+
     scenario_select: tuple[str, ...] = (*tuple(args.scenario_selector), *select)
     if args.scenario_command == SCENARIO_TEST_COMMAND:
         if args.scenario_local and args.scenario_retain:

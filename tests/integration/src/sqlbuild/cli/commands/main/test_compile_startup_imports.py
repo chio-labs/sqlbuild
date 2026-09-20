@@ -35,6 +35,7 @@ exit_code = main([
     "--project-dir", sys.argv[1], "--no-color", "compile", "--json", "--no-cache"
 ])
 Path(sys.argv[2]).write_text(json.dumps({
+    "aggregate_models": "sqlbuild.cli.commands.models" in sys.modules,
     "dag": "sqlbuild.compiler.dag.main.build" in sys.modules,
     "manifest": "sqlbuild.compiler.manifest.main.build" in sys.modules,
 }), encoding="utf-8")
@@ -52,12 +53,51 @@ raise SystemExit(exit_code)
 
     assert summary["models"] == 1
     assert json.loads(import_status_path.read_text(encoding="utf-8")) == {
+        "aggregate_models": False,
         "dag": False,
         "manifest": False,
     }
 
 
-def test_given_project_when_running_dag_after_graph_split_then_json_command_still_succeeds(
+def test_given_legacy_model_imports_when_loading_focused_models_then_exports_keep_identity() -> None:
+    script = """
+import json
+from sqlbuild.cli.commands import compile_models, entry_models, models, output_models
+
+expected_modules = {
+    "CompileAnalysis": compile_models,
+    "CompileCommandRequest": compile_models,
+    "CompileProfileFlags": compile_models,
+    "CompileWriteResult": compile_models,
+    "SqlTestArtifactCacheRecord": compile_models,
+    "SqlTestArtifactIdentityContext": compile_models,
+    "CliEntrypointHandlers": entry_models,
+    "ParsedCliInvocation": entry_models,
+    "SelectorFileSummary": entry_models,
+    "SelectorInputs": entry_models,
+    "SkillInstallTarget": output_models,
+    "SkillMaintenanceResult": output_models,
+    "SkillSettings": output_models,
+    "SkillUpdateResult": output_models,
+    "WrittenTarget": output_models,
+}
+print(json.dumps({
+    name: getattr(models, name) is getattr(module, name)
+    for name, module in expected_modules.items()
+}))
+"""
+
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        [sys.executable, "-c", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert all(json.loads(result.stdout).values())
+
+
+def test_given_project_when_running_unaffected_dag_after_model_split_then_json_command_still_succeeds(
     tmp_path: Path,
 ) -> None:
     _write_project(tmp_path)

@@ -17,7 +17,7 @@ from sqlbuild.cli.commands._helpers.compile.pipeline import (
     write_compile_dag_artifact,
 )
 from sqlbuild.cli.commands._helpers.compile.status import elapsed_ms, start_compile_status
-from sqlbuild.cli.commands.models import (
+from sqlbuild.cli.commands.compile_models import (
     CompileAnalysis,
     CompileCommandRequest,
     CompileWriteResult,

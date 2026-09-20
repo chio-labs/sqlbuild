@@ -17,12 +17,12 @@ from sqlbuild.cli.commands._helpers.compile.status import (
 )
 from sqlbuild.cli.commands._helpers.compile.target_writer import write_static_compile_target
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
-from sqlbuild.cli.commands.models import (
+from sqlbuild.cli.commands.compile_models import (
     CompileAnalysis,
     CompileProfileFlags,
     CompileWriteResult,
-    WrittenTarget,
 )
+from sqlbuild.cli.commands.output_models import WrittenTarget
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,

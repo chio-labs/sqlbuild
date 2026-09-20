@@ -16,11 +16,11 @@ from sqlbuild.cli.commands._helpers.compile.sql_test_artifact_cache import (
     sql_test_artifact_record_key,
     write_sql_test_artifact_cache,
 )
-from sqlbuild.cli.commands.models import (
+from sqlbuild.cli.commands.compile_models import (
     SqlTestArtifactCacheRecord,
     SqlTestArtifactIdentityContext,
-    WrittenTarget,
 )
+from sqlbuild.cli.commands.output_models import WrittenTarget
 from sqlbuild.cli.paths.main._sql_test_output_path import (
     compiled_sql_test_output_path,
     sql_test_output_path,

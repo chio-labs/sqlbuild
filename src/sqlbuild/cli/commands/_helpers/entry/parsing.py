@@ -18,7 +18,7 @@ from sqlbuild.cli.commands.constants import (
     SCOPE_GLOBAL_SUMMARY,
     SQLBUILD_CONCURRENCY_ENV_VAR,
 )
-from sqlbuild.cli.commands.models import (
+from sqlbuild.cli.commands.entry_models import (
     ParsedCliInvocation,
     SelectorFileSummary,
     SelectorInputs,

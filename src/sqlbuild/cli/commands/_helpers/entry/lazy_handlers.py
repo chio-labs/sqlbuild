@@ -7,7 +7,7 @@ from importlib import import_module
 from types import ModuleType
 from typing import Any, cast
 
-from sqlbuild.cli.commands.models import CliEntrypointHandlers
+from sqlbuild.cli.commands.entry_models import CliEntrypointHandlers
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 
 

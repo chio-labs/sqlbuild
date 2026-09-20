@@ -7,15 +7,15 @@ from pathlib import Path
 from sqlbuild.cli.commands._helpers.entry.errors import format_expected_error
 from sqlbuild.cli.commands._helpers.skills.update import maintain_sqlbuild_skills
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
+from sqlbuild.cli.commands.entry_models import (
+    CliEntrypointHandlers,
+    ParsedCliInvocation,
+)
 from sqlbuild.cli.commands.exceptions import CliUserError, QueryDiffExecutionError
 from sqlbuild.cli.commands.main.entrypoint._dispatch_with_observability import (
     dispatch_with_observability,
 )
-from sqlbuild.cli.commands.models import (
-    CliEntrypointHandlers,
-    ParsedCliInvocation,
-    SkillMaintenanceResult,
-)
+from sqlbuild.cli.commands.output_models import SkillMaintenanceResult
 from sqlbuild.cli.commands.types import CliCommand
 from sqlbuild.lint.exceptions import LintError
 from sqlbuild.rule_engine.exceptions import RulesError

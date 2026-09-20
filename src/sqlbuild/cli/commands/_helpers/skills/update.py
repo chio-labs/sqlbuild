@@ -10,7 +10,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.models import (
+from sqlbuild.cli.commands.output_models import (
     SkillInstallTarget,
     SkillMaintenanceResult,
     SkillSettings,

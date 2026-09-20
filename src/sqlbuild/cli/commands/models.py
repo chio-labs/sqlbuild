@@ -8,8 +8,28 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TextIO
 
+from sqlbuild.cli.commands.compile_models import (  # noqa: F401
+    CompileAnalysis,
+    CompileCommandRequest,
+    CompileProfileFlags,
+    CompileWriteResult,
+    SqlTestArtifactCacheRecord,
+    SqlTestArtifactIdentityContext,
+)
+from sqlbuild.cli.commands.entry_models import (  # noqa: F401
+    CliEntrypointHandlers,
+    ParsedCliInvocation,
+    SelectorFileSummary,
+    SelectorInputs,
+)
+from sqlbuild.cli.commands.output_models import (  # noqa: F401
+    SkillInstallTarget,
+    SkillMaintenanceResult,
+    SkillSettings,
+    SkillUpdateResult,
+    WrittenTarget,
+)
 from sqlbuild.cli.commands.types import (
-    CompileLineageMode,
     DebugCheckStatus,
     FreshnessSourceStatus,
     PlaygroundTemplate,
@@ -22,20 +42,8 @@ from sqlbuild.spec.contracts.models import ExecutionLimitsConfig
 if TYPE_CHECKING:
     from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
     from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
-    from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
     from sqlbuild.cli.commands.classes.direct_python_lifecycle_state import (
         DirectPythonLifecycleState,
-    )
-    from sqlbuild.cli.commands.types import (
-        DagCommandHandler,
-        DebugCommandHandler,
-        FormatCommandHandler,
-        LineageCommandHandler,
-        QueryCommandHandler,
-        ReconcileCommandHandler,
-        ScopeCommandHandler,
-        SkillsUpdateCommandHandler,
-        StateCommandHandler,
     )
     from sqlbuild.cli.progress.classes.audit_progress_reporter import AuditProgressReporter
     from sqlbuild.cli.progress.classes.connection_progress_reporter import (
@@ -50,7 +58,6 @@ if TYPE_CHECKING:
         CompiledObjectKey,
         CompiledProject,
         CompiledSqlScenario,
-        CompilerDiagnostic,
     )
     from sqlbuild.compiler.discovery.models import (
         DiscoveredCheckFunction,
@@ -58,13 +65,11 @@ if TYPE_CHECKING:
     )
     from sqlbuild.compiler.lineage.models import (
         ColumnLineageEdge,
-        ProjectColumnLineage,
         QualifiedLineageColumn,
     )
     from sqlbuild.compiler.pipeline.models import (
         ClonePipelineResult,
         CompilePipelineResult,
-        ProjectGraph,
         PythonPlanEntry,
     )
     from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
@@ -160,22 +165,6 @@ class AuditExecutionPreparation:
     execution_connection_progress: ConnectionProgressReporter
     effective_concurrency: int
     worker_count: int
-
-
-@dataclass(frozen=True)
-class SelectorFileSummary:
-    """Non-expanded provenance for one selector file."""
-
-    path: Path
-    selector_count: int
-
-
-@dataclass(frozen=True)
-class SelectorInputs:
-    """Expanded selectors paired with selector-file provenance."""
-
-    selectors: tuple[str, ...]
-    files: tuple[SelectorFileSummary, ...]
 
 
 @dataclass(frozen=True)
@@ -504,117 +493,6 @@ class CloneRunOutcome:
 
     result: CloneExecutionResult
     elapsed: float
-
-
-@dataclass(frozen=True)
-class CompileProfileFlags:
-    """Profiling toggles that skip compile phases for benchmarking."""
-
-    skip_discovery_sql_analysis: bool = False
-    skip_column_inference: bool = False
-    skip_contracts: bool = False
-    skip_write: bool = False
-
-
-@dataclass(frozen=True)
-class CompileCommandRequest:
-    """CLI inputs for one `sqb compile` invocation."""
-
-    project_dir: Path | None = None
-    no_sql_validation: bool = False
-    defer_to: str | None = None
-    selected_target: str | None = None
-    json_output: bool = False
-    manifest: bool = False
-    dag_path: str | None = None
-    no_color: bool = False
-    lineage_mode: CompileLineageMode = CompileLineageMode.FAST
-    select: tuple[str, ...] = ()
-    exclude: tuple[str, ...] = ()
-    cli_vars: dict[str, object] | None = None
-    profile_flags: CompileProfileFlags = CompileProfileFlags()
-    no_cache: bool = False
-
-
-@dataclass(frozen=True)
-class CompileAnalysis:
-    """Compiled project analysis shared by compile output phases."""
-
-    discovered_inputs: DiscoveredProjectInputs
-    adapter: BaseAdapter
-    graph: ProjectGraph
-    selected_keys: frozenset[CompiledObjectKey]
-    lineage: ProjectColumnLineage | None
-    diagnostics: tuple[CompilerDiagnostic, ...]
-    discover_ms: int
-    graph_ms: int
-    lineage_ms: int
-    contract_ms: int
-    built_in_rules_ms: int = 0
-    custom_rules_ms: int = 0
-    rule_cache_hits: int = 0
-    rule_cache_misses: int = 0
-
-
-@dataclass(frozen=True)
-class CompileWriteResult:
-    """Result of writing compiled artifacts with its elapsed time."""
-
-    written: WrittenTarget
-    write_ms: int
-
-
-@dataclass(frozen=True)
-class SqlTestArtifactCacheRecord:
-    """Validated metadata for one previously written SQL test artifact."""
-
-    identity: str
-    relative_path: Path
-    size: int
-    mtime_ns: int
-
-
-@dataclass(frozen=True)
-class SqlTestArtifactIdentityContext:
-    """Project-wide identity fragments shared by every SQL test."""
-
-    common_identity: str
-    model_identities: dict[str, str]
-
-
-@dataclass(frozen=True)
-class WrittenTarget:
-    """Result of writing compiled output to target/."""
-
-    model_count: int
-    seed_count: int
-    function_count: int
-    audit_count: int
-    test_count: int
-    target_dir: Path
-
-    def summary_line(self) -> str:
-        """Build a human-readable summary line."""
-
-        parts: list[str] = []
-        if self.model_count:
-            model_label: str = "model" if self.model_count == 1 else "models"
-            parts.append(f"{self.model_count} {model_label}")
-        if self.seed_count:
-            seed_label: str = "seed" if self.seed_count == 1 else "seeds"
-            parts.append(f"{self.seed_count} {seed_label}")
-        if self.function_count:
-            function_label: str = "function" if self.function_count == 1 else "functions"
-            parts.append(f"{self.function_count} {function_label}")
-        if self.audit_count:
-            audit_label: str = "audit" if self.audit_count == 1 else "audits"
-            parts.append(f"{self.audit_count} {audit_label}")
-        if self.test_count:
-            test_label: str = "test" if self.test_count == 1 else "tests"
-            parts.append(f"{self.test_count} {test_label}")
-        if not parts:
-            return "Compiled 0 resources"
-        return f"Compiled {', '.join(parts)}"
 
 
 @dataclass(frozen=True)
@@ -1337,37 +1215,6 @@ class SeedRunOutcome:
 
 
 @dataclass(frozen=True)
-class SkillInstallTarget:
-    """One destination for a SQLBuild skill file."""
-
-    name: str
-    path: Path
-
-
-@dataclass(frozen=True)
-class SkillSettings:
-    """Project skill installation preferences."""
-
-    targets: tuple[str, ...]
-    auto_update: bool
-    configured: bool
-
-
-@dataclass(frozen=True)
-class SkillMaintenanceResult:
-    """Non-blocking generated-skill maintenance result."""
-
-    message: str = ""
-
-
-@dataclass(frozen=True)
-class SkillUpdateResult:
-    """Result of installing or updating skill files."""
-
-    written_paths: tuple[Path, ...]
-
-
-@dataclass(frozen=True)
 class TestCommandRequest:
     """CLI inputs for one test command invocation."""
 
@@ -1435,14 +1282,6 @@ class TestExecutionPreparation:
     preflight_progress: TransientStatusReporter
     effective_concurrency: int
     worker_count: int
-
-
-@dataclass(frozen=True)
-class ParsedCliInvocation:
-    """Outcome of parsing CLI arguments: either a namespace or an exit code."""
-
-    args: CliNamespace | None
-    exit_code: int | None
 
 
 @dataclass(frozen=True)
@@ -1530,44 +1369,3 @@ class LineageCommandRequest:
     lineage_mode: ColumnLineageMode = ColumnLineageMode.RICH
     include_uses: bool = False
     cli_vars: dict[str, object] | None = None
-
-
-@dataclass(frozen=True)
-class CliEntrypointHandlers:
-    """Injected command handlers for the CLI entrypoint."""
-
-    run_compile: Callable[[CompileCommandRequest], int]
-    run_cost: Callable[[CostCommandRequest], int]
-    run_dag: DagCommandHandler
-    run_plan: Callable[[PlanCommandRequest], int]
-    run_dbt_plan: Callable[[Path | None, tuple[str, ...], bool], int]
-    run_dbt_run: Callable[[Path | None, tuple[str, ...], bool], int]
-    run_dbt_build: Callable[[Path | None, tuple[str, ...], bool], int]
-    run_dbt_debug: Callable[[Path | None, tuple[str, ...], bool], int]
-    run_dbt_init: Callable[[DbtInitCommandRequest], int]
-    run_build: Callable[[BuildCommandRequest], int]
-    run_freshness: Callable[[FreshnessCommandRequest], int]
-    run_test: Callable[[TestCommandRequest], int]
-    run_check: Callable[[CheckCommandRequest], int]
-    run_audit: Callable[[AuditCommandRequest], int]
-    run_seed: Callable[[SeedCommandRequest], int]
-    run_load: Callable[[LoadCommandRequest], int]
-    run_clone: Callable[[CloneCommandRequest], int]
-    run_diff: Callable[[DiffCommandRequest], int]
-    run_reconcile: ReconcileCommandHandler
-    run_promote: Callable[[PromoteCommandRequest], int]
-    run_rollback: Callable[[RollbackCommandRequest], int]
-    run_query: QueryCommandHandler
-    run_debug: DebugCommandHandler
-    run_lineage: LineageCommandHandler
-    run_janitor: Callable[[JanitorCommandRequest], int]
-    run_state: StateCommandHandler
-    run_init: Callable[[Path | None], int]
-    run_playground: Callable[[PlaygroundCommandRequest], int]
-    run_skills_update: SkillsUpdateCommandHandler
-    run_format: FormatCommandHandler
-    run_scenario: Callable[[ScenarioTestCommandRequest], int]
-    run_scenario_capture: Callable[[ScenarioCaptureCommandRequest], int]
-    run_rules: Callable[[RulesCommandRequest], int]
-    run_scope: ScopeCommandHandler
-    run_contract: Callable[[ContractCommandRequest], int] | None = None

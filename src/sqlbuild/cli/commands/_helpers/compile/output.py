@@ -7,7 +7,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from sqlbuild.cli.commands.constants import TARGET_DIRECTORY_NAME
-from sqlbuild.cli.commands.models import WrittenTarget
+from sqlbuild.cli.commands.output_models import WrittenTarget
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
