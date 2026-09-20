@@ -60,6 +60,7 @@ def write_compile_target(
 ) -> WrittenTarget:
     """Write compiled output files under target_dir."""
 
+    remove_stale_files: bool = (target_dir / _COMPILED_DIR).is_dir()
     target_dir.mkdir(parents=True, exist_ok=True)
     managed_paths: set[Path] = set().union(
         _write_models(target_dir=target_dir, plan_output=plan_output),
@@ -67,8 +68,9 @@ def write_compile_target(
         _write_audits(target_dir=target_dir, plan_output=plan_output),
         _write_tests(target_dir=target_dir, adapter=adapter, plan_output=plan_output),
     )
-    with record_compile_timing("stale_traversal_ms"):
-        _remove_stale_compiled_files(target_dir=target_dir, managed_paths=managed_paths)
+    if remove_stale_files:
+        with record_compile_timing("stale_traversal_ms"):
+            _remove_stale_compiled_files(target_dir=target_dir, managed_paths=managed_paths)
     if manifest is not None:
         _write_manifest(target_dir=target_dir, manifest=manifest)
 
@@ -91,6 +93,7 @@ def write_static_compile_target(
 ) -> WrittenTarget:
     """Write offline compiled output files under target_dir."""
 
+    remove_stale_files: bool = (target_dir / _COMPILED_DIR).is_dir()
     target_dir.mkdir(parents=True, exist_ok=True)
     managed_paths: set[Path] = set().union(
         _write_static_models(target_dir=target_dir, project=project),
@@ -98,8 +101,9 @@ def write_static_compile_target(
         _write_static_audits(target_dir=target_dir, project=project),
         _write_static_tests(target_dir=target_dir, adapter=adapter, project=project),
     )
-    with record_compile_timing("stale_traversal_ms"):
-        _remove_stale_compiled_files(target_dir=target_dir, managed_paths=managed_paths)
+    if remove_stale_files:
+        with record_compile_timing("stale_traversal_ms"):
+            _remove_stale_compiled_files(target_dir=target_dir, managed_paths=managed_paths)
     if manifest is not None:
         _write_manifest(target_dir=target_dir, manifest=manifest)
 
