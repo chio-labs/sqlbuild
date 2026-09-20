@@ -4,6 +4,7 @@ pub mod bindings;
 mod configuration;
 mod constants;
 mod engine;
+mod model_header_tokenization;
 mod models;
 mod query_analysis;
 mod rules;

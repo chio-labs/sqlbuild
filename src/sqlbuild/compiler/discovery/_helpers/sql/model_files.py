@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import re
 from bisect import bisect_right
+from collections import OrderedDict
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
+from sqlbuild import _native
 from sqlbuild.compiler.auditing.types import ThresholdOperator
 from sqlbuild.compiler.discovery.exceptions import (
     DiscoveryError,
@@ -75,6 +77,17 @@ _SQL_FROM_INITIAL: str = _SQL_FROM_KEYWORD[0]
 _SQL_UNION_LOWER_KEYWORD: str = _SQL_UNION_KEYWORD.lower()
 _MODEL_HEADER_INTEGER_PATTERN: re.Pattern[str] = re.compile(r"^[+-]?\d+$")
 _MODEL_HEADER_FLOAT_PATTERN: re.Pattern[str] = re.compile(r"^[+-]?(?:\d+\.\d*|\d*\.\d+)$")
+_MODEL_HEADER_TOKEN_CACHE_SIZE: int = 4096
+_NATIVE_MODEL_HEADER_END_TOKEN: int = 0
+_NATIVE_MODEL_HEADER_WORD_TOKEN: int = 1
+_NATIVE_MODEL_HEADER_STRING_TOKEN: int = 2
+_NATIVE_MODEL_HEADER_SYMBOL_TOKEN: int = 3
+_MODEL_HEADER_TOKEN_KIND_BY_NATIVE: dict[int, str] = {
+    _NATIVE_MODEL_HEADER_END_TOKEN: _MODEL_HEADER_END_TOKEN,
+    _NATIVE_MODEL_HEADER_WORD_TOKEN: _MODEL_HEADER_WORD_TOKEN,
+    _NATIVE_MODEL_HEADER_STRING_TOKEN: _MODEL_HEADER_STRING_TOKEN,
+    _NATIVE_MODEL_HEADER_SYMBOL_TOKEN: _MODEL_HEADER_SYMBOL_TOKEN,
+}
 _MODEL_HEADER_PATTERN: re.Pattern[str] = re.compile(
     r"^\s*MODEL\s*\((?P<header>.*?)\)\s*;\s*(?P<sql>.*)\Z",
     re.DOTALL,
@@ -87,6 +100,15 @@ class _ModelHeaderToken:
     kind: str
     value: str
     position: int
+
+
+@dataclass(frozen=True)
+class _ModelHeaderTokenization:
+    tokens: list[_ModelHeaderToken] | None
+    error: str | None
+
+
+_MODEL_HEADER_TOKEN_CACHE: OrderedDict[str, _ModelHeaderTokenization] = OrderedDict()
 
 
 def parse_model_sql(*, contents: str, file_path: Path) -> tuple[dict[str, object], str]:
@@ -587,6 +609,48 @@ def parse_header_values(
         ) from error
 
 
+def prepare_model_header_tokens(headers: list[str]) -> None:
+    """Batch cache-missing MODEL header tokenization through the native scanner."""
+
+    missing_headers: list[str] = list(
+        dict.fromkeys(header for header in headers if header not in _MODEL_HEADER_TOKEN_CACHE)
+    )
+    if not missing_headers:
+        return
+    tokenizations: list[tuple[list[tuple[int, str, int]] | None, str | None]] = (
+        _native.tokenize_model_headers(missing_headers)
+    )
+    if len(tokenizations) != len(missing_headers):
+        raise ValueError("Native MODEL header tokenizer returned an incomplete batch")
+    for header, (native_tokens, error) in zip(missing_headers, tokenizations, strict=True):
+        tokens: list[_ModelHeaderToken] | None = None
+        if native_tokens is not None:
+            tokens = [
+                _ModelHeaderToken(
+                    kind=_MODEL_HEADER_TOKEN_KIND_BY_NATIVE[kind],
+                    value=value,
+                    position=position,
+                )
+                for kind, value, position in native_tokens
+            ]
+        _cache_model_header_tokenization(
+            header=header,
+            tokenization=_ModelHeaderTokenization(tokens=tokens, error=error),
+        )
+
+
+def prepare_model_file_headers(contents: list[str]) -> None:
+    """Batch tokenization for syntactically recognizable MODEL file headers."""
+
+    prepare_model_header_tokens(
+        [
+            header_match.group("header")
+            for contents_value in contents
+            if (header_match := _MODEL_HEADER_PATTERN.match(contents_value)) is not None
+        ]
+    )
+
+
 @lru_cache(maxsize=4096)
 def _parse_header_values_cached(header: str) -> dict[str, object]:
     """Parse recurring authored headers once while keeping each top-level result independent."""
@@ -886,103 +950,27 @@ class _ModelHeaderParser:
         return token
 
 
-@lru_cache(maxsize=4096)
 def _tokenize_model_header(header: str) -> list[_ModelHeaderToken]:
-    tokens: list[_ModelHeaderToken] = []
-    index: int = 0
-    while index < len(header):
-        character: str = header[index]
-        if character.isspace():
-            index += 1
-            continue
-        if header.startswith("${", index):
-            template_end: int = header.find("}", index + 2)
-            if template_end < 0:
-                raise ModelHeaderSyntaxError(f"unterminated template value at position {index}")
-            tokens.append(
-                _ModelHeaderToken(
-                    kind=_MODEL_HEADER_WORD_TOKEN,
-                    value=header[index : template_end + 1],
-                    position=index,
-                )
-            )
-            index = template_end + 1
-            continue
-        if character in _MODEL_HEADER_SYMBOLS:
-            tokens.append(
-                _ModelHeaderToken(kind=_MODEL_HEADER_SYMBOL_TOKEN, value=character, position=index)
-            )
-            index += 1
-            continue
-        if character == _MODEL_HEADER_KEY_VALUE_SEPARATOR:
-            tokens.append(
-                _ModelHeaderToken(kind=_MODEL_HEADER_SYMBOL_TOKEN, value=character, position=index)
-            )
-            index += 1
-            continue
-        if character in _MODEL_HEADER_QUOTE_NAMES:
-            string_value: str
-            next_index: int
-            string_value, next_index = _read_quoted_string(header=header, start=index)
-            tokens.append(
-                _ModelHeaderToken(
-                    kind=_MODEL_HEADER_STRING_TOKEN, value=string_value, position=index
-                )
-            )
-            index = next_index
-            continue
-        value: str
-        next_index = index
-        while next_index < len(header):
-            if header.startswith("${", next_index):
-                embedded_template_end: int = header.find("}", next_index + 2)
-                if embedded_template_end < 0:
-                    raise ModelHeaderSyntaxError(
-                        f"unterminated template value at position {next_index}"
-                    )
-                next_index = embedded_template_end + 1
-                continue
-            next_character: str = header[next_index]
-            if (
-                next_character.isspace()
-                or next_character in _MODEL_HEADER_SYMBOLS
-                or next_character == _MODEL_HEADER_KEY_VALUE_SEPARATOR
-            ):
-                break
-            if next_character in _MODEL_HEADER_QUOTE_NAMES:
-                raise ModelHeaderSyntaxError(
-                    f"unexpected {_MODEL_HEADER_QUOTE_NAMES[next_character]} quote inside "
-                    "bare value "
-                    f"at position {next_index}; quote the whole value"
-                )
-            next_index += 1
-        value = header[index:next_index]
-        if not value:
-            raise ModelHeaderSyntaxError(f"unexpected character '{character}' at position {index}")
-        tokens.append(_ModelHeaderToken(kind=_MODEL_HEADER_WORD_TOKEN, value=value, position=index))
-        index = next_index
-    tokens.append(_ModelHeaderToken(kind=_MODEL_HEADER_END_TOKEN, value="", position=len(header)))
-    return tokens
+    tokenization: _ModelHeaderTokenization | None = _MODEL_HEADER_TOKEN_CACHE.get(header)
+    if tokenization is None:
+        prepare_model_header_tokens([header])
+        tokenization = _MODEL_HEADER_TOKEN_CACHE[header]
+    else:
+        _MODEL_HEADER_TOKEN_CACHE.move_to_end(header)
+    if tokenization.error is not None:
+        raise ModelHeaderSyntaxError(tokenization.error)
+    if tokenization.tokens is None:
+        raise ValueError("Native MODEL header tokenizer returned neither tokens nor an error")
+    return tokenization.tokens
 
 
-def _read_quoted_string(*, header: str, start: int) -> tuple[str, int]:
-    value_parts: list[str] = []
-    quote: str = header[start]
-    quote_name: str = _MODEL_HEADER_QUOTE_NAMES[quote]
-    index: int = start + 1
-    while index < len(header):
-        character: str = header[index]
-        if character == _MODEL_HEADER_ESCAPE_CHARACTER:
-            if index + 1 >= len(header):
-                raise ModelHeaderSyntaxError(f"unterminated escape at position {index}")
-            value_parts.append(header[index + 1])
-            index += 2
-            continue
-        if character == quote:
-            return "".join(value_parts), index + 1
-        value_parts.append(character)
-        index += 1
-    raise ModelHeaderSyntaxError(f"unterminated {quote_name}-quoted string at position {start}")
+def _cache_model_header_tokenization(
+    *, header: str, tokenization: _ModelHeaderTokenization
+) -> None:
+    _MODEL_HEADER_TOKEN_CACHE[header] = tokenization
+    _MODEL_HEADER_TOKEN_CACHE.move_to_end(header)
+    if len(_MODEL_HEADER_TOKEN_CACHE) > _MODEL_HEADER_TOKEN_CACHE_SIZE:
+        _MODEL_HEADER_TOKEN_CACHE.popitem(last=False)
 
 
 def _parse_word_value(value: str) -> object:

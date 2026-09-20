@@ -4,7 +4,9 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild import _native
 from sqlbuild.compiler.discovery._helpers.filesystem.core import discover_model_files
+from sqlbuild.compiler.discovery._helpers.sql import model_files as model_file_helpers
 from sqlbuild.compiler.discovery._helpers.sql.model_files import (
     model_header_column_locations,
     model_output_column_locations,
@@ -12,6 +14,7 @@ from sqlbuild.compiler.discovery._helpers.sql.model_files import (
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlModelFile,
+    DiscoveryFileFault,
     NamedSqlHookEntry,
     PythonHookEntry,
     SqlHookEntry,
@@ -25,6 +28,93 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseModelSqlErrorTestCase,
     ParseModelSqlHeaderTestCase,
 )
+
+
+def test_given_unique_model_headers_when_discovering_then_native_tokenization_is_batched(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models_dir: Path = tmp_path / "models"
+    models_dir.mkdir()
+    first_header = "batch_marker_first one, columns (café (type INTEGER))"
+    second_header = "batch_marker_second two, columns (total (type DECIMAL(10,2)))"
+    (models_dir / "first.sql").write_text(
+        f"MODEL ({first_header});\nSELECT 1 AS café\n", encoding="utf-8"
+    )
+    (models_dir / "second.sql").write_text(
+        f"MODEL ({second_header});\nSELECT 2 AS total\n", encoding="utf-8"
+    )
+    native_calls: list[list[str]] = []
+    native_tokenize = _native.tokenize_model_headers
+
+    def recording_tokenize(
+        headers: list[str],
+    ) -> list[tuple[list[tuple[int, str, int]] | None, str | None]]:
+        native_calls.append(headers)
+        return native_tokenize(headers)
+
+    monkeypatch.setattr(model_file_helpers._native, "tokenize_model_headers", recording_tokenize)
+
+    discovered = discover_model_files(project_dir=tmp_path)
+
+    assert native_calls == [[first_header, second_header]]
+    assert [model.header_values for model in discovered] == [
+        {"batch_marker_first": "one", "columns": {"café": {"type": "INTEGER"}}},
+        {
+            "batch_marker_second": "two",
+            "columns": {"total": {"type": "DECIMAL(10,2)"}},
+        },
+    ]
+    assert discovered[0].header_column_locations["café"] == SourceLocation(
+        path=Path("models/first.sql"), line=1, column=41, end_line=1, end_column=45
+    )
+
+
+def test_given_native_pool_construction_error_when_preparing_headers_then_error_is_authoritative(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def rejecting_tokenize(_headers: list[str]) -> object:
+        raise ValueError("MODEL header worker pool construction failed")
+
+    monkeypatch.setattr(model_file_helpers._native, "tokenize_model_headers", rejecting_tokenize)
+
+    with pytest.raises(ValueError, match="MODEL header worker pool construction failed"):
+        model_file_helpers.prepare_model_header_tokens(["pool_error_marker value"])
+
+
+def test_given_cached_model_header_when_parsing_twice_then_top_level_dictionaries_are_fresh() -> (
+    None
+):
+    contents = "MODEL (config (transient true), tags [core]); SELECT 1"
+
+    first, _ = parse_model_sql(contents=contents, file_path=Path("first.sql"))
+    second, _ = parse_model_sql(contents=contents, file_path=Path("second.sql"))
+    first["added"] = "value"
+
+    assert first is not second
+    assert "added" not in second
+
+
+def test_given_multiple_invalid_model_headers_when_discovering_then_fault_order_is_preserved(
+    tmp_path: Path,
+) -> None:
+    models_dir: Path = tmp_path / "models"
+    models_dir.mkdir()
+    (models_dir / "first.sql").write_text(
+        'MODEL (schema "unterminated); SELECT 1', encoding="utf-8"
+    )
+    (models_dir / "second.sql").write_text("MODEL (schema ${MISSING); SELECT 2", encoding="utf-8")
+    faults: list[DiscoveryFileFault] = []
+
+    discovered = discover_model_files(project_dir=tmp_path, on_fault=faults.append)
+
+    assert discovered == ()
+    assert [fault.path for fault in faults] == [
+        Path("models/first.sql"),
+        Path("models/second.sql"),
+    ]
+    assert "unterminated double-quoted string at position 7" in faults[0].message
+    assert "unterminated template value at position 7" in faults[1].message
 
 
 @pytest.mark.parametrize(
