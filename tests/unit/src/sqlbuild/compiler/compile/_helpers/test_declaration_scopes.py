@@ -8,6 +8,7 @@ from typing import cast
 
 import pytest
 
+from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
@@ -27,11 +28,13 @@ from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     ResourceIdentity,
     UsageRecord,
+    VisibilityRecord,
 )
 from sqlbuild.compiler.scopes.types import (
     DeclarationKind,
     ResourceKind,
     UsageKind,
+    VisibilityReason,
 )
 from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
@@ -55,6 +58,61 @@ adapter = "duckdb"
 sql_analysis = false
 sql_validation = false
 """
+
+
+def _visible_declarations_without_runtime_values(
+    *, enum_visibility: dict[str, tuple[VisibilityRecord, ...]] | None = None
+) -> attachment_core._VisibleModelDeclarations:
+    return attachment_core._VisibleModelDeclarations(
+        local_enums={},
+        local_constants={},
+        enums={},
+        constants={},
+        inaccessible_enums={},
+        inaccessible_constants={},
+        enum_visibility={} if enum_visibility is None else enum_visibility,
+        constant_visibility={},
+        macros={},
+        macro_records={},
+        inaccessible_macros={},
+    )
+
+
+def test_given_no_visibility_records_when_rebinding_then_reuses_immutable_facts() -> None:
+    declarations = _visible_declarations_without_runtime_values()
+
+    rebound = attachment_core._rebind_visible_declarations(
+        declarations=declarations,
+        consumer=ResourceIdentity(ResourceKind.MODEL, "orders"),
+    )
+
+    assert rebound is declarations
+
+
+def test_given_visibility_record_when_rebinding_then_projects_new_consumer_independently() -> None:
+    original_consumer = ResourceIdentity(ResourceKind.MODEL, "customers")
+    new_consumer = ResourceIdentity(ResourceKind.MODEL, "orders")
+    declaration = DeclarationIdentity(DeclarationKind.ENUM, "status")
+    declarations = _visible_declarations_without_runtime_values(
+        enum_visibility={
+            "status": (
+                VisibilityRecord(
+                    resource=original_consumer,
+                    declaration=declaration,
+                    reason=VisibilityReason.GLOBAL,
+                ),
+            )
+        }
+    )
+
+    rebound = attachment_core._rebind_visible_declarations(
+        declarations=declarations,
+        consumer=new_consumer,
+    )
+
+    assert rebound is not declarations
+    assert rebound.enum_visibility["status"][0].resource == new_consumer
+    assert declarations.enum_visibility["status"][0].resource == original_consumer
 
 
 @pytest.mark.parametrize(

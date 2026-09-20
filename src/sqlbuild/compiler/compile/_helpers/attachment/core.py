@@ -785,6 +785,8 @@ def _build_visible_declaration_indexes(
 def _rebind_visible_declarations(
     *, declarations: _VisibleModelDeclarations, consumer: ResourceIdentity
 ) -> _VisibleModelDeclarations:
+    if not declarations.enum_visibility and not declarations.constant_visibility:
+        return declarations
     return replace(
         declarations,
         enum_visibility=_rebind_visibility(
