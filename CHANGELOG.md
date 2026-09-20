@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.110.6](https://github.com/chio-labs/sqlbuild/compare/v0.110.5...v0.110.6) (2026-09-20)
+
+
+### Bug Fixes
+
+* type null-only SQL test fixtures ([#754](https://github.com/chio-labs/sqlbuild/issues/754)) ([7ca2da3](https://github.com/chio-labs/sqlbuild/commit/7ca2da372e9d04fdcffab6a574705c6a3834aa2e))
+
 ## [0.110.5](https://github.com/chio-labs/sqlbuild/compare/v0.110.4...v0.110.5) (2026-09-20)
 
 
