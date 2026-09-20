@@ -154,7 +154,7 @@ struct ProjectContext {
     dialect: String,
     set_difference_operator: String,
     requires_derived_table_aliases: bool,
-    analysis_templates: Arc<Mutex<HashMap<String, Option<AnalysisTemplate>>>>,
+    analysis_templates: Arc<AnalysisTemplateCache>,
 }
 
 #[derive(Clone)]
@@ -172,10 +172,13 @@ struct AnalysisResolvedSql {
 }
 
 #[derive(Clone)]
-struct AnalysisTemplate {
+pub(super) struct AnalysisTemplate {
     existing_cte_names: HashSet<String>,
     marker_calls: Vec<(String, String)>,
 }
+
+type AnalysisTemplateCell = Arc<OnceLock<Option<AnalysisTemplate>>>;
+type AnalysisTemplateCache = Mutex<HashMap<String, AnalysisTemplateCell>>;
 
 struct TestFixtures {
     mock_refs: BTreeMap<String, String>,
@@ -730,7 +733,7 @@ fn analyze_and_resolve_sql(
     functions: &HashMap<String, FunctionInput>,
     file_label: &str,
     dialect_name: &str,
-    templates: &Mutex<HashMap<String, Option<AnalysisTemplate>>>,
+    templates: &AnalysisTemplateCache,
 ) -> Result<Option<AnalysisResolvedSql>, String> {
     let Some(template) = analysis_template(query_sql, dialect_name, templates)? else {
         return Ok(None);
@@ -823,33 +826,41 @@ fn analyze_and_resolve_sql(
 fn analysis_template(
     query_sql: &str,
     dialect_name: &str,
-    templates: &Mutex<HashMap<String, Option<AnalysisTemplate>>>,
+    templates: &AnalysisTemplateCache,
 ) -> Result<Option<AnalysisTemplate>, String> {
-    if let Some(cached) = templates
-        .lock()
-        .map_err(|error| error.to_string())?
-        .get(query_sql)
-        .cloned()
-    {
-        return Ok(cached);
-    }
-    let parsed = Dialect::get_by_name(dialect_name).and_then(|dialect| {
-        let mut statements = dialect.parse(query_sql).ok()?;
-        if statements.len() != 1 {
-            return None;
-        }
-        let expression = statements.remove(0);
-        let value = serde_json::to_value(&expression).ok()?;
-        Some(AnalysisTemplate {
-            existing_cte_names: top_level_cte_names(&expression),
-            marker_calls: relation_marker_calls(&value),
+    cached_analysis_template(query_sql, templates, || {
+        Dialect::get_by_name(dialect_name).and_then(|dialect| {
+            let mut statements = dialect.parse(query_sql).ok()?;
+            if statements.len() != 1 {
+                return None;
+            }
+            let expression = statements.remove(0);
+            let value = serde_json::to_value(&expression).ok()?;
+            Some(AnalysisTemplate {
+                existing_cte_names: top_level_cte_names(&expression),
+                marker_calls: relation_marker_calls(&value),
+            })
         })
-    });
-    let mut cache = templates.lock().map_err(|error| error.to_string())?;
-    let cached = cache
-        .entry(query_sql.to_string())
-        .or_insert_with(|| parsed.clone());
-    Ok(cached.clone())
+    })
+}
+
+pub(super) fn cached_analysis_template<F>(
+    query_sql: &str,
+    templates: &AnalysisTemplateCache,
+    initialize: F,
+) -> Result<Option<AnalysisTemplate>, String>
+where
+    F: FnOnce() -> Option<AnalysisTemplate>,
+{
+    let cached = {
+        let mut cache = templates.lock().map_err(|error| error.to_string())?;
+        Arc::clone(
+            cache
+                .entry(query_sql.to_string())
+                .or_insert_with(|| Arc::new(OnceLock::new())),
+        )
+    };
+    Ok(cached.get_or_init(initialize).clone())
 }
 
 fn insert_generated_cte(

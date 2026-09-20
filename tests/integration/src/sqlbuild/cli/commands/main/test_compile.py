@@ -188,6 +188,14 @@ def test_given_sql_test_chain_when_compiling_then_native_planner_writes_complete
         "SELECT 1\n",
         encoding="utf-8",
     )
+    (tests_dir / "orders_chain_second.sql").write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__raw_orders AS (SELECT 2 AS order_id, 20 AS amount),\n"
+        "__expected__orders AS (SELECT 2 AS order_id, 20 AS amount)\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
 
     exit_code = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
     result: dict[str, object] = json.loads(capsys.readouterr().out)
@@ -201,15 +209,20 @@ def test_given_sql_test_chain_when_compiling_then_native_planner_writes_complete
         / "orders_chain.sql"
     )
     artifact_sql = artifact_path.read_text(encoding="utf-8")
+    second_artifact_sql = artifact_path.with_name("orders_chain_second.sql").read_text(
+        encoding="utf-8"
+    )
 
     assert exit_code == 0
-    assert cast(dict[str, object], result["summary"])["tests"] == 1
+    assert cast(dict[str, object], result["summary"])["tests"] == 2
     assert "__source__raw_orders AS (" in artifact_sql
     assert "__ref__stg_orders AS (" in artifact_sql
     assert "__actual__orders AS (" in artifact_sql
     assert "__expected__orders AS (" in artifact_sql
     assert '__source("raw_orders")' not in artifact_sql
     assert '__ref("stg_orders")' not in artifact_sql
+    assert "SELECT 2 AS order_id, 20 AS amount" in second_artifact_sql
+    assert "SELECT 1 AS order_id, 10 AS amount" not in second_artifact_sql
 
 
 if __name__ == "__main__":
