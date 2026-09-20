@@ -12,8 +12,10 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
+from sqlbuild.compiler.fingerprints.main.write_many import write_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from tests.integration.src.sqlbuild.compiler.fingerprints.main._test_types import (
+    BatchWriteTestCase,
     InvalidDefinitionStorageTestCase,
     LatestResolutionTestCase,
     OldFingerprintSchemaTestCase,
@@ -292,6 +294,64 @@ def test_given_fingerprints_when_writing_and_reading_then_returns_expected(
     for identity_key, expected_hash in test_case.expected_identity_definition_hashes.items():
         assert result.fingerprints_by_identity is not None
         assert result.fingerprints_by_identity[identity_key].definition_hash == expected_hash
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        BatchWriteTestCase(
+            description="writes every row across multiple batches",
+            row_count=101,
+            expected_last_definition="SELECT 100 AS order_id",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_many_fingerprints_when_batch_writing_then_all_rows_are_readable(
+    test_case: BatchWriteTestCase,
+    connection: Any,
+    execute: Any,
+) -> None:
+    fingerprints: tuple[Fingerprint, ...] = tuple(
+        Fingerprint(
+            node_type="model",
+            node_name=f"orders_{index}",
+            target_database=None,
+            target_schema="test_schema",
+            target_name=f"orders_{index}",
+            run_id="batch_run",
+            definition_hash=f"hash_{index}",
+            version_hash=f"version_{index}",
+            schema_fingerprint=f"schema_{index}",
+            definition=f"SELECT {index} AS order_id",
+            ts=datetime(2026, 1, 15, 12, 0, index % 60),
+        )
+        for index in range(test_case.row_count)
+    )
+
+    write_fingerprints(
+        connection=connection,
+        execute=execute,
+        database=None,
+        schema="test_schema",
+        fingerprints=fingerprints,
+        render_qualified_name=RENDER_QUALIFIED_NAME,
+        render_framework_type=RENDER_FRAMEWORK_TYPE,
+    )
+    result: FingerprintSet = read_latest_fingerprints(
+        connection=connection,
+        execute=execute,
+        table_exists=True,
+        database=None,
+        schema="test_schema",
+        render_qualified_name=RENDER_QUALIFIED_NAME,
+        render_read_latest_sql=RENDER_READ_LATEST_SQL,
+    )
+
+    assert len(result.fingerprints) == test_case.row_count
+    assert result.fingerprints[f"orders_{test_case.row_count - 1}"].definition == (
+        test_case.expected_last_definition
+    )
 
 
 @pytest.mark.parametrize(

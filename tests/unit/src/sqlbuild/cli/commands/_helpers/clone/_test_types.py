@@ -42,6 +42,33 @@ class CloneConnectionLifecycleTestCase:
 
 
 @dataclass(frozen=True)
+class RenderCloneFingerprintProgressTestCase:
+    description: str
+    completed: int
+    total: int
+    expected_line: str
+
+
+@dataclass(frozen=True)
+class RenderCloneFingerprintInterruptedTestCase:
+    description: str
+    completed: int
+    total: int
+    pending_identities: tuple[str, ...]
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CloneFingerprintProgressReporterTestCase:
+    description: str
+    completed: int
+    total: int
+    pending_identities: tuple[str, ...]
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class VirtualCloneLifecycleCase:
     description: str
     missing_count: int

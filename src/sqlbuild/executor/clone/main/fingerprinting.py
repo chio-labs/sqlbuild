@@ -8,6 +8,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ModelPlanEntry, SeedPlanEntry
 from sqlbuild.executor.clone._helpers.fingerprinting import copy_clone_fingerprints as _copy
 from sqlbuild.executor.clone.models import CloneExecutionResult
+from sqlbuild.executor.clone.types import CloneFingerprintProgressCallback
 
 
 def copy_clone_fingerprints(
@@ -21,6 +22,7 @@ def copy_clone_fingerprints(
     destination_connection: Any,
     run_id: str,
     query_change_tracking: bool,
+    on_progress: CloneFingerprintProgressCallback | None = None,
 ) -> None:
     _ = _copy(
         result=result,
@@ -32,4 +34,5 @@ def copy_clone_fingerprints(
         destination_connection=destination_connection,
         run_id=run_id,
         query_change_tracking=query_change_tracking,
+        on_progress=on_progress,
     )

@@ -625,6 +625,42 @@ def test_given_standalone_warehouse_operation_on_tty_when_projected_then_progres
     "test_case",
     (
         CursorCleanupCase(
+            description="clone finalization phase is visible",
+            expected_output="Clone finalization  START\nClone finalization  OK  (0.01s)\n",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_clone_finalization_lifecycle_when_projected_then_phase_is_visible(
+    test_case: CursorCleanupCase,
+) -> None:
+    stream: _FlushRecordingStream = _FlushRecordingStream(tty=False)
+    projector: NativeProgressProjector = NativeProgressProjector(stream=stream, use_color=False)
+    start: LifecycleEvent = lifecycle_event(
+        "operation_started",
+        operation_id="clone-finalization",
+        payload={
+            "operation_kind": "clone",
+            "operation_name": "clone_finalization",
+        },
+    )
+    terminal: LifecycleEvent = replace(
+        start,
+        event_id="clone-finalization-terminal",
+        event_type="operation_completed",
+        payload={**start.payload, "duration_ms": 10.0},
+    )
+
+    projector.consume(start)
+    projector.consume(terminal)
+
+    assert stream.getvalue() == test_case.expected_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CursorCleanupCase(
             description="standalone warehouse operation is visible without tty",
             expected_output="Promote relation  START\nPromote relation  OK  (0.01s)\n",
         ),

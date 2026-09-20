@@ -51,6 +51,35 @@ def clone_relation_flow_text(
     )
 
 
+def render_clone_fingerprint_progress_line(*, completed: int, total: int, use_color: bool) -> str:
+    """Render confirmed clone fingerprint propagation progress."""
+
+    style: CliStyle = CliStyle(use_color=use_color)
+    width: int = len(str(total))
+    return (
+        f"  {'fingerprint':<10}"
+        f"[{completed:>{width}}/{total}] propagated {style.status(status='OK')}"
+    )
+
+
+def render_clone_fingerprint_interrupted_line(
+    *, completed: int, total: int, pending_identities: tuple[str, ...], use_color: bool
+) -> str:
+    """Render bounded context for interrupted clone fingerprint propagation."""
+
+    style: CliStyle = CliStyle(use_color=use_color)
+    displayed: tuple[str, ...] = pending_identities[:10]
+    remaining_count: int = len(pending_identities) - len(displayed)
+    pending_text: str = ", ".join(displayed)
+    if remaining_count:
+        pending_text = f"{pending_text} (+{remaining_count} more)"
+    return (
+        f"  {'fingerprint':<10}"
+        f"[{completed}/{total}] {style.status(status='FAIL')} "
+        f"not confirmed: {pending_text}"
+    )
+
+
 def clone_relation_display_name(relation: str) -> str:
     """Normalize ordinary identifiers while preserving quoted identifier case."""
 

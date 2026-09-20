@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, cast
 
 import pytest
@@ -64,20 +65,26 @@ def test_given_clone_result_when_copying_fingerprints_then_writes_expected_rows(
             },
         )
 
-    def write_fingerprint(**kwargs: Any) -> None:
+    def write_fingerprints(**kwargs: Any) -> None:
         used_connections.append(kwargs["connection"])
-        fingerprint: Fingerprint = kwargs["fingerprint"]
-        written.append(
-            (
-                fingerprint.node_type,
-                fingerprint.node_name,
-                fingerprint.target_schema,
-                fingerprint.target_name,
-                fingerprint.run_id,
+        fingerprint: Fingerprint
+        for fingerprint in kwargs["fingerprints"]:
+            written.append(
+                (
+                    fingerprint.node_type,
+                    fingerprint.node_name,
+                    fingerprint.target_schema,
+                    fingerprint.target_name,
+                    fingerprint.run_id,
+                )
             )
+        on_progress: Callable[..., None] = kwargs["on_progress"]
+        on_progress(
+            completed=len(kwargs["fingerprints"]),
+            total=len(kwargs["fingerprints"]),
         )
 
-    patch_fingerprint_io(monkeypatch, read_latest=read_latest, write=write_fingerprint)
+    patch_fingerprint_io(monkeypatch, read_latest=read_latest, write=write_fingerprints)
     origin_model_entries: tuple[ModelPlanEntry, ...] = (
         build_model_entry("orders", schema="prod", materialization=MaterializationType.TABLE),
         build_model_entry("orders_view", schema="prod", materialization=MaterializationType.VIEW),
