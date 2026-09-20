@@ -93,6 +93,7 @@ def with_plan_warnings(
             version_identities=identities.stale_warning_identities,
             source_freshness=source_freshness,
             include_sources=False,
+            model_changes_complete=True,
         )
     )
     if stale_out_of_selection_warnings:

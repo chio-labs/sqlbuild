@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from unittest.mock import Mock
 
 import pytest
 
@@ -10,6 +11,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_SEED
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.planning.scopes import resolve_planner_scopes
+from sqlbuild.compiler.planner._helpers.pruning import selection_staleness
 from sqlbuild.compiler.planner._helpers.pruning.selection_classifier import (
     format_stale_upstream_warning_message,
 )
@@ -34,6 +36,7 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessIdentity,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
+    CompleteModelChangesWorkTestCase,
     PlannerStaleWarningScopeTestCase,
     SelectionStalenessGraphWarningTestCase,
     SelectionStalenessWarningTestCase,
@@ -47,6 +50,70 @@ MODEL_KEY: CompiledObjectKey = CompiledObjectKey(
     resource_type=CompiledResourceType.MODEL,
     name="c",
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompleteModelChangesWorkTestCase(
+            description="complete model changes",
+            expected_detector_calls=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_complete_change_results_when_building_stale_warnings_then_models_are_not_redetected(
+    test_case: CompleteModelChangesWorkTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model: CompiledModel = build_run_despite_unchanged_model(
+        key=MODEL_KEY,
+        name=MODEL_KEY.name,
+        materialized="table",
+        run_despite_unchanged=None,
+    )
+    scope: PlannerScope = PlannerScope(
+        upstream_deps={MODEL_KEY: ()},
+        downstream_deps={},
+        all_keys={MODEL_KEY.name: MODEL_KEY},
+        models_by_name={MODEL_KEY.name: model},
+        selected_keys=frozenset({MODEL_KEY}),
+        execution_order=(MODEL_KEY,),
+    )
+    model_detector: Mock = Mock(
+        side_effect=AssertionError("complete change results must not trigger model detection")
+    )
+    monkeypatch.setattr(selection_staleness, "detect_model_changes", model_detector)
+
+    warnings: tuple[PlanWarning, ...] = build_stale_out_of_selection_warnings(
+        original_scope=scope,
+        execution_scope=scope,
+        changes=PlannerChangeResults(
+            models={
+                MODEL_KEY.name: ChangeDetectionResult(
+                    model_name=MODEL_KEY.name,
+                    change_kind=ChangeKind.NO_CHANGE,
+                )
+            },
+            functions={},
+        ),
+        snapshot=WarehouseSnapshot(),
+        version_identities=DirectModelVersionIdentities(
+            function_local_hashes={},
+            seed_version_hashes={},
+            seed_metadata_jsons={},
+            model_metadata_jsons={},
+            model_local_hashes={},
+            model_version_hashes={},
+        ),
+        source_freshness=None,
+        model_changes_complete=True,
+    )
+
+    assert warnings == ()
+    assert model_detector.call_count == test_case.expected_detector_calls
+
+
 SEED_KEY: CompiledObjectKey = CompiledObjectKey(
     resource_type=CompiledResourceType.SEED,
     name="orders_seed",

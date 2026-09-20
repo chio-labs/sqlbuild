@@ -52,6 +52,7 @@ class FixturePlanningWorkTestCase:
     test_count: int
     expected_metadata_builds: int
     expected_analysis_calls: int
+    expected_topology_builds: int
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,12 @@ class CompleteFixturePlanningTestCase:
     description: str
     expected_analysis_calls: int
     expected_fixture_sql: str
+
+
+@dataclass(frozen=True)
+class CompleteModelChangesWorkTestCase:
+    description: str
+    expected_detector_calls: int
 
 
 @dataclass(frozen=True)

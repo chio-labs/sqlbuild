@@ -15,6 +15,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.fixtures import completion as fixture_completion
 from sqlbuild.compiler.planner._helpers.output.plan_output import build_selected_test_entries
+from sqlbuild.compiler.planner._helpers.sql_tests import assembly as sql_test_assembly
 from sqlbuild.compiler.planner.models import (
     FixtureColumnMetadata,
     FixtureRelationMetadata,
@@ -44,6 +45,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers
             test_count=250,
             expected_metadata_builds=1,
             expected_analysis_calls=1,
+            expected_topology_builds=1,
         ),
     ),
     ids=lambda case: case.description,
@@ -98,6 +100,8 @@ def test_given_many_tests_when_building_entries_then_project_fixture_metadata_is
         "analyze_resolved_column_reads",
         fallback_analyzer,
     )
+    topology_builder: Mock = Mock(wraps=sql_test_assembly._topo_sort_model_chain)
+    monkeypatch.setattr(sql_test_assembly, "_topo_sort_model_chain", topology_builder)
 
     entries: list[SqlTestPlanEntry]
     warnings: list[PlanWarning]
@@ -111,6 +115,7 @@ def test_given_many_tests_when_building_entries_then_project_fixture_metadata_is
     assert warnings == []
     assert metadata_builder.call_count == test_case.expected_metadata_builds
     assert fallback_analyzer.call_count == test_case.expected_analysis_calls
+    assert topology_builder.call_count == test_case.expected_topology_builds
 
 
 @pytest.mark.parametrize(

@@ -133,6 +133,17 @@ class RelationFixturePlanningContext:
 
 
 @dataclass(frozen=True)
+class SqlTestPlanningContext:
+    """Project-wide SQL-test indexes and reusable chain topology."""
+
+    models_by_name: dict[str, CompiledModel]
+    model_dependencies: dict[str, frozenset[str]]
+    function_locations: dict[str, CompiledRelationLocation]
+    qualified_function_locations: dict[str, str]
+    chain_names_by_test_key: dict[CompiledObjectKey, tuple[str, ...]]
+
+
+@dataclass(frozen=True)
 class GraphNodeKey:
     """Neutral graph key matching fingerprint identity fields."""
 

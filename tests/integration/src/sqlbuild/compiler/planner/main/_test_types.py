@@ -57,6 +57,17 @@ class BuildExecutionPlanTestCase:
 
 
 @dataclass(frozen=True)
+class PlannerChangeDetectionWorkTestCase:
+    description: str
+    selection_diagnostics: bool
+    expected_model_calls: dict[str, int]
+    expected_warning_count: int
+    query_change_tracking: bool = True
+    expected_query_tracking_calls: dict[tuple[str, bool], int] = field(default_factory=dict)
+    expected_identity_builds: int = 1
+
+
+@dataclass(frozen=True)
 class SourceCursorInputPlanErrorTestCase:
     description: str
     setup_sql: tuple[str, ...]

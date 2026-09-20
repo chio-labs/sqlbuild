@@ -198,19 +198,27 @@ def _fixture_keys_requiring_analysis(
     return frozenset(required)
 
 
-def build_relation_fixture_context(*, project: CompiledProject) -> RelationFixturePlanningContext:
+def build_relation_fixture_context(
+    *,
+    project: CompiledProject,
+    models_by_name: dict[str, CompiledModel] | None = None,
+) -> RelationFixturePlanningContext:
     """Build immutable project-wide fixture metadata once per planning invocation."""
 
-    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    model_map: dict[str, CompiledModel] = (
+        {model.name: model for model in project.models}
+        if models_by_name is None
+        else models_by_name
+    )
     relations: dict[FixtureKey, FixtureRelationMetadata] = _fixture_relation_metadata(
         project=project,
-        model_map=models_by_name,
+        model_map=model_map,
     )
     authoritative_columns: dict[FixtureKey, frozenset[str]] = _authoritative_fixture_columns(
         relations=relations
     )
     return RelationFixturePlanningContext(
-        models_by_name=models_by_name,
+        models_by_name=model_map,
         relations=relations,
         authoritative_columns=authoritative_columns,
         expected_types=_base_expected_fixture_types(relations=relations),

@@ -34,6 +34,7 @@ def build_stale_out_of_selection_warnings(
     version_identities: DirectModelVersionIdentities,
     source_freshness: DirectSourceFreshnessPlanningResult | None,
     include_sources: bool = True,
+    model_changes_complete: bool = False,
 ) -> tuple[PlanWarning, ...]:
     """Warn for selected models stale through changed upstreams outside the run set."""
 
@@ -67,6 +68,7 @@ def build_stale_out_of_selection_warnings(
             changes=changes,
             snapshot=snapshot,
             version_identities=version_identities,
+            model_changes_complete=model_changes_complete,
         ),
         changed_seed_names=_changed_seed_names(
             snapshot=snapshot,
@@ -129,6 +131,7 @@ def _changed_model_names(
     changes: PlannerChangeResults,
     snapshot: WarehouseSnapshot,
     version_identities: DirectModelVersionIdentities,
+    model_changes_complete: bool,
 ) -> frozenset[str]:
     changed: set[str] = {
         model_name
@@ -150,6 +153,7 @@ def _changed_model_names(
             changes=changes,
             snapshot=snapshot,
             version_identities=version_identities,
+            model_changes_complete=model_changes_complete,
         )
     )
     return frozenset(changed)
@@ -186,16 +190,25 @@ def _model_own_identity_changed(
     changes: PlannerChangeResults,
     snapshot: WarehouseSnapshot,
     version_identities: DirectModelVersionIdentities,
+    model_changes_complete: bool,
 ) -> bool:
     selected_change: ChangeDetectionResult | None = changes.models.get(model_name)
-    if selected_change is not None:
-        if selected_change.change_kind in {
+    if selected_change is not None and (
+        model_changes_complete
+        or selected_change.change_kind
+        in {
             ChangeKind.FIRST_RUN,
             ChangeKind.QUERY_CHANGED,
             ChangeKind.CONFIG_CHANGED,
             ChangeKind.SCHEMA_CHANGED,
-        }:
-            return True
+        }
+    ):
+        return selected_change.change_kind in {
+            ChangeKind.FIRST_RUN,
+            ChangeKind.QUERY_CHANGED,
+            ChangeKind.CONFIG_CHANGED,
+            ChangeKind.SCHEMA_CHANGED,
+        }
     model: CompiledModel | None = original_scope.models_by_name.get(model_name)
     if model is None:
         return False

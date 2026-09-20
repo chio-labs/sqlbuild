@@ -36,3 +36,12 @@ class TableTypePlanningTestCase:
     materialized: str = "table"
     additional_config: tuple[tuple[str, object], ...] = ()
     relation_type: str = "BASE TABLE"
+
+
+@dataclass(frozen=True)
+class ReusableExecutionModelNamesTestCase:
+    description: str
+    execution_hash: str
+    stale_warning_hash: str
+    query_change_tracking: bool
+    expected_names: frozenset[str]

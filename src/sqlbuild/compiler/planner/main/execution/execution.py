@@ -49,6 +49,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerSelection,
     PlannerWarehouseState,
     PlanOutput,
+    WarehouseSnapshot,
 )
 from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
@@ -90,12 +91,7 @@ def build_execution_plan(
     identities: PlannerIdentityContext = build_planner_identity_context(
         project=project,
         scopes=scopes,
-    )
-    stale_warning_changes: PlannerChangeResults = detect_stale_warning_changes(
-        project=project,
-        scopes=scopes,
-        snapshot=warehouse.snapshot,
-        identities=identities,
+        include_stale_warning_identities=policies.selection_diagnostics,
     )
     check_selected_scope_buildability(
         project=project,
@@ -103,13 +99,15 @@ def build_execution_plan(
         snapshot=warehouse.snapshot,
         deferral=deferral,
     )
-    changes: PlannerChangeResults = detect_changes(
+    changes: PlannerChangeResults
+    stale_warning_changes: PlannerChangeResults
+    changes, stale_warning_changes = _detect_planner_change_results(
         project=project,
-        scope=scopes.inspection_scope,
+        scopes=scopes,
         snapshot=warehouse.snapshot,
-        full_refresh=overrides.full_refresh,
-        expected_version_hashes=identities.version_identities.model_version_hashes,
-        expected_metadata_jsons=identities.version_identities.model_metadata_jsons,
+        identities=identities,
+        overrides=overrides,
+        policies=policies,
     )
     resolved_actions: PlannerResolvedActions = resolve_cascades(
         scope=scopes.inspection_scope,
@@ -183,3 +181,31 @@ def build_execution_plan(
     if on_progress is not None:
         on_progress(f"Generated plan. ({time.monotonic() - plan_start:.2f}s)")
     return plan_output
+
+
+def _detect_planner_change_results(
+    *,
+    project: CompiledProject,
+    scopes: PlannerScopeResolution,
+    snapshot: WarehouseSnapshot,
+    identities: PlannerIdentityContext,
+    overrides: PlannerOverrides,
+    policies: PlannerPolicies,
+) -> tuple[PlannerChangeResults, PlannerChangeResults]:
+    changes: PlannerChangeResults = detect_changes(
+        project=project,
+        scope=scopes.inspection_scope,
+        snapshot=snapshot,
+        full_refresh=overrides.full_refresh,
+        expected_version_hashes=identities.version_identities.model_version_hashes,
+        expected_metadata_jsons=identities.version_identities.model_metadata_jsons,
+    )
+    if not policies.selection_diagnostics:
+        return changes, PlannerChangeResults(models={}, functions={})
+    return changes, detect_stale_warning_changes(
+        project=project,
+        scopes=scopes,
+        snapshot=snapshot,
+        identities=identities,
+        execution_changes=changes,
+    )

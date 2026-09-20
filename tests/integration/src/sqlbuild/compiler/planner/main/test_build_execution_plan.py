@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import replace
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
@@ -10,6 +12,8 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.output.main.plan import format_plan
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.planner._helpers.changes import detect as change_detection
+from sqlbuild.compiler.planner._helpers.planning import identities as identity_planning
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
@@ -38,6 +42,7 @@ from tests.integration.src.sqlbuild.compiler.planner.main._test_types import (
     FormatPlanIntegrationTestCase,
     FutureCursorPlannerErrorTestCase,
     FutureCursorPlannerTestCase,
+    PlannerChangeDetectionWorkTestCase,
     SourceCursorInputPlanErrorTestCase,
     TableTypePlanAssemblyTestCase,
 )
@@ -49,6 +54,107 @@ from tests.integration.src.sqlbuild.compiler.planner.main.helpers import (
     build_project_from_test_case,
     write_previous_function_fingerprints,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PlannerChangeDetectionWorkTestCase(
+            description="selection diagnostics disabled",
+            selection_diagnostics=False,
+            expected_model_calls={"orders": 1},
+            expected_warning_count=0,
+            expected_query_tracking_calls={("orders", True): 1},
+        ),
+        PlannerChangeDetectionWorkTestCase(
+            description="selection diagnostics enabled",
+            selection_diagnostics=True,
+            expected_model_calls={"stg_orders": 1, "orders": 1},
+            expected_warning_count=0,
+            expected_query_tracking_calls={
+                ("stg_orders", True): 1,
+                ("orders", True): 1,
+            },
+            expected_identity_builds=2,
+        ),
+        PlannerChangeDetectionWorkTestCase(
+            description="selection diagnostics preserve independent query tracking",
+            selection_diagnostics=True,
+            expected_model_calls={"stg_orders": 1, "orders": 2},
+            expected_warning_count=0,
+            query_change_tracking=False,
+            expected_query_tracking_calls={
+                ("orders", False): 1,
+                ("stg_orders", True): 1,
+                ("orders", True): 1,
+            },
+            expected_identity_builds=2,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_selected_model_when_planning_then_each_required_model_is_change_detected_once(
+    test_case: PlannerChangeDetectionWorkTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection.execute("CREATE TABLE staging.stg_orders AS SELECT 1 AS order_id")
+    project: CompiledProject = build_project_from_test_case(
+        BuildExecutionPlanTestCase(
+            description=test_case.description,
+            setup_sql=(),
+            model_locations={"stg_orders": "staging", "orders": "staging"},
+            model_configs={
+                "stg_orders": {"materialized": "table"},
+                "orders": {"materialized": "table"},
+            },
+            model_queries={
+                "stg_orders": "SELECT 1 AS order_id",
+                "orders": "SELECT * FROM staging.stg_orders",
+            },
+            model_deps={"orders": ("stg_orders",)},
+            full_refresh=False,
+            select=("orders",),
+            expected_action={},
+            expected_reason={},
+        )
+    )
+    project = replace(
+        project,
+        settings=replace(
+            project.settings,
+            query_change_tracking=test_case.query_change_tracking,
+        ),
+    )
+    model_detector: Mock = Mock(wraps=change_detection.detect_model_changes)
+    monkeypatch.setattr(change_detection, "detect_model_changes", model_detector)
+    identity_builder: Mock = Mock(wraps=identity_planning.build_direct_model_version_identities)
+    monkeypatch.setattr(
+        identity_planning,
+        "build_direct_model_version_identities",
+        identity_builder,
+    )
+
+    plan: PlanOutput = build_execution_plan_from_kwargs(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        select=("orders",),
+        selection_diagnostics=test_case.selection_diagnostics,
+    )
+
+    model_calls: Counter[str] = Counter(
+        call.kwargs["model"].name for call in model_detector.call_args_list
+    )
+    assert dict(model_calls) == test_case.expected_model_calls
+    query_tracking_calls: Counter[tuple[str, bool]] = Counter(
+        (call.kwargs["model"].name, call.kwargs["query_change_tracking"])
+        for call in model_detector.call_args_list
+    )
+    assert dict(query_tracking_calls) == test_case.expected_query_tracking_calls
+    assert identity_builder.call_count == test_case.expected_identity_builds
+    assert len(plan.warnings) == test_case.expected_warning_count
 
 
 @pytest.mark.parametrize(

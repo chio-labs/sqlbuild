@@ -50,6 +50,7 @@ from sqlbuild.compiler.planner.models import (
     SqlAnalysisResolvedTestSql,
     SqlTestAssertionStep,
     SqlTestPlanEntry,
+    SqlTestPlanningContext,
 )
 from sqlbuild.compiler.planner.types import WarningSeverity
 from sqlbuild.compiler.references.main._quoted_reference_call_pattern import (
@@ -127,6 +128,60 @@ class _TextualChainResolver:
         return self.resolved
 
 
+def build_sql_test_planning_context(
+    *, project: CompiledProject, tests: tuple[CompiledSqlTest, ...] = ()
+) -> SqlTestPlanningContext:
+    """Build project-wide indexes shared by every SQL test in one plan."""
+
+    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    model_dependencies: dict[str, frozenset[str]] = _build_model_dependencies(
+        model_map=models_by_name
+    )
+    function_locations: dict[str, CompiledRelationLocation] = {
+        function.name: function.destination for function in project.functions
+    }
+    chain_names_by_topology: dict[
+        tuple[tuple[str, ...], tuple[tuple[str, str], ...], frozenset[str]],
+        tuple[str, ...],
+    ] = {}
+    chain_names_by_test_key: dict[CompiledObjectKey, tuple[str, ...]] = {}
+    test: CompiledSqlTest
+    for test in tests:
+        topology_inputs: tuple[tuple[str, ...], dict[str, str], frozenset[str]] | None = (
+            _test_model_chain_topology_inputs(test=test)
+        )
+        if topology_inputs is None:
+            continue
+        expected_names, model_query_overrides, mock_ref_names = topology_inputs
+        topology_key: tuple[tuple[str, ...], tuple[tuple[str, str], ...], frozenset[str]] = (
+            tuple(sorted(set(expected_names))),
+            tuple(sorted(model_query_overrides.items())),
+            mock_ref_names,
+        )
+        ordered_names: tuple[str, ...] | None = chain_names_by_topology.get(topology_key)
+        if ordered_names is None:
+            ordered_names = _topo_sort_model_chain(
+                expected_names=expected_names,
+                model_map=models_by_name,
+                model_dependencies=model_dependencies,
+                model_query_overrides=model_query_overrides,
+                mock_ref_names=mock_ref_names,
+            )
+            chain_names_by_topology[topology_key] = ordered_names
+        chain_names_by_test_key[test.key] = ordered_names
+    return SqlTestPlanningContext(
+        models_by_name=models_by_name,
+        model_dependencies=model_dependencies,
+        function_locations=function_locations,
+        qualified_function_locations={
+            name: target.qualified_name
+            for name, target in function_locations.items()
+            if target.qualified_name is not None
+        },
+        chain_names_by_test_key=chain_names_by_test_key,
+    )
+
+
 def plan_test(
     *,
     test: CompiledSqlTest,
@@ -135,17 +190,19 @@ def plan_test(
     sql_analysis_enabled: bool = False,
     validate_fixtures: bool = False,
     fixture_planning_context: RelationFixturePlanningContext | None = None,
+    planning_context: SqlTestPlanningContext | None = None,
 ) -> tuple[SqlTestPlanEntry, tuple[PlanWarning, ...]]:
     """Build a test plan entry with chained resolution."""
 
+    context: SqlTestPlanningContext = planning_context or build_sql_test_planning_context(
+        project=project,
+        tests=(test,),
+    )
     if isinstance(test.payload, CompiledDirectLogicSqlTestPayload):
-        function_locations: dict[str, CompiledRelationLocation] = {
-            function.name: function.destination for function in project.functions
-        }
         return (
             _plan_direct_logic_test(
                 test=test,
-                function_locations=function_locations,
+                function_locations=context.function_locations,
                 function_deps=_direct_function_deps(test=test, project=project),
                 adapter=adapter,
                 sql_analysis_enabled=sql_analysis_enabled,
@@ -155,15 +212,9 @@ def plan_test(
 
     model_payload: CompiledModelSqlTestPayload = test.payload
 
-    model_map: dict[str, CompiledModel] = {m.name: m for m in project.models}
-    function_locations: dict[str, CompiledRelationLocation] = {
-        function.name: function.destination for function in project.functions
-    }
-    qualified_function_locations: dict[str, str] = {
-        name: target.qualified_name
-        for name, target in function_locations.items()
-        if target.qualified_name is not None
-    }
+    model_map: dict[str, CompiledModel] = context.models_by_name
+    function_locations: dict[str, CompiledRelationLocation] = context.function_locations
+    qualified_function_locations: dict[str, str] = context.qualified_function_locations
     mock_refs: dict[str, str] = _extract_mock_refs(test)
     mock_sources: dict[str, str] = _extract_mock_sources(test)
     mock_seeds: dict[str, str] = _extract_mock_seeds(test)
@@ -179,12 +230,15 @@ def plan_test(
     expected_names: tuple[str, ...] = tuple(
         dict.fromkeys((*model_payload.expected_model_names, *assertion_target_names))
     )
-    ordered_names: tuple[str, ...] = _topo_sort_model_chain(
-        expected_names=expected_names,
-        model_map=model_map,
-        model_query_overrides=model_payload.model_query_overrides,
-        mock_ref_names=frozenset(mock_refs),
-    )
+    ordered_names: tuple[str, ...] | None = context.chain_names_by_test_key.get(test.key)
+    if ordered_names is None:
+        ordered_names = _topo_sort_model_chain(
+            expected_names=expected_names,
+            model_map=model_map,
+            model_dependencies=context.model_dependencies,
+            model_query_overrides=model_payload.model_query_overrides,
+            mock_ref_names=frozenset(mock_refs),
+        )
     if sql_analysis_enabled and validate_fixtures:
         mock_refs, mock_sources, mock_seeds = build_validated_test_fixtures(
             test=test,
@@ -401,8 +455,27 @@ def resolve_test_model_chain_names(
     return _topo_sort_model_chain(
         expected_names=expected_names,
         model_map=effective_model_map,
+        model_dependencies=_build_model_dependencies(model_map=effective_model_map),
         model_query_overrides=test.payload.model_query_overrides,
         mock_ref_names=frozenset(_extract_mock_refs(test)),
+    )
+
+
+def _test_model_chain_topology_inputs(
+    *, test: CompiledSqlTest
+) -> tuple[tuple[str, ...], dict[str, str], frozenset[str]] | None:
+    if not isinstance(test.payload, CompiledModelSqlTestPayload):
+        return None
+    assertion_target_names: tuple[str, ...] = _extract_assertion_ref_targets(
+        assertion_map=_extract_assertion_ctes(test)
+    )
+    expected_names: tuple[str, ...] = tuple(
+        dict.fromkeys((*test.payload.expected_model_names, *assertion_target_names))
+    )
+    return (
+        expected_names,
+        test.payload.model_query_overrides,
+        frozenset(_extract_mock_refs(test)),
     )
 
 
@@ -921,6 +994,7 @@ def _topo_sort_model_chain(
     *,
     expected_names: tuple[str, ...],
     model_map: dict[str, CompiledModel],
+    model_dependencies: dict[str, frozenset[str]],
     model_query_overrides: dict[str, str],
     mock_ref_names: frozenset[str],
 ) -> tuple[str, ...]:
@@ -939,6 +1013,7 @@ def _topo_sort_model_chain(
                 model=model,
                 query_override=model_query_overrides.get(node),
                 model_map=model_map,
+                model_dependencies=model_dependencies,
                 mock_ref_names=mock_ref_names,
             )
             dependency_name: str
@@ -957,6 +1032,7 @@ def _test_model_dependency_names(
     model: CompiledModel,
     query_override: str | None,
     model_map: dict[str, CompiledModel],
+    model_dependencies: dict[str, frozenset[str]],
     mock_ref_names: frozenset[str],
 ) -> set[str]:
     if query_override is not None:
@@ -965,12 +1041,21 @@ def _test_model_dependency_names(
             for match in uncommented_pattern_matches(pattern=_REF_PATTERN, sql=query_override)
         }
     else:
-        candidates = {
+        candidates = set(model_dependencies.get(model.name, ()))
+    return {name for name in candidates if name not in mock_ref_names and name in model_map}
+
+
+def _build_model_dependencies(*, model_map: dict[str, CompiledModel]) -> dict[str, frozenset[str]]:
+    dependencies_by_model: dict[str, frozenset[str]] = {}
+    model: CompiledModel
+    for model in model_map.values():
+        dependencies_by_model[model.name] = frozenset(
             dependency.name
             for dependency in model.deps
             if dependency.resource_type == CompiledResourceType.MODEL
-        }
-    return {name for name in candidates if name not in mock_ref_names and name in model_map}
+            and dependency.name in model_map
+        )
+    return dependencies_by_model
 
 
 def _extract_mock_refs(test: CompiledSqlTest) -> dict[str, str]:

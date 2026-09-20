@@ -60,32 +60,13 @@ def detect_changes(
 ) -> PlannerChangeResults:
     """Detect selected model and function changes."""
 
-    model_changes: dict[str, ChangeDetectionResult] = {}
-    function_local_hashes: dict[str, str] = build_function_local_hashes(
-        functions=project.functions,
+    model_changes: dict[str, ChangeDetectionResult] = detect_model_changes_in_scope(
+        project=project,
+        scope=scope,
+        snapshot=snapshot,
+        expected_version_hashes=expected_version_hashes,
+        expected_metadata_jsons=expected_metadata_jsons,
     )
-    hook_version_hashes: dict[str, str] = {
-        name: identity.version_hash
-        for name, identity in build_hook_identities(project.hook_functions).items()
-    }
-    key: CompiledObjectKey
-    for key in scope.execution_order:
-        if key not in scope.selected_keys or key.resource_type != CompiledResourceType.MODEL:
-            continue
-        model: CompiledModel | None = scope.models_by_name.get(key.name)
-        if model is None:
-            continue
-        model_changes[model.name] = detect_model_changes(
-            model=model,
-            snapshot=snapshot,
-            sql_analysis_enabled=project.settings.sql_analysis,
-            query_change_tracking=project.settings.query_change_tracking,
-            full_refresh=False,
-            function_local_hashes=function_local_hashes,
-            hook_version_hashes=hook_version_hashes,
-            expected_version_hash=(expected_version_hashes or {}).get(model.name),
-            expected_metadata_json=(expected_metadata_jsons or {}).get(model.name),
-        )
 
     function_changes: dict[str, FunctionChangeResult] = {}
     function: CompiledFunction
@@ -114,6 +95,51 @@ def detect_changes(
         )
 
     return PlannerChangeResults(models=model_changes, functions=function_changes)
+
+
+def detect_model_changes_in_scope(
+    *,
+    project: CompiledProject,
+    scope: PlannerScope,
+    snapshot: WarehouseSnapshot,
+    query_change_tracking: bool | None = None,
+    expected_version_hashes: dict[str, str] | None = None,
+    expected_metadata_jsons: dict[str, str] | None = None,
+) -> dict[str, ChangeDetectionResult]:
+    """Detect changes for selected models without inspecting functions."""
+
+    model_changes: dict[str, ChangeDetectionResult] = {}
+    effective_query_change_tracking: bool = (
+        project.settings.query_change_tracking
+        if query_change_tracking is None
+        else query_change_tracking
+    )
+    function_local_hashes: dict[str, str] = build_function_local_hashes(
+        functions=project.functions,
+    )
+    hook_version_hashes: dict[str, str] = {
+        name: identity.version_hash
+        for name, identity in build_hook_identities(project.hook_functions).items()
+    }
+    key: CompiledObjectKey
+    for key in scope.execution_order:
+        if key not in scope.selected_keys or key.resource_type != CompiledResourceType.MODEL:
+            continue
+        model: CompiledModel | None = scope.models_by_name.get(key.name)
+        if model is None:
+            continue
+        model_changes[model.name] = detect_model_changes(
+            model=model,
+            snapshot=snapshot,
+            sql_analysis_enabled=project.settings.sql_analysis,
+            query_change_tracking=effective_query_change_tracking,
+            full_refresh=False,
+            function_local_hashes=function_local_hashes,
+            hook_version_hashes=hook_version_hashes,
+            expected_version_hash=(expected_version_hashes or {}).get(model.name),
+            expected_metadata_json=(expected_metadata_jsons or {}).get(model.name),
+        )
+    return model_changes
 
 
 def detect_model_changes(
