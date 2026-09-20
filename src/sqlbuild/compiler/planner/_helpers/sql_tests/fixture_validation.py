@@ -5,10 +5,11 @@ from __future__ import annotations
 import re
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.main._infer_fixture_columns import infer_fixture_columns
+from sqlbuild.compiler.compile.main._infer_fixture_columns import infer_fixture_column_facts
 from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledSqlTest,
+    FixtureColumnInference,
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -65,10 +66,11 @@ def build_validated_test_fixtures(
         for name, sql in fixtures.items():
             inferred_columns: tuple[InferredColumn, ...] | None
             if resource_type == CompiledResourceType.SQL_TEST:
-                inferred_columns = infer_fixture_columns(
+                inference: FixtureColumnInference | None = infer_fixture_column_facts(
                     query_sql=sql,
                     inference_profile=adapter.expression_inference_profile(),
                 )
+                inferred_columns = inference.columns if inference is not None else None
             else:
                 inferred_columns = completion.inferred_by_fixture.get((resource_type, name))
             if inferred_columns is None:

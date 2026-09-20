@@ -145,6 +145,15 @@ class InferredColumn:
 
 
 @dataclass(frozen=True)
+class FixtureColumnInference:
+    """Inferred fixture columns plus outputs that are explicitly bare NULL literals."""
+
+    columns: tuple[InferredColumn, ...]
+    null_literal_names: frozenset[str]
+    quoted_names: frozenset[str]
+
+
+@dataclass(frozen=True)
 class DynamicColumnFamilyProof:
     """Compiler evidence for one declared runtime-generated column family."""
 

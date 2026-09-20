@@ -1954,6 +1954,11 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
 
         return '"' + name.replace('"', '""') + '"'
 
+    def render_exact_identifier(self, name: str) -> str:
+        """Render one explicitly quoted identifier without changing its logical spelling."""
+
+        return self.render_identifier(name)
+
     def render_framework_type(self, type_name: FrameworkType) -> str:
         """Render one framework-internal logical type using generic SQL defaults."""
 

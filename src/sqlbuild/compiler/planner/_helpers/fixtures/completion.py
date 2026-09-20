@@ -10,7 +10,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.main._analyze_columns_and_lineage import (
     analyze_resolved_column_reads,
 )
-from sqlbuild.compiler.compile.main._infer_fixture_columns import infer_fixture_columns
+from sqlbuild.compiler.compile.main._infer_fixture_columns import infer_fixture_column_facts
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
@@ -18,6 +18,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompileSqlReference,
     DynamicColumnContractProof,
+    FixtureColumnInference,
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -58,16 +59,20 @@ def build_relation_fixture_completion(
     model_map: dict[str, CompiledModel] = context.models_by_name
     fixture_sql_by_key: dict[FixtureKey, str] = {}
     inferred_by_fixture: dict[FixtureKey, tuple[InferredColumn, ...]] = {}
+    null_literal_names_by_fixture: dict[FixtureKey, frozenset[str]] = {}
+    quoted_names_by_fixture: dict[FixtureKey, frozenset[str]] = {}
     for resource_type, fixtures in fixture_groups:
         for name, sql in fixtures.items():
             key: FixtureKey = (resource_type, name)
             fixture_sql_by_key[key] = sql
-            inferred: tuple[InferredColumn, ...] | None = infer_fixture_columns(
+            inference: FixtureColumnInference | None = infer_fixture_column_facts(
                 query_sql=sql,
                 inference_profile=adapter.expression_inference_profile(),
             )
-            if inferred is not None:
-                inferred_by_fixture[key] = inferred
+            if inference is not None:
+                inferred_by_fixture[key] = inference.columns
+                null_literal_names_by_fixture[key] = inference.null_literal_names
+                quoted_names_by_fixture[key] = inference.quoted_names
 
     relations: dict[FixtureKey, FixtureRelationMetadata] = context.relations
     fixture_keys_requiring_analysis: frozenset[FixtureKey] = _fixture_keys_requiring_analysis(
@@ -89,6 +94,10 @@ def build_relation_fixture_completion(
         ordered_model_names=ordered_model_names,
         model_map=model_map,
     )
+    typed_nulls_by_fixture: dict[FixtureKey, dict[str, str]] = _typed_null_fixture_types(
+        null_literal_names_by_fixture=null_literal_names_by_fixture,
+        expected_types=expected_types,
+    )
     diagnostics: list[RelationFixtureDiagnostic] = list(
         _unknown_fixture_column_diagnostics(
             inferred_by_fixture=inferred_by_fixture,
@@ -96,6 +105,7 @@ def build_relation_fixture_completion(
         )
     )
 
+    completed_keys: set[FixtureKey] = set()
     for key, required_columns in required.items():
         inferred: tuple[InferredColumn, ...] | None = inferred_by_fixture.get(key)
         if inferred is None:
@@ -104,7 +114,8 @@ def build_relation_fixture_completion(
         missing: tuple[str, ...] = tuple(
             sorted(name for name in required_columns if name.casefold() not in available_names)
         )
-        if not missing:
+        typed_nulls: dict[str, str] = typed_nulls_by_fixture.get(key, {})
+        if not missing and not typed_nulls:
             continue
         relation: FixtureRelationMetadata | None = relations.get(key)
         metadata: tuple[FixtureColumnMetadata, ...] = (
@@ -172,7 +183,24 @@ def build_relation_fixture_completion(
         nullable_columns.sort(key=lambda column: metadata_order[column.name.casefold()])
         fixture_sql_by_key[key] = _completed_fixture_sql(
             sql=fixture_sql_by_key[key],
+            inferred=inferred,
+            typed_nulls=typed_nulls,
+            quoted_names=quoted_names_by_fixture.get(key, frozenset()),
             completed=tuple(nullable_columns),
+            adapter=adapter,
+        )
+        completed_keys.add(key)
+
+    for key, typed_nulls in typed_nulls_by_fixture.items():
+        if key in completed_keys:
+            continue
+        inferred = inferred_by_fixture[key]
+        fixture_sql_by_key[key] = _completed_fixture_sql(
+            sql=fixture_sql_by_key[key],
+            inferred=inferred,
+            typed_nulls=typed_nulls,
+            quoted_names=quoted_names_by_fixture.get(key, frozenset()),
+            completed=(),
             adapter=adapter,
         )
 
@@ -182,6 +210,24 @@ def build_relation_fixture_completion(
         expected_types=expected_types,
         diagnostics=tuple(diagnostics),
     )
+
+
+def _typed_null_fixture_types(
+    *,
+    null_literal_names_by_fixture: dict[FixtureKey, frozenset[str]],
+    expected_types: dict[FixtureKey, dict[str, str]],
+) -> dict[FixtureKey, dict[str, str]]:
+    result: dict[FixtureKey, dict[str, str]] = {}
+    for key, null_literal_names in null_literal_names_by_fixture.items():
+        fixture_types: dict[str, str] = {}
+        expected_fixture_types: dict[str, str] = expected_types.get(key, {})
+        for name in null_literal_names:
+            expected_type: str | None = expected_fixture_types.get(name)
+            if expected_type is not None:
+                fixture_types[name] = expected_type
+        if fixture_types:
+            result[key] = fixture_types
+    return result
 
 
 def _fixture_keys_requiring_analysis(
@@ -607,11 +653,31 @@ def _supplied_columns_form_schema_prefix(
 def _completed_fixture_sql(
     *,
     sql: str,
+    inferred: tuple[InferredColumn, ...],
+    typed_nulls: dict[str, str],
+    quoted_names: frozenset[str],
     completed: tuple[FixtureColumnMetadata, ...],
     adapter: BaseAdapter,
 ) -> str:
     alias: str = adapter.render_identifier(_PARTIAL_FIXTURE_ALIAS)
-    projections: list[str] = [f"{alias}.*"]
+    projections: list[str]
+    if typed_nulls:
+        projections = []
+        for supplied_column in inferred:
+            rendered_name: str = (
+                adapter.render_exact_identifier(supplied_column.name)
+                if supplied_column.name.casefold() in quoted_names
+                else supplied_column.name
+            )
+            source_expression: str = f"{alias}.{rendered_name}"
+            expected_type: str | None = typed_nulls.get(supplied_column.name.casefold())
+            projections.append(
+                source_expression
+                if expected_type is None
+                else f"CAST({source_expression} AS {expected_type}) AS {rendered_name}"
+            )
+    else:
+        projections = [f"{alias}.*"]
     for completed_column in completed:
         projections.append(
             f"CAST(NULL AS {completed_column.type}) AS "
