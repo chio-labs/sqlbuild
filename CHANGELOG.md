@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.110.7](https://github.com/chio-labs/sqlbuild/compare/v0.110.6...v0.110.7) (2026-09-20)
+
+
+### Bug Fixes
+
+* batch clone fingerprint finalization ([#756](https://github.com/chio-labs/sqlbuild/issues/756)) ([20eab8f](https://github.com/chio-labs/sqlbuild/commit/20eab8f16c78f49a55187e0904c1732c844eee13))
+
 ## [0.110.6](https://github.com/chio-labs/sqlbuild/compare/v0.110.5...v0.110.6) (2026-09-20)
 
 
