@@ -614,9 +614,7 @@ def prepare_model_header_tokens(headers: list[str]) -> None:
             header=header,
             tokenization=_ModelHeaderTokenization(
                 values=(
-                    _project_native_header_map(native_values)
-                    if native_values is not None
-                    else None
+                    _project_native_header_map(native_values) if native_values is not None else None
                 ),
                 column_offsets=(tuple(column_offsets) if column_offsets is not None else None),
                 error=error,
@@ -657,9 +655,7 @@ def _project_native_header_value(value: object) -> object:
         return tuple(_project_native_header_value(item) for item in payload)
     if kind == "constant" and isinstance(payload, dict):
         return AuthoredSqlValueCall(
-            arguments=tuple(
-                _project_native_header_map(cast(dict[str, object], payload)).items()
-            )
+            arguments=tuple(_project_native_header_map(cast(dict[str, object], payload)).items())
         )
     if kind == "inline_sql" and isinstance(payload, str):
         return SqlHookEntry(statement=payload)

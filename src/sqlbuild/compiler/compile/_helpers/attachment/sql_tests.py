@@ -285,8 +285,7 @@ def build_test_inputs(
                 )
     test_ctes_batch: tuple[CompileSqlTestCtes, ...] = extract_expanded_sql_tests(
         tuple(
-            (test.sql_body, str(test.test_file.relative_path), test.mode)
-            for test in expanded_tests
+            (test.sql_body, str(test.test_file.relative_path), test.mode) for test in expanded_tests
         )
     )
     for test, test_ctes in zip(expanded_tests, test_ctes_batch, strict=True):

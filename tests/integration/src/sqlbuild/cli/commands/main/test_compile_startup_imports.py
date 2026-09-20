@@ -59,7 +59,9 @@ raise SystemExit(exit_code)
     }
 
 
-def test_given_legacy_model_imports_when_loading_focused_models_then_exports_keep_identity() -> None:
+def test_given_legacy_model_imports_when_loading_focused_models_then_exports_keep_identity() -> (
+    None
+):
     script = """
 import json
 from sqlbuild.cli.commands import compile_models, entry_models, models, output_models

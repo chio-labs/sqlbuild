@@ -28,7 +28,7 @@ def test_given_expanded_mixed_mode_tests_when_compiling_project_then_complete_in
             ),
             "tests/unit/a_orders.sql": (
                 "TEST (name orders_match);\n\n"
-                "WITH helper AS (SELECT @const(\"order_id\") AS order_id),\n"
+                'WITH helper AS (SELECT @const("order_id") AS order_id),\n'
                 "__ref__orders AS (SELECT order_id FROM helper),\n"
                 "__expected__orders AS (SELECT order_id FROM helper),\n"
                 "__assert__positive AS (SELECT order_id FROM helper WHERE order_id < 0)\n"
