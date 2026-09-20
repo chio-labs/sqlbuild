@@ -4151,7 +4151,7 @@ wheels = [
 
 [[package]]
 name = "sqlbuild"
-version = "0.110.4"
+version = "0.110.5"
 source = { editable = "." }
 dependencies = [
     { name = "duckdb" },
