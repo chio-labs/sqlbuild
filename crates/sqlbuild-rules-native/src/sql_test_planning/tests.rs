@@ -132,3 +132,40 @@ fn preserves_unicode_cte_identifiers_after_leading_with() {
     assert!(sql.contains("WITH __source__raw_orders AS"));
     assert!(sql.contains("订单行"), "{sql}");
 }
+
+#[test]
+fn preserves_unresolved_reference_warning_after_fast_rejection_check() {
+    let response: Value = serde_json::from_str(
+        &super::main::plan_and_render_json(
+            &json!({
+                "models": [{
+                    "name": "orders",
+                    "querySql": "SELECT * FROM __SOURCE(\"missing_orders\")",
+                    "modelDependencies": []
+                }],
+                "tests": [{
+                    "name": "orders_case",
+                    "fileLabel": "tests/orders.sql",
+                    "payload": {
+                        "kind": "model",
+                        "expectedModelNames": ["orders"]
+                    }
+                }],
+                "sqlAnalysisEnabled": true,
+                "sqlAnalysisDialect": "duckdb"
+            })
+            .to_string(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        response["artifacts"][0]["warnings"],
+        json!([{
+            "modelName": "orders",
+            "severity": "error",
+            "message": "test 'orders_case': model 'orders' references __source('missing_orders') which has no mock"
+        }])
+    );
+}

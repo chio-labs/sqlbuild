@@ -1370,6 +1370,9 @@ fn keyword_end(sql: &str, start: usize, keyword: &str) -> Option<usize> {
 }
 
 fn unresolved_reference_warnings(sql: &str, test_name: &str, model_name: &str) -> Vec<PlanWarning> {
+    if !test_reference_pattern().is_match(sql) {
+        return Vec::new();
+    }
     let mut warnings = Vec::new();
     for name in marker_names(ref_pattern(), sql) {
         warnings.push(PlanWarning {
@@ -1458,6 +1461,9 @@ fn assertion_ref_targets(assertions: &[(String, String)]) -> Vec<String> {
 }
 
 fn has_unresolved_test_reference(sql: &str) -> bool {
+    if !test_reference_pattern().is_match(sql) {
+        return false;
+    }
     !marker_names(ref_pattern(), sql).is_empty()
         || !marker_names(source_pattern(), sql).is_empty()
         || !marker_names(seed_pattern(), sql).is_empty()
@@ -1548,6 +1554,13 @@ fn dbt_ref_pattern() -> &'static Regex {
     PATTERN.get_or_init(|| {
         Regex::new(r#"(?i)__dbt_ref\(\s*\"([^\"]+)\"\s*(?:,\s*\"([^\"]+)\"\s*)?\)"#)
             .expect("valid regex")
+    })
+}
+
+fn test_reference_pattern() -> &'static Regex {
+    static PATTERN: OnceLock<Regex> = OnceLock::new();
+    PATTERN.get_or_init(|| {
+        Regex::new(r#"(?i)__(?:ref|source|seed|dbt_ref|table_fn)\("#).expect("valid regex")
     })
 }
 
