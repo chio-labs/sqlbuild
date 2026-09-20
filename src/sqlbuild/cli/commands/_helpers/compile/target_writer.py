@@ -351,8 +351,11 @@ def _write_text_if_changed(*, path: Path, contents: str) -> None:
     with record_compile_timing("physical_write_ms"):
         if path.is_file() and path.read_text(encoding="utf-8") == contents:
             return
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(contents, encoding="utf-8")
+        try:
+            path.write_text(contents, encoding="utf-8")
+        except FileNotFoundError:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(contents, encoding="utf-8")
 
 
 def _remove_stale_compiled_files(*, target_dir: Path, managed_paths: set[Path]) -> None:
