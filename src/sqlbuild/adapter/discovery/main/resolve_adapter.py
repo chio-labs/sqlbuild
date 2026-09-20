@@ -8,24 +8,24 @@ from typing import cast
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
-from sqlbuild.adapter.discovery.main.builtins import builtin_adapter_classes
+from sqlbuild.adapter.discovery.main.builtins import builtin_adapter_class, builtin_adapter_names
 from sqlbuild.adapter.discovery.main.project_adapters import discover_project_adapters
 
 
 def resolve_adapter(*, adapter_name: str, project_dir: Path | None = None) -> BaseAdapter:
     """Resolve one adapter without depending on CLI error types."""
 
-    builtins: dict[str, type[BaseAdapter]] = builtin_adapter_classes()
+    builtin_names: frozenset[str] = builtin_adapter_names()
     adapter_class: type[StrictAdapter] | None = None
     if project_dir is not None:
         adapter_class = discover_project_adapters(
             project_dir=project_dir,
-            reserved_names=frozenset(builtins),
+            reserved_names=builtin_names,
         ).get(adapter_name)
     if adapter_class is None:
-        adapter_class = builtins.get(adapter_name)
+        adapter_class = cast(type[StrictAdapter] | None, builtin_adapter_class(adapter_name))
     if adapter_class is None:
-        available: str = ", ".join(sorted(builtins))
+        available: str = ", ".join(sorted(builtin_names))
         local_text: str = (
             " Project-local adapters are discovered from adapters/**/*.py."
             if project_dir is not None
