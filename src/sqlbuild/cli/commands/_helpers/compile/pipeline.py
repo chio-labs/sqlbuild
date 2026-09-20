@@ -148,7 +148,7 @@ def analyze_compile_project(
         *graph.project.diagnostics,
         *contract_result.diagnostics,
     )
-    if not any(diagnostic.is_error for diagnostic in core_diagnostics):
+    if not any(diagnostic.is_error for diagnostic in graph.project.diagnostics):
         _ = start_compile_phase(status=status, message="Evaluating built-in and custom rules...")
         rules_result = run_rules(
             graph=graph,
