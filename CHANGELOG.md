@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.110.5](https://github.com/chio-labs/sqlbuild/compare/v0.110.4...v0.110.5) (2026-09-20)
+
+
+### Bug Fixes
+
+* align configured rules with selected analysis ([#752](https://github.com/chio-labs/sqlbuild/issues/752)) ([956e993](https://github.com/chio-labs/sqlbuild/commit/956e993bfbd4189174ce32af0fbd7e4d74718fc6))
+
 ## [0.110.4](https://github.com/chio-labs/sqlbuild/compare/v0.110.3...v0.110.4) (2026-09-20)
 
 
