@@ -374,6 +374,7 @@ type CompactProjectColumn = (usize, Option<usize>, u8, u8, u8, Vec<(usize, usize
 #[serde(rename_all = "camelCase")]
 struct CompactProjectBatch {
     strings: Vec<String>,
+    facts: Vec<CompactProjectColumn>,
     templates: Vec<CompactProjectResponse>,
     analyses: Vec<CompactProjectProjection>,
     unique_query_count: usize,
@@ -383,7 +384,7 @@ struct CompactProjectBatch {
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
 enum CompactProjectResponse {
-    Success((Vec<CompactProjectColumn>, bool)),
+    Success((Vec<usize>, bool)),
     Failure(String),
 }
 
@@ -397,6 +398,8 @@ fn compact_project_batch(
 ) -> CompactProjectBatch {
     let mut strings = Vec::new();
     let mut indexes = HashMap::new();
+    let mut facts = Vec::new();
+    let mut fact_indexes = HashMap::new();
     let mut templates = Vec::with_capacity(analyses.len());
     for result in analyses {
         let analysis = match result {
@@ -419,7 +422,7 @@ fn compact_project_batch(
                     )
                 })
                 .collect();
-            columns.push((
+            let fact = (
                 intern_string(&mut strings, &mut indexes, column.name),
                 column
                     .data_type
@@ -428,7 +431,13 @@ fn compact_project_batch(
                 transform_code(lineage.transform_kind),
                 confidence_code(lineage.confidence),
                 upstream,
-            ));
+            );
+            let next_index = facts.len();
+            let fact_index = *fact_indexes.entry(fact.clone()).or_insert_with(|| {
+                facts.push(fact);
+                next_index
+            });
+            columns.push(fact_index);
         }
         templates.push(CompactProjectResponse::Success((
             columns,
@@ -455,6 +464,7 @@ fn compact_project_batch(
         .collect();
     CompactProjectBatch {
         strings,
+        facts,
         templates,
         analyses,
         unique_query_count,

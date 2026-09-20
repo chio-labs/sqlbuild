@@ -288,10 +288,18 @@ class NativeCompactAnalysis:
     projected: bool = False
     binding_diagnostics: tuple[SqlBindingDiagnostic, ...] | None = None
     compact_rows: list[object] | None = None
+    compact_fact_rows: list[object] | None = None
     string_pool: tuple[str, ...] = ()
     compact_column_cache: dict[tuple[int, int | None, int], InferredColumn] | None = None
     compact_template_index: int | None = None
     compact_fact_cache: dict[int, _CompactProjectedFacts] | None = None
+    compact_decoded_fact_cache: (
+        dict[
+            int,
+            tuple[InferredColumn, tuple[int, int, int, tuple[tuple[int, int, int], ...]]],
+        ]
+        | None
+    ) = None
     resource_name_indexes: dict[int, int] = field(default_factory=dict)
 
 
@@ -396,10 +404,12 @@ def analyze_columns_and_lineage_with_polyglot(
         return _projected_analysis_result(
             analysis=precomputed.analysis,
             compact_rows=precomputed.compact_rows,
+            compact_fact_rows=precomputed.compact_fact_rows,
             string_pool=precomputed.string_pool,
             column_cache=precomputed.compact_column_cache,
             template_index=precomputed.compact_template_index,
             fact_cache=precomputed.compact_fact_cache,
+            decoded_fact_cache=precomputed.compact_decoded_fact_cache,
             resource_name_indexes=precomputed.resource_name_indexes,
             binding_diagnostics=(
                 precomputed.binding_diagnostics
@@ -623,11 +633,13 @@ def analyze_queries_with_compact_polyglot_batch(  # noqa: PLR0915
             "native compact query analysis returned an invalid batch response"
         )
     raw_strings: object = response_payload.get("strings")
+    raw_facts: object = response_payload.get("facts")
     templates: object = response_payload.get("templates")
     responses: object = response_payload.get("analyses")
     if (
         not isinstance(raw_strings, list)
         or not all(isinstance(value, str) for value in raw_strings)
+        or not isinstance(raw_facts, list)
         or not isinstance(templates, list)
         or not isinstance(responses, list)
         or len(responses) != len(prepared)
@@ -638,6 +650,10 @@ def analyze_queries_with_compact_polyglot_batch(  # noqa: PLR0915
     string_pool: tuple[str, ...] = tuple(cast(list[str], raw_strings))
     column_cache: dict[tuple[int, int | None, int], InferredColumn] = {}
     fact_cache: dict[int, _CompactProjectedFacts] = {}
+    decoded_fact_cache: dict[
+        int,
+        tuple[InferredColumn, tuple[int, int, int, tuple[tuple[int, int, int], ...]]],
+    ] = {}
     results: list[NativeCompactAnalysis] = []
     for cleaned_sql, response in zip(prepared, responses, strict=True):
         if (
@@ -705,10 +721,12 @@ def analyze_queries_with_compact_polyglot_batch(  # noqa: PLR0915
                     analysis={"hasStar": template[1]},
                     projected=True,
                     compact_rows=cast(list[object], template[0]),
+                    compact_fact_rows=cast(list[object], raw_facts),
                     string_pool=string_pool,
                     compact_column_cache=column_cache,
                     compact_template_index=template_index,
                     compact_fact_cache=fact_cache,
+                    compact_decoded_fact_cache=decoded_fact_cache,
                     resource_name_indexes=resource_name_indexes,
                 )
             )
@@ -724,14 +742,20 @@ def analyze_queries_with_compact_polyglot_batch(  # noqa: PLR0915
     return tuple(results)
 
 
-def _projected_analysis_result(
+def _projected_analysis_result(  # noqa: PLR0913
     *,
     analysis: dict[str, Any] | None,
     compact_rows: list[object] | None = None,
+    compact_fact_rows: list[object] | None = None,
     string_pool: tuple[str, ...] = (),
     column_cache: dict[tuple[int, int | None, int], InferredColumn] | None = None,
     template_index: int | None = None,
     fact_cache: dict[int, _CompactProjectedFacts] | None = None,
+    decoded_fact_cache: dict[
+        int,
+        tuple[InferredColumn, tuple[int, int, int, tuple[tuple[int, int, int], ...]]],
+    ]
+    | None = None,
     resource_name_indexes: dict[int, int] | None = None,
     binding_diagnostics: tuple[SqlBindingDiagnostic, ...],
     binding_validated: bool,
@@ -739,10 +763,12 @@ def _projected_analysis_result(
     if compact_rows is not None:
         return _compact_projected_analysis_result(
             rows=compact_rows,
+            fact_rows=compact_fact_rows or [],
             string_pool=string_pool,
             column_cache=column_cache,
             template_index=template_index,
             fact_cache=fact_cache,
+            decoded_fact_cache=decoded_fact_cache,
             resource_name_indexes=resource_name_indexes or {},
             has_star=bool(analysis and analysis.get("hasStar")),
             binding_diagnostics=binding_diagnostics,
@@ -810,13 +836,19 @@ def _projected_analysis_result(
     )
 
 
-def _compact_projected_analysis_result(
+def _compact_projected_analysis_result(  # noqa: PLR0913
     *,
     rows: list[object],
+    fact_rows: list[object],
     string_pool: tuple[str, ...],
     column_cache: dict[tuple[int, int | None, int], InferredColumn] | None,
     template_index: int | None,
     fact_cache: dict[int, _CompactProjectedFacts] | None,
+    decoded_fact_cache: dict[
+        int,
+        tuple[InferredColumn, tuple[int, int, int, tuple[tuple[int, int, int], ...]]],
+    ]
+    | None,
     resource_name_indexes: dict[int, int],
     has_star: bool,
     binding_diagnostics: tuple[SqlBindingDiagnostic, ...],
@@ -871,7 +903,27 @@ def _compact_projected_analysis_result(
 
     columns: list[InferredColumn] = []
     compact_lineage_rows: list[tuple[int, int, int, tuple[tuple[int, int, int], ...]]] = []
-    for raw_row in rows:
+    for raw_fact_index in rows:
+        if (
+            not isinstance(raw_fact_index, int)
+            or isinstance(raw_fact_index, bool)
+            or raw_fact_index < 0
+        ):
+            raise SqlAnalysisBoundaryError("native compact analysis returned an invalid fact index")
+        decoded_fact = (
+            decoded_fact_cache.get(raw_fact_index) if decoded_fact_cache is not None else None
+        )
+        if decoded_fact is not None:
+            column, lineage_row = decoded_fact
+            columns.append(column)
+            compact_lineage_rows.append(lineage_row)
+            continue
+        try:
+            raw_row = fact_rows[raw_fact_index]
+        except IndexError as error:
+            raise SqlAnalysisBoundaryError(
+                "native compact analysis returned an out-of-range fact index"
+            ) from error
         if not isinstance(raw_row, list) or len(raw_row) != 6:
             raise SqlAnalysisBoundaryError("native compact analysis returned an invalid column")
         name_index, type_index, nullability_code, transform_code, confidence_code, raw_upstream = (
@@ -929,7 +981,10 @@ def _compact_projected_analysis_result(
             _ = pooled_string(source_key[1])
             _ = pooled_string(source_key[2])
             upstream.append(source_key)
-        compact_lineage_rows.append((name_index, transform_code, confidence_code, tuple(upstream)))
+        lineage_row = (name_index, transform_code, confidence_code, tuple(upstream))
+        compact_lineage_rows.append(lineage_row)
+        if decoded_fact_cache is not None:
+            decoded_fact_cache[raw_fact_index] = (column, lineage_row)
     compact_facts = _CompactProjectedFacts(
         columns=tuple(columns),
         lineage_rows=tuple(compact_lineage_rows),

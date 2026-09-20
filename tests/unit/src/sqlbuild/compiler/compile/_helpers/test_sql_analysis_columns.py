@@ -48,13 +48,20 @@ def test_given_queries_when_batch_analyzing_then_uses_one_ordered_native_request
         captured.append(request)
         return json.dumps(
             {
-                "strings": [],
+                "strings": [
+                    "order_id",
+                    "BIGINT",
+                    "model",
+                    "__sqlbuild_project_input_0",
+                    "orders",
+                ],
+                "facts": [[0, 1, 1, 0, 1, [[2, 3, 0]]]],
                 "templates": [
-                    [[], False],
+                    [[0], False],
                     "invalid query",
                 ],
                 "analyses": [
-                    [0, []],
+                    [0, [[3, 4]]],
                     [1, []],
                 ],
             }
@@ -111,9 +118,35 @@ def test_given_queries_when_batch_analyzing_then_uses_one_ordered_native_request
     }
     assert "orders" in results[0].cleaned_sql
     assert results[0].analysis == {"hasStar": False}
-    assert results[0].compact_rows == []
+    assert results[0].compact_rows == [0]
     assert results[1].analysis is None
     assert results[1].projected is True
+    projected_analysis: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+        query_sql='SELECT order_id FROM __ref("orders")',
+        allow_compact_analysis=True,
+        precomputed=results[0],
+    )
+    assert projected_analysis.columns == (
+        InferredColumn(
+            name="order_id",
+            type="BIGINT",
+            nullability=InferredNullability.NON_NULL,
+        ),
+    )
+    assert tuple(projected_analysis.lineage_columns) == (
+        CompiledLineageColumnFact(
+            output_column="order_id",
+            upstream_columns=(
+                CompiledLineageSourceFact(
+                    resource_type=CompiledResourceType.MODEL,
+                    resource_name="orders",
+                    column_name="order_id",
+                ),
+            ),
+            transform_kind=ColumnTransformKind.DIRECT,
+            confidence=ColumnLineageConfidence.HIGH,
+        ),
+    )
     monkeypatch.setattr(
         "sqlbuild.compiler.compile._helpers.analysis.columns.import_polyglot_sql",
         Mock(side_effect=AssertionError("native failures must not trigger Python reparsing")),

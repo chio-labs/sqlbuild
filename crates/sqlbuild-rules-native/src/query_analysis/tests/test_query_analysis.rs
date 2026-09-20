@@ -39,11 +39,35 @@ fn given_project_query_when_compact_analyzing_then_interns_repeated_lineage_stri
         response["strings"],
         json!(["model", "orders", "order_id", "BIGINT"])
     );
-    assert_eq!(
-        response["templates"][0],
-        json!([[[2, 3, 1, 0, 1, [[0, 1, 2]]]], false])
-    );
+    assert_eq!(response["facts"][0], json!([2, 3, 1, 0, 1, [[0, 1, 2]]]));
+    assert_eq!(response["templates"][0], json!([[0], false]));
     assert_eq!(response["analyses"][0], json!([0, [[1, 1]]]));
+}
+
+#[test]
+fn given_repeated_project_facts_when_compact_analyzing_then_interns_complete_facts() {
+    let response: Value = serde_json::from_str(
+        &analyze_project_compact_json(
+            &json!({
+                "queries": [{"sql": "SELECT 1 AS order_id", "dialect": "duckdb"}],
+                "templates": [
+                    {"queryIndex": 0},
+                    {"queryIndex": 0}
+                ],
+                "projections": [
+                    {"templateIndex": 0},
+                    {"templateIndex": 1}
+                ]
+            })
+            .to_string(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(response["facts"].as_array().map(Vec::len), Some(1));
+    assert_eq!(response["templates"][0][0], json!([0]));
+    assert_eq!(response["templates"][1][0], json!([0]));
 }
 
 #[test]
@@ -93,7 +117,10 @@ fn given_canonical_queries_when_compact_analyzing_then_reuses_semantics_and_proj
     let strings = response["strings"]
         .as_array()
         .expect("compact strings should be an array");
-    let canonical_resource_index = response["templates"][0][0][0][5][0][1]
+    let fact_index = response["templates"][0][0][0]
+        .as_u64()
+        .expect("template should use a fact index") as usize;
+    let canonical_resource_index = response["facts"][fact_index][5][0][1]
         .as_u64()
         .expect("canonical resource should use a string index")
         as usize;
