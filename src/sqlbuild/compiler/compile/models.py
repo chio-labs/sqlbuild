@@ -60,11 +60,14 @@ from sqlbuild.compiler.scopes.models import (
 )
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 from sqlbuild.spec.contracts.models import (
+    DefaultsConfig,
     LocalConfig,
+    MaterializationDefaultsConfig,
     ProjectConfig,
     ResolvedTableType,
     ResolvedTimeTravelRetention,
     ScenarioConfig,
+    SchemaColumn,
     SchemaModelEntry,
     SchemaSeedEntry,
     SettingsConfig,
@@ -538,7 +541,7 @@ class CompactLineageFacts(Sequence[CompiledLineageColumnFact]):
         if cached is not None:
             return cached
         name_index, transform_code, confidence_code, sources = self.rows[normalized_index]
-        fact = CompiledLineageColumnFact(
+        fact: CompiledLineageColumnFact = CompiledLineageColumnFact(
             output_column=self.string_pool[name_index],
             upstream_columns=tuple(
                 CompiledLineageSourceFact(
@@ -1210,3 +1213,174 @@ class CompiledSqlTest:
                 "parent_name",
                 self.test_block.name or self.test_file.relative_path.stem,
             )
+
+
+@dataclass(frozen=True)
+class CompactProjectedFacts:
+    """Decoded compact projection and lineage rows shared by projected analyses."""
+
+    columns: tuple[InferredColumn, ...]
+    lineage_rows: tuple[
+        tuple[int, int, int, tuple[tuple[int, int, int], ...]],
+        ...,
+    ]
+
+
+@dataclass(frozen=True)
+class CompactBatchPreparation:
+    """Deduplicated native request data and ordered cleaned SQL inputs."""
+
+    cleaned_sql: tuple[str, ...]
+    queries: tuple[dict[str, object], ...]
+    templates: tuple[dict[str, object], ...]
+    projections: tuple[dict[str, object], ...]
+
+
+@dataclass(frozen=True)
+class CompactProjectionCaches:
+    """Shared identity caches used while decoding compact native facts."""
+
+    columns: dict[tuple[int, int | None, int], InferredColumn] | None = None
+    facts: dict[int, CompactProjectedFacts] | None = None
+    decoded_facts: (
+        dict[
+            int,
+            tuple[InferredColumn, tuple[int, int, int, tuple[tuple[int, int, int], ...]]],
+        ]
+        | None
+    ) = None
+
+    def column(self, key: tuple[int, int | None, int]) -> InferredColumn | None:
+        return self.columns.get(key) if self.columns is not None else None
+
+    def remember_column(self, *, key: tuple[int, int | None, int], column: InferredColumn) -> None:
+        if self.columns is not None:
+            self.columns[key] = column
+
+    def fact(self, template_index: int | None) -> CompactProjectedFacts | None:
+        if self.facts is None or template_index is None:
+            return None
+        return self.facts.get(template_index)
+
+    def remember_fact(self, *, template_index: int | None, fact: CompactProjectedFacts) -> None:
+        if self.facts is not None and template_index is not None:
+            self.facts[template_index] = fact
+
+    def decoded_fact(
+        self, fact_index: int
+    ) -> tuple[InferredColumn, tuple[int, int, int, tuple[tuple[int, int, int], ...]]] | None:
+        return self.decoded_facts.get(fact_index) if self.decoded_facts is not None else None
+
+    def remember_decoded_fact(
+        self,
+        *,
+        fact_index: int,
+        fact: tuple[InferredColumn, tuple[int, int, int, tuple[tuple[int, int, int], ...]]],
+    ) -> None:
+        if self.decoded_facts is not None:
+            self.decoded_facts[fact_index] = fact
+
+
+@dataclass(frozen=True)
+class ProjectedAnalysisRequest:
+    """Inputs needed to project one native analysis into the public result contract."""
+
+    analysis: dict[str, Any] | None
+    binding_diagnostics: tuple[SqlBindingDiagnostic, ...]
+    binding_validated: bool
+    compact_rows: list[object] | None = None
+    compact_fact_rows: list[object] | None = None
+    string_pool: tuple[str, ...] = ()
+    caches: CompactProjectionCaches = field(default_factory=CompactProjectionCaches)
+    template_index: int | None = None
+    resource_name_indexes: dict[int, int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class NativeCompactAnalysis:
+    """One native compact result prepared for Python contract projection."""
+
+    cleaned_sql: str
+    analysis: dict[str, Any] | None
+    projected: bool = False
+    binding_diagnostics: tuple[SqlBindingDiagnostic, ...] | None = None
+    compact_rows: list[object] | None = None
+    compact_fact_rows: list[object] | None = None
+    string_pool: tuple[str, ...] = ()
+    compact_column_cache: dict[tuple[int, int | None, int], InferredColumn] | None = None
+    compact_template_index: int | None = None
+    compact_fact_cache: dict[int, CompactProjectedFacts] | None = None
+    compact_decoded_fact_cache: (
+        dict[
+            int,
+            tuple[InferredColumn, tuple[int, int, int, tuple[tuple[int, int, int], ...]]],
+        ]
+        | None
+    ) = None
+    resource_name_indexes: dict[int, int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class IdentityPresenceCache:
+    """Identity-safe memoization for recursive authored configuration scans."""
+
+    _values: dict[int, tuple[object, bool]] = field(default_factory=dict)
+
+    def get(self, value: object) -> bool | None:
+        cached: tuple[object, bool] | None = self._values.get(id(value))
+        if cached is None or cached[0] is not value:
+            return None
+        return cached[1]
+
+    def put(self, *, value: object, result: bool) -> None:
+        self._values[id(value)] = (value, result)
+
+
+@dataclass(frozen=True)
+class ModelConfigScanCache:
+    """Memoized recursive scans reused while attaching model configuration."""
+
+    template_presence: IdentityPresenceCache = field(default_factory=IdentityPresenceCache)
+    macro_presence: IdentityPresenceCache = field(default_factory=IdentityPresenceCache)
+
+
+@dataclass(frozen=True)
+class ModelConfigBuildRequest:
+    """Cohesive inputs for one effective model-configuration build."""
+
+    defaults: DefaultsConfig
+    path_defaults: dict[str, dict[str, object]]
+    matched_path_default: str | None
+    model_header_values: dict[str, object]
+    effective_vars: dict[str, object]
+    target_config: TargetConfig | None
+    model_name: str
+    effective_target_name: str | None
+    run_id: str
+    materialization_defaults: MaterializationDefaultsConfig | None = None
+    scan_cache: ModelConfigScanCache | None = None
+
+
+@dataclass(frozen=True)
+class CachedModelHeaderColumns:
+    """Cached authored MODEL-header columns and source locations."""
+
+    raw_columns: object
+    columns: tuple[SchemaColumn, ...]
+    column_locations: dict[str, SourceLocation]
+
+
+@dataclass(frozen=True)
+class ModelHeaderColumnCache:
+    """Identity-safe cache of parsed authored MODEL-header columns."""
+
+    _values: dict[int, CachedModelHeaderColumns] = field(default_factory=dict)
+
+    def get(self, raw_columns: object) -> CachedModelHeaderColumns | None:
+        cached: CachedModelHeaderColumns | None = self._values.get(id(raw_columns))
+        if cached is None or cached.raw_columns is not raw_columns:
+            return None
+        return cached
+
+    def put(self, cached: CachedModelHeaderColumns) -> None:
+        self._values[id(cached.raw_columns)] = cached

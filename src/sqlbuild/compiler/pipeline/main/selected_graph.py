@@ -21,7 +21,7 @@ from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import (
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline._helpers.graph import build_static_all_keys
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
-from sqlbuild.compiler.pipeline.project_graph import ProjectGraph
+from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.main.selection._build_model_path_index import (
     build_model_path_index,
 )

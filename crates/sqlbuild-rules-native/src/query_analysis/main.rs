@@ -355,10 +355,7 @@ fn analyze_project_request(request: ProjectAnalysisRequest) -> ProjectAnalysisRe
 }
 
 fn analyze_project_result(request: ProjectAnalysisRequest) -> Result<ProjectAnalysis, String> {
-    let analysis = match query_analysis(request.query, true) {
-        Ok(analysis) => analysis,
-        Err(error) => return Err(error),
-    };
+    let analysis = query_analysis(request.query, true)?;
     Ok(project_analysis(ProjectAnalysisInputs {
         analysis: &analysis,
         references: &request.references,
@@ -390,17 +387,34 @@ enum CompactProjectResponse {
 
 type CompactProjectProjection = (usize, Vec<(usize, usize)>);
 
+#[derive(Default)]
+struct StringInterner {
+    strings: Vec<String>,
+    indexes: HashMap<String, usize>,
+}
+
+impl StringInterner {
+    fn intern(&mut self, value: String) -> usize {
+        if let Some(index) = self.indexes.get(&value) {
+            return *index;
+        }
+        let index = self.strings.len();
+        self.indexes.insert(value.clone(), index);
+        self.strings.push(value);
+        index
+    }
+}
+
 fn compact_project_batch(
     analyses: Vec<Result<ProjectAnalysis, String>>,
     projections: Vec<ProjectAnalysisProjectionResult>,
     unique_query_count: usize,
     unique_projection_count: usize,
 ) -> CompactProjectBatch {
-    let mut strings = Vec::new();
-    let mut indexes = HashMap::new();
-    let mut facts = Vec::new();
-    let mut fact_indexes = HashMap::new();
-    let mut templates = Vec::with_capacity(analyses.len());
+    let mut interner = StringInterner::default();
+    let mut facts: Vec<CompactProjectColumn> = Vec::new();
+    let mut fact_indexes: HashMap<CompactProjectColumn, usize> = HashMap::new();
+    let mut templates: Vec<CompactProjectResponse> = Vec::with_capacity(analyses.len());
     for result in analyses {
         let analysis = match result {
             Ok(analysis) => analysis,
@@ -411,22 +425,20 @@ fn compact_project_batch(
         };
         let mut columns = Vec::with_capacity(analysis.columns.len());
         for (column, lineage) in analysis.columns.into_iter().zip(analysis.lineage_columns) {
-            let upstream = lineage
+            let upstream: Vec<(usize, usize, usize)> = lineage
                 .upstream_columns
                 .into_iter()
                 .map(|source| {
                     (
-                        intern_string(&mut strings, &mut indexes, source.resource_type),
-                        intern_string(&mut strings, &mut indexes, source.resource_name),
-                        intern_string(&mut strings, &mut indexes, source.column_name),
+                        interner.intern(source.resource_type),
+                        interner.intern(source.resource_name),
+                        interner.intern(source.column_name),
                     )
                 })
                 .collect();
             let fact = (
-                intern_string(&mut strings, &mut indexes, column.name),
-                column
-                    .data_type
-                    .map(|value| intern_string(&mut strings, &mut indexes, value)),
+                interner.intern(column.name),
+                column.data_type.map(|value| interner.intern(value)),
                 nullability_code(column.nullability),
                 transform_code(lineage.transform_kind),
                 confidence_code(lineage.confidence),
@@ -444,46 +456,27 @@ fn compact_project_batch(
             analysis.has_star,
         )));
     }
-    let analyses = projections
-        .into_iter()
-        .map(|projection| {
-            (
-                projection.projection_index,
-                projection
-                    .resource_names
-                    .into_iter()
-                    .map(|(canonical_name, resource_name)| {
-                        (
-                            intern_string(&mut strings, &mut indexes, canonical_name),
-                            intern_string(&mut strings, &mut indexes, resource_name),
-                        )
-                    })
-                    .collect(),
-            )
-        })
-        .collect();
+    let mut compact_projections: Vec<CompactProjectProjection> =
+        Vec::with_capacity(projections.len());
+    for projection in projections {
+        let mut resource_names: Vec<(usize, usize)> =
+            Vec::with_capacity(projection.resource_names.len());
+        for (canonical_name, resource_name) in projection.resource_names {
+            resource_names.push((
+                interner.intern(canonical_name),
+                interner.intern(resource_name),
+            ));
+        }
+        compact_projections.push((projection.projection_index, resource_names));
+    }
     CompactProjectBatch {
-        strings,
+        strings: interner.strings,
         facts,
         templates,
-        analyses,
+        analyses: compact_projections,
         unique_query_count,
         unique_projection_count,
     }
-}
-
-fn intern_string(
-    strings: &mut Vec<String>,
-    indexes: &mut HashMap<String, usize>,
-    value: String,
-) -> usize {
-    if let Some(index) = indexes.get(&value) {
-        return *index;
-    }
-    let index = strings.len();
-    indexes.insert(value.clone(), index);
-    strings.push(value);
-    index
 }
 
 fn nullability_code(value: ProjectNullability) -> u8 {
@@ -650,10 +643,10 @@ fn recovered_projection_type(
         return Some(data_type);
     }
     if projection.transform_kind == TransformKind::Direct {
-        if let Some(fact) = cte_column_fact(projection, cte_facts) {
-            if fact.data_type.is_some() {
-                return fact.data_type.clone();
-            }
+        if let Some(fact) = cte_column_fact(projection, cte_facts)
+            && fact.data_type.is_some()
+        {
+            return fact.data_type.clone();
         }
         return allow_direct_type_hint
             .then(|| project_type(projection, function_return_types, false))
@@ -670,10 +663,10 @@ fn recovered_projection_nullability(
     if !matches!(direct, ProjectNullability::Unknown) {
         return direct;
     }
-    if projection.transform_kind == TransformKind::Direct {
-        if let Some(fact) = cte_column_fact(projection, cte_facts) {
-            return fact.nullability;
-        }
+    if projection.transform_kind == TransformKind::Direct
+        && let Some(fact) = cte_column_fact(projection, cte_facts)
+    {
+        return fact.nullability;
     }
     ProjectNullability::Unknown
 }
@@ -692,10 +685,10 @@ fn recovered_projection_lineage(
     references: &HashMap<String, LineageResource>,
     cte_facts: &CteColumnFacts,
 ) -> (Vec<ProjectLineageSource>, ProjectConfidence) {
-    if projection.transform_kind == TransformKind::Direct {
-        if let Some(fact) = cte_column_fact(projection, cte_facts) {
-            return (fact.upstream_columns.clone(), fact.confidence);
-        }
+    if projection.transform_kind == TransformKind::Direct
+        && let Some(fact) = cte_column_fact(projection, cte_facts)
+    {
+        return (fact.upstream_columns.clone(), fact.confidence);
     }
     project_upstream_columns(projection, references)
 }

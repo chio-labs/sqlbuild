@@ -51,6 +51,14 @@ class NativeSqlTestExtractionParityTestCase:
     description: str
     sql: str
     mode: SqlTestMode
+    expected_matches: bool = True
+
+
+@dataclass(frozen=True)
+class QualifiedReferenceAnalysisTestCase:
+    description: str
+    query_sql: str
+    expected_matches: bool = True
 
 
 @dataclass(frozen=True)
@@ -820,3 +828,15 @@ class MicrobatchGrainOwnershipTestCase:
     producer_grain: str
     microbatch_strategy: str | None
     expected_grain: str
+
+
+@dataclass(frozen=True)
+class ExpectedBooleanTestCase:
+    description: str
+    expected_result: bool
+
+
+@dataclass(frozen=True)
+class ExpectedCountTestCase:
+    description: str
+    expected_count: int

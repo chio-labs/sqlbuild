@@ -18,13 +18,15 @@ from sqlbuild.compiler.compile._helpers.analysis.cache import (
     write_model_analyses,
 )
 from sqlbuild.compiler.compile._helpers.analysis.columns import (
+    substitute_placeholder_defaults,
+    table_function_analysis_name,
+)
+from sqlbuild.compiler.compile._helpers.analysis.compact import (
     NativeCompactAnalysis,
     analyze_columns_and_lineage_with_polyglot,
     analyze_queries_with_compact_polyglot_batch,
     get_complete_schema_binding_request,
     infer_columns_with_sql_analysis,
-    substitute_placeholder_defaults,
-    table_function_analysis_name,
 )
 from sqlbuild.compiler.compile._helpers.analysis.dynamic_pivot import (
     analyze_dynamic_column_contract,
@@ -33,7 +35,7 @@ from sqlbuild.compiler.compile._helpers.analysis.validation import (
     validate_hook_sql_syntax,
     validate_sql_syntax,
 )
-from sqlbuild.compiler.compile._helpers.attachment.namespace_validation import (
+from sqlbuild.compiler.compile._helpers.config.namespace_validation import (
     validate_preserved_logical_namespace,
 )
 from sqlbuild.compiler.compile._helpers.deps.dependencies import (

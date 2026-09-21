@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.cli.commands.models import SelectorFileSummary
+from sqlbuild.cli.entry.models import (
+    SelectorFileSummary,
+)
 
 
 @dataclass(frozen=True)

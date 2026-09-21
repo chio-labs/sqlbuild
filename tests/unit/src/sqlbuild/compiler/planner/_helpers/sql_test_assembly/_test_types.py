@@ -73,3 +73,4 @@ class NativePlanningDifferentialTestCase:
     description: str
     planning_case: PlanTestChainTestCase
     sql_analysis_enabled: bool = True
+    expected_matches: bool = True

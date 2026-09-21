@@ -6,7 +6,7 @@ from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.compiler.lineage.main.columns import build_project_column_lineage
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
-from sqlbuild.compiler.pipeline.project_graph import ProjectGraph
+from sqlbuild.compiler.pipeline.models import ProjectGraph
 
 
 def build_compile_lineage(

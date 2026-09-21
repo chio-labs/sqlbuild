@@ -15,7 +15,6 @@ from sqlbuild.cli.commands.models import (
     AuditCommandRequest,
     BuildCommandRequest,
     CloneCommandRequest,
-    CompileCommandRequest,
     CostCommandRequest,
     DbtInitCommandRequest,
     DiffCommandRequest,
@@ -32,6 +31,9 @@ from sqlbuild.cli.commands.models import (
     ScenarioTestCommandRequest,
 )
 from sqlbuild.cli.commands.types import CompileLineageMode
+from sqlbuild.cli.compile.models import (
+    CompileCommandRequest,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.lineage.types import ColumnLineageMode

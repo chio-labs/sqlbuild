@@ -88,6 +88,15 @@ from sqlbuild.sql_values.models import SqlValue
 
 
 @dataclass(frozen=True)
+class NativeSqlTestArtifact:
+    """One native-planned SQL-test artifact and its compact diagnostics."""
+
+    sql: str
+    model_names: tuple[str, ...]
+    warnings: tuple[dict[str, object], ...]
+
+
+@dataclass(frozen=True)
 class RelationFixtureDiagnostic:
     """One statically provable invalid fixture condition."""
 

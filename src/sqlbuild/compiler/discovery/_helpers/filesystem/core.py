@@ -51,6 +51,7 @@ from sqlbuild.compiler.discovery.exceptions import (
     DeclarationParseError,
     EventExporterDiscoveryError,
     LoaderDiscoveryError,
+    ModelSqlParseError,
     ProviderDiscoveryError,
     PythonNodeDiscoveryError,
     SchemaParseError,
@@ -383,7 +384,7 @@ def discover_model_files(
             on_fault(_discovery_fault(project_dir=project_dir, path=file_path, error=read_error))
             continue
         if contents is None:
-            raise RuntimeError("Model file read returned neither contents nor an error")
+            raise ModelSqlParseError("Model file read returned neither contents nor an error")
         try:
             discovered_model_files.append(
                 _discover_model_file(

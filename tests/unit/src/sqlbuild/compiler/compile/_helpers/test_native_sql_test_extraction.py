@@ -7,6 +7,7 @@ from sqlbuild.compiler.compile._helpers.sql_tests.native import extract_expanded
 from sqlbuild.compiler.compile.models import CompileSqlTestCtes
 from sqlbuild.compiler.compile.types import SqlTestMode
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
+    ExpectedBooleanTestCase,
     NativeSqlTestExtractionParityTestCase,
 )
 
@@ -97,12 +98,17 @@ def test_given_expanded_sql_tests_when_native_batch_extracting_then_matches_refe
         ((test_case.sql, "tests/unit/example.sql", test_case.mode),)
     )
 
-    assert actual == (expected,)
+    assert (actual == (expected,)) is test_case.expected_matches
 
 
-def test_given_cross_check_dependency_when_native_batch_extracting_then_matches_reference_diagnostic() -> (
-    None
-):
+@pytest.mark.parametrize(
+    "test_case",
+    [ExpectedBooleanTestCase(description="cross-check diagnostic matches", expected_result=True)],
+    ids=lambda case: case.description,
+)
+def test_given_cross_check_dependency_when_native_batch_extracting_then_matches_reference_diagnostic(
+    test_case: ExpectedBooleanTestCase,
+) -> None:
     sql: str = (
         "WITH __source__raw_orders AS (SELECT 1 AS order_id), "
         "__expected__orders AS (SELECT 1 AS order_id), "
@@ -119,12 +125,22 @@ def test_given_cross_check_dependency_when_native_batch_extracting_then_matches_
     with pytest.raises(ValueError) as native_error:
         extract_expanded_sql_tests(((sql, "tests/unit/example.sql", SqlTestMode.MODEL),))
 
-    assert str(native_error.value) == str(reference_error.value)
+    assert (str(native_error.value) == str(reference_error.value)) is test_case.expected_result
 
 
-def test_given_comma_separated_cross_check_dependency_when_extracting_then_native_matches_reference_diagnostic() -> (
-    None
-):
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedBooleanTestCase(
+            description="comma-separated cross-check diagnostic matches",
+            expected_result=True,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_comma_separated_cross_check_dependency_when_extracting_then_native_matches_reference_diagnostic(
+    test_case: ExpectedBooleanTestCase,
+) -> None:
     sql: str = (
         "WITH __source__orders AS (SELECT 1 AS id), "
         "__expected__orders AS (SELECT 1 AS id), "
@@ -142,4 +158,4 @@ def test_given_comma_separated_cross_check_dependency_when_extracting_then_nativ
     with pytest.raises(ValueError) as native_error:
         extract_expanded_sql_tests(((sql, "tests/unit/example.sql", SqlTestMode.MODEL),))
 
-    assert str(native_error.value) == str(reference_error.value)
+    assert (str(native_error.value) == str(reference_error.value)) is test_case.expected_result

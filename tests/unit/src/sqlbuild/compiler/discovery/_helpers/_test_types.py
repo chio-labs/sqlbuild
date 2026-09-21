@@ -783,3 +783,21 @@ class DiscoverCheckFunctionsTestCase:
     expected_check_dependency_counts: tuple[int, ...]
     expected_check_severities: tuple[str, ...]
     expected_check_tags: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class ExpectedBooleanTestCase:
+    description: str
+    expected_result: bool
+
+
+@dataclass(frozen=True)
+class ExpectedCountTestCase:
+    description: str
+    expected_count: int
+
+
+@dataclass(frozen=True)
+class ExpectedMessageTestCase:
+    description: str
+    expected_message: str

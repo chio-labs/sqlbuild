@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 
 pub mod bindings;
+mod compiler;
 mod configuration;
 mod constants;
 mod engine;
-mod model_header_tokenization;
 mod models;
 mod query_analysis;
 mod rules;
@@ -12,6 +12,3 @@ mod scope_metadata;
 mod semantic_usage;
 mod semantic_validation;
 mod sql_lint;
-mod sql_test_extraction;
-mod sql_test_planning;
-mod sql_test_rendering;

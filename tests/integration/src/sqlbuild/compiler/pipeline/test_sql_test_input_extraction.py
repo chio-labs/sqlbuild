@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+import pytest
+
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
@@ -11,11 +13,18 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
+from tests.integration.src.sqlbuild.compiler.pipeline._test_types import ExpectedCountTestCase
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [ExpectedCountTestCase(description="mixed test modes are preserved", expected_count=2)],
+    ids=lambda case: case.description,
+)
 def test_given_expanded_mixed_mode_tests_when_compiling_project_then_complete_inputs_are_preserved(
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
+    test_case: ExpectedCountTestCase,
 ) -> None:
     write_repo_files(
         tmp_path,
@@ -49,9 +58,14 @@ def test_given_expanded_mixed_mode_tests_when_compiling_project_then_complete_in
         adapter=DuckDbAdapter(),
     )
 
+    assert len(project.sql_tests) == test_case.expected_count
     assert tuple(test.name for test in project.sql_tests) == ("orders_match", "increment_works")
-    model_payload = project.sql_tests[0].payload
-    direct_payload = project.sql_tests[1].payload
+    model_payload: CompiledModelSqlTestPayload | CompiledDirectLogicSqlTestPayload = (
+        project.sql_tests[0].payload
+    )
+    direct_payload: CompiledModelSqlTestPayload | CompiledDirectLogicSqlTestPayload = (
+        project.sql_tests[1].payload
+    )
     assert isinstance(model_payload, CompiledModelSqlTestPayload)
     assert tuple(cte.name for cte in model_payload.authored_ctes) == ("helper", "__ref__orders")
     assert model_payload.expected_model_names == ("orders",)

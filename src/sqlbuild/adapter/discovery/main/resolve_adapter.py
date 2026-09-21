@@ -8,7 +8,8 @@ from typing import cast
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
-from sqlbuild.adapter.discovery.main.builtins import builtin_adapter_class, builtin_adapter_names
+from sqlbuild.adapter.discovery.main._builtin_adapter_class import builtin_adapter_class
+from sqlbuild.adapter.discovery.main._builtin_adapter_names import builtin_adapter_names
 from sqlbuild.adapter.discovery.main.project_adapters import discover_project_adapters
 
 

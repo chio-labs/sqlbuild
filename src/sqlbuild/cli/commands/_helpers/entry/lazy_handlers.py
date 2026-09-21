@@ -7,7 +7,9 @@ from importlib import import_module
 from types import ModuleType
 from typing import Any, cast
 
-from sqlbuild.cli.commands.entry_models import CliEntrypointHandlers
+from sqlbuild.cli.entry.models import (
+    CliEntrypointHandlers,
+)
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 
 
@@ -92,7 +94,7 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
             function_name="run_contract",
         ),
         "compile": _lazy_handler(
-            module_name="sqlbuild.cli.commands.main.project._compile",
+            module_name="sqlbuild.cli.compile.main.run",
             function_name="run_compile",
         ),
         "dag": _lazy_handler(

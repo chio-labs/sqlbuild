@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.compile_models import (
+from sqlbuild.cli.compile.models import (
     SqlTestArtifactCacheRecord,
     SqlTestArtifactIdentityContext,
 )

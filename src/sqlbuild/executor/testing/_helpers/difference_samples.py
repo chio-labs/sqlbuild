@@ -125,6 +125,7 @@ def build_sql_test_difference_sample_sql(
     if step.lifted_ctes:
         actual_sql, lifted_ctes = lift_preanalyzed_step_ctes(
             sql=step.comparison_body_sql or step.resolved_sql,
+            complete_sql=step.resolved_sql,
             preanalyzed_ctes=step.lifted_ctes,
             lifted_ctes=lifted_ctes,
             sql_analysis_enabled=test_entry.sql_analysis_enabled,

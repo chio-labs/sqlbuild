@@ -1,5 +1,11 @@
 use serde_json::Value;
 
+pub(crate) struct CompactQueryAnalysisTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) run: fn() -> bool,
+    pub(crate) expected_success: bool,
+}
+
 pub(crate) struct QueryAnalysisExpectedValue {
     pub(crate) pointer: &'static str,
     pub(crate) value: &'static str,

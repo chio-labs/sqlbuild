@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.analysis.columns import infer_columns_with_sql_analysis
+from sqlbuild.compiler.compile._helpers.analysis.compact import infer_columns_with_sql_analysis
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
     get_validated_model_cursor_intrinsics,

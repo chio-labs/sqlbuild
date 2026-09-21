@@ -8,7 +8,9 @@ import pytest
 
 from sqlbuild.cli.commands._helpers.entry.parser import build_cli_parser
 from sqlbuild.cli.commands._helpers.entry.parsing import parse_cli_invocation
-from sqlbuild.cli.commands.models import ParsedCliInvocation
+from sqlbuild.cli.entry.models import (
+    ParsedCliInvocation,
+)
 from tests.unit.src.sqlbuild.cli.commands._helpers.entry._test_types import (
     AuditConcurrencyParsingTestCase,
     QueryDiffParsingTestCase,

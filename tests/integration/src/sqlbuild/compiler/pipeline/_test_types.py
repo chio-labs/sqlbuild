@@ -211,3 +211,9 @@ class SnowflakeTargetValidationIntegrationTestCase:
     expected_error_fragment: str = ""
     expected_database: str | None = None
     expected_schema: str | None = None
+
+
+@dataclass(frozen=True)
+class ExpectedCountTestCase:
+    description: str
+    expected_count: int

@@ -20,6 +20,7 @@ from sqlbuild.compiler.lineage.types import (
 )
 from tests.unit.src.sqlbuild.compiler.lineage._test_types import (
     ColumnLineageAnalyzerTestCase,
+    ExpectedCountTestCase,
     ProjectLineageGraphTestCase,
     SqlAnalysisDisabledLineageTestCase,
 )
@@ -435,15 +436,20 @@ def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_
     assert downstream_trace == test_case.expected_downstream_trace
 
 
-def test_given_compact_analysis_facts_when_building_fast_lineage_then_preserves_public_graph() -> (
-    None
-):
-    upstream = make_compiled_model(
+@pytest.mark.parametrize(
+    "test_case",
+    [ExpectedCountTestCase(description="compact facts preserve graph", expected_count=1)],
+    ids=lambda case: case.description,
+)
+def test_given_compact_analysis_facts_when_building_fast_lineage_then_preserves_public_graph(
+    test_case: ExpectedCountTestCase,
+) -> None:
+    upstream: CompiledModel = make_compiled_model(
         name="orders",
         query_sql="SELECT 1 AS order_id",
         inferred_columns=("order_id",),
     )
-    target = replace(
+    target: CompiledModel = replace(
         make_compiled_model(
             name="order_summary",
             query_sql='SELECT order_id FROM __ref("orders")',
@@ -465,7 +471,7 @@ def test_given_compact_analysis_facts_when_building_fast_lineage_then_preserves_
         ),
     )
 
-    result = build_project_column_lineage(
+    result: ProjectColumnLineage | None = build_project_column_lineage(
         project=make_compiled_project(models=(upstream, target)),
         mode=ColumnLineageMode.FAST,
     )
@@ -473,7 +479,7 @@ def test_given_compact_analysis_facts_when_building_fast_lineage_then_preserves_
     assert result is not None
     assert result.has_model("order_summary")
     assert not result.model_has_star("order_summary")
-    assert result.edge_count_targeting("order_summary") == 1
+    assert result.edge_count_targeting("order_summary") == test_case.expected_count
     assert result.models["order_summary"].columns[0].upstream_columns[0].resource_name == "orders"
     assert tuple(
         edge_label(

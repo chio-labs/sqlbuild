@@ -14,11 +14,14 @@ from sqlbuild.cli.commands._helpers.compile.target_writer import (
     write_compile_target,
     write_static_compile_target,
 )
-from sqlbuild.cli.commands.models import WrittenTarget
+from sqlbuild.cli.output.models import (
+    WrittenTarget,
+)
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompiledSqlTest
 from sqlbuild.compiler.planner.models import ChainStep, PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
+    ExpectedMessageTestCase,
     TargetWriterCacheTestCase,
     TargetWriterTestCase,
 )
@@ -237,8 +240,19 @@ def test_given_compiled_project_when_writing_static_target_then_expected_files_a
     assert model_path.stat().st_mtime_ns != unchanged_mtime_ns
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedMessageTestCase(
+            description="unicode SQL bytes remain unchanged",
+            expected_message="SELECT 'café' AS product_name\n",
+        )
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_unicode_sql_when_writing_static_target_twice_then_bytes_remain_unchanged(
     tmp_path: Path,
+    test_case: ExpectedMessageTestCase,
 ) -> None:
     project: CompiledProject = build_static_target_writer_project()
     project = replace(
@@ -261,12 +275,22 @@ def test_given_unicode_sql_when_writing_static_target_twice_then_bytes_remain_un
         project=project,
     )
 
-    assert model_path.read_text(encoding="utf-8") == "SELECT 'café' AS product_name\n"
+    assert model_path.read_text(encoding="utf-8") == test_case.expected_message
     assert model_path.stat().st_mtime_ns == unchanged_mtime_ns
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedMessageTestCase(
+            description="invalid UTF-8 remains an error", expected_message="utf-8"
+        )
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_invalid_utf8_artifact_when_writing_again_then_existing_decode_error_is_preserved(
     tmp_path: Path,
+    test_case: ExpectedMessageTestCase,
 ) -> None:
     project: CompiledProject = build_static_target_writer_project()
     target_dir: Path = tmp_path / "target"
@@ -278,7 +302,7 @@ def test_given_invalid_utf8_artifact_when_writing_again_then_existing_decode_err
     model_path: Path = target_dir / "compiled" / "models" / "staging" / "orders.sql"
     model_path.write_bytes(b"\xff")
 
-    with pytest.raises(UnicodeDecodeError):
+    with pytest.raises(UnicodeDecodeError, match=test_case.expected_message):
         write_static_compile_target(
             target_dir=target_dir,
             adapter=DuckDbAdapter(),

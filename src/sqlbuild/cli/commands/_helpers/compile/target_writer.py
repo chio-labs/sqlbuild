@@ -16,25 +16,26 @@ from sqlbuild.cli.commands._helpers.compile.sql_test_artifact_cache import (
     sql_test_artifact_record_key,
     write_sql_test_artifact_cache,
 )
-from sqlbuild.cli.commands.compile_models import (
+from sqlbuild.cli.compile.models import (
     SqlTestArtifactCacheRecord,
     SqlTestArtifactIdentityContext,
 )
-from sqlbuild.cli.commands.output_models import WrittenTarget
-from sqlbuild.cli.paths.main._sql_test_output_path import (
-    compiled_sql_test_output_path,
-    sql_test_output_path,
+from sqlbuild.cli.output.models import (
+    WrittenTarget,
 )
+from sqlbuild.cli.paths.main._compiled_sql_test_output_path import (
+    compiled_sql_test_output_path,
+)
+from sqlbuild.cli.paths.main._sql_test_output_path import sql_test_output_path
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompiledSqlTest
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
-    NativeSqlTestArtifact,
+from sqlbuild.compiler.planner.main.execution.sql_test_artifacts import (
     plan_and_render_sql_test_artifacts,
 )
-from sqlbuild.compiler.planner.main.execution.sql_test_assembly import (
-    _sql_test_model_chain_names,
+from sqlbuild.compiler.planner.main.execution.sql_test_model_chain import (
+    sql_test_model_chain_names,
 )
-from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput
+from sqlbuild.compiler.planner.models import AuditPlanEntry, NativeSqlTestArtifact, PlanOutput
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 
@@ -49,6 +50,7 @@ _SINGULAR_DIR: str = "singular"
 _TESTS_DIR: str = "tests"
 _MANIFEST_FILE: str = "manifest.json"
 _SQL_FILE_SUFFIX: str = ".sql"
+_POSIX_LINE_SEPARATOR: str = "\n"
 
 
 def write_compile_target(
@@ -339,7 +341,7 @@ def _write_static_tests(
             record_key = sql_test_artifact_record_key(test=test)
             artifact_identity = sql_test_artifact_identity(
                 test=test,
-                model_chain_names=_sql_test_model_chain_names(
+                model_chain_names=sql_test_model_chain_names(
                     test=test, project=project, model_map=model_map
                 ),
                 context=identity_context,
@@ -401,7 +403,7 @@ def _write_sql(*, path: Path, sql: str, check_existing: bool = True) -> None:
     """Write one SQL file."""
 
     contents: str = sql.rstrip() + "\n"
-    if os.linesep != "\n":
+    if os.linesep != _POSIX_LINE_SEPARATOR:
         _write_text_if_changed(
             path=path,
             contents=contents,

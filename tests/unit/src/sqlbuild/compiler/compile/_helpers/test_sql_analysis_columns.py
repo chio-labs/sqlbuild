@@ -9,17 +9,20 @@ from polyglot_sql import ParseError
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.analysis.columns import (
+    import_polyglot_sql,
+    substitute_placeholder_defaults,
+)
+from sqlbuild.compiler.compile._helpers.analysis.compact import (
     analyze_columns_and_lineage_with_polyglot,
     analyze_queries_with_compact_polyglot_batch,
-    import_polyglot_sql,
     infer_columns_with_sql_analysis,
-    substitute_placeholder_defaults,
 )
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
     CompileSqlReference,
     InferredColumn,
+    NativeCompactAnalysis,
     PolyglotAnalysisResult,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -30,16 +33,24 @@ from sqlbuild.compiler.lineage.types import (
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
+    ExpectedCountTestCase,
     InferColumnsTestCase,
     PolyglotAnalysisTestCase,
+    QualifiedReferenceAnalysisTestCase,
     SubstitutePlaceholderDefaultsTestCase,
     UnexpectedAnalysisFailureTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import direct_orders_lineage
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [ExpectedCountTestCase(description="native request remains batched", expected_count=1)],
+    ids=lambda case: case.description,
+)
 def test_given_queries_when_batch_analyzing_then_uses_one_ordered_native_request(
     monkeypatch: pytest.MonkeyPatch,
+    test_case: ExpectedCountTestCase,
 ) -> None:
     captured: list[dict[str, object]] = []
 
@@ -68,12 +79,12 @@ def test_given_queries_when_batch_analyzing_then_uses_one_ordered_native_request
         )
 
     monkeypatch.setattr(
-        "sqlbuild.compiler.compile._helpers.analysis.columns._native.analyze_project_queries_compact_json",
+        "sqlbuild.compiler.compile._helpers.analysis.compact._native.analyze_project_queries_compact_json",
         analyze_project_queries_compact_json,
         raising=False,
     )
 
-    results = analyze_queries_with_compact_polyglot_batch(
+    results: tuple[NativeCompactAnalysis, ...] = analyze_queries_with_compact_polyglot_batch(
         query_sqls=(
             'SELECT order_id FROM __ref("orders")',
             "SELECT @@@status AS status",
@@ -89,7 +100,7 @@ def test_given_queries_when_batch_analyzing_then_uses_one_ordered_native_request
         recover_cte_facts=(False, False),
     )
 
-    assert len(captured) == 1
+    assert len(captured) == test_case.expected_count
     native_queries: list[dict[str, object]] = cast(list[dict[str, object]], captured[0]["queries"])
     native_templates: list[dict[str, object]] = cast(
         list[dict[str, object]], captured[0]["templates"]
@@ -149,7 +160,7 @@ def test_given_queries_when_batch_analyzing_then_uses_one_ordered_native_request
         ),
     )
     monkeypatch.setattr(
-        "sqlbuild.compiler.compile._helpers.analysis.columns.import_polyglot_sql",
+        "sqlbuild.compiler.compile._helpers.analysis.compact.import_polyglot_sql",
         Mock(side_effect=AssertionError("native failures must not trigger Python reparsing")),
     )
 
@@ -162,29 +173,33 @@ def test_given_queries_when_batch_analyzing_then_uses_one_ordered_native_request
     assert failed_analysis.analysis_succeeded is False
 
 
-def test_given_qualified_reference_when_batch_analyzing_then_preserves_analysis_facts() -> None:
-    _assert_qualified_reference_analysis_parity(
-        query_sql='SELECT orders.order_id FROM __ref("orders")'
-    )
-
-
-def test_given_commented_qualified_reference_when_batch_analyzing_then_preserves_analysis_facts() -> (
-    None
-):
-    _assert_qualified_reference_analysis_parity(
-        query_sql=('SELECT orders /* column qualifier */ .order_id FROM __ref("orders")')
-    )
-
-
-def _assert_qualified_reference_analysis_parity(*, query_sql: str) -> None:
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        QualifiedReferenceAnalysisTestCase(
+            description="plain qualified reference",
+            query_sql='SELECT orders.order_id FROM __ref("orders")',
+        ),
+        QualifiedReferenceAnalysisTestCase(
+            description="commented qualified reference",
+            query_sql='SELECT orders /* column qualifier */ .order_id FROM __ref("orders")',
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_qualified_reference_when_batch_analyzing_then_preserves_analysis_facts(
+    test_case: QualifiedReferenceAnalysisTestCase,
+) -> None:
     references: tuple[CompileSqlReference, ...] = (
         CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
     )
-    nullability = {"orders": {"order_id": InferredNullability.NON_NULL}}
-    types = {"orders": {"order_id": "BIGINT"}}
-    profile = ExpressionInferenceProfile(sql_analysis_dialect="duckdb")
+    nullability: dict[str, dict[str, InferredNullability]] = {
+        "orders": {"order_id": InferredNullability.NON_NULL}
+    }
+    types: dict[str, dict[str, str]] = {"orders": {"order_id": "BIGINT"}}
+    profile: ExpressionInferenceProfile = ExpressionInferenceProfile(sql_analysis_dialect="duckdb")
     expected: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
-        query_sql=query_sql,
+        query_sql=test_case.query_sql,
         references=references,
         placeholders=None,
         column_nullability_by_table=nullability,
@@ -192,8 +207,8 @@ def _assert_qualified_reference_analysis_parity(*, query_sql: str) -> None:
         inference_profile=profile,
         allow_compact_analysis=True,
     )
-    prepared = analyze_queries_with_compact_polyglot_batch(
-        query_sqls=(query_sql,),
+    prepared: NativeCompactAnalysis = analyze_queries_with_compact_polyglot_batch(
+        query_sqls=(test_case.query_sql,),
         references=(references,),
         placeholders=(None,),
         column_nullability_by_table=nullability,
@@ -203,7 +218,7 @@ def _assert_qualified_reference_analysis_parity(*, query_sql: str) -> None:
     )[0]
 
     actual: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
-        query_sql=query_sql,
+        query_sql=test_case.query_sql,
         references=references,
         placeholders=None,
         column_nullability_by_table=nullability,
@@ -213,7 +228,7 @@ def _assert_qualified_reference_analysis_parity(*, query_sql: str) -> None:
         precomputed=prepared,
     )
 
-    assert actual.columns == expected.columns
+    assert (actual.columns == expected.columns) is test_case.expected_matches
     assert tuple(actual.lineage_columns) == expected.lineage_columns
 
 

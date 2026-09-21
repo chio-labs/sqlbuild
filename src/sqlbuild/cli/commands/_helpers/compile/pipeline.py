@@ -17,13 +17,15 @@ from sqlbuild.cli.commands._helpers.compile.status import (
 )
 from sqlbuild.cli.commands._helpers.compile.target_writer import write_static_compile_target
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
-from sqlbuild.cli.commands.compile_models import (
+from sqlbuild.cli.commands.types import CompileLineageMode
+from sqlbuild.cli.compile.models import (
     CompileAnalysis,
     CompileProfileFlags,
     CompileWriteResult,
 )
-from sqlbuild.cli.commands.output_models import WrittenTarget
-from sqlbuild.cli.commands.types import CompileLineageMode
+from sqlbuild.cli.output.models import (
+    WrittenTarget,
+)
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
     CompiledObjectKey,
@@ -38,7 +40,7 @@ from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.pipeline.main.selected_graph import (
     build_project_graph_with_analysis_selection,
 )
-from sqlbuild.compiler.pipeline.project_graph import ProjectGraph
+from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.rule_engine.main.load_config import load_rules_config

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile._helpers.analysis.columns import (
+from sqlbuild.compiler.compile._helpers.analysis.compact import (
     analyze_columns_and_lineage_with_polyglot,
 )
 from sqlbuild.compiler.compile.constants import (

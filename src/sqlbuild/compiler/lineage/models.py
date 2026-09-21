@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledLineageSourceFact,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.lineage.constants import INDEXED_EDGE_RECORD_LENGTH
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
     ColumnTransformKind,
@@ -131,26 +132,26 @@ class ModelColumnLineage:
     has_star: bool = False
 
 
-_CompactEdgeRecord = tuple[
-    CompiledLineageSourceFact | ColumnLineageSource,
-    str,
-    str,
-    ColumnTransformKind,
-    ColumnLineageConfidence,
-]
-_IndexedEdgeRecord = tuple[
-    CompactLineageFacts,
-    tuple[int, int, int],
-    str,
-    str,
-    int,
-    int,
-]
-_EdgeRecord = ColumnLineageEdge | _CompactEdgeRecord | _IndexedEdgeRecord
-
-
+@dataclass(frozen=True, init=False)
 class ProjectColumnLineage:
     """Project-level column lineage graph with lazily materialized public views."""
+
+    _models: dict[str, ModelColumnLineage] = field(init=False, repr=False)
+    _compact_models: dict[str, tuple[Sequence[CompiledLineageColumnFact], bool]] = field(
+        init=False, repr=False
+    )
+    _model_order: tuple[str, ...] = field(init=False, repr=False)
+    _edges: tuple[ColumnLineageEdge, ...] | None = field(init=False, repr=False)
+    _edge_records: tuple[object, ...] = field(init=False, repr=False)
+    _edge_cache: dict[
+        tuple[str, str, str, str, str, ColumnTransformKind, ColumnLineageConfidence],
+        ColumnLineageEdge,
+    ] = field(init=False, repr=False)
+    _edge_counts_by_target_model: dict[str, int] = field(init=False, repr=False)
+    _indexes_initialized: bool = field(init=False, repr=False)
+    _edge_records_by_target_model: dict[str, tuple[object, ...]] = field(init=False, repr=False)
+    _edge_records_by_source_resource: dict[str, tuple[object, ...]] = field(init=False, repr=False)
+    _edge_record_by_target_column: dict[tuple[str, str], object] = field(init=False, repr=False)
 
     def __init__(
         self,
@@ -158,17 +159,14 @@ class ProjectColumnLineage:
         models: dict[str, ModelColumnLineage],
         edges: tuple[ColumnLineageEdge, ...],
     ) -> None:
-        self._models: dict[str, ModelColumnLineage] = models
-        self._compact_models: dict[str, tuple[Sequence[CompiledLineageColumnFact], bool]] = {}
-        self._model_order: tuple[str, ...] = tuple(models)
-        self._edges: tuple[ColumnLineageEdge, ...] | None = edges
-        self._edge_records: tuple[_EdgeRecord, ...] = edges
-        self._edge_cache: dict[
-            tuple[str, str, str, str, str, ColumnTransformKind, ColumnLineageConfidence],
-            ColumnLineageEdge,
-        ] = {}
-        self._edge_counts_by_target_model: dict[str, int] = {}
-        self._indexes_initialized: bool = False
+        object.__setattr__(self, "_models", models)
+        object.__setattr__(self, "_compact_models", {})
+        object.__setattr__(self, "_model_order", tuple(models))
+        object.__setattr__(self, "_edges", edges)
+        object.__setattr__(self, "_edge_records", edges)
+        object.__setattr__(self, "_edge_cache", {})
+        object.__setattr__(self, "_edge_counts_by_target_model", {})
+        object.__setattr__(self, "_indexes_initialized", False)
         self._initialize_indexes()
 
     @classmethod
@@ -182,79 +180,81 @@ class ProjectColumnLineage:
         """Build indexed project lineage without expanding compact analysis facts."""
 
         result: ProjectColumnLineage = cls(models=models, edges=())
-        result._compact_models = compact_models
-        result._model_order = model_order
-        result._edges = None
-        result._edge_records = ()
-        result._indexes_initialized = False
-        result._edge_counts_by_target_model = {
-            model_name: (
-                sum(len(row[3]) for row in compact[0].rows)
-                if isinstance(compact[0], CompactLineageFacts)
-                else sum(len(column.upstream_columns) for column in compact[0])
+        object.__setattr__(result, "_compact_models", compact_models)
+        object.__setattr__(result, "_model_order", model_order)
+        object.__setattr__(result, "_edges", None)
+        object.__setattr__(result, "_edge_records", ())
+        object.__setattr__(result, "_indexes_initialized", False)
+        edge_counts: dict[str, int] = {}
+        for model_name in model_order:
+            compact: tuple[Sequence[CompiledLineageColumnFact], bool] | None = compact_models.get(
+                model_name
             )
-            for model_name in model_order
-            if (compact := compact_models.get(model_name)) is not None
-        }
-        result._edge_counts_by_target_model.update(
-            {
-                model_name: sum(len(column.upstream_columns) for column in model.columns)
-                for model_name, model in models.items()
-            }
-        )
+            if compact is None:
+                continue
+            compact_columns: Sequence[CompiledLineageColumnFact] = compact[0]
+            if isinstance(compact_columns, CompactLineageFacts):
+                edge_counts[model_name] = sum(len(row[3]) for row in compact_columns.rows)
+            else:
+                edge_counts[model_name] = sum(
+                    len(column.upstream_columns) for column in compact_columns
+                )
+        for model_name, model in models.items():
+            edge_counts[model_name] = sum(len(column.upstream_columns) for column in model.columns)
+        object.__setattr__(result, "_edge_counts_by_target_model", edge_counts)
         return result
 
     def _build_fast_edge_records(
         self,
-    ) -> tuple[_CompactEdgeRecord | _IndexedEdgeRecord, ...]:
-        records: list[_CompactEdgeRecord | _IndexedEdgeRecord] = []
+    ) -> tuple[object, ...]:
+        records: list[object] = []
         for model_name in self._model_order:
             compact: tuple[Sequence[CompiledLineageColumnFact], bool] | None = (
                 self._compact_models.get(model_name)
             )
             if compact is not None:
-                columns = compact[0]
+                columns: Sequence[CompiledLineageColumnFact] = compact[0]
                 if isinstance(columns, CompactLineageFacts):
                     for name_index, transform_code, confidence_code, sources in columns.rows:
-                        output_column = columns.string_pool[name_index]
-                        records.extend(
-                            (
-                                columns,
-                                source,
-                                model_name,
-                                output_column,
-                                transform_code,
-                                confidence_code,
+                        output_column: str = columns.string_pool[name_index]
+                        for source in sources:
+                            records.append(
+                                (
+                                    columns,
+                                    source,
+                                    model_name,
+                                    output_column,
+                                    transform_code,
+                                    confidence_code,
+                                )
                             )
-                            for source in sources
-                        )
                 else:
                     for column in columns:
-                        records.extend(
-                            (
-                                source,
-                                model_name,
-                                column.output_column,
-                                column.transform_kind,
-                                column.confidence,
+                        for source in column.upstream_columns:
+                            records.append(
+                                (
+                                    source,
+                                    model_name,
+                                    column.output_column,
+                                    column.transform_kind,
+                                    column.confidence,
+                                )
                             )
-                            for source in column.upstream_columns
-                        )
                 continue
             model: ModelColumnLineage | None = self._models.get(model_name)
             if model is None:
                 continue
             for column in model.columns:
-                records.extend(
-                    (
-                        source,
-                        model_name,
-                        column.output_column,
-                        column.transform_kind,
-                        column.confidence,
+                for source in column.upstream_columns:
+                    records.append(
+                        (
+                            source,
+                            model_name,
+                            column.output_column,
+                            column.transform_kind,
+                            column.confidence,
+                        )
                     )
-                    for source in column.upstream_columns
-                )
         return tuple(records)
 
     @property
@@ -263,14 +263,16 @@ class ProjectColumnLineage:
 
         if self._compact_models:
             for model_name in self._model_order:
-                compact = self._compact_models.get(model_name)
+                compact: tuple[Sequence[CompiledLineageColumnFact], bool] | None = (
+                    self._compact_models.get(model_name)
+                )
                 if compact is not None and model_name not in self._models:
-                    self._models[model_name] = _model_lineage_from_compact_facts(
+                    self._models[model_name] = self._model_lineage_from_compact_facts(
                         model_name=model_name,
                         columns=compact[0],
                         has_star=compact[1],
                     )
-            self._compact_models = {}
+            object.__setattr__(self, "_compact_models", {})
         return self._models
 
     @property
@@ -279,8 +281,15 @@ class ProjectColumnLineage:
 
         if self._edges is None:
             self._ensure_indexes()
-            self._edges = tuple(self._materialize_edge(record) for record in self._edge_records)
-        return self._edges
+            object.__setattr__(
+                self,
+                "_edges",
+                tuple(self._materialize_edge(record) for record in self._edge_records),
+            )
+        edges: tuple[ColumnLineageEdge, ...] | None = self._edges
+        if edges is None:
+            return ()
+        return edges
 
     def has_model(self, model_name: str) -> bool:
         """Return whether model lineage is available without expanding its columns."""
@@ -290,10 +299,12 @@ class ProjectColumnLineage:
     def model_has_star(self, model_name: str) -> bool:
         """Return whether model lineage retains unresolved root-star uncertainty."""
 
-        compact = self._compact_models.get(model_name)
+        compact: tuple[Sequence[CompiledLineageColumnFact], bool] | None = self._compact_models.get(
+            model_name
+        )
         if compact is not None:
             return compact[1]
-        model = self._models.get(model_name)
+        model: ModelColumnLineage | None = self._models.get(model_name)
         return model.has_star if model is not None else False
 
     def edge_count_targeting(self, model_name: str) -> int:
@@ -305,33 +316,39 @@ class ProjectColumnLineage:
         )
 
     def _initialize_indexes(self) -> None:
-        by_target_model: dict[str, list[_EdgeRecord]] = defaultdict(list)
-        by_source_resource: dict[str, list[_EdgeRecord]] = defaultdict(list)
-        by_target_column: dict[tuple[str, str], _EdgeRecord] = {}
+        by_target_model: dict[str, list[object]] = defaultdict(list)
+        by_source_resource: dict[str, list[object]] = defaultdict(list)
+        by_target_column: dict[tuple[str, str], object] = {}
         for record in self._edge_records:
-            source_name, target_name, target_column = _edge_record_identity(record)
+            source_name, target_name, target_column = self._edge_record_identity(record)
             by_target_model[target_name].append(record)
             by_source_resource[source_name].append(record)
             by_target_column.setdefault((target_name, target_column), record)
-        self._edge_records_by_target_model: dict[str, tuple[_EdgeRecord, ...]] = {
-            key: tuple(value) for key, value in by_target_model.items()
-        }
-        self._edge_records_by_source_resource: dict[str, tuple[_EdgeRecord, ...]] = {
-            key: tuple(value) for key, value in by_source_resource.items()
-        }
-        self._edge_record_by_target_column: dict[tuple[str, str], _EdgeRecord] = by_target_column
-        self._edge_counts_by_target_model = {
-            key: len(value) for key, value in self._edge_records_by_target_model.items()
-        }
-        self._indexes_initialized = True
+        object.__setattr__(
+            self,
+            "_edge_records_by_target_model",
+            {key: tuple(value) for key, value in by_target_model.items()},
+        )
+        object.__setattr__(
+            self,
+            "_edge_records_by_source_resource",
+            {key: tuple(value) for key, value in by_source_resource.items()},
+        )
+        object.__setattr__(self, "_edge_record_by_target_column", by_target_column)
+        object.__setattr__(
+            self,
+            "_edge_counts_by_target_model",
+            {key: len(value) for key, value in self._edge_records_by_target_model.items()},
+        )
+        object.__setattr__(self, "_indexes_initialized", True)
 
     def _ensure_indexes(self) -> None:
         if self._indexes_initialized:
             return
-        self._edge_records = self._build_fast_edge_records()
+        object.__setattr__(self, "_edge_records", self._build_fast_edge_records())
         self._initialize_indexes()
 
-    def _materialize_edge(self, record: _EdgeRecord) -> ColumnLineageEdge:
+    def _materialize_edge(self, record: object) -> ColumnLineageEdge:
         if isinstance(record, ColumnLineageEdge):
             return record
         (
@@ -342,8 +359,16 @@ class ProjectColumnLineage:
             target_column,
             transform_kind,
             confidence,
-        ) = _edge_record_values(record)
-        key = (
+        ) = self._edge_record_values(record)
+        key: tuple[
+            str,
+            str,
+            str,
+            str,
+            str,
+            ColumnTransformKind,
+            ColumnLineageConfidence,
+        ] = (
             str(resource_type),
             resource_name,
             source_column,
@@ -352,10 +377,10 @@ class ProjectColumnLineage:
             transform_kind,
             confidence,
         )
-        cached = self._edge_cache.get(key)
+        cached: ColumnLineageEdge | None = self._edge_cache.get(key)
         if cached is not None:
             return cached
-        edge = ColumnLineageEdge(
+        edge: ColumnLineageEdge = ColumnLineageEdge(
             source=QualifiedLineageColumn(
                 resource_type=resource_type,
                 resource_name=resource_name,
@@ -390,7 +415,7 @@ class ProjectColumnLineage:
         """Return the first edge that produces `model_name.column_name`."""
 
         self._ensure_indexes()
-        record = self._edge_record_by_target_column.get((model_name, column_name))
+        record: object | None = self._edge_record_by_target_column.get((model_name, column_name))
         return self._materialize_edge(record) if record is not None else None
 
     def edges_sourced_from(self, resource_name: str) -> tuple[ColumnLineageEdge, ...]:
@@ -464,6 +489,98 @@ class ProjectColumnLineage:
 
         return tuple(result)
 
+    @staticmethod
+    def _edge_record_identity(record: object) -> tuple[str, str, str]:
+        if isinstance(record, ColumnLineageEdge):
+            return (
+                record.source.resource_name,
+                record.target.resource_name,
+                record.target.column_name,
+            )
+        _, resource_name, _, target_model, target_column, _, _ = (
+            ProjectColumnLineage._edge_record_values(record)
+        )
+        return resource_name, target_model, target_column
+
+    @staticmethod
+    def _edge_record_values(
+        record: object,
+    ) -> tuple[
+        CompiledResourceType | str,
+        str,
+        str,
+        str,
+        str,
+        ColumnTransformKind,
+        ColumnLineageConfidence,
+    ]:
+        if isinstance(record, tuple) and len(record) == INDEXED_EDGE_RECORD_LENGTH:
+            facts, source, target_model, target_column, transform_code, confidence_code = cast(
+                tuple[CompactLineageFacts, tuple[int, int, int], str, str, int, int], record
+            )
+            return (
+                facts.string_pool[source[0]],
+                facts.resource_name(source[1]),
+                facts.string_pool[source[2]],
+                target_model,
+                target_column,
+                facts.transform_kind(transform_code),
+                facts.confidence(confidence_code),
+            )
+        source, target_model, target_column, transform_kind, confidence = cast(
+            tuple[
+                CompiledLineageSourceFact | ColumnLineageSource,
+                str,
+                str,
+                ColumnTransformKind,
+                ColumnLineageConfidence,
+            ],
+            record,
+        )
+        return (
+            source.resource_type,
+            source.resource_name,
+            source.column_name,
+            target_model,
+            target_column,
+            transform_kind,
+            confidence,
+        )
+
+    @staticmethod
+    def _model_lineage_from_compact_facts(
+        *,
+        model_name: str,
+        columns: Sequence[CompiledLineageColumnFact],
+        has_star: bool,
+    ) -> ModelColumnLineage:
+        lineage_columns: list[ColumnLineage] = []
+        for column in columns:
+            upstream_columns: list[ColumnLineageSource] = []
+            for source in column.upstream_columns:
+                upstream_columns.append(
+                    ColumnLineageSource(
+                        resource_type=source.resource_type,
+                        resource_name=source.resource_name,
+                        column_name=source.column_name,
+                    )
+                )
+            lineage_columns.append(
+                ColumnLineage(
+                    output_column=column.output_column,
+                    transform_kind=column.transform_kind,
+                    expression_sql=None,
+                    upstream_columns=tuple(upstream_columns),
+                    nullability=InferredNullability.UNKNOWN,
+                    confidence=column.confidence,
+                )
+            )
+        return ModelColumnLineage(
+            model_name=model_name,
+            columns=tuple(lineage_columns),
+            has_star=has_star,
+        )
+
     def __repr__(self) -> str:
         return f"ProjectColumnLineage(models={self.models!r}, edges={self.edges!r})"
 
@@ -471,82 +588,3 @@ class ProjectColumnLineage:
         if not isinstance(other, ProjectColumnLineage):
             return NotImplemented
         return self.models == other.models and self.edges == other.edges
-
-
-def _edge_record_identity(record: _EdgeRecord) -> tuple[str, str, str]:
-    if isinstance(record, ColumnLineageEdge):
-        return (
-            record.source.resource_name,
-            record.target.resource_name,
-            record.target.column_name,
-        )
-    _, resource_name, _, target_model, target_column, _, _ = _edge_record_values(record)
-    return resource_name, target_model, target_column
-
-
-def _edge_record_values(
-    record: _CompactEdgeRecord | _IndexedEdgeRecord,
-) -> tuple[
-    CompiledResourceType | str,
-    str,
-    str,
-    str,
-    str,
-    ColumnTransformKind,
-    ColumnLineageConfidence,
-]:
-    if len(record) == 6:
-        facts, source, target_model, target_column, transform_code, confidence_code = cast(
-            _IndexedEdgeRecord, record
-        )
-        return (
-            facts.string_pool[source[0]],
-            facts.resource_name(source[1]),
-            facts.string_pool[source[2]],
-            target_model,
-            target_column,
-            facts.transform_kind(transform_code),
-            facts.confidence(confidence_code),
-        )
-    source, target_model, target_column, transform_kind, confidence = cast(
-        _CompactEdgeRecord, record
-    )
-    return (
-        source.resource_type,
-        source.resource_name,
-        source.column_name,
-        target_model,
-        target_column,
-        transform_kind,
-        confidence,
-    )
-
-
-def _model_lineage_from_compact_facts(
-    *,
-    model_name: str,
-    columns: Sequence[CompiledLineageColumnFact],
-    has_star: bool,
-) -> ModelColumnLineage:
-    return ModelColumnLineage(
-        model_name=model_name,
-        columns=tuple(
-            ColumnLineage(
-                output_column=column.output_column,
-                transform_kind=column.transform_kind,
-                expression_sql=None,
-                upstream_columns=tuple(
-                    ColumnLineageSource(
-                        resource_type=source.resource_type,
-                        resource_name=source.resource_name,
-                        column_name=source.column_name,
-                    )
-                    for source in column.upstream_columns
-                ),
-                nullability=InferredNullability.UNKNOWN,
-                confidence=column.confidence,
-            )
-            for column in columns
-        ),
-        has_star=has_star,
-    )

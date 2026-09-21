@@ -57,9 +57,14 @@ def lift_step_ctes(
 
 def merge_lifted_ctes(
     *, ctes: tuple[tuple[str, str], ...], lifted_ctes: OrderedDict[str, str]
-) -> OrderedDict[str, str]:
+) -> OrderedDict[str, str] | None:
     """Add already analyzed top-level CTEs without reparsing their SQL."""
 
+    for cte_name, cte_sql in ctes:
+        existing_name: str | None = _existing_cte_name(lifted_ctes=lifted_ctes, cte_name=cte_name)
+        existing_sql: str | None = lifted_ctes.get(existing_name) if existing_name else None
+        if existing_sql is not None and existing_sql != cte_sql:
+            return None
     updated_ctes: OrderedDict[str, str] = OrderedDict(lifted_ctes)
     for cte_name, cte_sql in ctes:
         if _existing_cte_name(lifted_ctes=updated_ctes, cte_name=cte_name) is None:
@@ -70,16 +75,19 @@ def merge_lifted_ctes(
 def lift_preanalyzed_step_ctes(
     *,
     sql: str,
+    complete_sql: str,
     preanalyzed_ctes: tuple[tuple[str, str], ...],
     lifted_ctes: OrderedDict[str, str],
     sql_analysis_enabled: bool,
 ) -> tuple[str, OrderedDict[str, str]]:
     """Reuse generated CTEs while still lifting authored top-level CTEs."""
 
-    updated_ctes: OrderedDict[str, str] = merge_lifted_ctes(
+    updated_ctes: OrderedDict[str, str] | None = merge_lifted_ctes(
         ctes=preanalyzed_ctes,
         lifted_ctes=lifted_ctes,
     )
+    if updated_ctes is None:
+        return complete_sql, lifted_ctes
     if not sql_analysis_enabled or _LEADING_WITH_PATTERN.match(sql) is None:
         return sql, updated_ctes
     return lift_step_ctes(
@@ -174,6 +182,7 @@ def build_chain_comparison_parts(
         if step.lifted_ctes:
             actual_sql, lifted_ctes = lift_preanalyzed_step_ctes(
                 sql=step.comparison_body_sql or step.resolved_sql,
+                complete_sql=step.resolved_sql,
                 preanalyzed_ctes=step.lifted_ctes,
                 lifted_ctes=lifted_ctes,
                 sql_analysis_enabled=test_entry.sql_analysis_enabled,

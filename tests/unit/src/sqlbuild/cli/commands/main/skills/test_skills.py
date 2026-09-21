@@ -12,7 +12,10 @@ from sqlbuild.cli.commands._helpers.skills.update import (
     update_sqlbuild_skills,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.models import SkillMaintenanceResult, SkillUpdateResult
+from sqlbuild.cli.output.models import (
+    SkillMaintenanceResult,
+    SkillUpdateResult,
+)
 from tests.unit.src.sqlbuild.cli.commands.main.skills._test_types import (
     SkillMaintenanceTestCase,
     SkillUpdateErrorTestCase,

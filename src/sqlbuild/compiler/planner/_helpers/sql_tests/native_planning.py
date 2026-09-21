@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass
 from typing import Any, cast
 
 import sqlbuild._native as _native
@@ -18,24 +17,16 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestCte,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner.exceptions import NativeSqlTestPlanningError, PlannerInputError
 from sqlbuild.compiler.planner.main.execution.sql_test_dialect import (
     restore_sql_test_dialect_function_names,
 )
+from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
 from sqlbuild.compiler.profiling.classes.context import CompileTimingContext
 from sqlbuild.compiler.profiling.models import CompileTimingCollector
 from sqlbuild.executor.testing.types import NativeSqlTestRenderingModule
 
 _CALL_SUFFIX_SENTINEL: str = "__SQLBUILD_CALL_SUFFIX__"
-
-
-@dataclass(frozen=True)
-class NativeSqlTestArtifact:
-    """One native-planned SQL-test artifact and its compact diagnostics."""
-
-    sql: str
-    model_names: tuple[str, ...]
-    warnings: tuple[dict[str, object], ...]
 
 
 def plan_and_render_sql_test_artifacts(
@@ -77,18 +68,7 @@ def plan_and_render_sql_test_artifacts(
             }
         )
     request: dict[str, object] = {
-        "models": [
-            {
-                "name": model.name,
-                "querySql": model.query_sql,
-                "modelDependencies": [
-                    dependency.name
-                    for dependency in model.deps
-                    if dependency.resource_type == CompiledResourceType.MODEL
-                ],
-            }
-            for model in project.models
-        ],
+        "models": _model_requests(project=project),
         "functions": functions,
         "tests": [_test_request(test) for test in tests],
         "sqlAnalysisEnabled": sql_analysis_enabled,
@@ -107,10 +87,12 @@ def plan_and_render_sql_test_artifacts(
             raise CompileInputError(message.removeprefix("compile_input:")) from None
         if message.startswith("planner_input:"):
             raise PlannerInputError(message.removeprefix("planner_input:")) from None
-        raise RuntimeError(f"native SQL-test planning failed: {message}") from error
+        raise NativeSqlTestPlanningError(f"native SQL-test planning failed: {message}") from error
     response_payload: object = json.loads(native_response)
     if not isinstance(response_payload, dict):
-        raise RuntimeError("native SQL-test planning returned an invalid batch response")
+        raise NativeSqlTestPlanningError(
+            "native SQL-test planning returned an invalid batch response"
+        )
     response: object = response_payload.get("artifacts")
     planning_ns: object = response_payload.get("planningNs")
     rendering_ns: object = response_payload.get("renderingNs")
@@ -122,7 +104,9 @@ def plan_and_render_sql_test_artifacts(
         or not isinstance(rendering_ns, int)
         or isinstance(rendering_ns, bool)
     ):
-        raise RuntimeError("native SQL-test planning returned an invalid batch response")
+        raise NativeSqlTestPlanningError(
+            "native SQL-test planning returned an invalid batch response"
+        )
     artifacts: list[NativeSqlTestArtifact] = []
     for value in response:
         payload: dict[str, Any] | None = (
@@ -138,7 +122,7 @@ def plan_and_render_sql_test_artifacts(
             or not isinstance(warnings, list)
             or not all(isinstance(warning, dict) for warning in warnings)
         ):
-            raise RuntimeError("native SQL-test planning returned an invalid result")
+            raise NativeSqlTestPlanningError("native SQL-test planning returned an invalid result")
         artifacts.append(
             NativeSqlTestArtifact(
                 sql=restore_sql_test_dialect_function_names(
@@ -187,6 +171,23 @@ def _test_request(test: CompiledSqlTest) -> dict[str, object]:
     }
 
 
+def _model_requests(*, project: CompiledProject) -> list[dict[str, object]]:
+    requests: list[dict[str, object]] = []
+    for model in project.models:
+        dependencies: list[str] = []
+        for dependency in model.deps:
+            if dependency.resource_type == CompiledResourceType.MODEL:
+                dependencies.append(dependency.name)
+        requests.append(
+            {
+                "name": model.name,
+                "querySql": model.query_sql,
+                "modelDependencies": dependencies,
+            }
+        )
+    return requests
+
+
 def _cte_request(cte: CompileSqlTestCte) -> dict[str, str]:
     return {"name": cte.name, "sqlBody": cte.sql_body}
 
@@ -194,5 +195,5 @@ def _cte_request(cte: CompileSqlTestCte) -> dict[str, str]:
 def _render_call_template(rendered: str) -> tuple[str, str]:
     prefix, separator, suffix = rendered.partition(_CALL_SUFFIX_SENTINEL)
     if not separator or _CALL_SUFFIX_SENTINEL in suffix:
-        raise RuntimeError("adapter SQL function call template is not deterministic")
+        raise NativeSqlTestPlanningError("adapter SQL function call template is not deterministic")
     return prefix, suffix

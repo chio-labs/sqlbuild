@@ -17,12 +17,12 @@ from sqlbuild.cli.commands._helpers.compile.pipeline import (
     write_compile_dag_artifact,
 )
 from sqlbuild.cli.commands._helpers.compile.status import elapsed_ms, start_compile_status
-from sqlbuild.cli.commands.compile_models import (
+from sqlbuild.cli.commands.types import CompileLineageMode
+from sqlbuild.cli.compile.models import (
     CompileAnalysis,
     CompileCommandRequest,
     CompileWriteResult,
 )
-from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.compiler.compile.types import DiagnosticPhase
 from sqlbuild.compiler.profiling.main.collect import collect_compile_timings
 from sqlbuild.compiler.profiling.models import CompileTimingCollector

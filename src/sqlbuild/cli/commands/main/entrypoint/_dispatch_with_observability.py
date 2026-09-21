@@ -9,8 +9,10 @@ from sqlbuild.cli.commands._helpers.entry.dispatch import dispatch_cli_command
 from sqlbuild.cli.commands._helpers.entry.observability import cli_observability_scope
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.constants import DBT_INIT_COMMAND
-from sqlbuild.cli.commands.entry_models import CliEntrypointHandlers
 from sqlbuild.cli.commands.types import CliCommand
+from sqlbuild.cli.entry.models import (
+    CliEntrypointHandlers,
+)
 from sqlbuild.observability import create_lifecycle_event
 
 

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from sqlbuild import _native
+import sqlbuild._native as _native
 from sqlbuild.compiler.auditing.types import ThresholdOperator
 from sqlbuild.compiler.discovery.exceptions import (
     DiscoveryError,
@@ -82,6 +82,13 @@ _NATIVE_MODEL_HEADER_END_TOKEN: int = 0
 _NATIVE_MODEL_HEADER_WORD_TOKEN: int = 1
 _NATIVE_MODEL_HEADER_STRING_TOKEN: int = 2
 _NATIVE_MODEL_HEADER_SYMBOL_TOKEN: int = 3
+_NATIVE_MARKER_LENGTH: int = 2
+_NATIVE_SET_MARKER: str = "set"
+_NATIVE_TUPLE_MARKER: str = "tuple"
+_NATIVE_CONSTANT_MARKER: str = "constant"
+_NATIVE_INLINE_SQL_MARKER: str = "inline_sql"
+_NATIVE_SQL_MARKER: str = "sql"
+_NATIVE_PYTHON_MARKER: str = "python"
 _MODEL_HEADER_TOKEN_KIND_BY_NATIVE: dict[int, str] = {
     _NATIVE_MODEL_HEADER_END_TOKEN: _MODEL_HEADER_END_TOKEN,
     _NATIVE_MODEL_HEADER_WORD_TOKEN: _MODEL_HEADER_WORD_TOKEN,
@@ -109,7 +116,27 @@ class _ModelHeaderTokenization:
     error: str | None
 
 
-_MODEL_HEADER_TOKEN_CACHE: OrderedDict[str, _ModelHeaderTokenization] = OrderedDict()
+class _ModelHeaderTokenCache:
+    def __init__(self) -> None:
+        self._values: OrderedDict[str, _ModelHeaderTokenization] = OrderedDict()
+
+    def missing(self, headers: list[str]) -> list[str]:
+        return list(dict.fromkeys(header for header in headers if header not in self._values))
+
+    def get(self, header: str) -> _ModelHeaderTokenization | None:
+        tokenization: _ModelHeaderTokenization | None = self._values.get(header)
+        if tokenization is not None:
+            self._values.move_to_end(header)
+        return tokenization
+
+    def put(self, *, header: str, tokenization: _ModelHeaderTokenization) -> None:
+        self._values[header] = tokenization
+        self._values.move_to_end(header)
+        if len(self._values) > _MODEL_HEADER_TOKEN_CACHE_SIZE:
+            self._values.popitem(last=False)
+
+
+_MODEL_HEADER_TOKEN_CACHE: _ModelHeaderTokenCache = _ModelHeaderTokenCache()
 
 
 def parse_model_sql(*, contents: str, file_path: Path) -> tuple[dict[str, object], str]:
@@ -238,7 +265,7 @@ def header_column_locations(
 
     tokenization: _ModelHeaderTokenization = _model_header_parse(header)
     if tokenization.column_offsets is None:
-        raise ValueError("Native MODEL header parser returned no column offsets")
+        raise ModelHeaderSyntaxError("Native MODEL header parser returned no column offsets")
     line_starts: tuple[int, ...] | None = None
     locations: dict[str, SourceLocation] = {}
     for name, position, length in tokenization.column_offsets:
@@ -579,7 +606,9 @@ def parse_header_values(
     try:
         parsed: _ModelHeaderTokenization = _model_header_parse(header)
         if parsed.values is None:
-            raise ValueError("Native MODEL header parser returned neither values nor an error")
+            raise ModelHeaderSyntaxError(
+                "Native MODEL header parser returned neither values nor an error"
+            )
         return dict(parsed.values)
     except ModelSqlParseError:
         raise
@@ -593,9 +622,7 @@ def parse_header_values(
 def prepare_model_header_tokens(headers: list[str]) -> None:
     """Batch cache-missing MODEL header semantic parsing through the native parser."""
 
-    missing_headers: list[str] = list(
-        dict.fromkeys(header for header in headers if header not in _MODEL_HEADER_TOKEN_CACHE)
-    )
+    missing_headers: list[str] = _MODEL_HEADER_TOKEN_CACHE.missing(headers)
     if not missing_headers:
         return
     tokenizations: list[
@@ -606,7 +633,7 @@ def prepare_model_header_tokens(headers: list[str]) -> None:
         ]
     ] = _native.parse_model_headers(missing_headers)
     if len(tokenizations) != len(missing_headers):
-        raise ValueError("Native MODEL header tokenizer returned an incomplete batch")
+        raise ModelHeaderSyntaxError("Native MODEL header tokenizer returned an incomplete batch")
     for header, (native_values, column_offsets, error) in zip(
         missing_headers, tokenizations, strict=True
     ):
@@ -643,32 +670,40 @@ def _project_native_header_value(value: object) -> object:
         return _project_native_header_map(cast(dict[str, object], value))
     if isinstance(value, list):
         return [_project_native_header_value(item) for item in value]
-    if not isinstance(value, tuple) or len(value) != 2 or not isinstance(value[0], str):
+    if (
+        not isinstance(value, tuple)
+        or len(value) != _NATIVE_MARKER_LENGTH
+        or not isinstance(value[0], str)
+    ):
         return value
     kind: str = value[0]
     payload: object = value[1]
-    if kind == "word" and isinstance(payload, str):
+    if kind == _MODEL_HEADER_WORD_TOKEN and isinstance(payload, str):
         return _parse_word_value(payload)
-    if kind == "set" and isinstance(payload, list):
+    if kind == _NATIVE_SET_MARKER and isinstance(payload, list):
         return AuthoredSqlSet(tuple(_project_native_header_value(item) for item in payload))
-    if kind == "tuple" and isinstance(payload, list):
+    if kind == _NATIVE_TUPLE_MARKER and isinstance(payload, list):
         return tuple(_project_native_header_value(item) for item in payload)
-    if kind == "constant" and isinstance(payload, dict):
+    if kind == _NATIVE_CONSTANT_MARKER and isinstance(payload, dict):
         return AuthoredSqlValueCall(
             arguments=tuple(_project_native_header_map(cast(dict[str, object], payload)).items())
         )
-    if kind == "inline_sql" and isinstance(payload, str):
+    if kind == _NATIVE_INLINE_SQL_MARKER and isinstance(payload, str):
         return SqlHookEntry(statement=payload)
-    if kind in {"sql", "python"} and isinstance(payload, tuple) and len(payload) == 2:
+    if (
+        kind in {_NATIVE_SQL_MARKER, _NATIVE_PYTHON_MARKER}
+        and isinstance(payload, tuple)
+        and len(payload) == _NATIVE_MARKER_LENGTH
+    ):
         name, kwargs = payload
         if isinstance(name, str) and isinstance(kwargs, dict):
             projected_kwargs: dict[str, object] = _project_native_header_map(
                 cast(dict[str, object], kwargs)
             )
-            if kind == "sql":
+            if kind == _NATIVE_SQL_MARKER:
                 return NamedSqlHookEntry(name=name, kwargs=projected_kwargs)
             return PythonHookEntry(name=name, kwargs=projected_kwargs)
-    raise ValueError(f"Native MODEL header parser returned invalid '{kind}' marker")
+    raise ModelHeaderSyntaxError(f"Native MODEL header parser returned invalid '{kind}' marker")
 
 
 class _ModelHeaderParser:
@@ -967,9 +1002,9 @@ def _model_header_parse(header: str) -> _ModelHeaderTokenization:
     tokenization: _ModelHeaderTokenization | None = _MODEL_HEADER_TOKEN_CACHE.get(header)
     if tokenization is None:
         prepare_model_header_tokens([header])
-        tokenization = _MODEL_HEADER_TOKEN_CACHE[header]
-    else:
-        _MODEL_HEADER_TOKEN_CACHE.move_to_end(header)
+        tokenization = _MODEL_HEADER_TOKEN_CACHE.get(header)
+        if tokenization is None:
+            raise ModelHeaderSyntaxError("Native MODEL header parser did not populate its cache")
     if tokenization.error is not None:
         raise ModelHeaderSyntaxError(tokenization.error)
     return tokenization
@@ -989,10 +1024,7 @@ def _tokenize_model_header_for_spans(header: str) -> list[_ModelHeaderToken]:
 def _cache_model_header_tokenization(
     *, header: str, tokenization: _ModelHeaderTokenization
 ) -> None:
-    _MODEL_HEADER_TOKEN_CACHE[header] = tokenization
-    _MODEL_HEADER_TOKEN_CACHE.move_to_end(header)
-    if len(_MODEL_HEADER_TOKEN_CACHE) > _MODEL_HEADER_TOKEN_CACHE_SIZE:
-        _MODEL_HEADER_TOKEN_CACHE.popitem(last=False)
+    _MODEL_HEADER_TOKEN_CACHE.put(header=header, tokenization=tokenization)
 
 
 def _parse_word_value(value: str) -> object:

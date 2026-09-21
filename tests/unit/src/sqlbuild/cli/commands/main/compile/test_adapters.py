@@ -13,6 +13,7 @@ from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
 )
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
+    ExpectedMessageTestCase,
     ResolveAdapterErrorTestCase,
     ResolveAdapterTestCase,
     ResolveEffectiveAdapterNameTestCase,
@@ -69,9 +70,14 @@ def test_given_unknown_adapter_when_resolving_adapter_then_raises_cli_user_error
     assert test_case.expected_error_fragment in str(error_info.value)
 
 
-def test_given_duckdb_adapter_when_resolving_in_fresh_process_then_other_adapters_stay_unloaded() -> (
-    None
-):
+@pytest.mark.parametrize(
+    "test_case",
+    [ExpectedMessageTestCase(description="unused adapters stay lazy", expected_message="")],
+    ids=lambda case: case.description,
+)
+def test_given_duckdb_adapter_when_resolving_in_fresh_process_then_other_adapters_stay_unloaded(
+    test_case: ExpectedMessageTestCase,
+) -> None:
     result: subprocess.CompletedProcess[str] = subprocess.run(
         [
             sys.executable,
@@ -90,7 +96,7 @@ def test_given_duckdb_adapter_when_resolving_in_fresh_process_then_other_adapter
         text=True,
     )
 
-    assert result.stderr == ""
+    assert result.stderr == test_case.expected_message
 
 
 @pytest.mark.parametrize(

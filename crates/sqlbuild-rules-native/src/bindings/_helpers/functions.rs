@@ -75,27 +75,27 @@ fn analyze_project_queries_compact_json(py: Python<'_>, request_json: &str) -> P
 
 #[pyfunction]
 fn render_sql_test_comparisons_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::sql_test_rendering::main::render_json(request_json))
+    py.detach(|| crate::compiler::main::sql_test_rendering::render_json(request_json))
         .map_err(value_error)
 }
 
 #[pyfunction]
 fn plan_and_render_sql_tests_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::sql_test_planning::main::plan_and_render_json(request_json))
+    py.detach(|| crate::compiler::main::sql_test_planning::plan_and_render_json(request_json))
         .map_err(value_error)
 }
 
 #[pyfunction]
 fn extract_sql_tests_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::sql_test_extraction::main::extract_batch_json(request_json))
+    py.detach(|| crate::compiler::main::sql_test_extraction::extract_batch_json(request_json))
         .map_err(value_error)
 }
 
 fn authored_value_to_python(
     py: Python<'_>,
-    value: crate::model_header_tokenization::main::AuthoredValue,
+    value: crate::compiler::models::AuthoredValue,
 ) -> PyResult<Py<PyAny>> {
-    use crate::model_header_tokenization::main::AuthoredValue;
+    use crate::compiler::models::AuthoredValue;
 
     match value {
         AuthoredValue::Null => Ok(py.None()),
@@ -139,10 +139,7 @@ fn authored_value_to_python(
 
 fn map_to_python(
     py: Python<'_>,
-    values: Vec<(
-        String,
-        crate::model_header_tokenization::main::AuthoredValue,
-    )>,
+    values: Vec<(String, crate::compiler::models::AuthoredValue)>,
 ) -> PyResult<Py<PyAny>> {
     let result = PyDict::new(py);
     for (key, value) in values {
@@ -163,10 +160,7 @@ fn hook_marker(
     py: Python<'_>,
     kind: &str,
     name: String,
-    kwargs: Vec<(
-        String,
-        crate::model_header_tokenization::main::AuthoredValue,
-    )>,
+    kwargs: Vec<(String, crate::compiler::models::AuthoredValue)>,
 ) -> PyResult<Py<PyAny>> {
     let payload = PyTuple::new(
         py,
@@ -178,27 +172,31 @@ fn hook_marker(
     marker_to_python(py, kind, payload.unbind().into_any())
 }
 
-#[pyfunction]
-fn parse_model_headers(
+fn optional_authored_value_to_python(
     py: Python<'_>,
-    headers: Vec<String>,
-) -> PyResult<
-    Vec<(
-        Option<Py<PyAny>>,
-        Option<Vec<(String, usize, usize)>>,
-        Option<String>,
-    )>,
-> {
+    value: Option<crate::compiler::models::AuthoredValue>,
+) -> PyResult<Option<Py<PyAny>>> {
+    value
+        .map(|item| authored_value_to_python(py, item))
+        .transpose()
+}
+
+type ParsedModelHeader = (
+    Option<Py<PyAny>>,
+    Option<Vec<(String, usize, usize)>>,
+    Option<String>,
+);
+
+#[pyfunction]
+fn parse_model_headers(py: Python<'_>, headers: Vec<String>) -> PyResult<Vec<ParsedModelHeader>> {
     let parsed = py
-        .detach(|| crate::model_header_tokenization::main::parse_batch(&headers))
+        .detach(|| crate::compiler::main::model_header_parsing::parse_batch(&headers))
         .map_err(value_error)?;
     parsed
         .into_iter()
         .map(|(value, offsets, error)| {
             Ok((
-                value
-                    .map(|item| authored_value_to_python(py, item))
-                    .transpose()?,
+                optional_authored_value_to_python(py, value)?,
                 offsets,
                 error,
             ))
@@ -208,7 +206,7 @@ fn parse_model_headers(
 
 #[pyfunction]
 fn tokenize_model_header(header: &str) -> PyResult<Vec<(u8, String, usize)>> {
-    crate::model_header_tokenization::main::tokenize_one(header).map_err(value_error)
+    crate::compiler::main::model_header_tokenizing::tokenize_one(header).map_err(value_error)
 }
 
 #[pyfunction]

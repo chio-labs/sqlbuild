@@ -6,9 +6,19 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TextIO
+from typing import Any, TextIO
 
-from sqlbuild.cli.commands.compile_models import (  # noqa: F401
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
+from sqlbuild.cli.commands.classes.direct_python_lifecycle_state import (
+    DirectPythonLifecycleState,
+)
+from sqlbuild.cli.commands.types import (
+    DebugCheckStatus,
+    FreshnessSourceStatus,
+    PlaygroundTemplate,
+)
+from sqlbuild.cli.compile.models import (  # noqa: F401
     CompileAnalysis,
     CompileCommandRequest,
     CompileProfileFlags,
@@ -16,113 +26,72 @@ from sqlbuild.cli.commands.compile_models import (  # noqa: F401
     SqlTestArtifactCacheRecord,
     SqlTestArtifactIdentityContext,
 )
-from sqlbuild.cli.commands.entry_models import (  # noqa: F401
+from sqlbuild.cli.entry.models import (  # noqa: F401
     CliEntrypointHandlers,
     ParsedCliInvocation,
     SelectorFileSummary,
     SelectorInputs,
 )
-from sqlbuild.cli.commands.output_models import (  # noqa: F401
+from sqlbuild.cli.output.models import (  # noqa: F401
     SkillInstallTarget,
     SkillMaintenanceResult,
     SkillSettings,
     SkillUpdateResult,
     WrittenTarget,
 )
-from sqlbuild.cli.commands.types import (
-    DebugCheckStatus,
-    FreshnessSourceStatus,
-    PlaygroundTemplate,
+from sqlbuild.cli.progress.classes.audit_progress_reporter import AuditProgressReporter
+from sqlbuild.cli.progress.classes.connection_progress_reporter import (
+    ConnectionProgressReporter,
+)
+from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
+    NestedCommandProgressCallbacks,
+)
+from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
+from sqlbuild.cli.progress.models import AuditDisplayEntry, ExecutionCounts  # noqa: F401
+from sqlbuild.compiler.compile.models import (
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledSqlScenario,
+)
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredCheckFunction,
+    DiscoveredProjectInputs,
+)
+from sqlbuild.compiler.lineage.models import (
+    ColumnLineageEdge,
+    QualifiedLineageColumn,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
+from sqlbuild.compiler.pipeline.models import (
+    ClonePipelineResult,
+    CompilePipelineResult,
+    PythonPlanEntry,
+)
+from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
+from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 from sqlbuild.cost.types import CostStatus
-from sqlbuild.spec.contracts.models import ExecutionLimitsConfig
-
-if TYPE_CHECKING:
-    from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-    from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
-    from sqlbuild.cli.commands.classes.direct_python_lifecycle_state import (
-        DirectPythonLifecycleState,
-    )
-    from sqlbuild.cli.progress.classes.audit_progress_reporter import AuditProgressReporter
-    from sqlbuild.cli.progress.classes.connection_progress_reporter import (
-        ConnectionProgressReporter,
-    )
-    from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
-        NestedCommandProgressCallbacks,
-    )
-    from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
-    from sqlbuild.compiler.auditing.types import AuditOutcome
-    from sqlbuild.compiler.compile.models import (
-        CompiledObjectKey,
-        CompiledProject,
-        CompiledSqlScenario,
-    )
-    from sqlbuild.compiler.discovery.models import (
-        DiscoveredCheckFunction,
-        DiscoveredProjectInputs,
-    )
-    from sqlbuild.compiler.lineage.models import (
-        ColumnLineageEdge,
-        QualifiedLineageColumn,
-    )
-    from sqlbuild.compiler.pipeline.models import (
-        ClonePipelineResult,
-        CompilePipelineResult,
-        PythonPlanEntry,
-    )
-    from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
-    from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
-    from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-    from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
-    from sqlbuild.executor.clone.models import CloneExecutionResult
-    from sqlbuild.executor.diff.models import DiffExecutionResult
-    from sqlbuild.executor.janitor.models import JanitorPlan
-    from sqlbuild.executor.load.models import LoadExecutionResult
-    from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
-    from sqlbuild.integrations.dbt.models import DbtInitRequest
-    from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-    from sqlbuild.provider.main.runtime import ProviderContainer
-    from sqlbuild.python_nodes.models import SqlResourceRef
-    from sqlbuild.runtime.contracts.types import NodeStartCallback
-    from sqlbuild.spec.contracts.models import CostConfig, SourceEntry
-    from sqlbuild.virtual.executor.models import VirtualBuildPipelineResult
-    from sqlbuild.virtual.state.models import (
-        CheckpointRetentionInspection,
-        DetachedVirtualEnvironmentInspection,
-        ExpiredVirtualEnvironmentInspection,
-        PhysicalRelationRecord,
-        StateJanitorInspection,
-    )
-
-
-@dataclass(frozen=True)
-class AuditDisplayEntry:
-    """Aggregated audit result for display."""
-
-    label: str
-    display_name: str
-    outcome: AuditOutcome
-    total_row_count: int
-    batch_pass: int
-    batch_total: int
-    reused: bool = False
-    executed_sql: str | None = None
-
-
-@dataclass(frozen=True)
-class ExecutionCounts:
-    """Aggregated pass, warning, failure, and skip counts."""
-
-    pass_count: int = 0
-    warn_count: int = 0
-    fail_count: int = 0
-    skip_count: int = 0
-
-    @property
-    def total_count(self) -> int:
-        return self.pass_count + self.warn_count + self.fail_count + self.skip_count
+from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
+from sqlbuild.executor.clone.models import CloneExecutionResult
+from sqlbuild.executor.diff.models import DiffExecutionResult
+from sqlbuild.executor.janitor.models import JanitorPlan
+from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
+from sqlbuild.integrations.dbt.models import DbtInitRequest
+from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.provider.main.runtime import ProviderContainer
+from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.runtime.contracts.types import NodeStartCallback
+from sqlbuild.spec.contracts.models import CostConfig, ExecutionLimitsConfig, SourceEntry
+from sqlbuild.virtual.executor.models import VirtualBuildPipelineResult
+from sqlbuild.virtual.state.models import (
+    CheckpointRetentionInspection,
+    DetachedVirtualEnvironmentInspection,
+    ExpiredVirtualEnvironmentInspection,
+    PhysicalRelationRecord,
+    StateJanitorInspection,
+)
 
 
 @dataclass(frozen=True)

@@ -9,8 +9,10 @@ from sqlbuild.cli.commands._helpers.compile.output import (
     format_compile_json,
     format_compile_text,
 )
-from sqlbuild.cli.commands.models import WrittenTarget
 from sqlbuild.cli.commands.types import CompileLineageMode
+from sqlbuild.cli.output.models import (
+    WrittenTarget,
+)
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage

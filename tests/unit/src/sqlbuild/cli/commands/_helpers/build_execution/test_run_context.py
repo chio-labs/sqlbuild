@@ -12,7 +12,12 @@ import pytest
 from sqlbuild.cli.commands._helpers.build_execution.run_context import (
     write_build_run_context,
 )
-from sqlbuild.cli.commands.models import BuildRunContext, SelectorFileSummary
+from sqlbuild.cli.commands.models import (
+    BuildRunContext,
+)
+from sqlbuild.cli.entry.models import (
+    SelectorFileSummary,
+)
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompiledSource
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredTaskFunction
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry

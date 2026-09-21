@@ -38,7 +38,6 @@ from sqlbuild.compiler.planner.models import (
     SqlTestPlanEntry,
 )
 from sqlbuild.compiler.planner.types import WarningSeverity
-from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     AssertionChainCteErrorTestCase,
     NativePlanningDifferentialTestCase,
@@ -48,41 +47,9 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_t
     SqlAnalysisDialectTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers import (
+    assert_native_artifact_matches_python_plan,
     build_test_and_project,
 )
-
-
-def _assert_native_artifact_matches_python_plan(
-    *,
-    project: CompiledProject,
-    sql_test: CompiledSqlTest,
-    entry: SqlTestPlanEntry,
-    warnings: tuple[PlanWarning, ...],
-    sql_analysis_enabled: bool,
-) -> None:
-    adapter = DuckDbAdapter()
-    expected_sql = build_sql_test_comparison_sql(
-        test_entry=entry,
-        set_difference_operator=adapter.render_set_difference_operator(),
-        sql_analysis_dialect=adapter.sql_analysis_dialect(),
-    )
-    (artifact,) = plan_and_render_sql_test_artifacts(
-        project=project,
-        tests=(sql_test,),
-        adapter=adapter,
-        sql_analysis_enabled=sql_analysis_enabled,
-    )
-
-    assert artifact.sql == expected_sql
-    assert artifact.model_names == tuple(step.model_name for step in entry.chain)
-    assert artifact.warnings == tuple(
-        {
-            "modelName": warning.model_name,
-            "severity": warning.severity.value,
-            "message": warning.message,
-        }
-        for warning in warnings
-    )
 
 
 @pytest.mark.parametrize(
@@ -716,6 +683,8 @@ def test_given_test_and_project_when_planning_then_produces_expected_chain(
 def test_given_model_chain_when_native_planning_then_matches_python_artifact_and_warnings(
     test_case: NativePlanningDifferentialTestCase,
 ) -> None:
+    compiled_test: CompiledSqlTest
+    project: CompiledProject
     compiled_test, project = build_test_and_project(test_case.planning_case)
     assert isinstance(compiled_test.payload, CompiledModelSqlTestPayload)
     compiled_test = replace(
@@ -732,19 +701,22 @@ def test_given_model_chain_when_native_planning_then_matches_python_artifact_and
         ),
     )
     project = replace(project, sql_tests=(compiled_test,))
-    adapter = DuckDbAdapter()
+    adapter: DuckDbAdapter = DuckDbAdapter()
     entry, warnings = plan_test(
         test=compiled_test,
         project=project,
         adapter=adapter,
         sql_analysis_enabled=test_case.sql_analysis_enabled,
     )
-    _assert_native_artifact_matches_python_plan(
-        project=project,
-        sql_test=compiled_test,
-        entry=entry,
-        warnings=warnings,
-        sql_analysis_enabled=test_case.sql_analysis_enabled,
+    assert (
+        assert_native_artifact_matches_python_plan(
+            project=project,
+            sql_test=compiled_test,
+            entry=entry,
+            warnings=warnings,
+            sql_analysis_enabled=test_case.sql_analysis_enabled,
+        )
+        is test_case.expected_matches
     )
 
 
@@ -1069,7 +1041,7 @@ def test_given_udf_sql_test_when_planning_then_compares_resolved_actual_to_expec
     assert entry.function_deps == (
         CompiledObjectKey(resource_type=CompiledResourceType.UDF, name="format_cents"),
     )
-    _assert_native_artifact_matches_python_plan(
+    assert_native_artifact_matches_python_plan(
         project=project,
         sql_test=sql_test,
         entry=entry,
@@ -1203,7 +1175,7 @@ def test_given_table_function_sql_test_when_planning_then_compares_resolved_actu
             name="customer_orders",
         ),
     )
-    _assert_native_artifact_matches_python_plan(
+    assert_native_artifact_matches_python_plan(
         project=project,
         sql_test=sql_test,
         entry=entry,

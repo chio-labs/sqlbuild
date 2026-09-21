@@ -11,12 +11,12 @@ from sqlbuild.cli.commands._helpers.entry.lazy_handlers import build_lazy_cli_ha
 from sqlbuild.cli.commands._helpers.entry.parser import build_cli_parser
 from sqlbuild.cli.commands._helpers.entry.parsing import parse_cli_invocation
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
-from sqlbuild.cli.commands.entry_models import (
-    CliEntrypointHandlers,
-    ParsedCliInvocation,
-)
 from sqlbuild.cli.commands.main.entrypoint._dispatch_with_compute_logs import (
     dispatch_with_compute_logs,
+)
+from sqlbuild.cli.entry.models import (
+    CliEntrypointHandlers,
+    ParsedCliInvocation,
 )
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.observability import invocation_external_context_scope, invocation_scope

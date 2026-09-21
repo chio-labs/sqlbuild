@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -23,16 +24,28 @@ from sqlbuild.spec.contracts.models import SourceLocation
 from sqlbuild.sql_values.models import AuthoredSqlSet, AuthoredSqlValueCall
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DeferredModelOutputLocationTestCase,
+    ExpectedBooleanTestCase,
+    ExpectedCountTestCase,
+    ExpectedMessageTestCase,
     ModelHeaderColumnLocationTestCase,
     ModelOutputColumnLocationTestCase,
     ParseModelSqlErrorTestCase,
     ParseModelSqlHeaderTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
+    assert_generated_model_header_corpus_parity,
+)
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [ExpectedCountTestCase(description="unique headers are batched", expected_count=1)],
+    ids=lambda case: case.description,
+)
 def test_given_unique_model_headers_when_discovering_then_native_tokenization_is_batched(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    test_case: ExpectedCountTestCase,
 ) -> None:
     models_dir: Path = tmp_path / "models"
     models_dir.mkdir()
@@ -45,7 +58,10 @@ def test_given_unique_model_headers_when_discovering_then_native_tokenization_is
         f"MODEL ({second_header});\nSELECT 2 AS total\n", encoding="utf-8"
     )
     native_calls: list[list[str]] = []
-    native_parse = _native.parse_model_headers
+    native_parse: Callable[
+        [list[str]],
+        list[tuple[dict[str, object] | None, list[tuple[str, int, int]] | None, str | None]],
+    ] = _native.parse_model_headers
 
     def recording_tokenize(
         headers: list[str],
@@ -61,8 +77,9 @@ def test_given_unique_model_headers_when_discovering_then_native_tokenization_is
 
     monkeypatch.setattr(model_file_helpers._native, "parse_model_headers", recording_tokenize)
 
-    discovered = discover_model_files(project_dir=tmp_path)
+    discovered: tuple[DiscoveredSqlModelFile, ...] = discover_model_files(project_dir=tmp_path)
 
+    assert len(native_calls) == test_case.expected_count
     assert native_calls == [[first_header, second_header]]
     assert [model.header_values for model in discovered] == [
         {"batch_marker_first": "one", "columns": {"café": {"type": "INTEGER"}}},
@@ -76,136 +93,66 @@ def test_given_unique_model_headers_when_discovering_then_native_tokenization_is
     )
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedMessageTestCase(
+            description="native worker error remains authoritative",
+            expected_message="MODEL header worker pool construction failed",
+        )
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_native_pool_construction_error_when_preparing_headers_then_error_is_authoritative(
     monkeypatch: pytest.MonkeyPatch,
+    test_case: ExpectedMessageTestCase,
 ) -> None:
     def rejecting_tokenize(_headers: list[str]) -> object:
         raise ValueError("MODEL header worker pool construction failed")
 
     monkeypatch.setattr(model_file_helpers._native, "parse_model_headers", rejecting_tokenize)
 
-    with pytest.raises(ValueError, match="MODEL header worker pool construction failed"):
+    with pytest.raises(ValueError, match=test_case.expected_message):
         model_file_helpers.prepare_model_header_tokens(["pool_error_marker value"])
 
 
-def test_given_cached_model_header_when_parsing_twice_then_top_level_dictionaries_are_fresh() -> (
-    None
-):
+@pytest.mark.parametrize(
+    "test_case",
+    [ExpectedBooleanTestCase(description="cached maps remain fresh", expected_result=True)],
+    ids=lambda case: case.description,
+)
+def test_given_cached_model_header_when_parsing_twice_then_top_level_dictionaries_are_fresh(
+    test_case: ExpectedBooleanTestCase,
+) -> None:
     contents = "MODEL (config (transient true), tags [core]); SELECT 1"
 
     first, _ = parse_model_sql(contents=contents, file_path=Path("first.sql"))
     second, _ = parse_model_sql(contents=contents, file_path=Path("second.sql"))
     first["added"] = "value"
 
-    assert first is not second
+    assert (first is not second) is test_case.expected_result
     assert "added" not in second
 
 
-def test_given_generated_header_corpus_when_native_parsing_then_parent_behavior_is_exact() -> None:
-    headers: list[str] = [
-        "config (columns (nested (type INTEGER))), columns (top (type INTEGER))",
-        "config (columns (nested (type INTEGER)))",
-    ]
-    for index in range(9_998):
-        suffix: str = str(index)
-        variant: int = index % 10
-        if variant == 0:
-            headers.append(
-                f"name model_{suffix}, enabled true, columns (col_{suffix} "
-                '(type DECIMAL(10,2), nullable false, description "Order total"))'
-            )
-        elif variant == 1:
-            headers.append(
-                f"constants (_set_{suffix} {{FR, GB, FR}}, "
-                f"_array_{suffix} constant(value [1, 2], render_as array))"
-            )
-        elif variant == 2:
-            headers.append(
-                f'pre_hooks [inline_sql("select {index}"), sql("record_{suffix}", '
-                'table: "orders"), python("notify", attempts: 2, urgent: true)]'
-            )
-        elif variant == 3:
-            headers.append(
-                f"audits [rate_{suffix} (thresholds (warn (outside -1.5 2.5)))], "
-                f'parent __ref("orders_{suffix}")'
-            )
-        elif variant == 4:
-            headers.append(
-                f"schema dev_${{user_{suffix}}}, tags [core, 'daily orders'], value null"
-            )
-        elif variant == 5:
-            headers.append(
-                f"columns (café_{suffix} (type TIMESTAMP_NTZ(9), audits "
-                "[accepted_values (values [placed, completed])]))"
-            )
-        elif variant == 6:
-            numeric_variant: int = (index // 10) % 6
-            if numeric_variant == 0:
-                headers.append(f"unicode_integer_{suffix} +١٢٣")
-            elif numeric_variant == 1:
-                headers.append(f"unicode_integer_{suffix} -१२३")
-            elif numeric_variant == 2:
-                headers.append(f"unicode_float_{suffix} ١٢.٥")
-            elif numeric_variant == 3:
-                headers.append(f"unicode_float_{suffix} -१२.५")
-            elif numeric_variant == 4:
-                headers.append(f"numeric_character_{suffix} ²")
-            else:
-                headers.append(f"large_{suffix} {10**40 + index}, ratio_{suffix} +.25")
-        elif variant == 7:
-            headers.append(f'description "escaped \\"value_{suffix}\\"", config (x [a, b])')
-        elif variant == 8:
-            if index % 20 == 8:
-                headers.append(f"duplicate_{suffix} one, duplicate_{suffix} two")
-            else:
-                headers.append('post_hooks [python("\u001c")]')
-        else:
-            headers.append(f"columns (col_{suffix} (type DECIMAL(10,2))")
-
-    native_results = _native.parse_model_headers(headers)
-    for header, (native_values, native_offsets, native_error) in zip(
-        headers, native_results, strict=True
-    ):
-        try:
-            parent_values: dict[str, object] | None = model_file_helpers._ModelHeaderParser(
-                header=header
-            ).parse()
-            parent_error: str | None = None
-        except model_file_helpers.ModelHeaderSyntaxError as error:
-            parent_values = None
-            parent_error = str(error)
-        assert native_error == parent_error
-        if native_values is None:
-            assert parent_values is None
-            assert native_offsets is None
-            continue
-        assert model_file_helpers._project_native_header_map(native_values) == parent_values
-        assert native_offsets == _parent_column_offsets(header)
+@pytest.mark.parametrize(
+    "test_case",
+    [ExpectedBooleanTestCase(description="generated header corpus matches", expected_result=True)],
+    ids=lambda case: case.description,
+)
+def test_given_generated_header_corpus_when_native_parsing_then_parent_behavior_is_exact(
+    test_case: ExpectedBooleanTestCase,
+) -> None:
+    assert assert_generated_model_header_corpus_parity() is test_case.expected_result
 
 
-def _parent_column_offsets(header: str) -> list[tuple[str, int, int]]:
-    tokens = model_file_helpers._tokenize_model_header_for_spans(header)
-    offsets: list[tuple[str, int, int]] = []
-    depth: int = 0
-    in_columns: bool = False
-    for index, token in enumerate(tokens):
-        if token.kind == "end":
-            break
-        if token.kind == "word" and token.value == "columns" and depth == 0:
-            in_columns = tokens[index + 1].value == "("
-        elif in_columns and token.kind == "word" and depth == 1:
-            offsets.append((token.value, token.position, len(token.value)))
-        if token.kind == "symbol" and token.value == "(":
-            depth += 1
-        elif token.kind == "symbol" and token.value == ")":
-            depth -= 1
-            if in_columns and depth == 0:
-                break
-    return offsets
-
-
+@pytest.mark.parametrize(
+    "test_case",
+    [ExpectedCountTestCase(description="invalid faults preserve order", expected_count=2)],
+    ids=lambda case: case.description,
+)
 def test_given_multiple_invalid_model_headers_when_discovering_then_fault_order_is_preserved(
     tmp_path: Path,
+    test_case: ExpectedCountTestCase,
 ) -> None:
     models_dir: Path = tmp_path / "models"
     models_dir.mkdir()
@@ -215,9 +162,12 @@ def test_given_multiple_invalid_model_headers_when_discovering_then_fault_order_
     (models_dir / "second.sql").write_text("MODEL (schema ${MISSING); SELECT 2", encoding="utf-8")
     faults: list[DiscoveryFileFault] = []
 
-    discovered = discover_model_files(project_dir=tmp_path, on_fault=faults.append)
+    discovered: tuple[DiscoveredSqlModelFile, ...] = discover_model_files(
+        project_dir=tmp_path, on_fault=faults.append
+    )
 
     assert discovered == ()
+    assert len(faults) == test_case.expected_count
     assert [fault.path for fault in faults] == [
         Path("models/first.sql"),
         Path("models/second.sql"),

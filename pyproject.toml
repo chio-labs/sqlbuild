@@ -55,8 +55,8 @@ rivers = [
 ]
 
 [project.scripts]
-sqb = "sqlbuild.cli.commands.main.entrypoint.entry:main"
-sqlbuild = "sqlbuild.cli.commands.main.entrypoint.entry:main"
+sqb = "sqlbuild.cli.entry.main.entry:main"
+sqlbuild = "sqlbuild.cli.entry.main.entry:main"
 dupscore = "scripts.dupscore.main.dupscore:dupscore"
 
 [dependency-groups]
@@ -78,7 +78,7 @@ dev = [
   "pytest-cov>=7.0.0",
   "pytest-xdist>=3.8.0",
   "ruff>=0.12.0",
-  "fensu>=0.21.0",
+  "fensu>=0.15.2",
   "testcontainers>=4.8.1",
   "ty>=0.0.1a19",
 ]

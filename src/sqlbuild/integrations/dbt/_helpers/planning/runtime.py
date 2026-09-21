@@ -10,7 +10,7 @@ import yaml
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
-from sqlbuild.adapter.discovery.main.builtins import builtin_adapter_classes
+from sqlbuild.adapter.discovery.main.builtin_adapter_classes import builtin_adapter_classes
 from sqlbuild.adapter.discovery.main.project_adapters import discover_project_adapters
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt._helpers.config.core import resolve_dbt_config

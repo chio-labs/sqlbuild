@@ -12,14 +12,22 @@ import pytest
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     ContractNullabilityCompileIntegrationTestCase,
+    ExpectedCountTestCase,
+    ExpectedMessageTestCase,
     ProjectDirectoryCompileIntegrationTestCase,
     SnowflakeCompileIntegrationTestCase,
 )
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [ExpectedCountTestCase(description="typed headers compile", expected_count=2)],
+    ids=lambda case: case.description,
+)
 def test_given_multiple_typed_model_headers_when_compiling_then_cli_preserves_header_semantics(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    test_case: ExpectedCountTestCase,
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text(
         'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
@@ -52,14 +60,25 @@ def test_given_multiple_typed_model_headers_when_compiling_then_cli_preserves_he
     summary: dict[str, object] = cast(dict[str, object], result["summary"])
 
     assert exit_code == 0
-    assert summary["models"] == 2
+    assert summary["models"] == test_case.expected_count
     assert summary["errors"] == 0
     assert (tmp_path / "target" / "compiled" / "models" / "orders.sql").is_file()
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedMessageTestCase(
+            description="unicode artifact remains unchanged",
+            expected_message="SELECT 'café' AS product_name\n",
+        )
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_unicode_model_when_compiling_twice_then_cli_preserves_unchanged_artifact(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    test_case: ExpectedMessageTestCase,
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text(
         'name = "inventory"\nadapter = "duckdb"\n', encoding="utf-8"
@@ -85,7 +104,7 @@ def test_given_unicode_model_when_compiling_twice_then_cli_preserves_unchanged_a
 
     assert first_exit_code == 0
     assert second_exit_code == 0
-    assert artifact_path.read_text(encoding="utf-8") == "SELECT 'café' AS product_name\n"
+    assert artifact_path.read_text(encoding="utf-8") == test_case.expected_message
     assert artifact_path.stat().st_mtime_ns == unchanged_mtime_ns
 
 
@@ -227,15 +246,21 @@ def test_given_relative_project_directory_when_compiling_then_private_macro_is_v
     assert summary["models"] == 1
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [ExpectedCountTestCase(description="native planner writes both tests", expected_count=2)],
+    ids=lambda case: case.description,
+)
 def test_given_sql_test_chain_when_compiling_then_native_planner_writes_complete_artifact(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    test_case: ExpectedCountTestCase,
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text(
         'name = "orders"\nadapter = "duckdb"\n\n[settings]\nsql_analysis = true\n',
         encoding="utf-8",
     )
-    models_dir = tmp_path / "models"
+    models_dir: Path = tmp_path / "models"
     models_dir.mkdir()
     (models_dir / "stg_orders.sql").write_text(
         'MODEL (materialized table);\nSELECT order_id, amount FROM __source("raw_orders")\n',
@@ -245,13 +270,13 @@ def test_given_sql_test_chain_when_compiling_then_native_planner_writes_complete
         'MODEL (materialized table);\nSELECT order_id, amount FROM __ref("stg_orders")\n',
         encoding="utf-8",
     )
-    sources_dir = tmp_path / "sources"
+    sources_dir: Path = tmp_path / "sources"
     sources_dir.mkdir()
     (sources_dir / "raw_orders.yml").write_text(
         "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n",
         encoding="utf-8",
     )
-    tests_dir = tmp_path / "tests" / "unit"
+    tests_dir: Path = tmp_path / "tests" / "unit"
     tests_dir.mkdir(parents=True)
     (tests_dir / "orders_chain.sql").write_text(
         "TEST();\n\n"
@@ -270,9 +295,9 @@ def test_given_sql_test_chain_when_compiling_then_native_planner_writes_complete
         encoding="utf-8",
     )
 
-    exit_code = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
     result: dict[str, object] = json.loads(capsys.readouterr().out)
-    artifact_path = (
+    artifact_path: Path = (
         tmp_path
         / "target"
         / "compiled"
@@ -281,13 +306,13 @@ def test_given_sql_test_chain_when_compiling_then_native_planner_writes_complete
         / "orders__stg_orders"
         / "orders_chain.sql"
     )
-    artifact_sql = artifact_path.read_text(encoding="utf-8")
-    second_artifact_sql = artifact_path.with_name("orders_chain_second.sql").read_text(
+    artifact_sql: str = artifact_path.read_text(encoding="utf-8")
+    second_artifact_sql: str = artifact_path.with_name("orders_chain_second.sql").read_text(
         encoding="utf-8"
     )
 
     assert exit_code == 0
-    assert cast(dict[str, object], result["summary"])["tests"] == 2
+    assert cast(dict[str, object], result["summary"])["tests"] == test_case.expected_count
     assert "__source__raw_orders AS (" in artifact_sql
     assert "__ref__stg_orders AS (" in artifact_sql
     assert "__actual__orders AS (" in artifact_sql
