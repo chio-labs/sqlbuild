@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.111.1](https://github.com/chio-labs/sqlbuild/compare/v0.111.0...v0.111.1) (2026-09-21)
+
+
+### Performance Improvements
+
+* **compiler:** reduce compile memory and latency ([#758](https://github.com/chio-labs/sqlbuild/issues/758)) ([359ef00](https://github.com/chio-labs/sqlbuild/commit/359ef002d6ec295785e4a19f48f90e5f14058151))
+
+
+### Documentation
+
+* clarify auto-merge ownership ([#762](https://github.com/chio-labs/sqlbuild/issues/762)) ([1891652](https://github.com/chio-labs/sqlbuild/commit/1891652e80e9ecbc64c74d9a5bf1daffcb2cfee7))
+
 ## [0.111.0](https://github.com/chio-labs/sqlbuild/compare/v0.110.7...v0.111.0) (2026-09-21)
 
 
