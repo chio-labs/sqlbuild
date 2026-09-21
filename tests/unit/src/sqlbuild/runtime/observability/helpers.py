@@ -12,15 +12,42 @@ from sqlbuild.runtime.observability._helpers.dispatcher import dispatcher_scope
 from sqlbuild.runtime.observability._helpers.factory import create_lifecycle_event
 from sqlbuild.runtime.observability._helpers.identity import invocation_scope
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
+from sqlbuild.runtime.observability.classes.microbatch_lifecycle import MicrobatchLifecycle
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 from sqlbuild.runtime.observability.models import (
     DiagnosticLog,
     LifecycleEvent,
+    MicrobatchLifecycleContext,
     OpaqueLifecycleEvent,
 )
 from sqlbuild.runtime.observability.types import JSONValue
 
 OCCURRED_AT: datetime = datetime(2026, 8, 31, 12, 34, 56, 123456, tzinfo=UTC)
+
+
+def capture_lifecycle_events() -> tuple[EventDispatcher, list[LifecycleEvent]]:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+    return dispatcher, events
+
+
+def microbatch_lifecycle() -> MicrobatchLifecycle:
+    return MicrobatchLifecycle(
+        context=MicrobatchLifecycleContext(
+            cursor_start="2026-01-01T00:00:00",
+            cursor_end_exclusive="2026-01-02T00:00:00",
+            planned_cursor_start="2026-01-01T00:00:00",
+            planned_cursor_end_exclusive="2026-01-04T00:00:00",
+            batch_index=1,
+            batch_count=3,
+            configured_batch_size="1d",
+            effective_batch_size="1d",
+            microbatch_strategy="watermark",
+            microbatch_run_type="normal",
+            batch_kind="ordinary",
+        )
+    )
 
 
 async def delayed_statement(*, release: asyncio.Event, query_id: str) -> None:

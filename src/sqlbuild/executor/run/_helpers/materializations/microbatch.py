@@ -147,6 +147,9 @@ from sqlbuild.microbatches.types import (
     ReplayRequirementState,
     UnaccountedPartitionPolicy,
 )
+from sqlbuild.runtime.observability.classes.microbatch_lifecycle import (
+    MicrobatchLifecycle,
+)
 from sqlbuild.runtime.observability.classes.operation_lifecycle import (
     OperationAttributes,
     OperationLifecycle,
@@ -154,6 +157,7 @@ from sqlbuild.runtime.observability.classes.operation_lifecycle import (
 from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
     canonicalize_operation_adapter,
 )
+from sqlbuild.runtime.observability.models import MicrobatchLifecycleContext
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction, TableType
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
@@ -223,6 +227,24 @@ class _PreparedMicrobatchExecution:
     state: MicrobatchLifecycleState
     batch_plan: _MicrobatchPlan
     history: _MicrobatchHistoryContext
+
+
+@dataclass(frozen=True)
+class _MicrobatchLifecyclePlan:
+    """Stable planned context repeated on each active microbatch fact."""
+
+    batch_count: int
+    cursor_start: str
+    cursor_end_exclusive: str
+
+
+@dataclass(frozen=True)
+class _MicrobatchBatchPreparation:
+    """Prepared batch state or the failure that prevents target DML."""
+
+    state: MicrobatchLifecycleState
+    schema_checked: bool
+    failure: ModelExecutionResult | None = None
 
 
 class _SerialMicrobatchEventStore:
@@ -494,6 +516,10 @@ def execute_microbatch_entry(
         state=state,
         history_context=history_context,
         on_progress=on_progress,
+        lifecycle_plan=_microbatch_lifecycle_plan(
+            batch_plan=batch_plan,
+            cursor_type=context.entry.cursor_type or "",
+        ),
     )
     state = batch_outcome.state
     if context.microbatch_event_store is not None:
@@ -994,7 +1020,13 @@ def _execute_microbatch_batches(
     state: MicrobatchLifecycleState,
     history_context: _MicrobatchHistoryContext,
     on_progress: Callable[[str], None] | None = None,
+    lifecycle_plan: _MicrobatchLifecyclePlan | None = None,
 ) -> MicrobatchPhaseOutcome:
+    plan: _MicrobatchLifecyclePlan = lifecycle_plan or _MicrobatchLifecyclePlan(
+        batch_count=len(batches),
+        cursor_start=render(value=batches[0].start if batches else history_context.run_start),
+        cursor_end_exclusive=render(value=batches[-1].end if batches else history_context.run_end),
+    )
     if context.microbatch_batch_runner is not None and not is_full_refresh and len(batches) > 1:
         return _execute_microbatch_batches_concurrently(
             context=context,
@@ -1004,15 +1036,22 @@ def _execute_microbatch_batches(
             state=state,
             history_context=history_context,
             on_progress=on_progress,
+            lifecycle_plan=plan,
         )
     schema_checked: bool = False
     completed_batches: int = 0
     applied_intervals: list[tuple[str, str]] = []
     total_rows: int = 0
     row_count_known: bool = False
-    total_batches: int = len(batches)
     batch: BatchWindow
     for batch in batches:
+        lifecycle: MicrobatchLifecycle = _microbatch_lifecycle(
+            context=context,
+            batch=batch,
+            history=history_context,
+            plan=plan,
+        )
+        lifecycle.start()
         lease_failure: ModelExecutionResult | None = _microbatch_lease_failure(
             context=context,
             state=state,
@@ -1020,6 +1059,7 @@ def _execute_microbatch_batches(
             boundary="batch staging",
         )
         if lease_failure is not None:
+            lifecycle.failed(error_code=lease_failure.error_code)
             return MicrobatchPhaseOutcome(
                 state=state,
                 failure=lease_failure,
@@ -1032,53 +1072,26 @@ def _execute_microbatch_batches(
         window_text: str = f"{render(value=batch.start)}..{render(value=batch.end)}"
         display_window: str = _format_batch_window_for_display(batch=batch, entry=context.entry)
         if on_progress is not None:
-            on_progress(f"batch {completed_batches + 1}/{total_batches} {display_window}")
-        stage_failure: ModelExecutionResult | None = _stage_microbatch_delta(
+            on_progress(f"batch {batch.index + 1}/{plan.batch_count} {display_window}")
+        preparation: _MicrobatchBatchPreparation = _prepare_microbatch_batch(
             context=context,
-            batch=batch,
-            window_text=window_text,
-            targets=batch_targets,
-            state=state,
-        )
-        if stage_failure is not None:
-            return MicrobatchPhaseOutcome(
-                state=state, failure=stage_failure, completed_batches=completed_batches
-            )
-        schema_outcome: MicrobatchSchemaPhaseOutcome = _apply_microbatch_schema_change(
-            context=context,
+            declared_columns=declared_columns,
             is_full_refresh=is_full_refresh,
+            batch=batch,
             schema_checked=schema_checked,
             window_text=window_text,
             targets=batch_targets,
             state=state,
         )
-        state = schema_outcome.state
-        if schema_outcome.failure is not None:
+        state = preparation.state
+        if preparation.failure is not None:
+            lifecycle.failed(error_code=preparation.failure.error_code)
             return MicrobatchPhaseOutcome(
-                state=state, failure=schema_outcome.failure, completed_batches=completed_batches
+                state=state,
+                failure=preparation.failure,
+                completed_batches=completed_batches,
             )
-        schema_checked = schema_outcome.schema_checked
-        type_failure: ModelExecutionResult | None = _enforce_microbatch_types(
-            context=context,
-            declared_columns=declared_columns,
-            batch=batch,
-            window_text=window_text,
-            targets=batch_targets,
-            state=state,
-        )
-        if type_failure is not None:
-            return MicrobatchPhaseOutcome(
-                state=state, failure=type_failure, completed_batches=completed_batches
-            )
-        audit_outcome: MicrobatchPhaseOutcome = _run_microbatch_delta_audits(
-            context=context,
-            batch=batch,
-            targets=batch_targets,
-            state=state,
-        )
-        state = audit_outcome.state
-        if audit_outcome.failure is not None:
-            return replace(audit_outcome, completed_batches=completed_batches)
+        schema_checked = preparation.schema_checked
         lease_failure = _microbatch_lease_failure(
             context=context,
             state=state,
@@ -1086,6 +1099,7 @@ def _execute_microbatch_batches(
             boundary="target DML",
         )
         if lease_failure is not None:
+            lifecycle.failed(error_code=lease_failure.error_code)
             return MicrobatchPhaseOutcome(
                 state=state,
                 failure=lease_failure,
@@ -1101,6 +1115,7 @@ def _execute_microbatch_batches(
             state=state,
         )
         if isinstance(dml_result, ModelExecutionResult):
+            lifecycle.failed(error_code=dml_result.error_code)
             return MicrobatchPhaseOutcome(
                 state=state,
                 failure=dml_result,
@@ -1121,6 +1136,7 @@ def _execute_microbatch_batches(
             boundary="completion publication",
         )
         if lease_failure is not None:
+            lifecycle.failed(error_code=lease_failure.error_code)
             return MicrobatchPhaseOutcome(
                 state=state,
                 failure=lease_failure,
@@ -1145,6 +1161,7 @@ def _execute_microbatch_batches(
             )
         )
         if completion_failure is not None:
+            lifecycle.failed(error_code=completion_failure.error_code)
             return MicrobatchPhaseOutcome(
                 state=state,
                 failure=completion_failure,
@@ -1153,18 +1170,23 @@ def _execute_microbatch_batches(
                     total_rows=total_rows, row_count_known=row_count_known
                 ),
             )
-        _complete_microbatch_batch(
-            context=context,
-            window_text=window_text,
-            targets=batch_targets,
-            state=state,
-        )
+        try:
+            _complete_microbatch_batch(
+                context=context,
+                window_text=window_text,
+                targets=batch_targets,
+                state=state,
+            )
+        except BaseException as error:
+            lifecycle.failed(error=error)
+            raise
+        lifecycle.completed(affected_rows=dml_result if isinstance(dml_result, int) else None)
         completed_batches += 1
         applied_intervals.append((render(value=batch.start), render(value=batch.end)))
         if on_progress is not None:
             batch_elapsed: float = time.monotonic() - batch_start_time
             on_progress(
-                f"batch {completed_batches}/{total_batches} {display_window} {batch_elapsed:.1f}s"
+                f"batch {batch.index + 1}/{plan.batch_count} {display_window} {batch_elapsed:.1f}s"
             )
     return MicrobatchPhaseOutcome(
         state=state,
@@ -1174,6 +1196,119 @@ def _execute_microbatch_batches(
             row_count_known=row_count_known,
         ),
         applied_intervals=tuple(applied_intervals),
+    )
+
+
+def _microbatch_lifecycle(
+    *,
+    context: ModelMaterializationContext,
+    batch: BatchWindow,
+    history: _MicrobatchHistoryContext,
+    plan: _MicrobatchLifecyclePlan,
+) -> MicrobatchLifecycle:
+    start: str = render(value=batch.start)
+    end: str = render(value=batch.end)
+    return MicrobatchLifecycle(
+        context=MicrobatchLifecycleContext(
+            cursor_start=start,
+            cursor_end_exclusive=end,
+            planned_cursor_start=plan.cursor_start,
+            planned_cursor_end_exclusive=plan.cursor_end_exclusive,
+            batch_index=batch.index + 1,
+            batch_count=plan.batch_count,
+            configured_batch_size=context.entry.batch_size or history.batch_size,
+            effective_batch_size=history.batch_size,
+            microbatch_strategy=context.entry.microbatch_strategy or "watermark",
+            microbatch_run_type=history.run_type.value,
+            batch_kind=("recovery" if (start, end) in history.recovery_intervals else "ordinary"),
+        )
+    )
+
+
+def _microbatch_lifecycle_plan(
+    *, batch_plan: _MicrobatchPlan, cursor_type: str
+) -> _MicrobatchLifecyclePlan:
+    selected_intervals: tuple[MicrobatchInterval, ...] = merge_intervals(
+        intervals=tuple(
+            MicrobatchInterval(start=render(value=batch.start), end=render(value=batch.end))
+            for batch in batch_plan.batches
+        ),
+        cursor_type=cursor_type,
+    )
+    if selected_intervals:
+        return _MicrobatchLifecyclePlan(
+            batch_count=len(batch_plan.batches),
+            cursor_start=selected_intervals[0].start,
+            cursor_end_exclusive=selected_intervals[-1].end,
+        )
+    resolved_range: CursorBounds | None = batch_plan.resolved_range
+    if resolved_range is None:
+        raise ExecutorInputError("microbatch lifecycle requires resolved cursor bounds")
+    return _MicrobatchLifecyclePlan(
+        batch_count=len(batch_plan.batches),
+        cursor_start=render(value=_concrete_bound(bound=resolved_range.start)),
+        cursor_end_exclusive=render(value=_concrete_bound(bound=resolved_range.end)),
+    )
+
+
+def _prepare_microbatch_batch(
+    *,
+    context: ModelMaterializationContext,
+    declared_columns: tuple[ColumnInfo, ...],
+    is_full_refresh: bool,
+    batch: BatchWindow,
+    schema_checked: bool,
+    window_text: str,
+    targets: MicrobatchTargets,
+    state: MicrobatchLifecycleState,
+) -> _MicrobatchBatchPreparation:
+    stage_failure: ModelExecutionResult | None = _stage_microbatch_delta(
+        context=context,
+        batch=batch,
+        window_text=window_text,
+        targets=targets,
+        state=state,
+    )
+    if stage_failure is not None:
+        return _MicrobatchBatchPreparation(state, schema_checked, stage_failure)
+    schema_outcome: MicrobatchSchemaPhaseOutcome = _apply_microbatch_schema_change(
+        context=context,
+        is_full_refresh=is_full_refresh,
+        schema_checked=schema_checked,
+        window_text=window_text,
+        targets=targets,
+        state=state,
+    )
+    if schema_outcome.failure is not None:
+        return _MicrobatchBatchPreparation(
+            schema_outcome.state,
+            schema_outcome.schema_checked,
+            schema_outcome.failure,
+        )
+    type_failure: ModelExecutionResult | None = _enforce_microbatch_types(
+        context=context,
+        declared_columns=declared_columns,
+        batch=batch,
+        window_text=window_text,
+        targets=targets,
+        state=schema_outcome.state,
+    )
+    if type_failure is not None:
+        return _MicrobatchBatchPreparation(
+            schema_outcome.state,
+            schema_outcome.schema_checked,
+            type_failure,
+        )
+    audit_outcome: MicrobatchPhaseOutcome = _run_microbatch_delta_audits(
+        context=context,
+        batch=batch,
+        targets=targets,
+        state=schema_outcome.state,
+    )
+    return _MicrobatchBatchPreparation(
+        audit_outcome.state,
+        schema_outcome.schema_checked,
+        audit_outcome.failure,
     )
 
 
@@ -1211,6 +1346,7 @@ def _execute_microbatch_batches_concurrently(
     state: MicrobatchLifecycleState,
     history_context: _MicrobatchHistoryContext,
     on_progress: Callable[[str], None] | None,
+    lifecycle_plan: _MicrobatchLifecyclePlan,
 ) -> MicrobatchPhaseOutcome:
     recovery_batches: tuple[BatchWindow, ...] = tuple(
         batch
@@ -1239,6 +1375,7 @@ def _execute_microbatch_batches_concurrently(
             aggregate_state=state,
             history_context=history_context,
             on_progress=on_progress,
+            lifecycle_plan=lifecycle_plan,
         )
         state = phase_outcome.state
         completed_batches += phase_outcome.completed_batches
@@ -1275,6 +1412,7 @@ def _execute_concurrent_microbatch_phase(
     aggregate_state: MicrobatchLifecycleState,
     history_context: _MicrobatchHistoryContext,
     on_progress: Callable[[str], None] | None,
+    lifecycle_plan: _MicrobatchLifecyclePlan,
 ) -> MicrobatchPhaseOutcome:
     first: BatchWindow = batches[0]
     serial_context: ModelMaterializationContext = replace(context, microbatch_batch_runner=None)
@@ -1287,6 +1425,7 @@ def _execute_concurrent_microbatch_phase(
         state=aggregate_state,
         history_context=history_context,
         on_progress=on_progress,
+        lifecycle_plan=lifecycle_plan,
     )
     if first_outcome.failure is not None or len(batches) == 1:
         return first_outcome
@@ -1317,6 +1456,7 @@ def _execute_concurrent_microbatch_phase(
             state=worker_state,
             history_context=replace(history_context, store=worker_store),
             on_progress=on_progress,
+            lifecycle_plan=lifecycle_plan,
         )
 
     runner: MicrobatchBatchRunner | None = context.microbatch_batch_runner

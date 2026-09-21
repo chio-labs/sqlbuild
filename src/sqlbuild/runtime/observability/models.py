@@ -23,6 +23,38 @@ class OperationAttributes:
 
 
 @dataclass(frozen=True)
+class MicrobatchLifecycleContext:
+    """Bounded execution context repeated across one microbatch lifecycle."""
+
+    cursor_start: str
+    cursor_end_exclusive: str
+    planned_cursor_start: str
+    planned_cursor_end_exclusive: str
+    batch_index: int
+    batch_count: int
+    configured_batch_size: str
+    effective_batch_size: str
+    microbatch_strategy: str
+    microbatch_run_type: str
+    batch_kind: str
+
+    def payload(self) -> dict[str, JSONValue]:
+        return {
+            "cursor_start": self.cursor_start,
+            "cursor_end_exclusive": self.cursor_end_exclusive,
+            "planned_cursor_start": self.planned_cursor_start,
+            "planned_cursor_end_exclusive": self.planned_cursor_end_exclusive,
+            "batch_index": self.batch_index,
+            "batch_count": self.batch_count,
+            "configured_batch_size": self.configured_batch_size,
+            "effective_batch_size": self.effective_batch_size,
+            "microbatch_strategy": self.microbatch_strategy,
+            "microbatch_run_type": self.microbatch_run_type,
+            "batch_kind": self.batch_kind,
+        }
+
+
+@dataclass(frozen=True)
 class ExecutionIdentity:
     """Immutable correlation identity for one point in an execution hierarchy."""
 

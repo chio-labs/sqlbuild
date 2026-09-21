@@ -144,11 +144,12 @@ measurement/sample/threshold summary, bounded evidence metadata and rendered aud
 | `invocation_started` | `invocation` | `debug` | 0 |
 | `run_started` | `run` | `debug` | 0 |
 | `resource_attempt_started` | `resource` | `debug` | 0 |
+| `microbatch_started` | `microbatch` | `debug` | 0 |
 | `operation_started` | `operation` | `debug` | 0 |
 | `statement_started`, `statement_submitted` | `statement` | `debug` | 0 |
 | `retry_scheduled` | `retry` | `warning` | 1 |
 | `audit_completed` | `audit` | `info` | 2 |
-| `invocation_completed`, `run_completed`, `resource_attempt_completed`, `resource_attempt_skipped`, `operation_completed`, `statement_completed` | Corresponding kind | `info` | 2 |
+| `invocation_completed`, `run_completed`, `resource_attempt_completed`, `resource_attempt_skipped`, `microbatch_completed`, `operation_completed`, `statement_completed` | Corresponding kind | `info` | 2 |
 | Any `*_failed` event | Corresponding kind | `error` | 3 |
 
 Diagnostics and command output never enter lifecycle-event queues.
