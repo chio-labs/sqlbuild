@@ -120,6 +120,16 @@ pub(crate) fn quoted_ctes_and_implicit_alias_preserve_payload() -> bool {
     true
 }
 
+pub(crate) fn empty_model_fixture_marker_preserves_direct_mode_validation() -> bool {
+    let response = extract_batch_json(r#"{"tests":[{"sql":"WITH __source__raw_orders AS (SELECT * FROM __empty_fixture()), __expected__orders AS (SELECT * FROM __empty_fixture()) SELECT 1","fileLabel":"tests/orders.sql","mode":"model"}]}"#).expect("model marker succeeds");
+    let payload: serde_json::Value = serde_json::from_str(&response).expect("valid JSON");
+    assert_eq!(payload[0]["expectedModels"][0], "orders");
+
+    let error = extract_batch_json(r#"{"tests":[{"sql":"WITH __udf_actual__ AS (SELECT 1 AS value), __udf_expected__ AS (SELECT * FROM __empty_fixture()) SELECT 1","fileLabel":"tests/function.sql","mode":"udf"}]}"#).expect_err("direct marker is rejected");
+    assert!(error.contains("must not use SELECT * in __udf_expected__ CTEs"));
+    true
+}
+
 pub(crate) fn concurrent_requests_initialize_shared_template_once() -> bool {
     let templates = Arc::new(Mutex::new(HashMap::new()));
     let starts = Arc::new(Barrier::new(4));

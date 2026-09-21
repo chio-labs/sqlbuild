@@ -195,7 +195,7 @@ fn classify_model(ctes: Vec<Cte>, file: &str) -> Result<Classified, String> {
             authored.push(cte);
         } else if let Some(value) = name.strip_prefix("__expected__") {
             expected_models.push(required(value, "__expected__<model>", file)?);
-            validate_expected(&cte, file, "__expected__<model>")?;
+            validate_expected(&cte, file, "__expected__<model>", true)?;
             expected.push(cte);
         } else if let Some(value) = name.strip_prefix("__assert__") {
             assertion_names.push(required(value, "__assert__<assertion>", file)?);
@@ -259,7 +259,7 @@ fn classify_direct(ctes: Vec<Cte>, file: &str, mode: &str) -> Result<Classified,
             if expected.is_some() {
                 return Err(direct_count_error(file, mode, actual_name, expected_name));
             }
-            validate_expected(&cte, file, expected_name)?;
+            validate_expected(&cte, file, expected_name, false)?;
             expected = Some(cte);
         } else {
             if is_model_name(&cte.0) {
@@ -410,7 +410,15 @@ fn macro_mock_shape(file: &str, name: &str, trailing: bool) -> String {
     }
 }
 
-fn validate_expected(cte: &Cte, file: &str, label: &str) -> Result<(), String> {
+fn validate_expected(
+    cte: &Cte,
+    file: &str,
+    label: &str,
+    allow_empty_fixture: bool,
+) -> Result<(), String> {
+    if allow_empty_fixture && empty_fixture_marker_matches(&cte.1)? {
+        return Ok(());
+    }
     if contains_select_star(&cte.1)? {
         return Err(format!(
             "SQL test '{file}' must not use SELECT * in {label} CTEs"
@@ -432,6 +440,38 @@ fn validate_expected(cte: &Cte, file: &str, label: &str) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn empty_fixture_marker_matches(sql: &str) -> Result<bool, String> {
+    let mut index = skip_ignorable(sql, 0)?;
+    let Some(select_end) = consume_keyword(sql, index, "SELECT") else {
+        return Ok(false);
+    };
+    index = skip_ignorable(sql, select_end)?;
+    if byte_at(sql, index) != Some(b'*') {
+        return Ok(false);
+    }
+    index = skip_ignorable(sql, index + 1)?;
+    let Some(from_end) = consume_keyword(sql, index, "FROM") else {
+        return Ok(false);
+    };
+    index = skip_ignorable(sql, from_end)?;
+    let Some((name, name_end)) = read_identifier(sql, index) else {
+        return Ok(false);
+    };
+    if !name.eq_ignore_ascii_case("__empty_fixture") {
+        return Ok(false);
+    }
+    index = skip_ignorable(sql, name_end)?;
+    if byte_at(sql, index) != Some(b'(') {
+        return Ok(false);
+    }
+    index = skip_ignorable(sql, index + 1)?;
+    if byte_at(sql, index) != Some(b')') {
+        return Ok(false);
+    }
+    index = skip_ignorable(sql, index + 1)?;
+    Ok(index == sql.len())
 }
 
 fn projection_names(branch: &str, file: &str) -> Result<Vec<String>, String> {
