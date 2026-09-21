@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile._helpers.analysis.tests import (
 )
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile._helpers.render.macros import find_macro_call_names
+from sqlbuild.compiler.compile._helpers.sql_tests.empty_fixture import is_empty_fixture_query
 from sqlbuild.compiler.compile.constants import (
     ASSERT_TEST_CTE_PREFIX,
     DBT_REF_TEST_CTE_PREFIX,
@@ -489,7 +490,11 @@ def _classify_model_sql_test_ctes(
                     file_label=file_label,
                 )
             )
-            _validate_expected_cte_query(cte=cte, file_label=file_label)
+            _validate_expected_cte_query(
+                cte=cte,
+                file_label=file_label,
+                allow_empty_fixture=True,
+            )
             expected_ctes.append(cte)
             continue
         if cte.name.startswith(ASSERT_TEST_CTE_PREFIX):
@@ -736,8 +741,14 @@ def _read_sql_string_literal(*, sql: str, start: int) -> tuple[str, int]:
 
 
 def _validate_expected_cte_query(
-    *, cte: CompileSqlTestCte, file_label: str, label: str = "__expected__<model>"
+    *,
+    cte: CompileSqlTestCte,
+    file_label: str,
+    label: str = "__expected__<model>",
+    allow_empty_fixture: bool = False,
 ) -> None:
+    if allow_empty_fixture and is_empty_fixture_query(cte.sql_body):
+        return
     if _contains_select_star(cte.sql_body):
         raise CompileInputError(f"SQL test '{file_label}' must not use SELECT * in {label} CTEs")
     branch_column_names: tuple[tuple[str, ...], ...] = _extract_expected_branch_column_names(
