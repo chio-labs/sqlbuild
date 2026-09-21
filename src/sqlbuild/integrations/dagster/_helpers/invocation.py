@@ -39,6 +39,7 @@ from sqlbuild.integrations.dagster.constants import (
     SCENARIO_VALUE_FLAGS,
     SELECT_FILE_FLAG,
     SOURCE_NODE_KIND,
+    STANDALONE_CHECK_COMMANDS,
     SUCCESS_EXECUTION_STATUS,
     VIRTUAL_ENV_FLAG,
     WARNING_CHECK_SEVERITY,
@@ -617,7 +618,10 @@ def _build_results_from_integration_result(
             selected_paths=selected_paths,
             selected_check_keys=selected_check_keys,
             emitted_asset_paths=(
-                None if _asset_check_only_context(context=context) else emitted_asset_paths
+                None
+                if _asset_check_only_context(context=context)
+                or envelope.command in STANDALONE_CHECK_COMMANDS
+                else emitted_asset_paths
             ),
             check_selection_is_explicit=_check_selection_is_explicit(context=context),
             seen_check_outputs=seen_check_outputs,
