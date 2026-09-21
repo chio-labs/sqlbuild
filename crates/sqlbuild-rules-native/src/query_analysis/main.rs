@@ -5,7 +5,7 @@ use polyglot_sql::{
     ReferenceConfidence, TransformKind, ValidationSchema, analyze_query,
     analyze_query_for_project_projections,
 };
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -66,6 +66,8 @@ struct CompactProjectAnalysisTemplateRequest {
     declared_column_order: Vec<String>,
     #[serde(default)]
     recover_cte_facts: bool,
+    #[serde(default = "default_true")]
+    rich_type_inference: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -89,6 +91,8 @@ struct ProjectAnalysisRequest {
     declared_column_order: Vec<String>,
     #[serde(default)]
     recover_cte_facts: bool,
+    #[serde(default = "default_true")]
+    rich_type_inference: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -119,6 +123,7 @@ struct ProjectAnalysisInputs<'a> {
     function_return_types: &'a HashMap<String, String>,
     declared_column_order: &'a [String],
     recover_cte_facts: bool,
+    rich_type_inference: bool,
 }
 
 struct ProjectAnalysisProjection {
@@ -127,6 +132,7 @@ struct ProjectAnalysisProjection {
     function_return_types: HashMap<String, String>,
     declared_column_order: Vec<String>,
     recover_cte_facts: bool,
+    rich_type_inference: bool,
 }
 
 struct ProjectAnalysisProjectionResult {
@@ -194,6 +200,10 @@ fn default_dialect() -> String {
     "generic".to_string()
 }
 
+fn default_true() -> bool {
+    true
+}
+
 pub(crate) fn analyze_json(request_json: &str) -> Result<String, String> {
     let request: AnalysisBatchRequest =
         serde_json::from_str(request_json).map_err(|error| error.to_string())?;
@@ -252,6 +262,12 @@ pub(crate) fn analyze_project_compact_json(request_json: &str) -> Result<String,
     }
     let unique_query_count = request.queries.len();
     let unique_projection_count = request.templates.len();
+    let mut project_projection_queries = vec![false; unique_query_count];
+    for template in &request.templates {
+        if template.recover_cte_facts {
+            project_projection_queries[template.query_index] = true;
+        }
+    }
     let unique_projections: Vec<ProjectAnalysisProjection> = request
         .templates
         .into_iter()
@@ -261,6 +277,7 @@ pub(crate) fn analyze_project_compact_json(request_json: &str) -> Result<String,
             function_return_types: template.function_return_types,
             declared_column_order: template.declared_column_order,
             recover_cte_facts: template.recover_cte_facts,
+            rich_type_inference: template.rich_type_inference,
         })
         .collect();
     let projection_results: Vec<ProjectAnalysisProjectionResult> = request
@@ -285,7 +302,8 @@ pub(crate) fn analyze_project_compact_json(request_json: &str) -> Result<String,
         request
             .queries
             .into_par_iter()
-            .map(|query| query_analysis(query, true))
+            .zip(project_projection_queries.into_par_iter())
+            .map(|(query, project_projections)| query_analysis(query, project_projections))
             .collect()
     });
     let analyses: Vec<Result<ProjectAnalysis, String>> = pool.install(|| {
@@ -301,6 +319,7 @@ pub(crate) fn analyze_project_compact_json(request_json: &str) -> Result<String,
                     function_return_types: &projection.function_return_types,
                     declared_column_order: &projection.declared_column_order,
                     recover_cte_facts: projection.recover_cte_facts,
+                    rich_type_inference: projection.rich_type_inference,
                 }))
             })
             .collect()
@@ -362,6 +381,7 @@ fn analyze_project_result(request: ProjectAnalysisRequest) -> Result<ProjectAnal
         function_return_types: &request.function_return_types,
         declared_column_order: &request.declared_column_order,
         recover_cte_facts: request.recover_cte_facts,
+        rich_type_inference: request.rich_type_inference,
     }))
 }
 
@@ -512,6 +532,7 @@ fn project_analysis(inputs: ProjectAnalysisInputs<'_>) -> ProjectAnalysis {
             inputs.analysis,
             inputs.function_return_types,
             inputs.references,
+            inputs.rich_type_inference,
         )
     } else {
         HashMap::new()
@@ -542,7 +563,10 @@ fn project_analysis(inputs: ProjectAnalysisInputs<'_>) -> ProjectAnalysis {
                 projection,
                 inputs.function_return_types,
                 &cte_facts,
-                true,
+                ProjectionTypeOptions {
+                    allow_direct_type_hint: inputs.rich_type_inference,
+                    rich_type_inference: inputs.rich_type_inference,
+                },
             ),
             nullability: if infer_nullability {
                 recovered_projection_nullability(projection, &cte_facts)
@@ -593,12 +617,19 @@ struct CteColumnFact {
     confidence: ProjectConfidence,
 }
 
+#[derive(Clone, Copy)]
+struct ProjectionTypeOptions {
+    allow_direct_type_hint: bool,
+    rich_type_inference: bool,
+}
+
 type CteColumnFacts = HashMap<(String, String), CteColumnFact>;
 
 fn recovered_cte_facts(
     analysis: &QueryAnalysis,
     function_return_types: &HashMap<String, String>,
     references: &HashMap<String, LineageResource>,
+    rich_type_inference: bool,
 ) -> CteColumnFacts {
     let mut facts: CteColumnFacts = HashMap::new();
     for cte in &analysis.cte_facts {
@@ -606,8 +637,15 @@ fn recovered_cte_facts(
             let Some(name) = projection.name.as_ref() else {
                 continue;
             };
-            let data_type =
-                recovered_projection_type(projection, function_return_types, &facts, true);
+            let data_type = recovered_projection_type(
+                projection,
+                function_return_types,
+                &facts,
+                ProjectionTypeOptions {
+                    allow_direct_type_hint: true,
+                    rich_type_inference,
+                },
+            );
             let nullability = if cte.shape == Some(QueryShape::SetOperation) {
                 project_nullability(projection.nullability)
             } else {
@@ -633,7 +671,7 @@ fn recovered_projection_type(
     projection: &polyglot_sql::ProjectionFact,
     function_return_types: &HashMap<String, String>,
     cte_facts: &CteColumnFacts,
-    allow_direct_type_hint: bool,
+    options: ProjectionTypeOptions,
 ) -> Option<String> {
     if let Some(data_type) = projection.transform_function.as_ref().and_then(|function| {
         function_return_types
@@ -648,11 +686,30 @@ fn recovered_projection_type(
         {
             return fact.data_type.clone();
         }
-        return allow_direct_type_hint
+        return options
+            .allow_direct_type_hint
             .then(|| project_type(projection, function_return_types, false))
             .flatten();
     }
-    project_type(projection, function_return_types, true)
+    if options.rich_type_inference {
+        return project_type(projection, function_return_types, true);
+    }
+    legacy_expression_type(projection)
+}
+
+fn legacy_expression_type(projection: &polyglot_sql::ProjectionFact) -> Option<String> {
+    if projection.transform_kind == TransformKind::Cast {
+        return projection.cast_type.as_deref().map(normalize_project_type);
+    }
+    if projection.transform_kind == TransformKind::Expression
+        && projection
+            .type_hint
+            .as_deref()
+            .is_some_and(|value| value.eq_ignore_ascii_case("BOOLEAN"))
+    {
+        return Some("BOOLEAN".to_string());
+    }
+    None
 }
 
 fn recovered_projection_nullability(

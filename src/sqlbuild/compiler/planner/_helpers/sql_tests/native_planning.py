@@ -24,6 +24,9 @@ from sqlbuild.compiler.planner.main.execution.sql_test_dialect import (
 from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
 from sqlbuild.compiler.profiling.classes.context import CompileTimingContext
 from sqlbuild.compiler.profiling.models import CompileTimingCollector
+from sqlbuild.executor.testing.main.canonical_comparison_sql import (
+    canonicalize_comparison_sql,
+)
 from sqlbuild.executor.testing.types import NativeSqlTestRenderingModule
 
 _CALL_SUFFIX_SENTINEL: str = "__SQLBUILD_CALL_SUFFIX__"
@@ -108,6 +111,7 @@ def plan_and_render_sql_test_artifacts(
             "native SQL-test planning returned an invalid batch response"
         )
     artifacts: list[NativeSqlTestArtifact] = []
+    formatting_start_ns: int = time.perf_counter_ns()
     for value in response:
         payload: dict[str, Any] | None = (
             cast(dict[str, Any], value) if isinstance(value, dict) else None
@@ -125,23 +129,31 @@ def plan_and_render_sql_test_artifacts(
             raise NativeSqlTestPlanningError("native SQL-test planning returned an invalid result")
         artifacts.append(
             NativeSqlTestArtifact(
-                sql=restore_sql_test_dialect_function_names(
-                    sql=sql,
-                    dialect=adapter.sql_analysis_dialect(),
+                sql=canonicalize_comparison_sql(
+                    sql=restore_sql_test_dialect_function_names(
+                        sql=sql,
+                        dialect=adapter.sql_analysis_dialect(),
+                    ),
+                    sql_analysis_dialect=adapter.sql_analysis_dialect(),
+                    sql_analysis_enabled=sql_analysis_enabled,
                 ),
                 model_names=tuple(cast(list[str], model_names)),
                 warnings=tuple(cast(list[dict[str, object]], warnings)),
             )
         )
+    formatting_ns: int = time.perf_counter_ns() - formatting_start_ns
     elapsed_ns: int = time.perf_counter_ns() - start_ns
-    boundary_overhead_ns: int = max(0, elapsed_ns - planning_ns - rendering_ns)
+    boundary_overhead_ns: int = max(0, elapsed_ns - planning_ns - rendering_ns - formatting_ns)
     collector: CompileTimingCollector | None = CompileTimingContext.active.get()
     if collector is not None:
         collector.add(
             phase="test_planning_ms",
             elapsed_ns=planning_ns + boundary_overhead_ns,
         )
-        collector.add(phase="comparison_render_ms", elapsed_ns=rendering_ns)
+        collector.add(
+            phase="comparison_render_ms",
+            elapsed_ns=rendering_ns + formatting_ns,
+        )
     return tuple(artifacts)
 
 

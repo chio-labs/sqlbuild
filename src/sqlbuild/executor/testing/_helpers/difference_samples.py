@@ -129,17 +129,20 @@ def build_sql_test_difference_sample_sql(
             preanalyzed_ctes=step.lifted_ctes,
             lifted_ctes=lifted_ctes,
             sql_analysis_enabled=test_entry.sql_analysis_enabled,
+            sql_analysis_dialect=sql_analysis_dialect,
         )
     else:
         actual_sql, lifted_ctes = lift_step_ctes(
             sql=step.resolved_sql,
             lifted_ctes=lifted_ctes,
             sql_analysis_enabled=test_entry.sql_analysis_enabled,
+            sql_analysis_dialect=sql_analysis_dialect,
         )
     expected_sql, lifted_ctes = lift_step_ctes(
         sql=step.expected_cte_sql,
         lifted_ctes=lifted_ctes,
         sql_analysis_enabled=test_entry.sql_analysis_enabled,
+        sql_analysis_dialect=sql_analysis_dialect,
     )
     cte_parts: list[str] = [
         cte_definition_sql(name=name, sql=sql) for name, sql in lifted_ctes.items()

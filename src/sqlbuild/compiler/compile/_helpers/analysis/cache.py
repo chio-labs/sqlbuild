@@ -72,6 +72,7 @@ def build_analysis_cache_context(
     root: Path | None,
     inference_profile: ExpressionInferenceProfile,
     allow_compact_analysis: bool,
+    rich_type_inference: bool = True,
     signature_namespace: object = None,
 ) -> AnalysisCacheContext | None:
     """Build a reusable cache context, or bypass when profile identity is unstable."""
@@ -88,6 +89,7 @@ def build_analysis_cache_context(
         "polyglot_version": _package_version("polyglot-sql-chio"),
         "python_version": platform.python_version_tuple()[:2],
         "allow_compact_analysis": allow_compact_analysis,
+        "rich_type_inference": rich_type_inference,
         "inference_profile": profile_payload,
     }
     try:

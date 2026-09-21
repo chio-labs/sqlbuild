@@ -372,6 +372,7 @@ def analyze_queries_with_compact_polyglot_batch(
     column_types_by_table: dict[str, dict[str, str]],
     inference_profile: ExpressionInferenceProfile,
     recover_cte_facts: tuple[bool, ...],
+    rich_type_inference: bool = True,
 ) -> tuple[NativeCompactAnalysis, ...]:
     """Analyze rendered SQL in one bounded native call, preserving input order."""
 
@@ -387,6 +388,7 @@ def analyze_queries_with_compact_polyglot_batch(
         column_types_by_table=column_types_by_table,
         inference_profile=inference_profile,
         recover_cte_facts=recover_cte_facts,
+        rich_type_inference=rich_type_inference,
     )
     response_payload: object = _run_compact_analysis_batch(preparation=preparation)
     return _project_compact_analysis_batch(
@@ -404,6 +406,7 @@ def _prepare_compact_analysis_batch(
     column_types_by_table: dict[str, dict[str, str]],
     inference_profile: ExpressionInferenceProfile,
     recover_cte_facts: tuple[bool, ...],
+    rich_type_inference: bool,
 ) -> CompactBatchPreparation:
     dialect: str | None = inference_profile.sql_analysis_dialect
     prepared: list[str] = []
@@ -416,6 +419,7 @@ def _prepare_compact_analysis_batch(
             tuple[tuple[str, str], ...],
             tuple[tuple[str, str], ...],
             tuple[str, ...],
+            bool,
             bool,
         ],
         int,
@@ -490,12 +494,14 @@ def _prepare_compact_analysis_batch(
             tuple[tuple[str, str], ...],
             tuple[str, ...],
             bool,
+            bool,
         ] = (
             query_index,
             reference_types,
             tuple(function_return_types.items()),
             declared_column_order,
             query_recover_cte_facts,
+            rich_type_inference,
         )
         template_index: int | None = template_indexes.get(template_key)
         if template_index is None:
@@ -514,6 +520,7 @@ def _prepare_compact_analysis_batch(
                     "functionReturnTypes": function_return_types,
                     "declaredColumnOrder": list(declared_column_order),
                     "recoverCteFacts": query_recover_cte_facts,
+                    "richTypeInference": rich_type_inference,
                 }
             )
         projections.append(

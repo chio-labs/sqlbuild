@@ -62,6 +62,15 @@ class QualifiedReferenceAnalysisTestCase:
 
 
 @dataclass(frozen=True)
+class NativeTypeInferenceModeTestCase:
+    description: str
+    query_sql: str
+    column_types: dict[str, str]
+    expected_fast_types: tuple[str | None, ...]
+    expected_rich_types: tuple[str | None, ...]
+
+
+@dataclass(frozen=True)
 class WatermarkLimitValidationTestCase:
     description: str
     incremental_strategy: str

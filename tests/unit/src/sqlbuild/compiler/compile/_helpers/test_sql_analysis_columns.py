@@ -35,6 +35,7 @@ from sqlbuild.compiler.references.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ExpectedCountTestCase,
     InferColumnsTestCase,
+    NativeTypeInferenceModeTestCase,
     PolyglotAnalysisTestCase,
     QualifiedReferenceAnalysisTestCase,
     SubstitutePlaceholderDefaultsTestCase,
@@ -230,6 +231,66 @@ def test_given_qualified_reference_when_batch_analyzing_then_preserves_analysis_
 
     assert (actual.columns == expected.columns) is test_case.expected_matches
     assert tuple(actual.lineage_columns) == expected.lineage_columns
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativeTypeInferenceModeTestCase(
+            description="direct input type remains unknown in fast mode",
+            query_sql='SELECT status FROM __ref("orders")',
+            column_types={"status": "VARCHAR"},
+            expected_fast_types=(None,),
+            expected_rich_types=("TEXT",),
+        ),
+        NativeTypeInferenceModeTestCase(
+            description="aggregate hint remains unknown in fast mode",
+            query_sql='SELECT SUM(amount) AS total FROM __ref("orders")',
+            column_types={"amount": "INT"},
+            expected_fast_types=(None,),
+            expected_rich_types=("INT128",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_native_batch_when_selecting_type_mode_then_preserves_mode_contract(
+    test_case: NativeTypeInferenceModeTestCase,
+) -> None:
+    references: tuple[CompileSqlReference, ...] = (
+        CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
+    )
+    nullability: dict[str, dict[str, InferredNullability]] = {
+        "orders": {name: InferredNullability.NON_NULL for name in test_case.column_types}
+    }
+    profile: ExpressionInferenceProfile = ExpressionInferenceProfile(sql_analysis_dialect="duckdb")
+
+    projected_types: list[tuple[str | None, ...]] = []
+    for rich_type_inference in (False, True):
+        prepared: NativeCompactAnalysis = analyze_queries_with_compact_polyglot_batch(
+            query_sqls=(test_case.query_sql,),
+            references=(references,),
+            placeholders=(None,),
+            column_nullability_by_table=nullability,
+            column_types_by_table={"orders": test_case.column_types},
+            inference_profile=profile,
+            recover_cte_facts=(False,),
+            rich_type_inference=rich_type_inference,
+        )[0]
+        result: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+            query_sql=test_case.query_sql,
+            references=references,
+            column_nullability_by_table=nullability,
+            column_types_by_table={"orders": test_case.column_types},
+            inference_profile=profile,
+            allow_compact_analysis=True,
+            precomputed=prepared,
+        )
+        projected_types.append(tuple(column.type for column in result.columns or ()))
+
+    assert tuple(projected_types) == (
+        test_case.expected_fast_types,
+        test_case.expected_rich_types,
+    )
 
 
 @pytest.mark.parametrize(

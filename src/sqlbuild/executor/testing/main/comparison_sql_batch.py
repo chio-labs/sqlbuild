@@ -10,6 +10,7 @@ from sqlbuild.compiler.planner.main.execution.sql_test_dialect import (
     restore_sql_test_dialect_function_names,
 )
 from sqlbuild.compiler.planner.models import SqlTestPlanEntry
+from sqlbuild.executor.testing._helpers.comparison_sql import format_sql
 from sqlbuild.executor.testing.exceptions import SqlTestRenderingError
 from sqlbuild.executor.testing.types import NativeSqlTestRenderingModule
 
@@ -72,9 +73,13 @@ def build_sql_test_comparison_sql_batch(
         if not isinstance(sql, str):
             raise SqlTestRenderingError("native SQL-test rendering returned an invalid result")
         rendered.append(
-            restore_sql_test_dialect_function_names(
-                sql=sql,
-                dialect=sql_analysis_dialect,
+            format_sql(
+                sql=restore_sql_test_dialect_function_names(
+                    sql=sql,
+                    dialect=sql_analysis_dialect,
+                ),
+                sql_analysis_dialect=sql_analysis_dialect,
+                sql_analysis_enabled=test_entries[len(rendered)].sql_analysis_enabled,
             )
         )
     return tuple(rendered)

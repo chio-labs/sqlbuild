@@ -197,11 +197,13 @@ def assemble_compiled_project(
         ColumnLineageMode.FAST,
         ColumnLineageMode.RICH,
     }
+    rich_type_inference: bool = column_lineage_mode == ColumnLineageMode.RICH
     analysis_cache: AnalysisCacheContext | None = (
         build_analysis_cache_context(
             root=analysis_cache_dir,
             inference_profile=profile,
             allow_compact_analysis=allow_compact_analysis,
+            rich_type_inference=rich_type_inference,
             signature_namespace={
                 "target": inputs.effective_target_name,
                 "vars": inputs.effective_vars,
@@ -227,6 +229,7 @@ def assemble_compiled_project(
                 column_types_by_table=column_types_by_table,
                 inference_profile=profile,
                 allow_compact_analysis=allow_compact_analysis,
+                rich_type_inference=rich_type_inference,
                 analysis_cache=analysis_cache,
                 complete_binding_schemas=complete_binding_schemas,
             )
@@ -494,6 +497,7 @@ def _analyze_model_sql_in_parallel(
     column_types_by_table: dict[str, dict[str, str]],
     inference_profile: ExpressionInferenceProfile,
     allow_compact_analysis: bool,
+    rich_type_inference: bool,
     analysis_cache: AnalysisCacheContext | None,
     complete_binding_schemas: dict[str, dict[str, str]],
 ) -> dict[str, _ModelSqlAnalysis]:
@@ -541,6 +545,7 @@ def _analyze_model_sql_in_parallel(
         column_types_by_table=column_types_by_table,
         inference_profile=inference_profile,
         allow_compact_analysis=allow_compact_analysis,
+        rich_type_inference=rich_type_inference,
     )
     analyses = _complete_inferred_bindings(
         requests=requests,
@@ -610,6 +615,7 @@ def _analyze_model_sql_in_parallel(
                     column_types_by_table=column_types_by_table,
                     inference_profile=inference_profile,
                     allow_compact_analysis=allow_compact_analysis,
+                    rich_type_inference=rich_type_inference,
                 ),
                 strict=True,
             )
@@ -682,6 +688,7 @@ def _analyze_model_sql_requests(
     column_types_by_table: dict[str, dict[str, str]],
     inference_profile: ExpressionInferenceProfile,
     allow_compact_analysis: bool,
+    rich_type_inference: bool,
 ) -> tuple[_ModelSqlAnalysis, ...]:
     if allow_compact_analysis:
         uncached: tuple[tuple[int, _ModelSqlAnalysisRequest], ...] = tuple(
@@ -703,6 +710,7 @@ def _analyze_model_sql_requests(
                     recover_cte_facts=tuple(
                         _should_recover_cte_facts(request.model_input) for _, request in uncached
                     ),
+                    rich_type_inference=rich_type_inference,
                 )
             )
             prepared_by_index = {

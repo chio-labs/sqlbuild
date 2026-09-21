@@ -9,6 +9,7 @@ from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.executor.testing._helpers.comparison_sql import (
     build_chain_comparison_parts,
     cte_definition_sql,
+    format_sql,
     lift_preanalyzed_step_ctes,
     lift_step_ctes,
     unique_cte_suffix,
@@ -29,6 +30,7 @@ def build_sql_test_comparison_sql(
     lifted_ctes, comparison_ctes, select_parts, cte_name_counts = build_chain_comparison_parts(
         test_entry=test_entry,
         set_difference_operator=set_difference_operator,
+        sql_analysis_dialect=sql_analysis_dialect,
     )
     assertion_index: int
     for assertion_index, assertion in enumerate(test_entry.assertions, start=len(test_entry.chain)):
@@ -46,12 +48,14 @@ def build_sql_test_comparison_sql(
                 preanalyzed_ctes=assertion.lifted_ctes,
                 lifted_ctes=lifted_ctes,
                 sql_analysis_enabled=test_entry.sql_analysis_enabled,
+                sql_analysis_dialect=sql_analysis_dialect,
             )
         else:
             assertion_sql, lifted_ctes = lift_step_ctes(
                 sql=assertion.resolved_sql,
                 lifted_ctes=lifted_ctes,
                 sql_analysis_enabled=test_entry.sql_analysis_enabled,
+                sql_analysis_dialect=sql_analysis_dialect,
             )
         comparison_ctes.append(cte_definition_sql(name=assertion_cte, sql=assertion_sql))
         select_parts.append(
@@ -71,9 +75,13 @@ def build_sql_test_comparison_sql(
         return ""
     comparison_sql: str = "WITH " + ",\n".join(cte_parts) + "\n"
     comparison_sql += "\nUNION ALL\n".join(select_parts)
-    return restore_sql_test_dialect_function_names(
-        sql=comparison_sql,
-        dialect=sql_analysis_dialect,
+    return format_sql(
+        sql=restore_sql_test_dialect_function_names(
+            sql=comparison_sql,
+            dialect=sql_analysis_dialect,
+        ),
+        sql_analysis_dialect=sql_analysis_dialect,
+        sql_analysis_enabled=test_entry.sql_analysis_enabled,
     )
 
 
