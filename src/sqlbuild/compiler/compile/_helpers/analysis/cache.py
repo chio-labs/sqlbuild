@@ -8,32 +8,43 @@ import inspect
 import json
 import platform
 import sqlite3
+import time
+from collections import defaultdict, deque
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from string import hexdigits
 from typing import Any, cast
+
+import orjson
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.analysis.columns import table_function_analysis_name
 from sqlbuild.compiler.compile.exceptions import AnalysisCacheEntryError
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
+    CompactAnalysisCacheCandidate,
+    CompactAnalysisCacheModel,
+    CompactAnalysisCachePlan,
+    CompactBatchPreparation,
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
     CompileSqlReference,
     InferredColumn,
     PolyglotAnalysisResult,
 )
+from sqlbuild.compiler.compile.types import CompactBatchResponseCallback
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
     ColumnTransformKind,
     InferredNullability,
 )
+from sqlbuild.compiler.profiling.main._metric import record_compile_metric
+from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 
-_ANALYSIS_CACHE_VERSION: int = 9
-_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v9-polyglot-scope-fix"
+_ANALYSIS_CACHE_VERSION: int = 10
+_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v10-incremental-compact-batch"
 _MAX_CACHE_ENTRY_BYTES: int = 10_000_000
 _SHA256_HEX_LENGTH: int = 64
 _CACHE_ENTRY_SEPARATOR: str = "\n"
@@ -41,6 +52,9 @@ _LOCAL_QUALNAME_MARKER: str = "<locals>"
 _SQLITE_QUERY_CHUNK_SIZE: int = 500
 _SQLITE_TIMEOUT_SECONDS: float = 0.1
 _CACHE_DATABASE_NAME: str = "model-analysis.sqlite3"
+_COMPACT_BATCH_CACHE_VERSION: int = 1
+_MAX_COMPACT_BATCH_BYTES: int = 128 * 1024 * 1024
+_MAX_COMPACT_BATCH_RECORDS: int = 2
 _CREATE_CACHE_TABLE_SQL: str = """
 CREATE TABLE IF NOT EXISTS model_analysis (
     cache_key TEXT PRIMARY KEY,
@@ -63,6 +77,14 @@ CREATE TABLE IF NOT EXISTS model_analysis_dependency (
     upstream_model_name TEXT NOT NULL,
     output_signature TEXT NOT NULL,
     PRIMARY KEY (signature_namespace, cache_key, upstream_model_name)
+)
+"""
+_CREATE_COMPACT_BATCH_TABLE_SQL: str = """
+CREATE TABLE IF NOT EXISTS model_analysis_compact_batch (
+    batch_key TEXT PRIMARY KEY,
+    shared_fingerprint TEXT NOT NULL,
+    payload BLOB NOT NULL,
+    created_ns INTEGER NOT NULL
 )
 """
 
@@ -141,6 +163,314 @@ def model_analysis_cache_key(
     if recover_cte_facts:
         payload["recover_cte_facts"] = True
     return _payload_digest(payload)
+
+
+def compact_analysis_batch_cache_key(
+    *, context: AnalysisCacheContext, reuse_keys: tuple[str, ...]
+) -> str:
+    """Return the exact identity of one ordered whole-project compact analysis batch."""
+
+    return _payload_digest(
+        {
+            "cache_version": _ANALYSIS_CACHE_VERSION,
+            "compact_batch_version": _COMPACT_BATCH_CACHE_VERSION,
+            "shared_fingerprint": context.shared_fingerprint,
+            "reuse_keys": reuse_keys,
+        }
+    )
+
+
+def compact_analysis_model_reuse_key(
+    *, cache_key: str, upstream_reuse_keys: tuple[tuple[str, str], ...]
+) -> str:
+    """Return one model key that changes with every transitive model dependency."""
+
+    return _payload_digest(
+        {
+            "cache_key": cache_key,
+            "upstream": upstream_reuse_keys,
+        }
+    )
+
+
+def build_compact_analysis_cache_plan(
+    *,
+    context: AnalysisCacheContext | None,
+    models: tuple[CompactAnalysisCacheModel, ...],
+    min_model_count: int,
+) -> CompactAnalysisCachePlan | None:
+    """Build a dependency-aware ordered batch identity when every model is cacheable."""
+
+    if context is None or len(models) < min_model_count:
+        return None
+    models_by_name: dict[str, CompactAnalysisCacheModel] = {model.name: model for model in models}
+    dependencies_by_name: dict[str, tuple[str, ...]] = {}
+    for model in models:
+        dependencies_by_name[model.name] = tuple(
+            name for name in model.upstream_names if name in models_by_name
+        )
+    dependents_by_name: dict[str, list[str]] = defaultdict(list)
+    remaining_dependency_count: dict[str, int] = {}
+    for model_name, dependencies in dependencies_by_name.items():
+        remaining_dependency_count[model_name] = len(dependencies)
+        for dependency in dependencies:
+            dependents_by_name[dependency].append(model_name)
+    resolved: dict[str, str] = {}
+    ready: deque[str] = deque(
+        sorted(name for name, count in remaining_dependency_count.items() if count == 0)
+    )
+    while ready:
+        model_name: str = ready.popleft()
+        model: CompactAnalysisCacheModel = models_by_name[model_name]
+        if model.cache_key is None:
+            return None
+        resolved[model_name] = compact_analysis_model_reuse_key(
+            cache_key=model.cache_key,
+            upstream_reuse_keys=tuple(
+                (upstream_name, resolved[upstream_name])
+                for upstream_name in dependencies_by_name[model_name]
+            ),
+        )
+        for dependent_name in sorted(dependents_by_name.get(model_name, ())):
+            remaining_dependency_count[dependent_name] -= 1
+            if remaining_dependency_count[dependent_name] == 0:
+                ready.append(dependent_name)
+    if len(resolved) != len(models):
+        return None
+    cache_keys: tuple[str, ...] = tuple(
+        model.cache_key for model in models if model.cache_key is not None
+    )
+    if len(cache_keys) != len(models):
+        return None
+    reuse_keys: tuple[str, ...] = tuple(resolved[model.name] for model in models)
+    return CompactAnalysisCachePlan(
+        context=context,
+        batch_key=compact_analysis_batch_cache_key(context=context, reuse_keys=reuse_keys),
+        cache_keys=cache_keys,
+        reuse_keys=reuse_keys,
+    )
+
+
+def read_compact_analysis_cache_candidate(
+    *, plan: CompactAnalysisCachePlan, expected_count: int, min_model_count: int
+) -> CompactAnalysisCacheCandidate | None:
+    """Read one compatible generation and locate dependency-safe matching positions."""
+
+    cached: tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], object] | None = (
+        read_compact_analysis_batch(context=plan.context, batch_key=plan.batch_key)
+    )
+    if cached is None:
+        return None
+    stored_cache_keys, stored_reuse_keys, cleaned_sql, response = cached
+    matching_indexes: tuple[int, ...] = tuple(
+        index
+        for index, (stored_key, current_key) in enumerate(
+            zip(stored_reuse_keys, plan.reuse_keys, strict=False)
+        )
+        if stored_key == current_key
+    )
+    if len(stored_cache_keys) != expected_count or len(matching_indexes) < min_model_count:
+        return None
+    return CompactAnalysisCacheCandidate(
+        matching_indexes=matching_indexes,
+        preparation=CompactBatchPreparation(
+            cleaned_sql=cleaned_sql,
+            queries=(),
+            templates=(),
+            projections=(),
+        ),
+        response=response,
+    )
+
+
+def compact_analysis_batch_response_writer(
+    *, plan: CompactAnalysisCachePlan, count: int
+) -> CompactBatchResponseCallback:
+    """Build a callback that publishes one complete compact generation."""
+
+    def write(*, preparation: CompactBatchPreparation, response: object) -> None:
+        if len(preparation.cleaned_sql) != count:
+            return
+        with record_compile_timing("cache_publication_ms"):
+            write_compact_analysis_batch(
+                context=plan.context,
+                batch_key=plan.batch_key,
+                cache_keys=plan.cache_keys,
+                reuse_keys=plan.reuse_keys,
+                cleaned_sql=preparation.cleaned_sql,
+                response=response,
+            )
+
+    return write
+
+
+def record_analysis_cache_metrics(
+    *, batch_hits: int, entry_hits: int, misses: int, bypasses: int
+) -> None:
+    """Record semantic analysis cache outcomes for one invocation."""
+
+    record_compile_metric(metric="analysis_batch_cache_hits", value=batch_hits)
+    record_compile_metric(metric="analysis_entry_cache_hits", value=entry_hits)
+    record_compile_metric(metric="analysis_cache_misses", value=misses)
+    record_compile_metric(metric="analysis_cache_bypasses", value=bypasses)
+
+
+def read_compact_analysis_batch(
+    *, context: AnalysisCacheContext, batch_key: str
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], object] | None:
+    """Read the newest compatible compact generation, treating every fault as a miss."""
+
+    database_path: Path = _cache_database_path(context=context)
+    if not database_path.is_file():
+        return None
+    try:
+        connection_uri: str = f"file:{database_path}?mode=ro"
+        with sqlite3.connect(
+            connection_uri,
+            uri=True,
+            timeout=_SQLITE_TIMEOUT_SECONDS,
+        ) as connection:
+            metadata_row: tuple[str, int] | None = connection.execute(
+                "SELECT batch_key, length(payload) FROM model_analysis_compact_batch "
+                "WHERE batch_key = ?",
+                (batch_key,),
+            ).fetchone()
+            if metadata_row is None:
+                metadata_row = connection.execute(
+                    "SELECT batch_key, length(payload) FROM model_analysis_compact_batch "
+                    "WHERE shared_fingerprint = ? ORDER BY created_ns DESC LIMIT 1",
+                    (context.shared_fingerprint,),
+                ).fetchone()
+            if metadata_row is None:
+                return None
+            stored_batch_key, payload_bytes = metadata_row
+            if payload_bytes < 0 or payload_bytes > _MAX_COMPACT_BATCH_BYTES:
+                return None
+            payload_row: tuple[bytes] | None = connection.execute(
+                "SELECT payload FROM model_analysis_compact_batch WHERE batch_key = ?",
+                (stored_batch_key,),
+            ).fetchone()
+            if payload_row is None:
+                return None
+            contents: bytes = payload_row[0]
+        if not isinstance(contents, bytes) or len(contents) != payload_bytes:
+            return None
+        envelope: object = orjson.loads(contents)
+        if not isinstance(envelope, dict):
+            return None
+        values: dict[str, Any] = cast(dict[str, Any], envelope)
+        cache_keys_value: object = values.get("cache_keys")
+        reuse_keys_value: object = values.get("reuse_keys")
+        cleaned_sql_value: object = values.get("cleaned_sql")
+        response: object = values.get("response")
+        if (
+            not isinstance(cache_keys_value, list)
+            or not all(isinstance(value, str) for value in cache_keys_value)
+            or not isinstance(reuse_keys_value, list)
+            or not all(isinstance(value, str) for value in reuse_keys_value)
+            or not isinstance(cleaned_sql_value, list)
+            or not all(isinstance(value, str) for value in cleaned_sql_value)
+        ):
+            return None
+        cache_keys: tuple[str, ...] = tuple(cache_keys_value)
+        reuse_keys: tuple[str, ...] = tuple(reuse_keys_value)
+        cleaned_sql: tuple[str, ...] = tuple(cleaned_sql_value)
+        if (
+            values.get("version") != _COMPACT_BATCH_CACHE_VERSION
+            or values.get("batch_key") != stored_batch_key
+            or values.get("shared_fingerprint") != context.shared_fingerprint
+            or values.get("count") != len(cache_keys)
+            or len(reuse_keys) != len(cache_keys)
+            or len(cleaned_sql) != len(cache_keys)
+            or not isinstance(values.get("facts_sha256"), str)
+            or not hmac.compare_digest(
+                values["facts_sha256"],
+                _compact_batch_facts_digest(
+                    cache_keys=cache_keys,
+                    reuse_keys=reuse_keys,
+                    cleaned_sql=cleaned_sql,
+                    response=response,
+                ),
+            )
+        ):
+            return None
+        return cache_keys, reuse_keys, cleaned_sql, response
+    except (OSError, sqlite3.DatabaseError, TypeError, ValueError, orjson.JSONDecodeError):
+        return None
+
+
+def write_compact_analysis_batch(
+    *,
+    context: AnalysisCacheContext,
+    batch_key: str,
+    cache_keys: tuple[str, ...],
+    reuse_keys: tuple[str, ...],
+    cleaned_sql: tuple[str, ...],
+    response: object,
+) -> None:
+    """Persist one compact native response transactionally, with bounded logical retention."""
+
+    try:
+        if not (len(cache_keys) == len(reuse_keys) == len(cleaned_sql)):
+            return
+        contents: bytes = orjson.dumps(
+            {
+                "version": _COMPACT_BATCH_CACHE_VERSION,
+                "batch_key": batch_key,
+                "shared_fingerprint": context.shared_fingerprint,
+                "count": len(cleaned_sql),
+                "facts_sha256": _compact_batch_facts_digest(
+                    cache_keys=cache_keys,
+                    reuse_keys=reuse_keys,
+                    cleaned_sql=cleaned_sql,
+                    response=response,
+                ),
+                "cache_keys": cache_keys,
+                "reuse_keys": reuse_keys,
+                "cleaned_sql": cleaned_sql,
+                "response": response,
+            },
+            option=orjson.OPT_SORT_KEYS,
+        )
+        if len(contents) > _MAX_COMPACT_BATCH_BYTES:
+            return
+        database_path: Path = _cache_database_path(context=context)
+        database_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(database_path, timeout=_SQLITE_TIMEOUT_SECONDS) as connection:
+            _ = connection.execute(_CREATE_COMPACT_BATCH_TABLE_SQL)
+            _ = connection.execute(
+                "INSERT OR REPLACE INTO model_analysis_compact_batch "
+                "(batch_key, shared_fingerprint, payload, created_ns) VALUES (?, ?, ?, ?)",
+                (batch_key, context.shared_fingerprint, contents, time.time_ns()),
+            )
+            _ = connection.execute(
+                "DELETE FROM model_analysis_compact_batch WHERE batch_key NOT IN "
+                "(SELECT batch_key FROM model_analysis_compact_batch "
+                "ORDER BY created_ns DESC LIMIT ?)",
+                (_MAX_COMPACT_BATCH_RECORDS,),
+            )
+    except (OSError, sqlite3.DatabaseError, TypeError, ValueError):
+        return
+
+
+def _compact_batch_facts_digest(
+    *,
+    cache_keys: tuple[str, ...],
+    reuse_keys: tuple[str, ...],
+    cleaned_sql: tuple[str, ...],
+    response: object,
+) -> str:
+    digest: Any = hashlib.sha256()
+    for label, value in (
+        (b"cache_keys\0", cache_keys),
+        (b"reuse_keys\0", reuse_keys),
+        (b"cleaned_sql\0", cleaned_sql),
+        (b"response\0", response),
+    ):
+        digest.update(label)
+        digest.update(orjson.dumps(value, option=orjson.OPT_SORT_KEYS))
+        digest.update(b"\0")
+    return digest.hexdigest()
 
 
 def read_model_analyses(

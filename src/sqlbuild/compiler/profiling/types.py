@@ -12,3 +12,10 @@ type CompileTimingPhase = Literal[
     "physical_write_ms",
     "stale_traversal_ms",
 ]
+
+type CompileMetric = Literal[
+    "analysis_batch_cache_hits",
+    "analysis_entry_cache_hits",
+    "analysis_cache_misses",
+    "analysis_cache_bypasses",
+]

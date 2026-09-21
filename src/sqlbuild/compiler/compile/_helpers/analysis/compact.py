@@ -50,7 +50,7 @@ from sqlbuild.compiler.compile.models import (
     PolyglotAnalysisResult,
     ProjectedAnalysisRequest,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompactBatchResponseCallback, CompiledResourceType
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
     ColumnTransformKind,
@@ -373,6 +373,8 @@ def analyze_queries_with_compact_polyglot_batch(
     inference_profile: ExpressionInferenceProfile,
     recover_cte_facts: tuple[bool, ...],
     rich_type_inference: bool = True,
+    cached_batch: tuple[CompactBatchPreparation, object] | None = None,
+    on_response: CompactBatchResponseCallback | None = None,
 ) -> tuple[NativeCompactAnalysis, ...]:
     """Analyze rendered SQL in one bounded native call, preserving input order."""
 
@@ -380,21 +382,36 @@ def analyze_queries_with_compact_polyglot_batch(
         raise CompactAnalysisInputError(
             "compact query-analysis batch inputs must have equal lengths"
         )
-    preparation: CompactBatchPreparation = _prepare_compact_analysis_batch(
-        query_sqls=query_sqls,
-        references=references,
-        placeholders=placeholders,
-        column_nullability_by_table=column_nullability_by_table,
-        column_types_by_table=column_types_by_table,
-        inference_profile=inference_profile,
-        recover_cte_facts=recover_cte_facts,
-        rich_type_inference=rich_type_inference,
+    preparation: CompactBatchPreparation = (
+        cached_batch[0]
+        if cached_batch is not None
+        else _prepare_compact_analysis_batch(
+            query_sqls=query_sqls,
+            references=references,
+            placeholders=placeholders,
+            column_nullability_by_table=column_nullability_by_table,
+            column_types_by_table=column_types_by_table,
+            inference_profile=inference_profile,
+            recover_cte_facts=recover_cte_facts,
+            rich_type_inference=rich_type_inference,
+        )
     )
-    response_payload: object = _run_compact_analysis_batch(preparation=preparation)
-    return _project_compact_analysis_batch(
+    if len(preparation.cleaned_sql) != len(query_sqls):
+        raise CompactAnalysisInputError(
+            "cached compact query-analysis preparation has an invalid length"
+        )
+    response_payload: object = (
+        cached_batch[1]
+        if cached_batch is not None
+        else _run_compact_analysis_batch(preparation=preparation)
+    )
+    projected: tuple[NativeCompactAnalysis, ...] = _project_compact_analysis_batch(
         preparation=preparation,
         response_payload=response_payload,
     )
+    if cached_batch is None and on_response is not None:
+        on_response(preparation=preparation, response=response_payload)
+    return projected
 
 
 def _prepare_compact_analysis_batch(

@@ -27,13 +27,13 @@ from sqlbuild.cli.paths.main._compiled_sql_test_output_path import (
     compiled_sql_test_output_path,
 )
 from sqlbuild.cli.paths.main._sql_test_output_path import sql_test_output_path
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompiledSqlTest
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject, CompiledSqlTest
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.planner.main.execution.sql_test_artifacts import (
     plan_and_render_sql_test_artifacts,
 )
 from sqlbuild.compiler.planner.main.execution.sql_test_model_chain import (
-    sql_test_model_chain_names,
+    sql_test_model_chain_names_by_key,
 )
 from sqlbuild.compiler.planner.models import AuditPlanEntry, NativeSqlTestArtifact, PlanOutput
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
@@ -332,7 +332,12 @@ def _write_static_tests(
         if project.compile_cache_dir is not None
         else None
     )
-    model_map: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    model_chain_names_by_key: dict[CompiledObjectKey, tuple[str, ...]] = (
+        sql_test_model_chain_names_by_key(
+            project=project,
+            tests=project.sql_tests,
+        )
+    )
     pending: list[tuple[CompiledSqlTest, str | None, str | None]] = []
     for test in project.sql_tests:
         record_key: str | None = None
@@ -341,9 +346,7 @@ def _write_static_tests(
             record_key = sql_test_artifact_record_key(test=test)
             artifact_identity = sql_test_artifact_identity(
                 test=test,
-                model_chain_names=sql_test_model_chain_names(
-                    test=test, project=project, model_map=model_map
-                ),
+                model_chain_names=model_chain_names_by_key.get(test.key, ()),
                 context=identity_context,
             )
             cached_record: SqlTestArtifactCacheRecord | None = cached_records.get(record_key)
