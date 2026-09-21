@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.111.0](https://github.com/chio-labs/sqlbuild/compare/v0.110.7...v0.111.0) (2026-09-21)
+
+
+### Features
+
+* improve Dagster checks and test fixtures ([#759](https://github.com/chio-labs/sqlbuild/issues/759)) ([a5923fa](https://github.com/chio-labs/sqlbuild/commit/a5923fa7948ae53802e762f1895dbb77ab48e60f))
+
 ## [0.110.7](https://github.com/chio-labs/sqlbuild/compare/v0.110.6...v0.110.7) (2026-09-20)
 
 
