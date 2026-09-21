@@ -100,6 +100,13 @@ class MicrobatchSuccessTestCase:
     microbatch_limit_action: MicrobatchLimitAction | None = None
     expected_microbatch_limit_count: int | None = None
     expected_microbatch_limit_warning: bool = False
+    expected_lifecycle_event_types: tuple[str, ...] = field(default_factory=tuple)
+    expected_lifecycle_batch_indexes: tuple[int, ...] = field(default_factory=tuple)
+    expected_lifecycle_cursor_starts: tuple[str, ...] = field(default_factory=tuple)
+    expected_lifecycle_error_type: str | None = None
+    expected_lifecycle_batch_count: int | None = None
+    expected_lifecycle_planned_cursor_start: str | None = None
+    expected_lifecycle_planned_cursor_end: str | None = None
 
 
 @dataclass(frozen=True)
@@ -148,3 +155,10 @@ class MicrobatchFailureTestCase:
     microbatch_limit_action: MicrobatchLimitAction | None = None
     expected_microbatch_limit_count: int | None = None
     expected_microbatch_limit_warning: bool = False
+    expected_lifecycle_event_types: tuple[str, ...] = field(default_factory=tuple)
+    expected_lifecycle_batch_indexes: tuple[int, ...] = field(default_factory=tuple)
+    expected_lifecycle_cursor_starts: tuple[str, ...] = field(default_factory=tuple)
+    expected_lifecycle_error_type: str | None = None
+    expected_lifecycle_batch_count: int | None = None
+    expected_lifecycle_planned_cursor_start: str | None = None
+    expected_lifecycle_planned_cursor_end: str | None = None

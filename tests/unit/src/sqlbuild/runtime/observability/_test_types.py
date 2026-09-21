@@ -76,6 +76,14 @@ class CatalogVersionCase:
 
 
 @dataclass(frozen=True)
+class CatalogEventPresenceCase:
+    description: str
+    schema_version: int
+    event_type: str
+    expected_present: bool
+
+
+@dataclass(frozen=True)
 class IdempotencyCase:
     description: str
     duplicate_command: str | None

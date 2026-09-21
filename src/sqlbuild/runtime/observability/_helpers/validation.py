@@ -23,6 +23,10 @@ from sqlbuild.runtime.observability.constants import (
     LIFECYCLE_EVENT_CATALOGS,
     MAX_METADATA_BYTES,
     METADATA_FIELD,
+    MICROBATCH_EVENT_PREFIX,
+    MICROBATCH_KINDS,
+    MICROBATCH_RUN_TYPES,
+    MICROBATCH_STRATEGIES,
     NONNEGATIVE_INTEGER_PAYLOAD_FIELDS,
     OPERATION_ADAPTERS,
     OPERATION_EVENT_PREFIX,
@@ -295,6 +299,8 @@ def validate_known_lifecycle_event(*, event: LifecycleEvent) -> None:
             )
     if event.event_type.startswith(OPERATION_EVENT_PREFIX):
         _validate_operation_payload(payload=event.payload)
+    if event.event_type.startswith(MICROBATCH_EVENT_PREFIX):
+        _validate_microbatch_payload(payload=event.payload)
     if event.event_type == RESOURCE_ATTEMPT_SKIPPED_EVENT:
         if event.payload.get("skip_code") not in RESOURCE_SKIP_CODES:
             raise ObservabilityValidationError("skip_code must be a catalogued value")
@@ -321,6 +327,25 @@ def validate_known_lifecycle_event(*, event: LifecycleEvent) -> None:
     for field_name, value in event.payload.items():
         _validate_payload_field(field_name=field_name, value=value)
     _validate_run_payload(event=event)
+
+
+def _validate_microbatch_payload(*, payload: Mapping[str, JSONValue]) -> None:
+    batch_index: JSONValue | None = payload.get("batch_index")
+    batch_count: JSONValue | None = payload.get("batch_count")
+    if isinstance(batch_index, bool) or not isinstance(batch_index, int) or batch_index < 1:
+        raise ObservabilityValidationError("batch_index must be a positive integer")
+    if isinstance(batch_count, bool) or not isinstance(batch_count, int) or batch_count < 1:
+        raise ObservabilityValidationError("batch_count must be a positive integer")
+    if batch_index > batch_count:
+        raise ObservabilityValidationError("batch_index must not exceed batch_count")
+    for field_name, allowed in (
+        ("microbatch_strategy", MICROBATCH_STRATEGIES),
+        ("microbatch_run_type", MICROBATCH_RUN_TYPES),
+        ("batch_kind", MICROBATCH_KINDS),
+    ):
+        value: JSONValue | None = payload.get(field_name)
+        if not isinstance(value, str) or value not in allowed:
+            raise ObservabilityValidationError(f"{field_name} must be a catalogued value")
 
 
 def _validate_run_payload(*, event: LifecycleEvent) -> None:

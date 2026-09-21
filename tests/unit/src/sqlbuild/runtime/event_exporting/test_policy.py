@@ -32,11 +32,14 @@ def test_given_canonical_catalog_when_building_export_policy_then_every_type_is_
     assert policy["statement_submitted"].severity == "debug"
     assert policy["audit_completed"].kind == LifecycleEventKind.AUDIT
     assert policy["audit_completed"].severity == "info"
+    assert policy["microbatch_started"].kind == LifecycleEventKind.MICROBATCH
+    assert policy["microbatch_started"].severity == "debug"
+    assert policy["microbatch_completed"].severity == "info"
 
 
 @pytest.mark.parametrize(
     "test_case",
-    (EventExportPolicyTestCase("typed kind vocabulary is exhaustive", 7),),
+    (EventExportPolicyTestCase("typed kind vocabulary is exhaustive", 8),),
     ids=lambda case: case.description,
 )
 def test_given_lifecycle_catalog_when_deriving_export_dimensions_then_kind_enum_is_exhaustive(

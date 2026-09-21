@@ -112,7 +112,8 @@ def raw_driver_execution_boundary(*, module: object, ctx: RuleContext) -> list[F
     slug="event-construction-ownership",
     message="canonical lifecycle records and catalogs must be created by observability owners",
     remediation=(
-        "Use OperationLifecycle, ResourceAttemptLifecycle, StatementLifecycle, or dispatcher APIs."
+        "Use MicrobatchLifecycle, OperationLifecycle, ResourceAttemptLifecycle, "
+        "StatementLifecycle, or dispatcher APIs."
     ),
 )
 def event_construction_ownership(*, module: object, ctx: RuleContext) -> list[Fault]:

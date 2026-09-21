@@ -9,6 +9,7 @@ class LifecycleEventKind(StrEnum):
     INVOCATION = "invocation"
     RUN = "run"
     RESOURCE = "resource"
+    MICROBATCH = "microbatch"
     OPERATION = "operation"
     STATEMENT = "statement"
     RETRY = "retry"

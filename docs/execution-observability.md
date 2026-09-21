@@ -7,7 +7,7 @@ record that answers the question instead of treating every JSON or log file as i
 
 | Record | Purpose | Authority and retention |
 | --- | --- | --- |
-| `LifecycleEvent` | Immutable facts about invocation, run, resource-attempt, operation, retry, and statement lifecycles | Canonical execution evidence. An explicitly attached `LifecycleEventLogStorage` is authoritative once the fact is durable. SQLite and PostgreSQL retain facts until an operator removes the database or applies an external retention policy. |
+| `LifecycleEvent` | Immutable facts about invocation, run, resource-attempt, microbatch, operation, retry, and statement lifecycles | Canonical execution evidence. An explicitly attached `LifecycleEventLogStorage` is authoritative once the fact is durable. SQLite and PostgreSQL retain facts until an operator removes the database or applies an external retention policy. |
 | `DiagnosticLog` | Structured framework and user diagnostics | Explanatory only. It cannot establish that work started, completed, failed, skipped, or retried. Local compute-log retention applies. |
 | `stdout.log` and `stderr.log` | Exact process output for one invocation | Troubleshooting data, not execution truth. Local compute-log retention applies. |
 | `CommandOutputRecord` | Normalized, ANSI-free, line-oriented stdout/stderr chunks for an explicitly configured remote sink | Potentially sensitive, bounded, and potentially lossy troubleshooting data. It is not execution evidence and destination retention is project-owned. |
@@ -52,8 +52,10 @@ Schema version 1 has these fields:
 `event_id` identifies immutable content. Re-appending canonically equal content with the same ID is
 an idempotent no-op; different content under that ID is an integrity error. `producer` and
 `producer_version` identify the emitting implementation, while `schema_version` identifies the
-wire contract. Known schema-v1 events reject unknown envelope and payload fields. Readers preserve
-unknown event names or newer schema versions as opaque envelopes rather than inventing semantics.
+wire contract. Known schema-v1 events reject unknown envelope and payload fields. Schema version 2
+adds `invocation_sequence` and `external_context`, and catalogs bounded microbatch lifecycle facts.
+Readers preserve unknown event names or newer schema versions as opaque envelopes rather than
+inventing semantics.
 History storage retains those opaque envelopes and exposes them to queries, but run projection,
 native progress, integration-result output, and lifecycle-event sinks consume only known
 `LifecycleEvent` values and ignore opaque facts.
@@ -61,7 +63,9 @@ native progress, integration-result output, and lifecycle-event sinks consume on
 An invocation ID exists for every fact. A run groups executable graph work. A stable `resource_id`
 identifies the logical model, source, check, or other resource, while a new
 `resource_attempt_id` identifies each attempt. `operation_id` identifies one blocking non-SQL
-operation and `statement_id` one SQL statement. IDs are correlation values, not timestamps.
+operation and `statement_id` one SQL statement. Microbatch facts correlate through the containing
+resource attempt and identify their interval through bounded payload fields. IDs are correlation
+values, not timestamps.
 
 Publication is synchronous and preserves each producer's call order. Concurrent producers have no
 global event-time ordering guarantee. Durable `storage_order` is the total order assigned by one
@@ -69,6 +73,19 @@ storage backend; `occurred_at` never reorders it. Starts and `statement_submitte
 Completed, failed, and `resource_attempt_skipped` facts are terminal. `retry_scheduled` is a
 first-class fact between attempts. A start without terminal evidence remains unknown or presumed
 lost: no storage, projection, integration, or sink may fabricate success or failure.
+
+## Microbatch lifecycle
+
+Each active microbatch emits `microbatch_started` before staging begins. The payload records the
+inclusive `cursor_start`, exclusive `cursor_end_exclusive`, complete planned range, one-based
+`batch_index`, `batch_count`, configured and effective batch sizes, strategy, run type, and whether
+the interval is ordinary or recovery work. `microbatch_completed` repeats that context with
+duration and optional affected rows; `microbatch_failed` repeats it with bounded error identity.
+
+The start fact is sufficient to identify the active interval when a process is cancelled or lost
+before it can publish a terminal. Concurrent intervals share the containing resource-attempt
+identity and retain distinct bounds and indexes; their publication order is not a completion-order
+guarantee.
 
 ## Integration consumers
 

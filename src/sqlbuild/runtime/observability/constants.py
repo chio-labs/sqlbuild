@@ -31,6 +31,25 @@ RESOURCE_ATTEMPT_SKIPPED_EVENT: str = "resource_attempt_skipped"
 RESOURCE_TERMINALS: frozenset[str] = frozenset(
     {"resource_attempt_completed", "resource_attempt_failed", RESOURCE_ATTEMPT_SKIPPED_EVENT}
 )
+MICROBATCH_EVENT_PREFIX: str = "microbatch_"
+MICROBATCH_FIELDS: frozenset[str] = frozenset(
+    {
+        "cursor_start",
+        "cursor_end_exclusive",
+        "planned_cursor_start",
+        "planned_cursor_end_exclusive",
+        "batch_index",
+        "batch_count",
+        "configured_batch_size",
+        "effective_batch_size",
+        "microbatch_strategy",
+        "microbatch_run_type",
+        "batch_kind",
+    }
+)
+MICROBATCH_STRATEGIES: frozenset[str] = frozenset({"rolling_window", "watermark"})
+MICROBATCH_RUN_TYPES: frozenset[str] = frozenset({"normal", "backfill", "replay_on_change"})
+MICROBATCH_KINDS: frozenset[str] = frozenset({"ordinary", "recovery"})
 HOOK_PHASES: frozenset[str] = frozenset({"post_hooks", "pre_hooks"})
 HOOK_TYPES: frozenset[str] = frozenset({"python", "sql"})
 OPERATION_FIELDS: frozenset[str] = frozenset(
@@ -253,6 +272,15 @@ STRING_PAYLOAD_FIELDS: frozenset[str] = frozenset(
         "executed_sql",
         "execution_error",
         "result_id",
+        "cursor_start",
+        "cursor_end_exclusive",
+        "planned_cursor_start",
+        "planned_cursor_end_exclusive",
+        "configured_batch_size",
+        "effective_batch_size",
+        "microbatch_strategy",
+        "microbatch_run_type",
+        "batch_kind",
     }
 )
 NONNEGATIVE_INTEGER_PAYLOAD_FIELDS: frozenset[str] = frozenset(
@@ -280,6 +308,8 @@ NONNEGATIVE_INTEGER_PAYLOAD_FIELDS: frozenset[str] = frozenset(
         "sample_count",
         "minimum_samples",
         "evidence_count",
+        "batch_index",
+        "batch_count",
     }
 )
 FINITE_NUMBER_PAYLOAD_FIELDS: frozenset[str] = frozenset({"measured_value"})
@@ -523,7 +553,29 @@ LIFECYCLE_EVENT_CATALOG_V1: Mapping[str, LifecycleEventDefinition] = MappingProx
         ),
     }
 )
-LIFECYCLE_EVENT_CATALOGS: Mapping[int, Mapping[str, LifecycleEventDefinition]] = MappingProxyType(
-    {1: LIFECYCLE_EVENT_CATALOG_V1, 2: LIFECYCLE_EVENT_CATALOG_V1}
+LIFECYCLE_EVENT_CATALOG_V2: Mapping[str, LifecycleEventDefinition] = MappingProxyType(
+    {
+        **LIFECYCLE_EVENT_CATALOG_V1,
+        "microbatch_started": LifecycleEventDefinition.create(
+            required_correlations=frozenset({"run_id", "resource_id", "resource_attempt_id"}),
+            required_payload=MICROBATCH_FIELDS,
+            allowed=MICROBATCH_FIELDS,
+        ),
+        "microbatch_completed": LifecycleEventDefinition.create(
+            required_correlations=frozenset({"run_id", "resource_id", "resource_attempt_id"}),
+            required_payload=MICROBATCH_FIELDS,
+            allowed=MICROBATCH_FIELDS | DURATION_FIELDS | frozenset({"affected_rows"}),
+            terminal=True,
+        ),
+        "microbatch_failed": LifecycleEventDefinition.create(
+            required_correlations=frozenset({"run_id", "resource_id", "resource_attempt_id"}),
+            required_payload=MICROBATCH_FIELDS | frozenset({"error_type"}),
+            allowed=MICROBATCH_FIELDS | DURATION_FIELDS | ERROR_FIELDS,
+            terminal=True,
+        ),
+    }
 )
-LIFECYCLE_EVENT_CATALOG: Mapping[str, LifecycleEventDefinition] = LIFECYCLE_EVENT_CATALOG_V1
+LIFECYCLE_EVENT_CATALOGS: Mapping[int, Mapping[str, LifecycleEventDefinition]] = MappingProxyType(
+    {1: LIFECYCLE_EVENT_CATALOG_V1, 2: LIFECYCLE_EVENT_CATALOG_V2}
+)
+LIFECYCLE_EVENT_CATALOG: Mapping[str, LifecycleEventDefinition] = LIFECYCLE_EVENT_CATALOG_V2

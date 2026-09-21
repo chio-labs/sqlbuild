@@ -19,6 +19,7 @@ from sqlbuild.runtime.observability.main.validate_idempotent_duplicate import (
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.runtime.observability.types import JSONValue
 from tests.unit.src.sqlbuild.runtime.observability._test_types import (
+    CatalogEventPresenceCase,
     CatalogVersionCase,
     IdempotencyCase,
     LifecycleErrorCase,
@@ -376,6 +377,20 @@ def test_given_only_started_and_submitted_facts_when_inspecting_then_no_terminal
             expected_terminal=True,
             expected_unsupported_version=3,
         ),
+        CatalogVersionCase(
+            description="microbatch completion is terminal in v2",
+            schema_version=2,
+            event_type="microbatch_completed",
+            expected_terminal=True,
+            expected_unsupported_version=3,
+        ),
+        CatalogVersionCase(
+            description="microbatch failure is terminal in v2",
+            schema_version=2,
+            event_type="microbatch_failed",
+            expected_terminal=True,
+            expected_unsupported_version=3,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -387,6 +402,32 @@ def test_given_catalog_when_looking_up_events_then_authority_is_version_dimensio
         is test_case.expected_terminal
     )
     assert test_case.expected_unsupported_version not in LIFECYCLE_EVENT_CATALOGS
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CatalogEventPresenceCase(
+            description="v1 excludes microbatch events",
+            schema_version=1,
+            event_type="microbatch_started",
+            expected_present=False,
+        ),
+        CatalogEventPresenceCase(
+            description="v2 includes microbatch events",
+            schema_version=2,
+            event_type="microbatch_started",
+            expected_present=True,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_microbatch_events_when_inspecting_versioned_catalog_then_v1_remains_unchanged(
+    test_case: CatalogEventPresenceCase,
+) -> None:
+    assert (
+        test_case.event_type in LIFECYCLE_EVENT_CATALOGS[test_case.schema_version]
+    ) is test_case.expected_present
 
 
 @pytest.mark.parametrize(

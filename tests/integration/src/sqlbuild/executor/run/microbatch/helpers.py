@@ -47,6 +47,7 @@ from sqlbuild.executor.run.models import (
     RuntimeCursorSpec,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.observability import EventDispatcher, LifecycleEvent
 from tests.integration.src.sqlbuild.executor.run.microbatch._test_types import (
     MicrobatchFailureTestCase,
     MicrobatchSuccessTestCase,
@@ -57,6 +58,29 @@ _STRATEGY_TO_ACTION: dict[str, PlanAction] = {
     IncrementalStrategy.DELETE_INSERT: PlanAction.INCREMENTAL_DELETE_INSERT,
     IncrementalStrategy.MERGE: PlanAction.INCREMENTAL_MERGE,
 }
+
+
+def capture_lifecycle_events() -> tuple[EventDispatcher, list[LifecycleEvent]]:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+    return dispatcher, events
+
+
+def lifecycle_events_with_prefix(
+    *, events: list[LifecycleEvent], prefix: str
+) -> tuple[LifecycleEvent, ...]:
+    return tuple(filter(lambda event: event.event_type.startswith(prefix), events))
+
+
+def lifecycle_events_by_type(
+    *, events: tuple[LifecycleEvent, ...], event_type: str
+) -> tuple[LifecycleEvent, ...]:
+    return tuple(filter(lambda event: event.event_type == event_type, events))
+
+
+def fail_microbatch_cleanup(**_: object) -> None:
+    raise RuntimeError("cleanup failed")
 
 
 def resolve_nonempty_terminal_bounds(
