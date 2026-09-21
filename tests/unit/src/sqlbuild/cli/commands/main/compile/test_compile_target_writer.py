@@ -500,6 +500,12 @@ def test_given_compile_cache_disabled_when_writing_twice_then_rebuilds_test_arti
     )
     planner_spy: Mock = Mock(wraps=target_writer_module.plan_and_render_sql_test_artifacts)
     monkeypatch.setattr(target_writer_module, "plan_and_render_sql_test_artifacts", planner_spy)
+    closure_index_spy: Mock = Mock(wraps=target_writer_module.sql_test_model_chain_names_by_key)
+    monkeypatch.setattr(
+        target_writer_module,
+        "sql_test_model_chain_names_by_key",
+        closure_index_spy,
+    )
 
     for _ in range(2):
         _ = write_static_compile_target(
@@ -509,6 +515,7 @@ def test_given_compile_cache_disabled_when_writing_twice_then_rebuilds_test_arti
         )
 
     assert planner_spy.call_count == test_case.expected_builder_calls
+    assert closure_index_spy.call_count == 0
     assert not (target_dir / "cache" / "compiler" / "sql-test-artifacts.json").exists()
 
 

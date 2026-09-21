@@ -536,21 +536,23 @@ def _analyze_model_sql_in_parallel(
     request_cache_keys: tuple[str, ...] = tuple(
         request.cache_key for request in requests if request.cache_key is not None
     )
-    compact_batch_plan: CompactAnalysisCachePlan | None = build_compact_analysis_cache_plan(
-        context=analysis_cache,
-        models=tuple(
-            CompactAnalysisCacheModel(
-                name=_model_name(request.model_input),
-                cache_key=request.cache_key,
-                upstream_names=_referenced_model_names(
-                    model_input=request.model_input,
-                    available_names=analyzed_model_names,
-                ),
-            )
-            for request in requests
-        ),
-        min_model_count=_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT,
-    )
+    compact_batch_plan: CompactAnalysisCachePlan | None = None
+    if analysis_cache is not None:
+        compact_batch_plan = build_compact_analysis_cache_plan(
+            context=analysis_cache,
+            models=tuple(
+                CompactAnalysisCacheModel(
+                    name=_model_name(request.model_input),
+                    cache_key=request.cache_key,
+                    upstream_names=_referenced_model_names(
+                        model_input=request.model_input,
+                        available_names=analyzed_model_names,
+                    ),
+                )
+                for request in requests
+            ),
+            min_model_count=_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT,
+        )
     compact_cached_analyses: dict[str, PolyglotAnalysisResult] = {}
     compact_batch_hit_count: int = 0
     compact_candidate: CompactAnalysisCacheCandidate | None = (

@@ -332,12 +332,12 @@ def _write_static_tests(
         if project.compile_cache_dir is not None
         else None
     )
-    model_chain_names_by_key: dict[CompiledObjectKey, tuple[str, ...]] = (
-        sql_test_model_chain_names_by_key(
+    model_chain_names_by_key: dict[CompiledObjectKey, tuple[str, ...]] = {}
+    if identity_context is not None:
+        model_chain_names_by_key = sql_test_model_chain_names_by_key(
             project=project,
             tests=project.sql_tests,
         )
-    )
     pending: list[tuple[CompiledSqlTest, str | None, str | None]] = []
     for test in project.sql_tests:
         record_key: str | None = None
