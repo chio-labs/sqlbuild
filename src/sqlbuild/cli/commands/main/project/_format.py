@@ -6,13 +6,18 @@ import difflib
 from dataclasses import replace
 from pathlib import Path
 
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.lint.runs import (
     prepare_lint_run,
     render_lint_result,
     render_lint_result_json,
 )
 from sqlbuild.cli.commands._helpers.lint.selection import resolve_lint_inputs
-from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
+from sqlbuild.compiler.pipeline.main.graph import build_project_graph
+from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.lint.main.has_fixture_typed_null_candidates import (
+    has_fixture_typed_null_candidates,
+)
 from sqlbuild.lint.main.run_format import run_format
 from sqlbuild.lint.models import LintConfig, LintRunResult
 from sqlbuild.presentation.main.supports_color import supports_color
@@ -34,24 +39,43 @@ def run_format_command(
     prepared: tuple[LintConfig, str | None] = prepare_lint_run(project_dir=base_dir)
     if prepared[1] is not None:
         print(f"WARN  {prepared[1]}")
-    value_renderer: TypedSqlValueRenderer | None = None
-    selected_paths: frozenset[Path] | None = None
     config: LintConfig = prepared[0]
-    if select or exclude:
-        value_renderer, selected_paths, _discovered_inputs = resolve_lint_inputs(
-            project_dir=base_dir,
-            select=select,
-            exclude=exclude,
-        )
-        config = replace(
-            config,
-            dialect=value_renderer.sql_analysis_dialect_name or "generic",
-        )
+    value_renderer: BaseAdapter | None = None
+    selected_paths: frozenset[Path] | None = None
+    graph: ProjectGraph | None = None
+    has_fixture_candidates: bool = has_fixture_typed_null_candidates(project_dir=base_dir)
+    if select or exclude or has_fixture_candidates:
+        try:
+            value_renderer, selected_paths, discovered_inputs = resolve_lint_inputs(
+                project_dir=base_dir,
+                select=select,
+                exclude=exclude,
+            )
+        except Exception:
+            if select or exclude:
+                raise
+        else:
+            config = replace(
+                config,
+                dialect=value_renderer.sql_analysis_dialect_name or "generic",
+            )
+            if has_fixture_candidates and selected_paths is None:
+                try:
+                    graph = build_project_graph(
+                        discovered_inputs=discovered_inputs,
+                        adapter=value_renderer,
+                    )
+                except Exception:
+                    graph = None
     result: LintRunResult = run_format(
         project_dir=base_dir,
         config=config,
         value_renderer=value_renderer,
         selected_paths=selected_paths,
+        compiled_project=(
+            graph.project if graph is not None and graph.project.settings.sql_analysis else None
+        ),
+        adapter=value_renderer,
         write=not (check or diff),
     )
     if diff:

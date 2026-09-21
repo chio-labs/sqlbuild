@@ -581,7 +581,10 @@ def build_untyped_null_fixture_project_files() -> dict[str, str]:
             'database = "untyped_null_fixture.duckdb"\n'
         ),
         "models/orders.sql": (
-            "MODEL ();\n\n"
+            "MODEL (\n"
+            "  contract enforced,\n"
+            "  columns (order_year (type BIGINT)),\n"
+            ");\n\n"
             "SELECT EXTRACT(YEAR FROM ordered_at) AS order_year\n"
             'FROM __source("raw_orders")\n'
         ),
@@ -599,11 +602,72 @@ def build_untyped_null_fixture_project_files() -> dict[str, str]:
             "WITH\n"
             "__source__raw_orders AS (SELECT NULL AS ordered_at WHERE FALSE),\n"
             "__expected__orders AS (\n"
-            "  SELECT CAST(NULL AS BIGINT) AS order_year WHERE FALSE\n"
+            "  SELECT NULL AS order_year WHERE FALSE\n"
             ")\n"
             "SELECT 1\n"
         ),
     }
+
+
+def build_contract_empty_fixture_project_files() -> dict[str, str]:
+    """Build empty input and expected fixtures whose shapes come from contracts."""
+
+    files: dict[str, str] = build_partial_source_fixture_project_files()
+    files["models/orders.sql"] = (
+        "MODEL (\n"
+        "  contract enforced,\n"
+        "  columns (\n"
+        "    order_id (type INTEGER),\n"
+        "    status (type VARCHAR),\n"
+        "  ),\n"
+        ");\n\n"
+        'SELECT order_id, status FROM __source("raw_orders")\n'
+    )
+    files["sources/raw_orders.yml"] = files["sources/raw_orders.yml"].replace(
+        "    table: raw_orders\n",
+        "    table: raw_orders\n    contract: enforced\n",
+    )
+    files["tests/unit/test_orders.sql"] = (
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__raw_orders AS (SELECT * FROM __empty_fixture()),\n"
+        "__expected__orders AS (SELECT * FROM __empty_fixture())\n"
+        "SELECT 1\n"
+    )
+    return files
+
+
+def build_open_source_empty_fixture_project_files() -> dict[str, str]:
+    """Build an empty source fixture without an authoritative source shape."""
+
+    files: dict[str, str] = build_partial_source_fixture_project_files()
+    files["tests/unit/test_orders.sql"] = (
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__raw_orders AS (SELECT * FROM __empty_fixture()),\n"
+        "__expected__orders AS (\n"
+        "  SELECT 1 AS order_id, CAST(NULL AS VARCHAR) AS status\n"
+        ")\n"
+        "SELECT 1\n"
+    )
+    return files
+
+
+def build_open_expected_empty_fixture_project_files() -> dict[str, str]:
+    """Build an empty expected fixture without an authoritative model shape."""
+
+    files: dict[str, str] = build_partial_source_fixture_project_files()
+    files["models/orders.sql"] = 'MODEL ();\n\nSELECT * FROM __source("raw_orders")\n'
+    files["tests/unit/test_orders.sql"] = (
+        "TEST();\n\n"
+        "WITH\n"
+        "__source__raw_orders AS (\n"
+        "  SELECT 1 AS order_id, CAST(NULL AS VARCHAR) AS status\n"
+        "),\n"
+        "__expected__orders AS (SELECT * FROM __empty_fixture())\n"
+        "SELECT 1\n"
+    )
+    return files
 
 
 def build_qualified_star_other_relation_project_files() -> dict[str, str]:

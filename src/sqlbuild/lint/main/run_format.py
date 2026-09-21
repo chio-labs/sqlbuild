@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
+from sqlbuild.compiler.planner.classes.fixture_null_autofix import FixtureNullAutofix
 from sqlbuild.lint._helpers.headers import scan_headers
 from sqlbuild.lint._helpers.native import format_native_headers, lint_native_headers
 from sqlbuild.lint._helpers.native_format import (
@@ -29,6 +32,8 @@ def run_format(
     config: LintConfig,
     value_renderer: TypedSqlValueRenderer | None = None,
     selected_paths: frozenset[Path] | None = None,
+    compiled_project: CompiledProject | None = None,
+    adapter: BaseAdapter | None = None,
     write: bool = True,
 ) -> LintRunResult:
     """Format all DSL files in place and report the violations that remain."""
@@ -40,7 +45,11 @@ def run_format(
         file_path: newline_style(contents=contents) for file_path, contents in files.items()
     }
     updated_contents: dict[Path, str] = _apply_fixes(
-        files=files, config=config, project_dir=project_dir
+        files=files,
+        config=config,
+        project_dir=project_dir,
+        compiled_project=compiled_project,
+        adapter=adapter,
     )
     formatted: list[Path] = []
     changes: list[FormatChange] = []
@@ -91,14 +100,31 @@ def run_format(
 
 
 def _apply_fixes(
-    *, files: dict[Path, str], config: LintConfig, project_dir: Path
+    *,
+    files: dict[Path, str],
+    config: LintConfig,
+    project_dir: Path,
+    compiled_project: CompiledProject | None,
+    adapter: BaseAdapter | None,
 ) -> dict[Path, str]:
     """Return contents after native header and supported SQL body fixes."""
 
-    updated: dict[Path, str] = {}
+    updated: dict[Path, str] = (
+        FixtureNullAutofix.apply(
+            files=files,
+            project_dir=project_dir,
+            project=compiled_project,
+            adapter=adapter,
+        )
+        if compiled_project is not None and adapter is not None
+        else {}
+    )
     file_path: Path
     contents: str
-    for file_path, contents in sorted(files.items()):
+    current_files: dict[Path, str] = {
+        file_path: updated.get(file_path, contents) for file_path, contents in files.items()
+    }
+    for file_path, contents in sorted(current_files.items()):
         native_result: tuple[str, tuple[LintViolation, ...]] = format_native_headers(
             contents=contents,
             file_path=file_path,
@@ -108,7 +134,7 @@ def _apply_fixes(
             updated[file_path] = native_result[0]
     if not config.native_enabled:
         return updated
-    current_files: dict[Path, str] = {
+    current_files = {
         file_path: updated.get(file_path, contents) for file_path, contents in files.items()
     }
     updated.update(

@@ -44,6 +44,7 @@ from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterMeasurementMetadataTestCase,
     DagsterMicrobatchLimitMetadataTestCase,
     DagsterSelectedCheckTestCase,
+    DagsterStandaloneCheckCommandTestCase,
     DagsterTranslatorRuntimeTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
@@ -53,6 +54,7 @@ from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
     build_check_integration_envelope,
     build_dagster_test_dag,
     integration_result_payload,
+    write_blocking_audit_event_command,
     write_blocking_execution_event_command,
     write_blocking_failed_execution_event_command,
     write_blocking_fake_sqb_command,
@@ -279,6 +281,63 @@ def test_given_two_audit_envelopes_when_projecting_then_each_check_keeps_own_can
 @pytest.mark.parametrize(
     "test_case",
     (
+        DagsterStandaloneCheckCommandTestCase(
+            "standalone audit",
+            "audit",
+            ("analytics", "orders"),
+            "audit__not_null__order_id",
+        ),
+        DagsterStandaloneCheckCommandTestCase(
+            "standalone Python check",
+            "check",
+            ("analytics", "orders"),
+            "audit__not_null__order_id",
+        ),
+        DagsterStandaloneCheckCommandTestCase(
+            "standalone SQL test",
+            "test",
+            ("analytics", "orders"),
+            "audit__not_null__order_id",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_standalone_check_command_when_projecting_live_result_then_parent_need_not_materialize(
+    test_case: DagsterStandaloneCheckCommandTestCase,
+) -> None:
+    envelope: IntegrationResultEnvelope = replace(
+        build_check_integration_envelope(
+            check_id="audit:not_null:model:orders:order_id",
+            name="not_null",
+            event_id="event-live-check",
+            attempt_id="attempt-live-check",
+            event_sequence=1,
+        ),
+        command=test_case.command,
+    )
+
+    results: tuple[Any, ...] = _build_results_from_integration_result(
+        dg=dg,
+        dag=build_dagster_test_dag(),
+        envelope=envelope,
+        command=("sqb", test_case.command),
+        context=type(
+            "CheckContext",
+            (),
+            {"selected_asset_keys": {dg.AssetKey(["analytics", "orders"])}},
+        )(),
+        emitted_asset_paths=set(),
+    )
+
+    assert len(results) == 1
+    assert isinstance(results[0], dg.AssetCheckResult)
+    assert tuple(results[0].asset_key.path) == test_case.expected_asset_path
+    assert results[0].check_name == test_case.expected_check_name
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
         DagsterMeasurementMetadataTestCase(
             "insufficient measurement metadata",
             "insufficient",
@@ -342,6 +401,7 @@ def test_given_measurement_check_when_projecting_then_dagster_metadata_and_warni
     assert result.passed is test_case.expected_passed
     assert result.severity == dg.AssetCheckSeverity.WARN
     assert result.metadata["status"].value == test_case.expected_status
+    assert type(result.metadata["severity"].value) is str
     for key, expected_value in test_case.expected_metadata.items():
         assert result.metadata[key].value == expected_value
 
@@ -1485,6 +1545,51 @@ def test_given_running_clone_when_item_completes_then_materializes_before_proces
         test_case.expected_asset_key,
         *test_case.expected_remaining_asset_keys,
     )
+    assert invocation.returncode == 0
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagsterStandaloneCheckCommandTestCase(
+            "live standalone audit",
+            "audit",
+            ("analytics", "orders"),
+            "audit__not_null__order_id",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_standalone_audit_when_check_completes_then_emits_before_process_exit(
+    test_case: DagsterStandaloneCheckCommandTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    release_path: Path = tmp_path / "release"
+    context: Any = type(
+        "AuditContext",
+        (),
+        {"selected_asset_keys": {dg.AssetKey(["analytics", "orders"])}},
+    )()
+    invocation: SqlBuildCliInvocation = SqlBuildCliResource(
+        project_dir=str(project_dir),
+        sqb_command=write_blocking_audit_event_command(
+            root=tmp_path,
+            release_path=release_path,
+        ),
+        dag_path=str(write_dagster_test_dag(root=tmp_path)),
+    ).cli(args=[test_case.command], context=context)
+    stream: Iterator[Any] = invocation.stream()
+
+    check_result: Any = next(stream)
+
+    assert isinstance(check_result, dg.AssetCheckResult)
+    assert tuple(check_result.asset_key.path) == test_case.expected_asset_path
+    assert check_result.check_name == test_case.expected_check_name
+    assert invocation.process.poll() is None
+    release_path.touch()
+    assert list(stream) == []
     assert invocation.returncode == 0
 
 

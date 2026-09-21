@@ -434,6 +434,50 @@ def write_blocking_execution_event_command(
     return ["python", str(script_path)]
 
 
+def write_blocking_audit_event_command(*, root: Path, release_path: Path) -> list[str]:
+    envelope: IntegrationResultEnvelope = build_check_integration_envelope(
+        check_id="audit:not_null:model:orders:order_id",
+        name="not_null",
+        event_id="event-live-audit",
+        attempt_id="attempt-live-audit",
+        event_sequence=1,
+    )
+    event_payload: str = envelope.to_json() + "\n"
+    execution_payload: str = json.dumps(
+        {
+            "version": 1,
+            "command": "audit",
+            "status": "success",
+            "summary": {"pass_count": 1},
+            "assets": [],
+            "checks": [json.loads(envelope.to_json())["checks"][0]],
+        }
+    )
+    script_path: Path = root / "blocking_audit_event.py"
+    script_path.write_text(
+        "\n".join(
+            (
+                "from pathlib import Path",
+                "import os",
+                "import sys",
+                "import time",
+                "event_path = Path(os.environ['SQLBUILD_INTEGRATION_RESULT_PATH'])",
+                "with event_path.open('a', encoding='utf-8') as stream:",
+                f"    stream.write({event_payload!r})",
+                "    stream.flush()",
+                f"release_path = Path({str(release_path)!r})",
+                "while not release_path.exists():",
+                "    time.sleep(0.01)",
+                "json_path = Path(sys.argv[sys.argv.index('--json-output') + 1])",
+                f"json_path.write_text({execution_payload!r}, encoding='utf-8')",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return ["python", str(script_path)]
+
+
 def write_blocking_failed_execution_event_command(*, root: Path, release_path: Path) -> list[str]:
     asset: dict[str, object] = {
         "kind": "model",

@@ -7,6 +7,7 @@ import tempfile
 from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import asdict
+from enum import Enum
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any, TextIO
 
@@ -39,6 +40,7 @@ from sqlbuild.integrations.dagster.constants import (
     SCENARIO_VALUE_FLAGS,
     SELECT_FILE_FLAG,
     SOURCE_NODE_KIND,
+    STANDALONE_CHECK_COMMANDS,
     SUCCESS_EXECUTION_STATUS,
     VIRTUAL_ENV_FLAG,
     WARNING_CHECK_SEVERITY,
@@ -617,7 +619,10 @@ def _build_results_from_integration_result(
             selected_paths=selected_paths,
             selected_check_keys=selected_check_keys,
             emitted_asset_paths=(
-                None if _asset_check_only_context(context=context) else emitted_asset_paths
+                None
+                if _asset_check_only_context(context=context)
+                or envelope.command in STANDALONE_CHECK_COMMANDS
+                else emitted_asset_paths
             ),
             check_selection_is_explicit=_check_selection_is_explicit(context=context),
             seen_check_outputs=seen_check_outputs,
@@ -854,10 +859,20 @@ def _normalize_check_name(value: str) -> str:
 
 def _metadata_from_mapping(value: Mapping[str, Any]) -> Mapping[str, Any]:
     return {
-        str(key): list(item) if isinstance(item, tuple) else item
+        str(key): _metadata_value(item)
         for key, item in value.items()
         if item is not None and key not in CHECK_METADATA_EXCLUDED_KEYS
     }
+
+
+def _metadata_value(value: Any) -> Any:
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, Mapping):
+        return {str(key): _metadata_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_metadata_value(item) for item in value]
+    return value
 
 
 def _dagster_check_severity(*, dg: Any, check: Mapping[str, Any]) -> Any:

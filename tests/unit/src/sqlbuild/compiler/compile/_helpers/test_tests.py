@@ -50,6 +50,19 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
             expected_mock_table_function_names=("customer_orders",),
         ),
         ExtractSqlTestCtesTestCase(
+            description="allows empty fixture marker for model expected output",
+            sql="""
+        WITH
+        __source__raw_orders AS (SELECT 1 AS order_id),
+        __expected__orders AS (SELECT * FROM __empty_fixture())
+        SELECT 1
+        """.strip(),
+            expected_authored_cte_names=("__source__raw_orders",),
+            expected_mock_model_names=(),
+            expected_mock_source_names=("raw_orders",),
+            expected_expected_model_names=("orders",),
+        ),
+        ExtractSqlTestCtesTestCase(
             description="extracts zero-row assertion ctes",
             sql="""
         WITH
@@ -633,6 +646,16 @@ def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_return
         SELECT 1
         """.strip(),
             expected_error_fragment=r"must not use SELECT \* in __expected__<model> CTEs",
+        ),
+        ExtractSqlTestCtesErrorTestCase(
+            description="rejects empty fixture marker for direct logic expected output",
+            sql="""
+        WITH __macro_actual__ AS (SELECT 'paid' AS status),
+        __macro_expected__ AS (SELECT * FROM __empty_fixture())
+        SELECT 1
+        """.strip(),
+            mode=SqlTestMode.MACRO,
+            expected_error_fragment=r"must not use SELECT \* in __macro_expected__ CTEs",
         ),
         ExtractSqlTestCtesErrorTestCase(
             description="raises when union branch projection order differs",

@@ -94,6 +94,12 @@ model SQL or warehouse defaults. Required columns declared with `nullable false`
 unknown types must be supplied explicitly. When the relation's complete column set is authoritative,
 misspelled or unknown supplied fixture columns are rejected.
 
+A direct `NULL AS column_name` projection receives the authoritative relation type in compiled test
+SQL, including expected-output CTEs for contracted models. To represent a contracted upstream with
+no rows, use `SELECT * FROM __empty_fixture()` as the complete body of a `__ref__`, `__source__`, or
+`__seed__` fixture CTE, or a contracted `__expected__` CTE. SQLBuild expands it to the relation's
+full typed schema with a false filter.
+
 See the [documentation](https://docs.sqlbuild.com) for incremental models, scenarios, loaders, and more.
 
 ### Python project layout
