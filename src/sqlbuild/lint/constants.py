@@ -52,6 +52,8 @@ LINT_DIRECTORY_NAMES: tuple[str, ...] = (
     "hooks",
     "schemas",
 )
+PARENT_PATH_SEGMENT: str = ".."
+SQL_FILE_SUFFIX: str = ".sql"
 
 RULE_DESCRIPTION_PRESENT: str = "description-present"
 RULE_DESCRIPTION_LENGTH: str = "description-length"

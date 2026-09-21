@@ -1,5 +1,6 @@
 use serde_json::{Value, json};
 
+use crate::sql_lint::main::batch_formatter::format_batch_json;
 use crate::sql_lint::main::engine::lint_json;
 use crate::sql_lint::main::formatter::format_json;
 use crate::sql_lint::tests::{helpers, test_types};
@@ -1909,6 +1910,49 @@ fn given_format_cases_when_formatting_then_output_matches() -> Result<(), String
             "{}",
             test_case.description
         );
+    }
+    Ok(())
+}
+
+#[test]
+fn given_ordered_sql_batch_when_formatting_then_outputs_are_parallel_and_ordered()
+-> Result<(), String> {
+    let test_cases = [
+        test_types::FormatTestCase {
+            description: "first order query",
+            sql: "select order_id from orders where order_id=1",
+            expected_sql: "SELECT\n  order_id\nFROM orders\nWHERE\n  order_id = 1",
+            expected_changed: true,
+        },
+        test_types::FormatTestCase {
+            description: "second product query",
+            sql: "select product_id from products where product_id=2",
+            expected_sql: "SELECT\n  product_id\nFROM products\nWHERE\n  product_id = 2",
+            expected_changed: true,
+        },
+    ];
+    let requests: Vec<Value> = test_cases
+        .iter()
+        .map(|test_case| json!({"version": 1, "sql": test_case.sql, "dialect": "snowflake"}))
+        .collect();
+
+    let response =
+        format_batch_json(&serde_json::to_string(&requests).map_err(|error| error.to_string())?)?;
+    let payloads: Vec<Value> =
+        serde_json::from_str(&response).map_err(|error| error.to_string())?;
+
+    assert_eq!(payloads.len(), test_cases.len());
+    let mut payload_iter = payloads.iter();
+    for test_case in &test_cases {
+        let payload = payload_iter
+            .next()
+            .ok_or_else(|| format!("{}: batch response omitted an item", test_case.description))?;
+        assert_eq!(
+            payload["sql"], test_case.expected_sql,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(payload["changed"], test_case.expected_changed);
     }
     Ok(())
 }

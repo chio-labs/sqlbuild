@@ -615,6 +615,7 @@ def _dispatch_lint_format_command(
         exclude=tuple(args.exclude),
         check=args.format_check,
         diff=args.format_diff,
+        fixtures_only=args.format_fixtures_only,
         json_output=args.json,
         no_color=args.no_color,
     )

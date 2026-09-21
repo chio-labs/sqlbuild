@@ -309,6 +309,12 @@ def _add_quality_parsers(
     format_parser.add_argument("--json", action="store_true", default=False)
     format_parser.add_argument("--check", dest="format_check", action="store_true")
     format_parser.add_argument("--diff", dest="format_diff", action="store_true")
+    format_parser.add_argument(
+        "--fixtures-only",
+        dest="format_fixtures_only",
+        action="store_true",
+        help="only remove redundant typed-null SQL test fixture columns",
+    )
     _ = add_select_args(format_parser)
 
 

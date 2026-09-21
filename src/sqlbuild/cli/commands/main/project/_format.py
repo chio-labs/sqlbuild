@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import difflib
+import sys
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -13,13 +15,14 @@ from sqlbuild.cli.commands._helpers.lint.runs import (
     render_lint_result_json,
 )
 from sqlbuild.cli.commands._helpers.lint.selection import resolve_lint_inputs
-from sqlbuild.compiler.pipeline.main.graph import build_project_graph
-from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.discovery.constants import SQL_ANALYSIS_SETTING_KEY
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.lint.main.has_fixture_typed_null_candidates import (
     has_fixture_typed_null_candidates,
 )
 from sqlbuild.lint.main.run_format import run_format
 from sqlbuild.lint.models import LintConfig, LintRunResult
+from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.presentation.main.supports_color import supports_color
 
 
@@ -30,6 +33,7 @@ def run_format_command(
     exclude: tuple[str, ...] = (),
     check: bool = False,
     diff: bool = False,
+    fixtures_only: bool = False,
     json_output: bool = False,
     no_color: bool = False,
 ) -> int:
@@ -42,8 +46,10 @@ def run_format_command(
     config: LintConfig = prepared[0]
     value_renderer: BaseAdapter | None = None
     selected_paths: frozenset[Path] | None = None
-    graph: ProjectGraph | None = None
-    has_fixture_candidates: bool = has_fixture_typed_null_candidates(project_dir=base_dir)
+    discovered_inputs: DiscoveredProjectInputs | None = None
+    has_fixture_candidates: bool = False
+    if not select and not exclude:
+        has_fixture_candidates = has_fixture_typed_null_candidates(project_dir=base_dir)
     if select or exclude or has_fixture_candidates:
         try:
             value_renderer, selected_paths, discovered_inputs = resolve_lint_inputs(
@@ -55,28 +61,46 @@ def run_format_command(
             if select or exclude:
                 raise
         else:
+            has_fixture_candidates = bool(discovered_inputs.test_files)
             config = replace(
                 config,
                 dialect=value_renderer.sql_analysis_dialect_name or "generic",
             )
-            if has_fixture_candidates and selected_paths is None:
-                try:
-                    graph = build_project_graph(
-                        discovered_inputs=discovered_inputs,
-                        adapter=value_renderer,
-                    )
-                except Exception:
-                    graph = None
-    result: LintRunResult = run_format(
-        project_dir=base_dir,
-        config=config,
-        value_renderer=value_renderer,
-        selected_paths=selected_paths,
-        compiled_project=(
-            graph.project if graph is not None and graph.project.settings.sql_analysis else None
-        ),
-        adapter=value_renderer,
-        write=not (check or diff),
+    fixture_inputs: DiscoveredProjectInputs | None = None
+    if discovered_inputs is not None and has_fixture_candidates:
+        local_overrides: frozenset[str] = discovered_inputs.local_config.setting_overrides
+        sql_analysis_enabled: bool = (
+            discovered_inputs.local_config.settings.sql_analysis
+            if SQL_ANALYSIS_SETTING_KEY in local_overrides
+            else discovered_inputs.project_config.settings.sql_analysis
+        )
+        if sql_analysis_enabled:
+            fixture_inputs = discovered_inputs
+    format_started_at: float = time.monotonic()
+    format_status: TransientStatusReporter = TransientStatusReporter(
+        stream=sys.stderr,
+        use_color=not no_color and supports_color(),
+    )
+    format_status.start("Formatting SQL  START")
+    try:
+        result: LintRunResult = run_format(
+            project_dir=base_dir,
+            config=config,
+            value_renderer=value_renderer,
+            selected_paths=selected_paths,
+            discovered_inputs=fixture_inputs,
+            fixtures_only=fixtures_only,
+            write=not (check or diff),
+        )
+    except Exception:
+        format_status.error("Formatting SQL  ERROR")
+        raise
+    elapsed_seconds: float = time.monotonic() - format_started_at
+    format_status.complete(
+        message=(
+            f"Formatting SQL  OK  ({elapsed_seconds:.2f}s; "
+            f"{result.files_checked} files checked, {len(result.formatted_files)} changed)"
+        )
     )
     if diff:
         _ = _render_format_diff(result=result)

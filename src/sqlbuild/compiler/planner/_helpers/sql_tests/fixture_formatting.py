@@ -5,36 +5,29 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.classes.sql_test_cte_extractor import SqlTestCteExtractor
 from sqlbuild.compiler.compile.constants import (
     REF_TEST_CTE_PREFIX,
     SEED_TEST_CTE_PREFIX,
     SOURCE_TEST_CTE_PREFIX,
 )
-from sqlbuild.compiler.compile.main._infer_fixture_columns import infer_fixture_column_facts
-from sqlbuild.compiler.compile.models import (
-    CompiledModelSqlTestPayload,
-    CompiledProject,
-    CompiledSqlTest,
-    CompileSqlTestCte,
-    FixtureColumnInference,
-)
+from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.models import CompileSqlTestCte
 from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
-from sqlbuild.compiler.planner._helpers.fixtures.completion import (
-    build_relation_fixture_completion,
-    build_relation_fixture_context,
+from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_columns
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredProjectInputs,
+    DiscoveredSqlModelFile,
+    DiscoveredSqlTestBlock,
+    DiscoveredSqlTestFile,
 )
-from sqlbuild.compiler.planner._helpers.sql_tests.assembly import (
-    build_sql_test_planning_context,
-)
+from sqlbuild.compiler.path_defaults.main._select import select_path_default
 from sqlbuild.compiler.planner.models import (
     FixtureColumnMetadata,
     FixtureRelationMetadata,
-    RelationFixtureCompletion,
-    RelationFixturePlanningContext,
-    SqlTestPlanningContext,
 )
-from sqlbuild.compiler.planner.types import FixtureGroups, FixtureKey
+from sqlbuild.compiler.planner.types import ContractPolicy, FixtureKey
+from sqlbuild.spec.contracts.models import SchemaColumn, SchemaSeedEntry, SourceEntry
 
 _TYPED_NULL_LINE_PATTERN: re.Pattern[str] = re.compile(
     r"^(?P<indent>[ \t]*)(?:"
@@ -54,123 +47,169 @@ _CLAUSE_LINE_PATTERN: re.Pattern[str] = re.compile(
 _SET_OPERATION_PATTERN: re.Pattern[str] = re.compile(
     r"\b(?:UNION|INTERSECT|EXCEPT)\b", re.IGNORECASE
 )
+_MACRO_INVOCATION_MARKER: str = "@"
+_TYPED_NULL_CANDIDATE_PATTERN: re.Pattern[str] = re.compile(
+    r"(?:CAST\s*\(\s*NULL\s+AS\b|NULL\s*::)", re.IGNORECASE
+)
+_PROJECTION_ALIAS_PATTERN: re.Pattern[str] = re.compile(
+    r"\bAS\s+(?P<alias>\"[^\"]+\"|`[^`]+`|[A-Za-z_][A-Za-z0-9_]*)\s*,?\s*$",
+    re.IGNORECASE,
+)
+_SELECT_LINE_PATTERN: re.Pattern[str] = re.compile(r"^\s*SELECT\b(?P<body>.*)$", re.IGNORECASE)
 
 
 def format_redundant_fixture_nulls(
     *,
     files: dict[Path, str],
     project_dir: Path,
-    project: CompiledProject,
-    adapter: BaseAdapter,
+    discovered_inputs: DiscoveredProjectInputs,
 ) -> dict[Path, str]:
     """Remove typed-null fixture projections that planner completion can reproduce."""
 
-    planning_context: SqlTestPlanningContext = build_sql_test_planning_context(
-        project=project,
-        tests=project.sql_tests,
-    )
-    fixture_context: RelationFixturePlanningContext = build_relation_fixture_context(
-        project=project
+    relations: dict[FixtureKey, FixtureRelationMetadata] = _fixture_relations(
+        discovered_inputs=discovered_inputs
     )
     updated: dict[Path, str] = {}
-    processed_blocks: set[tuple[Path, int]] = set()
-    for test in project.sql_tests:
-        source_path: Path | None = test.source_path
-        block_index: int | None = test.block_index
-        if source_path is None or block_index is None:
+    test_file: DiscoveredSqlTestFile
+    for test_file in discovered_inputs.test_files:
+        file_path: Path = (project_dir / test_file.relative_path).resolve()
+        if file_path not in files:
             continue
-        block_key: tuple[Path, int] = (source_path, block_index)
-        if block_key in processed_blocks or test.mode is not SqlTestMode.MODEL:
-            continue
-        processed_blocks.add(block_key)
-        file_path: Path = (project_dir / source_path).resolve()
         contents: str | None = updated.get(file_path, files.get(file_path))
         if contents is None:
             continue
-        fixed_block: str = _format_test_block(
-            test=test,
-            project=project,
-            adapter=adapter,
-            planning_context=planning_context,
-            fixture_context=fixture_context,
-        )
-        if fixed_block == test.test_block.sql_body:
-            continue
-        rewritten: str = _replace_test_block(
-            contents=contents,
-            original=test.test_block.sql_body,
-            replacement=fixed_block,
-        )
-        if rewritten != contents:
-            updated[file_path] = rewritten
+        block: DiscoveredSqlTestBlock
+        for block in test_file.blocks:
+            fixed_block: str = _format_test_block(
+                block=block,
+                file_label=str(test_file.relative_path),
+                relations=relations,
+            )
+            if fixed_block == block.sql_body:
+                continue
+            contents = _replace_test_block(
+                contents=contents,
+                original=block.sql_body,
+                replacement=fixed_block,
+            )
+            updated[file_path] = contents
     return updated
 
 
 def _format_test_block(
     *,
-    test: CompiledSqlTest,
-    project: CompiledProject,
-    adapter: BaseAdapter,
-    planning_context: SqlTestPlanningContext,
-    fixture_context: RelationFixturePlanningContext,
+    block: DiscoveredSqlTestBlock,
+    file_label: str,
+    relations: dict[FixtureKey, FixtureRelationMetadata],
 ) -> str:
-    payload: object = test.payload
-    if not isinstance(payload, CompiledModelSqlTestPayload):
-        return test.test_block.sql_body
-    if test.sql_body != test.test_block.sql_body:
-        return test.test_block.sql_body
-    ordered_model_names: tuple[str, ...] | None = planning_context.chain_names_by_test_key.get(
-        test.key
-    )
-    if ordered_model_names is None:
-        return test.test_block.sql_body
-    fixture_ctes: tuple[CompileSqlTestCte, ...] = tuple(
-        cte for cte in payload.authored_ctes if _fixture_key(cte.name) is not None
-    )
-    fixture_sql: dict[tuple[CompiledResourceType, str], str] = {
-        key: cte.sql_body for cte in fixture_ctes if (key := _fixture_key(cte.name)) is not None
-    }
+    if (
+        block.mode is not SqlTestMode.MODEL
+        or _MACRO_INVOCATION_MARKER in block.sql_body
+        or _TYPED_NULL_CANDIDATE_PATTERN.search(block.sql_body) is None
+    ):
+        return block.sql_body
+    try:
+        authored_ctes: tuple[CompileSqlTestCte, ...] = SqlTestCteExtractor.extract(
+            sql=block.sql_body,
+            file_label=file_label,
+        )
+    except CompileInputError:
+        return block.sql_body
     changed_bodies: list[tuple[str, str]] = []
-    for cte in fixture_ctes:
+    for cte in authored_ctes:
         key: FixtureKey | None = _fixture_key(cte.name)
         if key is None:
             continue
-        relation: FixtureRelationMetadata | None = fixture_context.relations.get(key)
+        relation: FixtureRelationMetadata | None = relations.get(key)
         if relation is None or not relation.authoritative_names:
             continue
         candidate: str = _remove_redundant_typed_null_lines(
-            sql=fixture_sql[key],
+            sql=cte.sql_body,
             relation=relation,
-            adapter=adapter,
         )
-        if candidate == fixture_sql[key]:
+        if candidate == cte.sql_body:
             continue
-        candidate_fixture_sql: dict[tuple[CompiledResourceType, str], str] = {
-            **fixture_sql,
-            key: candidate,
-        }
-        completion: RelationFixtureCompletion = build_relation_fixture_completion(
-            project=project,
-            adapter=adapter,
-            ordered_model_names=ordered_model_names,
-            fixture_groups=_fixture_groups(candidate_fixture_sql),
-            planning_context=fixture_context,
-        )
-        if completion.diagnostics:
-            continue
-        fixture_sql[key] = candidate
         changed_bodies.append((cte.sql_body, candidate))
     if not changed_bodies:
-        return test.test_block.sql_body
+        return block.sql_body
     return _replace_cte_bodies(
-        sql=test.test_block.sql_body,
+        sql=block.sql_body,
         replacements=tuple(changed_bodies),
     )
 
 
-def _remove_redundant_typed_null_lines(
-    *, sql: str, relation: FixtureRelationMetadata, adapter: BaseAdapter
-) -> str:
+def _fixture_relations(
+    *, discovered_inputs: DiscoveredProjectInputs
+) -> dict[FixtureKey, FixtureRelationMetadata]:
+    relations: dict[FixtureKey, FixtureRelationMetadata] = {}
+    default_contract: str | None = discovered_inputs.project_config.defaults.contract
+    path_defaults: dict[str, dict[str, object]] = discovered_inputs.project_config.path_defaults
+    model_file: DiscoveredSqlModelFile
+    for model_file in discovered_inputs.model_files:
+        selected_default: str | None = select_path_default(
+            model_path=str(model_file.relative_path),
+            path_keys=tuple(path_defaults),
+        ).selected_key
+        contract: object = default_contract
+        if selected_default is not None:
+            contract = path_defaults[selected_default].get("contract", contract)
+        contract = model_file.header_values.get("contract", contract)
+        if contract != ContractPolicy.ENFORCED.value:
+            continue
+        columns: tuple[SchemaColumn, ...] = parse_schema_columns(
+            raw_columns=model_file.header_values.get("columns"),
+            file_path=model_file.file_path,
+            label="model",
+            error_class=CompileInputError,
+            column_locations=model_file.header_column_locations,
+        )
+        if not columns:
+            continue
+        relations[(CompiledResourceType.MODEL, model_file.file_path.stem)] = _relation_metadata(
+            columns=columns
+        )
+    for source_file in discovered_inputs.source_files:
+        source: SourceEntry
+        for source in source_file.source_entries:
+            source_contract: str | None = source.contract or default_contract
+            if source_contract != ContractPolicy.ENFORCED.value:
+                continue
+            relations[(CompiledResourceType.SOURCE, source.name)] = FixtureRelationMetadata(
+                columns=tuple(
+                    FixtureColumnMetadata(
+                        name=column.name,
+                        type=column.type,
+                        nullable=column.nullable,
+                    )
+                    for column in source.columns
+                ),
+                authoritative_names=bool(source.columns),
+            )
+    for schema_file in discovered_inputs.schema_files:
+        seed: SchemaSeedEntry
+        for seed in schema_file.seed_entries:
+            if seed.columns:
+                relations[(CompiledResourceType.SEED, seed.name)] = _relation_metadata(
+                    columns=seed.columns
+                )
+    return relations
+
+
+def _relation_metadata(*, columns: tuple[SchemaColumn, ...]) -> FixtureRelationMetadata:
+    return FixtureRelationMetadata(
+        columns=tuple(
+            FixtureColumnMetadata(
+                name=column.name,
+                type=column.type,
+                nullable=column.nullable,
+            )
+            for column in columns
+        ),
+        authoritative_names=True,
+    )
+
+
+def _remove_redundant_typed_null_lines(*, sql: str, relation: FixtureRelationMetadata) -> str:
     if _SET_OPERATION_PATTERN.search(sql) is not None:
         return sql
     metadata_by_name: dict[str, FixtureColumnMetadata] = {
@@ -200,16 +239,52 @@ def _remove_redundant_typed_null_lines(
         return "SELECT * FROM __empty_fixture()"
     if not remove_indexes:
         return sql
+    authored_names: tuple[str, ...] | None = _projection_aliases(lines=lines)
+    if authored_names is None or not _names_form_schema_prefix(
+        names=authored_names,
+        relation=relation,
+    ):
+        return sql
     retained: list[str] = [line for index, line in enumerate(lines) if index not in remove_indexes]
     retained = _without_trailing_projection_comma(lines=retained)
     candidate: str = "\n".join(retained)
-    inference: FixtureColumnInference | None = infer_fixture_column_facts(
-        query_sql=candidate,
-        inference_profile=adapter.expression_inference_profile(),
-    )
-    if inference is None or not inference.columns:
+    retained_names: tuple[str, ...] | None = _projection_aliases(lines=retained)
+    if retained_names is None or not retained_names:
+        return sql
+    if not _names_form_schema_prefix(names=retained_names, relation=relation):
         return sql
     return candidate
+
+
+def _projection_aliases(*, lines: list[str]) -> tuple[str, ...] | None:
+    aliases: list[str] = []
+    saw_select: bool = False
+    for line in lines:
+        candidate: str = line
+        if not saw_select:
+            select_match: re.Match[str] | None = _SELECT_LINE_PATTERN.match(line)
+            if select_match is None:
+                if line.strip():
+                    return None
+                continue
+            saw_select = True
+            candidate = select_match.group("body")
+        if _CLAUSE_LINE_PATTERN.match(candidate):
+            break
+        if not candidate.strip():
+            continue
+        alias_match: re.Match[str] | None = _PROJECTION_ALIAS_PATTERN.search(candidate)
+        if alias_match is None:
+            return None
+        aliases.append(alias_match.group("alias").strip('"`').casefold())
+    return tuple(aliases) if saw_select else None
+
+
+def _names_form_schema_prefix(*, names: tuple[str, ...], relation: FixtureRelationMetadata) -> bool:
+    schema_prefix: tuple[str, ...] = tuple(
+        column.name.casefold() for column in relation.columns[: len(names)]
+    )
+    return names == schema_prefix
 
 
 def _without_trailing_projection_comma(*, lines: list[str]) -> list[str]:
@@ -236,24 +311,6 @@ def _fixture_key(name: str) -> tuple[CompiledResourceType, str] | None:
         if name.startswith(prefix):
             return resource_type, name.removeprefix(prefix)
     return None
-
-
-def _fixture_groups(
-    fixture_sql: dict[tuple[CompiledResourceType, str], str],
-) -> FixtureGroups:
-    groups: list[tuple[CompiledResourceType, dict[str, str]]] = []
-    resource_types: tuple[CompiledResourceType, ...] = (
-        CompiledResourceType.MODEL,
-        CompiledResourceType.SOURCE,
-        CompiledResourceType.SEED,
-    )
-    for resource_type in resource_types:
-        fixtures: dict[str, str] = {}
-        for (candidate_type, name), sql in fixture_sql.items():
-            if candidate_type == resource_type:
-                fixtures[name] = sql
-        groups.append((resource_type, fixtures))
-    return tuple(groups)
 
 
 def _replace_cte_bodies(*, sql: str, replacements: tuple[tuple[str, str], ...]) -> str:

@@ -247,16 +247,17 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
             targets=targets,
             force=force,
         ),
-        run_format=lambda project_dir, select, exclude, check, diff, json_output, no_color: lazy[
-            "format"
-        ](
-            project_dir=project_dir,
-            select=select,
-            exclude=exclude,
-            check=check,
-            diff=diff,
-            json_output=json_output,
-            no_color=no_color,
+        run_format=lambda project_dir, select, exclude, check, diff, fixtures_only, json_output, no_color: (  # noqa: E501
+            lazy["format"](
+                project_dir=project_dir,
+                select=select,
+                exclude=exclude,
+                check=check,
+                diff=diff,
+                fixtures_only=fixtures_only,
+                json_output=json_output,
+                no_color=no_color,
+            )
         ),
         run_scenario=lazy["scenario"],
         run_scenario_capture=lazy["scenario_capture"],

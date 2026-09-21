@@ -10,6 +10,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.discovery._helpers.sql.model_files import (
     parse_header_values,  # noqa: FFL102 - the compiler owns the canonical native header grammar
+    prepare_model_header_tokens,
 )
 from sqlbuild.compiler.discovery.exceptions import ModelSqlParseError
 from sqlbuild.lint.constants import (
@@ -83,6 +84,20 @@ def lint_native_headers(
             )
         )
     return tuple(violations)
+
+
+def prepare_native_header_cache(*, files: dict[Path, str]) -> None:
+    """Batch parse formatter-owned headers before per-file formatting and linting."""
+
+    headers: list[str] = []
+    from sqlbuild.lint._helpers.headers import scan_headers
+
+    for contents in files.values():
+        headers.extend(
+            _inner_header_text(header_text=contents[header.start : header.end])
+            for header in scan_headers(contents=contents)
+        )
+    prepare_model_header_tokens(headers)
 
 
 def format_native_headers(
