@@ -29,3 +29,9 @@ class TableTypeValidationErrorTestCase:
     materialized: str
     expected_error_fragment: str
     expected_declared: bool = True
+
+
+@dataclass(frozen=True)
+class ExpectedCountTestCase:
+    description: str
+    expected_count: int

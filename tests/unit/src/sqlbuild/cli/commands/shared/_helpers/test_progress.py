@@ -18,12 +18,11 @@ from sqlbuild.cli.commands.classes.build_progress_callbacks import (
     _truncate_name,
     format_build_footer,
 )
-from sqlbuild.cli.commands.models import AuditDisplayEntry
 from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
     NestedCommandProgressCallbacks,
 )
 from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
-from sqlbuild.cli.progress.models import NestedProgressChildRow
+from sqlbuild.cli.progress.models import AuditDisplayEntry, NestedProgressChildRow
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.python_nodes.types import SkipMode

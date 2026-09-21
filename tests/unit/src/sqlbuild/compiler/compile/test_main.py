@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     CompileProjectInputs,
     CompileSqlFunctionInput,
+    ModelConfigBuildRequest,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
@@ -1112,6 +1113,39 @@ select 1
             expected_effective_connection={},
             expected_effective_vars={},
             expected_model_references=((),),
+            expected_audit_references=(),
+        ),
+        BuildCompileInputsTestCase(
+            description="keeps default model context distinct across empty headers",
+            repo_files=base_repo_files()
+            | {
+                "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+
+[defaults]
+schema = "${CTX:model.name}_schema"
+""".strip()
+                + "\n",
+                "models/orders.sql": "MODEL ();\n\nselect 1\n",
+                "models/customers.sql": "MODEL ();\n\nselect 2\n",
+            },
+            selected_target=None,
+            cli_vars=None,
+            run_id=None,
+            expected_model_schema_names=(None, None),
+            expected_model_config_values=(
+                {"schema": "customers_schema"},
+                {"schema": "orders_schema"},
+            ),
+            expected_model_query_sqls=("select 2", "select 1"),
+            expected_model_path_defaults=(None, None),
+            expected_seed_names=(),
+            expected_source_names=(),
+            expected_effective_target_name=None,
+            expected_effective_connection={},
+            expected_effective_vars={},
+            expected_model_references=((), ()),
             expected_audit_references=(),
         ),
         BuildCompileInputsTestCase(
@@ -4506,15 +4540,17 @@ def test_given_typed_hook_defaults_when_building_config_then_layers_values(
     }
 
     config: CompileModelConfig = build_model_config(
-        defaults=defaults,
-        path_defaults=path_defaults,
-        matched_path_default="models/marts",
-        model_header_values={},
-        effective_vars={},
-        target_config=None,
-        model_name="orders",
-        effective_target_name=None,
-        run_id="run_123",
+        request=ModelConfigBuildRequest(
+            defaults=defaults,
+            path_defaults=path_defaults,
+            matched_path_default="models/marts",
+            model_header_values={},
+            effective_vars={},
+            target_config=None,
+            model_name="orders",
+            effective_target_name=None,
+            run_id="run_123",
+        )
     )
 
     assert config.values["pre_hooks"] == test_case.expected_pre_hooks
@@ -4567,16 +4603,18 @@ def test_given_retention_layers_when_building_model_config_then_precedence_is_re
     test_case: BuildModelRetentionConfigTestCase,
 ) -> None:
     config: CompileModelConfig = build_model_config(
-        defaults=test_case.defaults,
-        path_defaults={},
-        matched_path_default=None,
-        model_header_values=test_case.model_header_values,
-        effective_vars={},
-        target_config=test_case.target_config,
-        model_name="orders",
-        effective_target_name="prod",
-        run_id="run_123",
-        materialization_defaults=test_case.materialization_defaults,
+        request=ModelConfigBuildRequest(
+            defaults=test_case.defaults,
+            path_defaults={},
+            matched_path_default=None,
+            model_header_values=test_case.model_header_values,
+            effective_vars={},
+            target_config=test_case.target_config,
+            model_name="orders",
+            effective_target_name="prod",
+            run_id="run_123",
+            materialization_defaults=test_case.materialization_defaults,
+        )
     )
 
     assert config.time_travel_retention.desired_days == test_case.expected_desired_days

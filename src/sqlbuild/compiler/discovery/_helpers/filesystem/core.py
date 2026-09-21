@@ -29,6 +29,7 @@ from sqlbuild.compiler.discovery._helpers.sql.model_files import (
     model_header_column_locations,
     model_output_column_locations,
     parse_model_sql,
+    prepare_model_file_headers,
 )
 from sqlbuild.compiler.discovery._helpers.sql.scenarios import parse_sql_scenario_file
 from sqlbuild.compiler.discovery._helpers.sql.tests import parse_sql_test_file
@@ -50,6 +51,7 @@ from sqlbuild.compiler.discovery.exceptions import (
     DeclarationParseError,
     EventExporterDiscoveryError,
     LoaderDiscoveryError,
+    ModelSqlParseError,
     ProviderDiscoveryError,
     PythonNodeDiscoveryError,
     SchemaParseError,
@@ -99,9 +101,8 @@ from sqlbuild.compiler.scopes.constants import (
     LOCAL_DECLARATION_DIRECTORIES,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
-from sqlbuild.observability import LifecycleEvent
+from sqlbuild.provider.classes.provider import Provider
 from sqlbuild.provider.exceptions import ProviderInputError
-from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.main.read_asset_definition import read_asset_definition
 from sqlbuild.python_nodes.main.read_audit_factory_definition import (
     read_audit_factory_definition,
@@ -122,10 +123,11 @@ from sqlbuild.python_nodes.models import (
     TaskDefinition,
 )
 from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORTER_EVENT_PARAMETER_NAME
-from sqlbuild.runtime.event_exporting.models import LifecycleEventSinkDefinition
-from sqlbuild.sinks import (
+from sqlbuild.runtime.event_exporting.main.get_lifecycle_event_sink_definition import (
     get_lifecycle_event_sink_definition,
 )
+from sqlbuild.runtime.event_exporting.models import LifecycleEventSinkDefinition
+from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import SchemaModelEntry, SchemaSeedEntry, SourceEntry
 
 _PYTHON_NODE_KIND_FOLDERS: tuple[str, ...] = ("loaders", "tasks", "assets", "checks")
@@ -355,16 +357,40 @@ def discover_model_files(
     if not model_root.is_dir():
         return ()
 
-    discovered_model_files: list[DiscoveredSqlModelFile] = []
+    loaded_model_files: list[tuple[Path, str | None, Exception | None]] = []
     file_path: Path
     for file_path in sorted(model_root.rglob("*.sql")):
         if _is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir):
             continue
         try:
+            loaded_model_files.append((file_path, file_path.read_text(encoding="utf-8"), None))
+        except (OSError, UnicodeError, ValueError, SyntaxError) as error:
+            loaded_model_files.append((file_path, None, error))
+
+    prepare_model_file_headers(
+        [
+            contents
+            for _path, contents, error in loaded_model_files
+            if contents is not None and error is None
+        ]
+    )
+    discovered_model_files: list[DiscoveredSqlModelFile] = []
+    contents: str | None
+    read_error: Exception | None
+    for file_path, contents, read_error in loaded_model_files:
+        if read_error is not None:
+            if on_fault is None:
+                raise read_error
+            on_fault(_discovery_fault(project_dir=project_dir, path=file_path, error=read_error))
+            continue
+        if contents is None:
+            raise ModelSqlParseError("Model file read returned neither contents nor an error")
+        try:
             discovered_model_files.append(
                 _discover_model_file(
                     project_dir=project_dir,
                     file_path=file_path,
+                    contents=contents,
                     extract_implicit_alias_columns=extract_implicit_alias_columns,
                     extract_output_column_locations=extract_output_column_locations,
                 )
@@ -381,10 +407,10 @@ def _discover_model_file(
     *,
     project_dir: Path,
     file_path: Path,
+    contents: str,
     extract_implicit_alias_columns: bool,
     extract_output_column_locations: bool,
 ) -> DiscoveredSqlModelFile:
-    contents: str = file_path.read_text(encoding="utf-8")
     header_values, query_sql = parse_model_sql(contents=contents, file_path=file_path)
     relative_path: Path = file_path.relative_to(project_dir)
     return DiscoveredSqlModelFile(

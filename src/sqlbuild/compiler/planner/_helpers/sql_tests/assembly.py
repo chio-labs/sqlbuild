@@ -32,6 +32,8 @@ from sqlbuild.compiler.planner._helpers.resolve.refs import (
     resolve_udf_references,
 )
 from sqlbuild.compiler.planner._helpers.sql_tests.analysis_assembly import (
+    TestFunctionAnalysisContext,
+    build_test_function_analysis_context,
     try_resolve_test_model_sql_with_sql_analysis,
 )
 from sqlbuild.compiler.planner._helpers.sql_tests.comments import (
@@ -79,6 +81,7 @@ _TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
     reference_call_prefix_pattern_text(SqlReferenceKind.TABLE_FUNCTION), re.IGNORECASE
 )
 _LEADING_WITH_PATTERN: re.Pattern[str] = re.compile(r"^\s*WITH\b", re.IGNORECASE)
+_TRAILING_LINE_COMMENT_PATTERN: re.Pattern[str] = re.compile(r"--[^\n]*\Z")
 
 
 @dataclass
@@ -169,15 +172,19 @@ def build_sql_test_planning_context(
             )
             chain_names_by_topology[topology_key] = ordered_names
         chain_names_by_test_key[test.key] = ordered_names
+    qualified_function_locations: dict[str, str] = {
+        name: target.qualified_name
+        for name, target in function_locations.items()
+        if target.qualified_name is not None
+    }
     return SqlTestPlanningContext(
         models_by_name=models_by_name,
         model_dependencies=model_dependencies,
         function_locations=function_locations,
-        qualified_function_locations={
-            name: target.qualified_name
-            for name, target in function_locations.items()
-            if target.qualified_name is not None
-        },
+        qualified_function_locations=qualified_function_locations,
+        function_analysis_context=build_test_function_analysis_context(
+            function_locations=qualified_function_locations
+        ),
         chain_names_by_test_key=chain_names_by_test_key,
     )
 
@@ -214,7 +221,7 @@ def plan_test(
 
     model_map: dict[str, CompiledModel] = context.models_by_name
     function_locations: dict[str, CompiledRelationLocation] = context.function_locations
-    qualified_function_locations: dict[str, str] = context.qualified_function_locations
+    function_analysis_context: TestFunctionAnalysisContext = context.function_analysis_context
     mock_refs: dict[str, str] = _extract_mock_refs(test)
     mock_sources: dict[str, str] = _extract_mock_sources(test)
     mock_seeds: dict[str, str] = _extract_mock_seeds(test)
@@ -298,6 +305,8 @@ def plan_test(
 
         query_sql: str = _resolve_test_model_query_sql(model=model, test=test)
         step_sql: str | None = None
+        step_lifted_ctes: tuple[tuple[str, str], ...] = ()
+        comparison_body_sql: str | None = None
         if sql_analysis_enabled:
             analysis_query_sql, reached_table_functions = _resolve_table_function_fixtures(
                 query_sql=query_sql,
@@ -312,7 +321,7 @@ def plan_test(
                     mock_sources=mock_sources,
                     mock_seeds=mock_seeds,
                     mock_dbt_refs=mock_dbt_refs,
-                    function_locations=qualified_function_locations,
+                    function_context=function_analysis_context,
                     helper_ctes=helper_ctes,
                     resolved_chain=sql_analysis_resolved,
                     file_label=str(test.test_file.relative_path),
@@ -321,6 +330,8 @@ def plan_test(
             )
             if sql_analysis_sql is not None:
                 step_sql = sql_analysis_sql.resolved_sql
+                step_lifted_ctes = tuple(sql_analysis_sql.generated_ctes.items())
+                comparison_body_sql = sql_analysis_sql.cte_body_sql
                 sql_analysis_resolved[model_name] = sql_analysis_sql
                 reachable_mocks.update(sql_analysis_sql.reachable_mock_names)
         if step_sql is None:
@@ -340,6 +351,8 @@ def plan_test(
                 model_name=model_name,
                 resolved_sql=step_sql,
                 expected_cte_sql=expected_cte_sql or None,
+                lifted_ctes=step_lifted_ctes,
+                comparison_body_sql=comparison_body_sql,
             )
         )
 
@@ -349,7 +362,7 @@ def plan_test(
         assertion_map=assertion_map,
         test=test,
         function_locations=function_locations,
-        qualified_function_locations=qualified_function_locations,
+        function_analysis_context=function_analysis_context,
         helper_ctes=helper_ctes,
         mock_table_functions=mock_table_functions,
         textual_chain=textual_chain,
@@ -484,7 +497,7 @@ def _build_assertion_steps(
     assertion_map: dict[str, str],
     test: CompiledSqlTest,
     function_locations: dict[str, CompiledRelationLocation],
-    qualified_function_locations: dict[str, str],
+    function_analysis_context: TestFunctionAnalysisContext,
     helper_ctes: tuple[CompileSqlTestCte, ...],
     mock_table_functions: dict[str, str],
     textual_chain: _TextualChainResolver,
@@ -508,6 +521,8 @@ def _build_assertion_steps(
         )
         reached_table_functions.update(reached)
         resolved_assertion_sql: str | None = None
+        assertion_lifted_ctes: tuple[tuple[str, str], ...] = ()
+        assertion_comparison_body_sql: str | None = None
         if sql_analysis_enabled:
             analyzed_assertion_sql: SqlAnalysisResolvedTestSql | None = (
                 try_resolve_test_model_sql_with_sql_analysis(
@@ -516,7 +531,7 @@ def _build_assertion_steps(
                     mock_sources=mock_sources,
                     mock_seeds=mock_seeds,
                     mock_dbt_refs=mock_dbt_refs,
-                    function_locations=qualified_function_locations,
+                    function_context=function_analysis_context,
                     helper_ctes=helper_ctes,
                     resolved_chain=sql_analysis_resolved,
                     file_label=str(test.test_file.relative_path),
@@ -527,6 +542,8 @@ def _build_assertion_steps(
                 analyzed_assertion_sql.resolved_sql
             ):
                 resolved_assertion_sql = analyzed_assertion_sql.resolved_sql
+                assertion_lifted_ctes = tuple(analyzed_assertion_sql.generated_ctes.items())
+                assertion_comparison_body_sql = analyzed_assertion_sql.cte_body_sql
         if resolved_assertion_sql is None:
             resolved_assertion_sql = _resolve_assertion_sql(
                 sql=fixture_resolved_assertion_sql,
@@ -543,6 +560,8 @@ def _build_assertion_steps(
             SqlTestAssertionStep(
                 name=assertion_name,
                 resolved_sql=resolved_assertion_sql,
+                lifted_ctes=assertion_lifted_ctes,
+                comparison_body_sql=assertion_comparison_body_sql,
             )
         )
     return tuple(assertion_steps), frozenset(reached_table_functions)
@@ -708,7 +727,7 @@ def _build_assertion_chain_ctes(
                 "with WITH"
             )
         assertion_resolved_chain[name] = cte_name
-        cte_parts.append(f"{cte_name} AS ({resolved_sql})")
+        cte_parts.append(_cte_definition_sql(name=cte_name, sql=resolved_sql))
     return assertion_resolved_chain, tuple(cte_parts)
 
 
@@ -986,8 +1005,14 @@ def _build_helper_with_clause(
     parts: list[str] = []
     cte: CompileSqlTestCte
     for cte in helper_ctes:
-        parts.append(f"{cte.name} AS ({cte.sql_body})")
+        parts.append(_cte_definition_sql(name=cte.name, sql=cte.sql_body))
     return "WITH " + ", ".join(parts)
+
+
+def _cte_definition_sql(*, name: str, sql: str) -> str:
+    body: str = sql.rstrip()
+    terminator: str = "\n" if _TRAILING_LINE_COMMENT_PATTERN.search(body) is not None else ""
+    return f"{name} AS ({body}{terminator})"
 
 
 def _topo_sort_model_chain(

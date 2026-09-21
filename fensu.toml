@@ -124,12 +124,6 @@ reason = "These collector methods preserve dlt's external positional progress pr
 
 [[targets.python.rule_exceptions]]
 rule = "FFS120"
-path = "src/sqlbuild/loaders.py"
-symbols = ["loader"]
-reason = "Bare @loader is evaluated by Python as loader(function), requiring positional function calling."
-
-[[targets.python.rule_exceptions]]
-rule = "FFS120"
 path = "src/sqlbuild/assets.py"
 symbols = ["asset"]
 reason = "Bare @asset is evaluated by Python as asset(function), requiring positional function calling."
@@ -147,15 +141,27 @@ symbols = ["task"]
 reason = "Bare @task is evaluated by Python as task(function), requiring positional function calling."
 
 [[targets.python.rule_exceptions]]
-rule = "FFR402"
-path = "src/sqlbuild/integrations/dagster/__init__.py"
-reason = "These imports preserve Dagster's documented external package-root APIs."
+rule = "FFS120"
+path = "src/sqlbuild/python_nodes/_helpers/loader_authoring.py"
+symbols = ["loader"]
+reason = "Bare @loader is evaluated by Python as loader(function), requiring positional function calling."
 
 [[targets.python.rule_exceptions]]
 rule = "FFS120"
-path = "src/sqlbuild/sinks.py"
-symbols = ["command_output_sink", "lifecycle_event_sink"]
-reason = "Bare sink decorators are evaluated by Python as decorator(function), requiring positional function calling."
+path = "src/sqlbuild/runtime/event_exporting/main/lifecycle_event_sink.py"
+symbols = ["lifecycle_event_sink"]
+reason = "Bare lifecycle sink decorators are evaluated as decorator(function), requiring positional function calling."
+
+[[targets.python.rule_exceptions]]
+rule = "FFS120"
+path = "src/sqlbuild/runtime/event_exporting/main/command_output_sink.py"
+symbols = ["command_output_sink"]
+reason = "Bare command-output sink decorators are evaluated as decorator(function), requiring positional function calling."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR402"
+path = "src/sqlbuild/integrations/dagster/__init__.py"
+reason = "These imports preserve Dagster's documented external package-root APIs."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR402"
@@ -213,31 +219,6 @@ symbols = ["ObservedConnection.execute", "ObservedConnection.executemany"]
 reason = "This proxy preserves DuckDB's positional connection execution protocol."
 
 [[targets.python.rule_exceptions]]
-rule = "FFL101"
-path = "scripts/fensu_policy/rules/adapter_ownership.py"
-reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers imports, despite FFR704 requiring that layout."
-
-[[targets.python.rule_exceptions]]
-rule = "FFL101"
-path = "scripts/fensu_policy/rules/canonical_operations.py"
-reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers imports, despite FFR704 requiring that layout."
-
-[[targets.python.rule_exceptions]]
-rule = "FFL101"
-path = "scripts/fensu_policy/rules/execution_observability.py"
-reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers imports, despite FFR704 requiring that layout."
-
-[[targets.python.rule_exceptions]]
-rule = "FFL101"
-path = "scripts/fensu_policy/rules/module_boundaries.py"
-reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers imports, despite FFR704 requiring that layout."
-
-[[targets.python.rule_exceptions]]
-rule = "FFL101"
-path = "scripts/fensu_policy/rules/orchestration_dataflow.py"
-reason = "Fensu does not classify tooling rules/ as a role for sibling _helpers imports, despite FFR704 requiring that layout."
-
-[[targets.python.rule_exceptions]]
 rule = "FFL102"
 path = "src/sqlbuild/lint/_helpers/native.py"
 reason = "The lint layer reuses the compiler's MODEL() header parser; the compiler exposes no public facade for it."
@@ -259,6 +240,26 @@ tests = []
 tooling = []
 rule_packs = ["rust"]
 select = ["FPRS"]
+
+[[targets.rust.rule_exceptions]]
+rule = "FPRSR307"
+path = "crates/sqlbuild-rules-native/src/query_analysis/main.rs"
+reason = "This module owns the single coarse native query-analysis boundary and its compact SQLBuild projection contract."
+
+[[targets.rust.rule_exceptions]]
+rule = "FPRSR307"
+path = "crates/sqlbuild-rules-native/src/scope_metadata/main.rs"
+reason = "This focused serde boundary validates the scope metadata schema used by the crate-root wire models."
+
+[[targets.rust.rule_exceptions]]
+rule = "FPRSR307"
+path = "crates/sqlbuild-rules-native/src/semantic_usage/main.rs"
+reason = "This module owns the existing coarse native SQL usage-analysis boundary exposed through PyO3."
+
+[[targets.rust.rule_exceptions]]
+rule = "FPRSR307"
+path = "crates/sqlbuild-rules-native/src/semantic_validation/main.rs"
+reason = "This module owns the existing coarse native schema-validation boundary exposed through PyO3."
 
 [targets.rust.rule_options.FPRSL301]
 forbidden_packages = [

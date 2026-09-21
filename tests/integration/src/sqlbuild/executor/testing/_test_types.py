@@ -49,3 +49,9 @@ class SqlTestDiagnosticsTestCase:
     expect_redaction: bool = False
     expect_truncation: bool = False
     expected_column_differences: tuple[tuple[str, str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class ExpectedBooleanTestCase:
+    description: str
+    expected_result: bool

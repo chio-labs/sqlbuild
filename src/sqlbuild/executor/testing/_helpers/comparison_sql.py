@@ -20,16 +20,28 @@ _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 
 _IDENTIFIER_CHAR_PATTERN: re.Pattern[str] = re.compile(r"[^a-zA-Z0-9_]+")
 _BACKTICK_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(r"`[^`]+`(?:\s*\.\s*`[^`]+`)*")
+_LEADING_WITH_PATTERN: re.Pattern[str] = re.compile(
+    r"\A(?:\s|--[^\n]*(?:\n|\Z)|/\*.*?\*/)*WITH\b",
+    flags=re.IGNORECASE | re.DOTALL,
+)
+_TRAILING_LINE_COMMENT_PATTERN: re.Pattern[str] = re.compile(r"--[^\n]*\Z")
 
 
 def lift_step_ctes(
-    *, sql: str, lifted_ctes: OrderedDict[str, str], sql_analysis_enabled: bool = True
+    *,
+    sql: str,
+    lifted_ctes: OrderedDict[str, str],
+    sql_analysis_enabled: bool = True,
+    sql_analysis_dialect: str | None = None,
 ) -> tuple[str, OrderedDict[str, str]]:
     """Lift a step's top-level CTEs into the shared comparison query when possible."""
 
     if not sql_analysis_enabled:
         return sql, lifted_ctes
-    split_sql: tuple[tuple[tuple[str, str], ...], str] | None = _split_top_level_with(sql)
+    split_sql: tuple[tuple[tuple[str, str], ...], str] | None = _split_top_level_with(
+        sql=sql,
+        sql_analysis_dialect=sql_analysis_dialect,
+    )
     if split_sql is None:
         return sql, lifted_ctes
     step_ctes: tuple[tuple[str, str], ...]
@@ -48,6 +60,69 @@ def lift_step_ctes(
         if existing_name is None:
             updated_ctes[cte_name] = cte_sql
     return body_sql, updated_ctes
+
+
+def merge_lifted_ctes(
+    *,
+    ctes: tuple[tuple[str, str], ...],
+    lifted_ctes: OrderedDict[str, str],
+    sql_analysis_dialect: str | None = None,
+) -> OrderedDict[str, str] | None:
+    """Canonicalize and merge already identified top-level CTE bodies."""
+
+    canonical_ctes: tuple[tuple[str, str], ...] = tuple(
+        (
+            cte_name,
+            format_sql(sql=cte_sql, sql_analysis_dialect=sql_analysis_dialect),
+        )
+        for cte_name, cte_sql in ctes
+    )
+    for cte_name, cte_sql in canonical_ctes:
+        existing_name: str | None = _existing_cte_name(lifted_ctes=lifted_ctes, cte_name=cte_name)
+        existing_sql: str | None = lifted_ctes.get(existing_name) if existing_name else None
+        if existing_sql is not None and existing_sql != cte_sql:
+            return None
+    updated_ctes: OrderedDict[str, str] = OrderedDict(lifted_ctes)
+    for cte_name, cte_sql in canonical_ctes:
+        if _existing_cte_name(lifted_ctes=updated_ctes, cte_name=cte_name) is None:
+            updated_ctes[cte_name] = cte_sql
+    return updated_ctes
+
+
+def lift_preanalyzed_step_ctes(
+    *,
+    sql: str,
+    complete_sql: str,
+    preanalyzed_ctes: tuple[tuple[str, str], ...],
+    lifted_ctes: OrderedDict[str, str],
+    sql_analysis_enabled: bool,
+    sql_analysis_dialect: str | None = None,
+) -> tuple[str, OrderedDict[str, str]]:
+    """Reuse generated CTEs while still lifting authored top-level CTEs."""
+
+    updated_ctes: OrderedDict[str, str] | None = merge_lifted_ctes(
+        ctes=preanalyzed_ctes,
+        lifted_ctes=lifted_ctes,
+        sql_analysis_dialect=sql_analysis_dialect,
+    )
+    if updated_ctes is None:
+        return complete_sql, lifted_ctes
+    if not sql_analysis_enabled or _LEADING_WITH_PATTERN.match(sql) is None:
+        return sql, updated_ctes
+    return lift_step_ctes(
+        sql=sql,
+        lifted_ctes=updated_ctes,
+        sql_analysis_enabled=True,
+        sql_analysis_dialect=sql_analysis_dialect,
+    )
+
+
+def cte_definition_sql(*, name: str, sql: str) -> str:
+    """Wrap a CTE body without letting a trailing line comment consume delimiters."""
+
+    body: str = sql.rstrip()
+    terminator: str = "\n" if _TRAILING_LINE_COMMENT_PATTERN.search(body) is not None else ""
+    return f"{name} AS ({body}{terminator})"
 
 
 def format_sql(
@@ -101,6 +176,7 @@ def build_chain_comparison_parts(
     *,
     test_entry: SqlTestPlanEntry,
     set_difference_operator: str,
+    sql_analysis_dialect: str | None = None,
 ) -> tuple[OrderedDict[str, str], list[str], list[str], dict[str, int]]:
     """Build actual/expected CTEs only for explicitly asserted model steps."""
 
@@ -124,12 +200,23 @@ def build_chain_comparison_parts(
         ):
             continue
         actual_sql: str
-        actual_sql, lifted_ctes = lift_step_ctes(
-            sql=step.resolved_sql,
-            lifted_ctes=lifted_ctes,
-            sql_analysis_enabled=test_entry.sql_analysis_enabled,
-        )
-        comparison_ctes.append(f"{actual_cte} AS ({actual_sql})")
+        if step.lifted_ctes:
+            actual_sql, lifted_ctes = lift_preanalyzed_step_ctes(
+                sql=step.comparison_body_sql or step.resolved_sql,
+                complete_sql=step.resolved_sql,
+                preanalyzed_ctes=step.lifted_ctes,
+                lifted_ctes=lifted_ctes,
+                sql_analysis_enabled=test_entry.sql_analysis_enabled,
+                sql_analysis_dialect=sql_analysis_dialect,
+            )
+        else:
+            actual_sql, lifted_ctes = lift_step_ctes(
+                sql=step.resolved_sql,
+                lifted_ctes=lifted_ctes,
+                sql_analysis_enabled=test_entry.sql_analysis_enabled,
+                sql_analysis_dialect=sql_analysis_dialect,
+            )
+        comparison_ctes.append(cte_definition_sql(name=actual_cte, sql=actual_sql))
         if step.expected_cte_sql is None:
             continue
         expected_sql: str
@@ -137,8 +224,9 @@ def build_chain_comparison_parts(
             sql=step.expected_cte_sql,
             lifted_ctes=lifted_ctes,
             sql_analysis_enabled=test_entry.sql_analysis_enabled,
+            sql_analysis_dialect=sql_analysis_dialect,
         )
-        comparison_ctes.append(f"{expected_cte} AS ({expected_sql})")
+        comparison_ctes.append(cte_definition_sql(name=expected_cte, sql=expected_sql))
         select_parts.append(
             "SELECT "
             f"{step_index} AS step_index, "
@@ -155,7 +243,9 @@ def build_chain_comparison_parts(
     return lifted_ctes, comparison_ctes, select_parts, cte_name_counts
 
 
-def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] | None:
+def _split_top_level_with(
+    *, sql: str, sql_analysis_dialect: str | None = None
+) -> tuple[tuple[tuple[str, str], ...], str] | None:
     """Split top-level WITH CTEs from a SQL statement with Polyglot if available."""
 
     polyglot_module: Any = import_polyglot_sql()
@@ -165,7 +255,8 @@ def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] |
         protected_sql, protected_identifiers = _protect_backtick_identifiers(sql)
 
     try:
-        parsed: Any = polyglot_module.parse_one(protected_sql, dialect="generic")
+        dialect: str = sql_analysis_dialect or "generic"
+        parsed: Any = polyglot_module.parse_one(protected_sql, dialect=dialect)
     except polyglot_module.PolyglotError as error:
         log_debug_event(
             logger=_DEBUG_LOGGER,
@@ -192,7 +283,11 @@ def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] |
         body: Any | None = cte.get("this")
         if name is None or body is None:
             return None
-        cte_sql: str | None = _generate_one(polyglot_module=polyglot_module, expression=body)
+        cte_sql: str | None = _generate_one(
+            polyglot_module=polyglot_module,
+            expression=body,
+            dialect=dialect,
+        )
         if cte_sql is None:
             return None
         cte_parts.append(
@@ -206,7 +301,11 @@ def _split_top_level_with(sql: str) -> tuple[tuple[tuple[str, str], ...], str] |
         )
 
     select_dict["with"] = None
-    body_sql: str | None = _generate_one(polyglot_module=polyglot_module, expression=parsed_dict)
+    body_sql: str | None = _generate_one(
+        polyglot_module=polyglot_module,
+        expression=parsed_dict,
+        dialect=dialect,
+    )
     if body_sql is None:
         return None
     return (
@@ -248,9 +347,9 @@ def _existing_cte_name(*, lifted_ctes: OrderedDict[str, str], cte_name: str) -> 
     return None
 
 
-def _generate_one(*, polyglot_module: Any, expression: Any) -> str | None:
+def _generate_one(*, polyglot_module: Any, expression: Any, dialect: str) -> str | None:
     try:
-        generated: list[str] = polyglot_module.generate(expression, dialect="generic")
+        generated: list[str] = polyglot_module.generate(expression, dialect=dialect)
     except Exception as error:
         log_debug_event(
             logger=_DEBUG_LOGGER,

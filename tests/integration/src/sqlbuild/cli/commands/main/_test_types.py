@@ -405,3 +405,21 @@ class PlanAutoLoadJsonTestCase:
     expected_source_loads: tuple[dict[str, object], ...]
     expected_selected_count: int
     expected_source_load_count: int
+
+
+@dataclass(frozen=True)
+class ExpectedBooleanTestCase:
+    description: str
+    expected_result: bool
+
+
+@dataclass(frozen=True)
+class ExpectedCountTestCase:
+    description: str
+    expected_count: int
+
+
+@dataclass(frozen=True)
+class ExpectedMessageTestCase:
+    description: str
+    expected_message: str

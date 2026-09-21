@@ -19,6 +19,9 @@ import orjson
 import sqlbuild._native as _native
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.models import (
+    CompactLineageFacts,
+    CompiledLineageColumnFact,
+    CompiledLineageSourceFact,
     CompiledModel,
     CompiledProject,
     CompiledSqlScenario,
@@ -574,9 +577,48 @@ def _custom_fact_fingerprint(*, project: CompiledProject, attributes: frozenset[
             tuple(model.constant_declarations for model in project.models),
         )
     if RULE_CONTEXT_PROJECT_FACT in attributes:
-        facts[RULE_CONTEXT_PROJECT_FACT] = project.models
+        facts[RULE_CONTEXT_PROJECT_FACT] = _project_fact_models(project=project)
     encoded: bytes = orjson.dumps(facts, option=orjson.OPT_SORT_KEYS, default=str)
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _project_fact_models(*, project: CompiledProject) -> tuple[CompiledModel, ...]:
+    """Project models with lazy lineage represented by stable semantic data only."""
+
+    projected: list[CompiledModel] = []
+    for model in project.models:
+        projected_model: CompiledModel = model
+        lineage: object = model.fast_lineage_columns
+        if isinstance(lineage, CompactLineageFacts):
+            lineage = _compact_lineage_fact_payloads(lineage=lineage)
+            projected_model = replace(model, fast_lineage_columns=cast(Any, lineage))
+        projected.append(projected_model)
+    return tuple(projected)
+
+
+def _compact_lineage_fact_payloads(
+    *, lineage: CompactLineageFacts
+) -> tuple[CompiledLineageColumnFact, ...]:
+    """Project compact lineage into the same semantic shape as materialized facts."""
+
+    payloads: list[CompiledLineageColumnFact] = []
+    for name_index, transform_code, confidence_code, sources in lineage.rows:
+        payloads.append(
+            CompiledLineageColumnFact(
+                output_column=lineage.string_pool[name_index],
+                upstream_columns=tuple(
+                    CompiledLineageSourceFact(
+                        resource_type=lineage.string_pool[source[0]],
+                        resource_name=lineage.resource_name(source[1]),
+                        column_name=lineage.string_pool[source[2]],
+                    )
+                    for source in sources
+                ),
+                transform_kind=lineage.transform_kind(transform_code),
+                confidence=lineage.confidence(confidence_code),
+            )
+        )
+    return tuple(payloads)
 
 
 def _custom_rule_source_payload(*, rule: Rule, project_dir: Path) -> dict[str, object]:

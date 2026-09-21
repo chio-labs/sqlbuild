@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import get_type_hints
 
 from sqlbuild.provider.classes.container import ProviderContainer
+from sqlbuild.provider.classes.provider import Provider
 from sqlbuild.provider.exceptions import ProviderInjectionError, ProviderLookupError
-from sqlbuild.providers import Provider
 
 _CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset({"ctx", "context", "_ctx", "hook_context"})
 

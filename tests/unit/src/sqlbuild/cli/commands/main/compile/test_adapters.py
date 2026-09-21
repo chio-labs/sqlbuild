@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import subprocess
+import sys
+
 import pytest
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -10,6 +13,7 @@ from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
 )
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
+    ExpectedMessageTestCase,
     ResolveAdapterErrorTestCase,
     ResolveAdapterTestCase,
     ResolveEffectiveAdapterNameTestCase,
@@ -64,6 +68,35 @@ def test_given_unknown_adapter_when_resolving_adapter_then_raises_cli_user_error
 
     assert error_info.value.code == "C601"
     assert test_case.expected_error_fragment in str(error_info.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [ExpectedMessageTestCase(description="unused adapters stay lazy", expected_message="")],
+    ids=lambda case: case.description,
+)
+def test_given_duckdb_adapter_when_resolving_in_fresh_process_then_other_adapters_stay_unloaded(
+    test_case: ExpectedMessageTestCase,
+) -> None:
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; "
+                "from sqlbuild.adapter.discovery.main.resolve_adapter import resolve_adapter; "
+                "adapter = resolve_adapter(adapter_name='duckdb'); "
+                "assert type(adapter).__name__ == 'DuckDbAdapter'; "
+                "assert 'sqlbuild.adapters.snowflake.classes.snowflake_adapter' "
+                "not in sys.modules"
+            ),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stderr == test_case.expected_message
 
 
 @pytest.mark.parametrize(

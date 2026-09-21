@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from typing import Any, cast
 
 from sqlbuild.compiler.compile.models import (
+    CompiledLineageColumnFact,
+    CompiledLineageSourceFact,
     CompiledModel,
     CompiledProject,
 )
@@ -18,12 +21,10 @@ from sqlbuild.compiler.lineage._helpers.columns import (
 from sqlbuild.compiler.lineage.constants import STAR_COLUMN_NAME
 from sqlbuild.compiler.lineage.models import (
     ColumnLineage,
-    ColumnLineageEdge,
     ColumnLineageSource,
     ModelColumnLineage,
     PhysicalResource,
     ProjectColumnLineage,
-    QualifiedLineageColumn,
 )
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
@@ -59,10 +60,31 @@ def build_fast_project_column_lineage(
 
     schema: dict[str, dict[str, str]] = _build_schema_mapping(project)
     model_results: dict[str, ModelColumnLineage] = {}
-    collapsed_edges: list[ColumnLineageEdge] = []
+    compact_models: dict[str, tuple[Sequence[CompiledLineageColumnFact], bool]] = {}
+    model_order: list[str] = []
 
     for model in project.models:
         if model_names is not None and model.name not in model_names:
+            continue
+        if model.fast_lineage_columns is not None:
+            columns: Sequence[CompiledLineageColumnFact] = model.fast_lineage_columns
+            if model.fast_lineage_has_star:
+                normalized_sql: str
+                physical_resources: tuple[PhysicalResource, ...]
+                normalized_sql, physical_resources = _normalize_sqlbuild_refs(model.query_sql)
+                del normalized_sql
+                star_columns: tuple[ColumnLineage, ...] = _build_star_lineage(
+                    model=model,
+                    schema=schema,
+                    physical_resources=physical_resources,
+                    existing_columns={column.output_column for column in columns},
+                )
+                columns = (
+                    *columns,
+                    *(_compiled_lineage_fact(column) for column in star_columns),
+                )
+            compact_models[model.name] = (columns, model.fast_lineage_has_star)
+            model_order.append(model.name)
             continue
         result: ModelColumnLineage | None = _build_polyglot_fast_model_column_lineage(
             model=model,
@@ -72,23 +94,29 @@ def build_fast_project_column_lineage(
         if result is None:
             continue
         model_results[model.name] = result
-        for column in result.columns:
-            target: QualifiedLineageColumn = QualifiedLineageColumn(
-                resource_type=CompiledResourceType.MODEL,
-                resource_name=model.name,
-                column_name=column.output_column,
-            )
-            for upstream in column.upstream_columns:
-                collapsed_edges.append(
-                    ColumnLineageEdge(
-                        source=upstream.as_qualified_column(),
-                        target=target,
-                        transform_kind=column.transform_kind,
-                        confidence=column.confidence,
-                    )
-                )
+        model_order.append(model.name)
 
-    return ProjectColumnLineage(models=model_results, edges=tuple(collapsed_edges))
+    return ProjectColumnLineage.from_fast_facts(
+        models=model_results,
+        compact_models=compact_models,
+        model_order=tuple(model_order),
+    )
+
+
+def _compiled_lineage_fact(column: ColumnLineage) -> CompiledLineageColumnFact:
+    return CompiledLineageColumnFact(
+        output_column=column.output_column,
+        upstream_columns=tuple(
+            CompiledLineageSourceFact(
+                resource_type=source.resource_type,
+                resource_name=source.resource_name,
+                column_name=source.column_name,
+            )
+            for source in column.upstream_columns
+        ),
+        transform_kind=column.transform_kind,
+        confidence=column.confidence,
+    )
 
 
 def _build_polyglot_fast_model_column_lineage(

@@ -24,9 +24,10 @@ from sqlbuild.compiler.manifest._helpers.model_nodes import build_model_node
 from sqlbuild.compiler.planner.main.identity.version_identity_model_metadata import (
     build_model_version_identity_metadata_json,
 )
-from sqlbuild.spec.contracts.models import SchemaAuditInstance, SourceLocation
+from sqlbuild.spec.contracts.models import SchemaAuditInstance, SchemaModelEntry, SourceLocation
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     DynamicModelSchemaTestCase,
+    ExpectedCountTestCase,
     ModelSchemaCompilationTestCase,
     ModelSchemaContractDiagnosticTestCase,
     ModelSchemaCursorTestCase,
@@ -46,6 +47,61 @@ adapter = "duckdb"
 sql_analysis = true
 sql_validation = true
 """
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [ExpectedCountTestCase(description="identical headers keep locations", expected_count=2)],
+    ids=lambda case: case.description,
+)
+def test_given_identical_contract_headers_when_attaching_then_each_model_keeps_its_locations(
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+    test_case: ExpectedCountTestCase,
+) -> None:
+    model_sql: str = """
+MODEL (
+  columns (order_id (type INTEGER, audits [not_null])),
+);
+SELECT 1::INTEGER AS order_id
+""".strip()
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": """
+name = "demo"
+adapter = "duckdb"
+
+[settings]
+sql_analysis = false
+sql_validation = false
+""".strip()
+            + "\n",
+            "models/customers.sql": model_sql,
+            "models/staging/orders.sql": model_sql,
+        },
+    )
+
+    inputs: CompileProjectInputs = build_compile_inputs(
+        discovered_inputs=discover_project_inputs(project_dir=tmp_path),
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
+    )
+
+    schema_entries: tuple[SchemaModelEntry, ...] = tuple(
+        cast(SchemaModelEntry, model.schema_entry) for model in inputs.model_inputs
+    )
+    locations: tuple[tuple[Path, Path], ...] = tuple(
+        (
+            cast(SourceLocation, schema_entry.columns[0].location).path,
+            cast(SourceLocation, schema_entry.columns[0].audits[0].location).path,
+        )
+        for schema_entry in schema_entries
+    )
+    assert len(locations) == test_case.expected_count
+    assert locations == (
+        (Path("models/customers.sql"), Path("models/customers.sql")),
+        (Path("models/staging/orders.sql"), Path("models/staging/orders.sql")),
+    )
 
 
 @pytest.mark.parametrize(

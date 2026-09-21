@@ -5,9 +5,12 @@ use polyglot_sql::{
     ValidationError, ValidationResult, ValidationSchema, build_scope,
     mapping_schema_from_validation_schema_with_dialect, validate_with_schema,
 };
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::Deserialize;
 
 const MINIMUM_USING_SOURCE_COUNT: usize = 2;
+const MAX_VALIDATION_WORKERS: usize = 4;
+const VALIDATION_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Deserialize)]
 struct ValidationRequest {
@@ -38,8 +41,16 @@ pub(crate) fn validation_json(request_json: &str) -> Result<String, String> {
 pub(crate) fn validations_json(request_json: &str) -> Result<String, String> {
     let requests: Vec<ValidationRequest> =
         serde_json::from_str(request_json).map_err(|error| error.to_string())?;
+    if requests.is_empty() {
+        return Ok("[]".to_string());
+    }
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(MAX_VALIDATION_WORKERS.min(requests.len()))
+        .stack_size(VALIDATION_WORKER_STACK_BYTES)
+        .build()
+        .map_err(|error| error.to_string())?;
     let results: Result<Vec<ValidationResult>, String> =
-        requests.into_iter().map(validation_result).collect();
+        pool.install(|| requests.into_par_iter().map(validation_result).collect());
     serde_json::to_string(&results?).map_err(|error| error.to_string())
 }
 
@@ -173,6 +184,3 @@ impl ClauseResolver<'_, '_> {
             .any(|name| name.eq_ignore_ascii_case(column_name))
     }
 }
-
-#[cfg(test)]
-mod tests;

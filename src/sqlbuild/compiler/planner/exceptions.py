@@ -19,6 +19,10 @@ class PlannerInputError(ValueError):
         self.help = help
 
 
+class NativeSqlTestPlanningError(PlannerInputError):
+    """Raised when the native SQL-test planning boundary returns invalid data."""
+
+
 class SqlTestFixtureValidationError(PlannerInputError):
     """Raised with every invalid fixture diagnostic for one SQL test."""
 

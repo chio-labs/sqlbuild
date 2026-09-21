@@ -461,7 +461,7 @@ pub(crate) struct ScopeCompleteness {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ScopeIndexFacts {
-    #[serde(deserialize_with = "crate::scope_metadata::deserialize_scope_schema_version")]
+    #[serde(deserialize_with = "crate::scope_metadata::main::deserialize_scope_schema_version")]
     pub schema_version: u32,
     pub ownership_roots: Vec<ScopeOwnershipRoot>,
     pub resources: Vec<ScopeResource>,

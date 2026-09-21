@@ -8,3 +8,9 @@ class BuildComparisonSqlTestCase:
     expected_fragments: tuple[str, ...]
     expected_absent_fragments: tuple[str, ...] = ()
     sql_analysis_enabled: bool = True
+
+
+@dataclass(frozen=True)
+class ExpectedBooleanTestCase:
+    description: str
+    expected_result: bool

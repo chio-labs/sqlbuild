@@ -7,12 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from sqlbuild.compiler.compile._helpers.analysis.columns import infer_columns_with_sql_analysis
+from sqlbuild.compiler.compile._helpers.analysis.compact import infer_columns_with_sql_analysis
 from sqlbuild.compiler.compile._helpers.analysis.validation import (
     validate_function_sql_syntax,
-)
-from sqlbuild.compiler.compile._helpers.attachment.namespace_validation import (
-    validate_preserved_logical_namespace,
 )
 from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_function_names,
@@ -21,6 +18,9 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_source_names,
     build_known_table_function_names,
     validate_function_references,
+)
+from sqlbuild.compiler.compile._helpers.config.namespace_validation import (
+    validate_preserved_logical_namespace,
 )
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics

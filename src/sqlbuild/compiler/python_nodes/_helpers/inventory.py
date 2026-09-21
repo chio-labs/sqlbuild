@@ -26,7 +26,7 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
 )
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
-from sqlbuild.providers import Provider
+from sqlbuild.provider.classes.provider import Provider
 from sqlbuild.python_nodes.main.read_asset_definition import read_asset_definition
 from sqlbuild.python_nodes.main.read_check_definition import read_check_definition
 from sqlbuild.python_nodes.main.read_loader_definition import read_loader_definition

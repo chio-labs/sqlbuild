@@ -6,7 +6,6 @@ import time
 from pathlib import Path
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.compile.dag import resolve_compile_dag_path
 from sqlbuild.cli.commands._helpers.compile.lineage import (
     build_compile_lineage,
     compile_analysis_lineage_mode,
@@ -18,13 +17,15 @@ from sqlbuild.cli.commands._helpers.compile.status import (
 )
 from sqlbuild.cli.commands._helpers.compile.target_writer import write_static_compile_target
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
-from sqlbuild.cli.commands.models import (
+from sqlbuild.cli.commands.types import CompileLineageMode
+from sqlbuild.cli.compile.models import (
     CompileAnalysis,
     CompileProfileFlags,
     CompileWriteResult,
+)
+from sqlbuild.cli.output.models import (
     WrittenTarget,
 )
-from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
     CompiledObjectKey,
@@ -33,18 +34,14 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.contracts.models import ContractValidationResult
-from sqlbuild.compiler.dag.main.build import build_dag_json
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
-from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.main.selected_graph import (
     build_project_graph_with_analysis_selection,
 )
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
-from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.main.run_rules import run_rules
@@ -153,7 +150,7 @@ def analyze_compile_project(
         *graph.project.diagnostics,
         *contract_result.diagnostics,
     )
-    if not any(diagnostic.is_error for diagnostic in core_diagnostics):
+    if not any(diagnostic.is_error for diagnostic in graph.project.diagnostics):
         _ = start_compile_phase(status=status, message="Evaluating built-in and custom rules...")
         rules_result = run_rules(
             graph=graph,
@@ -211,6 +208,8 @@ def build_compile_manifest_payload(
 
     if not manifest:
         return None
+    from sqlbuild.compiler.manifest.main.build import build_manifest
+
     manifest_start: float = time.monotonic()
     _ = start_compile_phase(status=status, message="Building manifest...")
     manifest_payload: dict[str, object] = build_manifest(
@@ -240,6 +239,11 @@ def write_compile_dag_artifact(
 
     if dag_path is None:
         return
+    from sqlbuild.cli.commands._helpers.compile.dag import resolve_compile_dag_path
+    from sqlbuild.compiler.dag.main.build import build_dag_json
+    from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
+    from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
+
     dag_start: float = time.monotonic()
     _ = start_compile_phase(status=status, message="Writing DAG artifact...")
     python_graph: PythonNodeGraph = build_discovered_python_node_graph(

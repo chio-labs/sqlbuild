@@ -17,10 +17,10 @@ from sqlbuild.diagnostics.constants import (
     SQL_PRIVATE_RECORD_FIELD,
     SQL_PRIVATE_RECORD_MARKER,
 )
-from sqlbuild.observability import DiagnosticLog
 from sqlbuild.runtime.compute_logs.constants import SQL_LOG_RECORD_FIELD
 from sqlbuild.runtime.compute_logs.types import ComputeLogStorage
 from sqlbuild.runtime.observability.constants import CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION
+from sqlbuild.runtime.observability.models import DiagnosticLog
 from sqlbuild.runtime.observability.types import JSONValue
 
 _IDENTITY_FIELDS: tuple[str, ...] = (

@@ -7,6 +7,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Any, cast
 
 from sqlbuild.cli.output._helpers.integration_identity import integration_resource_id
@@ -68,6 +69,14 @@ from sqlbuild.runtime.observability.types import JSONValue
 
 
 @dataclass(frozen=True)
+class TerminalEventClaim:
+    """One claimed terminal with its immutable canonical publication sequence."""
+
+    terminal: LifecycleEvent
+    event_sequence: int
+
+
+@dataclass(frozen=True)
 class CursorPlanDetails:
     """Operator-facing cursor details shared by plan renderers."""
 
@@ -81,14 +90,6 @@ class CursorPlanDetails:
     declared_batch_size: str | None
     effective_batch_size: str | None
     planned_batch_count: int | None
-
-
-@dataclass(frozen=True)
-class TerminalEventClaim:
-    """One claimed terminal with its immutable canonical publication sequence."""
-
-    terminal: LifecycleEvent
-    event_sequence: int
 
 
 @dataclass(frozen=True)
@@ -563,3 +564,69 @@ class IntegrationResultEnvelope:
             raise
         except (KeyError, TypeError, ValueError) as error:
             raise ObservabilityValidationError("invalid integration result envelope") from error
+
+
+@dataclass(frozen=True)
+class WrittenTarget:
+    """Result of writing compiled output to target/."""
+
+    model_count: int
+    seed_count: int
+    function_count: int
+    audit_count: int
+    test_count: int
+    target_dir: Path
+
+    def summary_line(self) -> str:
+        """Build a human-readable summary line."""
+
+        parts: list[str] = []
+        if self.model_count:
+            model_label: str = "model" if self.model_count == 1 else "models"
+            parts.append(f"{self.model_count} {model_label}")
+        if self.seed_count:
+            seed_label: str = "seed" if self.seed_count == 1 else "seeds"
+            parts.append(f"{self.seed_count} {seed_label}")
+        if self.function_count:
+            function_label: str = "function" if self.function_count == 1 else "functions"
+            parts.append(f"{self.function_count} {function_label}")
+        if self.audit_count:
+            audit_label: str = "audit" if self.audit_count == 1 else "audits"
+            parts.append(f"{self.audit_count} {audit_label}")
+        if self.test_count:
+            test_label: str = "test" if self.test_count == 1 else "tests"
+            parts.append(f"{self.test_count} {test_label}")
+        if not parts:
+            return "Compiled 0 resources"
+        return f"Compiled {', '.join(parts)}"
+
+
+@dataclass(frozen=True)
+class SkillInstallTarget:
+    """One destination for a SQLBuild skill file."""
+
+    name: str
+    path: Path
+
+
+@dataclass(frozen=True)
+class SkillSettings:
+    """Project skill installation preferences."""
+
+    targets: tuple[str, ...]
+    auto_update: bool
+    configured: bool
+
+
+@dataclass(frozen=True)
+class SkillMaintenanceResult:
+    """Non-blocking generated-skill maintenance result."""
+
+    message: str = ""
+
+
+@dataclass(frozen=True)
+class SkillUpdateResult:
+    """Result of installing or updating skill files."""
+
+    written_paths: tuple[Path, ...]

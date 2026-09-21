@@ -8,7 +8,12 @@ import pytest
 
 from sqlbuild.cli.commands._helpers.entry.lazy_handlers import build_lazy_cli_handlers
 from sqlbuild.cli.commands.main.entrypoint.entry import _main_with_dependencies
-from sqlbuild.cli.commands.models import CliEntrypointHandlers, ScopeCommandRequest
+from sqlbuild.cli.commands.models import (
+    ScopeCommandRequest,
+)
+from sqlbuild.cli.entry.models import (
+    CliEntrypointHandlers,
+)
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     ScopeArgumentMisuseCase,
     ScopeEntryCase,

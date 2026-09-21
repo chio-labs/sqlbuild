@@ -22,11 +22,11 @@ from sqlbuild.executor.clone.models import (
     CloneItemResult,
 )
 from sqlbuild.executor.clone.types import CloneStatus
-from sqlbuild.observability import run_scope
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,
 )
+from sqlbuild.runtime.observability.main.run_scope import run_scope
 
 
 def execute_clone(*, inputs: CloneExecutionInput) -> CloneExecutionResult:

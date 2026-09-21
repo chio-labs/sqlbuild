@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.models import (
+from sqlbuild.cli.compile.models import (
     SqlTestArtifactCacheRecord,
     SqlTestArtifactIdentityContext,
 )
@@ -42,7 +42,7 @@ def build_sql_test_artifact_identity_context(
         {
             "algorithm": _ALGORITHM_FINGERPRINT,
             "sqlbuild_version": _package_version("sqlbuild"),
-            "polyglot_version": _package_version("polyglot-sql"),
+            "polyglot_version": _package_version("polyglot-sql-chio"),
             "python_version": platform.python_version_tuple()[:2],
             "adapter_class": f"{type(adapter).__module__}.{type(adapter).__qualname__}",
             "set_difference_operator": adapter.render_set_difference_operator(),

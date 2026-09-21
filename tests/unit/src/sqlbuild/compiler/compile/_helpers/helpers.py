@@ -5,6 +5,7 @@ from types import MappingProxyType
 from typing import cast
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
@@ -39,6 +40,7 @@ from sqlbuild.compiler.scopes.models import (
     ResourceIdentity,
     ResourceRecord,
     ScopeIndex,
+    VisibilityRecord,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind
 from sqlbuild.sql_values.types import CollectionRendering
@@ -58,6 +60,26 @@ DUCKDB_DECLARATION_EXPANSION_CONTEXT: DeclarationExpansionContext = DeclarationE
     value_renderer=DUCKDB_COMPILE_ADAPTER_CONTEXT.value_renderer,
     collection_rendering=DUCKDB_COMPILE_ADAPTER_CONTEXT.collection_rendering,
 )
+
+
+def visible_declarations_without_runtime_values(
+    *, enum_visibility: dict[str, tuple[VisibilityRecord, ...]] | None = None
+) -> attachment_core._VisibleModelDeclarations:
+    """Build declaration visibility facts without runtime declaration values."""
+
+    return attachment_core._VisibleModelDeclarations(
+        local_enums={},
+        local_constants={},
+        enums={},
+        constants={},
+        inaccessible_enums={},
+        inaccessible_constants={},
+        enum_visibility=enum_visibility or {},
+        constant_visibility={},
+        macros={},
+        macro_records={},
+        inaccessible_macros={},
+    )
 
 
 def direct_orders_lineage(*column_names: str) -> tuple[CompiledLineageColumnFact, ...]:

@@ -47,6 +47,30 @@ class SqlTestCteCacheTestCase:
 
 
 @dataclass(frozen=True)
+class NativeSqlTestExtractionParityTestCase:
+    description: str
+    sql: str
+    mode: SqlTestMode
+    expected_matches: bool = True
+
+
+@dataclass(frozen=True)
+class QualifiedReferenceAnalysisTestCase:
+    description: str
+    query_sql: str
+    expected_matches: bool = True
+
+
+@dataclass(frozen=True)
+class NativeTypeInferenceModeTestCase:
+    description: str
+    query_sql: str
+    column_types: dict[str, str]
+    expected_fast_types: tuple[str | None, ...]
+    expected_rich_types: tuple[str | None, ...]
+
+
+@dataclass(frozen=True)
 class WatermarkLimitValidationTestCase:
     description: str
     incremental_strategy: str
@@ -813,3 +837,15 @@ class MicrobatchGrainOwnershipTestCase:
     producer_grain: str
     microbatch_strategy: str | None
     expected_grain: str
+
+
+@dataclass(frozen=True)
+class ExpectedBooleanTestCase:
+    description: str
+    expected_result: bool
+
+
+@dataclass(frozen=True)
+class ExpectedCountTestCase:
+    description: str
+    expected_count: int

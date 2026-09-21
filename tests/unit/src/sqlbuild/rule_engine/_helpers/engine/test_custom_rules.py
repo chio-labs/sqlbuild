@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models import CompactLineageFacts, CompiledProject
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.main._evaluate import evaluate
 from sqlbuild.rule_engine.models import (
@@ -91,6 +91,49 @@ def test_given_custom_rule_when_repeated_then_deterministic_cache_is_reused(
     _ = evaluate(project=project, config=config, project_dir=tmp_path)
 
     second: RulesResult = evaluate(project=project, config=config, project_dir=tmp_path)
+
+    assert second.cache_hits == test_case.expected_cache_hits
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CustomRuleTestCase(
+            description="lazy lineage cache does not affect project fact identity",
+            body="del project\n    return []",
+            project_wide=True,
+            expected_cache_hits=2,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_lazy_lineage_when_materialized_then_project_rule_cache_is_stable(
+    tmp_path: Path,
+    test_case: CustomRuleTestCase,
+) -> None:
+    project: CompiledProject
+    config: RulesConfig
+    project, config = custom_rule_inputs(tmp_path=tmp_path, test_case=test_case)
+    lineage: CompactLineageFacts = CompactLineageFacts(
+        string_pool=("order_id",),
+        rows=((0, 0, 1, ()),),
+        resource_name_indexes={0: 0},
+    )
+    project = replace(
+        project,
+        models=(replace(project.models[0], fast_lineage_columns=lineage),),
+    )
+    _ = evaluate(project=project, config=config, project_dir=tmp_path)
+    materialized_project: CompiledProject = replace(
+        project,
+        models=(replace(project.models[0], fast_lineage_columns=tuple(lineage)),),
+    )
+
+    second: RulesResult = evaluate(
+        project=materialized_project,
+        config=config,
+        project_dir=tmp_path,
+    )
 
     assert second.cache_hits == test_case.expected_cache_hits
 

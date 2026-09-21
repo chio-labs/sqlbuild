@@ -12,7 +12,12 @@ from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
 from sqlbuild.diagnostics.classes.diagnostic_record_redactor import DiagnosticRecordRedactor
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
-from sqlbuild.executor.testing._helpers.comparison_sql import format_sql, lift_step_ctes
+from sqlbuild.executor.testing._helpers.comparison_sql import (
+    cte_definition_sql,
+    format_sql,
+    lift_preanalyzed_step_ctes,
+    lift_step_ctes,
+)
 from sqlbuild.executor.testing.models import (
     SqlTestColumnDifference,
     SqlTestDifferenceSample,
@@ -117,18 +122,37 @@ def build_sql_test_difference_sample_sql(
     if step.expected_cte_sql is None:
         return ""
     lifted_ctes: OrderedDict[str, str] = OrderedDict()
-    actual_sql, lifted_ctes = lift_step_ctes(
-        sql=step.resolved_sql,
-        lifted_ctes=lifted_ctes,
-        sql_analysis_enabled=test_entry.sql_analysis_enabled,
-    )
+    if step.lifted_ctes:
+        actual_sql, lifted_ctes = lift_preanalyzed_step_ctes(
+            sql=step.comparison_body_sql or step.resolved_sql,
+            complete_sql=step.resolved_sql,
+            preanalyzed_ctes=step.lifted_ctes,
+            lifted_ctes=lifted_ctes,
+            sql_analysis_enabled=test_entry.sql_analysis_enabled,
+            sql_analysis_dialect=sql_analysis_dialect,
+        )
+    else:
+        actual_sql, lifted_ctes = lift_step_ctes(
+            sql=step.resolved_sql,
+            lifted_ctes=lifted_ctes,
+            sql_analysis_enabled=test_entry.sql_analysis_enabled,
+            sql_analysis_dialect=sql_analysis_dialect,
+        )
     expected_sql, lifted_ctes = lift_step_ctes(
         sql=step.expected_cte_sql,
         lifted_ctes=lifted_ctes,
         sql_analysis_enabled=test_entry.sql_analysis_enabled,
+        sql_analysis_dialect=sql_analysis_dialect,
     )
-    cte_parts: list[str] = [f"{name} AS ({sql})" for name, sql in lifted_ctes.items()]
-    cte_parts.extend((f"__actual AS ({actual_sql})", f"__expected AS ({expected_sql})"))
+    cte_parts: list[str] = [
+        cte_definition_sql(name=name, sql=sql) for name, sql in lifted_ctes.items()
+    ]
+    cte_parts.extend(
+        (
+            cte_definition_sql(name="__actual", sql=actual_sql),
+            cte_definition_sql(name="__expected", sql=expected_sql),
+        )
+    )
     is_unexpected: bool = direction == SqlTestDifferenceDirection.UNEXPECTED
     left: str = "__actual" if is_unexpected else "__expected"
     right: str = "__expected" if is_unexpected else "__actual"

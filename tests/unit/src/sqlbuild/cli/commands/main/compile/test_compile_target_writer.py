@@ -14,11 +14,14 @@ from sqlbuild.cli.commands._helpers.compile.target_writer import (
     write_compile_target,
     write_static_compile_target,
 )
-from sqlbuild.cli.commands.models import WrittenTarget
+from sqlbuild.cli.output.models import (
+    WrittenTarget,
+)
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompiledSqlTest
 from sqlbuild.compiler.planner.models import ChainStep, PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
+    ExpectedMessageTestCase,
     TargetWriterCacheTestCase,
     TargetWriterTestCase,
 )
@@ -239,6 +242,76 @@ def test_given_compiled_project_when_writing_static_target_then_expected_files_a
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        ExpectedMessageTestCase(
+            description="unicode SQL bytes remain unchanged",
+            expected_message="SELECT 'café' AS product_name\n",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unicode_sql_when_writing_static_target_twice_then_bytes_remain_unchanged(
+    tmp_path: Path,
+    test_case: ExpectedMessageTestCase,
+) -> None:
+    project: CompiledProject = build_static_target_writer_project()
+    project = replace(
+        project,
+        models=(replace(project.models[0], query_sql="SELECT 'café' AS product_name  \n\n"),),
+    )
+    target_dir: Path = tmp_path / "target"
+
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+    model_path: Path = target_dir / "compiled" / "models" / "staging" / "orders.sql"
+    unchanged_mtime_ns: int = 1_000_000_000
+    os.utime(model_path, ns=(unchanged_mtime_ns, unchanged_mtime_ns))
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+
+    assert model_path.read_text(encoding="utf-8") == test_case.expected_message
+    assert model_path.stat().st_mtime_ns == unchanged_mtime_ns
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedMessageTestCase(
+            description="invalid UTF-8 remains an error", expected_message="utf-8"
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_utf8_artifact_when_writing_again_then_existing_decode_error_is_preserved(
+    tmp_path: Path,
+    test_case: ExpectedMessageTestCase,
+) -> None:
+    project: CompiledProject = build_static_target_writer_project()
+    target_dir: Path = tmp_path / "target"
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+    model_path: Path = target_dir / "compiled" / "models" / "staging" / "orders.sql"
+    model_path.write_bytes(b"\xff")
+
+    with pytest.raises(UnicodeDecodeError, match=test_case.expected_message):
+        write_static_compile_target(
+            target_dir=target_dir,
+            adapter=DuckDbAdapter(),
+            project=project,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
     (TargetWriterCacheTestCase(description="unchanged artifact reuse", expected_builder_calls=0),),
     ids=lambda case: case.description,
 )
@@ -256,8 +329,8 @@ def test_given_unchanged_test_artifact_when_writing_again_then_skips_test_plan_r
     )
     artifact_path: Path = next((target_dir / "compiled" / "tests").rglob("*.sql"))
     original_mtime_ns: int = artifact_path.stat().st_mtime_ns
-    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
-    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+    planner_spy: Mock = Mock(wraps=target_writer_module.plan_and_render_sql_test_artifacts)
+    monkeypatch.setattr(target_writer_module, "plan_and_render_sql_test_artifacts", planner_spy)
 
     _ = write_static_compile_target(
         target_dir=target_dir,
@@ -266,7 +339,7 @@ def test_given_unchanged_test_artifact_when_writing_again_then_skips_test_plan_r
     )
 
     assert artifact_path.stat().st_mtime_ns == original_mtime_ns
-    assert builder_spy.call_count == test_case.expected_builder_calls
+    assert planner_spy.call_count == test_case.expected_builder_calls
 
 
 @pytest.mark.parametrize(
@@ -290,8 +363,8 @@ def test_given_changed_model_in_test_closure_when_writing_then_rebuilds_test_art
         adapter=DuckDbAdapter(),
         project=project,
     )
-    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
-    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+    planner_spy: Mock = Mock(wraps=target_writer_module.plan_and_render_sql_test_artifacts)
+    monkeypatch.setattr(target_writer_module, "plan_and_render_sql_test_artifacts", planner_spy)
     changed_project: CompiledProject = replace(
         project,
         models=(replace(project.models[0], query_sql="SELECT 3 AS order_id"),),
@@ -303,7 +376,7 @@ def test_given_changed_model_in_test_closure_when_writing_then_rebuilds_test_art
         project=changed_project,
     )
 
-    assert builder_spy.call_count == test_case.expected_builder_calls
+    assert planner_spy.call_count == test_case.expected_builder_calls
 
 
 @pytest.mark.parametrize(
@@ -334,15 +407,15 @@ def test_given_changed_unrelated_model_when_writing_then_reuses_test_artifact(
         project,
         models=(*project.models, unrelated_model),
     )
-    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
-    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+    planner_spy: Mock = Mock(wraps=target_writer_module.plan_and_render_sql_test_artifacts)
+    monkeypatch.setattr(target_writer_module, "plan_and_render_sql_test_artifacts", planner_spy)
 
     _ = write_static_compile_target(
         target_dir=target_dir,
         adapter=DuckDbAdapter(),
         project=changed_project,
     )
-    assert builder_spy.call_count == test_case.expected_builder_calls
+    assert planner_spy.call_count == test_case.expected_builder_calls
 
 
 @pytest.mark.parametrize(
@@ -362,8 +435,8 @@ def test_given_changed_test_sql_when_writing_then_rebuilds_test_artifact(
         adapter=DuckDbAdapter(),
         project=project,
     )
-    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
-    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+    planner_spy: Mock = Mock(wraps=target_writer_module.plan_and_render_sql_test_artifacts)
+    monkeypatch.setattr(target_writer_module, "plan_and_render_sql_test_artifacts", planner_spy)
     changed_test: CompiledSqlTest = replace(
         project.sql_tests[0], sql_body=project.sql_tests[0].sql_body + "\n-- edit"
     )
@@ -374,7 +447,7 @@ def test_given_changed_test_sql_when_writing_then_rebuilds_test_artifact(
         project=replace(project, sql_tests=(changed_test,)),
     )
 
-    assert builder_spy.call_count == test_case.expected_builder_calls
+    assert planner_spy.call_count == test_case.expected_builder_calls
 
 
 @pytest.mark.parametrize(
@@ -398,8 +471,8 @@ def test_given_changed_compile_target_when_writing_then_rebuilds_test_artifact(
         adapter=DuckDbAdapter(),
         project=project,
     )
-    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
-    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+    planner_spy: Mock = Mock(wraps=target_writer_module.plan_and_render_sql_test_artifacts)
+    monkeypatch.setattr(target_writer_module, "plan_and_render_sql_test_artifacts", planner_spy)
 
     _ = write_static_compile_target(
         target_dir=target_dir,
@@ -407,7 +480,7 @@ def test_given_changed_compile_target_when_writing_then_rebuilds_test_artifact(
         project=replace(project, effective_target_schema="changed_schema"),
     )
 
-    assert builder_spy.call_count == test_case.expected_builder_calls
+    assert planner_spy.call_count == test_case.expected_builder_calls
 
 
 @pytest.mark.parametrize(
@@ -425,8 +498,8 @@ def test_given_compile_cache_disabled_when_writing_twice_then_rebuilds_test_arti
         build_cached_target_writer_project(target_dir=target_dir),
         compile_cache_dir=None,
     )
-    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
-    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+    planner_spy: Mock = Mock(wraps=target_writer_module.plan_and_render_sql_test_artifacts)
+    monkeypatch.setattr(target_writer_module, "plan_and_render_sql_test_artifacts", planner_spy)
 
     for _ in range(2):
         _ = write_static_compile_target(
@@ -435,7 +508,7 @@ def test_given_compile_cache_disabled_when_writing_twice_then_rebuilds_test_arti
             project=project,
         )
 
-    assert builder_spy.call_count == test_case.expected_builder_calls
+    assert planner_spy.call_count == test_case.expected_builder_calls
     assert not (target_dir / "cache" / "compiler" / "sql-test-artifacts.json").exists()
 
 
@@ -459,8 +532,8 @@ def test_given_modified_test_artifact_when_writing_then_rebuilds_expected_sql(
     artifact_path: Path = next((target_dir / "compiled" / "tests").rglob("*.sql"))
     expected_sql: str = artifact_path.read_text(encoding="utf-8")
     artifact_path.write_text("SELECT 'tampered'\n", encoding="utf-8")
-    builder_spy: Mock = Mock(wraps=target_writer_module.build_sql_test_plan_entry)
-    monkeypatch.setattr(target_writer_module, "build_sql_test_plan_entry", builder_spy)
+    planner_spy: Mock = Mock(wraps=target_writer_module.plan_and_render_sql_test_artifacts)
+    monkeypatch.setattr(target_writer_module, "plan_and_render_sql_test_artifacts", planner_spy)
 
     _ = write_static_compile_target(
         target_dir=target_dir,
@@ -468,5 +541,5 @@ def test_given_modified_test_artifact_when_writing_then_rebuilds_expected_sql(
         project=project,
     )
 
-    assert builder_spy.call_count == test_case.expected_builder_calls
+    assert planner_spy.call_count == test_case.expected_builder_calls
     assert artifact_path.read_text(encoding="utf-8") == expected_sql

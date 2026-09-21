@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
-from sqlbuild.observability import LifecycleEvent
 from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORT_KINDS
+from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.types import EventExportSeverity
 
 

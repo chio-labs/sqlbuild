@@ -11,14 +11,9 @@ from sqlbuild.cli.commands._helpers.entry.compute_log_diagnostics import (
 )
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.main.entrypoint._dispatch_with_observability import _creates_project
-from sqlbuild.compute_logs import (
-    COMPUTE_LOG_FORMAT_VERSION,
-    CaptureMetadata,
-)
 from sqlbuild.diagnostics.classes.invocation_diagnostic_routing import InvocationDiagnosticRouting
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
 from sqlbuild.diagnostics.models import DiagnosticRoutingOptions
-from sqlbuild.observability import ExecutionIdentity
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.runtime.compute_logs.classes.local_filesystem_compute_log_storage import (
     LocalFilesystemComputeLogStorage,
@@ -26,6 +21,9 @@ from sqlbuild.runtime.compute_logs.classes.local_filesystem_compute_log_storage 
 from sqlbuild.runtime.compute_logs.classes.scoped_compute_log_capture import (
     ScopedComputeLogCapture,
 )
+from sqlbuild.runtime.compute_logs.constants import COMPUTE_LOG_FORMAT_VERSION
+from sqlbuild.runtime.compute_logs.models import CaptureMetadata
+from sqlbuild.runtime.observability.models import ExecutionIdentity
 
 
 def dispatch_with_compute_logs(

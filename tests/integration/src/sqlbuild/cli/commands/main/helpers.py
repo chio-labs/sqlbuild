@@ -5,6 +5,19 @@ from pathlib import Path
 import duckdb
 
 
+def write_compile_startup_project(project_dir: Path) -> None:
+    """Write the minimal project used by fresh-process import tests."""
+
+    (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    models_dir: Path = project_dir / "models"
+    models_dir.mkdir()
+    (models_dir / "orders.sql").write_text(
+        "MODEL (materialized table);\nSELECT 1 AS order_id\n", encoding="utf-8"
+    )
+
+
 def prepare_contract_project(tmp_path: Path, *, prod_connection_toml: str = "") -> Path:
     database: Path = tmp_path / "warehouse.duckdb"
     _ = (tmp_path / "sqlbuild_project.toml").write_text(

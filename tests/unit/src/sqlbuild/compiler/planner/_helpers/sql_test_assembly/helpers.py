@@ -6,7 +6,9 @@ import re
 from collections.abc import Callable
 from pathlib import Path
 from types import MappingProxyType
+from typing import Any
 
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.render.macros import expand_sql_macros
 from sqlbuild.compiler.compile.constants import (
     ASSERT_TEST_CTE_PREFIX,
@@ -36,6 +38,12 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.planner._helpers.sql_tests.comments import uncommented_pattern_matches
+from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
+    plan_and_render_sql_test_artifacts,
+)
+from sqlbuild.compiler.planner.models import PlanWarning, SqlTestPlanEntry
+from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
+from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     PlanTestChainTestCase,
 )
@@ -59,6 +67,51 @@ _MACRO_CONTEXT: MacroContext = MacroContext(
     target_name=None,
     vars={},
 )
+
+
+def assert_native_artifact_matches_python_plan(
+    *,
+    project: CompiledProject,
+    sql_test: CompiledSqlTest,
+    entry: SqlTestPlanEntry,
+    warnings: tuple[PlanWarning, ...],
+    sql_analysis_enabled: bool,
+) -> bool:
+    """Assert native artifact output remains equivalent to the Python reference path."""
+
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    expected_sql: str = build_sql_test_comparison_sql(
+        test_entry=entry,
+        set_difference_operator=adapter.render_set_difference_operator(),
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
+    )
+    (artifact,) = plan_and_render_sql_test_artifacts(
+        project=project,
+        tests=(sql_test,),
+        adapter=adapter,
+        sql_analysis_enabled=sql_analysis_enabled,
+    )
+
+    polyglot_sql: Any = import_polyglot_sql()
+    native_expression: Any = polyglot_sql.parse_one(
+        artifact.sql, dialect=adapter.sql_analysis_dialect()
+    )
+    expected_expression: Any = polyglot_sql.parse_one(
+        expected_sql, dialect=adapter.sql_analysis_dialect()
+    )
+    assert native_expression.sql(dialect=adapter.sql_analysis_dialect()) == expected_expression.sql(
+        dialect=adapter.sql_analysis_dialect()
+    )
+    assert artifact.model_names == tuple(step.model_name for step in entry.chain)
+    assert artifact.warnings == tuple(
+        {
+            "modelName": warning.model_name,
+            "severity": warning.severity.value,
+            "message": warning.message,
+        }
+        for warning in warnings
+    )
+    return True
 
 
 def build_test_and_project(

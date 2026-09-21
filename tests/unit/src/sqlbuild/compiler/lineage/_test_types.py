@@ -32,3 +32,9 @@ class SqlAnalysisDisabledLineageTestCase:
     description: str
     sql_analysis_enabled: bool
     expected_result_is_none: bool
+
+
+@dataclass(frozen=True)
+class ExpectedCountTestCase:
+    description: str
+    expected_count: int

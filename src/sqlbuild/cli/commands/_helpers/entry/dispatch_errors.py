@@ -11,19 +11,16 @@ from sqlbuild.cli.commands.exceptions import CliUserError, QueryDiffExecutionErr
 from sqlbuild.cli.commands.main.entrypoint._dispatch_with_observability import (
     dispatch_with_observability,
 )
-from sqlbuild.cli.commands.models import (
+from sqlbuild.cli.commands.types import CliCommand
+from sqlbuild.cli.entry.models import (
     CliEntrypointHandlers,
     ParsedCliInvocation,
+)
+from sqlbuild.cli.output.models import (
     SkillMaintenanceResult,
 )
-from sqlbuild.cli.commands.types import CliCommand
-from sqlbuild.compiler.discovery.exceptions import DiscoveryError
-from sqlbuild.executor.pipeline.exceptions import AuditExecutionError
 from sqlbuild.lint.exceptions import LintError
 from sqlbuild.rule_engine.exceptions import RulesError
-from sqlbuild.runtime.execution_limits.exceptions import ExecutionDurationLimitError
-from sqlbuild.spec.contracts.exceptions import SpecConfigError
-from sqlbuild.virtual.state.exceptions import StateBackendError
 
 
 def dispatch_and_handle_errors(
@@ -66,20 +63,34 @@ def dispatch_and_handle_errors(
             file=sys.stderr,
         )
         return 1
-    except (
-        AuditExecutionError,
-        DiscoveryError,
-        ExecutionDurationLimitError,
-        SpecConfigError,
-        StateBackendError,
-        ValueError,
-    ) as error:
+    except Exception as error:
+        if not isinstance(error, _expected_command_failure_types()):
+            raise
         logging.getLogger("sqlbuild.cli").exception("command failed")
         print(
             format_expected_error(error=error, fallback_code="E001", use_color=use_color),
             file=sys.stderr,
         )
         return 1
+
+
+def _expected_command_failure_types() -> tuple[type[Exception], ...]:
+    """Load command-specific failures only after a command raises."""
+
+    from sqlbuild.compiler.discovery.exceptions import DiscoveryError
+    from sqlbuild.executor.pipeline.exceptions import AuditExecutionError
+    from sqlbuild.runtime.execution_limits.exceptions import ExecutionDurationLimitError
+    from sqlbuild.spec.contracts.exceptions import SpecConfigError
+    from sqlbuild.virtual.state.exceptions import StateBackendError
+
+    return (
+        AuditExecutionError,
+        DiscoveryError,
+        ExecutionDurationLimitError,
+        SpecConfigError,
+        StateBackendError,
+        ValueError,
+    )
 
 
 def _report_skill_freshness(*, invocation: ParsedCliInvocation) -> None:

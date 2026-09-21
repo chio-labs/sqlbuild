@@ -88,6 +88,15 @@ from sqlbuild.sql_values.models import SqlValue
 
 
 @dataclass(frozen=True)
+class NativeSqlTestArtifact:
+    """One native-planned SQL-test artifact and its compact diagnostics."""
+
+    sql: str
+    model_names: tuple[str, ...]
+    warnings: tuple[dict[str, object], ...]
+
+
+@dataclass(frozen=True)
 class RelationFixtureDiagnostic:
     """One statically provable invalid fixture condition."""
 
@@ -133,6 +142,14 @@ class RelationFixturePlanningContext:
 
 
 @dataclass(frozen=True)
+class TestFunctionAnalysisContext:
+    """Function locations and reusable marker targets for SQL-test analysis."""
+
+    locations: dict[str, str]
+    marker_targets: tuple[tuple[str, str, str], ...]
+
+
+@dataclass(frozen=True)
 class SqlTestPlanningContext:
     """Project-wide SQL-test indexes and reusable chain topology."""
 
@@ -140,6 +157,7 @@ class SqlTestPlanningContext:
     model_dependencies: dict[str, frozenset[str]]
     function_locations: dict[str, CompiledRelationLocation]
     qualified_function_locations: dict[str, str]
+    function_analysis_context: TestFunctionAnalysisContext
     chain_names_by_test_key: dict[CompiledObjectKey, tuple[str, ...]]
 
 
@@ -1150,6 +1168,8 @@ class ChainStep:
     model_name: str
     resolved_sql: str
     expected_cte_sql: str | None = None
+    lifted_ctes: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    comparison_body_sql: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1158,6 +1178,8 @@ class SqlTestAssertionStep:
 
     name: str
     resolved_sql: str
+    lifted_ctes: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    comparison_body_sql: str | None = None
 
 
 @dataclass(frozen=True)

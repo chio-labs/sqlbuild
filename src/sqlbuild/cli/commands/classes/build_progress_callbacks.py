@@ -19,6 +19,7 @@ from sqlbuild.cli.progress.classes.native_progress_projector import (
 )
 from sqlbuild.cli.progress.main._expectation_detail import format_expectation_detail
 from sqlbuild.cli.progress.main._expectation_name import format_expectation_name
+from sqlbuild.cli.progress.models import AuditDisplayEntry, ExecutionCounts
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.main.execution.cursor_bound_display import cursor_bound_display
@@ -1456,6 +1457,3 @@ def _format_abbreviated_rows(*, count: int) -> str:
     if count >= _ROW_COUNT_ABBREVIATION_THRESHOLD:
         return f"{count / _ROW_COUNT_THOUSAND:.1f}K {label}"
     return f"{count:,} {label}"
-
-
-from sqlbuild.cli.commands.models import AuditDisplayEntry, ExecutionCounts  # noqa: E402,F401

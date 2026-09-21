@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict, deque
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -18,11 +18,15 @@ from sqlbuild.compiler.compile._helpers.analysis.cache import (
     write_model_analyses,
 )
 from sqlbuild.compiler.compile._helpers.analysis.columns import (
-    analyze_columns_and_lineage_with_polyglot,
-    get_complete_schema_binding_request,
-    infer_columns_with_sql_analysis,
     substitute_placeholder_defaults,
     table_function_analysis_name,
+)
+from sqlbuild.compiler.compile._helpers.analysis.compact import (
+    NativeCompactAnalysis,
+    analyze_columns_and_lineage_with_polyglot,
+    analyze_queries_with_compact_polyglot_batch,
+    get_complete_schema_binding_request,
+    infer_columns_with_sql_analysis,
 )
 from sqlbuild.compiler.compile._helpers.analysis.dynamic_pivot import (
     analyze_dynamic_column_contract,
@@ -31,7 +35,7 @@ from sqlbuild.compiler.compile._helpers.analysis.validation import (
     validate_hook_sql_syntax,
     validate_sql_syntax,
 )
-from sqlbuild.compiler.compile._helpers.attachment.namespace_validation import (
+from sqlbuild.compiler.compile._helpers.config.namespace_validation import (
     validate_preserved_logical_namespace,
 )
 from sqlbuild.compiler.compile._helpers.deps.dependencies import (
@@ -135,10 +139,6 @@ from sqlbuild.spec.contracts.models import (
     TargetConfig,
 )
 
-_POLYGLOT_ANALYSIS_WORKERS: int = 4
-_POLYGLOT_PARALLEL_ANALYSIS_MIN_MODELS: int = 32
-_POLYGLOT_PARALLEL_REANALYSIS_MIN_MODELS: int = 2
-
 
 @dataclass(frozen=True)
 class _ModelSqlAnalysis:
@@ -193,12 +193,17 @@ def assemble_compiled_project(
         )
     )
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
-    allow_compact_analysis: bool = column_lineage_mode == ColumnLineageMode.RICH
+    allow_compact_analysis: bool = column_lineage_mode in {
+        ColumnLineageMode.FAST,
+        ColumnLineageMode.RICH,
+    }
+    rich_type_inference: bool = column_lineage_mode == ColumnLineageMode.RICH
     analysis_cache: AnalysisCacheContext | None = (
         build_analysis_cache_context(
             root=analysis_cache_dir,
             inference_profile=profile,
             allow_compact_analysis=allow_compact_analysis,
+            rich_type_inference=rich_type_inference,
             signature_namespace={
                 "target": inputs.effective_target_name,
                 "vars": inputs.effective_vars,
@@ -224,6 +229,7 @@ def assemble_compiled_project(
                 column_types_by_table=column_types_by_table,
                 inference_profile=profile,
                 allow_compact_analysis=allow_compact_analysis,
+                rich_type_inference=rich_type_inference,
                 analysis_cache=analysis_cache,
                 complete_binding_schemas=complete_binding_schemas,
             )
@@ -369,7 +375,7 @@ def _assemble_compiled_model(
         cursor_type=model_input.config.values.get("cursor_type"),
     )
     inferred_columns: tuple[InferredColumn, ...] | None = None
-    fast_lineage_columns: tuple[CompiledLineageColumnFact, ...] | None = None
+    fast_lineage_columns: Sequence[CompiledLineageColumnFact] | None = None
     fast_lineage_has_star: bool = False
     placeholders: dict[str, str] | None = (
         sql_analysis.placeholders if sql_analysis is not None else _model_placeholders(model_input)
@@ -491,6 +497,7 @@ def _analyze_model_sql_in_parallel(
     column_types_by_table: dict[str, dict[str, str]],
     inference_profile: ExpressionInferenceProfile,
     allow_compact_analysis: bool,
+    rich_type_inference: bool,
     analysis_cache: AnalysisCacheContext | None,
     complete_binding_schemas: dict[str, dict[str, str]],
 ) -> dict[str, _ModelSqlAnalysis]:
@@ -538,6 +545,7 @@ def _analyze_model_sql_in_parallel(
         column_types_by_table=column_types_by_table,
         inference_profile=inference_profile,
         allow_compact_analysis=allow_compact_analysis,
+        rich_type_inference=rich_type_inference,
     )
     analyses = _complete_inferred_bindings(
         requests=requests,
@@ -545,6 +553,11 @@ def _analyze_model_sql_in_parallel(
         complete_binding_schemas=complete_binding_schemas,
         inference_profile=inference_profile,
     )
+    if analysis_cache is None:
+        return {
+            _model_name(model_input): analysis
+            for model_input, analysis in zip(model_inputs, analyses, strict=True)
+        }
     current_analyses_by_name: dict[str, PolyglotAnalysisResult] = {
         _model_name(request.model_input): analysis.polyglot_analysis
         for request, analysis in zip(requests, analyses, strict=True)
@@ -602,7 +615,7 @@ def _analyze_model_sql_in_parallel(
                     column_types_by_table=column_types_by_table,
                     inference_profile=inference_profile,
                     allow_compact_analysis=allow_compact_analysis,
-                    parallel_min_models=_POLYGLOT_PARALLEL_REANALYSIS_MIN_MODELS,
+                    rich_type_inference=rich_type_inference,
                 ),
                 strict=True,
             )
@@ -675,8 +688,75 @@ def _analyze_model_sql_requests(
     column_types_by_table: dict[str, dict[str, str]],
     inference_profile: ExpressionInferenceProfile,
     allow_compact_analysis: bool,
-    parallel_min_models: int = _POLYGLOT_PARALLEL_ANALYSIS_MIN_MODELS,
+    rich_type_inference: bool,
 ) -> tuple[_ModelSqlAnalysis, ...]:
+    if allow_compact_analysis:
+        uncached: tuple[tuple[int, _ModelSqlAnalysisRequest], ...] = tuple(
+            (index, request)
+            for index, request in enumerate(requests)
+            if request.cache_key is None or request.cache_key not in cached_analyses
+        )
+        prepared_by_index: dict[int, NativeCompactAnalysis] = {}
+        diagnostics_by_index: dict[int, tuple[SqlBindingDiagnostic, ...]] = {}
+        if uncached:
+            prepared: tuple[NativeCompactAnalysis, ...] = (
+                analyze_queries_with_compact_polyglot_batch(
+                    query_sqls=tuple(request.query_sql for _, request in uncached),
+                    references=tuple(request.model_input.references for _, request in uncached),
+                    placeholders=tuple(request.placeholders for _, request in uncached),
+                    column_nullability_by_table=column_nullability_by_table,
+                    column_types_by_table=column_types_by_table,
+                    inference_profile=inference_profile,
+                    recover_cte_facts=tuple(
+                        _should_recover_cte_facts(request.model_input) for _, request in uncached
+                    ),
+                    rich_type_inference=rich_type_inference,
+                )
+            )
+            prepared_by_index = {
+                index: value for (index, _), value in zip(uncached, prepared, strict=True)
+            }
+            validation_indices: tuple[int, ...] = tuple(
+                index for index, request in uncached if request.binding_schema is not None
+            )
+            validation_results: tuple[SqlBindingResult, ...] = get_schema_validations(
+                requests=tuple(
+                    SqlSchemaValidationRequest(
+                        sql=prepared_by_index[index].cleaned_sql,
+                        dialect=inference_profile.sql_analysis_dialect,
+                        schema=requests[index].binding_schema or {},
+                    )
+                    for index in validation_indices
+                )
+            )
+            diagnostics_by_index = {
+                index: result.diagnostics
+                for index, result in zip(validation_indices, validation_results, strict=True)
+            }
+        return tuple(
+            _analyze_model_sql(
+                request=request,
+                cached_analysis=(
+                    cached_analyses.get(request.cache_key)
+                    if request.cache_key is not None
+                    else None
+                ),
+                column_nullability_by_table=column_nullability_by_table,
+                column_types_by_table=column_types_by_table,
+                inference_profile=inference_profile,
+                allow_compact_analysis=True,
+                precomputed=(
+                    replace(
+                        prepared_by_index[index],
+                        binding_diagnostics=diagnostics_by_index.get(index),
+                    )
+                    if index in prepared_by_index
+                    else None
+                ),
+            )
+            for index, request in enumerate(requests)
+        )
+
     def analyze(request: _ModelSqlAnalysisRequest) -> _ModelSqlAnalysis:
         return _analyze_model_sql(
             request=request,
@@ -689,11 +769,7 @@ def _analyze_model_sql_requests(
             allow_compact_analysis=allow_compact_analysis,
         )
 
-    if len(requests) < parallel_min_models:
-        return tuple(analyze(request) for request in requests)
-    workers: int = min(_POLYGLOT_ANALYSIS_WORKERS, len(requests))
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        return tuple(executor.map(analyze, requests))
+    return tuple(analyze(request) for request in requests)
 
 
 def _complete_inferred_bindings(
@@ -875,6 +951,7 @@ def _analyze_model_sql(
     column_types_by_table: dict[str, dict[str, str]],
     inference_profile: ExpressionInferenceProfile,
     allow_compact_analysis: bool,
+    precomputed: NativeCompactAnalysis | None = None,
 ) -> _ModelSqlAnalysis:
     if cached_analysis is not None:
         return _ModelSqlAnalysis(
@@ -891,6 +968,7 @@ def _analyze_model_sql(
         allow_compact_analysis=allow_compact_analysis,
         binding_schema=request.binding_schema,
         recover_cte_facts=_should_recover_cte_facts(request.model_input),
+        precomputed=precomputed,
     )
     return _ModelSqlAnalysis(
         polyglot_analysis=polyglot_analysis,

@@ -138,3 +138,9 @@ class ResolveEffectiveAdapterNameTestCase:
     project_adapter: str
     local_adapter: str | None
     expected_adapter_name: str
+
+
+@dataclass(frozen=True)
+class ExpectedMessageTestCase:
+    description: str
+    expected_message: str

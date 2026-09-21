@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from typing import Any
 
-from sqlbuild.observability import ExecutionIdentity
+from sqlbuild.runtime.observability.models import ExecutionIdentity
 from sqlbuild.runtime.output_capture.classes.dispatcher import OutputCaptureDispatcher
 from sqlbuild.runtime.output_capture.classes.text_tee import TextOutputTee
 from sqlbuild.runtime.output_capture.main.current_output_capture_context import (

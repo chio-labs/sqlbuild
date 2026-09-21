@@ -1,20 +1,28 @@
 from __future__ import annotations
 
+import json
+from typing import cast
+from unittest.mock import Mock
+
 import pytest
 from polyglot_sql import ParseError
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.analysis.columns import (
-    analyze_columns_and_lineage_with_polyglot,
     import_polyglot_sql,
-    infer_columns_with_sql_analysis,
     substitute_placeholder_defaults,
+)
+from sqlbuild.compiler.compile._helpers.analysis.compact import (
+    analyze_columns_and_lineage_with_polyglot,
+    analyze_queries_with_compact_polyglot_batch,
+    infer_columns_with_sql_analysis,
 )
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
     CompileSqlReference,
     InferredColumn,
+    NativeCompactAnalysis,
     PolyglotAnalysisResult,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -25,12 +33,264 @@ from sqlbuild.compiler.lineage.types import (
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
+    ExpectedCountTestCase,
     InferColumnsTestCase,
+    NativeTypeInferenceModeTestCase,
     PolyglotAnalysisTestCase,
+    QualifiedReferenceAnalysisTestCase,
     SubstitutePlaceholderDefaultsTestCase,
     UnexpectedAnalysisFailureTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import direct_orders_lineage
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [ExpectedCountTestCase(description="native request remains batched", expected_count=1)],
+    ids=lambda case: case.description,
+)
+def test_given_queries_when_batch_analyzing_then_uses_one_ordered_native_request(
+    monkeypatch: pytest.MonkeyPatch,
+    test_case: ExpectedCountTestCase,
+) -> None:
+    captured: list[dict[str, object]] = []
+
+    def analyze_project_queries_compact_json(request_json: str) -> str:
+        request: dict[str, object] = json.loads(request_json)
+        captured.append(request)
+        return json.dumps(
+            {
+                "strings": [
+                    "order_id",
+                    "BIGINT",
+                    "model",
+                    "__sqlbuild_project_input_0",
+                    "orders",
+                ],
+                "facts": [[0, 1, 1, 0, 1, [[2, 3, 0]]]],
+                "templates": [
+                    [[0], False],
+                    "invalid query",
+                ],
+                "analyses": [
+                    [0, [[3, 4]]],
+                    [1, []],
+                ],
+            }
+        )
+
+    monkeypatch.setattr(
+        "sqlbuild.compiler.compile._helpers.analysis.compact._native.analyze_project_queries_compact_json",
+        analyze_project_queries_compact_json,
+        raising=False,
+    )
+
+    results: tuple[NativeCompactAnalysis, ...] = analyze_queries_with_compact_polyglot_batch(
+        query_sqls=(
+            'SELECT order_id FROM __ref("orders")',
+            "SELECT @@@status AS status",
+        ),
+        references=(
+            (CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),),
+            (),
+        ),
+        placeholders=(None, {"status": "'ready'"}),
+        column_nullability_by_table={"orders": {"order_id": InferredNullability.NON_NULL}},
+        column_types_by_table={"orders": {"order_id": "BIGINT"}},
+        inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="duckdb"),
+        recover_cte_facts=(False, False),
+    )
+
+    assert len(captured) == test_case.expected_count
+    native_queries: list[dict[str, object]] = cast(list[dict[str, object]], captured[0]["queries"])
+    native_templates: list[dict[str, object]] = cast(
+        list[dict[str, object]], captured[0]["templates"]
+    )
+    native_projections: list[dict[str, object]] = cast(
+        list[dict[str, object]], captured[0]["projections"]
+    )
+    assert len(native_queries) == 2
+    assert "__ref" not in str(native_queries[0]["sql"])
+    assert "__sqlbuild_project_input_0" in str(native_queries[0]["sql"])
+    assert native_queries[1]["sql"] == "SELECT 'ready' AS status"
+    assert native_templates[0]["references"] == {
+        "__sqlbuild_project_input_0": {
+            "resourceType": "model",
+            "resourceName": "__sqlbuild_project_input_0",
+        }
+    }
+    assert native_projections[0]["resourceNames"] == {"__sqlbuild_project_input_0": "orders"}
+    assert native_queries[0]["schema"] == {
+        "tables": [
+            {
+                "name": "__sqlbuild_project_input_0",
+                "columns": [{"name": "order_id", "type": "BIGINT", "nullable": False}],
+            }
+        ]
+    }
+
+    assert "orders" in results[0].cleaned_sql
+    assert results[0].analysis == {"hasStar": False}
+    assert results[0].compact_rows == [0]
+    assert results[1].analysis is None
+    assert results[1].projected is True
+    projected_analysis: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+        query_sql='SELECT order_id FROM __ref("orders")',
+        allow_compact_analysis=True,
+        precomputed=results[0],
+    )
+    assert projected_analysis.columns == (
+        InferredColumn(
+            name="order_id",
+            type="BIGINT",
+            nullability=InferredNullability.NON_NULL,
+        ),
+    )
+    assert tuple(projected_analysis.lineage_columns) == (
+        CompiledLineageColumnFact(
+            output_column="order_id",
+            upstream_columns=(
+                CompiledLineageSourceFact(
+                    resource_type=CompiledResourceType.MODEL,
+                    resource_name="orders",
+                    column_name="order_id",
+                ),
+            ),
+            transform_kind=ColumnTransformKind.DIRECT,
+            confidence=ColumnLineageConfidence.HIGH,
+        ),
+    )
+    monkeypatch.setattr(
+        "sqlbuild.compiler.compile._helpers.analysis.compact.import_polyglot_sql",
+        Mock(side_effect=AssertionError("native failures must not trigger Python reparsing")),
+    )
+
+    failed_analysis: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+        query_sql="SELECT FROM",
+        allow_compact_analysis=True,
+        precomputed=results[1],
+    )
+
+    assert failed_analysis.analysis_succeeded is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        QualifiedReferenceAnalysisTestCase(
+            description="plain qualified reference",
+            query_sql='SELECT orders.order_id FROM __ref("orders")',
+        ),
+        QualifiedReferenceAnalysisTestCase(
+            description="commented qualified reference",
+            query_sql='SELECT orders /* column qualifier */ .order_id FROM __ref("orders")',
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_qualified_reference_when_batch_analyzing_then_preserves_analysis_facts(
+    test_case: QualifiedReferenceAnalysisTestCase,
+) -> None:
+    references: tuple[CompileSqlReference, ...] = (
+        CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
+    )
+    nullability: dict[str, dict[str, InferredNullability]] = {
+        "orders": {"order_id": InferredNullability.NON_NULL}
+    }
+    types: dict[str, dict[str, str]] = {"orders": {"order_id": "BIGINT"}}
+    profile: ExpressionInferenceProfile = ExpressionInferenceProfile(sql_analysis_dialect="duckdb")
+    expected: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+        query_sql=test_case.query_sql,
+        references=references,
+        placeholders=None,
+        column_nullability_by_table=nullability,
+        column_types_by_table=types,
+        inference_profile=profile,
+        allow_compact_analysis=True,
+    )
+    prepared: NativeCompactAnalysis = analyze_queries_with_compact_polyglot_batch(
+        query_sqls=(test_case.query_sql,),
+        references=(references,),
+        placeholders=(None,),
+        column_nullability_by_table=nullability,
+        column_types_by_table=types,
+        inference_profile=profile,
+        recover_cte_facts=(False,),
+    )[0]
+
+    actual: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+        query_sql=test_case.query_sql,
+        references=references,
+        placeholders=None,
+        column_nullability_by_table=nullability,
+        column_types_by_table=types,
+        inference_profile=profile,
+        allow_compact_analysis=True,
+        precomputed=prepared,
+    )
+
+    assert (actual.columns == expected.columns) is test_case.expected_matches
+    assert tuple(actual.lineage_columns) == expected.lineage_columns
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativeTypeInferenceModeTestCase(
+            description="direct input type remains unknown in fast mode",
+            query_sql='SELECT status FROM __ref("orders")',
+            column_types={"status": "VARCHAR"},
+            expected_fast_types=(None,),
+            expected_rich_types=("TEXT",),
+        ),
+        NativeTypeInferenceModeTestCase(
+            description="aggregate hint remains unknown in fast mode",
+            query_sql='SELECT SUM(amount) AS total FROM __ref("orders")',
+            column_types={"amount": "INT"},
+            expected_fast_types=(None,),
+            expected_rich_types=("INT128",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_native_batch_when_selecting_type_mode_then_preserves_mode_contract(
+    test_case: NativeTypeInferenceModeTestCase,
+) -> None:
+    references: tuple[CompileSqlReference, ...] = (
+        CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
+    )
+    nullability: dict[str, dict[str, InferredNullability]] = {
+        "orders": {name: InferredNullability.NON_NULL for name in test_case.column_types}
+    }
+    profile: ExpressionInferenceProfile = ExpressionInferenceProfile(sql_analysis_dialect="duckdb")
+
+    projected_types: list[tuple[str | None, ...]] = []
+    for rich_type_inference in (False, True):
+        prepared: NativeCompactAnalysis = analyze_queries_with_compact_polyglot_batch(
+            query_sqls=(test_case.query_sql,),
+            references=(references,),
+            placeholders=(None,),
+            column_nullability_by_table=nullability,
+            column_types_by_table={"orders": test_case.column_types},
+            inference_profile=profile,
+            recover_cte_facts=(False,),
+            rich_type_inference=rich_type_inference,
+        )[0]
+        result: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+            query_sql=test_case.query_sql,
+            references=references,
+            column_nullability_by_table=nullability,
+            column_types_by_table={"orders": test_case.column_types},
+            inference_profile=profile,
+            allow_compact_analysis=True,
+            precomputed=prepared,
+        )
+        projected_types.append(tuple(column.type for column in result.columns or ()))
+
+    assert tuple(projected_types) == (
+        test_case.expected_fast_types,
+        test_case.expected_rich_types,
+    )
 
 
 @pytest.mark.parametrize(
@@ -1572,8 +1832,10 @@ def test_given_compact_query_analysis_safe_shape_when_analyzing_then_matches_ast
     assert fallback_result.analysis_succeeded
     assert compact_result.columns == fallback_result.columns
     assert compact_result.has_star == fallback_result.has_star
-    compact_lineage_columns: tuple[CompiledLineageColumnFact, ...] = compact_result.lineage_columns
-    fallback_lineage_columns: tuple[CompiledLineageColumnFact, ...] = (
+    compact_lineage_columns: tuple[CompiledLineageColumnFact, ...] = tuple(
+        compact_result.lineage_columns
+    )
+    fallback_lineage_columns: tuple[CompiledLineageColumnFact, ...] = tuple(
         fallback_result.lineage_columns
     )
     assert len(compact_lineage_columns) == len(fallback_lineage_columns)

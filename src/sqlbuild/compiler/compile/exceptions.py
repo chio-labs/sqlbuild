@@ -19,5 +19,13 @@ class MacroDeclarationLookupError(CompileInputError, KeyError):
     """Retain authored diagnostics while honoring the Mapping lookup contract."""
 
 
+class NativeSqlTestResponseError(CompileInputError):
+    """Raised when native SQL-test extraction returns malformed data."""
+
+
+class CompactAnalysisInputError(CompileInputError):
+    """Raised when compact SQL-analysis batch inputs are inconsistent."""
+
+
 class AnalysisCacheEntryError(ValueError):
     """Raised when a persisted model analysis cache entry is invalid."""

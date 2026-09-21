@@ -4,36 +4,33 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Iterable
 from typing import Any, cast
 
 from sqlbuild.adapter.contract.constants import POLYGLOT_CUSTOM_TYPE_NAME
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule
 from sqlbuild.compiler.compile._helpers.analysis.cte_facts import (
-    _polyglot_cte_passthrough_facts,
     _polyglot_cte_passthrough_nullability_from_parsed,
     _polyglot_cte_passthrough_types_from_parsed,
     _polyglot_expression_is_non_null_after_filter,
-    _polyglot_filtered_non_null_outputs,
     _polyglot_non_null_filter_context,
+    _polyglot_top_level_ctes,
+    _unwrap_polyglot_annotations,
 )
 from sqlbuild.compiler.compile.constants import (
     DECIMAL_SQL_TYPE_NAME,
     FULL_JOIN_SIDE,
     LEFT_JOIN_SIDE,
-    RESOLVED_SOURCE_CONFIDENCE,
     RIGHT_JOIN_SIDE,
     SQL_WILDCARD_TOKEN,
-    UNKNOWN_SQL_TYPE_NAME,
 )
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
     CompileSqlReference,
-    CteFactResolvers,
     InferredColumn,
     NonNullFilterContext,
-    PolyglotAnalysisResult,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.types import (
@@ -52,90 +49,6 @@ from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_AGGREGATE_KINDS as _POLYGLOT_AGGREGATE_KINDS,
 )
 from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_BASE_TABLES as _POLYGLOT_ANALYSIS_BASE_TABLES,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_CAST_TYPE as _POLYGLOT_ANALYSIS_CAST_TYPE,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_FUNCTION_NAME as _POLYGLOT_ANALYSIS_FUNCTION_NAME,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_IS_STAR as _POLYGLOT_ANALYSIS_IS_STAR,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_NAME as _POLYGLOT_ANALYSIS_NAME,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_NULLABILITY as _POLYGLOT_ANALYSIS_NULLABILITY,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_NULLABILITY_NON_NULL as _POLYGLOT_ANALYSIS_NULLABILITY_NON_NULL,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_NULLABILITY_NULLABLE as _POLYGLOT_ANALYSIS_NULLABILITY_NULLABLE,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_PROJECTIONS as _POLYGLOT_ANALYSIS_PROJECTIONS,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_RELATIONS as _POLYGLOT_ANALYSIS_RELATIONS,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_SHAPE as _POLYGLOT_ANALYSIS_SHAPE,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_SHAPE_SELECT as _POLYGLOT_ANALYSIS_SHAPE_SELECT,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_SHAPE_SET_OPERATION as _POLYGLOT_ANALYSIS_SHAPE_SET_OPERATION,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_SOURCE_ALIAS as _POLYGLOT_ANALYSIS_SOURCE_ALIAS,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_SOURCE_CONFIDENCE as _POLYGLOT_ANALYSIS_SOURCE_CONFIDENCE,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_SOURCE_NAME as _POLYGLOT_ANALYSIS_SOURCE_NAME,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_STAR_PROJECTIONS as _POLYGLOT_ANALYSIS_STAR_PROJECTIONS,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_TABLE as _POLYGLOT_ANALYSIS_TABLE,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_TRANSFORM_AGGREGATION as _POLYGLOT_ANALYSIS_TRANSFORM_AGGREGATION,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_TRANSFORM_CAST as _POLYGLOT_ANALYSIS_TRANSFORM_CAST,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_TRANSFORM_CONSTANT as _POLYGLOT_ANALYSIS_TRANSFORM_CONSTANT,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_TRANSFORM_DIRECT as _POLYGLOT_ANALYSIS_TRANSFORM_DIRECT,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_TRANSFORM_FUNCTION as _POLYGLOT_ANALYSIS_TRANSFORM_FUNCTION,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_TRANSFORM_KIND as _POLYGLOT_ANALYSIS_TRANSFORM_KIND,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_TRANSFORM_STAR as _POLYGLOT_ANALYSIS_TRANSFORM_STAR,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_TYPE_HINT as _POLYGLOT_ANALYSIS_TYPE_HINT,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_UNSAFE_TRANSFORMS as _POLYGLOT_ANALYSIS_UNSAFE_TRANSFORMS,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_ANALYSIS_UPSTREAM as _POLYGLOT_ANALYSIS_UPSTREAM,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_BOOLEAN_RESULT_KINDS as _POLYGLOT_BOOLEAN_RESULT_KINDS,
 )
 from sqlbuild.compiler.sql_analysis.constants import (
@@ -152,9 +65,6 @@ from sqlbuild.compiler.sql_analysis.constants import (
 )
 from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_KIND_ALIAS as _POLYGLOT_KIND_ALIAS,
-)
-from sqlbuild.compiler.sql_analysis.constants import (
-    POLYGLOT_KIND_ANNOTATED as _POLYGLOT_KIND_ANNOTATED,
 )
 from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_KIND_CAST as _POLYGLOT_KIND_CAST,
@@ -247,12 +157,7 @@ from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matchi
 from sqlbuild.compiler.sql_analysis.main._normalize_for_polyglot import (
     normalize_sql_for_polyglot,
 )
-from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
-from sqlbuild.compiler.sql_analysis.models import (
-    SqlBindingDiagnostic,
-    SqlSchemaValidationRequest,
-)
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
@@ -269,548 +174,6 @@ _TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
     r'"([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()'
 )
 _PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(r"@@@(\w+)")
-
-
-def infer_columns_with_sql_analysis(
-    *,
-    query_sql: str,
-    placeholders: dict[str, str] | None = None,
-    column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
-    inference_profile: ExpressionInferenceProfile | None = None,
-) -> tuple[InferredColumn, ...] | None:
-    """Infer output columns from model query SQL using SQL analysis."""
-
-    profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
-
-    cleaned_sql: str = _replace_refs_with_stubs(
-        query_sql=query_sql,
-        dialect=profile.sql_analysis_dialect,
-    )
-    if placeholders:
-        cleaned_sql = substitute_placeholder_defaults(
-            query_sql=cleaned_sql, placeholders=placeholders
-        )
-
-    polyglot_columns: tuple[InferredColumn, ...] | None | bool = _infer_columns_with_polyglot(
-        cleaned_sql=cleaned_sql,
-        dialect=profile.sql_analysis_dialect,
-        column_nullability_by_table=column_nullability_by_table or {},
-        inference_profile=profile,
-    )
-    if isinstance(polyglot_columns, tuple):
-        return polyglot_columns
-    return None
-
-
-def analyze_columns_with_polyglot(
-    *,
-    query_sql: str,
-    placeholders: dict[str, str] | None = None,
-    column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
-    inference_profile: ExpressionInferenceProfile | None = None,
-) -> tuple[InferredColumn, ...] | None | bool:
-    """Infer columns with one Polyglot parse, returning False when unavailable."""
-
-    profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
-    cleaned_sql: str = _replace_refs_with_stubs(
-        query_sql=query_sql,
-        dialect=profile.sql_analysis_dialect,
-    )
-    if placeholders:
-        cleaned_sql = substitute_placeholder_defaults(
-            query_sql=cleaned_sql, placeholders=placeholders
-        )
-    return _infer_columns_with_polyglot(
-        cleaned_sql=cleaned_sql,
-        dialect=profile.sql_analysis_dialect,
-        column_nullability_by_table=column_nullability_by_table or {},
-        inference_profile=profile,
-    )
-
-
-def analyze_columns_and_lineage_with_polyglot(
-    *,
-    query_sql: str,
-    references: tuple[CompileSqlReference, ...] = (),
-    placeholders: dict[str, str] | None = None,
-    column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
-    column_types_by_table: dict[str, dict[str, str]] | None = None,
-    inference_profile: ExpressionInferenceProfile | None = None,
-    allow_compact_analysis: bool = False,
-    binding_schema: dict[str, dict[str, str]] | None = None,
-    recover_cte_facts: bool = False,
-) -> PolyglotAnalysisResult:
-    """Infer columns and compact lineage facts from one Polyglot parse."""
-
-    polyglot_module: Any = import_polyglot_sql()
-    profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
-    cleaned_sql: str = _replace_refs_with_stubs(
-        query_sql=query_sql,
-        dialect=profile.sql_analysis_dialect,
-    )
-    if placeholders:
-        cleaned_sql = substitute_placeholder_defaults(
-            query_sql=cleaned_sql, placeholders=placeholders
-        )
-    compact_analysis: (
-        tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | None
-    ) = _analyze_columns_and_lineage_with_compact_polyglot(
-        polyglot_module=polyglot_module,
-        cleaned_sql=cleaned_sql,
-        dialect=profile.sql_analysis_dialect,
-        references=references,
-        column_nullability_by_table=column_nullability_by_table or {},
-        column_types_by_table=column_types_by_table or {},
-        inference_profile=profile,
-        allow_compact_analysis=allow_compact_analysis,
-        recover_cte_facts=recover_cte_facts,
-    )
-    if compact_analysis is not None:
-        return PolyglotAnalysisResult(
-            analysis_succeeded=True,
-            columns=compact_analysis[0],
-            lineage_columns=compact_analysis[1],
-            has_star=compact_analysis[2],
-            binding_diagnostics=_validate_complete_binding_schema(
-                cleaned_sql=cleaned_sql,
-                dialect=profile.sql_analysis_dialect,
-                binding_schema=binding_schema,
-            ),
-            binding_validated=binding_schema is not None,
-        )
-    try:
-        parsed: Any = polyglot_module.parse_one(
-            cleaned_sql,
-            dialect=profile.sql_analysis_dialect or "generic",
-        )
-    except polyglot_module.PolyglotError as error:
-        log_debug_event(
-            logger=_DEBUG_LOGGER,
-            message="column and lineage analysis parse failed; falling back",
-            sqlbuild_error=str(error),
-        )
-        return PolyglotAnalysisResult(analysis_succeeded=False)
-    columns, lineage_columns, has_star = _analyze_columns_and_lineage_from_polyglot_ast(
-        parsed=parsed,
-        references=references,
-        column_nullability_by_table=column_nullability_by_table or {},
-        column_types_by_table=column_types_by_table or {},
-        inference_profile=profile,
-        recover_cte_facts=recover_cte_facts,
-    )
-    return PolyglotAnalysisResult(
-        analysis_succeeded=True,
-        columns=columns,
-        lineage_columns=lineage_columns,
-        has_star=has_star,
-        binding_diagnostics=_validate_complete_binding_schema(
-            cleaned_sql=cleaned_sql,
-            dialect=profile.sql_analysis_dialect,
-            binding_schema=binding_schema,
-        ),
-        binding_validated=binding_schema is not None,
-    )
-
-
-def get_complete_schema_binding_request(
-    *,
-    query_sql: str,
-    placeholders: dict[str, str] | None,
-    dialect: str | None,
-    binding_schema: dict[str, dict[str, str]],
-) -> SqlSchemaValidationRequest:
-    """Build one stable native schema-validation request."""
-
-    cleaned_sql: str = _replace_refs_with_stubs(query_sql=query_sql, dialect=dialect)
-    if placeholders:
-        cleaned_sql = substitute_placeholder_defaults(
-            query_sql=cleaned_sql,
-            placeholders=placeholders,
-        )
-    return SqlSchemaValidationRequest(
-        sql=cleaned_sql,
-        dialect=dialect,
-        schema=binding_schema,
-    )
-
-
-def _validate_complete_binding_schema(
-    *,
-    cleaned_sql: str,
-    dialect: str | None,
-    binding_schema: dict[str, dict[str, str]] | None,
-) -> tuple[SqlBindingDiagnostic, ...]:
-    if binding_schema is None:
-        return ()
-    return get_schema_validations(
-        requests=(
-            SqlSchemaValidationRequest(
-                sql=cleaned_sql,
-                dialect=dialect,
-                schema=binding_schema,
-            ),
-        )
-    )[0].diagnostics
-
-
-def _analyze_columns_and_lineage_with_compact_polyglot(
-    *,
-    polyglot_module: Any,
-    cleaned_sql: str,
-    dialect: str | None,
-    references: tuple[CompileSqlReference, ...],
-    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
-    column_types_by_table: dict[str, dict[str, str]],
-    inference_profile: ExpressionInferenceProfile,
-    allow_compact_analysis: bool,
-    recover_cte_facts: bool,
-) -> tuple[tuple[InferredColumn, ...] | None, tuple[CompiledLineageColumnFact, ...], bool] | None:
-    if not allow_compact_analysis:
-        return None
-    try:
-        options: dict[str, object] = {"dialect": dialect or "generic"}
-        schema: dict[str, object] | None = _compact_analysis_schema(
-            column_nullability_by_table=column_nullability_by_table,
-            column_types_by_table=column_types_by_table,
-            table_names=frozenset(_analysis_reference_name(reference) for reference in references),
-        )
-        if schema is not None:
-            options["schema"] = schema
-        analysis: Any = polyglot_module.analyze_query(cleaned_sql, options)
-    except polyglot_module.PolyglotError as error:
-        log_debug_event(
-            logger=_DEBUG_LOGGER,
-            message="compact query analysis failed; falling back",
-            sqlbuild_error=str(error),
-        )
-        return None
-    if not isinstance(analysis, dict):
-        return None
-    projections: object = analysis.get(_POLYGLOT_ANALYSIS_PROJECTIONS)
-    if not isinstance(projections, list):
-        return None
-    if not _compact_analysis_is_eligible(analysis=analysis, projections=projections):
-        return None
-    reference_map: dict[str, tuple[CompiledResourceType, str]] = _lineage_reference_map(references)
-    relation_alias_by_name: dict[str, str | None] = _compact_relation_alias_by_name(analysis)
-    cte_passthrough_types, cte_passthrough_nullability, direct_cte_outputs, parsed = (
-        _polyglot_cte_passthrough_facts(
-            polyglot_module=polyglot_module,
-            cleaned_sql=cleaned_sql,
-            dialect=dialect,
-            column_types_by_table=column_types_by_table,
-            column_nullability_by_table=column_nullability_by_table,
-            inference_profile=inference_profile,
-            analysis=analysis,
-            resolvers=CteFactResolvers(
-                expression_type=_polyglot_expression_type,
-                nullability=_infer_polyglot_nullability,
-                shallow_nullability=_infer_polyglot_shallow_nullability,
-                alias_nullability=_polyglot_alias_nullability_from_select,
-            ),
-        )
-        if recover_cte_facts
-        else ({}, {}, frozenset(), None)
-    )
-    filtered_non_null_outputs: frozenset[str] = _polyglot_filtered_non_null_outputs(
-        polyglot_module=polyglot_module,
-        cleaned_sql=cleaned_sql,
-        dialect=dialect,
-        analysis=analysis,
-        column_nullability_by_table=column_nullability_by_table,
-        parsed=parsed,
-    )
-    columns: list[InferredColumn] = []
-    lineage_columns: list[CompiledLineageColumnFact] = []
-    has_star: bool = _compact_analysis_has_star(analysis)
-    infer_nullability: bool = (
-        analysis.get(_POLYGLOT_ANALYSIS_SHAPE) != _POLYGLOT_ANALYSIS_SHAPE_SET_OPERATION
-    )
-    for projection in projections:
-        if not isinstance(projection, dict):
-            return None
-        if bool(projection.get(_POLYGLOT_ANALYSIS_IS_STAR)):
-            continue
-        output_column: str = str(projection.get(_POLYGLOT_ANALYSIS_NAME) or "")
-        if not output_column or output_column == SQL_WILDCARD_TOKEN:
-            continue
-        columns.append(
-            InferredColumn(
-                name=output_column,
-                type=(
-                    cte_passthrough_types.get(output_column)
-                    if output_column in direct_cte_outputs
-                    else _compact_projection_type(
-                        projection=projection, inference_profile=inference_profile
-                    )
-                ),
-                nullability=(
-                    InferredNullability.NON_NULL
-                    if output_column in filtered_non_null_outputs
-                    else (
-                        (
-                            cte_passthrough_nullability.get(output_column)
-                            if output_column in direct_cte_outputs
-                            else None
-                        )
-                        or _compact_projection_nullability(
-                            projection=projection,
-                            infer_nullability=infer_nullability,
-                        )
-                    )
-                ),
-            )
-        )
-        upstream_columns, confidence = _compact_lineage_upstream_columns(
-            projection=projection,
-            reference_map=reference_map,
-            relation_alias_by_name=relation_alias_by_name,
-        )
-        transform_kind: ColumnTransformKind = _compact_transform_kind(
-            projection=projection,
-            has_upstream=bool(upstream_columns),
-        )
-        lineage_columns.append(
-            CompiledLineageColumnFact(
-                output_column=output_column,
-                upstream_columns=upstream_columns,
-                transform_kind=transform_kind,
-                confidence=confidence
-                if upstream_columns or transform_kind == ColumnTransformKind.CONSTANT
-                else ColumnLineageConfidence.UNKNOWN,
-            )
-        )
-    if has_star and len(references) == 1:
-        schema_name: str = _analysis_reference_name(references[0])
-        declared_order: dict[str, int] = {
-            column_name: index
-            for index, column_name in enumerate(column_nullability_by_table.get(schema_name, {}))
-        }
-        fallback_order: int = len(declared_order)
-        columns.sort(key=lambda column: declared_order.get(column.name, fallback_order))
-        lineage_columns.sort(
-            key=lambda column: declared_order.get(column.output_column, fallback_order)
-        )
-    return tuple(columns), tuple(lineage_columns), has_star
-
-
-def _compact_analysis_is_eligible(*, analysis: dict[str, Any], projections: list[object]) -> bool:
-    shape: object = analysis.get(_POLYGLOT_ANALYSIS_SHAPE)
-    if shape not in {_POLYGLOT_ANALYSIS_SHAPE_SELECT, _POLYGLOT_ANALYSIS_SHAPE_SET_OPERATION}:
-        return False
-    projection: object
-    for projection in projections:
-        if not isinstance(projection, dict):
-            return False
-        projection_dict: dict[str, Any] = cast(dict[str, Any], projection)
-        transform_kind: str = str(projection_dict.get(_POLYGLOT_ANALYSIS_TRANSFORM_KIND) or "")
-        if transform_kind in _POLYGLOT_ANALYSIS_UNSAFE_TRANSFORMS:
-            return False
-        upstream_values: object = projection_dict.get(_POLYGLOT_ANALYSIS_UPSTREAM)
-        if transform_kind == _POLYGLOT_ANALYSIS_TRANSFORM_CAST and (
-            not isinstance(upstream_values, list) or not upstream_values
-        ):
-            return False
-    return True
-
-
-def _compact_analysis_schema(
-    *,
-    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
-    column_types_by_table: dict[str, dict[str, str]],
-    table_names: frozenset[str] | None = None,
-) -> dict[str, object] | None:
-    tables: list[dict[str, object]] = []
-    table_name: str
-    columns: dict[str, InferredNullability]
-    for table_name, columns in sorted(column_nullability_by_table.items()):
-        if table_names is not None and table_name not in table_names:
-            continue
-        if not columns:
-            continue
-        tables.append(
-            {
-                "name": table_name,
-                "columns": [
-                    _compact_analysis_schema_column(
-                        column_name=column_name,
-                        column_type=column_types_by_table.get(table_name, {}).get(
-                            column_name, "UNKNOWN"
-                        ),
-                        nullability=columns[column_name],
-                    )
-                    for column_name in columns
-                ],
-            }
-        )
-    if not tables:
-        return None
-    return {"tables": tables}
-
-
-def _compact_analysis_schema_column(
-    *,
-    column_name: str,
-    column_type: str,
-    nullability: InferredNullability,
-) -> dict[str, object]:
-    column: dict[str, object] = {"name": column_name, "type": column_type}
-    if nullability == InferredNullability.NON_NULL:
-        column["nullable"] = False
-    elif nullability == InferredNullability.NULLABLE:
-        column["nullable"] = True
-    return column
-
-
-def _lineage_reference_map(
-    references: tuple[CompileSqlReference, ...],
-) -> dict[str, tuple[CompiledResourceType, str]]:
-    reference_map: dict[str, tuple[CompiledResourceType, str]] = {}
-    reference: CompileSqlReference
-    for reference in references:
-        resource_type: CompiledResourceType | None = _lineage_resource_type(reference)
-        if resource_type is None:
-            continue
-        reference_map[_analysis_reference_name(reference)] = (
-            resource_type,
-            reference.ref_name,
-        )
-    return reference_map
-
-
-def _compact_relation_alias_by_name(analysis: dict[str, Any]) -> dict[str, str | None]:
-    alias_by_name: dict[str, str | None] = {}
-    relation_key: str
-    for relation_key in (_POLYGLOT_ANALYSIS_RELATIONS, _POLYGLOT_ANALYSIS_BASE_TABLES):
-        relations: object = analysis.get(relation_key)
-        if not isinstance(relations, list):
-            continue
-        relation: object
-        for relation in relations:
-            if not isinstance(relation, dict):
-                continue
-            name: object = relation.get(_POLYGLOT_ANALYSIS_NAME)
-            if not isinstance(name, str) or not name:
-                continue
-            alias: object = relation.get(_POLYGLOT_PAYLOAD_ALIAS)
-            alias_by_name[name] = alias if isinstance(alias, str) and alias else None
-    return alias_by_name
-
-
-def _compact_analysis_has_star(analysis: dict[str, Any]) -> bool:
-    star_projections: object = analysis.get(_POLYGLOT_ANALYSIS_STAR_PROJECTIONS)
-    return isinstance(star_projections, list) and bool(star_projections)
-
-
-def _compact_projection_type(
-    *, projection: dict[str, Any], inference_profile: ExpressionInferenceProfile
-) -> str | None:
-    cast_type: object = projection.get(_POLYGLOT_ANALYSIS_CAST_TYPE)
-    if isinstance(cast_type, str) and cast_type and cast_type != UNKNOWN_SQL_TYPE_NAME:
-        return cast_type
-    type_hint: object = projection.get(_POLYGLOT_ANALYSIS_TYPE_HINT)
-    if isinstance(type_hint, str) and type_hint and type_hint != UNKNOWN_SQL_TYPE_NAME:
-        return type_hint
-    transform_function: object = projection.get(_POLYGLOT_ANALYSIS_TRANSFORM_FUNCTION)
-    if isinstance(transform_function, dict):
-        function_name: object = transform_function.get(_POLYGLOT_ANALYSIS_FUNCTION_NAME)
-        if isinstance(function_name, str):
-            return inference_profile.function_return_type(function_name)
-    return None
-
-
-def _compact_projection_nullability(
-    *,
-    projection: dict[str, Any],
-    infer_nullability: bool,
-) -> InferredNullability:
-    if not infer_nullability:
-        return InferredNullability.UNKNOWN
-    value: object = projection.get(_POLYGLOT_ANALYSIS_NULLABILITY)
-    if value == _POLYGLOT_ANALYSIS_NULLABILITY_NON_NULL:
-        return InferredNullability.NON_NULL
-    if value == _POLYGLOT_ANALYSIS_NULLABILITY_NULLABLE:
-        return InferredNullability.NULLABLE
-    return InferredNullability.UNKNOWN
-
-
-def _compact_lineage_upstream_columns(
-    *,
-    projection: dict[str, Any],
-    reference_map: dict[str, tuple[CompiledResourceType, str]],
-    relation_alias_by_name: dict[str, str | None],
-) -> tuple[tuple[CompiledLineageSourceFact, ...], ColumnLineageConfidence]:
-    upstream_values: object = projection.get(_POLYGLOT_ANALYSIS_UPSTREAM)
-    if not isinstance(upstream_values, list):
-        return (), ColumnLineageConfidence.UNKNOWN
-    columns: list[CompiledLineageSourceFact] = []
-    seen: set[tuple[CompiledResourceType, str, str]] = set()
-    confidence: ColumnLineageConfidence = ColumnLineageConfidence.HIGH
-    upstream: object
-    for upstream in upstream_values:
-        if not isinstance(upstream, dict):
-            continue
-        column_name: object = upstream.get(_POLYGLOT_PAYLOAD_COLUMN)
-        if not isinstance(column_name, str) or not column_name or column_name == SQL_WILDCARD_TOKEN:
-            continue
-        source_name: object = upstream.get(_POLYGLOT_ANALYSIS_SOURCE_NAME) or upstream.get(
-            _POLYGLOT_ANALYSIS_TABLE
-        )
-        if not isinstance(source_name, str) or not source_name:
-            confidence = ColumnLineageConfidence.UNKNOWN
-            continue
-        resource: tuple[CompiledResourceType, str] | None = reference_map.get(source_name)
-        if resource is None:
-            continue
-        source_confidence: object = upstream.get(_POLYGLOT_ANALYSIS_SOURCE_CONFIDENCE)
-        source_alias: object = upstream.get(_POLYGLOT_ANALYSIS_SOURCE_ALIAS)
-        if source_confidence != RESOLVED_SOURCE_CONFIDENCE and not isinstance(source_alias, str):
-            confidence = ColumnLineageConfidence.MEDIUM
-        resource_type, resource_name = resource
-        key: tuple[CompiledResourceType, str, str] = (resource_type, resource_name, column_name)
-        if key in seen:
-            continue
-        seen.add(key)
-        columns.append(
-            CompiledLineageSourceFact(
-                resource_type=resource_type,
-                resource_name=resource_name,
-                column_name=column_name,
-            )
-        )
-    return tuple(
-        sorted(
-            columns,
-            key=lambda column: (
-                column.resource_type.value,
-                column.resource_name,
-                column.column_name,
-            ),
-        )
-    ), confidence
-
-
-def _compact_transform_kind(
-    *, projection: dict[str, Any], has_upstream: bool
-) -> ColumnTransformKind:
-    transform_kind: str = str(projection.get(_POLYGLOT_ANALYSIS_TRANSFORM_KIND) or "")
-    if transform_kind == _POLYGLOT_ANALYSIS_TRANSFORM_STAR:
-        return ColumnTransformKind.STAR
-    if transform_kind == _POLYGLOT_ANALYSIS_TRANSFORM_CAST:
-        return ColumnTransformKind.CAST
-    if transform_kind == _POLYGLOT_ANALYSIS_TRANSFORM_AGGREGATION:
-        return ColumnTransformKind.AGGREGATION
-    if transform_kind == _POLYGLOT_ANALYSIS_TRANSFORM_CONSTANT or not has_upstream:
-        return ColumnTransformKind.CONSTANT
-    if transform_kind == _POLYGLOT_ANALYSIS_TRANSFORM_DIRECT:
-        return ColumnTransformKind.DIRECT
-    return ColumnTransformKind.EXPRESSION
-
-
-def _unwrap_polyglot_annotations(expression: Any) -> Any:
-    while str(getattr(expression, "kind", "")) == _POLYGLOT_KIND_ANNOTATED:
-        expression = expression.this
-    return expression
 
 
 def _infer_columns_with_polyglot(
@@ -857,11 +220,21 @@ def _infer_columns_from_polyglot_ast(
             select=select,
             column_nullability_by_table=column_nullability_by_table,
         )
+    top_level_ctes: tuple[tuple[str, Any, bool], ...] = _polyglot_top_level_ctes(parsed)
+    referenced_table_names: tuple[str, ...] = (
+        tuple(
+            str(getattr(table, "name", "") or "") for table in parsed.find_all(_POLYGLOT_KIND_TABLE)
+        )
+        if top_level_ctes
+        else ()
+    )
     cte_passthrough_types: dict[str, str] = _polyglot_cte_passthrough_types_from_parsed(
         parsed=parsed,
         column_types_by_table={},
         inference_profile=inference_profile,
         expression_type_resolver=_polyglot_expression_type,
+        top_level_ctes=top_level_ctes,
+        referenced_table_names=referenced_table_names,
     )
     cte_passthrough_nullability: dict[str, InferredNullability] = (
         _polyglot_cte_passthrough_nullability_from_parsed(
@@ -871,6 +244,8 @@ def _infer_columns_from_polyglot_ast(
             nullability_resolver=_infer_polyglot_nullability,
             shallow_nullability_resolver=_infer_polyglot_shallow_nullability,
             alias_nullability_resolver=_polyglot_alias_nullability_from_select,
+            top_level_ctes=top_level_ctes,
+            referenced_table_names=referenced_table_names,
         )
     )
     non_null_filter_context: NonNullFilterContext | None = _polyglot_non_null_filter_context(
@@ -949,12 +324,24 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
         alias_map
     )
 
+    top_level_ctes: tuple[tuple[str, Any, bool], ...] = (
+        _polyglot_top_level_ctes(parsed) if recover_cte_facts else ()
+    )
+    referenced_table_names: tuple[str, ...] = (
+        tuple(
+            str(getattr(table, "name", "") or "") for table in parsed.find_all(_POLYGLOT_KIND_TABLE)
+        )
+        if top_level_ctes
+        else ()
+    )
     cte_passthrough_types: dict[str, str] = (
         _polyglot_cte_passthrough_types_from_parsed(
             parsed=parsed,
             column_types_by_table=column_types_by_table,
             inference_profile=inference_profile,
             expression_type_resolver=_polyglot_expression_type,
+            top_level_ctes=top_level_ctes,
+            referenced_table_names=referenced_table_names,
         )
         if recover_cte_facts
         else {}
@@ -967,6 +354,8 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
             nullability_resolver=_infer_polyglot_nullability,
             shallow_nullability_resolver=_infer_polyglot_shallow_nullability,
             alias_nullability_resolver=_polyglot_alias_nullability_from_select,
+            top_level_ctes=top_level_ctes,
+            referenced_table_names=referenced_table_names,
         )
         if recover_cte_facts
         else {}
@@ -1654,19 +1043,47 @@ def substitute_placeholder_defaults(*, query_sql: str, placeholders: dict[str, s
     return _PLACEHOLDER_PATTERN.sub(_replacer, query_sql)
 
 
-def _replace_refs_with_stubs(*, query_sql: str, dialect: str | None = None) -> str:
+def _replace_refs_with_stubs(
+    *,
+    query_sql: str,
+    dialect: str | None = None,
+    relation_stubs: dict[str, str] | None = None,
+) -> str:
     """Replace SQLBuild marker calls with parseable SQL stubs."""
 
-    result: str = _REF_PATTERN.sub(r"\1", query_sql)
-    result = _SEED_PATTERN.sub(r"\1", result)
-    result = _SOURCE_PATTERN.sub(r"\1", result)
+    stubs: dict[str, str] = relation_stubs or {}
+
+    def relation_stub(match: re.Match[str]) -> str:
+        name: str = match.group(1)
+        return stubs.get(name, name)
+
+    result: str = _REF_PATTERN.sub(relation_stub, query_sql)
+    result = _SEED_PATTERN.sub(relation_stub, result)
+    result = _SOURCE_PATTERN.sub(relation_stub, result)
     result = _DBT_REF_PATTERN.sub(r"\1", result)
     result = _UDF_PATTERN.sub(r"__sqlbuild_udf_\1", result)
-    result = _replace_table_function_calls_with_stubs(result)
+    result = _replace_table_function_calls_with_stubs(query_sql=result, relation_stubs=stubs)
     return normalize_sql_for_polyglot(sql=result, dialect=dialect)
 
 
-def _replace_table_function_calls_with_stubs(query_sql: str) -> str:
+def _qualified_reference_names(*, query_sql: str, reference_names: Iterable[str]) -> frozenset[str]:
+    qualified: set[str] = set()
+    for value in reference_names:
+        name: str = str(value)
+        escaped: str = re.escape(name)
+        if re.search(
+            rf'(?<![A-Za-z0-9_$])(?:"{escaped}"|`{escaped}`|\[{escaped}\]|{escaped})'
+            r"(?:\s|--[^\r\n]*(?:\r?\n|$)|/\*.*?\*/)*\.",
+            query_sql,
+            re.IGNORECASE | re.DOTALL,
+        ):
+            qualified.add(name)
+    return frozenset(qualified)
+
+
+def _replace_table_function_calls_with_stubs(
+    *, query_sql: str, relation_stubs: dict[str, str] | None = None
+) -> str:
     parts: list[str] = []
     last_index: int = 0
     match: re.Match[str]
@@ -1677,7 +1094,8 @@ def _replace_table_function_calls_with_stubs(query_sql: str) -> str:
             open_paren_index=match.end(),
             context="SQL table function analysis",
         )
-        parts.append(table_function_analysis_name(match.group(1)))
+        table_name: str = table_function_analysis_name(match.group(1))
+        parts.append((relation_stubs or {}).get(table_name, table_name))
         last_index = call_end + 1
     parts.append(query_sql[last_index:])
     return "".join(parts)

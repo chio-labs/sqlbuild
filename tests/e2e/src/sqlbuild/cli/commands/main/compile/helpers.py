@@ -6,6 +6,8 @@ import json
 import os
 import signal
 import statistics
+import subprocess
+import sys
 import time
 from bisect import bisect_left
 from collections.abc import Callable, Iterator
@@ -17,6 +19,9 @@ from typing import Any, NamedTuple
 
 import pytest
 
+from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
+    semantic_compile_fingerprint,
+)
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 
 _DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
@@ -60,6 +65,13 @@ class LayeredProductionCompileBenchmarkResult(NamedTuple):
 class SemanticCompileBenchmarkResult(NamedTuple):
     cold: CompileBenchmarkMeasurement
     warm: CompileBenchmarkMeasurement
+
+
+class FreshProcessCompileBenchmarkResult(NamedTuple):
+    elapsed_seconds: float
+    peak_rss_bytes: int
+    semantic_fingerprint: str
+    payload: dict[str, object]
 
 
 class DbtShapedCompileBenchmarkResult(NamedTuple):
@@ -305,6 +317,81 @@ def run_semantic_compile_benchmark(
         expected_max_seconds=expected_warm_max_seconds,
     )
     return SemanticCompileBenchmarkResult(cold=cold, warm=warm)
+
+
+def run_fresh_process_semantic_compile_benchmark(
+    *,
+    project_dir: Path,
+    model_count: int,
+    source_count: int,
+    seed_count: int,
+    function_count: int,
+    macro_count: int,
+    test_count: int,
+    audit_count: int,
+    expected_max_wall_seconds: float,
+) -> FreshProcessCompileBenchmarkResult:
+    """Compile one clean semantic fixture in a fresh process without compiler caches."""
+
+    write_semantic_compile_project(
+        project_dir=project_dir,
+        model_count=model_count,
+        source_count=source_count,
+        seed_count=seed_count,
+        function_count=function_count,
+        macro_count=macro_count,
+        test_count=test_count,
+        audit_count=audit_count,
+    )
+    target_dir: Path = project_dir / "target"
+    assert not target_dir.exists()
+    measurement_path: Path = project_dir.parent / f"fresh-process-{model_count}-measurement.txt"
+    output_path: Path = project_dir.parent / f"fresh-process-{model_count}.json"
+    stderr_path: Path = project_dir.parent / f"fresh-process-{model_count}.stderr"
+    command: list[str] = [
+        "/usr/bin/time",
+        "--quiet",
+        "--output",
+        str(measurement_path),
+        "--format",
+        "%e %M",
+        str(Path(sys.executable).with_name("sqb")),
+        "--project-dir",
+        str(project_dir),
+        "--no-color",
+        "compile",
+        "--json",
+        "--no-cache",
+    ]
+    with (
+        output_path.open("wb") as output_file,
+        stderr_path.open("wb") as stderr_file,
+    ):
+        completed: subprocess.CompletedProcess[bytes] = subprocess.run(
+            command,
+            check=False,
+            stdout=output_file,
+            stderr=stderr_file,
+            timeout=expected_max_wall_seconds + 10.0,
+        )
+    assert completed.returncode == 0, stderr_path.read_text(encoding="utf-8")
+    elapsed_text, peak_rss_kib_text = measurement_path.read_text(encoding="utf-8").split()
+    elapsed_seconds: float = float(elapsed_text)
+    payload_object: object = json.loads(output_path.read_bytes())
+    assert isinstance(payload_object, dict)
+    payload: dict[str, object] = payload_object
+    peak_rss_bytes: int = int(peak_rss_kib_text) * 1024
+    compiled_dir: Path = target_dir / "compiled"
+    semantic_fingerprint: str = semantic_compile_fingerprint(
+        payload=payload, compiled_dir=compiled_dir
+    )
+    assert not (target_dir / "cache").exists()
+    return FreshProcessCompileBenchmarkResult(
+        elapsed_seconds=elapsed_seconds,
+        peak_rss_bytes=peak_rss_bytes,
+        semantic_fingerprint=semantic_fingerprint,
+        payload=payload,
+    )
 
 
 def _append_benchmark_edit(path: Path, label: str) -> None:

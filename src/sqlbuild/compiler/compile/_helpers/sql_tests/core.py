@@ -1053,6 +1053,8 @@ def validate_independent_expected_and_assertion_ctes(
             prohibited_label = "expected result"
         if prohibited_prefix is None or prohibited_label is None:
             continue
+        if prohibited_prefix.casefold() not in cte.sql_body.casefold():
+            continue
         nested_name: str | None = next(
             (
                 name
@@ -1135,6 +1137,9 @@ def _defined_cte_names(*, sql: str) -> tuple[str, ...]:
 
 
 def _known_cte_references(*, sql: str, names_by_key: dict[str, str]) -> tuple[str, ...]:
+    folded_sql: str = sql.casefold()
+    if not any(name in folded_sql for name in names_by_key):
+        return ()
     polyglot_module: Any = import_polyglot_sql()
     try:
         parsed: Any = polyglot_module.parse_one(sql, dialect="generic")

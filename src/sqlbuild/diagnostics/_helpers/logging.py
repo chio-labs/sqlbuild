@@ -9,11 +9,13 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 
 from sqlbuild.diagnostics.constants import SQL_TEXT_FIELD
-from sqlbuild.observability import (
-    ExecutionIdentity,
+from sqlbuild.runtime.observability.main.current_execution_identity import (
     current_execution_identity,
+)
+from sqlbuild.runtime.observability.main.execution_identity_to_dict import (
     execution_identity_to_dict,
 )
+from sqlbuild.runtime.observability.models import ExecutionIdentity
 
 _LOGGER_ROOT_NAME: str = "sqlbuild"
 _EMPTY_CONTEXT: dict[str, object] = {}

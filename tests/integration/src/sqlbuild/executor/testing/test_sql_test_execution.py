@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.planner.models import SqlTestPlanEntry
+from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
 from sqlbuild.executor.testing._helpers.difference_samples import (
     build_sql_test_difference_sample_sql,
 )
 from sqlbuild.executor.testing.main._execute import execute_sql_test
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
+from sqlbuild.executor.testing.main.comparison_sql_batch import (
+    build_sql_test_comparison_sql_batch,
+)
 from sqlbuild.executor.testing.models import (
     SqlTestColumnDifference,
     SqlTestExecutionResult,
@@ -21,6 +25,7 @@ from sqlbuild.executor.testing.models import (
 )
 from sqlbuild.executor.testing.types import SqlTestDifferenceDirection, SqlTestOutcome
 from tests.integration.src.sqlbuild.executor.testing._test_types import (
+    ExpectedBooleanTestCase,
     SqlTestComparisonSqlTestCase,
     SqlTestDiagnosticsTestCase,
     SqlTestDifferenceSqlTestCase,
@@ -120,6 +125,85 @@ def test_given_sql_test_chain_when_building_comparison_sql_then_uses_readable_ct
     unexpected_fragment: str
     for unexpected_fragment in test_case.unexpected_fragments:
         assert unexpected_fragment not in comparison_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [ExpectedBooleanTestCase(description="trailing comments remain valid", expected_result=True)],
+    ids=lambda case: case.description,
+)
+def test_given_actual_sql_ending_in_line_comment_when_executing_then_delimiters_remain_valid(
+    adapter: DuckDbAdapter,
+    connection: Any,
+    test_case: ExpectedBooleanTestCase,
+) -> None:
+    entry: SqlTestPlanEntry = build_sql_test_plan_entry(
+        name="trailing_comment",
+        chain_steps=(("orders", "SELECT 1 AS id -- keep orders", "SELECT 1 AS id"),),
+    )
+
+    result: SqlTestExecutionResult = execute_sql_test(
+        test_entry=entry,
+        adapter=adapter,
+        connection=connection,
+    )
+
+    assert (result.outcome == SqlTestOutcome.PASS) is test_case.expected_result
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedBooleanTestCase(
+            description="conflicting preanalyzed CTEs retain step inputs",
+            expected_result=True,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_conflicting_preanalyzed_ctes_when_executing_then_each_step_uses_its_definition(
+    adapter: DuckDbAdapter,
+    connection: Any,
+    test_case: ExpectedBooleanTestCase,
+) -> None:
+    entry: SqlTestPlanEntry = replace(
+        build_sql_test_plan_entry(name="conflicting_ctes", chain_steps=()),
+        chain=(
+            ChainStep(
+                model_name="orders",
+                resolved_sql=(
+                    "WITH __source__products AS (SELECT 2 AS id) SELECT id FROM __source__products"
+                ),
+                expected_cte_sql="SELECT 2 AS id",
+                lifted_ctes=(("__source__products", "SELECT 2 AS id"),),
+                comparison_body_sql="SELECT id FROM __source__products",
+            ),
+            ChainStep(
+                model_name="products",
+                resolved_sql=(
+                    "WITH __source__products AS (SELECT 1 AS id) SELECT id FROM __source__products"
+                ),
+                expected_cte_sql="SELECT 1 AS id",
+                lifted_ctes=(("__source__products", "SELECT 1 AS id"),),
+                comparison_body_sql="SELECT id FROM __source__products",
+            ),
+        ),
+    )
+
+    result: SqlTestExecutionResult = execute_sql_test(
+        test_entry=entry,
+        adapter=adapter,
+        connection=connection,
+    )
+    (native_sql,) = build_sql_test_comparison_sql_batch(
+        test_entries=(entry,),
+        set_difference_operator=adapter.render_set_difference_operator(),
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
+    )
+    native_rows: list[tuple[object, ...]] = connection.execute(native_sql).fetchall()
+
+    assert result.outcome == SqlTestOutcome.PASS
+    assert all(row[-2:] == (0, 0) for row in native_rows) is test_case.expected_result
 
 
 @pytest.mark.parametrize(

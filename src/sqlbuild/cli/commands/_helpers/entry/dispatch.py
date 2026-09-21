@@ -16,38 +16,16 @@ from sqlbuild.cli.commands.constants import (
     SCENARIO_TEST_COMMAND,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.models import (
-    AuditCommandRequest,
-    BuildCommandRequest,
-    CheckCommandRequest,
-    CliEntrypointHandlers,
-    CloneCommandRequest,
+from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode
+from sqlbuild.cli.compile.models import (
     CompileCommandRequest,
     CompileProfileFlags,
-    ContractCommandRequest,
-    CostCommandRequest,
-    DbtInitCommandRequest,
-    DiffCommandRequest,
-    FreshnessCommandRequest,
-    JanitorCommandRequest,
-    LineageCommandRequest,
-    LoadCommandRequest,
-    PlanCommandRequest,
-    PlaygroundCommandRequest,
-    PromoteCommandRequest,
-    RollbackCommandRequest,
-    RulesCommandRequest,
-    ScenarioCaptureCommandRequest,
-    ScenarioSnapshotLimitInputs,
-    ScenarioTestCommandRequest,
-    ScopeCommandRequest,
-    SeedCommandRequest,
-    SelectorInputs,
-    TestCommandRequest,
 )
-from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode
+from sqlbuild.cli.entry.models import (
+    CliEntrypointHandlers,
+    SelectorInputs,
+)
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
-from sqlbuild.compiler.planner.models import CursorOverrides
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 
 
@@ -60,49 +38,33 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     selector_inputs: SelectorInputs = read_selector_file_inputs(args.select_file)
     select: tuple[str, ...] = (*tuple(args.select), *selector_inputs.selectors)
-    if args.command == CliCommand.CONTRACT:
-        if handlers.run_contract is None:
-            raise CliUserError("contract command handler is unavailable", code="C470")
-        if args.contract_command is None or args.contract_from is None:
-            raise CliUserError("contract requires an action and --from target", code="C474")
-        return handlers.run_contract(
-            ContractCommandRequest(
-                action=args.contract_command,
-                from_target=args.contract_from,
-                project_dir=project_dir,
-                select=select,
-                exclude=tuple(args.exclude),
-                write=args.contract_write,
-                overwrite=args.overwrite,
-                json_output=args.json,
-                no_color=args.no_color,
-                cli_vars=args.vars,
-            )
-        )
-    if args.command == CliCommand.COMPILE:
-        return handlers.run_compile(
-            CompileCommandRequest(
-                project_dir=project_dir,
-                no_sql_validation=args.no_sql_validation,
-                no_cache=args.no_cache,
-                defer_to=args.defer_to,
-                selected_target=args.target,
-                json_output=args.json,
-                manifest=args.manifest,
-                dag_path=args.dag,
-                no_color=args.no_color,
-                lineage_mode=CompileLineageMode(args.compile_lineage_mode),
-                select=select,
-                exclude=tuple(args.exclude),
-                cli_vars=args.vars,
-                profile_flags=CompileProfileFlags(
-                    skip_discovery_sql_analysis=args.profile_skip_discovery_sql_analysis,
-                    skip_column_inference=args.profile_skip_column_inference,
-                    skip_contracts=args.profile_skip_contracts,
-                    skip_write=args.profile_skip_write,
-                ),
-            )
-        )
+    compile_exit_code: int | None = _dispatch_compile_or_contract(
+        args=args,
+        handlers=handlers,
+        project_dir=project_dir,
+        select=select,
+    )
+    if compile_exit_code is not None:
+        return compile_exit_code
+    from sqlbuild.cli.commands.models import (
+        AuditCommandRequest,
+        BuildCommandRequest,
+        CheckCommandRequest,
+        CloneCommandRequest,
+        CostCommandRequest,
+        DiffCommandRequest,
+        FreshnessCommandRequest,
+        JanitorCommandRequest,
+        LineageCommandRequest,
+        LoadCommandRequest,
+        PlanCommandRequest,
+        PromoteCommandRequest,
+        RollbackCommandRequest,
+        ScopeCommandRequest,
+        SeedCommandRequest,
+        TestCommandRequest,
+    )
+
     if args.command == CliCommand.SCOPE:
         return handlers.run_scope(
             request=ScopeCommandRequest(
@@ -128,6 +90,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 no_cache=args.no_cache,
             )
         )
+
     if args.command == CliCommand.DAG:
         return handlers.run_dag(
             project_dir=project_dir,
@@ -136,6 +99,8 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
             cli_vars=args.vars,
         )
     if args.command == CliCommand.PLAN:
+        from sqlbuild.compiler.planner.models import CursorOverrides
+
         return handlers.run_plan(
             PlanCommandRequest(
                 project_dir=project_dir,
@@ -174,6 +139,8 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
             effective_project_dir=effective_project_dir,
         )
     if args.command == CliCommand.BUILD:
+        from sqlbuild.compiler.planner.models import CursorOverrides
+
         return handlers.run_build(
             BuildCommandRequest(
                 project_dir=project_dir,
@@ -284,6 +251,8 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
             )
         )
     if args.command == CliCommand.LOAD:
+        from sqlbuild.compiler.planner.models import CursorOverrides
+
         return handlers.run_load(
             LoadCommandRequest(
                 project_dir=project_dir,
@@ -512,6 +481,61 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
     )
 
 
+def _dispatch_compile_or_contract(
+    *,
+    args: CliNamespace,
+    handlers: CliEntrypointHandlers,
+    project_dir: Path | None,
+    select: tuple[str, ...],
+) -> int | None:
+    if args.command == CliCommand.CONTRACT:
+        from sqlbuild.cli.commands.models import ContractCommandRequest
+
+        if handlers.run_contract is None:
+            raise CliUserError("contract command handler is unavailable", code="C470")
+        if args.contract_command is None or args.contract_from is None:
+            raise CliUserError("contract requires an action and --from target", code="C474")
+        return handlers.run_contract(
+            ContractCommandRequest(
+                action=args.contract_command,
+                from_target=args.contract_from,
+                project_dir=project_dir,
+                select=select,
+                exclude=tuple(args.exclude),
+                write=args.contract_write,
+                overwrite=args.overwrite,
+                json_output=args.json,
+                no_color=args.no_color,
+                cli_vars=args.vars,
+            )
+        )
+    if args.command == CliCommand.COMPILE:
+        return handlers.run_compile(
+            CompileCommandRequest(
+                project_dir=project_dir,
+                no_sql_validation=args.no_sql_validation,
+                no_cache=args.no_cache,
+                defer_to=args.defer_to,
+                selected_target=args.target,
+                json_output=args.json,
+                manifest=args.manifest,
+                dag_path=args.dag,
+                no_color=args.no_color,
+                lineage_mode=CompileLineageMode(args.compile_lineage_mode),
+                select=select,
+                exclude=tuple(args.exclude),
+                cli_vars=args.vars,
+                profile_flags=CompileProfileFlags(
+                    skip_discovery_sql_analysis=args.profile_skip_discovery_sql_analysis,
+                    skip_column_inference=args.profile_skip_column_inference,
+                    skip_contracts=args.profile_skip_contracts,
+                    skip_write=args.profile_skip_write,
+                ),
+            )
+        )
+    return None
+
+
 def _dispatch_local_command(
     *,
     args: CliNamespace,
@@ -519,6 +543,8 @@ def _dispatch_local_command(
     project_dir: Path | None,
     select: tuple[str, ...],
 ) -> int:
+    from sqlbuild.cli.commands.models import PlaygroundCommandRequest
+
     if args.command == CliCommand.INIT:
         return handlers.run_init(project_dir)
     if args.command == CliCommand.PLAYGROUND:
@@ -558,6 +584,8 @@ def _dispatch_local_command(
 def _dispatch_rules_command(
     *, args: CliNamespace, handlers: CliEntrypointHandlers, project_dir: Path | None
 ) -> int:
+    from sqlbuild.cli.commands.models import RulesCommandRequest
+
     return handlers.run_rules(
         RulesCommandRequest(
             project_dir=project_dir,
@@ -599,6 +627,8 @@ def _dispatch_dbt_command(
     project_dir: Path | None,
     effective_project_dir: Path,
 ) -> int:
+    from sqlbuild.cli.commands.models import DbtInitCommandRequest
+
     if args.dbt_command == DBT_INIT_COMMAND:
         return handlers.run_dbt_init(
             DbtInitCommandRequest(
@@ -631,6 +661,12 @@ def _dispatch_scenario_command(
     project_dir: Path | None,
     select: tuple[str, ...],
 ) -> int:
+    from sqlbuild.cli.commands.models import (
+        ScenarioCaptureCommandRequest,
+        ScenarioSnapshotLimitInputs,
+        ScenarioTestCommandRequest,
+    )
+
     scenario_select: tuple[str, ...] = (*tuple(args.scenario_selector), *select)
     if args.scenario_command == SCENARIO_TEST_COMMAND:
         if args.scenario_local and args.scenario_retain:

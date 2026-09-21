@@ -17,8 +17,8 @@ from sqlbuild.compiler.source_freshness.models import (
 from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
-from sqlbuild.observability import run_scope
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
+from sqlbuild.runtime.observability.main.run_scope import run_scope
 from sqlbuild.runtime.observability.models import OperationAttributes
 
 

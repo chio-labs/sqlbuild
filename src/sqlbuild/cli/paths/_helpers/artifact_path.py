@@ -17,16 +17,37 @@ _CHAIN_EDGE_NAME_BYTES: int = 80
 def build_sql_test_output_path(entry: SqlTestPlanEntry) -> Path:
     """Return a readable test path with bounded chain directory components."""
 
-    if entry.case_name is None or entry.source_path is None:
-        return _test_folder(entry) / f"{entry.name}{_SQL_FILE_SUFFIX}"
-    source_path: Path = entry.source_path.with_suffix("")
-    return source_path / f"block_{entry.block_index}__{entry.case_name}{_SQL_FILE_SUFFIX}"
+    return build_sql_test_output_path_from_values(
+        name=entry.name,
+        source_path=entry.source_path,
+        block_index=entry.block_index,
+        case_name=entry.case_name,
+        model_names=tuple(step.model_name for step in entry.chain),
+    )
 
 
-def _test_folder(entry: SqlTestPlanEntry) -> Path:
-    unique_names: list[str] = sorted({step.model_name for step in entry.chain})
+def build_sql_test_output_path_from_values(
+    *,
+    name: str,
+    source_path: Path | None,
+    block_index: int | None,
+    case_name: str | None,
+    model_names: tuple[str, ...],
+) -> Path:
+    """Return the stable test path from compact planner artifact metadata."""
+
+    if case_name is None or source_path is None:
+        return _test_folder_from_names(name=name, model_names=model_names) / (
+            f"{name}{_SQL_FILE_SUFFIX}"
+        )
+    source_stem: Path = source_path.with_suffix("")
+    return source_stem / f"block_{block_index}__{case_name}{_SQL_FILE_SUFFIX}"
+
+
+def _test_folder_from_names(*, name: str, model_names: tuple[str, ...]) -> Path:
+    unique_names: list[str] = sorted(set(model_names))
     if len(unique_names) <= 1:
-        return Path(unique_names[0] if unique_names else entry.name)
+        return Path(unique_names[0] if unique_names else name)
     chain_name: str = "__".join(unique_names)
     if len(chain_name.encode()) <= _MAX_CHAIN_COMPONENT_BYTES:
         return Path(_CHAIN_DIR) / chain_name

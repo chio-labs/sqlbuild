@@ -105,6 +105,18 @@ def expand_effective_vars(raw_values: dict[str, object]) -> dict[str, object]:
     return resolver.resolved_values
 
 
+def contains_template_data(value: object) -> bool:
+    """Return whether a supported nested value contains a template token."""
+
+    if isinstance(value, str):
+        return TEMPLATE_OPEN_TOKEN in value
+    if isinstance(value, dict):
+        return any(contains_template_data(item) for item in value.values())
+    if isinstance(value, list | tuple):
+        return any(contains_template_data(item) for item in value)
+    return False
+
+
 def expand_template_data(
     *,
     value: object,

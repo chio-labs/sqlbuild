@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
 from sqlbuild.executor.testing._helpers import comparison_sql as comparison_sql_helpers
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
+from sqlbuild.executor.testing.main.comparison_sql_batch import (
+    build_sql_test_comparison_sql_batch,
+)
 from tests.unit.src.sqlbuild.executor.testing.main._test_types import (
     BuildComparisonSqlTestCase,
+    ExpectedBooleanTestCase,
 )
 from tests.unit.src.sqlbuild.executor.testing.main.helpers import (
     build_assertion_test_entry,
@@ -290,3 +297,96 @@ def test_given_bigquery_table_fn_when_building_comparison_sql_then_preserves_bac
     for expected_fragment in test_case.expected_fragments:
         assert expected_fragment in comparison_sql
     assert "project-d5f92072-d107-4987-9ef.test.customer_orders(1)" not in comparison_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [ExpectedBooleanTestCase(description="authored CTEs are lifted", expected_result=True)],
+    ids=lambda case: case.description,
+)
+def test_given_preanalyzed_step_with_authored_cte_when_building_comparison_then_lifts_both_ctes(
+    test_case: ExpectedBooleanTestCase,
+) -> None:
+    entry: SqlTestPlanEntry = build_comparison_test_entry()
+    entry = replace(
+        entry,
+        chain=(
+            ChainStep(
+                model_name="orders",
+                resolved_sql=(
+                    "WITH __ref__raw_orders AS (SELECT 1 AS order_id), "
+                    "picked AS (SELECT * FROM __ref__raw_orders) SELECT * FROM picked"
+                ),
+                comparison_body_sql=(
+                    "WITH picked AS (SELECT * FROM __ref__raw_orders) SELECT * FROM picked"
+                ),
+                lifted_ctes=(("__ref__raw_orders", "SELECT 1 AS order_id"),),
+                expected_cte_sql="SELECT 1 AS order_id",
+            ),
+        ),
+    )
+
+    comparison_sql: str = build_sql_test_comparison_sql(
+        test_entry=entry,
+        sql_analysis_dialect="tsql",
+    )
+
+    assert (
+        comparison_sql.index("__ref__raw_orders AS") < comparison_sql.index("picked AS")
+    ) is test_case.expected_result
+    assert comparison_sql.index("picked AS") < comparison_sql.index("__actual__orders AS")
+    assert "__actual__orders AS (\nWITH picked" not in comparison_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [ExpectedBooleanTestCase(description="native batch matches reference", expected_result=True)],
+    ids=lambda case: case.description,
+)
+def test_given_representative_plans_when_rendering_native_batch_then_matches_reference_sql(
+    test_case: ExpectedBooleanTestCase,
+) -> None:
+    entries: tuple[SqlTestPlanEntry, ...] = (
+        build_comparison_test_entry(),
+        build_comparison_test_entry_with_helper_ctes(),
+        build_transitive_comparison_test_entry(),
+        build_assertion_test_entry(),
+    )
+    expected: tuple[str, ...] = tuple(
+        build_sql_test_comparison_sql(test_entry=entry, sql_analysis_dialect="duckdb")
+        for entry in entries
+    )
+
+    actual: tuple[str, ...] = build_sql_test_comparison_sql_batch(
+        test_entries=entries,
+        sql_analysis_dialect="duckdb",
+    )
+
+    assert (actual == expected) is test_case.expected_result
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [ExpectedBooleanTestCase(description="quoted table function matches", expected_result=True)],
+    ids=lambda case: case.description,
+)
+def test_given_quoted_table_function_when_rendering_native_batch_then_matches_reference_sql(
+    test_case: ExpectedBooleanTestCase,
+) -> None:
+    entry: SqlTestPlanEntry = build_table_function_test_entry(
+        resolved_sql="SELECT * FROM `project-d5f92072-d107-4987-9ef.test.customer_orders`(1)"
+    )
+    adapter: BaseAdapter = build_comparison_test_adapter("bigquery")
+    expected: str = build_sql_test_comparison_sql(
+        test_entry=entry,
+        set_difference_operator=adapter.render_set_difference_operator(),
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
+    )
+
+    (actual,) = build_sql_test_comparison_sql_batch(
+        test_entries=(entry,),
+        set_difference_operator=adapter.render_set_difference_operator(),
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
+    )
+
+    assert (actual == expected) is test_case.expected_result

@@ -37,11 +37,12 @@ from sqlbuild.executor.pipeline.exceptions import (
 )
 from sqlbuild.executor.pipeline.models import AuditExecutionFailure, AuditPipelineCallbacks
 from sqlbuild.executor.scheduling.main._run_worker import run_worker_with_completion
-from sqlbuild.observability import RunLifecycle, run_scope
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,
 )
+from sqlbuild.runtime.observability.classes.run_lifecycle import RunLifecycle
+from sqlbuild.runtime.observability.main.run_scope import run_scope
 
 
 @dataclass(frozen=True)

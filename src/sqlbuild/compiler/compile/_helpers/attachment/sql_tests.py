@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from sqlbuild.compiler.compile._helpers.attachment.references import (
@@ -30,11 +29,11 @@ from sqlbuild.compiler.compile._helpers.render.sql_vars import (
     expand_authored_sql_result,
 )
 from sqlbuild.compiler.compile._helpers.scenarios.core import extract_sql_scenario_ctes
-from sqlbuild.compiler.compile._helpers.sql_tests.cache import cached_sql_test_cte_extractor
 from sqlbuild.compiler.compile._helpers.sql_tests.core import (
     extract_assertion_target_model_names,
     extract_sql_test_ctes,
 )
+from sqlbuild.compiler.compile._helpers.sql_tests.native import extract_expanded_sql_tests
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
@@ -85,6 +84,18 @@ _HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
 )
 
 
+@dataclass(frozen=True)
+class _ExpandedSqlTest:
+    test_file: DiscoveredSqlTestFile
+    test_block: DiscoveredSqlTestBlock
+    sql_body: str
+    mode: SqlTestMode
+    tested_resource_names: tuple[str, ...]
+    declaration_usages: tuple[UsageRecord, ...]
+    parent_name: str
+    test_case: DiscoveredSqlTestCase | None
+
+
 def build_test_inputs_with_cache(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -96,20 +107,19 @@ def build_test_inputs_with_cache(
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...],
     compile_cache_dir: Path | None,
 ) -> tuple[CompileSqlTestInput, ...]:
-    """Build SQL test inputs while reusing exact expanded CTE boundaries."""
+    """Build SQL test inputs inside the compile timing boundary."""
 
     with record_compile_timing("test_input_compile_ms"):
-        with cached_sql_test_cte_extractor(root=compile_cache_dir) as extract_test_ctes:
-            return build_test_inputs(
-                discovered_inputs=discovered_inputs,
-                effective_vars=effective_vars,
-                macro_context=macro_context,
-                loaded_macros=loaded_macros,
-                declaration_expansion=declaration_expansion,
-                external_sql_reference_resolver=external_sql_reference_resolver,
-                sql_function_inputs=sql_function_inputs,
-                sql_test_cte_extractor=extract_test_ctes,
-            )
+        del compile_cache_dir
+        return build_test_inputs(
+            discovered_inputs=discovered_inputs,
+            effective_vars=effective_vars,
+            macro_context=macro_context,
+            loaded_macros=loaded_macros,
+            declaration_expansion=declaration_expansion,
+            external_sql_reference_resolver=external_sql_reference_resolver,
+            sql_function_inputs=sql_function_inputs,
+        )
 
 
 def build_test_inputs(
@@ -121,20 +131,10 @@ def build_test_inputs(
     declaration_expansion: DeclarationExpansionContext,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = (),
-    sql_test_cte_extractor: Callable[[str, str, SqlTestMode], CompileSqlTestCtes] | None = None,
 ) -> tuple[CompileSqlTestInput, ...]:
     """Build compile-time test inputs from discovered SQL-native test blocks."""
 
     vars_for_substitution: dict[str, object] = effective_vars or {}
-    extract_test_ctes: Callable[[str, str, SqlTestMode], CompileSqlTestCtes] = (
-        sql_test_cte_extractor
-        if sql_test_cte_extractor is not None
-        else lambda sql, file_label, mode: extract_sql_test_ctes(
-            sql=sql,
-            file_label=file_label,
-            mode=mode,
-        )
-    )
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     if external_sql_reference_resolver is not None:
         known_model_names.update(
@@ -163,6 +163,7 @@ def build_test_inputs(
         if function_input.return_columns
     }
     test_inputs: list[CompileSqlTestInput] = []
+    expanded_tests: list[_ExpandedSqlTest] = []
     resolver: DeclarationScopeResolver | None = declaration_expansion.resolver
     reuse_parent_scope: bool = (
         resolver is not None
@@ -262,33 +263,13 @@ def build_test_inputs(
                     sql=expanded_sql_body,
                     context=f"SQL test '{test_block.name or test_file.file_path.stem}'",
                 )
-                test_ctes: CompileSqlTestCtes = extract_test_ctes(
-                    expanded_sql_body,
-                    str(test_file.relative_path),
-                    test_mode,
-                )
-                validate_test_ctes(
-                    test_ctes=test_ctes,
-                    test_file=test_file,
-                    known_model_names=known_model_names,
-                    known_seed_names=known_seed_names,
-                    known_source_names=known_source_names,
-                    known_table_function_names=known_table_function_names,
-                    loaded_macros=loaded_macros,
-                )
-                test_payload: (
-                    CompileModelSqlTestInputPayload | CompileDirectLogicSqlTestInputPayload
-                ) = _build_test_input_payload(
-                    test_ctes=test_ctes,
-                    tested_resource_names=tested_resource_names,
-                )
-                test_inputs.append(
-                    CompileSqlTestInput(
+                expanded_tests.append(
+                    _ExpandedSqlTest(
                         test_file=test_file,
                         test_block=test_block,
                         sql_body=expanded_sql_body,
                         mode=test_mode,
-                        payload=test_payload,
+                        tested_resource_names=tested_resource_names,
                         declaration_usages=(
                             _macro_test_declaration_usages(
                                 sql=parameter_sql,
@@ -299,12 +280,42 @@ def build_test_inputs(
                             else expansion.usages
                         ),
                         parent_name=test_block.name or test_file.relative_path.stem,
-                        case_name=test_case.name if test_case is not None else None,
-                        case_index=test_case.case_index if test_case is not None else None,
-                        parameter_schema=test_block.parameters,
-                        parameter_values=test_case.values if test_case is not None else (),
+                        test_case=test_case,
                     )
                 )
+    test_ctes_batch: tuple[CompileSqlTestCtes, ...] = extract_expanded_sql_tests(
+        tuple(
+            (test.sql_body, str(test.test_file.relative_path), test.mode) for test in expanded_tests
+        )
+    )
+    for test, test_ctes in zip(expanded_tests, test_ctes_batch, strict=True):
+        validate_test_ctes(
+            test_ctes=test_ctes,
+            test_file=test.test_file,
+            known_model_names=known_model_names,
+            known_seed_names=known_seed_names,
+            known_source_names=known_source_names,
+            known_table_function_names=known_table_function_names,
+            loaded_macros=loaded_macros,
+        )
+        test_inputs.append(
+            CompileSqlTestInput(
+                test_file=test.test_file,
+                test_block=test.test_block,
+                sql_body=test.sql_body,
+                mode=test.mode,
+                payload=_build_test_input_payload(
+                    test_ctes=test_ctes,
+                    tested_resource_names=test.tested_resource_names,
+                ),
+                declaration_usages=test.declaration_usages,
+                parent_name=test.parent_name,
+                case_name=test.test_case.name if test.test_case is not None else None,
+                case_index=test.test_case.case_index if test.test_case is not None else None,
+                parameter_schema=test.test_block.parameters,
+                parameter_values=test.test_case.values if test.test_case is not None else (),
+            )
+        )
     return tuple(test_inputs)
 
 

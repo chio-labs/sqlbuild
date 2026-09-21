@@ -1,20 +1,25 @@
 """Public authoring API for generated SQL audit attachments."""
 
-from __future__ import annotations
-
-from collections.abc import Callable
-from typing import overload
-
+from sqlbuild.compiler.auditing.main.above import above as above
+from sqlbuild.compiler.auditing.main.audit_factory import audit_factory as audit_factory
+from sqlbuild.compiler.auditing.main.below import below as below
+from sqlbuild.compiler.auditing.main.get_audit_factory_definition import (
+    get_audit_factory_definition as get_audit_factory_definition,
+)
+from sqlbuild.compiler.auditing.main.outside import outside as outside
 from sqlbuild.compiler.auditing.models import (
-    MeasurementThresholdBound,
-    MeasurementThresholds,
+    MeasurementThresholdBound as MeasurementThresholdBound,
 )
-from sqlbuild.compiler.auditing.types import AuditSeverity, ThresholdOperator
-from sqlbuild.python_nodes.main.apply_audit_factory import apply_audit_factory
-from sqlbuild.python_nodes.main.read_audit_factory_definition import (
-    read_audit_factory_definition,
+from sqlbuild.compiler.auditing.models import (
+    MeasurementThresholds as MeasurementThresholds,
 )
-from sqlbuild.python_nodes.models import AuditCase, AuditFactoryDefinition
+from sqlbuild.compiler.auditing.types import (
+    AuditSeverity as AuditSeverity,
+)
+from sqlbuild.compiler.auditing.types import (
+    ThresholdOperator as ThresholdOperator,
+)
+from sqlbuild.python_nodes.models import AuditCase as AuditCase
 
 __all__ = (
     "AuditCase",
@@ -28,53 +33,3 @@ __all__ = (
     "get_audit_factory_definition",
     "outside",
 )
-
-
-def below(limit: float) -> MeasurementThresholdBound:
-    """Return a threshold that matches values below ``limit``."""
-
-    return MeasurementThresholdBound(operator=ThresholdOperator.BELOW, limit=limit)
-
-
-def above(limit: float) -> MeasurementThresholdBound:
-    """Return a threshold that matches values above ``limit``."""
-
-    return MeasurementThresholdBound(operator=ThresholdOperator.ABOVE, limit=limit)
-
-
-def outside(*, lower: float, upper: float) -> MeasurementThresholdBound:
-    """Return a threshold that matches values outside the inclusive range."""
-
-    return MeasurementThresholdBound(
-        operator=ThresholdOperator.OUTSIDE,
-        lower=lower,
-        upper=upper,
-    )
-
-
-@overload
-def audit_factory(function: Callable[..., object]) -> Callable[..., object]: ...
-
-
-@overload
-def audit_factory(
-    function: None = None,
-) -> Callable[[Callable[..., object]], Callable[..., object]]: ...
-
-
-def audit_factory(
-    function: Callable[..., object] | None = None,
-) -> Callable[..., object] | Callable[[Callable[..., object]], Callable[..., object]]:
-    """Mark a deterministic, side-effect-free function as an audit-case factory."""
-
-    if function is None:
-        return apply_audit_factory
-    return apply_audit_factory(function)
-
-
-def get_audit_factory_definition(
-    function: Callable[..., object],
-) -> AuditFactoryDefinition | None:
-    """Return audit-factory metadata from a decorated function, if present."""
-
-    return read_audit_factory_definition(function)

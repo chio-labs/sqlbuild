@@ -214,6 +214,8 @@ def resolve_table_function_references(
 ) -> str:
     """Replace __table_fn() calls with adapter-specific table function calls."""
 
+    if _TABLE_FUNCTION_PATTERN.search(query_sql) is None:
+        return query_sql
     parts: list[str] = []
     last_index: int = 0
     match: re.Match[str]
@@ -258,6 +260,8 @@ def resolve_table_function_fixture_references(
 ) -> tuple[str, frozenset[str]]:
     """Replace complete table-function invocations with model-test fixture relations."""
 
+    if not fixtures or _TABLE_FUNCTION_PATTERN.search(query_sql) is None:
+        return query_sql, frozenset()
     parts: list[str] = []
     last_index: int = 0
     reached: set[str] = set()

@@ -7,8 +7,10 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from sqlbuild.cli.commands.constants import TARGET_DIRECTORY_NAME
-from sqlbuild.cli.commands.models import WrittenTarget
 from sqlbuild.cli.commands.types import CompileLineageMode
+from sqlbuild.cli.output.models import (
+    WrittenTarget,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
@@ -24,7 +26,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, DiagnosticSeverity
 from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
-from sqlbuild.compiler.lineage.models import ModelColumnLineage, ProjectColumnLineage
+from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
 from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
@@ -420,14 +422,13 @@ def _lineage_summary(
 ) -> dict[str, object]:
     if lineage is None:
         return {"available": False}
-    model_lineage: ModelColumnLineage | None = lineage.models.get(model.name)
-    if model_lineage is None:
+    if not lineage.has_model(model.name):
         return {"available": False}
     return {
         "available": True,
         "column_count": _column_count(model),
-        "edge_count": len(lineage.edges_targeting(model.name)),
-        "has_star": model_lineage.has_star,
+        "edge_count": lineage.edge_count_targeting(model.name),
+        "has_star": lineage.model_has_star(model.name),
     }
 
 

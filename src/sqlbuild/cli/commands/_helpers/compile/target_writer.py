@@ -16,19 +16,26 @@ from sqlbuild.cli.commands._helpers.compile.sql_test_artifact_cache import (
     sql_test_artifact_record_key,
     write_sql_test_artifact_cache,
 )
-from sqlbuild.cli.commands.models import (
+from sqlbuild.cli.compile.models import (
     SqlTestArtifactCacheRecord,
     SqlTestArtifactIdentityContext,
+)
+from sqlbuild.cli.output.models import (
     WrittenTarget,
 )
-from sqlbuild.cli.paths.main._sql_test_output_path import sql_test_output_path
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
-from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.planner.main.execution.sql_test_assembly import (
-    _sql_test_model_chain_names,
-    build_sql_test_plan_entry,
+from sqlbuild.cli.paths.main._compiled_sql_test_output_path import (
+    compiled_sql_test_output_path,
 )
-from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput
+from sqlbuild.cli.paths.main._sql_test_output_path import sql_test_output_path
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompiledSqlTest
+from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.planner.main.execution.sql_test_artifacts import (
+    plan_and_render_sql_test_artifacts,
+)
+from sqlbuild.compiler.planner.main.execution.sql_test_model_chain import (
+    sql_test_model_chain_names,
+)
+from sqlbuild.compiler.planner.models import AuditPlanEntry, NativeSqlTestArtifact, PlanOutput
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 
@@ -43,6 +50,7 @@ _SINGULAR_DIR: str = "singular"
 _TESTS_DIR: str = "tests"
 _MANIFEST_FILE: str = "manifest.json"
 _SQL_FILE_SUFFIX: str = ".sql"
+_POSIX_LINE_SEPARATOR: str = "\n"
 
 
 def write_compile_target(
@@ -54,15 +62,35 @@ def write_compile_target(
 ) -> WrittenTarget:
     """Write compiled output files under target_dir."""
 
+    remove_stale_files: bool = (target_dir / _COMPILED_DIR).is_dir()
     target_dir.mkdir(parents=True, exist_ok=True)
     managed_paths: set[Path] = set().union(
-        _write_models(target_dir=target_dir, plan_output=plan_output),
-        _write_functions(target_dir=target_dir, adapter=adapter, plan_output=plan_output),
-        _write_audits(target_dir=target_dir, plan_output=plan_output),
-        _write_tests(target_dir=target_dir, adapter=adapter, plan_output=plan_output),
+        _write_models(
+            target_dir=target_dir,
+            plan_output=plan_output,
+            check_existing=remove_stale_files,
+        ),
+        _write_functions(
+            target_dir=target_dir,
+            adapter=adapter,
+            plan_output=plan_output,
+            check_existing=remove_stale_files,
+        ),
+        _write_audits(
+            target_dir=target_dir,
+            plan_output=plan_output,
+            check_existing=remove_stale_files,
+        ),
+        _write_tests(
+            target_dir=target_dir,
+            adapter=adapter,
+            plan_output=plan_output,
+            check_existing=remove_stale_files,
+        ),
     )
-    with record_compile_timing("stale_traversal_ms"):
-        _remove_stale_compiled_files(target_dir=target_dir, managed_paths=managed_paths)
+    if remove_stale_files:
+        with record_compile_timing("stale_traversal_ms"):
+            _remove_stale_compiled_files(target_dir=target_dir, managed_paths=managed_paths)
     if manifest is not None:
         _write_manifest(target_dir=target_dir, manifest=manifest)
 
@@ -85,15 +113,35 @@ def write_static_compile_target(
 ) -> WrittenTarget:
     """Write offline compiled output files under target_dir."""
 
+    remove_stale_files: bool = (target_dir / _COMPILED_DIR).is_dir()
     target_dir.mkdir(parents=True, exist_ok=True)
     managed_paths: set[Path] = set().union(
-        _write_static_models(target_dir=target_dir, project=project),
-        _write_static_functions(target_dir=target_dir, adapter=adapter, project=project),
-        _write_static_audits(target_dir=target_dir, project=project),
-        _write_static_tests(target_dir=target_dir, adapter=adapter, project=project),
+        _write_static_models(
+            target_dir=target_dir,
+            project=project,
+            check_existing=remove_stale_files,
+        ),
+        _write_static_functions(
+            target_dir=target_dir,
+            adapter=adapter,
+            project=project,
+            check_existing=remove_stale_files,
+        ),
+        _write_static_audits(
+            target_dir=target_dir,
+            project=project,
+            check_existing=remove_stale_files,
+        ),
+        _write_static_tests(
+            target_dir=target_dir,
+            adapter=adapter,
+            project=project,
+            check_existing=remove_stale_files,
+        ),
     )
-    with record_compile_timing("stale_traversal_ms"):
-        _remove_stale_compiled_files(target_dir=target_dir, managed_paths=managed_paths)
+    if remove_stale_files:
+        with record_compile_timing("stale_traversal_ms"):
+            _remove_stale_compiled_files(target_dir=target_dir, managed_paths=managed_paths)
     if manifest is not None:
         _write_manifest(target_dir=target_dir, manifest=manifest)
 
@@ -107,24 +155,26 @@ def write_static_compile_target(
     )
 
 
-def _write_models(*, target_dir: Path, plan_output: PlanOutput) -> set[Path]:
+def _write_models(*, target_dir: Path, plan_output: PlanOutput, check_existing: bool) -> set[Path]:
     """Write model resolved SQL."""
 
     managed_paths: set[Path] = set()
     for entry in plan_output.model_entries:
         compiled_path: Path = target_dir / _COMPILED_DIR / _model_output_path(entry.relative_path)
-        _write_sql(path=compiled_path, sql=entry.resolved_sql)
+        _write_sql(path=compiled_path, sql=entry.resolved_sql, check_existing=check_existing)
         managed_paths.add(compiled_path)
     return managed_paths
 
 
-def _write_static_models(*, target_dir: Path, project: CompiledProject) -> set[Path]:
+def _write_static_models(
+    *, target_dir: Path, project: CompiledProject, check_existing: bool
+) -> set[Path]:
     """Write offline model query SQL."""
 
     managed_paths: set[Path] = set()
     for model in project.models:
         compiled_path: Path = target_dir / _COMPILED_DIR / _model_output_path(model.relative_path)
-        _write_sql(path=compiled_path, sql=model.query_sql)
+        _write_sql(path=compiled_path, sql=model.query_sql, check_existing=check_existing)
         managed_paths.add(compiled_path)
     return managed_paths
 
@@ -134,6 +184,7 @@ def _write_functions(
     target_dir: Path,
     adapter: BaseAdapter,
     plan_output: PlanOutput,
+    check_existing: bool,
 ) -> set[Path]:
     """Write executable SQL function DDL."""
 
@@ -160,6 +211,7 @@ def _write_functions(
         _write_sql(
             path=function_path,
             sql=";\n\n".join(statements),
+            check_existing=check_existing,
         )
         managed_paths.add(function_path)
     return managed_paths
@@ -170,6 +222,7 @@ def _write_static_functions(
     target_dir: Path,
     adapter: BaseAdapter,
     project: CompiledProject,
+    check_existing: bool,
 ) -> set[Path]:
     """Write offline rendered SQL function DDL."""
 
@@ -198,12 +251,13 @@ def _write_static_functions(
         _write_sql(
             path=function_path,
             sql=";\n\n".join(statements),
+            check_existing=check_existing,
         )
         managed_paths.add(function_path)
     return managed_paths
 
 
-def _write_audits(*, target_dir: Path, plan_output: PlanOutput) -> set[Path]:
+def _write_audits(*, target_dir: Path, plan_output: PlanOutput, check_existing: bool) -> set[Path]:
     """Write resolved audit SQL."""
 
     managed_paths: set[Path] = set()
@@ -211,12 +265,14 @@ def _write_audits(*, target_dir: Path, plan_output: PlanOutput) -> set[Path]:
         folder: Path = _audit_folder(entry)
         file_name: str = _audit_file_name(entry)
         audit_path: Path = target_dir / _COMPILED_DIR / _AUDITS_DIR / folder / file_name
-        _write_sql(path=audit_path, sql=entry.resolved_sql)
+        _write_sql(path=audit_path, sql=entry.resolved_sql, check_existing=check_existing)
         managed_paths.add(audit_path)
     return managed_paths
 
 
-def _write_static_audits(*, target_dir: Path, project: CompiledProject) -> set[Path]:
+def _write_static_audits(
+    *, target_dir: Path, project: CompiledProject, check_existing: bool
+) -> set[Path]:
     """Write offline resolved audit SQL."""
 
     managed_paths: set[Path] = set()
@@ -228,7 +284,7 @@ def _write_static_audits(*, target_dir: Path, project: CompiledProject) -> set[P
             attached_column_name=audit.attached_column_name,
         )
         audit_path: Path = target_dir / _COMPILED_DIR / _AUDITS_DIR / folder / file_name
-        _write_sql(path=audit_path, sql=audit.sql_body)
+        _write_sql(path=audit_path, sql=audit.sql_body, check_existing=check_existing)
         managed_paths.add(audit_path)
     return managed_paths
 
@@ -238,6 +294,7 @@ def _write_tests(
     target_dir: Path,
     adapter: BaseAdapter,
     plan_output: PlanOutput,
+    check_existing: bool,
 ) -> set[Path]:
     """Write resolved SQL-native test SQL."""
 
@@ -250,7 +307,7 @@ def _write_tests(
                 set_difference_operator=adapter.render_set_difference_operator(),
                 sql_analysis_dialect=adapter.sql_analysis_dialect(),
             )
-        _write_sql(path=test_path, sql=comparison_sql)
+        _write_sql(path=test_path, sql=comparison_sql, check_existing=check_existing)
         managed_paths.add(test_path)
     return managed_paths
 
@@ -260,6 +317,7 @@ def _write_static_tests(
     target_dir: Path,
     adapter: BaseAdapter,
     project: CompiledProject,
+    check_existing: bool,
 ) -> set[Path]:
     """Write offline SQL-native test SQL."""
 
@@ -275,6 +333,7 @@ def _write_static_tests(
         else None
     )
     model_map: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    pending: list[tuple[CompiledSqlTest, str | None, str | None]] = []
     for test in project.sql_tests:
         record_key: str | None = None
         artifact_identity: str | None = None
@@ -282,7 +341,7 @@ def _write_static_tests(
             record_key = sql_test_artifact_record_key(test=test)
             artifact_identity = sql_test_artifact_identity(
                 test=test,
-                model_chain_names=_sql_test_model_chain_names(
+                model_chain_names=sql_test_model_chain_names(
                     test=test, project=project, model_map=model_map
                 ),
                 context=identity_context,
@@ -298,21 +357,24 @@ def _write_static_tests(
                     managed_paths.add(cached_path)
                     current_records[record_key] = cached_record
                     continue
-        with record_compile_timing("test_planning_ms"):
-            entry, _warnings = build_sql_test_plan_entry(
-                test=test,
-                project=project,
-                adapter=adapter,
-                sql_analysis_enabled=project.settings.sql_analysis,
-            )
-        test_path: Path = tests_root / sql_test_output_path(entry)
-        with record_compile_timing("comparison_render_ms"):
-            comparison_sql: str = build_sql_test_comparison_sql(
-                test_entry=entry,
-                set_difference_operator=adapter.render_set_difference_operator(),
-                sql_analysis_dialect=adapter.sql_analysis_dialect(),
-            )
-        _write_sql(path=test_path, sql=comparison_sql)
+        pending.append((test, record_key, artifact_identity))
+
+    native_artifacts: tuple[NativeSqlTestArtifact, ...] = ()
+    if pending:
+        native_artifacts = plan_and_render_sql_test_artifacts(
+            project=project,
+            tests=tuple(test for test, _, _ in pending),
+            adapter=adapter,
+            sql_analysis_enabled=project.settings.sql_analysis,
+        )
+    for (test, record_key, artifact_identity), artifact in zip(
+        pending, native_artifacts, strict=True
+    ):
+        test_path: Path = tests_root / compiled_sql_test_output_path(
+            test=test,
+            model_names=artifact.model_names,
+        )
+        _write_sql(path=test_path, sql=artifact.sql, check_existing=check_existing)
         managed_paths.add(test_path)
         if record_key is not None and artifact_identity is not None:
             record: SqlTestArtifactCacheRecord | None = build_sql_test_artifact_cache_record(
@@ -337,18 +399,64 @@ def _write_manifest(*, target_dir: Path, manifest: dict[str, object]) -> None:
     _write_text_if_changed(path=manifest_path, contents=json.dumps(manifest, indent=2) + "\n")
 
 
-def _write_sql(*, path: Path, sql: str) -> None:
+def _write_sql(*, path: Path, sql: str, check_existing: bool = True) -> None:
     """Write one SQL file."""
 
-    _write_text_if_changed(path=path, contents=sql.rstrip() + "\n")
+    contents: str = sql.rstrip() + "\n"
+    if os.linesep != _POSIX_LINE_SEPARATOR:
+        _write_text_if_changed(
+            path=path,
+            contents=contents,
+            check_existing=check_existing,
+        )
+        return
+    _write_bytes_if_changed(
+        path=path,
+        contents=contents.encode("utf-8"),
+        check_existing=check_existing,
+    )
 
 
-def _write_text_if_changed(*, path: Path, contents: str) -> None:
+def _write_text_if_changed(*, path: Path, contents: str, check_existing: bool = True) -> None:
     with record_compile_timing("physical_write_ms"):
-        if path.is_file() and path.read_text(encoding="utf-8") == contents:
+        if check_existing and path.is_file() and path.read_text(encoding="utf-8") == contents:
             return
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(contents, encoding="utf-8")
+        try:
+            _overwrite_text(path=path, contents=contents)
+        except FileNotFoundError:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _overwrite_text(path=path, contents=contents)
+
+
+def _write_bytes_if_changed(*, path: Path, contents: bytes, check_existing: bool = True) -> None:
+    with record_compile_timing("physical_write_ms"):
+        if check_existing and path.is_file():
+            existing: bytes = path.read_bytes()
+            if existing == contents:
+                return
+            _ = existing.decode("utf-8")
+        try:
+            _overwrite_bytes(path=path, contents=contents)
+        except FileNotFoundError:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _overwrite_bytes(path=path, contents=contents)
+
+
+def _overwrite_text(*, path: Path, contents: str) -> None:
+    _ = path.write_text(contents, encoding="utf-8")
+
+
+def _overwrite_bytes(*, path: Path, contents: bytes) -> None:
+    descriptor: int = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666)
+    try:
+        offset: int = 0
+        while offset < len(contents):
+            written: int = os.write(descriptor, contents[offset:])
+            if written == 0:
+                raise OSError(f"failed to write compiled artifact '{path}'")
+            offset += written
+    finally:
+        os.close(descriptor)
 
 
 def _remove_stale_compiled_files(*, target_dir: Path, managed_paths: set[Path]) -> None:

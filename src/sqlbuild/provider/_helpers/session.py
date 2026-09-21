@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from sqlbuild.compiler.discovery.models import DiscoveredProvider
+from sqlbuild.provider.classes.provider import Provider
 from sqlbuild.provider.classes.session import ProviderSession
-from sqlbuild.providers import Provider
 
 if TYPE_CHECKING:
     from sqlbuild.runtime.event_exporting.classes.command_scope import EventExporterCommandScope
