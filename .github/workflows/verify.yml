@@ -282,9 +282,11 @@ jobs:
   rules_performance:
     name: Rules performance guards
     needs: [changes, lockfile]
-    if: needs.changes.outputs.rules_performance == 'true'
+    # Temporarily disabled while the Blacksmith runner allowance is unavailable.
+    # These budgets are calibrated for the 8-vCPU Blacksmith runner.
+    if: false
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
