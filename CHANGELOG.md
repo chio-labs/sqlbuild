@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.113.0](https://github.com/chio-labs/sqlbuild/compare/v0.112.2...v0.113.0) (2026-09-21)
+
+
+### Features
+
+* **observability:** expose microbatch lifecycle bounds ([#770](https://github.com/chio-labs/sqlbuild/issues/770)) ([1470abb](https://github.com/chio-labs/sqlbuild/commit/1470abb46b297184e7fcdf92686a1d75822c8405))
+
 ## [0.112.2](https://github.com/chio-labs/sqlbuild/compare/v0.112.1...v0.112.2) (2026-09-21)
 
 
