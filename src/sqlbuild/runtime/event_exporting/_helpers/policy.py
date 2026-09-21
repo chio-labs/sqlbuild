@@ -5,12 +5,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 from types import MappingProxyType
 
-from sqlbuild.observability import LifecycleEvent
 from sqlbuild.runtime.event_exporting.constants import (
     EVENT_EXPORT_SEVERITY_RANKS,
     LIFECYCLE_EXPORT_DIMENSIONS,
 )
 from sqlbuild.runtime.event_exporting.models import LifecycleExportPolicy
+from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.types import EventExportSeverity
 
 _LIFECYCLE_EXPORT_POLICY: Mapping[str, LifecycleExportPolicy] = MappingProxyType(

@@ -16,8 +16,8 @@ from scripts.fensu_policy.constants import (
     MAIN_PACKAGE_NAME,
     MAIN_SUPPORT_PACKAGE_NAMES,
     POLICY_EVALUATION_SCOPES,
-    PROVIDER_CLASS_NAME,
     PROVIDER_MODULE_PARTS,
+    PUBLIC_EXPORT_ASSIGNMENT_TARGETS,
     ROOT_SCOPE_NAME,
 )
 
@@ -164,25 +164,21 @@ def adapter_entry_content(*, module: object, ctx: RuleContext) -> list[Fault]:
     code="XSB042",
     family=Family.CUSTOM,
     slug="provider-public-surface",
-    message="providers.py must contain imports and exactly one Provider class",
-    remediation="Keep only the public Provider class and imports in src/sqlbuild/providers.py.",
+    message="providers.py must remain a static public facade",
+    remediation="Keep only imports and a static __all__ assignment in src/sqlbuild/providers.py.",
 )
 def provider_public_surface(*, module: object, ctx: RuleContext) -> list[Fault]:
     del module
     if ctx.repo_relative_parts() != PROVIDER_MODULE_PARTS:
         return []
     faults: list[Fault] = []
-    provider_count: int = 0
     statement: ModuleStatementFact
     for statement in ctx.facts.module_declarations().statements:
         if statement.import_statement:
             continue
-        if statement.class_name == PROVIDER_CLASS_NAME:
-            provider_count += 1
+        if statement.assignment_target_names == PUBLIC_EXPORT_ASSIGNMENT_TARGETS:
             continue
         faults.append(ctx.fault_at(location=statement.location))
-    if provider_count != 1:
-        faults.append(ctx.path_fault())
     return faults
 
 

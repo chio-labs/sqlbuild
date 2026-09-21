@@ -315,15 +315,18 @@ def test_given_adapter_entry_when_checking_content_then_matches_contract(
     "test_case",
     [
         CustomRuleTestCase(
-            description="provider module function faults",
+            description="provider facade function faults",
             path="src/sqlbuild/providers.py",
-            source="class Provider:\n    pass\n\ndef build() -> None:\n    pass\n",
+            source="from sqlbuild.provider.classes.provider import Provider\n\ndef build() -> None:\n    pass\n",
             expected_fault_count=1,
         ),
         CustomRuleTestCase(
-            description="single Provider class passes",
+            description="static provider facade passes",
             path="src/sqlbuild/providers.py",
-            source="class Provider:\n    pass\n",
+            source=(
+                "from sqlbuild.provider.classes.provider import Provider as Provider\n"
+                '__all__ = ("Provider",)\n'
+            ),
             expected_fault_count=0,
         ),
     ],

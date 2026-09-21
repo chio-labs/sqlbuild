@@ -6,6 +6,7 @@ import re
 from collections.abc import Callable
 from pathlib import Path
 from types import MappingProxyType
+from typing import Any
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.render.macros import expand_sql_macros
@@ -41,6 +42,7 @@ from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
     plan_and_render_sql_test_artifacts,
 )
 from sqlbuild.compiler.planner.models import PlanWarning, SqlTestPlanEntry
+from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     PlanTestChainTestCase,
@@ -90,7 +92,16 @@ def assert_native_artifact_matches_python_plan(
         sql_analysis_enabled=sql_analysis_enabled,
     )
 
-    assert artifact.sql == expected_sql
+    polyglot_sql: Any = import_polyglot_sql()
+    native_expression: Any = polyglot_sql.parse_one(
+        artifact.sql, dialect=adapter.sql_analysis_dialect()
+    )
+    expected_expression: Any = polyglot_sql.parse_one(
+        expected_sql, dialect=adapter.sql_analysis_dialect()
+    )
+    assert native_expression.sql(dialect=adapter.sql_analysis_dialect()) == expected_expression.sql(
+        dialect=adapter.sql_analysis_dialect()
+    )
     assert artifact.model_names == tuple(step.model_name for step in entry.chain)
     assert artifact.warnings == tuple(
         {

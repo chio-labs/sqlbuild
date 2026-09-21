@@ -58,6 +58,9 @@ def collect_model_column_contract_diagnostics(
         return ()
     diagnostics: list[CompilerDiagnostic] = []
     diagnostics.extend(_dynamic_column_diagnostics(model=model, dialect=dialect))
+    dynamic_output_unproven: bool = any(
+        diagnostic.code == _DYNAMIC_OUTPUT_NOT_PROVEN_CODE for diagnostic in diagnostics
+    )
     if model.inferred_columns is None:
         return tuple(diagnostics)
 
@@ -93,6 +96,8 @@ def collect_model_column_contract_diagnostics(
             model.schema_entry.type_enforcement
         )
         if not validate_declared_shape and not type_enforcement:
+            continue
+        if dynamic_output_unproven and inferred_column.type is None:
             continue
         diagnostics.extend(
             _type_diagnostics(

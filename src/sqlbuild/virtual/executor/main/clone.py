@@ -8,8 +8,8 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ClonePipelineConnection, ClonePipelineResult
-from sqlbuild.observability import run_scope
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
+from sqlbuild.runtime.observability.main.run_scope import run_scope
 from sqlbuild.virtual.executor._helpers.clone import (
     build_clone_origin_lookup,
     build_clone_project_context,

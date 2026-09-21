@@ -22,9 +22,11 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProvider,
     DiscoveredProviderUsage,
 )
+from sqlbuild.runtime.event_exporting.main.get_command_output_sink_definition import (
+    get_command_output_sink_definition,
+)
 from sqlbuild.runtime.output_capture.constants import COMMAND_OUTPUT_SINK_RECORD_PARAMETER_NAME
 from sqlbuild.runtime.output_capture.models import CommandOutputRecord, CommandOutputSinkDefinition
-from sqlbuild.sinks import get_command_output_sink_definition
 
 
 def discover_command_output_sink_functions(

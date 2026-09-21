@@ -8,7 +8,6 @@ import threading
 import time
 from collections.abc import Callable
 
-from sqlbuild.observability import LifecycleEvent
 from sqlbuild.runtime.event_exporting._helpers.sanitization import sanitized_exception_type
 from sqlbuild.runtime.event_exporting.classes.finite_priority_event_queue import (
     FinitePriorityEventQueue,
@@ -40,6 +39,7 @@ from sqlbuild.runtime.event_exporting.models import (
     LifecycleExportPolicy,
     QueuedLifecycleEvent,
 )
+from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.runtime.output_capture.constants import COMMAND_OUTPUT_RECORD_TYPE
 from sqlbuild.runtime.output_capture.models import (
     BoundCommandOutputSink,

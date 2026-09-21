@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
+from sqlbuild.provider.classes.provider import Provider
 from sqlbuild.provider.exceptions import ProviderLookupError
-from sqlbuild.providers import Provider
 
 if TYPE_CHECKING:
     from sqlbuild.provider.classes.session import ProviderSession

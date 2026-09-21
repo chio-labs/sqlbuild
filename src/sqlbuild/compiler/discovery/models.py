@@ -16,7 +16,7 @@ from sqlbuild.compiler.discovery.constants import (
 )
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.scopes.types import ScopeKind
-from sqlbuild.providers import Provider
+from sqlbuild.provider.classes.provider import Provider
 from sqlbuild.python_nodes.models import AuditCase, ColumnLineageRef, RetryPolicy, SqlResourceRef
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORT_KINDS

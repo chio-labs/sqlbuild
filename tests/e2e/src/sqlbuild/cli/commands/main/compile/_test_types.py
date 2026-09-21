@@ -91,6 +91,21 @@ class SemanticCompilePerformanceGuardTestCase:
 
 
 @dataclass(frozen=True)
+class FreshProcessCompilePerformanceGuardTestCase:
+    description: str
+    model_count: int
+    source_count: int
+    seed_count: int
+    function_count: int
+    macro_count: int
+    test_count: int
+    audit_count: int
+    expected_max_wall_seconds: float
+    expected_max_rss_bytes: int
+    expected_semantic_fingerprint: str
+
+
+@dataclass(frozen=True)
 class NamespaceCompileTestCase:
     description: str
     repo_files: dict[str, str]

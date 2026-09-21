@@ -9,7 +9,6 @@ from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.executor.testing._helpers.comparison_sql import (
     build_chain_comparison_parts,
     cte_definition_sql,
-    format_sql,
     lift_preanalyzed_step_ctes,
     lift_step_ctes,
     unique_cte_suffix,
@@ -75,13 +74,9 @@ def build_sql_test_comparison_sql(
         return ""
     comparison_sql: str = "WITH " + ",\n".join(cte_parts) + "\n"
     comparison_sql += "\nUNION ALL\n".join(select_parts)
-    return format_sql(
-        sql=restore_sql_test_dialect_function_names(
-            sql=comparison_sql,
-            dialect=sql_analysis_dialect,
-        ),
-        sql_analysis_dialect=sql_analysis_dialect,
-        sql_analysis_enabled=test_entry.sql_analysis_enabled,
+    return restore_sql_test_dialect_function_names(
+        sql=comparison_sql,
+        dialect=sql_analysis_dialect,
     )
 
 

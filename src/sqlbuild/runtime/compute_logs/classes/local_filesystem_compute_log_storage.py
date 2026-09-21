@@ -14,7 +14,6 @@ from uuid import uuid4
 
 from filelock import FileLock
 
-from sqlbuild.observability import DiagnosticLog, diagnostic_log_to_json
 from sqlbuild.runtime.compute_logs._helpers.metadata import metadata_from_json, metadata_to_json
 from sqlbuild.runtime.compute_logs.constants import (
     COMPLETE_FILE_NAME,
@@ -44,6 +43,8 @@ from sqlbuild.runtime.compute_logs.models import (
     PruneResult,
 )
 from sqlbuild.runtime.compute_logs.types import ByteCursor, ComputeLogStream
+from sqlbuild.runtime.observability.main.diagnostic_log_to_json import diagnostic_log_to_json
+from sqlbuild.runtime.observability.models import DiagnosticLog
 
 _CAPTURE_ID_PATTERN: re.Pattern[str] = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}\Z")
 _DATE_PATTERN: re.Pattern[str] = re.compile(r"\d{4}-\d{2}-\d{2}\Z")

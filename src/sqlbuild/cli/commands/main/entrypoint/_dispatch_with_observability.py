@@ -13,7 +13,7 @@ from sqlbuild.cli.commands.types import CliCommand
 from sqlbuild.cli.entry.models import (
     CliEntrypointHandlers,
 )
-from sqlbuild.observability import create_lifecycle_event
+from sqlbuild.runtime.observability.main.create_lifecycle_event import create_lifecycle_event
 
 
 def dispatch_with_observability(*, args: CliNamespace, handlers: CliEntrypointHandlers) -> int:

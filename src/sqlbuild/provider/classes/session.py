@@ -6,12 +6,12 @@ from collections.abc import Iterable, Mapping
 from threading import RLock
 
 from sqlbuild.provider.classes.container import ProviderContainer
+from sqlbuild.provider.classes.provider import Provider
 from sqlbuild.provider.exceptions import (
     ProviderLookupError,
     ProviderSetupError,
     ProviderTeardownError,
 )
-from sqlbuild.providers import Provider
 
 
 class ProviderSession:

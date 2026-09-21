@@ -78,7 +78,7 @@ dev = [
   "pytest-cov>=7.0.0",
   "pytest-xdist>=3.8.0",
   "ruff>=0.12.0",
-  "fensu>=0.15.2",
+  "fensu>=0.22.0",
   "testcontainers>=4.8.1",
   "ty>=0.0.1a19",
 ]
@@ -115,6 +115,7 @@ markers = [
   "sqlserver: tests that require a live Microsoft SQL Server database",
   "motherduck: tests that require live MotherDuck credentials",
   "performance: opt-in performance guard tests",
+  "cold_compile_performance: fresh-process semantic compile scaling guards",
 ]
 
 [tool.ruff]

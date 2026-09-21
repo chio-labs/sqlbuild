@@ -101,9 +101,8 @@ from sqlbuild.compiler.scopes.constants import (
     LOCAL_DECLARATION_DIRECTORIES,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
-from sqlbuild.observability import LifecycleEvent
+from sqlbuild.provider.classes.provider import Provider
 from sqlbuild.provider.exceptions import ProviderInputError
-from sqlbuild.providers import Provider
 from sqlbuild.python_nodes.main.read_asset_definition import read_asset_definition
 from sqlbuild.python_nodes.main.read_audit_factory_definition import (
     read_audit_factory_definition,
@@ -124,10 +123,11 @@ from sqlbuild.python_nodes.models import (
     TaskDefinition,
 )
 from sqlbuild.runtime.event_exporting.constants import EVENT_EXPORTER_EVENT_PARAMETER_NAME
-from sqlbuild.runtime.event_exporting.models import LifecycleEventSinkDefinition
-from sqlbuild.sinks import (
+from sqlbuild.runtime.event_exporting.main.get_lifecycle_event_sink_definition import (
     get_lifecycle_event_sink_definition,
 )
+from sqlbuild.runtime.event_exporting.models import LifecycleEventSinkDefinition
+from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import SchemaModelEntry, SchemaSeedEntry, SourceEntry
 
 _PYTHON_NODE_KIND_FOLDERS: tuple[str, ...] = ("loaders", "tasks", "assets", "checks")

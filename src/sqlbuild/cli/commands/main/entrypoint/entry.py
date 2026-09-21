@@ -19,8 +19,11 @@ from sqlbuild.cli.entry.models import (
     ParsedCliInvocation,
 )
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
-from sqlbuild.observability import invocation_external_context_scope, invocation_scope
 from sqlbuild.presentation.main.supports_color import supports_color
+from sqlbuild.runtime.observability.main.invocation_external_context_scope import (
+    invocation_external_context_scope,
+)
+from sqlbuild.runtime.observability.main.invocation_scope import invocation_scope
 from sqlbuild.runtime.output_capture.exceptions import OutputCaptureInputError
 from sqlbuild.runtime.output_capture.main.invocation_context import (
     invocation_context_from_environment,

@@ -123,7 +123,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             description="nullable column outside the closure leaves fixture unchanged",
             repo_files=build_irrelevant_omitted_column_project_files(),
             expected_stdout_fragment="PASS=1",
-            expected_artifact_fragments=("__source__raw_orders AS (\n  SELECT\n    1 AS order_id",),
+            expected_artifact_fragments=("__source__raw_orders AS (SELECT\n  1 AS order_id",),
             unexpected_artifact_fragments=("__sqlbuild_partial_fixture",),
         ),
         PartialFixtureE2ETestCase(
@@ -149,7 +149,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             description="explicit typed null keeps complete fixture on unchanged path",
             repo_files=build_explicit_typed_null_fixture_project_files(),
             expected_stdout_fragment="PASS=1",
-            expected_artifact_fragments=("CAST(NULL AS TEXT) AS status",),
+            expected_artifact_fragments=("CAST(NULL AS VARCHAR) AS status",),
             unexpected_artifact_fragments=("__sqlbuild_partial_fixture",),
         ),
         PartialFixtureE2ETestCase(

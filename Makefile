@@ -4,7 +4,8 @@ SHELL := /bin/bash
 	check-e2e-shards test-e2e-duckdb test-e2e-duckdb-build-core \
 	test-e2e-duckdb-build-incremental test-e2e-duckdb-build-virtual \
 	test-e2e-duckdb-cli-data test-e2e-duckdb-cli test-e2e-duckdb-virtual \
-	test-e2e-duckdb-integrations test-e2e-performance
+	test-e2e-duckdb-integrations test-e2e-performance \
+	test-e2e-cold-compile-performance
 
 format:
 	uv run ruff format .
@@ -223,11 +224,19 @@ test-e2e-performance:
 	@log="/tmp/opencode/test-e2e-performance-$$(date +%Y%m%d-%H%M%S).log"; \
 	echo "Logging to $$log"; \
 	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/e2e \
-		-m "performance and not real_warehouse and not dbt" \
+		-m "performance and not cold_compile_performance and not real_warehouse and not dbt" \
 		-vv --log-cli-level=INFO --color=yes 2>&1 | tee "$$log"; \
 	status=$${PIPESTATUS[0]}; \
 	echo "TEST_E2E_PERFORMANCE_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
 	exit $$status
+
+
+test-e2e-cold-compile-performance:
+	test -n "$(SQLBUILD_BENCHMARK_MODELS)"
+	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=4 uv run pytest \
+		tests/e2e/src/sqlbuild/cli/commands/main/compile/test_fresh_process_compile_performance.py \
+		-m cold_compile_performance -k "models_$(SQLBUILD_BENCHMARK_MODELS)" \
+		-vv --log-cli-level=INFO --color=yes
 
 
 test-virtual:

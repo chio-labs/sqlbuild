@@ -32,7 +32,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProvider,
 )
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
-from sqlbuild.observability import DispatchFailure, EventDispatcher, Unsubscribe, dispatcher_scope
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.runtime.event_exporting.classes.command_scope import EventExporterCommandScope
 from sqlbuild.runtime.event_exporting.classes.dispatcher import EventExporterDispatcher
@@ -44,10 +43,13 @@ from sqlbuild.runtime.event_exporting.models import (
     EventExporterFailure,
     EventExportSummary,
 )
+from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
 from sqlbuild.runtime.observability.main.current_execution_identity import (
     current_execution_identity,
 )
-from sqlbuild.runtime.observability.models import ExecutionIdentity
+from sqlbuild.runtime.observability.main.dispatcher_scope import dispatcher_scope
+from sqlbuild.runtime.observability.models import DispatchFailure, ExecutionIdentity
+from sqlbuild.runtime.observability.types import Unsubscribe
 
 _LOGGER: logging.Logger = logging.getLogger("sqlbuild.cli.observability")
 

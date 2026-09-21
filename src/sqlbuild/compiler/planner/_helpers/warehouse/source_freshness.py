@@ -24,7 +24,7 @@ from sqlbuild.compiler.source_freshness.main._propagation import (
     build_direct_source_freshness_propagation_result,
 )
 from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
-from sqlbuild.observability import run_scope
+from sqlbuild.runtime.observability.main.run_scope import run_scope
 
 
 def build_planner_source_freshness_result(

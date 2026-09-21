@@ -30,8 +30,8 @@ from sqlbuild.executor.scenario.models import (
     ScenarioSnapshotManifest,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
-from sqlbuild.observability import run_scope
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
+from sqlbuild.runtime.observability.main.run_scope import run_scope
 
 
 def execute_scenario_snapshot_capture_steps(

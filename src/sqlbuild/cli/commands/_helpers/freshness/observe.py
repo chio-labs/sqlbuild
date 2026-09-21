@@ -36,7 +36,7 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
 )
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
-from sqlbuild.observability import run_scope
+from sqlbuild.runtime.observability.main.run_scope import run_scope
 from sqlbuild.spec.contracts.models import SourceEntry, SourceFreshnessConfig
 from sqlbuild.spec.contracts.types import SourceFreshnessStrategy
 

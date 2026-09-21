@@ -62,12 +62,10 @@ from sqlbuild.executor.pipeline.models import (
     BuildConnectionPreparation,
     ResolvedBuildInputs,
 )
-from sqlbuild.observability import (
-    EventDispatcher,
-    create_lifecycle_event,
-    current_event_dispatcher,
-    run_scope,
-)
+from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
+from sqlbuild.runtime.observability.main.create_lifecycle_event import create_lifecycle_event
+from sqlbuild.runtime.observability.main.current_event_dispatcher import current_event_dispatcher
+from sqlbuild.runtime.observability.main.run_scope import run_scope
 from sqlbuild.spec.contracts.models import SettingsConfig
 
 
