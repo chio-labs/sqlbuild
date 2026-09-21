@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner._helpers.sql_tests.fixture_formatting import (
     format_redundant_fixture_nulls,
 )
@@ -19,14 +18,12 @@ class FixtureNullAutofix:
         *,
         files: dict[Path, str],
         project_dir: Path,
-        project: CompiledProject,
-        adapter: BaseAdapter,
+        discovered_inputs: DiscoveredProjectInputs,
     ) -> dict[Path, str]:
         """Return contract-safe fixture source rewrites."""
 
         return format_redundant_fixture_nulls(
             files=files,
             project_dir=project_dir,
-            project=project,
-            adapter=adapter,
+            discovered_inputs=discovered_inputs,
         )

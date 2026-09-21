@@ -159,6 +159,7 @@ class FormatCommandHandler(Protocol):
         exclude: tuple[str, ...],
         check: bool,
         diff: bool,
+        fixtures_only: bool,
         json_output: bool,
         no_color: bool,
     ) -> int: ...

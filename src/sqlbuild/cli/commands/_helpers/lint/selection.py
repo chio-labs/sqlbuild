@@ -8,12 +8,20 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.classes.selected_contract_input_discoverer import (
+    SelectedContractInputDiscoverer,
+)
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
+from sqlbuild.lint.constants import LINT_DIRECTORY_NAMES, PARENT_PATH_SEGMENT, SQL_FILE_SUFFIX
+from sqlbuild.lint.main.scan_fixture_typed_null_candidates import (
+    scan_fixture_typed_null_candidates,
+)
+from sqlbuild.lint.models import FixtureNullCandidateScan
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
@@ -26,17 +34,35 @@ def resolve_lint_inputs(
 ) -> tuple[BaseAdapter, frozenset[Path] | None, DiscoveredProjectInputs]:
     """Resolve the adapter and optional model-file scope through canonical selectors."""
 
-    discovered: DiscoveredProjectInputs = discover_project_inputs(
+    lint_paths: frozenset[Path] | None = _resolve_lint_paths(
+        project_dir=project_dir,
+        select=select,
+        exclude=exclude,
+    )
+    if lint_paths is not None:
+        _validate_selected_paths(paths=lint_paths)
+        candidates: FixtureNullCandidateScan = scan_fixture_typed_null_candidates(
+            project_dir=project_dir,
+            selected_paths=lint_paths,
+        )
+        discovered: DiscoveredProjectInputs = SelectedContractInputDiscoverer.discover(
+            project_dir=project_dir,
+            selected_test_paths=candidates.paths,
+            referenced_model_names=candidates.model_names,
+        )
+        adapter: BaseAdapter = _resolve_discovered_adapter(
+            project_dir=project_dir,
+            discovered=discovered,
+        )
+        return adapter, lint_paths, discovered
+    discovered = discover_project_inputs(
         project_dir=project_dir,
         sql_analysis_enabled_override=False,
         extract_output_column_locations=False,
     )
-    adapter: BaseAdapter = resolve_adapter(
-        adapter_name=resolve_effective_adapter_name(
-            project_config=discovered.project_config,
-            local_config=discovered.local_config,
-        ),
+    adapter = _resolve_discovered_adapter(
         project_dir=project_dir,
+        discovered=discovered,
     )
     if not select and not exclude:
         return adapter, None, discovered
@@ -69,6 +95,84 @@ def resolve_lint_inputs(
     )
     _validate_selected_paths(paths=paths)
     return adapter, paths, discovered
+
+
+def _resolve_discovered_adapter(
+    *, project_dir: Path, discovered: DiscoveredProjectInputs
+) -> BaseAdapter:
+    return resolve_adapter(
+        adapter_name=resolve_effective_adapter_name(
+            project_config=discovered.project_config,
+            local_config=discovered.local_config,
+        ),
+        project_dir=project_dir,
+    )
+
+
+def _resolve_lint_paths(
+    *,
+    project_dir: Path,
+    select: tuple[str, ...],
+    exclude: tuple[str, ...],
+) -> frozenset[Path] | None:
+    """Resolve simple path selectors across every formatter-owned SQL root."""
+
+    selected_prefixes: tuple[str, ...] | None = _lint_path_prefixes(raw_selectors=select)
+    excluded_prefixes: tuple[str, ...] | None = _lint_path_prefixes(raw_selectors=exclude)
+    if selected_prefixes is None or excluded_prefixes is None:
+        return None
+    selected: tuple[Path, ...] = _paths_for_prefixes(
+        project_dir=project_dir,
+        prefixes=selected_prefixes,
+    )
+    return frozenset(
+        path
+        for path in selected
+        if not _matches_path_prefix(
+            relative_path=path.relative_to(project_dir.resolve()).as_posix(),
+            prefixes=excluded_prefixes,
+        )
+    )
+
+
+def _paths_for_prefixes(*, project_dir: Path, prefixes: tuple[str, ...]) -> tuple[Path, ...]:
+    roots: tuple[Path, ...] = (
+        tuple(project_dir / prefix for prefix in prefixes)
+        if prefixes
+        else tuple(project_dir / directory_name for directory_name in LINT_DIRECTORY_NAMES)
+    )
+    paths: set[Path] = set()
+    for root in roots:
+        if root.is_file() and root.suffix.casefold() == SQL_FILE_SUFFIX:
+            paths.add(root.resolve())
+        elif root.is_dir():
+            paths.update(file_path.resolve() for file_path in root.rglob("*.sql"))
+    return tuple(sorted(paths))
+
+
+def _lint_path_prefixes(*, raw_selectors: tuple[str, ...]) -> tuple[str, ...] | None:
+    prefixes: list[str] = []
+    for raw_selector in raw_selectors:
+        if not raw_selector.strip():
+            return None
+        for token in raw_selector.split():
+            normalized: str = token.replace("\\", "/")
+            if not normalized.startswith("path:"):
+                return None
+            prefix: str = normalized.removeprefix("path:").strip("/")
+            if any(marker in prefix for marker in ("+", "~", ",")):
+                return None
+            parts: tuple[str, ...] = tuple(part for part in prefix.split("/") if part)
+            if not parts or parts[0] not in LINT_DIRECTORY_NAMES or PARENT_PATH_SEGMENT in parts:
+                return None
+            prefixes.append("/".join(parts))
+    return tuple(prefixes)
+
+
+def _matches_path_prefix(*, relative_path: str, prefixes: tuple[str, ...]) -> bool:
+    return any(
+        relative_path == prefix or relative_path.startswith(f"{prefix}/") for prefix in prefixes
+    )
 
 
 def _resolve_exact_model_paths(
@@ -124,10 +228,10 @@ def _exact_names(*, raw_selectors: tuple[str, ...]) -> frozenset[str] | None:
 
 
 def _validate_selected_paths(*, paths: frozenset[Path]) -> None:
-    """Reject lint selections that contain no SQL model files."""
+    """Reject lint selections that contain no SQL files."""
 
     if not paths:
         raise PlannerInputError(
-            "lint selection matched no SQL model files",
+            "lint selection matched no SQL files",
             code="S007",
         )

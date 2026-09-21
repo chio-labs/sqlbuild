@@ -56,6 +56,17 @@ class FormatCliTestCase:
 
 
 @dataclass(frozen=True)
+class FormatSelectionWorkTestCase:
+    """Work-count expectations for one selected format run."""
+
+    description: str
+    selected_file_count: int
+    expected_fixture_parse_count: int
+    expected_native_batch_count: int
+    expected_native_request_count: int
+
+
+@dataclass(frozen=True)
 class ExpandedLintTestCase:
     """Test case for linting the SQL a project actually produces."""
 

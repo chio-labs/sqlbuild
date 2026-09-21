@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.classes.fixture_null_autofix import FixtureNullAutofix
 from sqlbuild.lint._helpers.headers import scan_headers
-from sqlbuild.lint._helpers.native import format_native_headers, lint_native_headers
+from sqlbuild.lint._helpers.native import (
+    format_native_headers,
+    lint_native_headers,
+    prepare_native_header_cache,
+)
 from sqlbuild.lint._helpers.native_format import (
     format_native_sql_bodies,
     newline_style,
@@ -32,8 +35,8 @@ def run_format(
     config: LintConfig,
     value_renderer: TypedSqlValueRenderer | None = None,
     selected_paths: frozenset[Path] | None = None,
-    compiled_project: CompiledProject | None = None,
-    adapter: BaseAdapter | None = None,
+    discovered_inputs: DiscoveredProjectInputs | None = None,
+    fixtures_only: bool = False,
     write: bool = True,
 ) -> LintRunResult:
     """Format all DSL files in place and report the violations that remain."""
@@ -48,8 +51,8 @@ def run_format(
         files=files,
         config=config,
         project_dir=project_dir,
-        compiled_project=compiled_project,
-        adapter=adapter,
+        discovered_inputs=discovered_inputs,
+        fixtures_only=fixtures_only,
     )
     formatted: list[Path] = []
     changes: list[FormatChange] = []
@@ -75,12 +78,16 @@ def run_format(
             with file_path.open("w", encoding="utf-8", newline="") as handle:
                 _ = handle.write(rendered_contents)
         formatted.append(file_path)
-    violations: list[LintViolation] = _lint_final_contents(
-        files=files,
-        updated_contents=updated_contents,
-        config=config,
-        project_dir=project_dir,
-        value_renderer=value_renderer,
+    violations: list[LintViolation] = (
+        []
+        if fixtures_only
+        else _lint_final_contents(
+            files=files,
+            updated_contents=updated_contents,
+            config=config,
+            project_dir=project_dir,
+            value_renderer=value_renderer,
+        )
     )
     final_contents: dict[Path, str] = {
         path: updated_contents.get(path, contents) for path, contents in files.items()
@@ -104,8 +111,8 @@ def _apply_fixes(
     files: dict[Path, str],
     config: LintConfig,
     project_dir: Path,
-    compiled_project: CompiledProject | None,
-    adapter: BaseAdapter | None,
+    discovered_inputs: DiscoveredProjectInputs | None,
+    fixtures_only: bool,
 ) -> dict[Path, str]:
     """Return contents after native header and supported SQL body fixes."""
 
@@ -113,17 +120,19 @@ def _apply_fixes(
         FixtureNullAutofix.apply(
             files=files,
             project_dir=project_dir,
-            project=compiled_project,
-            adapter=adapter,
+            discovered_inputs=discovered_inputs,
         )
-        if compiled_project is not None and adapter is not None
+        if discovered_inputs is not None
         else {}
     )
+    if fixtures_only:
+        return updated
     file_path: Path
     contents: str
     current_files: dict[Path, str] = {
         file_path: updated.get(file_path, contents) for file_path, contents in files.items()
     }
+    _ = prepare_native_header_cache(files=current_files)
     for file_path, contents in sorted(current_files.items()):
         native_result: tuple[str, tuple[LintViolation, ...]] = format_native_headers(
             contents=contents,

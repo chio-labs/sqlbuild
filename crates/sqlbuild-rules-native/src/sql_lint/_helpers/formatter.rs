@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use polyglot_sql::tokens::Token;
 use polyglot_sql::{Dialect, DialectType, format_by_name};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::sql_lint::constants::{
     CAST_TYPE_SEPARATOR_KEYWORD, CLOSE_PARENTHESIS, LINT_API_VERSION, OPEN_PARENTHESIS,
@@ -17,6 +18,14 @@ pub(crate) fn format_json_impl(request_json: &str) -> Result<String, String> {
         serde_json::from_str(request_json).map_err(|error| error.to_string())?;
     let response = format_sql(request)?;
     serde_json::to_string(&response).map_err(|error| error.to_string())
+}
+
+pub(crate) fn format_batch_json_impl(request_json: &str) -> Result<String, String> {
+    let requests: Vec<FormatRequest> =
+        serde_json::from_str(request_json).map_err(|error| error.to_string())?;
+    let responses: Result<Vec<FormatResponse>, String> =
+        requests.into_par_iter().map(format_sql).collect();
+    serde_json::to_string(&responses?).map_err(|error| error.to_string())
 }
 
 fn format_sql(request: FormatRequest) -> Result<FormatResponse, String> {

@@ -49,6 +49,14 @@ class LintBody:
 
 
 @dataclass(frozen=True)
+class FixtureNullCandidateScan:
+    """Cheaply discovered SQL-test fixtures that may contain removable typed nulls."""
+
+    paths: frozenset[Path] = field(default_factory=frozenset)
+    model_names: frozenset[str] = field(default_factory=frozenset)
+
+
+@dataclass(frozen=True)
 class LintEdit:
     """One deterministic authored-source edit proposed by a lint rule."""
 

@@ -349,6 +349,7 @@ def discover_model_files(
     project_dir: Path,
     extract_implicit_alias_columns: bool = True,
     extract_output_column_locations: bool = True,
+    selected_model_names: frozenset[str] | None = None,
     on_fault: Callable[[DiscoveryFileFault], None] | None = None,
 ) -> tuple[DiscoveredSqlModelFile, ...]:
     """Discover SQL model files under models/."""
@@ -360,6 +361,8 @@ def discover_model_files(
     loaded_model_files: list[tuple[Path, str | None, Exception | None]] = []
     file_path: Path
     for file_path in sorted(model_root.rglob("*.sql")):
+        if selected_model_names is not None and file_path.stem not in selected_model_names:
+            continue
         if _is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir):
             continue
         try:
@@ -722,7 +725,10 @@ def discover_seed_files(*, project_dir: Path) -> tuple[DiscoveredSeedFile, ...]:
 
 
 def discover_test_files(
-    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+    *,
+    project_dir: Path,
+    selected_paths: frozenset[Path] | None = None,
+    on_fault: Callable[[DiscoveryFileFault], None] | None = None,
 ) -> tuple[DiscoveredSqlTestFile, ...]:
     """Discover SQL-native unit test files under tests/unit/."""
 
@@ -733,6 +739,8 @@ def discover_test_files(
     discovered_test_files: list[DiscoveredSqlTestFile] = []
     file_path: Path
     for file_path in sorted(tests_root.rglob("*.sql")):
+        if selected_paths is not None and file_path.resolve() not in selected_paths:
+            continue
         if _is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir):
             continue
         try:

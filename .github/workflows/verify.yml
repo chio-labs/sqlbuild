@@ -19,6 +19,7 @@ jobs:
       duckdb: ${{ steps.scope.outputs.duckdb }}
       postgres: ${{ steps.scope.outputs.postgres }}
       performance: ${{ steps.scope.outputs.performance }}
+      format_performance: ${{ steps.scope.outputs.format_performance }}
       rules_performance: ${{ steps.scope.outputs.rules_performance }}
     steps:
       - uses: actions/checkout@v4
@@ -36,18 +37,20 @@ jobs:
               echo "duckdb=$1"
               echo "postgres=$2"
               echo "performance=$3"
-              echo "rules_performance=$4"
+              echo "format_performance=$4"
+              echo "rules_performance=$5"
             } >> "${GITHUB_OUTPUT}"
           }
 
           if [[ "${EVENT_NAME}" != "pull_request" ]]; then
-            write_scope true true true true
+            write_scope true true true true true
             exit 0
           fi
 
           duckdb=false
           postgres=false
           performance=false
+          format_performance=false
           rules_performance=false
           broad=false
           changed=false
@@ -70,7 +73,12 @@ jobs:
                 ;;
               src/sqlbuild/rule_engine/*|src/sqlbuild/lint/*|scripts/rules_benchmark/*|scripts/benchmark_rules_ci.py|tests/performance/*)
                 broad=true
+                format_performance=true
                 rules_performance=true
+                ;;
+              tests/e2e/src/sqlbuild/cli/commands/main/format/*)
+                duckdb=true
+                format_performance=true
                 ;;
               tests/e2e/src/sqlbuild/cli/commands/main/postgres/*|tests/integration/src/sqlbuild/adapters/postgres/*|tests/integration/src/sqlbuild/virtual/state/classes/postgres/*|tests/integration/src/sqlbuild/runtime/execution_history/*)
                 postgres=true
@@ -82,6 +90,7 @@ jobs:
                 ;;
               .github/workflows/verify.yml|Makefile)
                 performance=true
+                format_performance=true
                 rules_performance=true
                 ;;
               .github/*|docs/*|*.md|.gitignore|LICENSE)
@@ -93,15 +102,21 @@ jobs:
           done < <(git diff --name-only -z "${BASE_SHA}" "${HEAD_SHA}")
 
           if [[ "${changed}" != "true" ]]; then
-            write_scope true true true true
+            write_scope true true true true true
             exit 0
           fi
 
           if [[ "${broad}" == "true" ]]; then
             duckdb=true
             postgres=true
+            format_performance=true
           fi
-          write_scope "${duckdb}" "${postgres}" "${performance}" "${rules_performance}"
+          write_scope \
+            "${duckdb}" \
+            "${postgres}" \
+            "${performance}" \
+            "${format_performance}" \
+            "${rules_performance}"
 
   lockfile:
     name: Lockfile consistency
@@ -206,6 +221,34 @@ jobs:
           PY
       - name: Run DuckDB E2E shard
         run: make ${{ matrix.target }}
+
+  format_performance:
+    name: Formatter performance guards
+    needs: [changes, lockfile]
+    if: needs.changes.outputs.format_performance == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            Cargo.lock
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Install Python
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: uv sync --locked --all-groups --all-extras --python 3.12
+      - name: Run formatter performance guards
+        run: >-
+          uv run pytest
+          tests/e2e/src/sqlbuild/cli/commands/main/format/test_format_performance.py
+          -n auto --dist loadfile -m performance
 
   performance:
     name: Performance guards
@@ -371,6 +414,7 @@ jobs:
         lockfile,
         checks,
         e2e_shards,
+        format_performance,
         performance,
         cold_compile_performance,
         rules_performance,
@@ -384,6 +428,7 @@ jobs:
           LOCKFILE_RESULT: ${{ needs.lockfile.result }}
           CHECKS_RESULT: ${{ needs.checks.result }}
           E2E_SHARDS_RESULT: ${{ needs.e2e_shards.result }}
+          FORMAT_PERFORMANCE_RESULT: ${{ needs.format_performance.result }}
           PERFORMANCE_RESULT: ${{ needs.performance.result }}
           COLD_COMPILE_PERFORMANCE_RESULT: ${{ needs.cold_compile_performance.result }}
           RULES_PERFORMANCE_RESULT: ${{ needs.rules_performance.result }}
@@ -397,6 +442,7 @@ jobs:
           fi
           for result in \
             "${E2E_SHARDS_RESULT}" \
+            "${FORMAT_PERFORMANCE_RESULT}" \
             "${PERFORMANCE_RESULT}" \
             "${COLD_COMPILE_PERFORMANCE_RESULT}" \
             "${RULES_PERFORMANCE_RESULT}" \
