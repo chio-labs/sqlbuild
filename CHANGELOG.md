@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.112.1](https://github.com/chio-labs/sqlbuild/compare/v0.112.0...v0.112.1) (2026-09-21)
+
+
+### Performance Improvements
+
+* accelerate warm incremental compiles ([#766](https://github.com/chio-labs/sqlbuild/issues/766)) ([82e353d](https://github.com/chio-labs/sqlbuild/commit/82e353d4fc539faf5d9f9f6f3688621ef58633ee))
+
 ## [0.112.0](https://github.com/chio-labs/sqlbuild/compare/v0.111.1...v0.112.0) (2026-09-21)
 
 
