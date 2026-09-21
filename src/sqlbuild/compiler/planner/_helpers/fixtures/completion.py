@@ -25,8 +25,8 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
     ColumnTransformKind,
-    InferredNullability,
 )
+from sqlbuild.compiler.planner._helpers.fixtures.empty_fixture import is_empty_fixture_query
 from sqlbuild.compiler.planner.models import (
     FixtureColumnMetadata,
     FixtureRelationMetadata,
@@ -57,24 +57,24 @@ def build_relation_fixture_completion(
         project=project
     )
     model_map: dict[str, CompiledModel] = context.models_by_name
-    fixture_sql_by_key: dict[FixtureKey, str] = {}
-    inferred_by_fixture: dict[FixtureKey, tuple[InferredColumn, ...]] = {}
-    null_literal_names_by_fixture: dict[FixtureKey, frozenset[str]] = {}
-    quoted_names_by_fixture: dict[FixtureKey, frozenset[str]] = {}
-    for resource_type, fixtures in fixture_groups:
-        for name, sql in fixtures.items():
-            key: FixtureKey = (resource_type, name)
-            fixture_sql_by_key[key] = sql
-            inference: FixtureColumnInference | None = infer_fixture_column_facts(
-                query_sql=sql,
-                inference_profile=adapter.expression_inference_profile(),
-            )
-            if inference is not None:
-                inferred_by_fixture[key] = inference.columns
-                null_literal_names_by_fixture[key] = inference.null_literal_names
-                quoted_names_by_fixture[key] = inference.quoted_names
-
     relations: dict[FixtureKey, FixtureRelationMetadata] = context.relations
+    fixture_sql_by_key: dict[FixtureKey, str]
+    inferred_by_fixture: dict[FixtureKey, tuple[InferredColumn, ...]]
+    null_literal_names_by_fixture: dict[FixtureKey, frozenset[str]]
+    quoted_names_by_fixture: dict[FixtureKey, frozenset[str]]
+    diagnostics: list[RelationFixtureDiagnostic]
+    (
+        fixture_sql_by_key,
+        inferred_by_fixture,
+        null_literal_names_by_fixture,
+        quoted_names_by_fixture,
+        diagnostics,
+    ) = _prepare_fixture_inputs(
+        fixture_groups=fixture_groups,
+        relations=relations,
+        adapter=adapter,
+    )
+
     fixture_keys_requiring_analysis: frozenset[FixtureKey] = _fixture_keys_requiring_analysis(
         inferred_by_fixture=inferred_by_fixture,
         authoritative_columns=context.authoritative_columns,
@@ -98,10 +98,9 @@ def build_relation_fixture_completion(
         null_literal_names_by_fixture=null_literal_names_by_fixture,
         expected_types=expected_types,
     )
-    diagnostics: list[RelationFixtureDiagnostic] = list(
+    diagnostics.extend(
         _unknown_fixture_column_diagnostics(
-            inferred_by_fixture=inferred_by_fixture,
-            relations=relations,
+            inferred_by_fixture=inferred_by_fixture, relations=relations
         )
     )
 
@@ -210,6 +209,116 @@ def build_relation_fixture_completion(
         expected_types=expected_types,
         diagnostics=tuple(diagnostics),
     )
+
+
+def _prepare_fixture_inputs(
+    *,
+    fixture_groups: FixtureGroups,
+    relations: dict[FixtureKey, FixtureRelationMetadata],
+    adapter: BaseAdapter,
+) -> tuple[
+    dict[FixtureKey, str],
+    dict[FixtureKey, tuple[InferredColumn, ...]],
+    dict[FixtureKey, frozenset[str]],
+    dict[FixtureKey, frozenset[str]],
+    list[RelationFixtureDiagnostic],
+]:
+    fixture_sql_by_key: dict[FixtureKey, str] = {}
+    inferred_by_fixture: dict[FixtureKey, tuple[InferredColumn, ...]] = {}
+    null_literal_names_by_fixture: dict[FixtureKey, frozenset[str]] = {}
+    quoted_names_by_fixture: dict[FixtureKey, frozenset[str]] = {}
+    diagnostics: list[RelationFixtureDiagnostic] = []
+    for resource_type, fixtures in fixture_groups:
+        for name, sql in fixtures.items():
+            key: FixtureKey = (resource_type, name)
+            fixture_sql: str = sql
+            if is_empty_fixture_query(fixture_sql):
+                empty_sql, empty_error = complete_empty_fixture_sql(
+                    sql=fixture_sql,
+                    relation=relations.get(key),
+                    adapter=adapter,
+                )
+                if empty_error is not None:
+                    diagnostics.append(
+                        RelationFixtureDiagnostic(
+                            key=key,
+                            message=f"mock {key[0].value} '{key[1]}' {empty_error}",
+                        )
+                    )
+                    fixture_sql_by_key[key] = fixture_sql
+                    continue
+                fixture_sql = empty_sql
+            fixture_sql_by_key[key] = fixture_sql
+            inference: FixtureColumnInference | None = infer_fixture_column_facts(
+                query_sql=fixture_sql,
+                inference_profile=adapter.expression_inference_profile(),
+            )
+            if inference is not None:
+                inferred_by_fixture[key] = inference.columns
+                null_literal_names_by_fixture[key] = inference.null_literal_names
+                quoted_names_by_fixture[key] = inference.quoted_names
+    return (
+        fixture_sql_by_key,
+        inferred_by_fixture,
+        null_literal_names_by_fixture,
+        quoted_names_by_fixture,
+        diagnostics,
+    )
+
+
+def complete_typed_null_columns(
+    *,
+    sql: str,
+    inference: FixtureColumnInference,
+    expected_types: dict[str, str],
+    adapter: BaseAdapter,
+) -> str:
+    """Apply authoritative types to direct bare-NULL projections."""
+
+    typed_nulls: dict[str, str] = {
+        name: expected_types[name]
+        for name in inference.null_literal_names
+        if name in expected_types
+    }
+    if not typed_nulls:
+        return sql
+    return _completed_fixture_sql(
+        sql=sql,
+        inferred=inference.columns,
+        typed_nulls=typed_nulls,
+        quoted_names=inference.quoted_names,
+        completed=(),
+        adapter=adapter,
+    )
+
+
+def complete_empty_fixture_sql(
+    *,
+    sql: str,
+    relation: FixtureRelationMetadata | None,
+    adapter: BaseAdapter,
+) -> tuple[str, str | None]:
+    """Expand an empty-fixture marker from authoritative relation metadata."""
+
+    if not is_empty_fixture_query(sql):
+        return sql, None
+    if relation is None or not relation.authoritative_names:
+        return sql, "uses __empty_fixture() but its column schema is not authoritative"
+    unknown_types: tuple[str, ...] = tuple(
+        column.name for column in relation.columns if column.type is None
+    )
+    if unknown_types:
+        return (
+            sql,
+            f"uses __empty_fixture() but columns have unknown types: {', '.join(unknown_types)}",
+        )
+    if not relation.columns:
+        return sql, "uses __empty_fixture() but its schema has no columns"
+    projections: str = ",\n  ".join(
+        f"CAST(NULL AS {column.type}) AS {adapter.render_identifier(column.name)}"
+        for column in relation.columns
+    )
+    return f"SELECT\n  {projections}\nWHERE FALSE", None
 
 
 def _typed_null_fixture_types(
@@ -520,7 +629,7 @@ def _model_fixture_metadata(*, model: CompiledModel) -> FixtureRelationMetadata:
         columns_by_name[key] = FixtureColumnMetadata(
             name=column.name,
             type=column.type,
-            nullable=_inferred_nullable(column.nullability),
+            nullable=None,
         )
     for column in model.schema_entry.columns if model.schema_entry is not None else ():
         key = column.name.casefold()
@@ -619,14 +728,6 @@ def _unknown_fixture_column_diagnostics(
                 )
             )
     return tuple(diagnostics)
-
-
-def _inferred_nullable(value: InferredNullability) -> bool | None:
-    if value == InferredNullability.NULLABLE:
-        return True
-    if value == InferredNullability.NON_NULL:
-        return False
-    return None
 
 
 def _models_reading_columns(

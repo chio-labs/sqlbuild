@@ -240,7 +240,7 @@ def plan_test(
             mock_ref_names=frozenset(mock_refs),
         )
     if sql_analysis_enabled and validate_fixtures:
-        mock_refs, mock_sources, mock_seeds = build_validated_test_fixtures(
+        mock_refs, mock_sources, mock_seeds, expected_map = build_validated_test_fixtures(
             test=test,
             project=project,
             adapter=adapter,

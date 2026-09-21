@@ -15,6 +15,9 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.fixtures.completion import (
     build_relation_fixture_completion,
+    build_relation_fixture_context,
+    complete_empty_fixture_sql,
+    complete_typed_null_columns,
 )
 from sqlbuild.compiler.planner.exceptions import SqlTestFixtureValidationError
 from sqlbuild.compiler.planner.models import (
@@ -39,7 +42,7 @@ def build_validated_test_fixtures(
     mock_seeds: dict[str, str],
     expected_outputs: dict[str, str],
     planning_context: RelationFixturePlanningContext | None = None,
-) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+) -> tuple[dict[str, str], dict[str, str], dict[str, str], dict[str, str]]:
     """Report all statically provable missing columns and collection-type mismatches."""
 
     fixture_groups: tuple[tuple[CompiledResourceType, dict[str, str]], ...] = (
@@ -47,17 +50,21 @@ def build_validated_test_fixtures(
         (CompiledResourceType.SOURCE, mock_sources),
         (CompiledResourceType.SEED, mock_seeds),
     )
+    fixture_context: RelationFixturePlanningContext = (
+        planning_context or build_relation_fixture_context(project=project)
+    )
     completion: RelationFixtureCompletion = build_relation_fixture_completion(
         project=project,
         adapter=adapter,
         ordered_model_names=ordered_model_names,
         fixture_groups=fixture_groups,
-        planning_context=planning_context,
+        planning_context=fixture_context,
     )
     errors: list[str] = [
         _located_diagnostic(test=test, diagnostic=diagnostic)
         for diagnostic in completion.diagnostics
     ]
+    completed_expected_outputs: dict[str, str] = dict(expected_outputs)
     type_fixture_groups: tuple[tuple[CompiledResourceType, dict[str, str]], ...] = (
         *fixture_groups,
         (CompiledResourceType.SQL_TEST, expected_outputs),
@@ -66,11 +73,31 @@ def build_validated_test_fixtures(
         for name, sql in fixtures.items():
             inferred_columns: tuple[InferredColumn, ...] | None
             if resource_type == CompiledResourceType.SQL_TEST:
+                completed_sql, empty_error = complete_empty_fixture_sql(
+                    sql=sql,
+                    relation=fixture_context.relations.get((CompiledResourceType.MODEL, name)),
+                    adapter=adapter,
+                )
+                if empty_error is not None:
+                    errors.append(
+                        f"{_fixture_location(test=test, resource_type=resource_type, name=name)}: "
+                        f"expected output '{name}' {empty_error}"
+                    )
+                completed_expected_outputs[name] = completed_sql
                 inference: FixtureColumnInference | None = infer_fixture_column_facts(
-                    query_sql=sql,
+                    query_sql=completed_sql,
                     inference_profile=adapter.expression_inference_profile(),
                 )
                 inferred_columns = inference.columns if inference is not None else None
+                if inference is not None:
+                    completed_expected_outputs[name] = complete_typed_null_columns(
+                        sql=completed_sql,
+                        inference=inference,
+                        expected_types=completion.expected_types.get(
+                            (CompiledResourceType.MODEL, name), {}
+                        ),
+                        adapter=adapter,
+                    )
             else:
                 inferred_columns = completion.inferred_by_fixture.get((resource_type, name))
             if inferred_columns is None:
@@ -118,6 +145,7 @@ def build_validated_test_fixtures(
             fixtures=mock_seeds,
             completion=completion,
         ),
+        completed_expected_outputs,
     )
 
 
