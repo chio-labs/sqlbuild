@@ -44,6 +44,7 @@ SQL_ARGUMENT_SEPARATOR_TOKEN: str = ","
 SQL_STATEMENT_TERMINATOR_TOKEN: str = ";"
 SQL_SINGLE_QUOTE_TOKEN: str = "'"
 SQL_QUOTE_TOKENS: frozenset[str] = frozenset({"'", '"', "`"})
+SQL_QUALIFIER_SEPARATOR_TOKEN: str = "."
 SQL_REFERENCE_NAME_QUOTE_TOKENS: frozenset[str] = frozenset({"'", '"'})
 SQL_IDENTIFIER_EXTRA_TOKEN: str = "_"
 SQL_UNION_KEYWORD: str = "UNION"

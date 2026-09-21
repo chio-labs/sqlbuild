@@ -100,6 +100,12 @@ class CompileJsonExecutionLayersTestCase:
 
 
 @dataclass(frozen=True)
+class CompileJsonLargeIntegerTestCase:
+    description: str
+    expected_value: int
+
+
+@dataclass(frozen=True)
 class CompileJsonDiagnosticsTestCase:
     description: str
     model_sql: str

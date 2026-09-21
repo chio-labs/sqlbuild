@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import time
 from typing import Any, cast
+
+import orjson
 
 import sqlbuild._native as _native
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -80,7 +81,9 @@ def plan_and_render_sql_test_artifacts(
     try:
         native_response: str = cast(
             NativeSqlTestRenderingModule, _native
-        ).plan_and_render_sql_tests_json(json.dumps(request, sort_keys=True, separators=(",", ":")))
+        ).plan_and_render_sql_tests_json(
+            orjson.dumps(request, option=orjson.OPT_SORT_KEYS).decode()
+        )
     except ValueError as error:
         message: str = str(error)
         if message.startswith("compile_input:"):
@@ -88,7 +91,7 @@ def plan_and_render_sql_test_artifacts(
         if message.startswith("planner_input:"):
             raise PlannerInputError(message.removeprefix("planner_input:")) from None
         raise NativeSqlTestPlanningError(f"native SQL-test planning failed: {message}") from error
-    response_payload: object = json.loads(native_response)
+    response_payload: object = orjson.loads(native_response)
     if not isinstance(response_payload, dict):
         raise NativeSqlTestPlanningError(
             "native SQL-test planning returned an invalid batch response"

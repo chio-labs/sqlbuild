@@ -23,6 +23,7 @@ from sqlbuild.compiler.compile.constants import (
     FULL_JOIN_SIDE,
     LEFT_JOIN_SIDE,
     RIGHT_JOIN_SIDE,
+    SQL_QUALIFIER_SEPARATOR_TOKEN,
     SQL_WILDCARD_TOKEN,
 )
 from sqlbuild.compiler.compile.models import (
@@ -174,6 +175,12 @@ _TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
     r'"([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()'
 )
 _PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(r"@@@(\w+)")
+_QUALIFIED_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(
+    r'(?<![A-Za-z0-9_$])(?:"(?P<double>[^"]+)"|`(?P<backtick>[^`]+)`|'
+    r"\[(?P<bracket>[^\]]+)\]|(?P<plain>[A-Za-z_$][A-Za-z0-9_$]*))"
+    r"(?:\s|--[^\r\n]*(?:\r?\n|$)|/\*.*?\*/)*\.",
+    re.DOTALL,
+)
 
 
 def _infer_columns_with_polyglot(
@@ -1067,17 +1074,19 @@ def _replace_refs_with_stubs(
 
 
 def _qualified_reference_names(*, query_sql: str, reference_names: Iterable[str]) -> frozenset[str]:
-    qualified: set[str] = set()
+    if SQL_QUALIFIER_SEPARATOR_TOKEN not in query_sql:
+        return frozenset()
+    names_by_normalized: dict[str, list[str]] = {}
     for value in reference_names:
         name: str = str(value)
-        escaped: str = re.escape(name)
-        if re.search(
-            rf'(?<![A-Za-z0-9_$])(?:"{escaped}"|`{escaped}`|\[{escaped}\]|{escaped})'
-            r"(?:\s|--[^\r\n]*(?:\r?\n|$)|/\*.*?\*/)*\.",
-            query_sql,
-            re.IGNORECASE | re.DOTALL,
-        ):
-            qualified.add(name)
+        names_by_normalized.setdefault(name.casefold(), []).append(name)
+    if not names_by_normalized:
+        return frozenset()
+
+    qualified: set[str] = set()
+    for match in _QUALIFIED_IDENTIFIER_PATTERN.finditer(query_sql):
+        identifier: str = next(value for value in match.groups() if value is not None)
+        qualified.update(names_by_normalized.get(identifier.casefold(), ()))
     return frozenset(qualified)
 
 

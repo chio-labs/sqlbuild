@@ -101,6 +101,9 @@ class FreshProcessCompilePerformanceGuardTestCase:
     test_count: int
     audit_count: int
     expected_max_wall_seconds: float
+    expected_max_total_ms: int
+    expected_max_model_analysis_ms: int
+    expected_max_test_input_compile_ms: int
     expected_max_rss_bytes: int
     expected_semantic_fingerprint: str
 

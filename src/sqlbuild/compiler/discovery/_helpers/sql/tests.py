@@ -9,7 +9,10 @@ from typing import cast
 
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.types import SqlTestMode
-from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_header_values
+from sqlbuild.compiler.discovery._helpers.sql.model_files import (
+    parse_header_values,
+    prepare_model_header_tokens,
+)
 from sqlbuild.compiler.discovery.exceptions import SqlTestParseError
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
@@ -41,6 +44,17 @@ _PARAMETER_TYPES: tuple[SqlValueKind, ...] = (
     SqlValueKind.DECIMAL,
 )
 _IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def prepare_sql_test_file_headers(contents_batch: list[str]) -> None:
+    """Batch cache TEST header parsing before projecting individual files."""
+
+    headers: list[str] = []
+    for contents in contents_batch:
+        headers.extend(
+            match.group("header") for match in _TEST_HEADER_ONLY_PATTERN.finditer(contents)
+        )
+    prepare_model_header_tokens(headers)
 
 
 def parse_sql_test_file(*, contents: str, file_path: Path) -> tuple[DiscoveredSqlTestBlock, ...]:

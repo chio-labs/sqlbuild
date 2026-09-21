@@ -188,7 +188,7 @@ def build_test_inputs(
                 parent
             )
             if scoped_declarations is not None:
-                scoped_declarations = _rebind_test_declarations(
+                scoped_declarations = _project_test_declaration_consumer(
                     context=scoped_declarations, consumer=resource
                 )
             else:
@@ -223,9 +223,10 @@ def build_test_inputs(
                             f"unused parameters: {', '.join(unused_parameters)} in case "
                             f"'{test_case.name}'"
                         )
-                expanded_test_block: DiscoveredSqlTestBlock = replace(
-                    test_block,
-                    sql_body=parameter_sql,
+                expanded_test_block: DiscoveredSqlTestBlock = (
+                    test_block
+                    if parameter_sql is test_block.sql_body
+                    else replace(test_block, sql_body=parameter_sql)
                 )
                 test_mode: SqlTestMode = test_block.mode
                 tested_resource_names: tuple[str, ...] = ()
@@ -319,37 +320,13 @@ def build_test_inputs(
     return tuple(test_inputs)
 
 
-def _rebind_test_declarations(
+def _project_test_declaration_consumer(
     *, context: DeclarationExpansionContext, consumer: ResourceIdentity
 ) -> DeclarationExpansionContext:
-    declarations: DeclarationResolutionContext = context.declarations
     return replace(
         context,
-        declarations=replace(
-            declarations,
-            consumer=consumer,
-            enum_visibility=_rebind_visibility(
-                visibility=declarations.enum_visibility, consumer=consumer
-            ),
-            constant_visibility=_rebind_visibility(
-                visibility=declarations.constant_visibility, consumer=consumer
-            ),
-            macro_visibility=_rebind_visibility(
-                visibility=declarations.macro_visibility, consumer=consumer
-            ),
-        ),
+        declarations=replace(context.declarations, consumer=consumer),
     )
-
-
-def _rebind_visibility(
-    *,
-    visibility: dict[str, tuple[VisibilityRecord, ...]],
-    consumer: ResourceIdentity,
-) -> dict[str, tuple[VisibilityRecord, ...]]:
-    rebound: dict[str, tuple[VisibilityRecord, ...]] = {}
-    for name, records in visibility.items():
-        rebound[name] = tuple(replace(record, resource=consumer) for record in records)
-    return rebound
 
 
 def _macro_test_declaration_usages(

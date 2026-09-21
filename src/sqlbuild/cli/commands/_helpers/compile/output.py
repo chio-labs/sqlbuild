@@ -6,6 +6,8 @@ import json
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
+import orjson
+
 from sqlbuild.cli.commands.constants import TARGET_DIRECTORY_NAME
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.output.models import (
@@ -175,7 +177,10 @@ def format_compile_json(
         "resources": _resources(graph=graph, lineage=lineage),
         "artifacts": _artifacts(written=written, manifest=manifest),
     }
-    return json.dumps(result, indent=2)
+    try:
+        return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
+    except TypeError:
+        return json.dumps(result, indent=2)
 
 
 def _summary(
