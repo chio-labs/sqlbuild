@@ -83,8 +83,17 @@
 - Local commits are checkpoints and do not trigger CI. Complete related implementation and review before the first push.
 - Run targeted regressions and fast local static checks before pushing. Do not delay a ready commit or push solely to run or wait for long full integration or end-to-end suites that CI already executes; run those locally only to reproduce or diagnose the change, or when the user explicitly requests them. CI remains the required broad-suite gate.
 - Review the complete local diff against the target branch and resolve findings before pushing. Do not push partial or overlapping branches merely to start CI.
-- Push once and open one ready pull request so CI and configured auto-merge can complete delivery.
-- After auto-merge is enabled, do not invoke a manual merge while the automation is healthy. Watch the pull request through merge in the foreground when no other useful work remains, or keep a background watch running while continuing independent work. Use a manual merge only with concrete evidence that auto-merge is broken or unavailable, and document that evidence and the fallback reason first.
+- Push once and open one ready pull request, then immediately enable squash auto-merge unless the
+  user explicitly asks to leave that pull request unmerged. The delivery agent owns enabling
+  auto-merge; do not assume a separate GitHub workflow or bot will enable it. Verify the pull
+  request reports an active auto-merge request, or confirm it completed as a squash merge
+  immediately after the enable command when all required checks had already passed.
+- Do not interpret "do not manually merge" as permission to leave auto-merge disabled. It means
+  enable auto-merge and let GitHub merge after required checks pass. Do not invoke a manual merge
+  while the automation is healthy. Watch the pull request through merge in the foreground when no
+  other useful work remains, or keep a background watch running while continuing independent work.
+  Use a manual merge only with concrete evidence that auto-merge is broken or unavailable, and
+  document that evidence and the fallback reason first.
 - PR titles must follow Conventional Commits. Descriptions must be no longer than 2,000 characters and contain non-empty `## Why`, `## Changes`, and `## Verification` sections in that order.
 - Before creating or editing a PR, validate its metadata with `make check-pr-metadata PR_TITLE='type: summary' PR_BODY_FILE=/path/to/body.md`.
 - Monitor CI after every push and follow it through completion. Address failures before considering delivery complete.
