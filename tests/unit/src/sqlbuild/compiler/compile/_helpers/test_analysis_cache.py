@@ -855,12 +855,19 @@ def test_given_compile_cache_bypass_when_compiling_twice_then_both_runs_analyze_
     monkeypatch.setenv(COMPILE_CACHE_DISABLE_ENV_VAR, "1")
     analyzer: Mock = Mock(wraps=assembly_project.analyze_columns_and_lineage_with_polyglot)
     monkeypatch.setattr(assembly_project, "analyze_columns_and_lineage_with_polyglot", analyzer)
+    batch_plan_spy: Mock = Mock(wraps=assembly_project.build_compact_analysis_cache_plan)
+    monkeypatch.setattr(
+        assembly_project,
+        "build_compact_analysis_cache_plan",
+        batch_plan_spy,
+    )
 
     _ = compile_project_with_cache(project_dir=tmp_path)
     with collect_compile_timings() as metrics:
         _ = compile_project_with_cache(project_dir=tmp_path)
 
     assert analyzer.call_count == test_case.expected_count
+    assert batch_plan_spy.call_count == 0
     assert not tuple((tmp_path / "target").rglob("*.sqlite3"))
     recorded: dict[str, int] = metrics.as_milliseconds()
     assert recorded["analysis_batch_cache_hits"] == 0

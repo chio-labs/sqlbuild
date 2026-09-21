@@ -36,8 +36,8 @@ _GIB: int = 1024 * 1024 * 1024
             macro_count=37,
             test_count=2_945,
             audit_count=5_056,
-            expected_max_wall_seconds=15.0,
-            expected_max_rss_bytes=2 * _GIB,
+            expected_max_wall_seconds=11.0,
+            expected_max_rss_bytes=int(1.5 * _GIB),
             expected_semantic_fingerprint=(
                 "02af81fb7723d30ec5082ed06fb039e45acba3d60b2d8a30fcbccb5a990bb9fc"
             ),
@@ -51,8 +51,8 @@ _GIB: int = 1024 * 1024 * 1024
             macro_count=61,
             test_count=4_908,
             audit_count=8_427,
-            expected_max_wall_seconds=20.0,
-            expected_max_rss_bytes=2 * _GIB,
+            expected_max_wall_seconds=15.5,
+            expected_max_rss_bytes=int(1.75 * _GIB),
             expected_semantic_fingerprint=(
                 "0c9258635fe4f9d31ec2dd1c99dbc63f5c8551ca7fea494003c5ab1c3a2ad57c"
             ),
@@ -66,7 +66,7 @@ _GIB: int = 1024 * 1024 * 1024
             macro_count=123,
             test_count=9_816,
             audit_count=16_855,
-            expected_max_wall_seconds=38.0,
+            expected_max_wall_seconds=29.5,
             expected_max_rss_bytes=2 * _GIB,
             expected_semantic_fingerprint=(
                 "6887ddd2547137efd8fe67d13fb07142f6287c0911d152d69eca0d495310e02b"

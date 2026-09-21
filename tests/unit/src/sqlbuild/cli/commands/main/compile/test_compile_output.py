@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from typing import cast
 
 import pytest
@@ -13,12 +14,14 @@ from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.output.models import (
     WrittenTarget,
 )
-from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey, CompileModelConfig
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileJsonExecutionLayersTestCase,
+    CompileJsonLargeIntegerTestCase,
     CompileRichLineageOutputTestCase,
     CompileSelectedJsonOutputTestCase,
     CompileSelectedOutputTestCase,
@@ -30,6 +33,60 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
     build_compile_output_model_names,
     build_linear_compile_output_graph,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CompileJsonLargeIntegerTestCase(
+            description="preserves integer above unsigned 64-bit range",
+            expected_value=2**64,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_large_hook_integer_when_formatting_json_then_preserves_value(
+    test_case: CompileJsonLargeIntegerTestCase,
+) -> None:
+    graph: ProjectGraph = build_compile_output_graph(model_names=("orders",))
+    model: CompiledModel = replace(
+        graph.project.models[0],
+        config=CompileModelConfig(
+            values={
+                "pre_hooks": [
+                    SqlHookEntry(
+                        statement="SELECT 1",
+                        name="record_order",
+                        kwargs={"order_id": test_case.expected_value},
+                    )
+                ]
+            }
+        ),
+    )
+    graph = replace(graph, project=replace(graph.project, models=(model,)))
+
+    payload: dict[str, object] = json.loads(
+        format_compile_json(
+            graph=graph,
+            written=WrittenTarget(
+                model_count=1,
+                seed_count=0,
+                function_count=0,
+                audit_count=0,
+                test_count=0,
+                target_dir=model.relative_path.parent.parent / "target",
+            ),
+            manifest=False,
+            timings_ms={},
+            lineage=None,
+            diagnostics=(),
+        )
+    )
+    resources: dict[str, object] = cast(dict[str, object], payload["resources"])
+    models: list[dict[str, object]] = cast(list[dict[str, object]], resources["models"])
+    hooks: list[dict[str, object]] = cast(list[dict[str, object]], models[0]["pre_hooks"])
+
+    assert cast(dict[str, object], hooks[0]["kwargs"])["order_id"] == test_case.expected_value
 
 
 @pytest.mark.parametrize(

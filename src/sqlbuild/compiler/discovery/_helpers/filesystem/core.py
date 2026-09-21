@@ -14,6 +14,7 @@ from typing import get_type_hints
 
 from pydantic import ValidationError
 
+from sqlbuild.compiler.discovery._helpers.filesystem.sql_test_files import discover_sql_test_files
 from sqlbuild.compiler.discovery._helpers.python.functions import parse_python_function
 from sqlbuild.compiler.discovery._helpers.sql.audits import parse_sql_audit_file
 from sqlbuild.compiler.discovery._helpers.sql.declarations import (
@@ -32,7 +33,6 @@ from sqlbuild.compiler.discovery._helpers.sql.model_files import (
     prepare_model_file_headers,
 )
 from sqlbuild.compiler.discovery._helpers.sql.scenarios import parse_sql_scenario_file
-from sqlbuild.compiler.discovery._helpers.sql.tests import parse_sql_test_file
 from sqlbuild.compiler.discovery._helpers.yml.schema import parse_schema_yml
 from sqlbuild.compiler.discovery._helpers.yml.sources import parse_sources_yml
 from sqlbuild.compiler.discovery.constants import (
@@ -84,7 +84,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlHookFile,
     DiscoveredSqlModelFile,
     DiscoveredSqlScenarioFile,
-    DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
     DiscoveredTaskFunction,
     DiscoveryFileFault,
@@ -736,33 +735,17 @@ def discover_test_files(
     if not tests_root.is_dir():
         return ()
 
-    discovered_test_files: list[DiscoveredSqlTestFile] = []
-    file_path: Path
-    for file_path in sorted(tests_root.rglob("*.sql")):
-        if selected_paths is not None and file_path.resolve() not in selected_paths:
-            continue
-        if _is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir):
-            continue
-        try:
-            contents: str = file_path.read_text(encoding="utf-8")
-            blocks: tuple[DiscoveredSqlTestBlock, ...] = parse_sql_test_file(
-                contents=contents, file_path=file_path
-            )
-        except (OSError, UnicodeError, ValueError, SyntaxError) as error:
-            if on_fault is None:
-                raise
-            on_fault(_discovery_fault(project_dir=project_dir, path=file_path, error=error))
-            continue
-        discovered_test_files.append(
-            DiscoveredSqlTestFile(
-                file_path=file_path,
-                relative_path=file_path.relative_to(project_dir),
-                contents=contents,
-                blocks=blocks,
-                ownership_root=Path(SQL_TESTS_OWNERSHIP_ROOT),
-            )
-        )
-    return tuple(discovered_test_files)
+    file_paths: tuple[Path, ...] = tuple(
+        file_path
+        for file_path in sorted(tests_root.rglob("*.sql"))
+        if (selected_paths is None or file_path.resolve() in selected_paths)
+        and not _is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir)
+    )
+    return discover_sql_test_files(
+        project_dir=project_dir,
+        file_paths=file_paths,
+        on_fault=on_fault,
+    )
 
 
 def discover_scenario_files(

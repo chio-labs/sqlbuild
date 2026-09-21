@@ -8,6 +8,7 @@ import pytest
 from polyglot_sql import ParseError
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.compile._helpers.analysis import columns as analysis_columns
 from sqlbuild.compiler.compile._helpers.analysis.columns import (
     import_polyglot_sql,
     substitute_placeholder_defaults,
@@ -231,6 +232,27 @@ def test_given_qualified_reference_when_batch_analyzing_then_preserves_analysis_
 
     assert (actual.columns == expected.columns) is test_case.expected_matches
     assert tuple(actual.lineage_columns) == expected.lineage_columns
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (ExpectedCountTestCase(description="unqualified SQL skips scanner", expected_count=0),),
+    ids=lambda case: case.description,
+)
+def test_given_sql_without_dots_when_finding_qualified_references_then_skips_scanner(
+    monkeypatch: pytest.MonkeyPatch,
+    test_case: ExpectedCountTestCase,
+) -> None:
+    scanner: Mock = Mock()
+    monkeypatch.setattr(analysis_columns, "_QUALIFIED_IDENTIFIER_PATTERN", scanner)
+
+    result: frozenset[str] = analysis_columns._qualified_reference_names(
+        query_sql='SELECT order_id FROM __ref("orders")',
+        reference_names=("orders",),
+    )
+
+    assert result == frozenset()
+    assert scanner.finditer.call_count == test_case.expected_count
 
 
 @pytest.mark.parametrize(

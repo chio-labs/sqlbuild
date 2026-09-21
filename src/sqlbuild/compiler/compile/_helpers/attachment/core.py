@@ -251,6 +251,7 @@ class _ReusableModelConfigCache:
     path_defaults: dict[str, dict[str, object]]
     target_config: TargetConfig | None
     reusable_by_path_default: dict[str | None, bool] = field(default_factory=dict)
+    reusable_metadata_by_identity: dict[int, tuple[object, bool]] = field(default_factory=dict)
     configs: dict[str | None, CompileModelConfig] = field(default_factory=dict)
 
     def get(
@@ -284,15 +285,21 @@ class _ReusableModelConfigCache:
         }
         self.configs[matched_path_default] = replace(config, values=reusable_values)
 
-    @staticmethod
     def _reusable_metadata(
+        self,
         model_header_values: dict[str, object],
     ) -> dict[str, object] | None:
         if not model_header_values:
             return {}
         if model_header_values.keys() != _REUSABLE_MODEL_HEADER_KEYS:
             return None
-        if _contains_dynamic_or_unsupported_reusable_metadata(model_header_values):
+        metadata: object = model_header_values["columns"]
+        cached: tuple[object, bool] | None = self.reusable_metadata_by_identity.get(id(metadata))
+        if cached is not None and cached[0] is metadata:
+            return model_header_values if cached[1] else None
+        reusable: bool = not _contains_dynamic_or_unsupported_reusable_metadata(metadata)
+        self.reusable_metadata_by_identity[id(metadata)] = (metadata, reusable)
+        if not reusable:
             return None
         return model_header_values
 
