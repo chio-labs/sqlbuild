@@ -401,6 +401,7 @@ def test_given_measurement_check_when_projecting_then_dagster_metadata_and_warni
     assert result.passed is test_case.expected_passed
     assert result.severity == dg.AssetCheckSeverity.WARN
     assert result.metadata["status"].value == test_case.expected_status
+    assert type(result.metadata["severity"].value) is str
     for key, expected_value in test_case.expected_metadata.items():
         assert result.metadata[key].value == expected_value
 

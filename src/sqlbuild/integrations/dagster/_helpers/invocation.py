@@ -7,6 +7,7 @@ import tempfile
 from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import asdict
+from enum import Enum
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any, TextIO
 
@@ -858,10 +859,20 @@ def _normalize_check_name(value: str) -> str:
 
 def _metadata_from_mapping(value: Mapping[str, Any]) -> Mapping[str, Any]:
     return {
-        str(key): list(item) if isinstance(item, tuple) else item
+        str(key): _metadata_value(item)
         for key, item in value.items()
         if item is not None and key not in CHECK_METADATA_EXCLUDED_KEYS
     }
+
+
+def _metadata_value(value: Any) -> Any:
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, Mapping):
+        return {str(key): _metadata_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_metadata_value(item) for item in value]
+    return value
 
 
 def _dagster_check_severity(*, dg: Any, check: Mapping[str, Any]) -> Any:
