@@ -1237,6 +1237,34 @@ class CompactBatchPreparation:
 
 
 @dataclass(frozen=True)
+class CompactAnalysisCacheModel:
+    """One ordered model identity and its project-model dependencies."""
+
+    name: str
+    cache_key: str | None
+    upstream_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CompactAnalysisCachePlan:
+    """Current invocation identity for one compact analysis generation."""
+
+    context: AnalysisCacheContext
+    batch_key: str
+    cache_keys: tuple[str, ...]
+    reuse_keys: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CompactAnalysisCacheCandidate:
+    """Validated persisted generation and positions safe for reuse."""
+
+    matching_indexes: tuple[int, ...]
+    preparation: CompactBatchPreparation
+    response: object
+
+
+@dataclass(frozen=True)
 class CompactProjectionCaches:
     """Shared identity caches used while decoding compact native facts."""
 

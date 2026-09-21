@@ -23,6 +23,9 @@ from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
     semantic_compile_fingerprint,
 )
 from sqlbuild.cli.commands.main.entrypoint.entry import main
+from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
+    FreshProcessCompileCachePerformanceGuardTestCase,
+)
 
 _DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
     (0.50, 1_800),
@@ -72,6 +75,77 @@ class FreshProcessCompileBenchmarkResult(NamedTuple):
     peak_rss_bytes: int
     semantic_fingerprint: str
     payload: dict[str, object]
+
+
+class FreshProcessCompileCacheBenchmarkResult(NamedTuple):
+    cold: FreshProcessCompileBenchmarkResult
+    warm: FreshProcessCompileBenchmarkResult
+    leaf_edit: FreshProcessCompileBenchmarkResult
+    after_leaf_edit: FreshProcessCompileBenchmarkResult
+    macro_edit: FreshProcessCompileBenchmarkResult
+    after_macro_edit: FreshProcessCompileBenchmarkResult
+    project_config_edit: FreshProcessCompileBenchmarkResult
+    after_project_config_edit: FreshProcessCompileBenchmarkResult
+    cache_bytes: int
+
+
+def fresh_process_compile_cache_metrics(
+    measurement: FreshProcessCompileBenchmarkResult,
+) -> tuple[int, int, int, int]:
+    """Return semantic analysis cache counters from one compile result."""
+
+    timings: object = measurement.payload["compile_timings"]
+    assert isinstance(timings, dict)
+    timings_by_name: dict[str, object] = {str(key): value for key, value in timings.items()}
+
+    def metric(name: str) -> int:
+        value: object = timings_by_name.get(name)
+        assert type(value) is int
+        return value
+
+    return (
+        metric("analysis_batch_cache_hits"),
+        metric("analysis_entry_cache_hits"),
+        metric("analysis_cache_misses"),
+        metric("analysis_cache_bypasses"),
+    )
+
+
+def assert_complete_compile_cache_hit(
+    *, measurement: FreshProcessCompileBenchmarkResult, model_count: int
+) -> None:
+    """Assert every model was served by one of the analysis cache layers."""
+
+    batch_hits, entry_hits, misses, bypasses = fresh_process_compile_cache_metrics(measurement)
+    assert batch_hits + entry_hits == model_count
+    assert misses == 0
+    assert bypasses == 0
+
+
+def assert_successful_compile_cache_payload(
+    *,
+    measurement: FreshProcessCompileBenchmarkResult,
+    test_case: FreshProcessCompileCachePerformanceGuardTestCase,
+) -> None:
+    """Assert exact representative resource counts and clean diagnostics."""
+
+    assert measurement.payload["has_errors"] is False
+    assert measurement.payload["diagnostics"] == []
+    assert measurement.payload["summary"] == {
+        "models": test_case.model_count,
+        "selected_models": test_case.model_count,
+        "sources": test_case.source_count,
+        "seeds": test_case.seed_count,
+        "selected_seeds": test_case.seed_count,
+        "functions": test_case.function_count,
+        "selected_functions": test_case.function_count,
+        "audits": test_case.audit_count,
+        "tests": test_case.test_count,
+        "hooks": 2,
+        "execution_layers": 54,
+        "errors": 0,
+        "warnings": 0,
+    }
 
 
 class DbtShapedCompileBenchmarkResult(NamedTuple):
@@ -345,9 +419,134 @@ def run_fresh_process_semantic_compile_benchmark(
     )
     target_dir: Path = project_dir / "target"
     assert not target_dir.exists()
-    measurement_path: Path = project_dir.parent / f"fresh-process-{model_count}-measurement.txt"
-    output_path: Path = project_dir.parent / f"fresh-process-{model_count}.json"
-    stderr_path: Path = project_dir.parent / f"fresh-process-{model_count}.stderr"
+    result: FreshProcessCompileBenchmarkResult = _run_fresh_process_compile_benchmark(
+        project_dir=project_dir,
+        label=f"fresh-process-{model_count}",
+        expected_max_wall_seconds=expected_max_wall_seconds,
+        compile_args=("--no-cache",),
+    )
+    assert not (target_dir / "cache").exists()
+    return result
+
+
+def run_fresh_process_compile_cache_benchmark(
+    *,
+    project_dir: Path,
+    model_count: int,
+    source_count: int,
+    seed_count: int,
+    function_count: int,
+    macro_count: int,
+    test_count: int,
+    audit_count: int,
+    expected_cold_max_wall_seconds: float,
+    expected_warm_max_wall_seconds: float,
+    expected_edit_max_wall_seconds: float,
+) -> FreshProcessCompileCacheBenchmarkResult:
+    """Measure exact and incremental cache reuse across independent CLI processes."""
+
+    write_semantic_compile_project(
+        project_dir=project_dir,
+        model_count=model_count,
+        source_count=source_count,
+        seed_count=seed_count,
+        function_count=function_count,
+        macro_count=macro_count,
+        test_count=test_count,
+        audit_count=audit_count,
+    )
+    target_dir: Path = project_dir / "target"
+    assert not target_dir.exists()
+    cold: FreshProcessCompileBenchmarkResult = _run_fresh_process_compile_benchmark(
+        project_dir=project_dir,
+        label=f"cache-cold-{model_count}",
+        expected_max_wall_seconds=expected_cold_max_wall_seconds,
+        compile_args=(),
+    )
+    warm: FreshProcessCompileBenchmarkResult = _run_fresh_process_compile_benchmark(
+        project_dir=project_dir,
+        label=f"cache-warm-{model_count}",
+        expected_max_wall_seconds=expected_warm_max_wall_seconds,
+        compile_args=(),
+    )
+    _append_benchmark_edit(_generated_model_path(project_dir, model_count - 1), "leaf model")
+    leaf_edit: FreshProcessCompileBenchmarkResult = _run_fresh_process_compile_benchmark(
+        project_dir=project_dir,
+        label=f"cache-leaf-edit-{model_count}",
+        expected_max_wall_seconds=expected_edit_max_wall_seconds,
+        compile_args=(),
+    )
+    after_leaf_edit: FreshProcessCompileBenchmarkResult = _run_fresh_process_compile_benchmark(
+        project_dir=project_dir,
+        label=f"cache-after-leaf-edit-{model_count}",
+        expected_max_wall_seconds=expected_warm_max_wall_seconds,
+        compile_args=(),
+    )
+    macro_path: Path = project_dir / "macros" / "macro_00000.py"
+    _replace_benchmark_text(
+        path=macro_path,
+        old='return f"({expression} + 1)"',
+        new='return f"({expression} + 1000)"',
+    )
+    macro_edit: FreshProcessCompileBenchmarkResult = _run_fresh_process_compile_benchmark(
+        project_dir=project_dir,
+        label=f"cache-macro-edit-{model_count}",
+        expected_max_wall_seconds=expected_edit_max_wall_seconds,
+        compile_args=(),
+    )
+    after_macro_edit: FreshProcessCompileBenchmarkResult = _run_fresh_process_compile_benchmark(
+        project_dir=project_dir,
+        label=f"cache-after-macro-edit-{model_count}",
+        expected_max_wall_seconds=expected_warm_max_wall_seconds,
+        compile_args=(),
+    )
+    project_config_path: Path = project_dir / "sqlbuild_project.toml"
+    _replace_benchmark_text(
+        path=project_config_path,
+        old='benchmark_revision = "0"',
+        new='benchmark_revision = "1"',
+    )
+    project_config_edit: FreshProcessCompileBenchmarkResult = _run_fresh_process_compile_benchmark(
+        project_dir=project_dir,
+        label=f"cache-project-config-edit-{model_count}",
+        expected_max_wall_seconds=expected_cold_max_wall_seconds,
+        compile_args=(),
+    )
+    after_project_config_edit: FreshProcessCompileBenchmarkResult = (
+        _run_fresh_process_compile_benchmark(
+            project_dir=project_dir,
+            label=f"cache-after-project-config-edit-{model_count}",
+            expected_max_wall_seconds=expected_warm_max_wall_seconds,
+            compile_args=(),
+        )
+    )
+    cache_dir: Path = target_dir / "cache" / "compiler"
+    cache_bytes: int = sum(path.stat().st_size for path in cache_dir.rglob("*.json")) + sum(
+        path.stat().st_size for path in cache_dir.rglob("*.sqlite3")
+    )
+    return FreshProcessCompileCacheBenchmarkResult(
+        cold=cold,
+        warm=warm,
+        leaf_edit=leaf_edit,
+        after_leaf_edit=after_leaf_edit,
+        macro_edit=macro_edit,
+        after_macro_edit=after_macro_edit,
+        project_config_edit=project_config_edit,
+        after_project_config_edit=after_project_config_edit,
+        cache_bytes=cache_bytes,
+    )
+
+
+def _run_fresh_process_compile_benchmark(
+    *,
+    project_dir: Path,
+    label: str,
+    expected_max_wall_seconds: float,
+    compile_args: tuple[str, ...],
+) -> FreshProcessCompileBenchmarkResult:
+    measurement_path: Path = project_dir.parent / f"{label}-measurement.txt"
+    output_path: Path = project_dir.parent / f"{label}.json"
+    stderr_path: Path = project_dir.parent / f"{label}.stderr"
     command: list[str] = [
         "/usr/bin/time",
         "--quiet",
@@ -361,7 +560,7 @@ def run_fresh_process_semantic_compile_benchmark(
         "--no-color",
         "compile",
         "--json",
-        "--no-cache",
+        *compile_args,
     ]
     with (
         output_path.open("wb") as output_file,
@@ -381,11 +580,10 @@ def run_fresh_process_semantic_compile_benchmark(
     assert isinstance(payload_object, dict)
     payload: dict[str, object] = payload_object
     peak_rss_bytes: int = int(peak_rss_kib_text) * 1024
-    compiled_dir: Path = target_dir / "compiled"
+    compiled_dir: Path = project_dir / "target" / "compiled"
     semantic_fingerprint: str = semantic_compile_fingerprint(
         payload=payload, compiled_dir=compiled_dir
     )
-    assert not (target_dir / "cache").exists()
     return FreshProcessCompileBenchmarkResult(
         elapsed_seconds=elapsed_seconds,
         peak_rss_bytes=peak_rss_bytes,

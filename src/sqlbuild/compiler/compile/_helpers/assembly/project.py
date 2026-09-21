@@ -12,9 +12,13 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.compiler.compile._helpers.analysis.cache import (
     build_analysis_cache_context,
+    build_compact_analysis_cache_plan,
+    compact_analysis_batch_response_writer,
     model_analysis_cache_key,
     model_analysis_output_signature,
+    read_compact_analysis_cache_candidate,
     read_model_analyses,
+    record_analysis_cache_metrics,
     write_model_analyses,
 )
 from sqlbuild.compiler.compile._helpers.analysis.columns import (
@@ -34,6 +38,10 @@ from sqlbuild.compiler.compile._helpers.analysis.dynamic_pivot import (
 from sqlbuild.compiler.compile._helpers.analysis.validation import (
     validate_hook_sql_syntax,
     validate_sql_syntax,
+)
+from sqlbuild.compiler.compile._helpers.assembly.targets import (
+    build_model_relation_target,
+    build_seed_relation_target,
 )
 from sqlbuild.compiler.compile._helpers.config.namespace_validation import (
     validate_preserved_logical_namespace,
@@ -63,7 +71,7 @@ from sqlbuild.compiler.compile._helpers.sql_tests.core import extract_assertion_
 from sqlbuild.compiler.compile._helpers.sql_tests.identity import (
     build_sql_test_case_fingerprint,
 )
-from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME, PRESERVE_TARGET_VALUE
+from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
     scope_index_with_compile_usages,
@@ -71,6 +79,10 @@ from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
 from sqlbuild.compiler.compile.main.function_node_type import function_node_type
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
+    CompactAnalysisCacheCandidate,
+    CompactAnalysisCacheModel,
+    CompactAnalysisCachePlan,
+    CompactBatchPreparation,
     CompileAuditInput,
     CompiledAudit,
     CompiledDirectLogicSqlTestPayload,
@@ -103,6 +115,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompactBatchResponseCallback,
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -116,6 +129,7 @@ from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
 from sqlbuild.compiler.scopes.main._validate_scope_index import validate_scope_index
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.compiler.sql_analysis.constants import BINDING_UNKNOWN_TABLE_INTERNAL_CODE
+from sqlbuild.compiler.sql_analysis.exceptions import SqlAnalysisBoundaryError
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.models import (
     SqlBindingDiagnostic,
@@ -133,7 +147,6 @@ from sqlbuild.spec.contracts.models import (
     SchemaAuditInstance,
     SchemaColumn,
     SchemaDynamicColumnFamily,
-    SchemaSeedEntry,
     SourceColumnEntry,
     SourceEntry,
     TargetConfig,
@@ -159,6 +172,10 @@ class _ModelSqlAnalysisRequest:
 class _DynamicContractAnalysisInputs:
     families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]]
     authoritative_column_types_by_table: dict[str, dict[str, str]]
+
+
+_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT: int = 256
+_COMPACT_BATCH_ENTRY_REUSE_MIN_PERCENT: int = 10
 
 
 def assemble_compiled_project(
@@ -467,7 +484,7 @@ def _assemble_compiled_model(
         relative_path=model_input.model_file.relative_path,
         query_sql=model_input.query_sql,
         config=model_input.config,
-        destination=_build_model_relation_target(model_input=model_input, model_name=model_name),
+        destination=build_model_relation_target(model_input=model_input, model_name=model_name),
         references=model_input.references,
         schema_entry=model_input.schema_entry,
         inferred_columns=inferred_columns,
@@ -516,15 +533,85 @@ def _analyze_model_sql_in_parallel(
         )
         for model_input in model_inputs
     )
+    request_cache_keys: tuple[str, ...] = tuple(
+        request.cache_key for request in requests if request.cache_key is not None
+    )
+    compact_batch_plan: CompactAnalysisCachePlan | None = build_compact_analysis_cache_plan(
+        context=analysis_cache,
+        models=tuple(
+            CompactAnalysisCacheModel(
+                name=_model_name(request.model_input),
+                cache_key=request.cache_key,
+                upstream_names=_referenced_model_names(
+                    model_input=request.model_input,
+                    available_names=analyzed_model_names,
+                ),
+            )
+            for request in requests
+        ),
+        min_model_count=_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT,
+    )
+    compact_cached_analyses: dict[str, PolyglotAnalysisResult] = {}
+    compact_batch_hit_count: int = 0
+    compact_candidate: CompactAnalysisCacheCandidate | None = (
+        read_compact_analysis_cache_candidate(
+            plan=compact_batch_plan,
+            expected_count=len(requests),
+            min_model_count=_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT,
+        )
+        if compact_batch_plan is not None
+        else None
+    )
+    if compact_candidate is not None:
+        try:
+            compact_analyses: tuple[_ModelSqlAnalysis, ...] = _analyze_model_sql_requests(
+                requests=requests,
+                cached_analyses={},
+                column_nullability_by_table=column_nullability_by_table,
+                column_types_by_table=column_types_by_table,
+                inference_profile=inference_profile,
+                allow_compact_analysis=allow_compact_analysis,
+                rich_type_inference=rich_type_inference,
+                cached_compact_batch=(
+                    compact_candidate.preparation,
+                    compact_candidate.response,
+                ),
+            )
+        except SqlAnalysisBoundaryError:
+            pass
+        else:
+            compact_cached_analyses = {
+                request_cache_keys[index]: compact_analyses[index].polyglot_analysis
+                for index in compact_candidate.matching_indexes
+            }
+            compact_batch_hit_count = len(compact_candidate.matching_indexes)
+            if compact_batch_hit_count == len(requests):
+                record_analysis_cache_metrics(
+                    batch_hits=compact_batch_hit_count,
+                    entry_hits=0,
+                    misses=0,
+                    bypasses=0,
+                )
+                compact_analyses = _complete_inferred_bindings(
+                    requests=requests,
+                    analyses=compact_analyses,
+                    complete_binding_schemas=complete_binding_schemas,
+                    inference_profile=inference_profile,
+                )
+                return {
+                    _model_name(model_input): analysis
+                    for model_input, analysis in zip(model_inputs, compact_analyses, strict=True)
+                }
+    entry_cache_keys: tuple[str, ...] = tuple(
+        cache_key for cache_key in request_cache_keys if cache_key not in compact_cached_analyses
+    )
     cached_analyses: dict[str, PolyglotAnalysisResult]
     previous_signatures: dict[str, str]
     cached_output_signatures_by_key: dict[str, str]
     cached_analyses, previous_signatures, cached_output_signatures_by_key = (
         read_model_analyses(
             context=analysis_cache,
-            cache_keys=tuple(
-                request.cache_key for request in requests if request.cache_key is not None
-            ),
+            cache_keys=entry_cache_keys,
             model_names=tuple(_model_name(request.model_input) for request in requests),
             upstream_model_names_by_key={
                 request.cache_key: _referenced_model_names(
@@ -533,10 +620,44 @@ def _analyze_model_sql_in_parallel(
                 )
                 for request in requests
                 if request.cache_key is not None
+                and request.cache_key not in compact_cached_analyses
             },
         )
         if analysis_cache is not None
         else ({}, {}, {})
+    )
+    entry_cache_hit_count: int = sum(
+        request.cache_key is not None and request.cache_key in cached_analyses
+        for request in requests
+    )
+    if (
+        compact_batch_plan is not None
+        and compact_batch_hit_count == 0
+        and entry_cache_hit_count > 0
+        and entry_cache_hit_count * 100 < len(requests) * _COMPACT_BATCH_ENTRY_REUSE_MIN_PERCENT
+    ):
+        cached_analyses.clear()
+        cached_output_signatures_by_key.clear()
+        entry_cache_hit_count = 0
+    cached_analyses.update(compact_cached_analyses)
+    cached_output_signatures_by_key.update(
+        {
+            cache_key: model_analysis_output_signature(analysis)
+            for cache_key, analysis in compact_cached_analyses.items()
+        }
+    )
+    record_analysis_cache_metrics(
+        batch_hits=compact_batch_hit_count,
+        entry_hits=entry_cache_hit_count,
+        misses=(
+            sum(
+                request.cache_key is None or request.cache_key not in cached_analyses
+                for request in requests
+            )
+            if analysis_cache is not None
+            else 0
+        ),
+        bypasses=(len(requests) if analysis_cache is None else 0),
     )
     analyses: tuple[_ModelSqlAnalysis, ...] = _analyze_model_sql_requests(
         requests=requests,
@@ -546,6 +667,14 @@ def _analyze_model_sql_in_parallel(
         inference_profile=inference_profile,
         allow_compact_analysis=allow_compact_analysis,
         rich_type_inference=rich_type_inference,
+        on_compact_response=(
+            compact_analysis_batch_response_writer(
+                plan=compact_batch_plan,
+                count=len(requests),
+            )
+            if compact_batch_plan is not None and not cached_analyses
+            else None
+        ),
     )
     analyses = _complete_inferred_bindings(
         requests=requests,
@@ -689,6 +818,8 @@ def _analyze_model_sql_requests(
     inference_profile: ExpressionInferenceProfile,
     allow_compact_analysis: bool,
     rich_type_inference: bool,
+    cached_compact_batch: tuple[CompactBatchPreparation, object] | None = None,
+    on_compact_response: CompactBatchResponseCallback | None = None,
 ) -> tuple[_ModelSqlAnalysis, ...]:
     if allow_compact_analysis:
         uncached: tuple[tuple[int, _ModelSqlAnalysisRequest], ...] = tuple(
@@ -711,6 +842,8 @@ def _analyze_model_sql_requests(
                         _should_recover_cte_facts(request.model_input) for _, request in uncached
                     ),
                     rich_type_inference=rich_type_inference,
+                    cached_batch=cached_compact_batch,
+                    on_response=(on_compact_response if len(uncached) == len(requests) else None),
                 )
             )
             prepared_by_index = {
@@ -1364,7 +1497,7 @@ def _assemble_compiled_seed(
     target_config: TargetConfig | None,
     effective_vars: dict[str, object],
 ) -> CompiledSeed:
-    target: CompiledRelationLocation = _build_seed_relation_target(
+    target: CompiledRelationLocation = build_seed_relation_target(
         seed_entry=seed_input.schema_entry,
         defaults=defaults,
         target_config=target_config,
@@ -1733,196 +1866,3 @@ def _resolve_test_name(test_input: CompileSqlTestInput) -> str:
     if test_input.case_name is not None:
         return f"{parent_name} [{test_input.case_name}]"
     return parent_name
-
-
-def _build_model_relation_target(
-    *, model_input: CompileModelInput, model_name: str
-) -> CompiledRelationLocation:
-    raw_database: object | None = model_input.config.values.get("database")
-    raw_schema: object | None = model_input.config.values.get("schema")
-    raw_alias: object | None = model_input.config.values.get("alias")
-    database: str | None = raw_database if isinstance(raw_database, str) else None
-    schema: str | None = raw_schema if isinstance(raw_schema, str) else None
-    name: str = raw_alias if isinstance(raw_alias, str) else model_name
-    return CompiledRelationLocation(
-        database=database,
-        schema=schema,
-        name=name,
-        qualified_name=None,
-        logical_schema=model_input.config.logical_schema,
-        logical_database=model_input.config.logical_database,
-    )
-
-
-def _build_seed_relation_target(
-    *,
-    seed_entry: SchemaSeedEntry,
-    defaults: DefaultsConfig,
-    target_config: TargetConfig | None,
-    effective_vars: dict[str, object],
-) -> CompiledRelationLocation:
-    logical_database, logical_schema = _resolve_seed_logical_namespace(
-        defaults=defaults,
-        effective_vars=effective_vars,
-    )
-    if seed_entry.database is not None:
-        logical_database: str | None = _expand_seed_target_value(
-            raw_value=seed_entry.database,
-            seed_name=seed_entry.name,
-            database=logical_database,
-            schema=logical_schema,
-            effective_vars=effective_vars,
-            context_label=f"seed '{seed_entry.name}' database",
-        )
-    if seed_entry.schema is not None:
-        logical_schema: str | None = _expand_seed_target_value(
-            raw_value=seed_entry.schema,
-            seed_name=seed_entry.name,
-            database=logical_database,
-            schema=logical_schema,
-            effective_vars=effective_vars,
-            context_label=f"seed '{seed_entry.name}' schema",
-        )
-    validate_preserved_logical_namespace(
-        resource_label=f"Seed '{seed_entry.name}'",
-        logical_database=logical_database,
-        logical_schema=logical_schema,
-        target_config=target_config,
-    )
-    database, schema = _apply_seed_target_overrides(
-        logical_database=logical_database,
-        logical_schema=logical_schema,
-        target_config=target_config,
-        effective_vars=effective_vars,
-    )
-    return CompiledRelationLocation(
-        database=database,
-        schema=schema,
-        name=seed_entry.name,
-        qualified_name=None,
-        logical_database=logical_database,
-        logical_schema=logical_schema,
-    )
-
-
-def _resolve_seed_logical_namespace(
-    *,
-    defaults: DefaultsConfig,
-    effective_vars: dict[str, object],
-) -> tuple[str | None, str | None]:
-    database: str | None = _expand_seed_default_value(
-        raw_value=(
-            defaults.seed_database if defaults.seed_database is not None else defaults.database
-        ),
-        effective_vars=effective_vars,
-        context_label="default seed database",
-    )
-    schema: str | None = _expand_seed_default_value(
-        raw_value=defaults.seed_schema if defaults.seed_schema is not None else defaults.schema,
-        effective_vars=effective_vars,
-        context_label="default seed schema",
-    )
-    return database, schema
-
-
-def _apply_seed_target_overrides(
-    *,
-    logical_database: str | None,
-    logical_schema: str | None,
-    target_config: TargetConfig | None,
-    effective_vars: dict[str, object],
-) -> tuple[str | None, str | None]:
-    if target_config is None:
-        return logical_database, logical_schema
-    database: str | None = logical_database
-    schema: str | None = logical_schema
-    if target_config.database is not None and target_config.database != PRESERVE_TARGET_VALUE:
-        database = _expand_seed_environment_value(
-            raw_value=target_config.database,
-            effective_vars=effective_vars,
-            context_label="target database",
-        )
-    if target_config.schema is not None and target_config.schema != PRESERVE_TARGET_VALUE:
-        schema = _expand_seed_environment_value(
-            raw_value=target_config.schema,
-            effective_vars=effective_vars,
-            context_label="target schema",
-        )
-    return database, schema
-
-
-def _expand_seed_default_value(
-    *, raw_value: str | None, effective_vars: dict[str, object], context_label: str
-) -> str | None:
-    if raw_value is None:
-        return None
-    return _expand_seed_environment_value(
-        raw_value=raw_value,
-        effective_vars=effective_vars,
-        context_label=context_label,
-    )
-
-
-def _expand_seed_environment_value(
-    *, raw_value: str, effective_vars: dict[str, object], context_label: str
-) -> str | None:
-    if raw_value == PRESERVE_TARGET_VALUE:
-        return None
-    return str(
-        expand_template_data(
-            value=raw_value,
-            variables=effective_vars,
-            context_values={},
-            context_label=context_label,
-            allow_context=False,
-            preserve_context_tokens=False,
-            preserve_unknown_context=False,
-        )
-    )
-
-
-def _expand_seed_target_value(
-    *,
-    raw_value: str,
-    seed_name: str,
-    database: str | None,
-    schema: str | None,
-    effective_vars: dict[str, object],
-    context_label: str,
-) -> str | None:
-    if raw_value == PRESERVE_TARGET_VALUE:
-        return None
-    return str(
-        expand_template_data(
-            value=raw_value,
-            variables=effective_vars,
-            context_values={
-                "model.name": seed_name,
-                "model.database": database,
-                "model.schema": schema,
-                "model.alias": seed_name,
-                "destination.database": database,
-                "destination.schema": schema,
-                "destination.table": seed_name,
-                "destination.qualified": _build_seed_destination_qualified_context(
-                    database=database,
-                    schema=schema,
-                    name=seed_name,
-                ),
-            },
-            context_label=context_label,
-            allow_context=True,
-            preserve_context_tokens=False,
-            preserve_unknown_context=False,
-        )
-    )
-
-
-def _build_seed_destination_qualified_context(
-    *, database: str | None, schema: str | None, name: str
-) -> str | None:
-    if database is not None and schema is not None:
-        return f"{database}.{schema}.{name}"
-    if schema is not None:
-        return f"{schema}.{name}"
-    return None

@@ -1,6 +1,6 @@
 """Compile profiling constants."""
 
-from sqlbuild.compiler.profiling.types import CompileTimingPhase
+from sqlbuild.compiler.profiling.types import CompileMetric, CompileTimingPhase
 
 COMPILE_TIMING_PHASES: tuple[CompileTimingPhase, ...] = (
     "attachment_ms",
@@ -11,4 +11,11 @@ COMPILE_TIMING_PHASES: tuple[CompileTimingPhase, ...] = (
     "cache_publication_ms",
     "physical_write_ms",
     "stale_traversal_ms",
+)
+
+COMPILE_METRICS: tuple[CompileMetric, ...] = (
+    "analysis_batch_cache_hits",
+    "analysis_entry_cache_hits",
+    "analysis_cache_misses",
+    "analysis_cache_bypasses",
 )

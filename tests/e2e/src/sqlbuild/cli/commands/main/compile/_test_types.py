@@ -106,6 +106,27 @@ class FreshProcessCompilePerformanceGuardTestCase:
 
 
 @dataclass(frozen=True)
+class FreshProcessCompileCachePerformanceGuardTestCase:
+    description: str
+    model_count: int
+    source_count: int
+    seed_count: int
+    function_count: int
+    macro_count: int
+    test_count: int
+    audit_count: int
+    expected_cold_max_wall_seconds: float
+    expected_warm_max_wall_seconds: float
+    expected_edit_max_wall_seconds: float
+    expected_max_rss_bytes: int
+    expected_max_cache_bytes: int
+    expected_cold_fingerprint: str
+    expected_leaf_edit_fingerprint: str
+    expected_macro_edit_fingerprint: str
+    expected_project_config_fingerprint: str
+
+
+@dataclass(frozen=True)
 class NamespaceCompileTestCase:
     description: str
     repo_files: dict[str, str]

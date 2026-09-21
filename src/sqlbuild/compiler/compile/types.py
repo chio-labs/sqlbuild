@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from sqlbuild.sql_values.models import SqlValue
+
+if TYPE_CHECKING:
+    from sqlbuild.compiler.compile.models import CompactBatchPreparation
 
 
 class TypedSqlValueRenderer(Protocol):
@@ -20,6 +23,12 @@ class TypedSqlValueRenderer(Protocol):
     def render_typed_array(self, *, value: SqlValue) -> str: ...
 
     def render_typed_object(self, *, value: SqlValue) -> str: ...
+
+
+class CompactBatchResponseCallback(Protocol):
+    """Keyword-only callback for publishing one native compact response."""
+
+    def __call__(self, *, preparation: CompactBatchPreparation, response: object) -> None: ...
 
 
 class AttachedAuditTargetKind(StrEnum):

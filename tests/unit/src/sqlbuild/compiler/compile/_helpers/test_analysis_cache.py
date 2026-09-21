@@ -28,6 +28,7 @@ from sqlbuild.compiler.compile.models import (
     PolyglotAnalysisResult,
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.compiler.profiling.main.collect import collect_compile_timings
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     AnalysisCacheTestCase,
@@ -104,6 +105,105 @@ def test_given_successful_analysis_when_compiling_again_then_reuses_identical_ca
 
 @pytest.mark.parametrize(
     "test_case",
+    (AnalysisCacheTestCase(description="exact compact batch reuse", expected_count=1),),
+    ids=lambda case: case.description,
+)
+def test_given_exact_compact_batch_when_entry_rows_are_absent_then_warm_compile_reuses_batch(
+    test_case: AnalysisCacheTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, _CACHE_REPO_FILES)
+    monkeypatch.setattr(assembly_project, "_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT", 1)
+    cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
+    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v10" / "model-analysis.sqlite3"
+    with sqlite3.connect(cache_path) as connection:
+        batch_count: int = connection.execute(
+            "SELECT COUNT(*) FROM model_analysis_compact_batch"
+        ).fetchone()[0]
+        _ = connection.execute("DELETE FROM model_analysis")
+
+    with collect_compile_timings() as metrics:
+        warm_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
+
+    assert batch_count == 1
+    assert warm_project.models == cold_project.models
+    assert warm_project.diagnostics == cold_project.diagnostics
+    assert metrics.as_milliseconds()["analysis_batch_cache_hits"] == test_case.expected_count
+    assert metrics.as_milliseconds()["analysis_entry_cache_hits"] == 0
+    assert metrics.as_milliseconds()["analysis_cache_misses"] == 0
+    assert metrics.as_milliseconds()["analysis_cache_bypasses"] == 0
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (AnalysisCacheTestCase(description="one changed compact model", expected_count=4),),
+    ids=lambda case: case.description,
+)
+def test_given_one_changed_model_when_entry_rows_are_absent_then_compact_batch_reuses_unchanged(
+    test_case: AnalysisCacheTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, _SELECTION_REPO_FILES)
+    monkeypatch.setattr(assembly_project, "_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT", 1)
+    cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
+    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v10" / "model-analysis.sqlite3"
+    with sqlite3.connect(cache_path) as connection:
+        _ = connection.execute("DELETE FROM model_analysis")
+    (tmp_path / "models" / "unrelated.sql").write_text(
+        "MODEL ();\n\nSELECT 3 AS id\n",
+        encoding="utf-8",
+    )
+
+    changed_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
+
+    models_by_name: dict[str, CompiledModel] = {
+        model.name: model for model in changed_project.models
+    }
+    cold_models_by_name: dict[str, CompiledModel] = {
+        model.name: model for model in cold_project.models
+    }
+    assert models_by_name["root"] == cold_models_by_name["root"]
+    assert models_by_name["middle"] == cold_models_by_name["middle"]
+    assert models_by_name["leaf"] == cold_models_by_name["leaf"]
+    assert models_by_name["unrelated"].query_sql == "SELECT 3 AS id"
+    assert len(models_by_name) == test_case.expected_count
+    assert changed_project.diagnostics == ()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (AnalysisCacheTestCase(description="corrupt compact batch fallback", expected_count=1),),
+    ids=lambda case: case.description,
+)
+def test_given_corrupt_compact_batch_when_entry_rows_are_valid_then_warm_compile_falls_back(
+    test_case: AnalysisCacheTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, _CACHE_REPO_FILES)
+    monkeypatch.setattr(assembly_project, "_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT", 1)
+    cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
+    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v10" / "model-analysis.sqlite3"
+    with sqlite3.connect(cache_path) as connection:
+        _ = connection.execute(
+            "UPDATE model_analysis_compact_batch SET payload = ?",
+            (b'{"version":1,"response":"tampered"}',),
+        )
+
+    warm_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
+
+    assert warm_project.models == cold_project.models
+    assert len(warm_project.models) == test_case.expected_count
+    assert warm_project.diagnostics == cold_project.diagnostics
+
+
+@pytest.mark.parametrize(
+    "test_case",
     (AnalysisCacheTestCase(description="changed SQL cache miss", expected_count=1),),
     ids=lambda case: case.description,
 )
@@ -139,7 +239,7 @@ def test_given_corrupt_analysis_when_compiling_then_reanalyzes_and_repairs_the_e
 ) -> None:
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v9" / "model-analysis.sqlite3"
+    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v10" / "model-analysis.sqlite3"
     with sqlite3.connect(cache_path) as connection:
         persisted_contents: str = connection.execute(
             "SELECT payload FROM model_analysis"
@@ -162,7 +262,7 @@ def test_given_corrupt_analysis_when_compiling_then_reanalyzes_and_repairs_the_e
     _digest, _separator, serialized_payload = repaired_contents.partition("\n")
     repaired_payload: dict[str, object] = json.loads(serialized_payload)
     assert repaired_project.models == cold_project.models
-    assert repaired_payload["v"] == 9
+    assert repaired_payload["v"] == 10
     assert isinstance(repaired_payload["s"], str)
     assert analyzer.call_count == test_case.expected_count
 
@@ -180,7 +280,7 @@ def test_given_non_text_analysis_cache_when_compiling_then_reanalyzes_safely(
 ) -> None:
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     _ = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v9" / "model-analysis.sqlite3"
+    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v10" / "model-analysis.sqlite3"
     with sqlite3.connect(cache_path) as connection:
         _ = connection.execute(
             "UPDATE model_analysis SET payload = ?",
@@ -612,6 +712,71 @@ def test_given_selected_upstream_change_when_compiling_full_project_then_stale_c
 
 @pytest.mark.parametrize(
     "test_case",
+    (AnalysisCacheTestCase(description="compact upstream interface change", expected_count=4),),
+    ids=lambda case: case.description,
+)
+def test_given_upstream_interface_change_when_compact_batch_exists_then_dependents_reanalyze(
+    test_case: AnalysisCacheTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {
+            **_SELECTION_REPO_FILES,
+            "models/middle.sql": 'MODEL ();\n\nSELECT * FROM __ref("root")\n',
+            "models/leaf.sql": 'MODEL ();\n\nSELECT * FROM __ref("middle")\n',
+        },
+    )
+    monkeypatch.setattr(assembly_project, "_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT", 1)
+    _ = compile_project_with_cache(project_dir=tmp_path)
+    (tmp_path / "models" / "root.sql").write_text(
+        "MODEL ();\n\nSELECT 1 AS id, 2 AS extra\n",
+        encoding="utf-8",
+    )
+
+    with collect_compile_timings() as metrics:
+        changed_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
+    expected_project: CompiledProject = compile_project_with_cache(
+        project_dir=tmp_path,
+        no_cache=True,
+    )
+
+    models_by_name: dict[str, CompiledModel] = {
+        model.name: model for model in changed_project.models
+    }
+    expected_models_by_name: dict[str, CompiledModel] = {
+        model.name: model for model in expected_project.models
+    }
+    assert (
+        models_by_name["root"].inferred_columns == expected_models_by_name["root"].inferred_columns
+    )
+    assert models_by_name["middle"].inferred_columns == (
+        expected_models_by_name["middle"].inferred_columns
+    )
+    assert (
+        models_by_name["leaf"].inferred_columns == expected_models_by_name["leaf"].inferred_columns
+    )
+    recorded: dict[str, int] = metrics.as_milliseconds()
+    assert (
+        sum(
+            recorded[name]
+            for name in (
+                "analysis_batch_cache_hits",
+                "analysis_entry_cache_hits",
+                "analysis_cache_misses",
+            )
+        )
+        == test_case.expected_count
+    )
+    assert recorded["analysis_batch_cache_hits"] == 1
+    assert recorded["analysis_entry_cache_hits"] == 2
+    assert recorded["analysis_cache_misses"] == 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
     (AnalysisCacheTestCase(description="selected upstream analysis", expected_count=2),),
     ids=lambda case: case.description,
 )
@@ -692,10 +857,16 @@ def test_given_compile_cache_bypass_when_compiling_twice_then_both_runs_analyze_
     monkeypatch.setattr(assembly_project, "analyze_columns_and_lineage_with_polyglot", analyzer)
 
     _ = compile_project_with_cache(project_dir=tmp_path)
-    _ = compile_project_with_cache(project_dir=tmp_path)
+    with collect_compile_timings() as metrics:
+        _ = compile_project_with_cache(project_dir=tmp_path)
 
     assert analyzer.call_count == test_case.expected_count
     assert not tuple((tmp_path / "target").rglob("*.sqlite3"))
+    recorded: dict[str, int] = metrics.as_milliseconds()
+    assert recorded["analysis_batch_cache_hits"] == 0
+    assert recorded["analysis_entry_cache_hits"] == 0
+    assert recorded["analysis_cache_misses"] == 0
+    assert recorded["analysis_cache_bypasses"] == 1
 
 
 @pytest.mark.parametrize(

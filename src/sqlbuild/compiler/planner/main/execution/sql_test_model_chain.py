@@ -1,15 +1,15 @@
-"""Public planner entrypoint for SQL-test model closure discovery."""
+"""Public planner entrypoint for batched SQL-test model closure discovery."""
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompiledSqlTest
-from sqlbuild.compiler.planner._helpers.sql_tests.assembly import resolve_test_model_chain_names
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject, CompiledSqlTest
+from sqlbuild.compiler.planner._helpers.sql_tests.assembly import build_sql_test_planning_context
 
 
-def sql_test_model_chain_names(
-    *,
-    test: CompiledSqlTest,
-    project: CompiledProject,
-    model_map: dict[str, CompiledModel] | None = None,
-) -> tuple[str, ...]:
-    """Return the exact model closure a SQL test plan will expand."""
+def sql_test_model_chain_names_by_key(
+    *, project: CompiledProject, tests: tuple[CompiledSqlTest, ...]
+) -> dict[CompiledObjectKey, tuple[str, ...]]:
+    """Return model closures using one shared project dependency index."""
 
-    return resolve_test_model_chain_names(test=test, project=project, model_map=model_map)
+    return build_sql_test_planning_context(
+        project=project,
+        tests=tests,
+    ).chain_names_by_test_key

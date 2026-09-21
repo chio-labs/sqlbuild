@@ -116,6 +116,7 @@ markers = [
   "motherduck: tests that require live MotherDuck credentials",
   "performance: opt-in performance guard tests",
   "cold_compile_performance: fresh-process semantic compile scaling guards",
+  "cache_compile_performance: fresh-process warm and incremental compile cache guards",
 ]
 
 [tool.ruff]
