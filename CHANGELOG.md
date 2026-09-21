@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.112.0](https://github.com/chio-labs/sqlbuild/compare/v0.111.1...v0.112.0) (2026-09-21)
+
+
+### Features
+
+* **format:** accelerate selected test formatting ([#764](https://github.com/chio-labs/sqlbuild/issues/764)) ([1782e00](https://github.com/chio-labs/sqlbuild/commit/1782e00ce21d4b12850f66fb266b4534dd5765e2))
+
 ## [0.111.1](https://github.com/chio-labs/sqlbuild/compare/v0.111.0...v0.111.1) (2026-09-21)
 
 
