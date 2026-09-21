@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.112.2](https://github.com/chio-labs/sqlbuild/compare/v0.112.1...v0.112.2) (2026-09-21)
+
+
+### Performance Improvements
+
+* accelerate no-cache cold compiles ([#768](https://github.com/chio-labs/sqlbuild/issues/768)) ([794b9dd](https://github.com/chio-labs/sqlbuild/commit/794b9dd1d973a3fc86db45a8eea76696aa21a3ab))
+
 ## [0.112.1](https://github.com/chio-labs/sqlbuild/compare/v0.112.0...v0.112.1) (2026-09-21)
 
 
