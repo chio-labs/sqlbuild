@@ -105,6 +105,35 @@ def test_given_successful_analysis_when_compiling_again_then_reuses_identical_ca
 
 @pytest.mark.parametrize(
     "test_case",
+    (AnalysisCacheTestCase(description="completed compact cache reuse", expected_count=1),),
+    ids=lambda case: case.description,
+)
+def test_given_completed_compact_cache_when_compiling_again_then_skips_analysis_and_binding(
+    test_case: AnalysisCacheTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, _CACHE_REPO_FILES)
+    monkeypatch.setattr(
+        assembly_project, "_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT", test_case.expected_count
+    )
+    cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
+    analyzer: Mock = Mock(side_effect=AssertionError("completed facts must not be reanalyzed"))
+    validator: Mock = Mock(side_effect=AssertionError("completed bindings must not be revalidated"))
+    monkeypatch.setattr(assembly_project, "_analyze_model_sql_requests", analyzer)
+    monkeypatch.setattr(assembly_project, "get_schema_validations", validator)
+
+    warm_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
+
+    assert warm_project.models == cold_project.models
+    assert warm_project.diagnostics == cold_project.diagnostics
+    analyzer.assert_not_called()
+    validator.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "test_case",
     (AnalysisCacheTestCase(description="exact compact batch reuse", expected_count=1),),
     ids=lambda case: case.description,
 )

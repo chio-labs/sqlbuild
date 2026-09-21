@@ -5,7 +5,7 @@ use polyglot_sql::{
     ReferenceConfidence, TransformKind, ValidationSchema, analyze_query,
     analyze_query_for_project_projections,
 };
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -115,6 +115,8 @@ struct ProjectAnalysis {
     columns: Vec<ProjectColumn>,
     lineage_columns: Vec<ProjectLineageColumn>,
     has_star: bool,
+    #[serde(skip)]
+    requires_legacy_fallback: bool,
 }
 
 struct ProjectAnalysisInputs<'a> {
@@ -127,12 +129,17 @@ struct ProjectAnalysisInputs<'a> {
 }
 
 struct ProjectAnalysisProjection {
-    analysis_index: usize,
     references: HashMap<String, LineageResource>,
     function_return_types: HashMap<String, String>,
     declared_column_order: Vec<String>,
     recover_cte_facts: bool,
     rich_type_inference: bool,
+}
+
+struct CompactQueryWork {
+    query: AnalysisRequest,
+    project_projections: bool,
+    projections: Vec<(usize, ProjectAnalysisProjection)>,
 }
 
 struct ProjectAnalysisProjectionResult {
@@ -268,18 +275,20 @@ pub(crate) fn analyze_project_compact_json(request_json: &str) -> Result<String,
             project_projection_queries[template.query_index] = true;
         }
     }
-    let unique_projections: Vec<ProjectAnalysisProjection> = request
-        .templates
-        .into_iter()
-        .map(|template| ProjectAnalysisProjection {
-            analysis_index: template.query_index,
-            references: template.references,
-            function_return_types: template.function_return_types,
-            declared_column_order: template.declared_column_order,
-            recover_cte_facts: template.recover_cte_facts,
-            rich_type_inference: template.rich_type_inference,
-        })
-        .collect();
+    let mut projections_by_query: Vec<Vec<(usize, ProjectAnalysisProjection)>> =
+        (0..unique_query_count).map(|_| Vec::new()).collect();
+    for (projection_index, template) in request.templates.into_iter().enumerate() {
+        projections_by_query[template.query_index].push((
+            projection_index,
+            ProjectAnalysisProjection {
+                references: template.references,
+                function_return_types: template.function_return_types,
+                declared_column_order: template.declared_column_order,
+                recover_cte_facts: template.recover_cte_facts,
+                rich_type_inference: template.rich_type_inference,
+            },
+        ));
+    }
     let projection_results: Vec<ProjectAnalysisProjectionResult> = request
         .projections
         .into_iter()
@@ -293,44 +302,71 @@ pub(crate) fn analyze_project_compact_json(request_json: &str) -> Result<String,
             }
         })
         .collect();
+    let analysis_workers = workers.min(unique_query_count.max(1));
     let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(workers.min(unique_query_count.max(1)))
+        .num_threads(analysis_workers)
         .stack_size(ANALYSIS_WORKER_STACK_BYTES)
         .build()
         .map_err(|error| error.to_string())?;
-    let query_analyses: Vec<Result<QueryAnalysis, String>> = pool.install(|| {
-        request
-            .queries
+    let query_work: Vec<CompactQueryWork> = request
+        .queries
+        .into_iter()
+        .zip(project_projection_queries)
+        .zip(projections_by_query)
+        .map(
+            |((query, project_projections), projections)| CompactQueryWork {
+                query,
+                project_projections,
+                projections,
+            },
+        )
+        .collect();
+    let mut accumulator = CompactProjectAccumulator::new(unique_projection_count);
+    let analysis_groups: Vec<Vec<(usize, Result<ProjectAnalysis, String>)>> = pool.install(|| {
+        query_work
             .into_par_iter()
-            .zip(project_projection_queries.into_par_iter())
-            .map(|(query, project_projections)| query_analysis(query, project_projections))
+            .map(analyze_compact_query_work)
             .collect()
     });
-    let analyses: Vec<Result<ProjectAnalysis, String>> = pool.install(|| {
-        unique_projections
-            .into_par_iter()
-            .map(|projection| {
-                let analysis = query_analyses[projection.analysis_index]
-                    .as_ref()
-                    .map_err(Clone::clone)?;
-                Ok(project_analysis(ProjectAnalysisInputs {
-                    analysis,
-                    references: &projection.references,
-                    function_return_types: &projection.function_return_types,
-                    declared_column_order: &projection.declared_column_order,
-                    recover_cte_facts: projection.recover_cte_facts,
-                    rich_type_inference: projection.rich_type_inference,
-                }))
-            })
-            .collect()
-    });
-    serde_json::to_string(&compact_project_batch(
-        analyses,
+    for (projection_index, analysis) in analysis_groups.into_iter().flatten() {
+        accumulator.compact_analysis(projection_index, analysis)?;
+    }
+    serde_json::to_string(&accumulator.finish(
         projection_results,
         unique_query_count,
         unique_projection_count,
-    ))
+    )?)
     .map_err(|error| error.to_string())
+}
+
+fn analyze_compact_query_work(
+    work: CompactQueryWork,
+) -> Vec<(usize, Result<ProjectAnalysis, String>)> {
+    let query_result = query_analysis(work.query, work.project_projections);
+    project_query_templates(&query_result, work.projections)
+}
+
+fn project_query_templates(
+    query_result: &Result<QueryAnalysis, String>,
+    projections: Vec<(usize, ProjectAnalysisProjection)>,
+) -> Vec<(usize, Result<ProjectAnalysis, String>)> {
+    let mut results: Vec<(usize, Result<ProjectAnalysis, String>)> =
+        Vec::with_capacity(projections.len());
+    for (projection_index, projection) in projections {
+        let projected = match query_result {
+            Ok(analysis) => Ok(project_analysis(ProjectAnalysisInputs {
+                analysis,
+                references: &projection.references,
+                function_return_types: &projection.function_return_types,
+                declared_column_order: &projection.declared_column_order,
+                recover_cte_facts: projection.recover_cte_facts,
+                rich_type_inference: projection.rich_type_inference,
+            })),
+            Err(error) => Err(error.clone()),
+        };
+        results.push((projection_index, projected));
+    }
+    results
 }
 
 fn analyze_request(request: AnalysisRequest) -> AnalysisResponse {
@@ -413,6 +449,13 @@ struct StringInterner {
     indexes: HashMap<String, usize>,
 }
 
+struct CompactProjectAccumulator {
+    interner: StringInterner,
+    facts: Vec<CompactProjectColumn>,
+    fact_indexes: HashMap<CompactProjectColumn, usize>,
+    templates: Vec<Option<CompactProjectResponse>>,
+}
+
 impl StringInterner {
     fn intern(&mut self, value: String) -> usize {
         if let Some(index) = self.indexes.get(&value) {
@@ -425,24 +468,37 @@ impl StringInterner {
     }
 }
 
-fn compact_project_batch(
-    analyses: Vec<Result<ProjectAnalysis, String>>,
-    projections: Vec<ProjectAnalysisProjectionResult>,
-    unique_query_count: usize,
-    unique_projection_count: usize,
-) -> CompactProjectBatch {
-    let mut interner = StringInterner::default();
-    let mut facts: Vec<CompactProjectColumn> = Vec::new();
-    let mut fact_indexes: HashMap<CompactProjectColumn, usize> = HashMap::new();
-    let mut templates: Vec<CompactProjectResponse> = Vec::with_capacity(analyses.len());
-    for result in analyses {
+impl CompactProjectAccumulator {
+    fn new(template_count: usize) -> Self {
+        Self {
+            interner: StringInterner::default(),
+            facts: Vec::new(),
+            fact_indexes: HashMap::new(),
+            templates: (0..template_count).map(|_| None).collect(),
+        }
+    }
+
+    fn compact_analysis(
+        &mut self,
+        projection_index: usize,
+        result: Result<ProjectAnalysis, String>,
+    ) -> Result<(), String> {
         let analysis = match result {
             Ok(analysis) => analysis,
             Err(error) => {
-                templates.push(CompactProjectResponse::Failure(error));
-                continue;
+                self.set_template(projection_index, CompactProjectResponse::Failure(error))?;
+                return Ok(());
             }
         };
+        if analysis.requires_legacy_fallback {
+            self.set_template(
+                projection_index,
+                CompactProjectResponse::Failure(
+                    "native project type recovery requires legacy fallback".to_string(),
+                ),
+            )?;
+            return Ok(());
+        }
         let mut columns = Vec::with_capacity(analysis.columns.len());
         for (column, lineage) in analysis.columns.into_iter().zip(analysis.lineage_columns) {
             let upstream: Vec<(usize, usize, usize)> = lineage
@@ -450,52 +506,81 @@ fn compact_project_batch(
                 .into_iter()
                 .map(|source| {
                     (
-                        interner.intern(source.resource_type),
-                        interner.intern(source.resource_name),
-                        interner.intern(source.column_name),
+                        self.interner.intern(source.resource_type),
+                        self.interner.intern(source.resource_name),
+                        self.interner.intern(source.column_name),
                     )
                 })
                 .collect();
             let fact = (
-                interner.intern(column.name),
-                column.data_type.map(|value| interner.intern(value)),
+                self.interner.intern(column.name),
+                column.data_type.map(|value| self.interner.intern(value)),
                 nullability_code(column.nullability),
                 transform_code(lineage.transform_kind),
                 confidence_code(lineage.confidence),
                 upstream,
             );
-            let next_index = facts.len();
-            let fact_index = *fact_indexes.entry(fact.clone()).or_insert_with(|| {
-                facts.push(fact);
+            let next_index = self.facts.len();
+            let fact_index = *self.fact_indexes.entry(fact.clone()).or_insert_with(|| {
+                self.facts.push(fact);
                 next_index
             });
             columns.push(fact_index);
         }
-        templates.push(CompactProjectResponse::Success((
-            columns,
-            analysis.has_star,
-        )));
+        self.set_template(
+            projection_index,
+            CompactProjectResponse::Success((columns, analysis.has_star)),
+        )
     }
-    let mut compact_projections: Vec<CompactProjectProjection> =
-        Vec::with_capacity(projections.len());
-    for projection in projections {
-        let mut resource_names: Vec<(usize, usize)> =
-            Vec::with_capacity(projection.resource_names.len());
-        for (canonical_name, resource_name) in projection.resource_names {
-            resource_names.push((
-                interner.intern(canonical_name),
-                interner.intern(resource_name),
-            ));
+
+    fn set_template(
+        &mut self,
+        projection_index: usize,
+        response: CompactProjectResponse,
+    ) -> Result<(), String> {
+        let Some(slot) = self.templates.get_mut(projection_index) else {
+            return Err("compact project analysis received an invalid projection index".to_owned());
+        };
+        if slot.is_some() {
+            return Err(
+                "compact project analysis received a duplicate projection index".to_owned(),
+            );
         }
-        compact_projections.push((projection.projection_index, resource_names));
+        *slot = Some(response);
+        Ok(())
     }
-    CompactProjectBatch {
-        strings: interner.strings,
-        facts,
-        templates,
-        analyses: compact_projections,
-        unique_query_count,
-        unique_projection_count,
+
+    fn finish(
+        mut self,
+        projections: Vec<ProjectAnalysisProjectionResult>,
+        unique_query_count: usize,
+        unique_projection_count: usize,
+    ) -> Result<CompactProjectBatch, String> {
+        let mut compact_projections: Vec<CompactProjectProjection> =
+            Vec::with_capacity(projections.len());
+        for projection in projections {
+            let mut resource_names: Vec<(usize, usize)> =
+                Vec::with_capacity(projection.resource_names.len());
+            for (canonical_name, resource_name) in projection.resource_names {
+                resource_names.push((
+                    self.interner.intern(canonical_name),
+                    self.interner.intern(resource_name),
+                ));
+            }
+            compact_projections.push((projection.projection_index, resource_names));
+        }
+        let templates: Option<Vec<CompactProjectResponse>> = self.templates.into_iter().collect();
+        let Some(templates) = templates else {
+            return Err("compact project analysis omitted a projection".to_owned());
+        };
+        Ok(CompactProjectBatch {
+            strings: self.interner.strings,
+            facts: self.facts,
+            templates,
+            analyses: compact_projections,
+            unique_query_count,
+            unique_projection_count,
+        })
     }
 }
 
@@ -540,6 +625,7 @@ fn project_analysis(inputs: ProjectAnalysisInputs<'_>) -> ProjectAnalysis {
     let infer_nullability = inputs.analysis.shape != QueryShape::SetOperation;
     let mut columns: Vec<ProjectColumn> = Vec::new();
     let mut lineage_columns: Vec<ProjectLineageColumn> = Vec::new();
+    let mut requires_legacy_fallback = false;
     for projection in inputs
         .analysis
         .projections
@@ -557,6 +643,12 @@ fn project_analysis(inputs: ProjectAnalysisInputs<'_>) -> ProjectAnalysis {
             recovered_projection_lineage(projection, inputs.references, &cte_facts);
         let has_upstream = !upstream_columns.is_empty();
         let transform_kind = project_transform_kind(projection.transform_kind, has_upstream);
+        requires_legacy_fallback |= direct_projection_requires_legacy_fallback(
+            projection,
+            inputs.function_return_types,
+            &cte_facts,
+            inputs.rich_type_inference,
+        );
         columns.push(ProjectColumn {
             name: output_column.clone(),
             data_type: recovered_projection_type(
@@ -564,7 +656,7 @@ fn project_analysis(inputs: ProjectAnalysisInputs<'_>) -> ProjectAnalysis {
                 inputs.function_return_types,
                 &cte_facts,
                 ProjectionTypeOptions {
-                    allow_direct_type_hint: inputs.rich_type_inference,
+                    allow_direct_type_hint: inputs.rich_type_inference || inputs.recover_cte_facts,
                     rich_type_inference: inputs.rich_type_inference,
                 },
             ),
@@ -606,12 +698,14 @@ fn project_analysis(inputs: ProjectAnalysisInputs<'_>) -> ProjectAnalysis {
         columns,
         lineage_columns,
         has_star: inputs.analysis.has_root_star,
+        requires_legacy_fallback,
     }
 }
 
 #[derive(Clone, Debug)]
 struct CteColumnFact {
     data_type: Option<String>,
+    authoritative_type: bool,
     nullability: ProjectNullability,
     upstream_columns: Vec<ProjectLineageSource>,
     confidence: ProjectConfidence,
@@ -646,6 +740,8 @@ fn recovered_cte_facts(
                     rich_type_inference,
                 },
             );
+            let authoritative_type =
+                projection_type_is_authoritative(projection, function_return_types, &facts);
             let nullability = if cte.shape == Some(QueryShape::SetOperation) {
                 project_nullability(projection.nullability)
             } else {
@@ -657,6 +753,7 @@ fn recovered_cte_facts(
                 (cte.name.to_lowercase(), name.to_lowercase()),
                 CteColumnFact {
                     data_type,
+                    authoritative_type,
                     nullability,
                     upstream_columns,
                     confidence,
@@ -673,6 +770,14 @@ fn recovered_projection_type(
     cte_facts: &CteColumnFacts,
     options: ProjectionTypeOptions,
 ) -> Option<String> {
+    if projection.transform_kind == TransformKind::Cast
+        && let Some(data_type) = projection
+            .cast_type
+            .as_deref()
+            .filter(|value| !value.is_empty() && *value != UNKNOWN_SQL_TYPE)
+    {
+        return Some(normalize_project_type(data_type));
+    }
     if let Some(data_type) = projection.transform_function.as_ref().and_then(|function| {
         function_return_types
             .get(&function.name.to_uppercase())
@@ -680,21 +785,140 @@ fn recovered_projection_type(
     }) {
         return Some(data_type);
     }
+    if let Some(data_type) = projection_cte_source_type(projection, cte_facts) {
+        return Some(data_type);
+    }
     if projection.transform_kind == TransformKind::Direct {
-        if let Some(fact) = cte_column_fact(projection, cte_facts)
-            && fact.data_type.is_some()
+        let cte_fact = cte_column_fact(projection, cte_facts);
+        if cte_fact.is_some_and(|fact| fact.authoritative_type)
+            && let Some(data_type) = cte_fact.and_then(|fact| fact.data_type.clone())
         {
-            return fact.data_type.clone();
+            return Some(data_type);
         }
-        return options
-            .allow_direct_type_hint
-            .then(|| project_type(projection, function_return_types, false))
-            .flatten();
+        if options.allow_direct_type_hint
+            && let Some(data_type) = project_type(projection, function_return_types, true)
+        {
+            return Some(data_type);
+        }
+        return cte_fact.and_then(|fact| fact.data_type.clone());
     }
     if options.rich_type_inference {
         return project_type(projection, function_return_types, true);
     }
     legacy_expression_type(projection)
+}
+
+fn projection_cte_source_type(
+    projection: &polyglot_sql::ProjectionFact,
+    cte_facts: &CteColumnFacts,
+) -> Option<String> {
+    if projection.transform_kind != TransformKind::Direct {
+        return None;
+    }
+    let mut data_types: Vec<String> = projection
+        .type_column_args
+        .iter()
+        .filter_map(|column| {
+            let source = column.source_name.as_ref().or(column.table.as_ref())?;
+            cte_facts
+                .get(&(source.to_lowercase(), column.column.to_lowercase()))
+                .and_then(|fact| fact.data_type.clone())
+        })
+        .collect();
+    data_types.sort();
+    data_types.dedup();
+    let [data_type] = data_types.as_slice() else {
+        return None;
+    };
+    Some(data_type.clone())
+}
+
+fn direct_projection_requires_legacy_fallback(
+    projection: &polyglot_sql::ProjectionFact,
+    function_return_types: &HashMap<String, String>,
+    cte_facts: &CteColumnFacts,
+    rich_type_inference: bool,
+) -> bool {
+    if projection.transform_kind == TransformKind::Aggregation && !cte_facts.is_empty() {
+        return true;
+    }
+    if rich_type_inference
+        || projection.transform_kind != TransformKind::Direct
+        || projection.passthrough_source.is_none()
+    {
+        return false;
+    }
+    let Some(fact) = cte_column_fact(projection, cte_facts) else {
+        return true;
+    };
+    let Some(fact_type) = fact.data_type.as_deref() else {
+        return true;
+    };
+    if !fact.authoritative_type {
+        return true;
+    }
+    project_type(projection, function_return_types, true).is_some_and(|root_type| {
+        canonical_project_type(&root_type) != canonical_project_type(fact_type)
+    })
+}
+
+fn canonical_project_type(value: &str) -> String {
+    let compact: String = normalize_project_type(value)
+        .chars()
+        .filter(|character| !character.is_ascii_whitespace() && *character != '_')
+        .flat_map(char::to_uppercase)
+        .collect();
+    match compact.as_str() {
+        "INTEGER" => "INT".to_string(),
+        "VARCHAR" => "TEXT".to_string(),
+        _ => compact,
+    }
+}
+
+fn projection_type_is_authoritative(
+    projection: &polyglot_sql::ProjectionFact,
+    function_return_types: &HashMap<String, String>,
+    cte_facts: &CteColumnFacts,
+) -> bool {
+    if projection
+        .cast_type
+        .as_deref()
+        .is_some_and(|value| !value.is_empty() && value != UNKNOWN_SQL_TYPE)
+    {
+        return true;
+    }
+    if projection
+        .transform_function
+        .as_ref()
+        .is_some_and(|function| function_return_types.contains_key(&function.name.to_uppercase()))
+    {
+        return true;
+    }
+    let source_facts: Vec<&CteColumnFact> = projection
+        .type_column_args
+        .iter()
+        .filter_map(|column| {
+            let source = column.source_name.as_ref().or(column.table.as_ref())?;
+            cte_facts.get(&(source.to_lowercase(), column.column.to_lowercase()))
+        })
+        .collect();
+    if projection.transform_kind == TransformKind::Direct
+        && !source_facts.is_empty()
+        && source_facts.iter().all(|fact| fact.authoritative_type)
+    {
+        return true;
+    }
+    if projection.transform_kind == TransformKind::Direct
+        && projection.passthrough_source.is_none()
+        && projection
+            .type_hint
+            .as_deref()
+            .is_some_and(|value| !value.is_empty() && value != UNKNOWN_SQL_TYPE)
+    {
+        return true;
+    }
+    projection.transform_kind == TransformKind::Direct
+        && cte_column_fact(projection, cte_facts).is_some_and(|fact| fact.authoritative_type)
 }
 
 fn legacy_expression_type(projection: &polyglot_sql::ProjectionFact) -> Option<String> {

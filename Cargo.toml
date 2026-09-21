@@ -15,7 +15,7 @@ fensu-policy = "=0.22.0"
 globset = "0.4"
 proc-macro2 = { version = "1", features = ["span-locations"] }
 pyo3 = { version = "0.26", features = ["abi3-py312"] }
-polyglot-sql = { git = "https://github.com/chio-labs/polyglot", rev = "190b1f8265b6135a9a6a100356599dd99487c1b4", default-features = false, features = [
+polyglot-sql = { git = "https://github.com/chio-labs/polyglot.git", rev = "f041d0d479089ec61c2430bd44c5c44eed79e296", default-features = false, features = [
     "ast-tools",
     "builder",
     "dialect-bigquery",

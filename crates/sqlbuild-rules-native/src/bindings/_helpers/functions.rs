@@ -216,6 +216,21 @@ fn tokenize_model_header(header: &str) -> PyResult<Vec<(u8, String, usize)>> {
 }
 
 #[pyfunction]
+fn substitute_static_project_vars(
+    sqls: Vec<String>,
+    variables: Vec<(String, String)>,
+) -> Vec<(u8, Option<String>)> {
+    crate::compiler::main::sql_interpolation::substitute_batch(&sqls, &variables)
+}
+
+#[pyfunction]
+fn extract_static_sql_references(
+    sql: &str,
+) -> Option<Vec<crate::compiler::_helpers::sql_references::extraction::StaticReference>> {
+    crate::compiler::main::sql_references::extract(sql)
+}
+
+#[pyfunction]
 fn load_config_json(project_dir: &str) -> PyResult<String> {
     load::load_config_json(std::path::Path::new(project_dir)).map_err(value_error)
 }
@@ -276,6 +291,8 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(extract_sql_tests_json, module)?)?;
     module.add_function(wrap_pyfunction!(parse_model_headers, module)?)?;
     module.add_function(wrap_pyfunction!(tokenize_model_header, module)?)?;
+    module.add_function(wrap_pyfunction!(substitute_static_project_vars, module)?)?;
+    module.add_function(wrap_pyfunction!(extract_static_sql_references, module)?)?;
     module.add_function(wrap_pyfunction!(load_config_json, module)?)?;
     module.add_function(wrap_pyfunction!(catalogue_json, module)?)?;
     module.add_function(wrap_pyfunction!(selected_codes_json, module)?)?;

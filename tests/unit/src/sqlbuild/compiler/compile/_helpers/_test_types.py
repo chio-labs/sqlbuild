@@ -12,6 +12,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, SqlTestMode
 from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.scopes.models import UsageRecord
 from sqlbuild.compiler.scopes.types import ScopeKind
 from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention
@@ -22,6 +23,28 @@ from sqlbuild.sql_values.models import SqlValue
 class UnexpectedAnalysisFailureTestCase:
     description: str
     expected_error: str
+
+
+@dataclass(frozen=True)
+class SqlReferenceExtractionTestCase:
+    description: str
+    sql: str
+    expected_references: tuple[tuple[SqlReferenceKind, str, str | None], ...]
+
+
+@dataclass(frozen=True)
+class SqlReferenceExtractionErrorTestCase:
+    description: str
+    sql: str
+    expected_error: str
+
+
+@dataclass(frozen=True)
+class StaticProjectVarBatchTestCase:
+    description: str
+    sqls: tuple[str, ...]
+    effective_vars: dict[str, object]
+    expected_sqls: tuple[str | None, ...]
 
 
 @dataclass(frozen=True)

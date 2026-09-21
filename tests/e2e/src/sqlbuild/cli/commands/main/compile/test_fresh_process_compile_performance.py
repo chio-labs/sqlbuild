@@ -92,11 +92,13 @@ def test_given_scaled_semantic_project_when_compiling_fresh_then_preserves_resou
         expected_max_wall_seconds=test_case.expected_max_wall_seconds,
     )
     _LOGGER.info(
-        "fresh-process semantic compile models=%d wall=%.3fs peak_rss_bytes=%d fingerprint=%s",
+        "fresh-process semantic compile models=%d wall=%.3fs peak_rss_bytes=%d "
+        "fingerprint=%s timings=%s",
         test_case.model_count,
         result.elapsed_seconds,
         result.peak_rss_bytes,
         result.semantic_fingerprint,
+        result.payload["compile_timings"],
     )
 
     assert result.payload["has_errors"] is False

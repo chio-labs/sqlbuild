@@ -291,6 +291,14 @@ class DeclarationScopeResolver:
     project_dir: Path | None
     lookup: ScopeLookup
     projection: DeclarationRuntimeProjection
+    resource_specific: frozenset[ResourceIdentity] | None = None
+    contexts_by_directory: dict[tuple[str, str], DeclarationResolutionContext] = field(
+        default_factory=dict, compare=False, repr=False
+    )
+
+    def cache_context(self, *, key: tuple[str, str], context: DeclarationResolutionContext) -> None:
+        """Retain a process-local context for equivalent lexical consumers."""
+        self.contexts_by_directory[key] = context
 
 
 @dataclass(frozen=True)

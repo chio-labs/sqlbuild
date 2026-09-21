@@ -565,10 +565,36 @@ def _analyze_model_sql_in_parallel(
         else None
     )
     if compact_candidate is not None:
+        completed_analyses: dict[str, PolyglotAnalysisResult] = {}
+        if analysis_cache is not None and len(compact_candidate.matching_indexes) == len(requests):
+            completed_analyses, _, _ = read_model_analyses(
+                context=analysis_cache,
+                cache_keys=request_cache_keys,
+                model_names=tuple(_model_name(request.model_input) for request in requests),
+                upstream_model_names_by_key={
+                    request.cache_key: _referenced_model_names(
+                        model_input=request.model_input,
+                        available_names=analyzed_model_names,
+                    )
+                    for request in requests
+                    if request.cache_key is not None
+                },
+            )
+            if all(key in completed_analyses for key in request_cache_keys):
+                record_analysis_cache_metrics(
+                    batch_hits=len(requests), entry_hits=0, misses=0, bypasses=0
+                )
+                return {
+                    _model_name(request.model_input): _ModelSqlAnalysis(
+                        polyglot_analysis=completed_analyses[cache_key],
+                        placeholders=request.placeholders,
+                    )
+                    for request, cache_key in zip(requests, request_cache_keys, strict=True)
+                }
         try:
             compact_analyses: tuple[_ModelSqlAnalysis, ...] = _analyze_model_sql_requests(
                 requests=requests,
-                cached_analyses={},
+                cached_analyses=completed_analyses,
                 column_nullability_by_table=column_nullability_by_table,
                 column_types_by_table=column_types_by_table,
                 inference_profile=inference_profile,
@@ -832,16 +858,25 @@ def _analyze_model_sql_requests(
         prepared_by_index: dict[int, NativeCompactAnalysis] = {}
         diagnostics_by_index: dict[int, tuple[SqlBindingDiagnostic, ...]] = {}
         if uncached:
+            batch_requests: tuple[tuple[int, _ModelSqlAnalysisRequest], ...] = (
+                tuple(enumerate(requests)) if cached_compact_batch is not None else uncached
+            )
+            validation_indices: tuple[int, ...] = tuple(
+                index for index, request in uncached if request.binding_schema is not None
+            )
             prepared: tuple[NativeCompactAnalysis, ...] = (
                 analyze_queries_with_compact_polyglot_batch(
-                    query_sqls=tuple(request.query_sql for _, request in uncached),
-                    references=tuple(request.model_input.references for _, request in uncached),
-                    placeholders=tuple(request.placeholders for _, request in uncached),
+                    query_sqls=tuple(request.query_sql for _, request in batch_requests),
+                    references=tuple(
+                        request.model_input.references for _, request in batch_requests
+                    ),
+                    placeholders=tuple(request.placeholders for _, request in batch_requests),
                     column_nullability_by_table=column_nullability_by_table,
                     column_types_by_table=column_types_by_table,
                     inference_profile=inference_profile,
                     recover_cte_facts=tuple(
-                        _should_recover_cte_facts(request.model_input) for _, request in uncached
+                        _should_recover_cte_facts(request.model_input)
+                        for _, request in batch_requests
                     ),
                     rich_type_inference=rich_type_inference,
                     cached_batch=cached_compact_batch,
@@ -849,21 +884,19 @@ def _analyze_model_sql_requests(
                 )
             )
             prepared_by_index = {
-                index: value for (index, _), value in zip(uncached, prepared, strict=True)
+                index: value for (index, _), value in zip(batch_requests, prepared, strict=True)
             }
-            validation_indices: tuple[int, ...] = tuple(
-                index for index, request in uncached if request.binding_schema is not None
-            )
-            validation_results: tuple[SqlBindingResult, ...] = get_schema_validations(
-                requests=tuple(
-                    SqlSchemaValidationRequest(
-                        sql=prepared_by_index[index].cleaned_sql,
-                        dialect=inference_profile.sql_analysis_dialect,
-                        schema=requests[index].binding_schema or {},
+            with record_compile_timing("binding_validation_ms"):
+                validation_results: tuple[SqlBindingResult, ...] = get_schema_validations(
+                    requests=tuple(
+                        SqlSchemaValidationRequest(
+                            sql=prepared_by_index[index].cleaned_sql,
+                            dialect=inference_profile.sql_analysis_dialect,
+                            schema=requests[index].binding_schema or {},
+                        )
+                        for index in validation_indices
                     )
-                    for index in validation_indices
                 )
-            )
             diagnostics_by_index = {
                 index: result.diagnostics
                 for index, result in zip(validation_indices, validation_results, strict=True)
@@ -976,9 +1009,10 @@ def _complete_inferred_bindings(
         for dependent_index in dependents_by_name.get(model_name, ()):
             if required_names_by_index[dependent_index] <= complete_schemas.keys():
                 ready.append(dependent_index)
-    validation_results: tuple[SqlBindingResult, ...] = get_schema_validations(
-        requests=tuple(deferred_validation_requests)
-    )
+    with record_compile_timing("binding_validation_ms"):
+        validation_results: tuple[SqlBindingResult, ...] = get_schema_validations(
+            requests=tuple(deferred_validation_requests)
+        )
     for index, validation_result in zip(
         deferred_validation_indices, validation_results, strict=True
     ):

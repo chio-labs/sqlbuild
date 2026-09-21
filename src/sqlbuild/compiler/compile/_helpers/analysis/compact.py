@@ -56,6 +56,7 @@ from sqlbuild.compiler.lineage.types import (
     ColumnTransformKind,
     InferredNullability,
 )
+from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.compiler.references.main._quoted_reference_call_pattern import (
     quoted_reference_call_pattern,
 )
@@ -164,6 +165,7 @@ from sqlbuild.compiler.sql_analysis.types import NativeQueryAnalysisModule
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
+_NATIVE_LEGACY_FALLBACK: str = "native project type recovery requires legacy fallback"
 _REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
 _SEED_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SEED)
 _SOURCE_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SOURCE)
@@ -304,7 +306,14 @@ def analyze_columns_and_lineage_with_polyglot(
         column_nullability_by_table=column_nullability_by_table or {},
         column_types_by_table=column_types_by_table or {},
         inference_profile=profile,
-        allow_compact_analysis=allow_compact_analysis,
+        allow_compact_analysis=(
+            allow_compact_analysis
+            and not (
+                precomputed is not None
+                and not precomputed.projected
+                and precomputed.analysis is None
+            )
+        ),
         recover_cte_facts=recover_cte_facts,
         analysis=precomputed.analysis if precomputed is not None else None,
     )
@@ -382,33 +391,34 @@ def analyze_queries_with_compact_polyglot_batch(
         raise CompactAnalysisInputError(
             "compact query-analysis batch inputs must have equal lengths"
         )
-    preparation: CompactBatchPreparation = (
-        cached_batch[0]
-        if cached_batch is not None
-        else _prepare_compact_analysis_batch(
-            query_sqls=query_sqls,
-            references=references,
-            placeholders=placeholders,
-            column_nullability_by_table=column_nullability_by_table,
-            column_types_by_table=column_types_by_table,
-            inference_profile=inference_profile,
-            recover_cte_facts=recover_cte_facts,
-            rich_type_inference=rich_type_inference,
-        )
-    )
+    if cached_batch is not None:
+        preparation: CompactBatchPreparation = cached_batch[0]
+    else:
+        with record_compile_timing("analysis_preparation_ms"):
+            preparation = _prepare_compact_analysis_batch(
+                query_sqls=query_sqls,
+                references=references,
+                placeholders=placeholders,
+                column_nullability_by_table=column_nullability_by_table,
+                column_types_by_table=column_types_by_table,
+                inference_profile=inference_profile,
+                recover_cte_facts=recover_cte_facts,
+                rich_type_inference=rich_type_inference,
+            )
     if len(preparation.cleaned_sql) != len(query_sqls):
         raise CompactAnalysisInputError(
             "cached compact query-analysis preparation has an invalid length"
         )
-    response_payload: object = (
-        cached_batch[1]
-        if cached_batch is not None
-        else _run_compact_analysis_batch(preparation=preparation)
-    )
-    projected: tuple[NativeCompactAnalysis, ...] = _project_compact_analysis_batch(
-        preparation=preparation,
-        response_payload=response_payload,
-    )
+    if cached_batch is not None:
+        response_payload: object = cached_batch[1]
+    else:
+        with record_compile_timing("analysis_native_ms"):
+            response_payload = _run_compact_analysis_batch(preparation=preparation)
+    with record_compile_timing("analysis_projection_ms"):
+        projected: tuple[NativeCompactAnalysis, ...] = _project_compact_analysis_batch(
+            preparation=preparation,
+            response_payload=response_payload,
+        )
     if cached_batch is None and on_response is not None:
         on_response(preparation=preparation, response=response_payload)
     return projected
@@ -631,7 +641,11 @@ def _project_compact_analysis_batch(
                     sqlbuild_error=template,
                 )
                 results.append(
-                    NativeCompactAnalysis(cleaned_sql=cleaned_sql, analysis=None, projected=True)
+                    NativeCompactAnalysis(
+                        cleaned_sql=cleaned_sql,
+                        analysis=None,
+                        projected=template != _NATIVE_LEGACY_FALLBACK,
+                    )
                 )
                 continue
             if not (

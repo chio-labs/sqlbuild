@@ -1,6 +1,30 @@
 use crate::query_analysis::main::analyze_project_compact_json;
 use serde_json::{Value, json};
 
+pub(crate) fn widening_aggregates_require_compatibility_recovery() -> bool {
+    for expression in [
+        "AVG(order_id)",
+        "SUM(order_id)",
+        "MIN(order_id) > 0",
+        "MIN(order_id) / 2.0",
+    ] {
+        for rich in [false, true] {
+            let response: Value = serde_json::from_str(
+                &analyze_project_compact_json(&json!({
+                    "queries": [{"sql": format!("WITH selected AS (SELECT CAST(1 AS BIGINT) AS order_id) SELECT {expression} AS result FROM selected"), "dialect": "duckdb"}],
+                    "templates": [{"queryIndex": 0, "recoverCteFacts": true, "richTypeInference": rich}],
+                    "projections": [{"templateIndex": 0}]
+                }).to_string()).expect("query should analyze"),
+            ).expect("response should decode");
+            assert_eq!(
+                response["templates"][0],
+                "native project type recovery requires legacy fallback"
+            );
+        }
+    }
+    true
+}
+
 pub(crate) fn compact_project_query_interns_repeated_lineage_strings() -> bool {
     let response: Value = serde_json::from_str(
         &analyze_project_compact_json(
@@ -65,6 +89,55 @@ pub(crate) fn repeated_project_facts_intern_complete_facts() -> bool {
     assert_eq!(response["templates"][0][0], json!([0]));
     assert_eq!(response["templates"][1][0], json!([0]));
     true
+}
+
+pub(crate) fn interleaved_query_templates_preserve_template_order() -> bool {
+    let response: Value = serde_json::from_str(
+        &analyze_project_compact_json(
+            &json!({
+                "queries": [
+                    {"sql": "SELECT 1 AS first_value", "dialect": "duckdb"},
+                    {"sql": "SELECT 2 AS second_value", "dialect": "duckdb"}
+                ],
+                "templates": [
+                    {"queryIndex": 1},
+                    {"queryIndex": 0},
+                    {"queryIndex": 1}
+                ],
+                "projections": [
+                    {"templateIndex": 0},
+                    {"templateIndex": 1},
+                    {"templateIndex": 2}
+                ]
+            })
+            .to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+
+    let strings = response["strings"]
+        .as_array()
+        .expect("compact strings should be an array");
+    let facts = response["facts"]
+        .as_array()
+        .expect("compact facts should be an array");
+    let templates = response["templates"]
+        .as_array()
+        .expect("compact templates should be an array");
+    let names: Vec<&Value> = templates
+        .iter()
+        .map(|template| {
+            let fact_index = template[0][0]
+                .as_u64()
+                .expect("template should use a fact index") as usize;
+            let name_index = facts[fact_index][0]
+                .as_u64()
+                .expect("fact should use a name index") as usize;
+            &strings[name_index]
+        })
+        .collect();
+    names == vec!["second_value", "first_value", "second_value"]
 }
 
 pub(crate) fn canonical_queries_reuse_semantics_and_project_resources() -> bool {
