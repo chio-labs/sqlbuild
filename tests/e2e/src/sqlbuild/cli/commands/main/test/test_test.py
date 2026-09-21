@@ -25,6 +25,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     build_chain_test_project_files,
     build_clause_partial_source_fixture_project_files,
     build_complex_values_fixture_project_files,
+    build_contract_empty_fixture_project_files,
     build_cte_derived_output_fixture_project_files,
     build_cte_partial_source_fixture_project_files,
     build_dynamic_pivot_test_project_files,
@@ -38,7 +39,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     build_mixed_case_partial_fixture_project_files,
     build_mock_boundary_test_project_files,
     build_multiple_invalid_fixtures_project_files,
+    build_open_expected_empty_fixture_project_files,
     build_open_schema_ref_fixture_project_files,
+    build_open_source_empty_fixture_project_files,
     build_parameterized_test_project_files,
     build_partial_ref_fixture_project_files,
     build_partial_seed_fixture_project_files,
@@ -158,8 +161,20 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_stdout_fragment="PASS=1",
             expected_artifact_fragments=(
                 'CAST("__sqlbuild_partial_fixture".ordered_at AS DATE) AS ordered_at',
+                'CAST("__sqlbuild_partial_fixture".order_year AS BIGINT) AS order_year',
                 "__sqlbuild_partial_fixture",
             ),
+        ),
+        PartialFixtureE2ETestCase(
+            description="empty fixture receives complete authoritative relation shape",
+            repo_files=build_contract_empty_fixture_project_files(),
+            expected_stdout_fragment="PASS=1",
+            expected_artifact_fragments=(
+                'CAST(NULL AS INT) AS "order_id"',
+                'CAST(NULL AS TEXT) AS "status"',
+                "FALSE",
+            ),
+            unexpected_artifact_fragments=("__empty_fixture",),
         ),
         PartialFixtureE2ETestCase(
             description="qualified star on real relation does not expand mocked relation",
@@ -398,6 +413,22 @@ def test_given_complex_strings_in_values_when_processing_then_literals_remain_in
                 "SQL test 'test_orders_b'",
                 "tests/unit/test_orders_b.sql:4",
                 "missing required columns: status",
+            ),
+        ),
+        SqlTestFixtureValidationE2ETestCase(
+            description="empty source fixture requires an authoritative shape",
+            repo_files=build_open_source_empty_fixture_project_files(),
+            expected_stderr_fragments=(
+                "mock source 'raw_orders' uses __empty_fixture()",
+                "column schema is not authoritative",
+            ),
+        ),
+        SqlTestFixtureValidationE2ETestCase(
+            description="empty expected fixture requires an authoritative shape",
+            repo_files=build_open_expected_empty_fixture_project_files(),
+            expected_stderr_fragments=(
+                "expected output 'orders' uses __empty_fixture()",
+                "column schema is not authoritative",
             ),
         ),
     ],

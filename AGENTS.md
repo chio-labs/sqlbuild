@@ -88,6 +88,13 @@
 - PR titles must follow Conventional Commits. Descriptions must be no longer than 2,000 characters and contain non-empty `## Why`, `## Changes`, and `## Verification` sections in that order.
 - Before creating or editing a PR, validate its metadata with `make check-pr-metadata PR_TITLE='type: summary' PR_BODY_FILE=/path/to/body.md`.
 - Monitor CI after every push and follow it through completion. Address failures before considering delivery complete.
+- When asked to babysit or watch a pull request, keep exactly one active background CI watcher for
+  the surviving pull request until its latest commit reaches a terminal state. Do not stop at the
+  initial push, PR creation, or an intermediate green run superseded by a later push. If pull
+  requests are consolidated, stop obsolete watchers and retain one watcher for the combined PR.
+- Babysitting includes inspecting failures, applying and pushing required fixes, restarting the
+  watcher after each push, and reporting the final green state. It does not authorize merging when
+  the user has asked for the pull request to remain unmerged.
 - Push follow-up commits only for CI failures or correctness findings that could not reasonably have been found before the first push.
 - For deployable changes, continue through auto-merge, release workflow completion, package publication, and published-version verification. Do not stop at PR creation unless the user explicitly asks.
 

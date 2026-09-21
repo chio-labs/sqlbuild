@@ -204,6 +204,16 @@ class DagsterAuditIdentityTestCase:
 
 
 @dataclass(frozen=True)
+class DagsterStandaloneCheckCommandTestCase:
+    """One non-materializing command that must stream check results."""
+
+    description: str
+    command: str
+    expected_asset_path: tuple[str, ...]
+    expected_check_name: str
+
+
+@dataclass(frozen=True)
 class DagsterManagedLoaderRoutingTestCase:
     """Expected source and loader projection identity."""
 
