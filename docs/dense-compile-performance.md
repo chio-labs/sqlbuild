@@ -40,8 +40,9 @@ make test-e2e-dense-compile-performance SQLBUILD_BENCHMARK_MODELS=1000
 ```
 
 For requests containing at least 32MiB of unique SQL, the compiler compacts native
-analysis results in batches of 64 and uses at most two workers to bound
-simultaneous parser heaps. Smaller requests retain a single batch and up to four workers.
+analysis results in batches of 64. Smaller requests retain a single batch. Both
+use up to four workers; local resolution views avoid copying CTE definitions
+that are already available through the source catalogue.
 These limits change scheduling, not analysis or fallback semantics.
 
 This fixture protects dense query analysis, declaration expansion, rules and

@@ -17,7 +17,6 @@ const MAX_WORKERS: usize = 4;
 const ANALYSIS_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
 const COMPACT_ANALYSIS_BATCH_SIZE: usize = 64;
 const LARGE_COMPACT_SQL_BYTES: usize = 32 * 1024 * 1024;
-const LARGE_COMPACT_MAX_WORKERS: usize = 2;
 
 #[derive(Debug, Deserialize)]
 struct AnalysisBatchRequest {
@@ -314,12 +313,7 @@ pub(crate) fn analyze_project_compact_json(request_json: &str) -> Result<String,
         })
         .collect();
     let sql_bytes: usize = request.queries.iter().map(|query| query.sql.len()).sum();
-    let memory_workers = if sql_bytes >= LARGE_COMPACT_SQL_BYTES {
-        workers.min(LARGE_COMPACT_MAX_WORKERS)
-    } else {
-        workers
-    };
-    let analysis_workers = memory_workers.min(unique_query_count.max(1));
+    let analysis_workers = workers.min(unique_query_count.max(1));
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(analysis_workers)
         .stack_size(ANALYSIS_WORKER_STACK_BYTES)
