@@ -4,12 +4,16 @@ use crate::constants::{
     RULES_DIRECTORY, TARGET_DIRECTORY,
 };
 use crate::engine::_helpers::cache::{Cache, RuleCacheBucket, RuleCacheEntry};
-use crate::models::{EvaluateRequest, EvaluateResponse, Fault, RuleMetadata, RulesCodeGrammar};
+use crate::models::{
+    EvaluateRequest, EvaluateResponse, Fault, Model, RuleMetadata, RulesCodeGrammar,
+};
 use crate::rules::main::{
     assemble_catalogue, evaluate as rules, evaluate_project, fingerprint,
     resolve_threshold_overrides, select,
 };
-use crate::rules::models::{ModelEvaluationRequest, ProjectEvaluationRequest};
+use crate::rules::models::{
+    ModelEvaluationRequest, ProjectEvaluationRequest, ResolvedThresholdOverride,
+};
 use fensu_policy::lifecycle::constants::ANALYSIS_BATCH_SCHEMA_VERSION;
 use fensu_policy::lifecycle::errors::LifecycleError;
 use fensu_policy::lifecycle::models::{
@@ -18,10 +22,165 @@ use fensu_policy::lifecycle::models::{
     RuntimeIdentity, ScopedIgnore,
 };
 use fensu_policy::{apply_suppressions, evaluate_batch, run_custom_host};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
+
+const NATIVE_RULE_WORKERS: usize = 4;
+const NATIVE_RULE_STACK_BYTES: usize = 16 * 1024 * 1024;
+
+struct PendingModelRule<'a> {
+    index: usize,
+    model: &'a Model,
+    identity: Option<String>,
+}
+
+struct CompletedModelRule {
+    index: usize,
+    identity: Option<String>,
+    faults: Result<Vec<Fault>, String>,
+}
+
+struct ModelRuleBatchContext<'a> {
+    request: &'a EvaluateRequest,
+    selected: &'a BTreeMap<String, &'a RuleMetadata>,
+    threshold_overrides: &'a [ResolvedThresholdOverride],
+}
+
+struct NativeModelRuleRequest<'a> {
+    context: ModelRuleBatchContext<'a>,
+    cache: Option<&'a Cache>,
+    ruleset_fingerprint: &'a str,
+    project_fingerprint: Option<&'a str>,
+}
+
+#[derive(Default)]
+struct NativeModelEvaluation {
+    faults: Vec<Fault>,
+    hits: usize,
+    misses: usize,
+}
+
+fn evaluate_native_models(
+    input: NativeModelRuleRequest<'_>,
+) -> Result<NativeModelEvaluation, String> {
+    let NativeModelRuleRequest {
+        context,
+        cache,
+        ruleset_fingerprint,
+        project_fingerprint,
+    } = input;
+    if !context
+        .selected
+        .values()
+        .any(|rule| !rule.custom && !rule.code.starts_with("SQBRSQL"))
+    {
+        return Ok(NativeModelEvaluation::default());
+    }
+    let mut models: Vec<_> = context.request.models.iter().collect();
+    models.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
+    let all_models_required = context.selected.values().any(|rule| {
+        !rule.custom
+            && !rule.code.starts_with("SQBRSQL")
+            && !matches!(
+                rule.code.as_str(),
+                "SQBRDECLARATION201" | "SQBRDECLARATION301" | "SQBRTEST301"
+            )
+    });
+    let model_limit = if all_models_required { models.len() } else { 1 };
+    let mut bucket = cache
+        .map(|store| store.native_rules_bucket(ruleset_fingerprint))
+        .transpose()?
+        .unwrap_or_default();
+    let mut bucket_changed = false;
+    let mut result = NativeModelEvaluation::default();
+    let mut model_results: Vec<Option<Vec<Fault>>> = vec![None; model_limit];
+    let mut pending_models: Vec<PendingModelRule<'_>> = Vec::new();
+    for (index, model) in models.iter().take(model_limit).enumerate() {
+        let identity = cache
+            .map(|_| {
+                model_cache_identity(
+                    model,
+                    ruleset_fingerprint,
+                    if index == 0 {
+                        project_fingerprint
+                    } else {
+                        None
+                    },
+                )
+            })
+            .transpose()?;
+        if let Some(identity) = &identity
+            && let Some(entry) = bucket
+                .entries
+                .get(&model.relative_path)
+                .filter(|entry| entry.identity == *identity)
+        {
+            model_results[index] = Some(entry.faults.clone());
+            result.hits += 1;
+            continue;
+        }
+        result.misses += 1;
+        pending_models.push(PendingModelRule {
+            index,
+            model,
+            identity,
+        });
+    }
+    let completed = evaluate_pending_models(pending_models, context)?;
+    for completed_model in completed {
+        let faults = completed_model.faults?;
+        if let Some(identity) = completed_model.identity {
+            let _ = bucket.entries.insert(
+                models[completed_model.index].relative_path.clone(),
+                RuleCacheEntry {
+                    identity,
+                    faults: faults.clone(),
+                },
+            );
+            bucket_changed = true;
+        }
+        model_results[completed_model.index] = Some(faults);
+    }
+    result.faults = model_results.into_iter().flatten().flatten().collect();
+    if bucket_changed && let Some(cache) = cache {
+        cache.put_native_rules_bucket(ruleset_fingerprint, &bucket)?;
+    }
+    Ok(result)
+}
+
+fn evaluate_pending_models(
+    pending_models: Vec<PendingModelRule<'_>>,
+    context: ModelRuleBatchContext<'_>,
+) -> Result<Vec<CompletedModelRule>, String> {
+    let evaluate_pending = |pending: PendingModelRule<'_>| CompletedModelRule {
+        index: pending.index,
+        identity: pending.identity,
+        faults: rules::evaluate_model(ModelEvaluationRequest {
+            model: pending.model,
+            config: &context.request.config,
+            selected: context.selected,
+            request: context.request,
+            threshold_overrides: context.threshold_overrides,
+        }),
+    };
+    if pending_models.len() <= 1 {
+        return Ok(pending_models.into_iter().map(evaluate_pending).collect());
+    }
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(NATIVE_RULE_WORKERS.min(pending_models.len()))
+        .stack_size(NATIVE_RULE_STACK_BYTES)
+        .build()
+        .map_err(|error| error.to_string())?;
+    Ok(pool.install(|| {
+        pending_models
+            .into_par_iter()
+            .map(evaluate_pending)
+            .collect()
+    }))
+}
 
 pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
     let request: EvaluateRequest = serde_json::from_str(request_json)
@@ -78,110 +237,87 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
     let cache = cache_enabled
         .then(|| Cache::open(Path::new(&request.project_dir)))
         .transpose()?;
-    let mut models: Vec<_> = request.models.iter().collect();
-    models.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
-    let built_in_started = Instant::now();
-    let mut raw_faults = request.initial_findings.clone();
-    raw_faults.extend(evaluate_project::evaluate_project(
-        ProjectEvaluationRequest {
-            selected: &selected_by_code,
-            request: &request,
-        },
-    )?);
-    let mut cache_hits = 0;
-    let mut cache_misses = 0;
-    let native_model_selected = selected
-        .iter()
-        .any(|rule| !rule.custom && !rule.code.starts_with("SQBRSQL"));
-    if native_model_selected {
-        let all_models_required = selected.iter().any(|rule| {
-            !rule.custom
-                && !rule.code.starts_with("SQBRSQL")
-                && !matches!(
-                    rule.code.as_str(),
-                    "SQBRDECLARATION201" | "SQBRDECLARATION301" | "SQBRTEST301"
-                )
-        });
-        let native_model_limit = if all_models_required { models.len() } else { 1 };
-        let mut bucket = cache
-            .as_ref()
-            .map(|store| store.native_rules_bucket(&ruleset_fingerprint))
-            .transpose()?
-            .unwrap_or_default();
-        let mut bucket_changed = false;
-        for (model_index, model) in models.iter().take(native_model_limit).enumerate() {
-            let fingerprint = cache
-                .as_ref()
-                .map(|_| {
-                    model_cache_identity(
-                        model,
-                        &ruleset_fingerprint,
-                        if model_index == 0 {
-                            project_fingerprint.as_deref()
-                        } else {
-                            None
-                        },
-                    )
-                })
-                .transpose()?;
-            if let Some(identity) = &fingerprint
-                && let Some(entry) = bucket
-                    .entries
-                    .get(&model.relative_path)
-                    .filter(|entry| entry.identity == *identity)
-            {
-                raw_faults.extend(entry.faults.clone());
-                cache_hits += 1;
-                continue;
-            }
-            cache_misses += 1;
-            let model_faults = rules::evaluate_model(ModelEvaluationRequest {
-                model,
-                config: &request.config,
-                selected: &selected_by_code,
-                request: &request,
-                threshold_overrides: &threshold_overrides,
-            })?;
-            if let Some(identity) = fingerprint {
-                let _ = bucket.entries.insert(
-                    model.relative_path.clone(),
-                    RuleCacheEntry {
-                        identity,
-                        faults: model_faults.clone(),
-                    },
-                );
-                bucket_changed = true;
-            }
-            raw_faults.extend(model_faults);
-        }
-        if bucket_changed && let Some(store) = &cache {
-            store.put_native_rules_bucket(&ruleset_fingerprint, &bucket)?;
-        }
-    }
-    let built_in_ms = built_in_started.elapsed().as_millis() as u64;
-    let custom_started = Instant::now();
-    let custom = match evaluate_custom_rules_cached(CustomRulesCacheRequest {
+    let (cached_custom, custom_probe_ms) = probe_custom_rules_cache(CustomRulesCacheRequest {
         request: &request,
         selected: &selected_by_code,
         cache: cache.as_ref(),
         project_fingerprint: project_fingerprint.as_deref(),
-    }) {
-        Ok(value) => value,
-        Err(error) if error == CUSTOM_HOST_REQUIRED_ERROR => {
-            return Err(format!("{error} [native_cache_misses={cache_misses}]"));
-        }
-        Err(error) => return Err(error),
-    };
-    cache_hits += custom.hits;
-    cache_misses += custom.misses;
-    raw_faults.extend(custom.faults);
-    let custom_ms = custom_started.elapsed().as_millis() as u64;
+    })?;
+    let (raw_faults, cache_hits, cache_misses, built_in_ms, custom_ms) =
+        std::thread::scope(|scope| {
+            let custom_parallel_started = Instant::now();
+            let custom_task = (cached_custom.is_none()
+                && std::env::var_os("SQLBUILD_EXPERIMENT_PARALLEL_NATIVE_RULES").is_some())
+            .then(|| {
+                scope.spawn(|| {
+                    evaluate_custom_rules_cached(CustomRulesCacheRequest {
+                        request: &request,
+                        selected: &selected_by_code,
+                        cache: cache.as_ref(),
+                        project_fingerprint: project_fingerprint.as_deref(),
+                    })
+                })
+            });
+            let built_in_started = Instant::now();
+            let mut raw_faults = request.initial_findings.clone();
+            raw_faults.extend(evaluate_project::evaluate_project(
+                ProjectEvaluationRequest {
+                    selected: &selected_by_code,
+                    request: &request,
+                },
+            )?);
+            let native = evaluate_native_models(NativeModelRuleRequest {
+                context: ModelRuleBatchContext {
+                    request: &request,
+                    selected: &selected_by_code,
+                    threshold_overrides: &threshold_overrides,
+                },
+                cache: cache.as_ref(),
+                ruleset_fingerprint: &ruleset_fingerprint,
+                project_fingerprint: project_fingerprint.as_deref(),
+            })?;
+            let mut cache_hits = native.hits;
+            let mut cache_misses = native.misses;
+            raw_faults.extend(native.faults);
+            let built_in_ms = built_in_started.elapsed().as_millis() as u64;
+            let custom_started = if custom_task.is_some() {
+                custom_parallel_started
+            } else {
+                Instant::now()
+            };
+            let custom_result = if let Some(task) = custom_task {
+                task.join()
+                    .map_err(|_| "custom rule evaluation worker panicked".to_string())?
+            } else {
+                match cached_custom {
+                    Some(custom) => Ok(custom),
+                    None => evaluate_custom_rules_cached(CustomRulesCacheRequest {
+                        request: &request,
+                        selected: &selected_by_code,
+                        cache: cache.as_ref(),
+                        project_fingerprint: project_fingerprint.as_deref(),
+                    }),
+                }
+            };
+            let custom = match custom_result {
+                Ok(value) => value,
+                Err(error) if error == CUSTOM_HOST_REQUIRED_ERROR => {
+                    return Err(format!("{error} [native_cache_misses={cache_misses}]"));
+                }
+                Err(error) => return Err(error),
+            };
+            cache_hits += custom.hits;
+            cache_misses += custom.misses;
+            raw_faults.extend(custom.faults);
+            let custom_ms = custom_probe_ms + custom_started.elapsed().as_millis() as u64;
+            Ok::<_, String>((raw_faults, cache_hits, cache_misses, built_in_ms, custom_ms))
+        })?;
     validate_exception_paths(&request)?;
     let faults = suppress_faults(&request, &selected, raw_faults)?;
     serde_json::to_string(&EvaluateResponse {
         version: API_VERSION,
         faults,
-        evaluated_models: models.len(),
+        evaluated_models: request.models.len(),
         cache_hits,
         cache_misses,
         ruleset_fingerprint,
@@ -202,6 +338,18 @@ struct CustomEvaluation {
     faults: Vec<Fault>,
     hits: usize,
     misses: usize,
+}
+
+fn probe_custom_rules_cache(
+    request: CustomRulesCacheRequest<'_>,
+) -> Result<(Option<CustomEvaluation>, u64), String> {
+    let started = Instant::now();
+    let cached = if request.request.custom_host.is_none() {
+        Some(evaluate_custom_rules_cached(request)?)
+    } else {
+        None
+    };
+    Ok((cached, started.elapsed().as_millis() as u64))
 }
 
 type LocalRuleMiss<'a> = (

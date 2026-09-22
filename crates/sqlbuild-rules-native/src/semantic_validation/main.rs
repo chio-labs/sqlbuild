@@ -22,6 +22,15 @@ struct ValidationRequest {
     options: SchemaValidationOptions,
 }
 
+#[derive(Debug)]
+pub(crate) struct ParsedValidationRequest<'a> {
+    pub(crate) sql: &'a str,
+    pub(crate) dialect: DialectType,
+    pub(crate) schema: &'a ValidationSchema,
+    pub(crate) result: ValidationResult,
+    pub(crate) expression: Option<&'a Expression>,
+}
+
 struct ClauseResolver<'a, 'b> {
     scope: &'a polyglot_sql::Scope,
     resolver: Resolver<'b>,
@@ -67,12 +76,18 @@ fn validation_result(request: ValidationRequest) -> Result<ValidationResult, Str
         &request.schema,
         &request.options,
     );
-    if result.valid {
+    if result.valid && may_have_extra_clause_checks(&request.sql) {
         let statements = Dialect::get(dialect)
             .parse(&request.sql)
             .map_err(|error| error.to_string())?;
         let schema = mapping_schema_from_validation_schema_with_dialect(&request.schema, dialect);
         for statement in statements {
+            if !statement.dfs().any(|expression| {
+                matches!(expression, Expression::Select(select)
+                    if select.qualify.is_some() || select.joins.iter().any(|join| !join.using.is_empty()))
+            }) {
+                continue;
+            }
             let scope = build_scope(&statement);
             result
                 .errors
@@ -83,6 +98,51 @@ fn validation_result(request: ValidationRequest) -> Result<ValidationResult, Str
             .iter()
             .any(|error| error.severity == polyglot_sql::ValidationSeverity::Error);
     }
+    Ok(result)
+}
+
+fn may_have_extra_clause_checks(sql: &str) -> bool {
+    sql.as_bytes()
+        .windows(5)
+        .any(|word| word.eq_ignore_ascii_case(b"using"))
+        || sql
+            .as_bytes()
+            .windows(7)
+            .any(|word| word.eq_ignore_ascii_case(b"qualify"))
+}
+
+pub(crate) fn complete_parsed_validation(
+    request: ParsedValidationRequest<'_>,
+) -> Result<ValidationResult, String> {
+    let ParsedValidationRequest {
+        sql,
+        dialect,
+        schema,
+        mut result,
+        expression,
+    } = request;
+    if !result.valid || !may_have_extra_clause_checks(sql) {
+        return Ok(result);
+    }
+    let mapping = mapping_schema_from_validation_schema_with_dialect(schema, dialect);
+    if let Some(expression) = expression {
+        result
+            .errors
+            .extend(missing_clause_columns(&build_scope(expression), &mapping));
+    } else {
+        for expression in Dialect::get(dialect)
+            .parse(sql)
+            .map_err(|error| error.to_string())?
+        {
+            result
+                .errors
+                .extend(missing_clause_columns(&build_scope(&expression), &mapping));
+        }
+    }
+    result.valid = !result
+        .errors
+        .iter()
+        .any(|error| error.severity == polyglot_sql::ValidationSeverity::Error);
     Ok(result)
 }
 

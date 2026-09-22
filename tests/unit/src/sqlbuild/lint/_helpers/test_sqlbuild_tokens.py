@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+import sqlbuild._native as _native
 from sqlbuild.lint._helpers.sqlbuild_tokens import (
     map_neutralized_offset,
     neutralize_interpolation,
@@ -149,6 +150,12 @@ def test_given_body_when_neutralizing_then_sentinels_replace_interpolation(
     neutralized, sites = neutralize_interpolation(body=test_case.body)
     assert neutralized == test_case.expected_neutralized
     assert tuple(site.original_text for site in sites) == test_case.expected_original_texts
+    native: tuple[str, list[tuple[str, int, int, int, int, str]], list[str]] | None = (
+        _native.prepare_lint_sql(test_case.body, test_case.body, [])
+    )
+    assert native is not None
+    assert native[0] == test_case.expected_neutralized
+    assert tuple(InterpolationSite(*site) for site in native[1]) == sites
 
 
 @pytest.mark.parametrize(

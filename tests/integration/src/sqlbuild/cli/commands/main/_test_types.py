@@ -6,6 +6,36 @@ from sqlbuild.compiler.planner.models import CursorOverrides
 
 
 @dataclass(frozen=True)
+class NativeCompilerModeTestCase:
+    """Compiler implementation exercised by a shared semantic regression."""
+
+    description: str
+    flags: tuple[str, ...]
+    expected_edge_count: int
+
+
+@dataclass(frozen=True)
+class DerivedNativeCompileTestCase:
+    """Expected compiled and executed output from the native query graph."""
+
+    description: str
+    query_sql: str
+    expected_exit_code: int
+    expected_diagnostics: tuple[str, ...]
+    expected_rows: tuple[tuple[int, ...], ...]
+
+
+@dataclass(frozen=True)
+class CombinedCompilationTestCase:
+    """Expected CLI behavior for schema-bound CTE compilation."""
+
+    description: str
+    projection: str
+    expected_exit_code: int
+    expected_diagnostics: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class RulesIntegrationTestCase:
     """One compiler-integrated Rules command expectation."""
 

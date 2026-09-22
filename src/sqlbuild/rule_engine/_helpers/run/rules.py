@@ -195,6 +195,7 @@ def _run_sql_rules(
             config=LintConfig(dialect=dialect, enabled_native_rules=codes),
             selected_paths=frozenset(selected_paths),
             discovered_inputs=discovered_inputs,
+            compiled_expansions=project.sql_expansions,
             dynamic_output_paths=frozenset(
                 (project_dir / model.relative_path).resolve()
                 for model in models_by_path.values()

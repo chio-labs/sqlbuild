@@ -1,8 +1,12 @@
-use crate::query_analysis::main::{analyze_json, analyze_project_json};
+use crate::query_analysis::main::analyze::analyze_json;
+use crate::query_analysis::main::analyze_project::analyze_project_json;
 use crate::query_analysis::tests::helpers::{
+    borrowed_facts_preserve_union_dependencies_and_join_nullability,
     canonical_queries_reuse_semantics_and_project_resources,
+    combined_queries_preserve_standalone_binding,
     compact_project_query_interns_repeated_lineage_strings,
     interleaved_query_templates_preserve_template_order,
+    native_compatibility_types_preserve_result_semantics,
     repeated_project_facts_intern_complete_facts,
     widening_aggregates_require_compatibility_recovery,
 };
@@ -14,6 +18,21 @@ use serde_json::{Value, json};
 #[test]
 fn given_compact_query_cases_when_analyzing_projects_then_expected_behavior_holds() {
     let test_cases = [
+        CompactQueryAnalysisTestCase {
+            description: "borrowed output graph preserves union dependencies and outer-join nullability",
+            run: borrowed_facts_preserve_union_dependencies_and_join_nullability,
+            expected_success: true,
+        },
+        CompactQueryAnalysisTestCase {
+            description: "borrowed native type evaluation preserves expression result semantics",
+            run: native_compatibility_types_preserve_result_semantics,
+            expected_success: true,
+        },
+        CompactQueryAnalysisTestCase {
+            description: "combined compilation preserves standalone analysis and binding",
+            run: combined_queries_preserve_standalone_binding,
+            expected_success: true,
+        },
         CompactQueryAnalysisTestCase {
             description: "widening aggregates preserve compatibility recovery",
             run: widening_aggregates_require_compatibility_recovery,
@@ -54,6 +73,30 @@ fn given_compact_query_cases_when_analyzing_projects_then_expected_behavior_hold
 #[test]
 fn given_query_analysis_cases_when_analyzing_batch_then_returns_expected_facts() {
     let test_cases = [
+        QueryAnalysisTestCase {
+            description: "cast output retains both named union branches",
+            request: json!({"requests": [{
+                "sql": "WITH combined AS (SELECT order_id FROM orders UNION ALL BY NAME SELECT customer_id AS order_id FROM customers), typed AS (SELECT CAST(order_id AS BIGINT) AS order_id FROM combined) SELECT order_id FROM typed",
+                "dialect": "snowflake", "recoverCteFacts": true,
+                "references": {
+                    "orders": {"resourceType": "model", "resourceName": "orders"},
+                    "customers": {"resourceType": "model", "resourceName": "customers"}
+                }
+            }]}),
+            analyze: analyze_project_json,
+            expected_length: 1,
+            expected_values: vec![
+                QueryAnalysisExpectedValue {
+                    pointer: "/0/analysis/lineageColumns/0/upstreamColumns/0/resourceName",
+                    value: "customers",
+                },
+                QueryAnalysisExpectedValue {
+                    pointer: "/0/analysis/lineageColumns/0/upstreamColumns/1/resourceName",
+                    value: "orders",
+                },
+            ],
+            expected_nonempty_strings: vec![],
+        },
         QueryAnalysisTestCase {
             description: "CTE comparisons preserve Boolean result types",
             request: json!({"requests": [{

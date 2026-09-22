@@ -20,6 +20,13 @@ from sqlbuild.sql_values.models import SqlValue
 
 
 @dataclass(frozen=True)
+class ExperimentalAnalysisCacheTestCase:
+    description: str
+    flag: str
+    expected_bypasses: int
+
+
+@dataclass(frozen=True)
 class UnexpectedAnalysisFailureTestCase:
     description: str
     expected_error: str

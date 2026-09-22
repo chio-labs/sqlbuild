@@ -5,6 +5,12 @@ pub(crate) struct LintTestCase {
     pub expected_anchors: &'static [(&'static str, &'static str)],
 }
 
+pub(crate) struct BatchLintTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) queries: &'static [&'static str],
+    pub(crate) expected_responses: usize,
+}
+
 pub(crate) struct LintMetadataTestCase {
     pub description: &'static str,
     pub sql: &'static str,

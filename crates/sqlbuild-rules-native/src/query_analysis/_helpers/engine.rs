@@ -1,9 +1,10 @@
 //! Coarse, bounded native batch boundary for compact SQL query analysis.
 
+use polyglot_sql::ExpressionWalk;
 use polyglot_sql::{
     AnalyzeQueryOptions, DialectType, ProjectionNullability, QueryAnalysis, QueryShape,
-    ReferenceConfidence, TransformKind, ValidationSchema, analyze_query,
-    analyze_query_for_project_projections,
+    ReferenceConfidence, SchemaValidationOptions, TransformKind, ValidationResult,
+    ValidationSchema, analyze_query, analyze_query_for_project_projections,
 };
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
@@ -29,6 +30,8 @@ struct AnalysisRequest {
     dialect: String,
     #[serde(default)]
     schema: Option<ValidationSchema>,
+    #[serde(default)]
+    binding_schema: Option<ValidationSchema>,
 }
 
 #[derive(Debug, Serialize)]
@@ -140,6 +143,11 @@ struct CompactQueryWork {
     query: AnalysisRequest,
     project_projections: bool,
     projections: Vec<(usize, ProjectAnalysisProjection)>,
+}
+
+struct CompiledQueryWorkResult {
+    projections: Vec<(usize, Result<ProjectAnalysis, String>)>,
+    validation: Option<Result<ValidationResult, String>>,
 }
 
 struct ProjectAnalysisProjectionResult {
@@ -322,38 +330,299 @@ pub(crate) fn analyze_project_compact_json(request_json: &str) -> Result<String,
         )
         .collect();
     let mut accumulator = CompactProjectAccumulator::new(unique_projection_count);
-    let analysis_groups: Vec<Vec<(usize, Result<ProjectAnalysis, String>)>> = pool.install(|| {
+    let analysis_groups: Vec<CompiledQueryWorkResult> = pool.install(|| {
         query_work
             .into_par_iter()
             .map(analyze_compact_query_work)
             .collect()
     });
-    for (projection_index, analysis) in analysis_groups.into_iter().flatten() {
-        accumulator.compact_analysis(projection_index, analysis)?;
+    let mut validations = Vec::with_capacity(unique_query_count);
+    for group in analysis_groups {
+        validations.push(group.validation.transpose()?);
+        for (projection_index, analysis) in group.projections {
+            accumulator.compact_analysis(projection_index, analysis)?;
+        }
     }
-    serde_json::to_string(&accumulator.finish(
+    let mut response = accumulator.finish(
         projection_results,
         unique_query_count,
         unique_projection_count,
-    )?)
-    .map_err(|error| error.to_string())
+    )?;
+    if validations.iter().any(Option::is_some) {
+        response.validations = Some(validations);
+    }
+    serde_json::to_string(&response).map_err(|error| error.to_string())
 }
 
-fn analyze_compact_query_work(
+fn analyze_compact_query_work(work: CompactQueryWork) -> CompiledQueryWorkResult {
+    let work = if std::env::var_os("SQLBUILD_EXPERIMENT_FOLDED_COMPILER").is_some() {
+        match experimental_folded_query(work) {
+            Ok(result) => return result,
+            Err(work) => *work,
+        }
+    } else {
+        work
+    };
+    let compatibility_enabled = std::env::var_os("SQLBUILD_EXPERIMENT_NATIVE_TYPES").is_some();
+    let schema = compatibility_enabled
+        .then(|| work.query.schema.clone())
+        .flatten();
+    let dialect = work.query.dialect.parse().unwrap_or(DialectType::Generic);
+    let (query_result, validation, expression) =
+        compile_query(work.query, work.project_projections);
+    CompiledQueryWorkResult {
+        projections: project_query_templates(
+            &query_result,
+            work.projections,
+            compatibility_enabled.then_some(CompatibilityTypeInputs {
+                expression: expression.as_ref(),
+                schema: schema.as_ref(),
+                dialect,
+            }),
+        ),
+        validation,
+    }
+}
+
+/// Experimental borrowed evaluation; semantic differential verification is incomplete.
+fn experimental_folded_query(
     work: CompactQueryWork,
-) -> Vec<(usize, Result<ProjectAnalysis, String>)> {
-    let query_result = query_analysis(work.query, work.project_projections);
-    project_query_templates(&query_result, work.projections)
+) -> Result<CompiledQueryWorkResult, Box<CompactQueryWork>> {
+    let Ok(dialect) = work.query.dialect.parse::<DialectType>() else {
+        return Err(Box::new(work));
+    };
+    let Ok(mut statements) = polyglot_sql::parse_with_options(
+        &work.query.sql,
+        dialect,
+        &polyglot_sql::ParseOptions {
+            complexity_guard: Some(polyglot_sql::ComplexityGuardOptions {
+                max_function_call_depth: Some(128),
+                ..Default::default()
+            }),
+        },
+    ) else {
+        return Err(Box::new(work));
+    };
+    if statements.len() != 1 {
+        return Err(Box::new(work));
+    }
+    let Some(mut expression) = statements.pop() else {
+        return Err(Box::new(work));
+    };
+    if !matches!(
+        expression,
+        polyglot_sql::Expression::Select(_)
+            | polyglot_sql::Expression::Union(_)
+            | polyglot_sql::Expression::Intersect(_)
+            | polyglot_sql::Expression::Except(_)
+    ) {
+        return Err(Box::new(work));
+    }
+    if expression.dfs().any(|node| {
+        matches!(
+            node,
+            polyglot_sql::Expression::Pivot(_) | polyglot_sql::Expression::Unpivot(_)
+        )
+    }) {
+        return Err(Box::new(work));
+    }
+    if expression.dfs().any(|node| {
+        matches!(node, polyglot_sql::Expression::Select(select)
+        if select.expressions.iter().any(|projection| projection.dfs().any(|child| matches!(child,
+            polyglot_sql::Expression::Select(_) | polyglot_sql::Expression::Union(_)
+            | polyglot_sql::Expression::Intersect(_) | polyglot_sql::Expression::Except(_)))))
+    }) {
+        return Err(Box::new(work));
+    }
+    let has_star = matches!(&expression, polyglot_sql::Expression::Select(select)
+        if select.expressions.iter().any(|projection| matches!(projection, polyglot_sql::Expression::Star(_))));
+    let validation = work.query.binding_schema.as_ref().map(|schema| {
+        let result = polyglot_sql::validation::validate_parsed_with_schema(
+            vec![expression.clone()],
+            dialect,
+            schema,
+            &SchemaValidationOptions {
+                check_types: false,
+                check_references: true,
+                strict: Some(true),
+                semantic: false,
+                strict_syntax: false,
+                ..Default::default()
+            },
+        );
+        crate::semantic_validation::main::complete_parsed_validation(
+            crate::semantic_validation::main::ParsedValidationRequest {
+                sql: &work.query.sql,
+                dialect,
+                schema,
+                result,
+                expression: Some(&expression),
+            },
+        )
+    });
+    if std::env::var_os("SQLBUILD_EXPERIMENT_FOLDED_INFERENCE").is_some() {
+        let schema = work.query.schema.as_ref().map(|schema| {
+            polyglot_sql::validation::mapping_schema_from_validation_schema_with_dialect(
+                schema, dialect,
+            )
+        });
+        let schema = schema
+            .as_ref()
+            .map(|schema| schema as &dyn polyglot_sql::schema::Schema);
+        polyglot_sql::lineage::expand_cte_stars(&mut expression, schema);
+        polyglot_sql::optimizer::annotate_types::annotate_types(
+            &mut expression,
+            schema,
+            Some(dialect),
+        );
+    }
+    let facts = std::env::var_os("SQLBUILD_EXPERIMENT_FOLDED_FACTS")
+        .map(|_| super::borrowed_facts::infer(&expression, work.query.schema.as_ref(), dialect));
+    let mut projections: Vec<(usize, Result<ProjectAnalysis, String>)> = Vec::new();
+    let mut facts_by_name: HashMap<&str, &super::borrowed_facts::OutputFact> = HashMap::new();
+    for fact in facts.iter().flatten() {
+        facts_by_name.entry(&fact.name).or_insert(fact);
+    }
+    for (index, projection) in work.projections {
+        let mut outputs = super::compatibility_types::infer_outputs(
+            &expression,
+            work.query.schema.as_ref(),
+            &projection.function_return_types,
+            dialect,
+        );
+        if let Some(facts) = &facts {
+            let types: HashMap<_, _> = outputs.into_iter().collect();
+            outputs = facts
+                .iter()
+                .map(|fact| (fact.name.clone(), types.get(&fact.name).cloned().flatten()))
+                .collect();
+        }
+        let columns: Vec<_> = outputs
+            .into_iter()
+            .map(|(name, data_type)| ProjectColumn {
+                nullability: facts_by_name
+                    .get(name.as_str())
+                    .map_or(ProjectNullability::Unknown, |fact| {
+                        project_nullability(fact.nullability)
+                    }),
+                name,
+                data_type: known_compatibility_type(data_type),
+            })
+            .collect();
+        let mut lineage_columns: Vec<ProjectLineageColumn> = Vec::new();
+        for column in &columns {
+            let fact = facts_by_name.get(column.name.as_str());
+            let mut upstream_columns: Vec<ProjectLineageSource> = Vec::new();
+            if let Some(fact) = fact {
+                for (table, source_column) in fact.upstream.iter() {
+                    if let Some(resource) = projection.references.get(table) {
+                        upstream_columns.push(ProjectLineageSource {
+                            resource_type: resource.resource_type.clone(),
+                            resource_name: resource.resource_name.clone(),
+                            column_name: source_column.clone(),
+                        });
+                    }
+                }
+            }
+            let upstream_columns = order_project_sources(upstream_columns);
+            lineage_columns.push(ProjectLineageColumn {
+                output_column: column.name.clone(),
+                transform_kind: fact.map_or(ProjectTransformKind::Direct, |fact| {
+                    project_transform_kind(fact.transform, !upstream_columns.is_empty())
+                }),
+                confidence: fact.map_or(ProjectConfidence::Unknown, |fact| {
+                    if fact.resolved {
+                        ProjectConfidence::High
+                    } else {
+                        ProjectConfidence::Unknown
+                    }
+                }),
+                upstream_columns,
+            });
+        }
+        projections.push((
+            index,
+            Ok(ProjectAnalysis {
+                columns,
+                lineage_columns,
+                has_star,
+                requires_legacy_fallback: false,
+            }),
+        ));
+    }
+    Ok(CompiledQueryWorkResult {
+        projections,
+        validation,
+    })
+}
+
+struct CompatibilityTypeInputs<'a> {
+    expression: Option<&'a polyglot_sql::Expression>,
+    schema: Option<&'a ValidationSchema>,
+    dialect: DialectType,
+}
+
+fn known_compatibility_type(data_type: Option<String>) -> Option<String> {
+    data_type.filter(|value| value != super::compatibility_types::NULL_TYPE)
+}
+
+type CompiledQueryResult = (
+    Result<QueryAnalysis, String>,
+    Option<Result<ValidationResult, String>>,
+    Option<polyglot_sql::Expression>,
+);
+
+fn compile_query(mut request: AnalysisRequest, project_projections: bool) -> CompiledQueryResult {
+    let Some(schema) = request.binding_schema.take() else {
+        return (query_analysis(request, project_projections), None, None);
+    };
+    let dialect: DialectType = match request.dialect.parse() {
+        Ok(dialect) => dialect,
+        Err(_) => return (query_analysis(request, project_projections), None, None),
+    };
+    let compiled = polyglot_sql::compile_required_query_analysis(
+        &request.sql,
+        AnalyzeQueryOptions {
+            complexity_guard: None,
+            dialect,
+            schema: request.schema,
+        },
+        &schema,
+        &SchemaValidationOptions {
+            check_types: false,
+            check_references: true,
+            strict: Some(true),
+            semantic: false,
+            strict_syntax: false,
+            ..Default::default()
+        },
+        project_projections,
+    );
+    let validation = crate::semantic_validation::main::complete_parsed_validation(
+        crate::semantic_validation::main::ParsedValidationRequest {
+            sql: &request.sql,
+            dialect,
+            schema: &schema,
+            result: compiled.validation,
+            expression: compiled.expression.as_ref(),
+        },
+    );
+    (
+        compiled.analysis.map_err(|error| error.to_string()),
+        Some(validation),
+        compiled.expression,
+    )
 }
 
 fn project_query_templates(
     query_result: &Result<QueryAnalysis, String>,
     projections: Vec<(usize, ProjectAnalysisProjection)>,
+    compatibility: Option<CompatibilityTypeInputs<'_>>,
 ) -> Vec<(usize, Result<ProjectAnalysis, String>)> {
     let mut results: Vec<(usize, Result<ProjectAnalysis, String>)> =
         Vec::with_capacity(projections.len());
     for (projection_index, projection) in projections {
-        let projected = match query_result {
+        let mut projected = match query_result {
             Ok(analysis) => Ok(project_analysis(ProjectAnalysisInputs {
                 analysis,
                 references: &projection.references,
@@ -364,6 +633,22 @@ fn project_query_templates(
             })),
             Err(error) => Err(error.clone()),
         };
+        if let Ok(result) = &mut projected
+            && result.requires_legacy_fallback
+            && let Some(inputs) = &compatibility
+            && let Some(expression) = inputs.expression
+        {
+            let types = super::compatibility_types::infer(
+                expression,
+                inputs.schema,
+                &projection.function_return_types,
+                inputs.dialect,
+            );
+            for column in &mut result.columns {
+                column.data_type = types.get(&column.name).cloned();
+            }
+            result.requires_legacy_fallback = false;
+        }
         results.push((projection_index, projected));
     }
     results
@@ -426,6 +711,8 @@ type CompactProjectColumn = (usize, Option<usize>, u8, u8, u8, Vec<(usize, usize
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CompactProjectBatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    validations: Option<Vec<Option<ValidationResult>>>,
     strings: Vec<String>,
     facts: Vec<CompactProjectColumn>,
     templates: Vec<CompactProjectResponse>,
@@ -574,6 +861,7 @@ impl CompactProjectAccumulator {
             return Err("compact project analysis omitted a projection".to_owned());
         };
         Ok(CompactProjectBatch {
+            validations: None,
             strings: self.interner.strings,
             facts: self.facts,
             templates,
@@ -639,16 +927,15 @@ fn project_analysis(inputs: ProjectAnalysisInputs<'_>) -> ProjectAnalysis {
         else {
             continue;
         };
-        let (upstream_columns, confidence) =
-            recovered_projection_lineage(projection, inputs.references, &cte_facts);
+        let (upstream_columns, confidence) = if inputs.analysis.shape == QueryShape::SetOperation {
+            project_upstream_columns(projection, inputs.references)
+        } else {
+            recovered_projection_lineage(projection, inputs.references, &cte_facts)
+        };
         let has_upstream = !upstream_columns.is_empty();
         let transform_kind = project_transform_kind(projection.transform_kind, has_upstream);
-        requires_legacy_fallback |= direct_projection_requires_legacy_fallback(
-            projection,
-            inputs.function_return_types,
-            &cte_facts,
-            inputs.rich_type_inference,
-        );
+        requires_legacy_fallback |=
+            direct_projection_requires_legacy_fallback(projection, &inputs, &cte_facts);
         columns.push(ProjectColumn {
             name: output_column.clone(),
             data_type: recovered_projection_type(
@@ -747,8 +1034,11 @@ fn recovered_cte_facts(
             } else {
                 recovered_projection_nullability(projection, &facts)
             };
-            let (upstream_columns, confidence) =
-                recovered_projection_lineage(projection, references, &facts);
+            let (upstream_columns, confidence) = if cte.shape == Some(QueryShape::SetOperation) {
+                project_upstream_columns(projection, references)
+            } else {
+                recovered_projection_lineage(projection, references, &facts)
+            };
             facts.insert(
                 (cte.name.to_lowercase(), name.to_lowercase()),
                 CteColumnFact {
@@ -835,14 +1125,15 @@ fn projection_cte_source_type(
 
 fn direct_projection_requires_legacy_fallback(
     projection: &polyglot_sql::ProjectionFact,
-    function_return_types: &HashMap<String, String>,
+    inputs: &ProjectAnalysisInputs<'_>,
     cte_facts: &CteColumnFacts,
-    rich_type_inference: bool,
 ) -> bool {
-    if projection.transform_kind == TransformKind::Aggregation && !cte_facts.is_empty() {
+    if projection.transform_kind == TransformKind::Aggregation
+        && !inputs.analysis.cte_facts.is_empty()
+    {
         return true;
     }
-    if rich_type_inference
+    if inputs.rich_type_inference
         || projection.transform_kind != TransformKind::Direct
         || projection.passthrough_source.is_none()
     {
@@ -857,7 +1148,7 @@ fn direct_projection_requires_legacy_fallback(
     if !fact.authoritative_type {
         return true;
     }
-    project_type(projection, function_return_types, true).is_some_and(|root_type| {
+    project_type(projection, inputs.function_return_types, true).is_some_and(|root_type| {
         canonical_project_type(&root_type) != canonical_project_type(fact_type)
     })
 }
@@ -966,8 +1257,10 @@ fn recovered_projection_lineage(
     references: &HashMap<String, LineageResource>,
     cte_facts: &CteColumnFacts,
 ) -> (Vec<ProjectLineageSource>, ProjectConfidence) {
-    if projection.transform_kind == TransformKind::Direct
-        && let Some(fact) = cte_column_fact(projection, cte_facts)
+    if matches!(
+        projection.transform_kind,
+        TransformKind::Direct | TransformKind::Cast
+    ) && let Some(fact) = cte_column_fact(projection, cte_facts)
     {
         return (fact.upstream_columns.clone(), fact.confidence);
     }
@@ -1066,6 +1359,11 @@ fn project_upstream_columns(
             column_name: upstream.column.clone(),
         });
     }
+    let columns = order_project_sources(columns);
+    (columns, confidence)
+}
+
+fn order_project_sources(mut columns: Vec<ProjectLineageSource>) -> Vec<ProjectLineageSource> {
     columns.sort_by(|left, right| {
         (
             left.resource_type.as_str(),
@@ -1078,7 +1376,12 @@ fn project_upstream_columns(
                 right.column_name.as_str(),
             ))
     });
-    (columns, confidence)
+    columns.dedup_by(|left, right| {
+        left.resource_type == right.resource_type
+            && left.resource_name == right.resource_name
+            && left.column_name == right.column_name
+    });
+    columns
 }
 
 fn project_transform_kind(kind: TransformKind, has_upstream: bool) -> ProjectTransformKind {

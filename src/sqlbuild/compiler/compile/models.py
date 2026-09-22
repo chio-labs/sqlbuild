@@ -13,6 +13,7 @@ from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompactBatchResponseCallback,
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -725,6 +726,7 @@ class CompileModelInput:
     macro_deps: tuple[str, ...] = field(default_factory=tuple)
     macro_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
     declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+    sql_expansion: CompiledSqlExpansion | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -1014,6 +1016,9 @@ class CompiledProject:
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
     scope_index: ScopeIndex = field(default_factory=ScopeIndex)
+    sql_expansions: dict[Path, CompiledSqlExpansion] = field(
+        default_factory=dict, compare=False, repr=False
+    )
 
 
 @dataclass(frozen=True)
@@ -1150,6 +1155,15 @@ class ExpansionSpan:
 
 
 @dataclass(frozen=True)
+class CompiledSqlExpansion:
+    """Process-local authored-to-expanded SQL evidence shared with compiler checks."""
+
+    authored_sql: str
+    expanded_sql: str
+    passes: tuple[tuple[ExpansionSpan, ...], ...]
+
+
+@dataclass(frozen=True)
 class MappedOffset:
     """An offset in rendered SQL resolved back onto the text that produced it."""
 
@@ -1232,6 +1246,14 @@ class CompactProjectedFacts:
         tuple[int, int, int, tuple[tuple[int, int, int], ...]],
         ...,
     ]
+
+
+@dataclass(frozen=True)
+class CompactBatchExecutionOptions:
+    """Optional binding work and cache publication for one native batch."""
+
+    binding_schemas: tuple[dict[str, dict[str, str]] | None, ...] | None = None
+    on_response: CompactBatchResponseCallback | None = None
 
 
 @dataclass(frozen=True)

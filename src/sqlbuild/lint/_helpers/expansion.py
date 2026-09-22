@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import sqlbuild._native as _native
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.discovery.main.resolve_adapter import resolve_adapter
 from sqlbuild.compiler.compile.constants import (
@@ -16,7 +17,11 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main.expand_sql_with_spans import expand_sql_with_spans
 from sqlbuild.compiler.compile.main.sql_expansion_context import build_sql_expansion_context
-from sqlbuild.compiler.compile.models import ExpansionSpan, SqlExpansionContext
+from sqlbuild.compiler.compile.models import (
+    CompiledSqlExpansion,
+    ExpansionSpan,
+    SqlExpansionContext,
+)
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -133,6 +138,7 @@ def prepare_lint_body(
     external_identifiers: tuple[str, ...] = (),
     allows_ceremonial_select: bool = False,
     allows_dynamic_output_star: bool = False,
+    compiled_expansion: CompiledSqlExpansion | None = None,
 ) -> LintBody:
     """Expand one authored body and neutralize whatever interpolation remains."""
 
@@ -149,6 +155,15 @@ def prepare_lint_body(
     expansion_passes: tuple[tuple[ExpansionSpan, ...], ...]
     try:
         if (
+            compiled_expansion is not None
+            and authored_body.strip() == compiled_expansion.authored_sql
+        ):
+            body_start += len(authored_body) - len(authored_body.lstrip())
+            body_end = body_start + len(compiled_expansion.authored_sql)
+            expansion_input = compiled_expansion.authored_sql
+            expanded = compiled_expansion.expanded_sql
+            expansion_passes = compiled_expansion.passes
+        elif (
             MACRO_TOKEN not in expansion_input
             and TEMPLATE_INTERPOLATION_START not in expansion_input
         ):
@@ -164,17 +179,27 @@ def prepare_lint_body(
         ) from error
     neutralized: str
     sites: tuple[InterpolationSite, ...]
-    neutralized, sites = neutralize_interpolation(body=expanded)
+    native_prepared: tuple[str, list[tuple[str, int, int, int, int, str]], list[str]] | None = (
+        _native.prepare_lint_sql(
+            expanded, expansion_input, [site.neutralized_start for site in pre_expansion_sites]
+        )
+    )
+    if native_prepared is None:
+        neutralized, sites = neutralize_interpolation(body=expanded)
+        externally_referenced_ctes: tuple[str, ...] = _externally_referenced_ctes(
+            expanded=expanded,
+            interpolation_sites=sites,
+            pre_expansion_body=expansion_input,
+            pre_expansion_sites=pre_expansion_sites,
+        )
+    else:
+        neutralized = native_prepared[0]
+        sites = tuple(InterpolationSite(*site) for site in native_prepared[1])
+        externally_referenced_ctes = tuple(native_prepared[2])
     dependency_identifiers: tuple[str, ...] = tuple(
         site.sentinel
         for site in sites
         if _DEPENDENCY_INTRINSIC_PATTERN.match(site.original_text) is not None
-    )
-    externally_referenced_ctes: tuple[str, ...] = _externally_referenced_ctes(
-        expanded=expanded,
-        interpolation_sites=sites,
-        pre_expansion_body=expansion_input,
-        pre_expansion_sites=pre_expansion_sites,
     )
     return LintBody(
         file_path=file_path,

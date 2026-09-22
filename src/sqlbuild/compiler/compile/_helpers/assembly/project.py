@@ -82,6 +82,7 @@ from sqlbuild.compiler.compile.models import (
     CompactAnalysisCacheCandidate,
     CompactAnalysisCacheModel,
     CompactAnalysisCachePlan,
+    CompactBatchExecutionOptions,
     CompactBatchPreparation,
     CompileAuditInput,
     CompiledAudit,
@@ -271,6 +272,11 @@ def assemble_compiled_project(
         run_id=inputs.run_id,
     )
     return CompiledProject(
+        sql_expansions={
+            model_input.model_file.file_path: model_input.sql_expansion
+            for model_input in inputs.model_inputs
+            if model_input.sql_expansion is not None
+        },
         run_id=inputs.run_id,
         effective_target_name=inputs.effective_target_name,
         effective_connection=inputs.effective_connection,
@@ -861,9 +867,6 @@ def _analyze_model_sql_requests(
             batch_requests: tuple[tuple[int, _ModelSqlAnalysisRequest], ...] = (
                 tuple(enumerate(requests)) if cached_compact_batch is not None else uncached
             )
-            validation_indices: tuple[int, ...] = tuple(
-                index for index, request in uncached if request.binding_schema is not None
-            )
             prepared: tuple[NativeCompactAnalysis, ...] = (
                 analyze_queries_with_compact_polyglot_batch(
                     query_sqls=tuple(request.query_sql for _, request in batch_requests),
@@ -880,12 +883,25 @@ def _analyze_model_sql_requests(
                     ),
                     rich_type_inference=rich_type_inference,
                     cached_batch=cached_compact_batch,
-                    on_response=(on_compact_response if len(uncached) == len(requests) else None),
+                    execution=CompactBatchExecutionOptions(
+                        on_response=(
+                            on_compact_response if len(uncached) == len(requests) else None
+                        ),
+                        binding_schemas=tuple(
+                            request.binding_schema for _, request in batch_requests
+                        ),
+                    ),
                 )
             )
             prepared_by_index = {
                 index: value for (index, _), value in zip(batch_requests, prepared, strict=True)
             }
+            validation_indices: tuple[int, ...] = tuple(
+                index
+                for index, request in uncached
+                if request.binding_schema is not None
+                and prepared_by_index[index].binding_diagnostics is None
+            )
             with record_compile_timing("binding_validation_ms"):
                 validation_results: tuple[SqlBindingResult, ...] = get_schema_validations(
                     requests=tuple(
@@ -916,7 +932,9 @@ def _analyze_model_sql_requests(
                 precomputed=(
                     replace(
                         prepared_by_index[index],
-                        binding_diagnostics=diagnostics_by_index.get(index),
+                        binding_diagnostics=diagnostics_by_index.get(
+                            index, prepared_by_index[index].binding_diagnostics
+                        ),
                     )
                     if index in prepared_by_index
                     else None

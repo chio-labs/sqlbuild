@@ -21,14 +21,34 @@ fn value_error(error: impl std::fmt::Display) -> PyErr {
 }
 
 #[pyfunction]
-fn evaluate_json(request_json: &str) -> PyResult<String> {
-    evaluate::evaluate_json(request_json).map_err(value_error)
+fn evaluate_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.detach(|| evaluate::evaluate_json(request_json))
+        .map_err(value_error)
 }
 
 #[pyfunction]
 fn lint_sql_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
     py.detach(|| crate::sql_lint::main::engine::lint_json(request_json))
         .map_err(value_error)
+}
+
+#[pyfunction]
+fn prepare_lint_sql(
+    py: Python<'_>,
+    expanded: &str,
+    before_expansion: &str,
+    prior_sites: Vec<usize>,
+) -> PyResult<Option<crate::sql_lint::types::PreparedSql>> {
+    py.detach(|| {
+        crate::sql_lint::main::preparation::prepare(expanded, before_expansion, &prior_sites)
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
+fn lint_sql_batch_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.detach(|| crate::sql_lint::main::batch_engine::lint_batch_json(request_json))
+        .map_err(pyo3::exceptions::PyValueError::new_err)
 }
 
 #[pyfunction]
@@ -63,20 +83,24 @@ fn analyze_sql_uses_json(py: Python<'_>, request_json: &str) -> PyResult<String>
 
 #[pyfunction]
 fn analyze_queries_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::query_analysis::main::analyze_json(request_json))
+    py.detach(|| crate::query_analysis::main::analyze::analyze_json(request_json))
         .map_err(value_error)
 }
 
 #[pyfunction]
 fn analyze_project_queries_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::query_analysis::main::analyze_project_json(request_json))
+    py.detach(|| crate::query_analysis::main::analyze_project::analyze_project_json(request_json))
         .map_err(value_error)
 }
 
 #[pyfunction]
 fn analyze_project_queries_compact_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::query_analysis::main::analyze_project_compact_json(request_json))
-        .map_err(value_error)
+    py.detach(|| {
+        crate::query_analysis::main::analyze_project_compact::analyze_project_compact_json(
+            request_json,
+        )
+    })
+    .map_err(value_error)
 }
 
 #[pyfunction]
@@ -275,6 +299,8 @@ fn skill_freshness(content: Option<&str>, input_fingerprint: &str) -> String {
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(evaluate_json, module)?)?;
     module.add_function(wrap_pyfunction!(lint_sql_json, module)?)?;
+    module.add_function(wrap_pyfunction!(prepare_lint_sql, module)?)?;
+    module.add_function(wrap_pyfunction!(lint_sql_batch_json, module)?)?;
     module.add_function(wrap_pyfunction!(format_sql_json, module)?)?;
     module.add_function(wrap_pyfunction!(format_sql_batch_json, module)?)?;
     module.add_function(wrap_pyfunction!(schema_validation_json, module)?)?;

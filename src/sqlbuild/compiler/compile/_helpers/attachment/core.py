@@ -87,6 +87,7 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
+    CompiledSqlExpansion,
     CompileModelConfig,
     CompileModelInput,
     CompileSeedInput,
@@ -633,6 +634,15 @@ def _build_model_inputs(
         if header_schema_entry is None:
             model_inputs.append(
                 CompileModelInput(
+                    sql_expansion=(
+                        CompiledSqlExpansion(
+                            authored_sql=model_file.query_sql,
+                            expanded_sql=macro_expansion.sql,
+                            passes=(declaration_expansion.spans, macro_expansion.spans),
+                        )
+                        if var_substituted_sql == model_file.query_sql
+                        else None
+                    ),
                     model_file=model_file,
                     config=model_config,
                     query_sql=expanded_query_sql,
@@ -651,6 +661,15 @@ def _build_model_inputs(
 
         model_inputs.append(
             CompileModelInput(
+                sql_expansion=(
+                    CompiledSqlExpansion(
+                        authored_sql=model_file.query_sql,
+                        expanded_sql=macro_expansion.sql,
+                        passes=(declaration_expansion.spans, macro_expansion.spans),
+                    )
+                    if var_substituted_sql == model_file.query_sql
+                    else None
+                ),
                 model_file=model_file,
                 config=model_config,
                 query_sql=expanded_query_sql,

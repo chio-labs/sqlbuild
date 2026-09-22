@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.compiler.compile.constants import MODEL_DIRECTORY_NAME
-from sqlbuild.compiler.compile.models import SqlExpansionContext
+from sqlbuild.compiler.compile.models import CompiledSqlExpansion, SqlExpansionContext
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.scopes.constants import (
@@ -30,6 +30,7 @@ def run_lint(
     selected_paths: frozenset[Path] | None = None,
     discovered_inputs: DiscoveredProjectInputs | None = None,
     dynamic_output_paths: frozenset[Path] = frozenset(),
+    compiled_expansions: dict[Path, CompiledSqlExpansion] | None = None,
 ) -> LintRunResult:
     """Lint all DSL files in the project without modifying anything."""
 
@@ -75,6 +76,7 @@ def run_lint(
                     context=context,
                     project_dir=project_dir,
                     allows_dynamic_output_star=file_path.resolve() in dynamic_output_paths,
+                    compiled_expansions=compiled_expansions,
                 )
             )
 
@@ -120,8 +122,10 @@ def _prepared_bodies(
     context: SqlExpansionContext,
     project_dir: Path,
     allows_dynamic_output_star: bool,
+    compiled_expansions: dict[Path, CompiledSqlExpansion] | None,
 ) -> tuple[LintBody, ...]:
     bodies: list[LintBody] = []
+    compiled_expansion: CompiledSqlExpansion | None = (compiled_expansions or {}).get(file_path)
     external_identifiers: tuple[str, ...] = external_identifiers_for_headers(
         contents=contents, headers=headers
     )
@@ -147,6 +151,7 @@ def _prepared_bodies(
                 external_identifiers=external_identifiers,
                 allows_ceremonial_select=allows_ceremonial_select,
                 allows_dynamic_output_star=allows_dynamic_output_star,
+                compiled_expansion=compiled_expansion,
             )
         )
     return tuple(bodies)
