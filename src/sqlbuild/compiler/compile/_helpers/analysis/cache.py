@@ -10,6 +10,7 @@ import platform
 import sqlite3
 import time
 from collections import defaultdict, deque
+from collections.abc import Sequence
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from string import hexdigits
@@ -26,13 +27,14 @@ from sqlbuild.compiler.compile.models import (
     CompactAnalysisCacheModel,
     CompactAnalysisCachePlan,
     CompactBatchPreparation,
+    CompactLineageFacts,
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
     CompileSqlReference,
     InferredColumn,
     PolyglotAnalysisResult,
 )
-from sqlbuild.compiler.compile.types import CompactBatchResponseCallback
+from sqlbuild.compiler.compile.types import CompactBatchResponseCallback, CompiledResourceType
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
     ColumnTransformKind,
@@ -44,7 +46,19 @@ from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 
 _ANALYSIS_CACHE_VERSION: int = 10
-_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v12-bound-borrowed-output-graph"
+_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v13-bound-lineage-type-recovery"
+_LINEAGE_COLUMN_VALUE_COUNT: int = 4
+_LINEAGE_SOURCE_VALUE_COUNT: int = 3
+_COMPACT_TRANSFORM_CODES: dict[str, int] = {
+    CompactLineageFacts.transform_kind(code).value: code for code in range(6)
+}
+_COMPACT_CONFIDENCE_CODES: dict[str, int] = {
+    CompactLineageFacts.confidence(code).value: code for code in range(3)
+}
+_RESOURCE_TYPE_VALUES: frozenset[str] = frozenset(item.value for item in CompiledResourceType)
+_NULLABILITY_BY_VALUE: dict[str, InferredNullability] = {
+    item.value: item for item in InferredNullability
+}
 _MAX_CACHE_ENTRY_BYTES: int = 10_000_000
 _SHA256_HEX_LENGTH: int = 64
 _CACHE_ENTRY_SEPARATOR: str = "\n"
@@ -162,7 +176,7 @@ def model_analysis_cache_key(
     }
     if recover_cte_facts:
         payload["recover_cte_facts"] = True
-    return _payload_digest(payload)
+    return _json_value_digest(payload)
 
 
 def compact_analysis_batch_cache_key(
@@ -185,7 +199,7 @@ def compact_analysis_model_reuse_key(
 ) -> str:
     """Return one model key that changes with every transitive model dependency."""
 
-    return _payload_digest(
+    return _json_value_digest(
         {
             "cache_key": cache_key,
             "upstream": upstream_reuse_keys,
@@ -488,6 +502,7 @@ def read_model_analyses(
     analyses: dict[str, PolyglotAnalysisResult] = {}
     signatures: dict[str, str] = {}
     output_signatures_by_key: dict[str, str] = {}
+    sources: _LineageSourceInterner = _LineageSourceInterner()
     try:
         connection_uri: str = f"file:{database_path}?mode=ro"
         with sqlite3.connect(
@@ -548,6 +563,7 @@ def read_model_analyses(
                         _analysis_from_contents(
                             contents=contents,
                             expected_cache_key=cache_key,
+                            sources=sources,
                         )
                     )
                     if cached_result is not None:
@@ -644,7 +660,7 @@ def _expected_dependencies(
 def model_analysis_output_signature(analysis: PolyglotAnalysisResult) -> str:
     """Return the exported column signature relevant to downstream analysis."""
 
-    return _payload_digest(
+    return _json_value_digest(
         {
             "columns": (
                 None
@@ -664,7 +680,10 @@ def model_analysis_output_signature(analysis: PolyglotAnalysisResult) -> str:
 
 
 def _analysis_from_contents(
-    *, contents: object, expected_cache_key: str
+    *,
+    contents: object,
+    expected_cache_key: str,
+    sources: _LineageSourceInterner | None = None,
 ) -> tuple[PolyglotAnalysisResult, str] | None:
     if not isinstance(contents, str):
         return None
@@ -680,9 +699,11 @@ def _analysis_from_contents(
             ),
         ):
             return None
-        payload: object = json.loads(serialized_payload)
-        return _analysis_from_payload(payload=payload, expected_cache_key=expected_cache_key)
-    except (ValueError, TypeError, KeyError, RecursionError, json.JSONDecodeError):
+        payload: object = orjson.loads(serialized_payload)
+        return _analysis_from_payload(
+            payload=payload, expected_cache_key=expected_cache_key, sources=sources
+        )
+    except (ValueError, TypeError, KeyError, RecursionError, orjson.JSONDecodeError):
         return None
 
 
@@ -813,7 +834,10 @@ def _lineage_column_payload(column: CompiledLineageColumnFact) -> list[object]:
 
 
 def _analysis_from_payload(
-    *, payload: object, expected_cache_key: str
+    *,
+    payload: object,
+    expected_cache_key: str,
+    sources: _LineageSourceInterner | None = None,
 ) -> tuple[PolyglotAnalysisResult, str]:
     if not isinstance(payload, dict):
         raise AnalysisCacheEntryError("analysis cache entry must be an object")
@@ -839,9 +863,16 @@ def _analysis_from_payload(
         if columns_payload is None
         else tuple(_column_from_payload(column) for column in _value_lists(columns_payload))
     )
-    lineage_columns: tuple[CompiledLineageColumnFact, ...] = tuple(
-        _lineage_column_from_payload(column) for column in _value_lists(values["l"])
+    lineage_payload: list[list[object]] = _value_lists(values["l"])
+    lineage_columns: Sequence[CompiledLineageColumnFact] | None = _compact_lineage_from_payload(
+        payload=lineage_payload
     )
+    if lineage_columns is None:
+        interner: _LineageSourceInterner = _LineageSourceInterner() if sources is None else sources
+        lineage_columns = tuple(
+            _lineage_column_from_payload(payload=column, sources=interner)
+            for column in lineage_payload
+        )
     has_star: object = values["h"]
     if not isinstance(has_star, bool):
         raise AnalysisCacheEntryError("analysis cache has_star must be a boolean")
@@ -904,11 +935,93 @@ def _column_from_payload(payload: list[object]) -> InferredColumn:
     return InferredColumn(
         name=name,
         type=column_type,
-        nullability=InferredNullability(nullability),
+        nullability=_NULLABILITY_BY_VALUE.get(nullability) or InferredNullability(nullability),
     )
 
 
-def _lineage_column_from_payload(payload: list[object]) -> CompiledLineageColumnFact:
+def _compact_lineage_from_payload(*, payload: list[list[object]]) -> CompactLineageFacts | None:
+    """Validate cached lineage into lazy indexed rows; None means use the eager decoder."""
+
+    pool: dict[str, int] = {}
+    rows: list[tuple[int, int, int, tuple[tuple[int, int, int], ...]]] = []
+    column: list[object]
+    for column in payload:
+        if len(column) != _LINEAGE_COLUMN_VALUE_COUNT:
+            raise AnalysisCacheEntryError("analysis cache lineage column must contain four values")
+        output_column, transform_kind, confidence, upstream_columns = column
+        if not (
+            type(output_column) is str and type(transform_kind) is str and type(confidence) is str
+        ):
+            raise AnalysisCacheEntryError("analysis cache lineage attributes must be strings")
+        transform_code: int | None = _COMPACT_TRANSFORM_CODES.get(transform_kind)
+        confidence_code: int | None = _COMPACT_CONFIDENCE_CODES.get(confidence)
+        if transform_code is None or confidence_code is None:
+            return None
+        if type(upstream_columns) is not list:
+            raise AnalysisCacheEntryError("analysis cache collection must contain arrays")
+        source_rows: list[tuple[int, int, int]] = []
+        source: object
+        for source in upstream_columns:
+            if not (
+                type(source) is list
+                and len(source) == _LINEAGE_SOURCE_VALUE_COUNT
+                and type(source[0]) is str
+                and type(source[1]) is str
+                and type(source[2]) is str
+            ):
+                raise AnalysisCacheEntryError(
+                    "analysis cache lineage source must contain three strings"
+                )
+            if source[0] not in _RESOURCE_TYPE_VALUES:
+                raise AnalysisCacheEntryError("analysis cache lineage resource type is invalid")
+            source_rows.append(
+                (
+                    pool.setdefault(source[0], len(pool)),
+                    pool.setdefault(source[1], len(pool)),
+                    pool.setdefault(source[2], len(pool)),
+                )
+            )
+        rows.append(
+            (
+                pool.setdefault(output_column, len(pool)),
+                transform_code,
+                confidence_code,
+                tuple(source_rows),
+            )
+        )
+    return CompactLineageFacts(string_pool=tuple(pool), rows=tuple(rows))
+
+
+class _LineageSourceInterner:
+    """Share identical immutable lineage source facts across one cache read."""
+
+    def __init__(self) -> None:
+        self._facts: dict[tuple[str, str, str], CompiledLineageSourceFact] = {}
+
+    def decode(self, *, payload: list[object]) -> CompiledLineageSourceFact:
+        source_value_count: int = 3
+        if len(payload) != source_value_count or not all(
+            isinstance(value, str) for value in payload
+        ):
+            raise AnalysisCacheEntryError(
+                "analysis cache lineage source must contain three strings"
+            )
+        resource_type, resource_name, column_name = cast(list[str], payload)
+        key: tuple[str, str, str] = (resource_type, resource_name, column_name)
+        fact: CompiledLineageSourceFact | None = self._facts.get(key)
+        if fact is None:
+            fact = CompiledLineageSourceFact(
+                resource_type=resource_type,
+                resource_name=resource_name,
+                column_name=column_name,
+            )
+            self._facts[key] = fact
+        return fact
+
+
+def _lineage_column_from_payload(
+    *, payload: list[object], sources: _LineageSourceInterner
+) -> CompiledLineageColumnFact:
     lineage_value_count: int = 4
     if len(payload) != lineage_value_count:
         raise AnalysisCacheEntryError("analysis cache lineage column must contain four values")
@@ -920,20 +1033,8 @@ def _lineage_column_from_payload(payload: list[object]) -> CompiledLineageColumn
         transform_kind=ColumnTransformKind(cast(str, transform_kind)),
         confidence=ColumnLineageConfidence(cast(str, confidence)),
         upstream_columns=tuple(
-            _lineage_source_from_payload(source) for source in _value_lists(upstream_columns)
+            sources.decode(payload=source) for source in _value_lists(upstream_columns)
         ),
-    )
-
-
-def _lineage_source_from_payload(payload: list[object]) -> CompiledLineageSourceFact:
-    source_value_count: int = 3
-    if len(payload) != source_value_count or not all(isinstance(value, str) for value in payload):
-        raise AnalysisCacheEntryError("analysis cache lineage source must contain three strings")
-    resource_type, resource_name, column_name = cast(list[str], payload)
-    return CompiledLineageSourceFact(
-        resource_type=resource_type,
-        resource_name=resource_name,
-        column_name=column_name,
     )
 
 
@@ -969,6 +1070,12 @@ def _payload_digest(payload: object) -> str:
         sort_keys=True,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _json_value_digest(payload: dict[str, object]) -> str:
+    """Digest string-keyed JSON scalars exactly as _payload_digest does, via orjson."""
+
+    return hashlib.sha256(orjson.dumps(payload, option=orjson.OPT_SORT_KEYS)).hexdigest()
 
 
 def _package_version(package: str) -> str:

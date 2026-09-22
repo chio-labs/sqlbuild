@@ -22,17 +22,25 @@ from sqlbuild.compiler.compile.constants import COMPILE_CACHE_DISABLE_ENV_VAR
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
+    CompactLineageFacts,
     CompileAnalysisSelection,
+    CompiledLineageColumnFact,
+    CompiledLineageSourceFact,
     CompiledModel,
     CompiledProject,
     CompileSqlReference,
     PolyglotAnalysisResult,
 )
-from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.compiler.lineage.types import (
+    ColumnLineageConfidence,
+    ColumnTransformKind,
+    InferredNullability,
+)
 from sqlbuild.compiler.profiling.main.collect import collect_compile_timings
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     AnalysisCacheTestCase,
+    CachedLineageRoundTripTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     compile_project_with_cache,
@@ -460,6 +468,101 @@ def test_given_unsuccessful_analysis_when_writing_then_reuses_deterministic_resu
 
     assert len(analyses) == test_case.expected_count
     assert analyses[cache_key].analysis_succeeded is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CachedLineageRoundTripTestCase(
+            description="indexed lineage decodes lazily",
+            transform_kind=ColumnTransformKind.CAST,
+            confidence=ColumnLineageConfidence.HIGH,
+            expected_compact=True,
+        ),
+        CachedLineageRoundTripTestCase(
+            description="unindexed lineage values decode eagerly",
+            transform_kind=ColumnTransformKind.UNKNOWN,
+            confidence=ColumnLineageConfidence.LOW,
+            expected_compact=False,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_cached_lineage_when_reading_then_facts_round_trip_exactly(
+    test_case: CachedLineageRoundTripTestCase,
+    tmp_path: Path,
+) -> None:
+    cache_key: str = "b" * 64
+    context: AnalysisCacheContext = AnalysisCacheContext(root=tmp_path, shared_fingerprint="shared")
+    shared_source: CompiledLineageSourceFact = CompiledLineageSourceFact(
+        resource_type="source", resource_name="raw_orders", column_name="order_id"
+    )
+    analysis: PolyglotAnalysisResult = PolyglotAnalysisResult(
+        analysis_succeeded=True,
+        lineage_columns=(
+            CompiledLineageColumnFact(
+                output_column="order_id",
+                upstream_columns=(shared_source,),
+                transform_kind=test_case.transform_kind,
+                confidence=test_case.confidence,
+            ),
+            CompiledLineageColumnFact(
+                output_column="order_key",
+                upstream_columns=(
+                    shared_source,
+                    CompiledLineageSourceFact(
+                        resource_type="model", resource_name="orders", column_name="order_key"
+                    ),
+                ),
+                transform_kind=ColumnTransformKind.EXPRESSION,
+                confidence=ColumnLineageConfidence.MEDIUM,
+            ),
+        ),
+    )
+    write_model_analyses(
+        context=context,
+        analyses_by_key={cache_key: analysis},
+        latest_analyses_by_model={"orders": analysis},
+    )
+
+    analyses, _, _ = read_model_analyses(
+        context=context,
+        cache_keys=(cache_key,),
+        model_names=("orders",),
+        upstream_model_names_by_key={cache_key: ()},
+    )
+
+    assert analyses[cache_key] == analysis
+    assert tuple(analyses[cache_key].lineage_columns) == analysis.lineage_columns
+    assert (
+        isinstance(analyses[cache_key].lineage_columns, CompactLineageFacts)
+        is test_case.expected_compact
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (AnalysisCacheTestCase(description="stable per-model digests", expected_count=1),),
+    ids=lambda case: case.description,
+)
+def test_given_model_payload_when_digesting_then_fast_digest_matches_stable_encoding(
+    test_case: AnalysisCacheTestCase,
+) -> None:
+    payload: dict[str, object] = {
+        "query_sql": "SELECT \"caf\u00e9\" AS name, '\\n\t\x01\u2028' AS note",
+        "references": [{"kind": "ref", "name": "orders", "package": None, "count": 2}],
+        "placeholders": {"b": "2", "a": "1"},
+        "upstream": (("orders", "a" * 64),),
+        "binding_schema": None,
+        "has_star": False,
+    }
+
+    digests: set[str] = {
+        analysis_cache._json_value_digest(payload),
+        analysis_cache._payload_digest(payload),
+    }
+
+    assert len(digests) == test_case.expected_count
 
 
 @pytest.mark.parametrize(

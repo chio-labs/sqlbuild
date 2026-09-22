@@ -164,6 +164,38 @@ pub(crate) fn binding_warnings_preserve_declared_relationship_evidence() -> bool
     true
 }
 
+pub(crate) fn bound_lineage_survives_type_recovery() -> bool {
+    for operator in ["UNION ALL", "UNION ALL BY NAME"] {
+        let response: Value = serde_json::from_str(
+            &analyze_project_compact_json(&json!({
+                "queries": [{
+                    "sql": format!("WITH combined AS (SELECT CAST(amount AS DOUBLE) AS amount FROM orders {operator} SELECT list_extract([amount], 1) AS amount FROM refunds) SELECT amount FROM combined"),
+                    "dialect": "duckdb",
+                    "schema": {"strict": true, "tables": [
+                        {"name": "orders", "columns": [{"name": "amount", "type": "DOUBLE"}]},
+                        {"name": "refunds", "columns": [{"name": "amount", "type": "DOUBLE"}]}
+                    ]}
+                }],
+                "templates": [{"queryIndex": 0, "recoverCteFacts": true, "richTypeInference": false, "references": {
+                    "orders": {"resourceType": "model", "resourceName": "orders"},
+                    "refunds": {"resourceType": "model", "resourceName": "refunds"}
+                }}],
+                "projections": [{"templateIndex": 0}]
+            }).to_string()).expect("query should analyze"),
+        ).expect("response should decode");
+        let index = response["templates"][0][0][0]
+            .as_u64()
+            .expect("successful fact") as usize;
+        let fact = &response["facts"][index];
+        assert_eq!(
+            response["templates"][0][2],
+            "native project type recovery requires legacy fallback"
+        );
+        assert_eq!(fact[5].as_array().expect("upstream columns").len(), 2);
+    }
+    true
+}
+
 pub(crate) fn widening_aggregates_require_compatibility_recovery() -> bool {
     for expression in [
         "AVG(order_id)",

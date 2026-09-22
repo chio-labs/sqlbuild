@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Sequence
 from dataclasses import replace
 from typing import Any, cast
 
@@ -30,6 +31,7 @@ from sqlbuild.compiler.compile._helpers.analysis.cte_facts import (
 )
 from sqlbuild.compiler.compile.constants import (
     COMPACT_ANALYSIS_FACT_LENGTH,
+    COMPACT_ANALYSIS_LEGACY_RESPONSE_LENGTH,
     COMPACT_ANALYSIS_RESPONSE_LENGTH,
     COMPACT_ANALYSIS_SOURCE_LENGTH,
     RESOLVED_SOURCE_CONFIDENCE,
@@ -353,7 +355,7 @@ def analyze_columns_and_lineage_with_polyglot(
             sqlbuild_error=str(error),
         )
         return PolyglotAnalysisResult(analysis_succeeded=False)
-    columns, lineage_columns, has_star = _analyze_columns_and_lineage_from_polyglot_ast(
+    columns, legacy_lineage_columns, has_star = _analyze_columns_and_lineage_from_polyglot_ast(
         parsed=parsed,
         references=references,
         column_nullability_by_table=column_nullability_by_table or {},
@@ -361,6 +363,25 @@ def analyze_columns_and_lineage_with_polyglot(
         inference_profile=profile,
         recover_cte_facts=recover_cte_facts,
     )
+    lineage_columns: Sequence[CompiledLineageColumnFact] = legacy_lineage_columns
+    if precomputed is not None and precomputed.compact_rows is not None:
+        lineage_columns = _compact_projected_analysis_result(
+            request=ProjectedAnalysisRequest(
+                analysis=None,
+                compact_rows=precomputed.compact_rows,
+                compact_fact_rows=precomputed.compact_fact_rows,
+                string_pool=precomputed.string_pool,
+                caches=CompactProjectionCaches(
+                    columns=precomputed.compact_column_cache,
+                    facts=precomputed.compact_fact_cache,
+                    decoded_facts=precomputed.compact_decoded_fact_cache,
+                ),
+                template_index=precomputed.compact_template_index,
+                resource_name_indexes=precomputed.resource_name_indexes,
+                binding_diagnostics=(),
+                binding_validated=False,
+            )
+        ).lineage_columns
     return PolyglotAnalysisResult(
         analysis_succeeded=True,
         columns=columns,
@@ -742,9 +763,14 @@ def _project_compact_analysis_batch(
                     )
                 )
                 continue
+            legacy_type_recovery: bool = (
+                isinstance(template, list)
+                and len(template) == COMPACT_ANALYSIS_LEGACY_RESPONSE_LENGTH
+                and template[2] == _NATIVE_LEGACY_FALLBACK
+            )
             if not (
                 isinstance(template, list)
-                and len(template) == COMPACT_ANALYSIS_RESPONSE_LENGTH
+                and (len(template) == COMPACT_ANALYSIS_RESPONSE_LENGTH or legacy_type_recovery)
                 and isinstance(template[0], list)
                 and isinstance(template[1], bool)
             ):
@@ -776,8 +802,8 @@ def _project_compact_analysis_batch(
             results.append(
                 NativeCompactAnalysis(
                     cleaned_sql=cleaned_sql,
-                    analysis={"hasStar": template[1]},
-                    projected=True,
+                    analysis=None if legacy_type_recovery else {"hasStar": template[1]},
+                    projected=not legacy_type_recovery,
                     compact_rows=cast(list[object], template[0]),
                     compact_fact_rows=cast(list[object], raw_facts),
                     string_pool=string_pool,

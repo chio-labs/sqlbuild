@@ -25,6 +25,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 _GIB: int = 1024 * 1024 * 1024
 _MIB: int = 1024 * 1024
+_MAX_WARM_TO_COLD_RATIO: float = 0.67
 
 
 @pytest.mark.performance
@@ -44,6 +45,7 @@ _MIB: int = 1024 * 1024
             expected_cold_max_wall_seconds=18.0,
             expected_warm_max_wall_seconds=10.0,
             expected_edit_max_wall_seconds=11.0,
+            expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=96 * _MIB,
             expected_cold_fingerprint=(
@@ -71,6 +73,7 @@ _MIB: int = 1024 * 1024
             expected_cold_max_wall_seconds=28.0,
             expected_warm_max_wall_seconds=15.0,
             expected_edit_max_wall_seconds=16.0,
+            expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=160 * _MIB,
             expected_cold_fingerprint=(
@@ -98,6 +101,7 @@ _MIB: int = 1024 * 1024
             expected_cold_max_wall_seconds=50.0,
             expected_warm_max_wall_seconds=28.0,
             expected_edit_max_wall_seconds=30.0,
+            expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=320 * _MIB,
             expected_cold_fingerprint=(
@@ -166,6 +170,10 @@ def test_given_semantic_project_when_compiling_across_processes_then_cache_is_in
         result.after_project_config_edit,
     ):
         assert measurement.elapsed_seconds < test_case.expected_warm_max_wall_seconds
+        assert (
+            measurement.elapsed_seconds / result.cold.elapsed_seconds
+            <= test_case.expected_max_warm_to_cold_ratio
+        )
     for measurement in (result.leaf_edit, result.macro_edit):
         assert measurement.elapsed_seconds < test_case.expected_edit_max_wall_seconds
     assert result.project_config_edit.elapsed_seconds < test_case.expected_cold_max_wall_seconds

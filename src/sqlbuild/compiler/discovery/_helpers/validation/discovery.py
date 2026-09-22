@@ -804,15 +804,6 @@ def _validate_path_defaults_match_models(
         str(model_file.relative_path).replace("\\", "/").removeprefix("models/")
         for model_file in model_files
     )
-    model_folders: tuple[str, ...] = tuple(
-        sorted(
-            {
-                str(Path(model_path).parent)
-                for model_path in model_paths
-                if str(Path(model_path).parent) != CURRENT_DIRECTORY_PATH
-            }
-        )
-    )
     matched_keys: set[str] = set()
     model_path: str
     for model_path in model_paths:
@@ -826,6 +817,15 @@ def _validate_path_defaults_match_models(
     for path_key in path_defaults:
         if path_key in matched_keys:
             continue
+        model_folders: tuple[str, ...] = tuple(
+            sorted(
+                {
+                    str(Path(model_path).parent)
+                    for model_path in model_paths
+                    if str(Path(model_path).parent) != CURRENT_DIRECTORY_PATH
+                }
+            )
+        )
         known_folders: str = ", ".join(model_folders[:5]) if model_folders else "<none>"
         raise DiscoveryConflictError(
             f"path_defaults['{path_key}'] does not match any model paths. Known model folders "

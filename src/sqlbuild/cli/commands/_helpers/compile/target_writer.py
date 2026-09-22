@@ -499,20 +499,20 @@ def _remove_stale_compiled_files(*, target_dir: Path, managed_paths: set[Path]) 
     compiled_dir: Path = target_dir / _COMPILED_DIR
     if not compiled_dir.is_dir():
         return
+    managed_names: set[str] = {os.fspath(path) for path in managed_paths}
     for root, directories, filenames in os.walk(compiled_dir, topdown=False):
-        root_path: Path = Path(root)
         for filename in filenames:
-            path: Path = root_path / filename
-            if path not in managed_paths:
-                path.unlink()
+            path: str = os.path.join(root, filename)
+            if path not in managed_names:
+                os.unlink(path)
         for name in directories:
-            _remove_empty_directory(root_path / name)
+            _remove_empty_directory(os.path.join(root, name))
     _remove_empty_directory(compiled_dir)
 
 
-def _remove_empty_directory(directory: Path) -> None:
+def _remove_empty_directory(directory: str | Path) -> None:
     try:
-        directory.rmdir()
+        os.rmdir(directory)
     except OSError:
         pass
 

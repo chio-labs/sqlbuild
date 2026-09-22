@@ -17,6 +17,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     RulesIntegrationTestCase,
     TypedContractRuleIntegrationTestCase,
 )
+from tests.integration.src.sqlbuild.cli.commands.main.helpers import compile_finding_keys
 
 
 @pytest.mark.parametrize(
@@ -553,6 +554,57 @@ def test_given_selected_sql_rule_when_compiling_then_authored_diagnostic_blocks_
     assert third["compile_timings"]["rule_cache_misses"] == 1
     assert third["diagnostics"] == []
     assert (tmp_path / "target" / "manifest.json").is_file()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulesIntegrationTestCase("warm SQL rules track non-model file edits", 1, "SQBRSQL004")],
+    ids=lambda case: case.description,
+)
+def test_given_cached_sql_test_rules_when_test_or_macro_changes_then_findings_are_current(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["{test_case.expected_code}"]\n',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text('MODEL (description "Orders");\nSELECT 1 AS order_id\n', encoding="utf-8")
+    tests_dir: Path = tmp_path / "tests" / "unit"
+    macro: Path = tests_dir / "_macros" / "row_limit.py"
+    macro.parent.mkdir(parents=True)
+    macro.write_text('def row_limit() -> str:\n    return "LIMIT 1"\n', encoding="utf-8")
+    plain: Path = tests_dir / "test_plain_orders.sql"
+    plain_body: str = (
+        "TEST ();\nWITH\n__ref__orders AS (SELECT 1 AS order_id),\n"
+        "__expected__orders AS (SELECT order_id FROM __ref__orders {limit})\n"
+        "SELECT 1\n"
+    )
+    plain.write_text(plain_body.format(limit="LIMIT 1"), encoding="utf-8")
+    (tests_dir / "test_macro_orders.sql").write_text(
+        plain_body.format(limit="@row_limit()"), encoding="utf-8"
+    )
+    plain_finding: str = f"tests/unit/test_plain_orders.sql:{test_case.expected_code}"
+    macro_finding: str = f"tests/unit/test_macro_orders.sql:{test_case.expected_code}"
+
+    cold: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
+    warm: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
+    plain.write_text(plain_body.format(limit="ORDER BY order_id LIMIT 1"), encoding="utf-8")
+    after_test_edit: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
+    macro.write_text(
+        'def row_limit() -> str:\n    return "ORDER BY order_id LIMIT 1"\n', encoding="utf-8"
+    )
+    after_macro_edit: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
+
+    assert {plain_finding, macro_finding} <= cold
+    assert warm == cold
+    assert plain_finding not in after_test_edit
+    assert macro_finding in after_test_edit
+    assert macro_finding not in after_macro_edit
+    assert (tmp_path / "target" / "rules-cache" / "bulk" / "sql.json").is_file()
 
 
 @pytest.mark.parametrize(

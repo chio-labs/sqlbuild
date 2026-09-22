@@ -10,6 +10,8 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import cast
 
+import orjson
+
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.compile.models import (
     SqlTestArtifactCacheRecord,
@@ -25,7 +27,7 @@ from sqlbuild.compiler.compile.models import (
 )
 
 _CACHE_VERSION: int = 3
-_ALGORITHM_FINGERPRINT: str = "sql-test-artifact-v3-polyglot-scope-fix"
+_ALGORITHM_FINGERPRINT: str = "sql-test-artifact-v4-orjson-identity"
 _CACHE_FILE_NAME: str = "sql-test-artifacts.json"
 _MAX_CACHE_BYTES: int = 10_000_000
 _MAX_CACHE_RECORDS: int = 100_000
@@ -276,8 +278,7 @@ def _is_safe_relative_sql_path(path: Path) -> bool:
 
 
 def _payload_digest(payload: object) -> str:
-    encoded: str = json.dumps(payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    return hashlib.sha256(orjson.dumps(payload, option=orjson.OPT_SORT_KEYS)).hexdigest()
 
 
 def _package_version(package_name: str) -> str:

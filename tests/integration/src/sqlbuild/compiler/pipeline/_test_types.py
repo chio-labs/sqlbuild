@@ -217,3 +217,17 @@ class SnowflakeTargetValidationIntegrationTestCase:
 class ExpectedCountTestCase:
     description: str
     expected_count: int
+
+
+@dataclass(frozen=True)
+class SetOperationTypeIntegrationTestCase:
+    description: str
+    query_sql: str
+    allowed_inferred_types: frozenset[str | None]
+    expected_rows: tuple[tuple[float], ...]
+
+
+@dataclass(frozen=True)
+class SetOperationLineageIntegrationTestCase:
+    description: str
+    expected_sources: frozenset[tuple[str, str]]
