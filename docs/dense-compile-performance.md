@@ -48,6 +48,25 @@ use up to four workers; local resolution views avoid copying CTE definitions
 that are already available through the source catalogue.
 These limits change scheduling, not analysis or fallback semantics.
 
+The compiler reuses borrowed syntax-tree facts when it can prove complete reference
+binding and infer types without consulting mutable type annotations. Unsupported
+clauses, incomplete schemas and unresolved expressions retain the normal validation
+and analysis paths.
+
+For cold projects with at least 128 models, artifact rendering can overlap rule
+evaluation after graph and contract analysis. Rendering uses one background thread
+and a disposable directory outside the project. The normal write phase publishes
+the staged files only after its existing diagnostic gates pass. Unchanged files
+retain their timestamps, stale files are removed using the normal policy, and
+cached compilation keeps its normal artifact-cache path. Temporary-storage failure
+falls back to ordinary artifact writing.
+
+Detailed phase timings can overlap; physical-write time includes any staging work.
+Use whole-process wall time for performance acceptance rather than summing phases.
+Custom rules continue to run in their isolated host. Disabled rules caches avoid
+unused fact fingerprints; enabled caches retain their normal identities and
+invalidation behavior.
+
 This fixture protects dense query analysis, declaration expansion, rules and
 artifact generation. It is not an exact reproduction of every application:
 dynamic plugins, incremental materialization mixes and deeply nested query

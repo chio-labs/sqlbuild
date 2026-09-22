@@ -1,11 +1,12 @@
 //! Immutable CTE output graph over one borrowed syntax tree.
 
+use std::cell::Cell;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::rc::Rc;
 
 use polyglot_sql::expressions::{Column, Join, JoinKind, Select, Star, Values, With};
 use polyglot_sql::{
-    DialectType, Expression, ProjectionNullability, TransformKind, ValidationSchema,
+    DialectType, Expression, ExpressionWalk, ProjectionNullability, TransformKind, ValidationSchema,
 };
 const SQL_WILDCARD: &str = "*";
 
@@ -51,11 +52,56 @@ struct Sources {
 }
 type Aliases = HashMap<String, Option<OutputFact>>;
 
+struct BindingProof {
+    enabled: bool,
+    complete: Cell<bool>,
+    lateral_aliases: bool,
+}
+
+impl BindingProof {
+    fn require(&self, condition: bool) {
+        if self.enabled && !condition {
+            self.complete.set(false);
+        }
+    }
+}
+
 pub(super) fn infer(
     expression: &Expression,
     schema: Option<&ValidationSchema>,
     dialect: DialectType,
 ) -> Vec<OutputFact> {
+    infer_with_binding_proof(expression, schema, dialect, false).0
+}
+
+/// Prove references while deriving facts; an incomplete proof requires normal validation.
+pub(super) fn infer_bound(
+    expression: &Expression,
+    schema: Option<&ValidationSchema>,
+    dialect: DialectType,
+) -> Option<Vec<OutputFact>> {
+    let (outputs, complete) = infer_with_binding_proof(expression, schema, dialect, true);
+    complete.then_some(outputs)
+}
+
+fn infer_with_binding_proof(
+    expression: &Expression,
+    schema: Option<&ValidationSchema>,
+    dialect: DialectType,
+    enabled: bool,
+) -> (Vec<OutputFact>, bool) {
+    let proof = BindingProof {
+        enabled,
+        complete: Cell::new(true),
+        lateral_aliases: matches!(
+            dialect,
+            DialectType::Snowflake
+                | DialectType::DuckDB
+                | DialectType::Redshift
+                | DialectType::Spark
+                | DialectType::Databricks
+        ),
+    };
     let mut relations = Relations::new();
     if let Some(schema) = schema {
         for table in &schema.tables {
@@ -74,32 +120,32 @@ pub(super) fn infer(
                     transform: TransformKind::Direct,
                 })
                 .collect();
-            relations.insert(
+            let previous = relations.insert(
                 table.name.to_lowercase(),
                 Source::new(outputs, Some(table.name.clone())),
             );
+            proof.require(previous.is_none());
         }
     }
-    query(
-        expression,
-        &relations,
-        matches!(
-            dialect,
-            DialectType::Snowflake
-                | DialectType::DuckDB
-                | DialectType::Redshift
-                | DialectType::Spark
-                | DialectType::Databricks
-        ),
-    )
+    let outputs = query(expression, &relations, &proof);
+    (outputs, proof.complete.get())
 }
 
-fn query(expression: &Expression, inherited: &Relations, lateral_aliases: bool) -> Vec<OutputFact> {
+fn query(expression: &Expression, inherited: &Relations, proof: &BindingProof) -> Vec<OutputFact> {
     let expression = unwrapped(expression);
+    proof.require(matches!(
+        expression,
+        Expression::Select(_) | Expression::Subquery(_)
+    ));
     let mut relations = inherited.clone();
     if let Some(with) = query_with(expression) {
+        let mut names: HashSet<String> = HashSet::new();
         for cte in &with.ctes {
-            let mut outputs = query(&cte.this, &relations, lateral_aliases);
+            if proof.enabled {
+                proof.require(!with.recursive && names.insert(cte.alias.name.to_lowercase()));
+            }
+            let mut outputs = query(&cte.this, &relations, proof);
+            proof.require(cte.columns.len() <= outputs.len());
             for (output, alias) in outputs.iter_mut().zip(&cte.columns) {
                 output.name = alias.name.clone();
             }
@@ -107,25 +153,32 @@ fn query(expression: &Expression, inherited: &Relations, lateral_aliases: bool) 
         }
     }
     match expression {
-        Expression::Select(select) => select_outputs(select, &relations, lateral_aliases),
-        Expression::Values(values) => values_outputs(values),
+        Expression::Select(select) => select_outputs(select, &relations, proof),
+        Expression::Values(values) => {
+            let outputs = values_outputs(values);
+            proof.require(outputs.iter().all(|fact| fact.resolved));
+            outputs
+        }
         Expression::Union(set) => set_outputs(
-            query(&set.left, &relations, lateral_aliases),
-            query(&set.right, &relations, lateral_aliases),
+            query(&set.left, &relations, proof),
+            query(&set.right, &relations, proof),
             set.by_name,
         ),
         Expression::Intersect(set) => set_outputs(
-            query(&set.left, &relations, lateral_aliases),
-            query(&set.right, &relations, lateral_aliases),
+            query(&set.left, &relations, proof),
+            query(&set.right, &relations, proof),
             set.by_name,
         ),
         Expression::Except(set) => set_outputs(
-            query(&set.left, &relations, lateral_aliases),
-            query(&set.right, &relations, lateral_aliases),
+            query(&set.left, &relations, proof),
+            query(&set.right, &relations, proof),
             set.by_name,
         ),
-        Expression::Subquery(subquery) => query(&subquery.this, &relations, lateral_aliases),
-        _ => Vec::new(),
+        Expression::Subquery(subquery) => query(&subquery.this, &relations, proof),
+        _ => {
+            proof.require(false);
+            Vec::new()
+        }
     }
 }
 
@@ -166,25 +219,61 @@ fn set_outputs(
     left
 }
 
-fn select_outputs(
-    select: &Select,
-    relations: &Relations,
-    lateral_aliases: bool,
-) -> Vec<OutputFact> {
+fn select_outputs(select: &Select, relations: &Relations, proof: &BindingProof) -> Vec<OutputFact> {
+    if proof.enabled {
+        proof.require(
+            select.lateral_views.is_empty()
+                && select.prewhere.is_none()
+                && select.distribute_by.is_none()
+                && select.cluster_by.is_none()
+                && select.sort_by.is_none()
+                && select.limit.is_none()
+                && select.offset.is_none()
+                && select.limit_by.is_none()
+                && select.fetch.is_none()
+                && select.distinct_on.is_none()
+                && select.top.is_none()
+                && select.sample.is_none()
+                && select.settings.is_none()
+                && select.format.is_none()
+                && select.windows.is_none()
+                && select.connect.is_none()
+                && select.into.is_none()
+                && select.locks.is_empty()
+                && select.for_xml.is_empty()
+                && select.for_json.is_empty()
+                && select.exclude.is_none()
+                && select.kind.is_none()
+                && select.operation_modifiers.is_empty()
+                && select.hint.is_none()
+                && select.option.is_none(),
+        );
+    }
     let mut sources = Sources::default();
     for expression in select.from.iter().flat_map(|from| &from.expressions) {
-        if let Some(source) = source(expression, relations, &sources, lateral_aliases) {
+        if let Some(source) = source(expression, relations, &sources, proof) {
+            proof.require(
+                !sources
+                    .items
+                    .iter()
+                    .any(|(name, _)| name.eq_ignore_ascii_case(&source.0)),
+            );
             sources.items.push(source);
         }
     }
     for join in &select.joins {
-        sources = joined_sources(sources, join, relations, lateral_aliases);
+        sources = joined_sources(sources, join, relations, proof);
     }
     let mut outputs: Vec<OutputFact> = Vec::new();
     let mut aliases = Aliases::new();
     for projection in &select.expressions {
         let projection = unwrapped(projection);
         if let Some(star) = projection_star(projection) {
+            proof.require(star.except.is_none() && star.replace.is_none() && star.rename.is_none());
+            if proof.enabled {
+                let expanded = star_outputs(&star, &sources);
+                proof.require(!expanded.is_empty() && expanded.iter().all(|fact| fact.resolved));
+            }
             outputs.extend(star_outputs(&star, &sources));
             continue;
         }
@@ -197,6 +286,9 @@ fn select_outputs(
             _ => projection,
         };
         let mut fact = expression_fact(expression, &sources, &aliases);
+        if proof.enabled {
+            proof.require(fact.resolved && scalar_binding_expression(expression));
+        }
         fact.name = name.to_string();
         if let Expression::Column(column) = unwrapped(expression)
             && select
@@ -206,30 +298,69 @@ fn select_outputs(
         {
             fact.nullability = ProjectionNullability::NonNull;
         }
-        if lateral_aliases && matches!(projection, Expression::Alias(_)) {
+        if proof.lateral_aliases && matches!(projection, Expression::Alias(_)) {
             let key = name.to_lowercase();
             let value = (!aliases.contains_key(&key)).then(|| fact.clone());
             aliases.insert(key, value);
         }
         outputs.push(fact);
     }
+    if proof.enabled {
+        for clause in select
+            .where_clause
+            .iter()
+            .map(|value| &value.this)
+            .chain(select.having.iter().map(|value| &value.this))
+            .chain(select.qualify.iter().map(|value| &value.this))
+            .chain(select.group_by.iter().flat_map(|value| &value.expressions))
+            .chain(
+                select
+                    .order_by
+                    .iter()
+                    .flat_map(|value| &value.expressions)
+                    .map(|value| &value.this),
+            )
+        {
+            proof.require(
+                scalar_binding_expression(clause)
+                    && expression_fact(clause, &sources, &aliases).resolved,
+            );
+        }
+    }
     outputs
+}
+
+fn scalar_binding_expression(expression: &Expression) -> bool {
+    !expression.dfs().any(|node| {
+        matches!(
+            node,
+            Expression::Select(_)
+                | Expression::Union(_)
+                | Expression::Intersect(_)
+                | Expression::Except(_)
+                | Expression::Subquery(_)
+                | Expression::Window(_)
+                | Expression::WindowFunction(_)
+        )
+    })
 }
 
 fn source(
     expression: &Expression,
     relations: &Relations,
     preceding: &Sources,
-    lateral_aliases: bool,
+    proof: &BindingProof,
 ) -> Option<(String, Source)> {
     match unwrapped(expression) {
         Expression::Table(table) => {
+            proof.require(relations.contains_key(&table.name.name.to_lowercase()));
             let name = table.alias.as_ref().unwrap_or(&table.name).name.clone();
             let mut source = relations
                 .get(&table.name.name.to_lowercase())
                 .cloned()
                 .unwrap_or_else(|| Source::new(Vec::new(), Some(table.name.name.clone())));
             if !table.column_aliases.is_empty() {
+                proof.require(table.column_aliases.len() <= source.outputs.len());
                 let mut outputs = source.outputs.as_ref().clone();
                 for (output, alias) in outputs.iter_mut().zip(&table.column_aliases) {
                     output.name = alias.name.clone();
@@ -239,7 +370,9 @@ fn source(
             Some((name, source))
         }
         Expression::Subquery(subquery) => {
-            let mut outputs = query(&subquery.this, relations, lateral_aliases);
+            proof.require(subquery.alias.is_some());
+            let mut outputs = query(&subquery.this, relations, proof);
+            proof.require(subquery.column_aliases.len() <= outputs.len());
             for (output, alias) in outputs.iter_mut().zip(&subquery.column_aliases) {
                 output.name = alias.name.clone();
             }
@@ -248,15 +381,19 @@ fn source(
                 Source::new(outputs, None),
             ))
         }
-        Expression::Values(values) => Some((
-            values
-                .alias
-                .as_ref()
-                .map_or(String::new(), |alias| alias.name.clone()),
-            Source::new(values_outputs(values), None),
-        )),
+        Expression::Values(values) => {
+            proof.require(false);
+            Some((
+                values
+                    .alias
+                    .as_ref()
+                    .map_or(String::new(), |alias| alias.name.clone()),
+                Source::new(values_outputs(values), None),
+            ))
+        }
         Expression::Lateral(lateral) if matches!(unwrapped(&lateral.this), Expression::Function(function) if function.name.eq_ignore_ascii_case("FLATTEN")) =>
         {
+            proof.require(false);
             let fact = expression_fact(&lateral.this, preceding, &Aliases::new());
             let names: Vec<String> = if lateral.column_aliases.is_empty() {
                 ["SEQ", "KEY", "PATH", "INDEX", "VALUE", "THIS"]
@@ -281,7 +418,10 @@ fn source(
                 ),
             ))
         }
-        _ => None,
+        _ => {
+            proof.require(false);
+            None
+        }
     }
 }
 
@@ -310,11 +450,27 @@ fn joined_sources(
     mut sources: Sources,
     join: &Join,
     relations: &Relations,
-    lateral_aliases: bool,
+    proof: &BindingProof,
 ) -> Sources {
-    let Some((name, mut right)) = source(&join.this, relations, &sources, lateral_aliases) else {
+    proof.require(
+        matches!(
+            join.kind,
+            JoinKind::Inner | JoinKind::Left | JoinKind::Right | JoinKind::Full
+        ) && !join.deferred_condition
+            && join.match_condition.is_none()
+            && join.pivots.is_empty()
+            && (join.on.is_some() || !join.using.is_empty()),
+    );
+    proof.require(join.using.iter().all(|identifier| !identifier.quoted));
+    let Some((name, mut right)) = source(&join.this, relations, &sources, proof) else {
         return sources;
     };
+    proof.require(
+        !sources
+            .items
+            .iter()
+            .any(|(prior, _)| prior.eq_ignore_ascii_case(&name)),
+    );
     let right_scope = Sources {
         items: vec![(name.clone(), right.clone())],
         ..Default::default()
@@ -331,6 +487,10 @@ fn joined_sources(
         };
         let left = column_fact(&column, &sources, &Aliases::new());
         let right = column_fact(&column, &right_scope, &Aliases::new());
+        proof.require(
+            left.as_ref().is_some_and(|fact| fact.resolved)
+                && right.as_ref().is_some_and(|fact| fact.resolved),
+        );
         let output = match (left, right) {
             (Some(mut left), Some(right)) if join.kind == JoinKind::Full => {
                 Rc::make_mut(&mut left.upstream).extend(right.upstream.iter().cloned());
@@ -362,6 +522,14 @@ fn joined_sources(
     );
     sources.items.push((name, right));
     sources.using_columns.extend(joined);
+    if proof.enabled
+        && let Some(on) = &join.on
+    {
+        proof.require(
+            scalar_binding_expression(on)
+                && expression_fact(on, &sources, &Aliases::new()).resolved,
+        );
+    }
     sources
 }
 

@@ -17,12 +17,14 @@ from sqlbuild.cli.commands._helpers.compile.pipeline import (
     write_compile_dag_artifact,
 )
 from sqlbuild.cli.commands._helpers.compile.status import elapsed_ms, start_compile_status
+from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import (
     CompileAnalysis,
     CompileCommandRequest,
     CompileWriteResult,
 )
+from sqlbuild.compiler.compile.models import CompileAnalysisSelection
 from sqlbuild.compiler.compile.types import DiagnosticPhase
 from sqlbuild.compiler.profiling.main.collect import collect_compile_timings
 from sqlbuild.compiler.profiling.models import CompileTimingCollector
@@ -42,12 +44,18 @@ def run_compile(request: CompileCommandRequest) -> int:
         no_color=request.no_color,
     )
     try:
-        with collect_compile_timings() as detailed_timings:
+        with (
+            collect_compile_timings() as detailed_timings,
+            PreparedCompileArtifacts(
+                enabled=not request.profile_flags.skip_write
+            ) as prepared_artifacts,
+        ):
             return _run_compile_with_status(
                 request=effective_request,
                 total_start=total_start,
                 status=status,
                 detailed_timings=detailed_timings,
+                prepared_artifacts=prepared_artifacts,
             )
     finally:
         if status is not None:
@@ -60,6 +68,7 @@ def _run_compile_with_status(
     total_start: float,
     status: TransientStatusReporter | None,
     detailed_timings: CompileTimingCollector,
+    prepared_artifacts: PreparedCompileArtifacts,
 ) -> int:
     """Execute compile after the optional interactive status reporter is initialized."""
 
@@ -71,14 +80,15 @@ def _run_compile_with_status(
     analysis: CompileAnalysis = analyze_compile_project(
         project_dir=project_dir,
         no_sql_validation=request.no_sql_validation,
-        no_cache=request.no_cache,
         selected_target=request.selected_target,
         lineage_mode=lineage_mode,
         cli_vars=request.cli_vars,
         profile_flags=request.profile_flags,
-        select=request.select,
-        exclude=request.exclude,
+        analysis_selection=CompileAnalysisSelection(
+            select=request.select, exclude=request.exclude, no_cache=request.no_cache
+        ),
         status=status,
+        prepared_artifacts=prepared_artifacts,
     )
     rules_failed: bool = any(
         diagnostic.is_error and diagnostic.phase is DiagnosticPhase.RULE
@@ -101,6 +111,7 @@ def _run_compile_with_status(
         analysis=analysis,
         manifest_payload=manifest_payload,
         status=status,
+        prepared_artifacts=prepared_artifacts,
     )
     timings_ms: dict[str, int] = {
         "discover_ms": analysis.discover_ms,

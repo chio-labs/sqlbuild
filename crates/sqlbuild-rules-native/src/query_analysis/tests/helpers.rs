@@ -71,7 +71,27 @@ pub(crate) fn combined_queries_preserve_standalone_binding() -> bool {
         "WITH orders AS (SELECT * FROM orders), typed AS (SELECT CAST(CAST(o.order_id AS INT) AS NUMBER(38, 0)) AS order_id FROM orders o) SELECT order_id FROM typed",
         "WITH combined AS (SELECT order_id FROM orders UNION ALL BY NAME SELECT customer_id AS order_id FROM customers), typed AS (SELECT CAST(order_id AS BIGINT) AS order_id FROM combined) SELECT order_id FROM typed",
         "SELECT order_id FROM orders QUALIFY missing > 0",
+        "SELECT order_id FROM orders WHERE missing > 0",
+        "SELECT order_id FROM orders GROUP BY missing",
+        "SELECT order_id FROM orders HAVING missing > 0",
+        "SELECT order_id FROM orders ORDER BY missing",
+        "SELECT orders.order_id FROM orders JOIN customers ON orders.order_id = customers.missing",
+        "WITH unused AS (SELECT missing FROM orders) SELECT CAST(1 AS BIGINT) AS order_id",
+        "SELECT order_id FROM orders WHERE EXISTS (SELECT missing FROM customers)",
+        "SELECT order_id AS selected_id FROM orders WHERE selected_id > 0",
+        "SELECT selected_id AS result, order_id AS selected_id FROM orders",
+        "WITH selected AS (SELECT missing.* FROM orders) SELECT CAST(1 AS BIGINT) AS order_id FROM selected",
+        "WITH selected AS (SELECT * EXCLUDE (missing) FROM orders) SELECT order_id FROM selected",
+        "SELECT order_id, ROW_NUMBER() OVER (ORDER BY missing) AS position FROM orders",
+        "SELECT order_id FROM orders LIMIT 1",
+        "SELECT a.order_id FROM orders a JOIN orders a ON a.order_id = a.order_id",
         "SELECT orders.order_id FROM orders JOIN customers USING (order_id)",
+        "SELECT orders.order_id FROM orders CROSS JOIN customers",
+        "SELECT orders.order_id FROM orders JOIN customers",
+        "WITH combined AS (SELECT order_id FROM orders UNION ALL SELECT missing FROM customers) SELECT order_id FROM combined",
+        "WITH combined AS (SELECT order_id FROM orders UNION ALL SELECT customer_id, customer_id AS extra FROM customers) SELECT order_id FROM combined",
+        "WITH combined AS (SELECT order_id FROM orders UNION ALL BY NAME SELECT customer_id FROM customers) SELECT order_id FROM combined",
+        "SELECT order_id FROM orders UNION ALL SELECT customer_id FROM customers ORDER BY missing",
         "SELECT FROM",
         "SELECT order_id FROM orders; SELECT customer_id FROM customers",
     ] {
@@ -110,6 +130,37 @@ pub(crate) fn combined_queries_preserve_standalone_binding() -> bool {
             .remove("validations");
         assert_eq!(combined, separate, "analysis mismatch for {sql}");
     }
+    true
+}
+
+pub(crate) fn binding_warnings_preserve_declared_relationship_evidence() -> bool {
+    let schema = json!({"strict": true, "tables": [
+        {"name": "orders", "columns": [
+            {"name": "order_id", "type": "BIGINT"},
+            {"name": "customer_id", "type": "BIGINT", "references": {"table": "customers", "column": "customer_id"}}
+        ]},
+        {"name": "customers", "columns": [{"name": "customer_id", "type": "BIGINT"}]}
+    ]});
+    let sql = "SELECT o.order_id FROM orders o JOIN customers c ON o.order_id = c.customer_id";
+    let standalone: Value = serde_json::from_str(&crate::semantic_validation::main::validation_json(
+        &json!({"sql": sql, "dialect": "duckdb", "schema": schema,
+        "options": {"check_types": false, "check_references": true, "strict": true, "semantic": false, "strict_syntax": false}}).to_string()
+    ).expect("validation succeeds")).expect("valid JSON");
+    assert!(
+        standalone["errors"]
+            .as_array()
+            .expect("diagnostics")
+            .iter()
+            .any(|item| item["code"] == "W221")
+    );
+    let response: Value = serde_json::from_str(&analyze_project_compact_json(&json!({
+        "queries": [{"sql": sql, "dialect": "duckdb", "schema": schema, "binding_schema": schema}],
+        "templates": [{"queryIndex": 0, "recoverCteFacts": true, "references": {
+            "orders": {"resourceType": "model", "resourceName": "orders"},
+            "customers": {"resourceType": "model", "resourceName": "customers"}
+        }}], "projections": [{"templateIndex": 0}]
+    }).to_string()).expect("analysis succeeds")).expect("valid JSON");
+    assert_eq!(response["validations"][0], standalone);
     true
 }
 
@@ -320,6 +371,45 @@ pub(crate) fn canonical_queries_reuse_semantics_and_project_resources() -> bool 
     assert_eq!(strings[second_resource_index], "archived_orders");
     true
 }
+pub(crate) fn unannotated_types_require_complete_nested_evidence() -> bool {
+    let dialect = polyglot_sql::DialectType::DuckDB;
+    let functions = std::collections::HashMap::new();
+    let expression = polyglot_sql::parse_one(
+        "WITH orders AS (SELECT CAST(1 AS INTEGER) AS order_id) SELECT order_id FROM orders",
+        dialect,
+    )
+    .expect("valid SQL");
+    let outputs = crate::query_analysis::compatibility_types::infer_unannotated_outputs(
+        &expression,
+        None,
+        &functions,
+        dialect,
+    )
+    .expect("all nested outputs have independently known types");
+    let mut annotated = expression.clone();
+    polyglot_sql::optimizer::annotate_types::annotate_types(&mut annotated, None, Some(dialect));
+    assert_eq!(
+        outputs,
+        crate::query_analysis::compatibility_types::infer_outputs(
+            &annotated, None, &functions, dialect,
+        )
+    );
+    let expression = polyglot_sql::parse_one(
+        "WITH orders AS (SELECT unknown_function() AS amount) SELECT CAST(amount AS INTEGER) AS amount FROM orders",
+        dialect,
+    ).expect("valid SQL");
+    assert!(
+        crate::query_analysis::compatibility_types::infer_unannotated_outputs(
+            &expression,
+            None,
+            &functions,
+            dialect,
+        )
+        .is_none()
+    );
+    true
+}
+
 pub(crate) fn native_compatibility_types_preserve_result_semantics() -> bool {
     let expression = polyglot_sql::parse_one(
         "WITH orders AS (SELECT CAST(1 AS INTEGER) AS order_id), values AS (SELECT CASE WHEN order_id > 0 THEN CAST(order_id AS BIGINT) ELSE NULL END AS result, order_id > 0 AS positive, SUM(order_id) AS total FROM orders GROUP BY order_id) SELECT result, positive, total FROM values",

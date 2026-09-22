@@ -1,5 +1,6 @@
 //! Borrowed-tree type evaluation with immutable lexical CTE outputs.
 
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
@@ -38,6 +39,26 @@ pub(super) fn infer_outputs(
     functions: &HashMap<String, String>,
     dialect: DialectType,
 ) -> Outputs {
+    evaluate_outputs(expression, schema, functions, dialect).0
+}
+
+/// Return outputs only when evaluation never consults mutable AST type annotations.
+pub(super) fn infer_unannotated_outputs(
+    expression: &Expression,
+    schema: Option<&ValidationSchema>,
+    functions: &HashMap<String, String>,
+    dialect: DialectType,
+) -> Option<Outputs> {
+    let (outputs, used_annotations) = evaluate_outputs(expression, schema, functions, dialect);
+    (!used_annotations).then_some(outputs)
+}
+
+fn evaluate_outputs(
+    expression: &Expression,
+    schema: Option<&ValidationSchema>,
+    functions: &HashMap<String, String>,
+    dialect: DialectType,
+) -> (Outputs, bool) {
     let mut relations = Relations::new();
     if let Some(schema) = schema {
         for table in &schema.tables {
@@ -53,13 +74,19 @@ pub(super) fn infer_outputs(
             );
         }
     }
-    let context = TypeContext { functions, dialect };
-    context.query(expression, &relations)
+    let context = TypeContext {
+        functions,
+        dialect,
+        used_annotations: Cell::new(false),
+    };
+    let outputs = context.query(expression, &relations);
+    (outputs, context.used_annotations.get())
 }
 
 struct TypeContext<'a> {
     functions: &'a HashMap<String, String>,
     dialect: DialectType,
+    used_annotations: Cell<bool>,
 }
 
 impl TypeContext<'_> {
@@ -222,6 +249,7 @@ impl TypeContext<'_> {
             Some(NULL_TYPE.to_string())
         } else {
             self.expression(expression, aliases).or_else(|| {
+                self.used_annotations.set(true);
                 expression
                     .inferred_type()
                     .filter(|data_type| **data_type != DataType::Unknown)

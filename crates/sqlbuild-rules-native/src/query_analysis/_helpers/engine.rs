@@ -461,12 +461,26 @@ fn try_borrowed_query(
     }) {
         return Err(Box::new(work));
     }
+    let bound_facts = work
+        .query
+        .schema
+        .as_ref()
+        .filter(|schema| {
+            plain_binding_schema(schema)
+                && work.query.binding_schema.as_ref().is_none_or(|binding| {
+                    plain_binding_schema(binding) && same_binding_columns(schema, binding)
+                })
+        })
+        .and_then(|schema| super::borrowed_facts::infer_bound(&expression, Some(schema), dialect));
     let validation = work
         .query
         .binding_schema
         .as_ref()
         .or(work.query.schema.as_ref())
         .map(|schema| {
+            if bound_facts.is_some() {
+                return Ok(ValidationResult::with_errors(Vec::new()));
+            }
             let result = polyglot_sql::validation::validate_parsed_with_schema(
                 vec![expression.clone()],
                 dialect,
@@ -493,7 +507,19 @@ fn try_borrowed_query(
     if !matches!(validation, Some(Ok(ref result)) if result.valid) {
         return Err(Box::new(work));
     }
-    {
+    let unannotated_outputs: Option<Vec<_>> = work
+        .projections
+        .iter()
+        .map(|(_, projection)| {
+            super::compatibility_types::infer_unannotated_outputs(
+                &expression,
+                work.query.schema.as_ref(),
+                &projection.function_return_types,
+                dialect,
+            )
+        })
+        .collect();
+    if unannotated_outputs.is_none() {
         let schema = work.query.schema.as_ref().map(|schema| {
             polyglot_sql::validation::mapping_schema_from_validation_schema_with_dialect(
                 schema, dialect,
@@ -508,7 +534,9 @@ fn try_borrowed_query(
             Some(dialect),
         );
     }
-    let facts = super::borrowed_facts::infer(&expression, work.query.schema.as_ref(), dialect);
+    let facts = bound_facts.unwrap_or_else(|| {
+        super::borrowed_facts::infer(&expression, work.query.schema.as_ref(), dialect)
+    });
     if facts.is_empty()
         || facts
             .iter()
@@ -523,13 +551,16 @@ fn try_borrowed_query(
             return Err(Box::new(work));
         }
     }
+    let mut unannotated_outputs = unannotated_outputs.unwrap_or_default().into_iter();
     for (index, projection) in &work.projections {
-        let mut outputs = super::compatibility_types::infer_outputs(
-            &expression,
-            work.query.schema.as_ref(),
-            &projection.function_return_types,
-            dialect,
-        );
+        let mut outputs = unannotated_outputs.next().unwrap_or_else(|| {
+            super::compatibility_types::infer_outputs(
+                &expression,
+                work.query.schema.as_ref(),
+                &projection.function_return_types,
+                dialect,
+            )
+        });
         {
             let types: HashMap<_, _> = outputs.into_iter().collect();
             outputs = facts
@@ -601,6 +632,49 @@ fn try_borrowed_query(
             None
         },
     })
+}
+
+fn same_binding_columns(left: &ValidationSchema, right: &ValidationSchema) -> bool {
+    if left.tables.len() != right.tables.len() {
+        return false;
+    }
+    for table in &left.tables {
+        let Some(other) = right
+            .tables
+            .iter()
+            .find(|other| other.name.eq_ignore_ascii_case(&table.name))
+        else {
+            return false;
+        };
+        if table.columns.len() != other.columns.len()
+            || !table
+                .columns
+                .iter()
+                .zip(&other.columns)
+                .all(|(left, right)| left.name.eq_ignore_ascii_case(&right.name))
+        {
+            return false;
+        }
+    }
+    true
+}
+
+fn plain_binding_schema(schema: &ValidationSchema) -> bool {
+    for table in &schema.tables {
+        if table.schema.is_some()
+            || !table.aliases.is_empty()
+            || !table.foreign_keys.is_empty()
+            || !table.primary_key.is_empty()
+            || !table.unique_keys.is_empty()
+            || table
+                .columns
+                .iter()
+                .any(|column| column.references.is_some() || column.primary_key || column.unique)
+        {
+            return false;
+        }
+    }
+    true
 }
 
 fn has_case_sensitive_binding(expression: &polyglot_sql::Expression) -> bool {

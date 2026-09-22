@@ -1,8 +1,18 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from tempfile import TemporaryDirectory
 
 from sqlbuild.compiler.planner.models import CursorOverrides
+
+
+@dataclass(frozen=True)
+class PreparedArtifactsCompileTestCase:
+    description: str
+    model_count: int
+    temporary_directory_factory: Callable[..., TemporaryDirectory[str]]
+    expected_exit_code: int = 0
 
 
 @dataclass(frozen=True)

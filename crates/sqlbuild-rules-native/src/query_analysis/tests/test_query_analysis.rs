@@ -1,6 +1,7 @@
 use crate::query_analysis::main::analyze::analyze_json;
 use crate::query_analysis::main::analyze_project::analyze_project_json;
 use crate::query_analysis::tests::helpers::{
+    binding_warnings_preserve_declared_relationship_evidence,
     borrowed_facts_preserve_named_outputs_and_terminal_sources,
     borrowed_facts_preserve_union_dependencies_and_join_nullability,
     canonical_queries_reuse_semantics_and_project_resources,
@@ -9,6 +10,7 @@ use crate::query_analysis::tests::helpers::{
     interleaved_query_templates_preserve_template_order,
     native_compatibility_types_preserve_result_semantics,
     repeated_project_facts_intern_complete_facts,
+    unannotated_types_require_complete_nested_evidence,
     widening_aggregates_require_compatibility_recovery,
 };
 use crate::query_analysis::tests::test_types::{
@@ -19,6 +21,16 @@ use serde_json::{Value, json};
 #[test]
 fn given_compact_query_cases_when_analyzing_projects_then_expected_behavior_holds() {
     let test_cases = [
+        CompactQueryAnalysisTestCase {
+            description: "binding warnings preserve declared relationship evidence",
+            run: binding_warnings_preserve_declared_relationship_evidence,
+            expected_success: true,
+        },
+        CompactQueryAnalysisTestCase {
+            description: "unannotated types require complete nested evidence",
+            run: unannotated_types_require_complete_nested_evidence,
+            expected_success: true,
+        },
         CompactQueryAnalysisTestCase {
             description: "borrowed facts preserve named outputs and actual terminal columns",
             run: borrowed_facts_preserve_named_outputs_and_terminal_sources,

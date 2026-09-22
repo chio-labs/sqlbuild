@@ -101,7 +101,10 @@ def evaluate_native(
         "initial_findings": [_finding_payload(finding) for finding in initial_findings],
         "defer_suppressions": defer_suppressions,
         "custom_rules": _custom_rule_payloads(
-            catalogue=catalogue, project=project, project_dir=project_dir
+            catalogue=catalogue,
+            project=project,
+            project_dir=project_dir,
+            cache_enabled=config.cache.enabled,
         ),
     }
     custom_host_input: Path | None = None
@@ -527,7 +530,11 @@ def _typed_value_payload(value: SqlValue) -> object:
 
 
 def _custom_rule_payloads(
-    *, catalogue: tuple[Rule, ...], project: CompiledProject, project_dir: Path
+    *,
+    catalogue: tuple[Rule, ...],
+    project: CompiledProject,
+    project_dir: Path,
+    cache_enabled: bool,
 ) -> list[dict[str, object]]:
     fingerprints: dict[frozenset[str], str] = {}
     closures: dict[str, tuple[Path, ...]] = {}
@@ -541,11 +548,11 @@ def _custom_rule_payloads(
         attributes: frozenset[str] = custom_rule_project_fact_attributes(
             rule=rule, project_dir=project_dir, import_closure=closure
         )
-        if attributes not in fingerprints:
+        if cache_enabled and attributes not in fingerprints:
             fingerprints[attributes] = _custom_fact_fingerprint(
                 project=project, attributes=attributes
             )
-        fact_fingerprint: str = fingerprints[attributes]
+        fact_fingerprint: str = fingerprints[attributes] if cache_enabled else ""
         payloads.append(
             _custom_rule_payload(
                 rule=rule,
