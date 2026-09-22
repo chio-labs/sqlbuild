@@ -71,6 +71,8 @@ pub(crate) struct LintRequest {
     pub allows_ceremonial_select: bool,
     #[serde(default)]
     pub allows_dynamic_output_star: bool,
+    #[serde(default)]
+    pub allows_empty_fixture_star: bool,
 }
 
 #[derive(Debug)]
@@ -79,6 +81,7 @@ pub(crate) struct AdditionalFactOptions<'a> {
     pub dependency_identifiers: &'a HashSet<String>,
     pub allows_ceremonial_select: bool,
     pub allows_dynamic_output_star: bool,
+    pub allows_empty_fixture_star: bool,
 }
 
 #[derive(Debug, Serialize)]

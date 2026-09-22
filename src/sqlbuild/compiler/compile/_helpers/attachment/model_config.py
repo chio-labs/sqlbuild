@@ -330,8 +330,10 @@ def strip_model_header_metadata_from_config(config: CompileModelConfig) -> Compi
         return config
     return CompileModelConfig(
         values=filtered_values,
+        model_header_keys=config.model_header_keys,
         matched_path_default=config.matched_path_default,
         logical_schema=config.logical_schema,
+        layer_schema=config.layer_schema,
         logical_database=config.logical_database,
         time_travel_retention=config.time_travel_retention,
         table_type=config.table_type,
@@ -556,8 +558,10 @@ def _merge_schema_tags(
     )
     return CompileModelConfig(
         values=merged_values,
+        model_header_keys=config.model_header_keys,
         matched_path_default=config.matched_path_default,
         logical_schema=config.logical_schema,
+        layer_schema=config.layer_schema,
         logical_database=config.logical_database,
         time_travel_retention=config.time_travel_retention,
         table_type=config.table_type,

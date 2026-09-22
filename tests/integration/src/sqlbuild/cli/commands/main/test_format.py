@@ -17,6 +17,67 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     "test_case",
     [
         FormatCompileIntegrationTestCase(
+            description="canonical empty input fixture remains compiler-compatible",
+            expected_literal="SELECT * FROM __empty_fixture()",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_typed_null_input_when_fixture_formatting_then_canonical_empty_fixture_compiles(
+    test_case: FormatCompileIntegrationTestCase,
+    tmp_path: Path,
+) -> None:
+    """Prove formatter output remains valid with uncontrolled-star lint selected."""
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRSQL021"]\n',
+        encoding="utf-8",
+    )
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "stg_orders.sql").write_text(
+        "MODEL (\n"
+        '  description "Staged orders",\n'
+        "  contract enforced,\n"
+        "  columns (\n"
+        "    order_id (type INTEGER, nullable true),\n"
+        "    order_label (type VARCHAR, nullable true),\n"
+        "  ),\n"
+        ");\n\n"
+        "SELECT CAST(1 AS INTEGER) AS order_id, CAST('new' AS VARCHAR) AS order_label\n",
+        encoding="utf-8",
+    )
+    (models / "orders.sql").write_text(
+        'MODEL (description "Orders");\n\nSELECT order_id, order_label FROM __ref("stg_orders")\n',
+        encoding="utf-8",
+    )
+    test_file: Path = tmp_path / "tests" / "unit" / "test_orders.sql"
+    test_file.parent.mkdir(parents=True)
+    test_file.write_text(
+        "TEST();\n\n"
+        "WITH\n"
+        "__ref__stg_orders AS (\n"
+        "  SELECT\n"
+        "    CAST(NULL AS INTEGER) AS order_id,\n"
+        "    CAST(NULL AS VARCHAR) AS order_label\n"
+        "  WHERE FALSE\n"
+        "),\n"
+        "__expected__orders AS (SELECT 1 AS order_id, 'new' AS order_label)\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+    format_exit: int = main(["--project-dir", str(tmp_path), "format", "--fixtures-only"])
+    compile_exit: int = main(["--project-dir", str(tmp_path), "compile", "--no-cache"])
+
+    assert format_exit == 0
+    assert compile_exit == 0
+    assert test_case.expected_literal in test_file.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FormatCompileIntegrationTestCase(
             description="doubled apostrophe remains valid through format and compile",
             expected_literal="'Customer''s order'",
         )

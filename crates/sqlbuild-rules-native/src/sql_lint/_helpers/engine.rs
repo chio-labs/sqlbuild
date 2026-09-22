@@ -323,6 +323,7 @@ struct FactBuildOptions<'a> {
     externally_referenced_ctes: &'a HashSet<String>,
     allows_ceremonial_select: bool,
     allows_dynamic_output_star: bool,
+    allows_empty_fixture_star: bool,
 }
 
 pub(crate) fn lint_json_impl(request_json: &str) -> Result<String, String> {
@@ -383,6 +384,7 @@ pub(crate) fn lint(request: LintRequest) -> Result<LintResponse, String> {
         externally_referenced_ctes: &externally_referenced_ctes,
         allows_ceremonial_select: request.allows_ceremonial_select,
         allows_dynamic_output_star: request.allows_dynamic_output_star,
+        allows_empty_fixture_star: request.allows_empty_fixture_star,
     };
     let facts = build_facts(&statements, &tokens, &request.sql, &options);
     let context = DiagnosticContext {
@@ -445,6 +447,7 @@ fn build_facts(
             dependency_identifiers: options.dependency_identifiers,
             allows_ceremonial_select: options.allows_ceremonial_select,
             allows_dynamic_output_star: options.allows_dynamic_output_star,
+            allows_empty_fixture_star: options.allows_empty_fixture_star,
         },
     );
     for expression in expressions {

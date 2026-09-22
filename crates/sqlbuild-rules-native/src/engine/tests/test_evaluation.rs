@@ -7,6 +7,158 @@ use crate::engine::tests::test_types;
 use crate::rules::_helpers::evaluation::normalize_rules_sql;
 
 #[test]
+fn given_conflicting_model_identity_when_evaluating_layer_rules_then_reports_independent_findings()
+-> Result<(), String> {
+    let test_cases = [test_types::ModelLayerRulesTestCase {
+        description: "conflicting model metadata reports every independent boundary",
+        expected_codes: &[
+            "SQBRMODEL103",
+            "SQBRMODEL104",
+            "SQBRPROJECT101",
+            "SQBRPROJECT104",
+            "SQBRPROJECT105",
+            "SQBRPROJECT106",
+        ],
+    }];
+    let project_dir = TempDir::new().map_err(|error| error.to_string())?;
+    let config = json!({
+        "select": [
+            "SQBRMODEL103",
+            "SQBRMODEL104",
+            "SQBRPROJECT101",
+            "SQBRPROJECT104",
+            "SQBRPROJECT105",
+            "SQBRPROJECT106"
+        ],
+        "cache": {"enabled": false}
+    });
+    let mut request: Value = serde_json::from_str(&helpers::request(&project_dir, &config))
+        .map_err(|error| error.to_string())?;
+    request["models"][0] = json!({
+        "name": "commerce__mart_v__int_v_orders",
+        "relative_path": "models/commerce/intermediate/enriched/orders/commerce__mart_v__int_v_orders.sql",
+        "query_sql": "SELECT 1 AS order_id",
+        "authored_sql": "SELECT 1 AS order_id",
+        "config": {"materialized": "table", "schema": "staging"},
+        "authored_config_keys": ["materialized", "schema"],
+        "logical_schema": "staging",
+        "references": [{"ref_kind": "ref", "ref_name": "commerce__mart__stg_orders"}]
+    });
+
+    for test_case in test_cases {
+        let result: Value = serde_json::from_str(&evaluate_json(&request.to_string())?)
+            .map_err(|error| error.to_string())?;
+        let codes: Vec<&str> = result["faults"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|fault| fault["code"].as_str())
+            .collect();
+
+        assert_eq!(codes, test_case.expected_codes, "{}", test_case.description);
+    }
+    Ok(())
+}
+
+#[test]
+fn given_internal_dependency_edges_when_evaluating_graph_rule_then_only_exact_live_exceptions_apply()
+-> Result<(), String> {
+    let project_dir = TempDir::new().map_err(|error| error.to_string())?;
+    let models = json!([
+        {
+            "name": "commerce__stg__orders",
+            "relative_path": "models/commerce/staging/commerce__stg__orders.sql",
+            "query_sql": "SELECT 1",
+            "authored_sql": "SELECT 1",
+            "references": [
+                {"ref_kind": "ref", "ref_name": "commerce__int_enriched__orders"},
+                {"ref_kind": "ref", "ref_name": "commerce__mart__customers"}
+            ]
+        },
+        {
+            "name": "commerce__int_clean__orders",
+            "relative_path": "models/commerce/intermediate/clean/commerce__int_clean__orders.sql",
+            "query_sql": "SELECT 1",
+            "authored_sql": "SELECT 1",
+            "references": [{"ref_kind": "ref", "ref_name": "commerce__int_enriched__customers"}]
+        },
+        {
+            "name": "commerce__mart__summary",
+            "relative_path": "models/commerce/mart/commerce__mart__summary.sql",
+            "query_sql": "SELECT 1",
+            "authored_sql": "SELECT 1",
+            "references": [{"ref_kind": "ref", "ref_name": "commerce__int_enriched__orders"}]
+        }
+    ]);
+    let test_cases = [
+        test_types::GraphRuleTestCase {
+            description: "unexcluded internal inversions",
+            exceptions: json!([]),
+            expected_fault_count: 2,
+            expected_message_fragments: &[],
+        },
+        test_types::GraphRuleTestCase {
+            description: "exact live exceptions",
+            exceptions: json!([
+                {
+                    "consumer": "commerce__stg__orders",
+                    "dependency": "commerce__int_enriched__orders",
+                    "reason": "Tracked cleanup"
+                },
+                {
+                    "consumer": "commerce__int_clean__orders",
+                    "dependency": "commerce__int_enriched__customers",
+                    "reason": "Tracked cleanup"
+                }
+            ]),
+            expected_fault_count: 0,
+            expected_message_fragments: &[],
+        },
+        test_types::GraphRuleTestCase {
+            description: "stale exact exception",
+            exceptions: json!([{
+                "consumer": "commerce__stg__orders",
+                "dependency": "commerce__int_clean__missing",
+                "reason": "Resolved cleanup"
+            }]),
+            expected_fault_count: 3,
+            expected_message_fragments: &["graph edge exception is stale"],
+        },
+    ];
+    for test_case in test_cases {
+        let config = json!({
+            "select": ["SQBRGRAPH101"],
+            "graph_edge_exceptions": test_case.exceptions,
+            "cache": {"enabled": false}
+        });
+        let mut request: Value = serde_json::from_str(&helpers::request(&project_dir, &config))
+            .map_err(|error| error.to_string())?;
+        request["models"] = models.clone();
+        let result: Value = serde_json::from_str(&evaluate_json(&request.to_string())?)
+            .map_err(|error| error.to_string())?;
+        let faults = result["faults"]
+            .as_array()
+            .ok_or("faults must be an array")?;
+        assert_eq!(
+            faults.len(),
+            test_case.expected_fault_count,
+            "{}",
+            test_case.description
+        );
+        for fragment in test_case.expected_message_fragments {
+            assert!(
+                faults.iter().any(|fault| fault["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains(fragment))),
+                "{}",
+                test_case.description
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn given_repeated_native_evaluation_when_faulting_then_returns_deterministic_complete_facts()
 -> Result<(), String> {
     let test_cases = [test_types::NativeEvaluationTestCase {

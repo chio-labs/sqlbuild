@@ -65,6 +65,14 @@ pub(crate) struct RuleException {
     pub reason: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, Ord, PartialEq, PartialOrd)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct GraphEdgeException {
+    pub consumer: String,
+    pub dependency: String,
+    pub reason: String,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct RuleIgnore {
@@ -135,6 +143,7 @@ pub(crate) struct RulesConfig {
     pub threshold_overrides: Vec<ThresholdOverride>,
     pub rule_options: BTreeMap<String, BTreeMap<String, Value>>,
     pub rule_exceptions: Vec<RuleException>,
+    pub graph_edge_exceptions: Vec<GraphEdgeException>,
     pub rule_ignores: Vec<RuleIgnore>,
     pub select_star_allow: Vec<SelectStarAllow>,
     pub domains: Vec<String>,
@@ -154,6 +163,7 @@ impl Default for RulesConfig {
             threshold_overrides: vec![],
             rule_options: BTreeMap::new(),
             rule_exceptions: vec![],
+            graph_edge_exceptions: vec![],
             rule_ignores: vec![],
             select_star_allow: vec![],
             domains: vec![],
@@ -508,6 +518,8 @@ pub(crate) struct Model {
     pub query_sql: String,
     pub authored_sql: String,
     pub config: BTreeMap<String, Value>,
+    pub authored_config_keys: Vec<String>,
+    pub logical_schema: Option<String>,
     pub references: Vec<Reference>,
     pub columns: Vec<Column>,
     pub dynamic_columns: Vec<DynamicColumnFamily>,

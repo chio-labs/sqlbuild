@@ -90,6 +90,7 @@ def resolve_ruleset(*, config: RulesConfig, project_dir: Path) -> ResolvedRulese
         "sql_tests": config.sql_tests,
         "layout": config.layout,
         "exceptions": config.rule_exceptions,
+        "graph_edge_exceptions": config.graph_edge_exceptions,
         "ignores": config.rule_ignores,
     }
     fingerprint: str = hashlib.sha256(

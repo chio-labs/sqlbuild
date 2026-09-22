@@ -227,6 +227,15 @@ class RuleExemption:
 
 
 @dataclass(frozen=True)
+class GraphEdgeExclusion:
+    """One exact, temporary internal-layer dependency exception."""
+
+    consumer: str
+    dependency: str
+    reason: str
+
+
+@dataclass(frozen=True)
 class RuleIgnore:
     rules: tuple[str, ...]
     paths: tuple[str, ...]
@@ -276,6 +285,7 @@ class RulesConfig:
     threshold_overrides: tuple[ThresholdOverride, ...] = ()
     rule_options: dict[str, dict[str, RuleOptionValue]] = field(default_factory=dict)
     rule_exceptions: tuple[RuleExemption, ...] = ()
+    graph_edge_exceptions: tuple[GraphEdgeExclusion, ...] = ()
     rule_ignores: tuple[RuleIgnore, ...] = ()
     select_star_allow: tuple[SelectStarAllow, ...] = ()
     domains: tuple[str, ...] = ()

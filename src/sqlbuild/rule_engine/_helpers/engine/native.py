@@ -464,6 +464,8 @@ def _model_payload(
         "query_sql": model.query_sql,
         "authored_sql": model.authored_query_sql or model.authored_sql,
         "config": model.config.values,
+        "authored_config_keys": list(model.config.model_header_keys),
+        "logical_schema": model.config.layer_schema,
         "references": [
             {
                 "ref_kind": str(reference.ref_kind),
