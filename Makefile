@@ -6,7 +6,7 @@ SHELL := /bin/bash
 	test-e2e-duckdb-cli-data test-e2e-duckdb-cli test-e2e-duckdb-virtual \
 	test-e2e-duckdb-integrations test-e2e-performance \
 	test-e2e-cold-compile-performance test-e2e-cache-compile-performance \
-	test-e2e-dense-compile-performance
+	test-e2e-dense-compile-performance test-e2e-varied-cache-performance
 
 format:
 	uv run ruff format .
@@ -254,6 +254,12 @@ test-e2e-cache-compile-performance:
 		-m cache_compile_performance -k "models_$(SQLBUILD_BENCHMARK_MODELS)" \
 		-vv --log-cli-level=INFO --color=yes
 
+
+test-e2e-varied-cache-performance:
+	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=4 uv run pytest \
+		tests/e2e/src/sqlbuild/cli/commands/main/compile/test_varied_compile_cache_performance.py \
+		-n auto --dist loadfile -m cache_compile_performance \
+		-vv -rP --log-level=INFO --log-cli-level=INFO --color=yes
 
 test-virtual:
 	@mkdir -p /tmp/opencode
