@@ -1,6 +1,6 @@
 [package]
 name = "sqlbuild-rules-native"
-version = "0.113.1"
+version = "0.113.2"
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
