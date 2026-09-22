@@ -23,10 +23,13 @@ The guard checks:
 
 | Models | Wall-time ceiling | Process RSS ceiling |
 | ---: | ---: | ---: |
-| 1,000 | 13s | 2GiB |
-| 3,000 | 36s | 3.5GiB |
-| 5,000 | 65s | 4GiB |
-| 10,000 | 135s | 4GiB |
+| 1,000 | 11s | 1.5GiB |
+| 3,000 | 30s | 2.75GiB |
+| 5,000 | 55s | 3.25GiB |
+| 10,000 | 115s | 4GiB |
+
+These are regression ceilings for the implemented compiler, with headroom for
+host variation. They are not a claim of sub-10-second compilation at every size.
 
 CI additionally runs each size in a 4GiB cgroup with swap disabled, covering
 the test harness and child processes together. Compiler, lint and rule-engine
