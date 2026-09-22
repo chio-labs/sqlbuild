@@ -31,6 +31,7 @@ def run_lint(
     discovered_inputs: DiscoveredProjectInputs | None = None,
     dynamic_output_paths: frozenset[Path] = frozenset(),
     compiled_expansions: dict[Path, CompiledSqlExpansion] | None = None,
+    expansion_context: SqlExpansionContext | None = None,
 ) -> LintRunResult:
     """Lint all DSL files in the project without modifying anything."""
 
@@ -39,7 +40,7 @@ def run_lint(
     )
     violations: list[LintViolation] = []
     bodies: list[LintBody] = []
-    context: SqlExpansionContext | None = _expansion_context(
+    context: SqlExpansionContext | None = expansion_context or _expansion_context(
         project_dir=project_dir,
         native_enabled=config.native_enabled,
         value_renderer=value_renderer,
@@ -59,14 +60,15 @@ def run_lint(
                 and not declaration_directories.intersection(relative_parts[1:-1])
             ),
         )
-        violations.extend(
-            lint_native_headers(
-                contents=contents,
-                file_path=file_path,
-                headers=headers,
-                config=config,
+        if config.header_rules_enabled:
+            violations.extend(
+                lint_native_headers(
+                    contents=contents,
+                    file_path=file_path,
+                    headers=headers,
+                    config=config,
+                )
             )
-        )
         if context is not None:
             bodies.extend(
                 _prepared_bodies(

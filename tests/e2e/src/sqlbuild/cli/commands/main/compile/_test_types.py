@@ -163,3 +163,12 @@ class DeepSqlAnalysisCompileTestCase:
     description: str
     function_depth: int
     expected_stdout_fragment: str
+
+
+@dataclass(frozen=True)
+class DenseCompileGuardTestCase:
+    description: str
+    model_count: int
+    expected_max_wall_seconds: float
+    expected_max_rss_bytes: int
+    expected_fingerprint: str

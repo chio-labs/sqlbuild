@@ -33,6 +33,12 @@ fn lint_sql_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
 }
 
 #[pyfunction]
+fn finalize_rule_findings_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.detach(|| crate::engine::main::finalize::finalize_findings_json(request_json))
+        .map_err(value_error)
+}
+
+#[pyfunction]
 fn prepare_lint_sql(
     py: Python<'_>,
     expanded: &str,
@@ -298,6 +304,7 @@ fn skill_freshness(content: Option<&str>, input_fingerprint: &str) -> String {
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(evaluate_json, module)?)?;
+    module.add_function(wrap_pyfunction!(finalize_rule_findings_json, module)?)?;
     module.add_function(wrap_pyfunction!(lint_sql_json, module)?)?;
     module.add_function(wrap_pyfunction!(prepare_lint_sql, module)?)?;
     module.add_function(wrap_pyfunction!(lint_sql_batch_json, module)?)?;

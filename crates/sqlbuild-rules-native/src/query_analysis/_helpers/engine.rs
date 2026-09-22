@@ -15,6 +15,9 @@ use crate::constants::{SQL_WILDCARD, UNKNOWN_SQL_TYPE, VARCHAR_SQL_TYPE};
 const DEFAULT_WORKERS: usize = 4;
 const MAX_WORKERS: usize = 4;
 const ANALYSIS_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
+const COMPACT_ANALYSIS_BATCH_SIZE: usize = 64;
+const LARGE_COMPACT_SQL_BYTES: usize = 32 * 1024 * 1024;
+const LARGE_COMPACT_MAX_WORKERS: usize = 2;
 
 #[derive(Debug, Deserialize)]
 struct AnalysisBatchRequest {
@@ -310,7 +313,13 @@ pub(crate) fn analyze_project_compact_json(request_json: &str) -> Result<String,
             }
         })
         .collect();
-    let analysis_workers = workers.min(unique_query_count.max(1));
+    let sql_bytes: usize = request.queries.iter().map(|query| query.sql.len()).sum();
+    let memory_workers = if sql_bytes >= LARGE_COMPACT_SQL_BYTES {
+        workers.min(LARGE_COMPACT_MAX_WORKERS)
+    } else {
+        workers
+    };
+    let analysis_workers = memory_workers.min(unique_query_count.max(1));
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(analysis_workers)
         .stack_size(ANALYSIS_WORKER_STACK_BYTES)
@@ -330,17 +339,29 @@ pub(crate) fn analyze_project_compact_json(request_json: &str) -> Result<String,
         )
         .collect();
     let mut accumulator = CompactProjectAccumulator::new(unique_projection_count);
-    let analysis_groups: Vec<CompiledQueryWorkResult> = pool.install(|| {
-        query_work
-            .into_par_iter()
-            .map(analyze_compact_query_work)
-            .collect()
-    });
     let mut validations = Vec::with_capacity(unique_query_count);
-    for group in analysis_groups {
-        validations.push(group.validation.transpose()?);
-        for (projection_index, analysis) in group.projections {
-            accumulator.compact_analysis(projection_index, analysis)?;
+    let batch_size = if sql_bytes >= LARGE_COMPACT_SQL_BYTES {
+        COMPACT_ANALYSIS_BATCH_SIZE
+    } else {
+        unique_query_count.max(1)
+    };
+    let mut remaining = query_work.into_iter();
+    loop {
+        let batch: Vec<_> = remaining.by_ref().take(batch_size).collect();
+        if batch.is_empty() {
+            break;
+        }
+        let analysis_groups: Vec<CompiledQueryWorkResult> = pool.install(|| {
+            batch
+                .into_par_iter()
+                .map(analyze_compact_query_work)
+                .collect()
+        });
+        for group in analysis_groups {
+            validations.push(group.validation.transpose()?);
+            for (projection_index, analysis) in group.projections {
+                accumulator.compact_analysis(projection_index, analysis)?;
+            }
         }
     }
     let mut response = accumulator.finish(
@@ -355,42 +376,41 @@ pub(crate) fn analyze_project_compact_json(request_json: &str) -> Result<String,
 }
 
 fn analyze_compact_query_work(work: CompactQueryWork) -> CompiledQueryWorkResult {
-    let work = if std::env::var_os("SQLBUILD_EXPERIMENT_FOLDED_COMPILER").is_some() {
-        match experimental_folded_query(work) {
-            Ok(result) => return result,
-            Err(work) => *work,
-        }
-    } else {
-        work
+    let work = match try_borrowed_query(work) {
+        Ok(result) => return result,
+        Err(work) => *work,
     };
-    let compatibility_enabled = std::env::var_os("SQLBUILD_EXPERIMENT_NATIVE_TYPES").is_some();
-    let schema = compatibility_enabled
-        .then(|| work.query.schema.clone())
-        .flatten();
-    let dialect = work.query.dialect.parse().unwrap_or(DialectType::Generic);
-    let (query_result, validation, expression) =
-        compile_query(work.query, work.project_projections);
+    let (query_result, validation, _) = compile_query(work.query, work.project_projections);
     CompiledQueryWorkResult {
-        projections: project_query_templates(
-            &query_result,
-            work.projections,
-            compatibility_enabled.then_some(CompatibilityTypeInputs {
-                expression: expression.as_ref(),
-                schema: schema.as_ref(),
-                dialect,
-            }),
-        ),
+        projections: project_query_templates(&query_result, work.projections),
         validation,
     }
 }
 
-/// Experimental borrowed evaluation; semantic differential verification is incomplete.
-fn experimental_folded_query(
+/// Fold fully bound lexical query graphs; unsupported shapes retain the existing resolver.
+fn try_borrowed_query(
     work: CompactQueryWork,
 ) -> Result<CompiledQueryWorkResult, Box<CompactQueryWork>> {
+    if work.query.schema.is_none()
+        || (work.query.binding_schema.is_none()
+            && !work
+                .query
+                .schema
+                .as_ref()
+                .is_some_and(|schema| schema.strict == Some(true)))
+        || work
+            .projections
+            .iter()
+            .any(|(_, projection)| !projection.rich_type_inference && !projection.recover_cte_facts)
+    {
+        return Err(Box::new(work));
+    }
     let Ok(dialect) = work.query.dialect.parse::<DialectType>() else {
         return Err(Box::new(work));
     };
+    if !matches!(dialect, DialectType::Snowflake | DialectType::DuckDB) {
+        return Err(Box::new(work));
+    }
     let Ok(mut statements) = polyglot_sql::parse_with_options(
         &work.query.sql,
         dialect,
@@ -409,6 +429,14 @@ fn experimental_folded_query(
     let Some(mut expression) = statements.pop() else {
         return Err(Box::new(work));
     };
+    if dialect == DialectType::Snowflake && expression.dfs().any(has_case_sensitive_binding) {
+        return Err(Box::new(work));
+    }
+    if matches!(&expression, polyglot_sql::Expression::Select(select)
+        if select.with.is_none() && select.expressions.iter().any(|projection| super::borrowed_facts::projection_star(projection).is_some()))
+    {
+        return Err(Box::new(work));
+    }
     if !matches!(
         expression,
         polyglot_sql::Expression::Select(_)
@@ -422,7 +450,12 @@ fn experimental_folded_query(
         matches!(
             node,
             polyglot_sql::Expression::Pivot(_) | polyglot_sql::Expression::Unpivot(_)
+                | polyglot_sql::Expression::Intersect(_) | polyglot_sql::Expression::Except(_)
         )
+        || matches!(node, polyglot_sql::Expression::Table(table) if table.schema.is_some() || table.catalog.is_some())
+        || matches!(node, polyglot_sql::Expression::Select(select) if select.with.as_ref().is_some_and(|with| with.recursive))
+        || matches!(node, polyglot_sql::Expression::Union(union) if union.with.as_ref().is_some_and(|with| with.recursive))
+        || matches!(node, polyglot_sql::Expression::Select(select) if !borrowed_sources_supported(select, dialect))
     }) {
         return Err(Box::new(work));
     }
@@ -434,33 +467,39 @@ fn experimental_folded_query(
     }) {
         return Err(Box::new(work));
     }
-    let has_star = matches!(&expression, polyglot_sql::Expression::Select(select)
-        if select.expressions.iter().any(|projection| matches!(projection, polyglot_sql::Expression::Star(_))));
-    let validation = work.query.binding_schema.as_ref().map(|schema| {
-        let result = polyglot_sql::validation::validate_parsed_with_schema(
-            vec![expression.clone()],
-            dialect,
-            schema,
-            &SchemaValidationOptions {
-                check_types: false,
-                check_references: true,
-                strict: Some(true),
-                semantic: false,
-                strict_syntax: false,
-                ..Default::default()
-            },
-        );
-        crate::semantic_validation::main::complete_parsed_validation(
-            crate::semantic_validation::main::ParsedValidationRequest {
-                sql: &work.query.sql,
+    let validation = work
+        .query
+        .binding_schema
+        .as_ref()
+        .or(work.query.schema.as_ref())
+        .map(|schema| {
+            let result = polyglot_sql::validation::validate_parsed_with_schema(
+                vec![expression.clone()],
                 dialect,
                 schema,
-                result,
-                expression: Some(&expression),
-            },
-        )
-    });
-    if std::env::var_os("SQLBUILD_EXPERIMENT_FOLDED_INFERENCE").is_some() {
+                &SchemaValidationOptions {
+                    check_types: false,
+                    check_references: true,
+                    strict: Some(true),
+                    semantic: false,
+                    strict_syntax: false,
+                    ..Default::default()
+                },
+            );
+            crate::semantic_validation::main::complete_parsed_validation(
+                crate::semantic_validation::main::ParsedValidationRequest {
+                    sql: &work.query.sql,
+                    dialect,
+                    schema,
+                    result,
+                    expression: Some(&expression),
+                },
+            )
+        });
+    if !matches!(validation, Some(Ok(ref result)) if result.valid) {
+        return Err(Box::new(work));
+    }
+    {
         let schema = work.query.schema.as_ref().map(|schema| {
             polyglot_sql::validation::mapping_schema_from_validation_schema_with_dialect(
                 schema, dialect,
@@ -469,28 +508,35 @@ fn experimental_folded_query(
         let schema = schema
             .as_ref()
             .map(|schema| schema as &dyn polyglot_sql::schema::Schema);
-        polyglot_sql::lineage::expand_cte_stars(&mut expression, schema);
         polyglot_sql::optimizer::annotate_types::annotate_types(
             &mut expression,
             schema,
             Some(dialect),
         );
     }
-    let facts = std::env::var_os("SQLBUILD_EXPERIMENT_FOLDED_FACTS")
-        .map(|_| super::borrowed_facts::infer(&expression, work.query.schema.as_ref(), dialect));
+    let facts = super::borrowed_facts::infer(&expression, work.query.schema.as_ref(), dialect);
+    if facts.is_empty()
+        || facts
+            .iter()
+            .any(|fact| !fact.resolved || fact.name.is_empty() || fact.name == SQL_WILDCARD)
+    {
+        return Err(Box::new(work));
+    }
     let mut projections: Vec<(usize, Result<ProjectAnalysis, String>)> = Vec::new();
     let mut facts_by_name: HashMap<&str, &super::borrowed_facts::OutputFact> = HashMap::new();
-    for fact in facts.iter().flatten() {
-        facts_by_name.entry(&fact.name).or_insert(fact);
+    for fact in &facts {
+        if facts_by_name.insert(&fact.name, fact).is_some() {
+            return Err(Box::new(work));
+        }
     }
-    for (index, projection) in work.projections {
+    for (index, projection) in &work.projections {
         let mut outputs = super::compatibility_types::infer_outputs(
             &expression,
             work.query.schema.as_ref(),
             &projection.function_return_types,
             dialect,
         );
-        if let Some(facts) = &facts {
+        {
             let types: HashMap<_, _> = outputs.into_iter().collect();
             outputs = facts
                 .iter()
@@ -506,7 +552,7 @@ fn experimental_folded_query(
                         project_nullability(fact.nullability)
                     }),
                 name,
-                data_type: known_compatibility_type(data_type),
+                data_type: known_compatibility_type(data_type, projection.rich_type_inference),
             })
             .collect();
         let mut lineage_columns: Vec<ProjectLineageColumn> = Vec::new();
@@ -541,29 +587,140 @@ fn experimental_folded_query(
             });
         }
         projections.push((
-            index,
+            *index,
             Ok(ProjectAnalysis {
                 columns,
                 lineage_columns,
-                has_star,
+                has_star: false,
                 requires_legacy_fallback: false,
             }),
         ));
     }
+    if projections.iter().any(|(_, result)| matches!(result, Ok(analysis) if analysis.columns.iter().any(|column| column.data_type.is_none()))) {
+        return Err(Box::new(work));
+    }
     Ok(CompiledQueryWorkResult {
         projections,
-        validation,
+        validation: if work.query.binding_schema.is_some() {
+            validation
+        } else {
+            None
+        },
     })
 }
 
-struct CompatibilityTypeInputs<'a> {
-    expression: Option<&'a polyglot_sql::Expression>,
-    schema: Option<&'a ValidationSchema>,
-    dialect: DialectType,
+fn has_case_sensitive_binding(expression: &polyglot_sql::Expression) -> bool {
+    use polyglot_sql::Expression;
+    match expression {
+        Expression::Column(column) => {
+            case_sensitive_identifier(&column.name)
+                || column.table.as_ref().is_some_and(case_sensitive_identifier)
+        }
+        Expression::Identifier(identifier) => case_sensitive_identifier(identifier),
+        Expression::Alias(alias) => {
+            case_sensitive_identifier(&alias.alias)
+                || alias.column_aliases.iter().any(case_sensitive_identifier)
+        }
+        Expression::Table(table) => {
+            case_sensitive_identifier(&table.name)
+                || table.alias.as_ref().is_some_and(case_sensitive_identifier)
+                || table.column_aliases.iter().any(case_sensitive_identifier)
+        }
+        Expression::Cte(cte) => {
+            case_sensitive_identifier(&cte.alias)
+                || cte.columns.iter().any(case_sensitive_identifier)
+        }
+        Expression::Subquery(query) => {
+            query.alias.as_ref().is_some_and(case_sensitive_identifier)
+                || query.column_aliases.iter().any(case_sensitive_identifier)
+        }
+        Expression::Select(select) => select
+            .with
+            .as_ref()
+            .is_some_and(case_sensitive_cte_bindings),
+        Expression::Union(union) => union.with.as_ref().is_some_and(case_sensitive_cte_bindings),
+        _ => false,
+    }
 }
 
-fn known_compatibility_type(data_type: Option<String>) -> Option<String> {
-    data_type.filter(|value| value != super::compatibility_types::NULL_TYPE)
+fn case_sensitive_identifier(identifier: &polyglot_sql::expressions::Identifier) -> bool {
+    identifier.quoted && identifier.name != identifier.name.to_uppercase()
+}
+
+fn case_sensitive_cte_bindings(with: &polyglot_sql::expressions::With) -> bool {
+    with.ctes.iter().any(|cte| {
+        case_sensitive_identifier(&cte.alias) || cte.columns.iter().any(case_sensitive_identifier)
+    })
+}
+
+fn borrowed_sources_supported(
+    select: &polyglot_sql::expressions::Select,
+    dialect: DialectType,
+) -> bool {
+    use polyglot_sql::expressions::JoinKind;
+    if select.joins.iter().any(|join| !join.using.is_empty())
+        && select
+            .expressions
+            .iter()
+            .any(|projection| super::borrowed_facts::projection_star(projection).is_some())
+    {
+        return false;
+    }
+    select
+        .from
+        .iter()
+        .flat_map(|from| &from.expressions)
+        .all(|source| borrowed_source_supported(source, dialect))
+        && select.joins.iter().all(|join| {
+            matches!(
+                join.kind,
+                JoinKind::Inner
+                    | JoinKind::Left
+                    | JoinKind::Right
+                    | JoinKind::Full
+                    | JoinKind::Cross
+                    | JoinKind::Implicit
+                    | JoinKind::AsOf
+                    | JoinKind::AsOfLeft
+                    | JoinKind::AsOfRight
+                    | JoinKind::Lateral
+                    | JoinKind::LeftLateral
+            ) && borrowed_source_supported(&join.this, dialect)
+        })
+}
+
+fn borrowed_source_supported(expression: &polyglot_sql::Expression, dialect: DialectType) -> bool {
+    use polyglot_sql::Expression;
+    match expression {
+        Expression::Table(_) => true,
+        Expression::Values(values) => {
+            dialect == DialectType::Snowflake || !values.column_aliases.is_empty()
+        }
+        Expression::Subquery(query) => query.alias.is_some(),
+        Expression::Lateral(lateral) => {
+            lateral.alias.is_some()
+                && matches!(lateral.this.as_ref(), Expression::Function(function) if !function.quoted && function.name.eq_ignore_ascii_case("FLATTEN"))
+        }
+        Expression::Paren(paren) => borrowed_source_supported(&paren.this, dialect),
+        Expression::Annotated(annotation) => borrowed_source_supported(&annotation.this, dialect),
+        _ => false,
+    }
+}
+
+fn known_compatibility_type(data_type: Option<String>, normalize: bool) -> Option<String> {
+    data_type
+        .filter(|value| {
+            !value.is_empty()
+                && value != UNKNOWN_SQL_TYPE
+                && value != super::compatibility_types::NULL_TYPE
+        })
+        .map(|value| {
+            if normalize {
+                normalize_project_type(&value)
+            } else {
+                value
+            }
+        })
 }
 
 type CompiledQueryResult = (
@@ -617,12 +774,11 @@ fn compile_query(mut request: AnalysisRequest, project_projections: bool) -> Com
 fn project_query_templates(
     query_result: &Result<QueryAnalysis, String>,
     projections: Vec<(usize, ProjectAnalysisProjection)>,
-    compatibility: Option<CompatibilityTypeInputs<'_>>,
 ) -> Vec<(usize, Result<ProjectAnalysis, String>)> {
     let mut results: Vec<(usize, Result<ProjectAnalysis, String>)> =
         Vec::with_capacity(projections.len());
     for (projection_index, projection) in projections {
-        let mut projected = match query_result {
+        let projected = match query_result {
             Ok(analysis) => Ok(project_analysis(ProjectAnalysisInputs {
                 analysis,
                 references: &projection.references,
@@ -633,22 +789,6 @@ fn project_query_templates(
             })),
             Err(error) => Err(error.clone()),
         };
-        if let Ok(result) = &mut projected
-            && result.requires_legacy_fallback
-            && let Some(inputs) = &compatibility
-            && let Some(expression) = inputs.expression
-        {
-            let types = super::compatibility_types::infer(
-                expression,
-                inputs.schema,
-                &projection.function_return_types,
-                inputs.dialect,
-            );
-            for column in &mut result.columns {
-                column.data_type = types.get(&column.name).cloned();
-            }
-            result.requires_legacy_fallback = false;
-        }
         results.push((projection_index, projected));
     }
     results

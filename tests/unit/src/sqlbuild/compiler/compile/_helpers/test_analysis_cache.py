@@ -9,6 +9,7 @@ from unittest.mock import Mock
 import pytest
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.compile._helpers.analysis import cache as analysis_cache
 from sqlbuild.compiler.compile._helpers.analysis.cache import (
     build_analysis_cache_context,
     model_analysis_cache_key,
@@ -32,7 +33,6 @@ from sqlbuild.compiler.profiling.main.collect import collect_compile_timings
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     AnalysisCacheTestCase,
-    ExperimentalAnalysisCacheTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     compile_project_with_cache,
@@ -70,52 +70,34 @@ _SELECTION_REPO_FILES: dict[str, str] = {
 @pytest.mark.parametrize(
     "test_case",
     (
-        ExperimentalAnalysisCacheTestCase(
-            description="folded compiler",
-            flag="SQLBUILD_EXPERIMENT_FOLDED_COMPILER",
-            expected_bypasses=1,
-        ),
-        ExperimentalAnalysisCacheTestCase(
-            description="borrowed facts",
-            flag="SQLBUILD_EXPERIMENT_FOLDED_FACTS",
-            expected_bypasses=1,
-        ),
-        ExperimentalAnalysisCacheTestCase(
-            description="folded inference",
-            flag="SQLBUILD_EXPERIMENT_FOLDED_INFERENCE",
-            expected_bypasses=1,
-        ),
-        ExperimentalAnalysisCacheTestCase(
-            description="native types", flag="SQLBUILD_EXPERIMENT_NATIVE_TYPES", expected_bypasses=1
+        AnalysisCacheTestCase(
+            description="changed compiler semantics invalidate prior analysis",
+            expected_count=1,
         ),
     ),
     ids=lambda case: case.description,
 )
-def test_given_experimental_analysis_when_compiling_then_preserves_default_cache(
-    test_case: ExperimentalAnalysisCacheTestCase,
+def test_given_changed_analysis_algorithm_when_compiling_then_refreshes_cached_facts(
+    test_case: AnalysisCacheTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
-    monkeypatch.setenv(test_case.flag, "")
-    with collect_compile_timings() as experimental_metrics:
-        _ = compile_project_with_cache(project_dir=tmp_path)
-    monkeypatch.delenv(test_case.flag)
+    monkeypatch.setattr(
+        analysis_cache, "_ANALYSIS_ALGORITHM_FINGERPRINT", "synthetic-next-algorithm"
+    )
+    with collect_compile_timings() as changed_metrics:
+        changed_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
     with collect_compile_timings() as normal_metrics:
         normal_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
 
-    assert (
-        experimental_metrics.as_milliseconds()["analysis_cache_bypasses"]
-        == test_case.expected_bypasses
-    )
-    assert experimental_metrics.as_milliseconds()["analysis_entry_cache_hits"] == 0
-    assert experimental_metrics.as_milliseconds()["analysis_batch_cache_hits"] == 0
-    assert (
-        normal_metrics.as_milliseconds()["analysis_entry_cache_hits"] == test_case.expected_bypasses
-    )
-    assert normal_project.models == cold_project.models
+    assert changed_metrics.as_milliseconds()["analysis_cache_misses"] == test_case.expected_count
+    assert changed_metrics.as_milliseconds()["analysis_entry_cache_hits"] == 0
+    assert changed_metrics.as_milliseconds()["analysis_batch_cache_hits"] == 0
+    assert normal_metrics.as_milliseconds()["analysis_entry_cache_hits"] == test_case.expected_count
+    assert normal_project.models == changed_project.models == cold_project.models
     assert normal_project.diagnostics == cold_project.diagnostics
 
 

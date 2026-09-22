@@ -47,16 +47,16 @@ _MIB: int = 1024 * 1024
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=96 * _MIB,
             expected_cold_fingerprint=(
-                "02af81fb7723d30ec5082ed06fb039e45acba3d60b2d8a30fcbccb5a990bb9fc"
+                "6841a94fc2d3a740cb0db14fe6cee46bfe32171b9580949134cd40379a31bf94"
             ),
             expected_leaf_edit_fingerprint=(
-                "eb9c3fce74888baad3818aa3f732e8786e8306b2a10c0ff82c15bb74a5a1620a"
+                "a58095a0cd5c2866cd99df92c2503174b400a136379b68dc5889272cef30f17e"
             ),
             expected_macro_edit_fingerprint=(
-                "1de325ddf1ed816c797218def79b23a45e4c020c96e564b71a8ec3cc86112d50"
+                "fdef695e0e1d08cb3809bb0589b0c535b1bbb604bf81a428627dce09317911f3"
             ),
             expected_project_config_fingerprint=(
-                "a320a971740013ccfbd09870864892635d5f5fca6a34ede117f3100537df8cc3"
+                "990efe5eee76ba8e0690e5203264aa948e59c39e12463120a3661ea976f9ec8d"
             ),
         ),
         FreshProcessCompileCachePerformanceGuardTestCase(
@@ -74,16 +74,16 @@ _MIB: int = 1024 * 1024
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=160 * _MIB,
             expected_cold_fingerprint=(
-                "0c9258635fe4f9d31ec2dd1c99dbc63f5c8551ca7fea494003c5ab1c3a2ad57c"
+                "32dac15ee9c15a2aea2e4783e888231e402f15a8fe83270ef55af1aa75924b6c"
             ),
             expected_leaf_edit_fingerprint=(
-                "d9f1e6840338b4ec75a105666a37e255a6c0eedb1edbcb924cc9c07ec06a7666"
+                "4b1d9da0a0141ded2db0cfb7719fb0ccc12353f129638822e451c11e98f55724"
             ),
             expected_macro_edit_fingerprint=(
-                "68ef78100da39c45b9a28751abff295c2f01a246f4515935cb288a648629ed6a"
+                "3a8d7e4ebe24a354f4d9f470e4b37b0286cf12a2f36f850053651c17d9f8e3b3"
             ),
             expected_project_config_fingerprint=(
-                "539f538bdd4387d1aa01cc9e36f378e2a0e61854229d8a482a8cfae4d7c123b6"
+                "c1efca198bc601d5135898ad059cfb6e016872e15f216cc357662bb185ba29f3"
             ),
         ),
         FreshProcessCompileCachePerformanceGuardTestCase(
@@ -101,16 +101,16 @@ _MIB: int = 1024 * 1024
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=320 * _MIB,
             expected_cold_fingerprint=(
-                "6887ddd2547137efd8fe67d13fb07142f6287c0911d152d69eca0d495310e02b"
+                "7e1410c35f6026c7520711224aea2a95d8fe46515a2d2d370a3ee21180a36fdc"
             ),
             expected_leaf_edit_fingerprint=(
-                "6447fccd4a45b5cfe959780cd9c3577d19e97bf7ad53b31cd30c31e1bdba0f34"
+                "059dc35c437adacfe0098e0cc19ccfeaae9fc5ca9aa682721cd3f37cbff92f77"
             ),
             expected_macro_edit_fingerprint=(
-                "999eddf213ff4f95b4b10b11890fc852c610410b730c38c81721d466a6534a68"
+                "e2cfd1b086c42ce4d181380a3be1d7a3d1360ee7ccea6f5dfbb5a8d2af5a76ce"
             ),
             expected_project_config_fingerprint=(
-                "17ae2532010bef51a653859929c3dc26ad88fdd77725cc791a2102184c86cbbc"
+                "38323964889d18747f10614c8442d9a2cdd9d38efed88369cb10c3bf1099ed85"
             ),
         ),
     ],

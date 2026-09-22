@@ -6,24 +6,46 @@ import hashlib
 import json
 import os
 import time
+from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from dataclasses import asdict, dataclass, replace
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import (
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledSqlExpansion,
+    CompileProjectInputs,
+    SqlExpansionContext,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.lint.main.build_expansion_context import build_expansion_context
 from sqlbuild.lint.main.collect_project_files import collect_project_files
 from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import LintConfig, LintRunResult, LintViolation
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue, select_rules
 from sqlbuild.rule_engine._helpers.engine.config import resolve_rule_ignore_selectors
 from sqlbuild.rule_engine._helpers.engine.hermeticity import verify_custom_rules
-from sqlbuild.rule_engine._helpers.engine.native import evaluate_native
+from sqlbuild.rule_engine._helpers.engine.native import (
+    evaluate_native,
+    finalize_native_findings,
+    native_catalogue,
+)
 from sqlbuild.rule_engine.exceptions import RulesError
-from sqlbuild.rule_engine.models import Finding, Rule, RulesConfig, RulesResult, RulesRunResult
+from sqlbuild.rule_engine.main.load_config import load_rules_config
+from sqlbuild.rule_engine.models import (
+    Finding,
+    PreparedSqlLint,
+    PreparedSqlLintResult,
+    Rule,
+    RulesConfig,
+    RulesResult,
+    RulesRunResult,
+)
 
 _SQL_RULE_CACHE_VERSION: str = "sql-rules-v2"
 _SQLBUILD_VERSION: str = version("sqlbuild")
@@ -45,8 +67,9 @@ def evaluate_rules(
     project_dir: Path,
     dialect: str,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
+    prepared_sql: PreparedSqlLint | None = None,
 ) -> RulesRunResult:
-    """Run selected native built-ins before selected custom Python rules."""
+    """Evaluate independent rule phases concurrently, then finalize their combined findings."""
     effective_config: RulesConfig = resolve_rule_ignore_selectors(
         config=config, project=graph.project
     )
@@ -69,32 +92,43 @@ def evaluate_rules(
         graph=graph, selected_keys=selected_keys
     )
     selected_project: CompiledProject = _selected_project(graph=graph, model_paths=model_paths)
-    sql_started: float = time.monotonic()
-    sql_result: _SqlRulesEvaluation = _run_sql_rules(
-        rules=native_rules,
-        project_dir=resolved_project_dir,
-        discovered_inputs=discovered_inputs,
-        project=selected_project,
-        dialect=dialect,
-        selected_model_paths=model_paths,
-        cache_enabled=effective_config.cache.enabled,
+    selected_config: RulesConfig = replace(
+        _selection_rules_config(config=effective_config, model_paths=model_paths),
+        select=tuple(rule.code for rule in selected),
+        ignore=(),
     )
-    sql_ms: int = round((time.monotonic() - sql_started) * 1000)
-    result: RulesResult = evaluate_native(
-        project=selected_project,
-        config=replace(
-            _selection_rules_config(config=effective_config, model_paths=model_paths),
-            select=tuple(rule.code for rule in selected),
-            ignore=(),
-        ),
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="sqlbuild-rules") as executor:
+        native_result: Future[RulesResult] = executor.submit(
+            evaluate_native,
+            project=selected_project,
+            config=selected_config,
+            project_dir=resolved_project_dir,
+            catalogue=catalogue,
+            dialect=dialect,
+            defer_suppressions=True,
+        )
+        sql_started: float = time.monotonic()
+        sql_result: _SqlRulesEvaluation = _run_sql_rules(
+            rules=native_rules,
+            project_dir=resolved_project_dir,
+            discovered_inputs=discovered_inputs,
+            project=selected_project,
+            dialect=dialect,
+            selected_model_paths=model_paths,
+            cache_enabled=effective_config.cache.enabled,
+            prepared_sql=prepared_sql,
+        )
+        sql_ms: int = round((time.monotonic() - sql_started) * 1000)
+        result: RulesResult = native_result.result()
+    finalized: tuple[Finding, ...] = finalize_native_findings(
+        config=selected_config,
         project_dir=resolved_project_dir,
-        catalogue=catalogue,
-        dialect=dialect,
-        initial_findings=sql_result.findings,
+        evaluated_codes=tuple(rule.code for rule in selected),
+        findings=(*sql_result.findings, *result.findings),
     )
     findings: tuple[Finding, ...] = tuple(
         sorted(
-            result.findings,
+            finalized,
             key=lambda item: (item.path.as_posix(), item.line, item.column, item.code),
         )
     )
@@ -122,6 +156,59 @@ def _config_references_custom_rules(config: RulesConfig) -> bool:
     return any(selector.startswith("XSQBR") for selector in selectors)
 
 
+def prepare_sql_rules(
+    *, inputs: CompileProjectInputs, executor: Executor, dialect: str
+) -> PreparedSqlLint | None:
+    project_dir: Path | None = inputs.discovered_inputs.project_dir
+    if project_dir is None or any(diagnostic.is_error for diagnostic in inputs.diagnostics):
+        return None
+    try:
+        config: RulesConfig = load_rules_config(project_dir=project_dir)
+    except RulesError:
+        return None
+    if not config.select or (config.cache.enabled and _read_sql_rule_cache(project_dir)):
+        return None
+    codes: tuple[str, ...] = _selected_sql_codes(config)
+    if not codes:
+        return None
+    return PreparedSqlLint(
+        codes=codes,
+        future=executor.submit(
+            _prepare_sql_lint,
+            project_dir=project_dir,
+            config=LintConfig(
+                dialect=dialect, enabled_native_rules=codes, header_rules_enabled=False
+            ),
+            discovered_inputs=inputs.discovered_inputs,
+            compiled_expansions={
+                model.model_file.file_path: model.sql_expansion
+                for model in inputs.model_inputs
+                if model.sql_expansion is not None
+            },
+        ),
+    )
+
+
+def _prepare_sql_lint(
+    *,
+    project_dir: Path,
+    config: LintConfig,
+    discovered_inputs: DiscoveredProjectInputs,
+    compiled_expansions: dict[Path, CompiledSqlExpansion],
+) -> PreparedSqlLintResult:
+    context: SqlExpansionContext = build_expansion_context(
+        project_dir=project_dir, discovered_inputs=discovered_inputs
+    )
+    result: LintRunResult = run_lint(
+        project_dir=project_dir,
+        config=config,
+        discovered_inputs=discovered_inputs,
+        compiled_expansions=compiled_expansions,
+        expansion_context=context,
+    )
+    return PreparedSqlLintResult(result=result, context=context)
+
+
 def _selection_rules_config(
     *, config: RulesConfig, model_paths: frozenset[str] | None
 ) -> RulesConfig:
@@ -133,6 +220,19 @@ def _selection_rules_config(
             entry for entry in config.rule_exceptions if Path(entry.path).as_posix() in model_paths
         ),
     )
+
+
+def _selected_sql_codes(config: RulesConfig) -> tuple[str, ...]:
+    codes: list[str] = []
+    for rule in native_catalogue():
+        code: str = str(rule["code"])
+        if not code.startswith("SQBRSQL"):
+            continue
+        selected: bool = any(code.startswith(selector) for selector in config.select)
+        ignored: bool = any(code.startswith(selector) for selector in config.ignore)
+        if selected and not ignored:
+            codes.append(code)
+    return tuple(codes)
 
 
 def _selected_project(
@@ -148,6 +248,47 @@ def _selected_project(
     )
 
 
+def _run_prepared_lint(
+    *,
+    project_dir: Path,
+    config: LintConfig,
+    selected_paths: frozenset[Path],
+    discovered_inputs: DiscoveredProjectInputs,
+    compiled_expansions: dict[Path, CompiledSqlExpansion],
+    dynamic_output_paths: frozenset[Path],
+    prepared_sql: PreparedSqlLint | None,
+) -> LintRunResult:
+    if prepared_sql is None or set(prepared_sql.codes) != set(config.enabled_native_rules or ()):
+        return run_lint(
+            project_dir=project_dir,
+            config=config,
+            selected_paths=selected_paths,
+            discovered_inputs=discovered_inputs,
+            compiled_expansions=compiled_expansions,
+            dynamic_output_paths=dynamic_output_paths,
+        )
+    completed: PreparedSqlLintResult = prepared_sql.future.result()
+    prepared: LintRunResult = completed.result
+    proof_paths: frozenset[Path] = selected_paths & dynamic_output_paths
+    violations: tuple[LintViolation, ...] = tuple(
+        violation
+        for violation in prepared.violations
+        if violation.file_path in selected_paths and violation.file_path not in proof_paths
+    )
+    if proof_paths:
+        proven: LintRunResult = run_lint(
+            project_dir=project_dir,
+            config=config,
+            selected_paths=proof_paths,
+            discovered_inputs=discovered_inputs,
+            compiled_expansions=compiled_expansions,
+            dynamic_output_paths=proof_paths,
+            expansion_context=completed.context,
+        )
+        violations = (*violations, *proven.violations)
+    return replace(prepared, violations=violations, files_checked=len(selected_paths))
+
+
 def _run_sql_rules(
     *,
     rules: tuple[Rule, ...],
@@ -157,6 +298,7 @@ def _run_sql_rules(
     dialect: str,
     selected_model_paths: frozenset[str] | None,
     cache_enabled: bool,
+    prepared_sql: PreparedSqlLint | None = None,
 ) -> _SqlRulesEvaluation:
     codes: tuple[str, ...] = tuple(rule.code for rule in rules if rule.code.startswith("SQBRSQL"))
     if not codes:
@@ -190,9 +332,11 @@ def _run_sql_rules(
             if path not in model_paths
         )
     result: LintRunResult | None = (
-        run_lint(
+        _run_prepared_lint(
             project_dir=project_dir,
-            config=LintConfig(dialect=dialect, enabled_native_rules=codes),
+            config=LintConfig(
+                dialect=dialect, enabled_native_rules=codes, header_rules_enabled=False
+            ),
             selected_paths=frozenset(selected_paths),
             discovered_inputs=discovered_inputs,
             compiled_expansions=project.sql_expansions,
@@ -202,6 +346,7 @@ def _run_sql_rules(
                 if model.dynamic_column_contract is not None
                 and model.dynamic_column_contract.output_proven
             ),
+            prepared_sql=prepared_sql,
         )
         if selected_paths
         else None

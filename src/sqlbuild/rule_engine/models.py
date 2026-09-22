@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from concurrent.futures import Future
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from sqlbuild.compiler.compile.models import SqlExpansionContext
+from sqlbuild.lint.models import LintRunResult
 from sqlbuild.rule_engine.types import RuleCheck, RuleOptionValue, RuleSubject
 
 
@@ -291,6 +294,22 @@ class RulesResult:
     cache_misses: int = 0
     built_in_ms: int = 0
     custom_ms: int = 0
+
+
+@dataclass(frozen=True)
+class PreparedSqlLintResult:
+    """Reusable expansion context and completed preliminary SQL checks."""
+
+    result: LintRunResult
+    context: SqlExpansionContext
+
+
+@dataclass(frozen=True)
+class PreparedSqlLint:
+    """Process-local SQL checks started after compiler expansion has completed."""
+
+    codes: tuple[str, ...]
+    future: Future[PreparedSqlLintResult]
 
 
 @dataclass(frozen=True)

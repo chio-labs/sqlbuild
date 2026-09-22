@@ -9,7 +9,8 @@ import pickle
 import re
 import sys
 import tempfile
-from dataclasses import asdict, replace
+from collections.abc import Sequence
+from dataclasses import asdict, fields, replace
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
@@ -21,7 +22,6 @@ from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.models import (
     CompactLineageFacts,
     CompiledLineageColumnFact,
-    CompiledLineageSourceFact,
     CompiledModel,
     CompiledProject,
     CompiledSqlScenario,
@@ -70,6 +70,7 @@ def evaluate_native(
     catalogue: tuple[Rule, ...],
     dialect: str = "generic",
     initial_findings: tuple[Finding, ...] = (),
+    defer_suppressions: bool = False,
 ) -> RulesResult:
     """Evaluate one compiled model batch through the native engine."""
 
@@ -98,6 +99,7 @@ def evaluate_native(
         ],
         "scope_index": scope_metadata_projection(index=project.scope_index),
         "initial_findings": [_finding_payload(finding) for finding in initial_findings],
+        "defer_suppressions": defer_suppressions,
         "custom_rules": _custom_rule_payloads(
             catalogue=catalogue, project=project, project_dir=project_dir
         ),
@@ -106,6 +108,15 @@ def evaluate_native(
     retry_native_misses: int = 0
     request["custom_host"] = None
     try:
+        if not config.cache.enabled or not (project_dir / "target" / "rules-cache").exists():
+            custom_host, custom_host_input = _custom_host_payload(
+                project=project,
+                config=config,
+                project_dir=project_dir,
+                catalogue=tuple(selected_catalogue),
+                dialect=dialect,
+            )
+            request["custom_host"] = custom_host
         try:
             response_json: str = _evaluate_request(request)
         except ValueError as error:
@@ -150,6 +161,33 @@ def _evaluate_request(request: dict[str, object]) -> str:
     return _native.evaluate_json(
         orjson.dumps(request, option=orjson.OPT_SORT_KEYS, default=str).decode()
     )
+
+
+def finalize_native_findings(
+    *,
+    config: RulesConfig,
+    project_dir: Path,
+    evaluated_codes: tuple[str, ...],
+    findings: tuple[Finding, ...],
+) -> tuple[Finding, ...]:
+    """Apply exception policy once to completed SQL, native, and custom findings."""
+
+    request: dict[str, object] = {
+        "version": RULES_NATIVE_API_VERSION,
+        "project_dir": str(project_dir.resolve()),
+        "config": _config_payload(config),
+        "evaluated_codes": evaluated_codes,
+        "findings": [_finding_payload(finding) for finding in findings],
+    }
+    try:
+        payload: object = orjson.loads(
+            _native.finalize_rule_findings_json(orjson.dumps(request).decode())
+        )
+    except (ValueError, TypeError) as error:
+        raise RulesError(str(error)) from error
+    if not isinstance(payload, list):
+        raise RulesError("native rules engine returned invalid finalized findings")
+    return tuple(_decode_finding(value) for value in payload)
 
 
 def load_native_config(project_dir: Path) -> dict[str, object]:
@@ -582,42 +620,56 @@ def _custom_fact_fingerprint(*, project: CompiledProject, attributes: frozenset[
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _project_fact_models(*, project: CompiledProject) -> tuple[CompiledModel, ...]:
+def _project_fact_models(*, project: CompiledProject) -> tuple[dict[str, object], ...]:
     """Project models with lazy lineage represented by stable semantic data only."""
 
-    projected: list[CompiledModel] = []
+    projected: list[dict[str, object]] = []
     for model in project.models:
-        projected_model: CompiledModel = model
-        lineage: object = model.fast_lineage_columns
-        if isinstance(lineage, CompactLineageFacts):
-            lineage = _compact_lineage_fact_payloads(lineage=lineage)
-            projected_model = replace(model, fast_lineage_columns=cast(Any, lineage))
-        projected.append(projected_model)
+        payload: dict[str, object] = {
+            field.name: getattr(model, field.name) for field in fields(model)
+        }
+        payload["fast_lineage_columns"] = _lineage_fingerprint_payload(
+            lineage=model.fast_lineage_columns
+        )
+        projected.append(payload)
     return tuple(projected)
 
 
-def _compact_lineage_fact_payloads(
-    *, lineage: CompactLineageFacts
-) -> tuple[CompiledLineageColumnFact, ...]:
-    """Project compact lineage into the same semantic shape as materialized facts."""
+def _lineage_fingerprint_payload(
+    *, lineage: Sequence[CompiledLineageColumnFact] | None
+) -> tuple[tuple[object, ...], ...] | None:
+    """Hash semantic lineage without rehydrating compact facts into Python objects."""
 
-    payloads: list[CompiledLineageColumnFact] = []
-    for name_index, transform_code, confidence_code, sources in lineage.rows:
-        payloads.append(
-            CompiledLineageColumnFact(
-                output_column=lineage.string_pool[name_index],
-                upstream_columns=tuple(
-                    CompiledLineageSourceFact(
-                        resource_type=lineage.string_pool[source[0]],
-                        resource_name=lineage.resource_name(source[1]),
-                        column_name=lineage.string_pool[source[2]],
-                    )
-                    for source in sources
-                ),
-                transform_kind=lineage.transform_kind(transform_code),
-                confidence=lineage.confidence(confidence_code),
+    if lineage is None:
+        return None
+    payloads: list[tuple[object, ...]] = []
+    if isinstance(lineage, CompactLineageFacts):
+        for name_index, transform_code, confidence_code, sources in lineage.rows:
+            upstream: tuple[tuple[str, str, str], ...] = tuple(
+                (
+                    lineage.string_pool[source[0]],
+                    lineage.resource_name(source[1]),
+                    lineage.string_pool[source[2]],
+                )
+                for source in sources
             )
-        )
+            payloads.append(
+                (
+                    lineage.string_pool[name_index],
+                    upstream,
+                    lineage.transform_kind(transform_code),
+                    lineage.confidence(confidence_code),
+                )
+            )
+    else:
+        for column in lineage:
+            upstream = tuple(
+                (source.resource_type, source.resource_name, source.column_name)
+                for source in column.upstream_columns
+            )
+            payloads.append(
+                (column.output_column, upstream, column.transform_kind, column.confidence)
+            )
     return tuple(payloads)
 
 

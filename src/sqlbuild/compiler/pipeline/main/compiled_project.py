@@ -86,6 +86,8 @@ def build_compiled_project(
             external_sql_reference_resolver=external_sql_reference_resolver,
             no_cache=no_cache,
         )
+    if analysis_selection is not None and analysis_selection.on_inputs_ready is not None:
+        analysis_selection.on_inputs_ready(inputs=compile_inputs)
     inference_profile: ExpressionInferenceProfile = adapter.expression_inference_profile()
     analysis_model_names: frozenset[str] | None = _resolve_analysis_model_names(
         compile_inputs=compile_inputs,

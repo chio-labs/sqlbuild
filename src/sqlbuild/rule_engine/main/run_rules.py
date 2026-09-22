@@ -6,7 +6,7 @@ from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.rule_engine._helpers.run.rules import evaluate_rules
-from sqlbuild.rule_engine.models import RulesConfig, RulesRunResult
+from sqlbuild.rule_engine.models import PreparedSqlLint, RulesConfig, RulesRunResult
 
 
 def run_rules(
@@ -17,6 +17,7 @@ def run_rules(
     project_dir: Path,
     dialect: str,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
+    prepared_sql: PreparedSqlLint | None = None,
 ) -> RulesRunResult:
     """Run selected native built-ins before selected custom Python rules."""
 
@@ -27,4 +28,5 @@ def run_rules(
         project_dir=project_dir,
         dialect=dialect,
         selected_keys=selected_keys,
+        prepared_sql=prepared_sql,
     )

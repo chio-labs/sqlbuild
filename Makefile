@@ -5,7 +5,8 @@ SHELL := /bin/bash
 	test-e2e-duckdb-build-incremental test-e2e-duckdb-build-virtual \
 	test-e2e-duckdb-cli-data test-e2e-duckdb-cli test-e2e-duckdb-virtual \
 	test-e2e-duckdb-integrations test-e2e-performance \
-	test-e2e-cold-compile-performance test-e2e-cache-compile-performance
+	test-e2e-cold-compile-performance test-e2e-cache-compile-performance \
+	test-e2e-dense-compile-performance
 
 format:
 	uv run ruff format .
@@ -236,6 +237,14 @@ test-e2e-cold-compile-performance:
 	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=4 uv run pytest \
 		tests/e2e/src/sqlbuild/cli/commands/main/compile/test_fresh_process_compile_performance.py \
 		-m cold_compile_performance -k "models_$(SQLBUILD_BENCHMARK_MODELS)" \
+		-vv --log-cli-level=INFO --color=yes
+
+test-e2e-dense-compile-performance:
+	test -n "$(SQLBUILD_BENCHMARK_MODELS)"
+	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=4 uv run pytest \
+		tests/e2e/src/sqlbuild/cli/commands/main/compile/test_dense_compile_performance.py \
+		-n auto --dist loadfile \
+		-m cold_compile_performance -k "models_$(SQLBUILD_BENCHMARK_MODELS)_" \
 		-vv --log-cli-level=INFO --color=yes
 
 test-e2e-cache-compile-performance:

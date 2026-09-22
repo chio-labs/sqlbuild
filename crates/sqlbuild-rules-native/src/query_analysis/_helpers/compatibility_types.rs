@@ -1,16 +1,22 @@
-//! Experimental borrowed-tree type evaluation with immutable lexical CTE outputs.
+//! Borrowed-tree type evaluation with immutable lexical CTE outputs.
 
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use polyglot_sql::expressions::{DataType, Select, Star, With};
+use polyglot_sql::expressions::{DataType, Select, Star, Values, With};
 use polyglot_sql::{Dialect, DialectType, Expression, ValidationSchema};
 
 type Outputs = Vec<(String, Option<String>)>;
 type Relations = HashMap<String, Rc<Outputs>>;
+#[derive(Default)]
+struct Sources {
+    items: Vec<(String, Rc<Outputs>)>,
+    using_columns: HashSet<String>,
+}
 pub(super) const NULL_TYPE: &str = "\0NULL";
 const SQL_WILDCARD: &str = "*";
 
+#[cfg(test)]
 pub(super) fn infer(
     expression: &Expression,
     schema: Option<&ValidationSchema>,
@@ -71,6 +77,7 @@ impl TypeContext<'_> {
         }
         match expression {
             Expression::Select(select) => self.select(select, &relations),
+            Expression::Values(values) => self.values_outputs(values),
             Expression::Union(set) => self.set(&set.left, &set.right, set.by_name, &relations),
             Expression::Intersect(set) => self.set(&set.left, &set.right, set.by_name, &relations),
             Expression::Except(set) => self.set(&set.left, &set.right, set.by_name, &relations),
@@ -89,14 +96,17 @@ impl TypeContext<'_> {
         let left = self.query(left, relations);
         let right = self.query(right, relations);
         if by_name {
-            return left
-                .into_iter()
-                .map(|(name, value)| {
-                    let other = lookup(&right, &name).flatten();
-                    let common = common_type(value.as_deref(), other);
-                    (name, common)
-                })
-                .collect();
+            let mut result: Outputs = Vec::new();
+            for (name, value) in &left {
+                let other = lookup(&right, name).unwrap_or(Some(NULL_TYPE));
+                result.push((name.clone(), common_type(value.as_deref(), other)));
+            }
+            for (name, value) in right {
+                if lookup(&left, &name).is_none() {
+                    result.push((name, value));
+                }
+            }
+            return result;
         }
         if left.len() != right.len() {
             return Vec::new();
@@ -110,13 +120,30 @@ impl TypeContext<'_> {
     }
 
     fn select(&self, select: &Select, relations: &Relations) -> Outputs {
-        let mut aliases = Relations::new();
+        let mut aliases = Sources {
+            using_columns: select
+                .joins
+                .iter()
+                .flat_map(|join| &join.using)
+                .map(|column| column.name.to_lowercase())
+                .collect(),
+            ..Default::default()
+        };
         let tables = select
             .from
             .iter()
             .flat_map(|from| &from.expressions)
             .chain(select.joins.iter().map(|join| &join.this));
         for source in tables {
+            if let Expression::Values(values) = unwrapped(source) {
+                aliases.items.push((
+                    values
+                        .alias
+                        .as_ref()
+                        .map_or(String::new(), |alias| alias.name.to_lowercase()),
+                    Rc::new(self.values_outputs(values)),
+                ));
+            }
             if let Expression::Subquery(subquery) = unwrapped(source)
                 && let Some(alias) = &subquery.alias
             {
@@ -124,39 +151,46 @@ impl TypeContext<'_> {
                 for ((name, _), alias) in outputs.iter_mut().zip(&subquery.column_aliases) {
                     *name = alias.name.clone();
                 }
-                aliases.insert(alias.name.to_lowercase(), Rc::new(outputs));
+                aliases
+                    .items
+                    .push((alias.name.to_lowercase(), Rc::new(outputs)));
             }
             if let Expression::Table(table) = unwrapped(source)
                 && let Some(outputs) = relations.get(&table.name.name.to_lowercase())
             {
-                aliases.insert(table.name.name.to_lowercase(), outputs.clone());
-                if let Some(alias) = &table.alias {
-                    aliases.insert(alias.name.to_lowercase(), outputs.clone());
-                }
+                let outputs = if table.column_aliases.is_empty() {
+                    outputs.clone()
+                } else {
+                    let mut renamed = outputs.as_ref().clone();
+                    for ((name, _), alias) in renamed.iter_mut().zip(&table.column_aliases) {
+                        *name = alias.name.clone();
+                    }
+                    Rc::new(renamed)
+                };
+                aliases.items.push((
+                    table
+                        .alias
+                        .as_ref()
+                        .unwrap_or(&table.name)
+                        .name
+                        .to_lowercase(),
+                    outputs,
+                ));
             }
         }
         let mut result: Outputs = Vec::new();
         for projection in &select.expressions {
             let projection = unwrapped(projection);
-            if let Expression::Star(star) = projection {
-                result.extend(star_outputs(star, &aliases));
+            if let Some(star) = super::borrowed_facts::projection_star(projection) {
+                result.extend(star_outputs(&star, &aliases, self));
             } else {
                 let name = projection.get_output_name();
-                if !name.is_empty() && name != SQL_WILDCARD {
+                if name != SQL_WILDCARD {
                     let inner = match projection {
                         Expression::Alias(alias) => &alias.this,
                         _ => projection,
                     };
-                    let value = if matches!(unwrapped(inner), Expression::Null(_)) {
-                        Some(NULL_TYPE.to_string())
-                    } else {
-                        self.expression(inner, &aliases).or_else(|| {
-                            inner
-                                .inferred_type()
-                                .filter(|data_type| **data_type != DataType::Unknown)
-                                .and_then(|data_type| self.cast_type(data_type))
-                        })
-                    };
+                    let value = self.projection_type(inner, &aliases);
                     result.push((name.to_string(), value));
                 }
             }
@@ -164,7 +198,39 @@ impl TypeContext<'_> {
         result
     }
 
-    fn expression(&self, expression: &Expression, aliases: &Relations) -> Option<String> {
+    fn values_outputs(&self, values: &Values) -> Outputs {
+        let mut outputs: Outputs = Vec::new();
+        for row in &values.expressions {
+            for (index, expression) in row.expressions.iter().enumerate() {
+                let value = self.projection_type(expression, &Sources::default());
+                if let Some((_, prior)) = outputs.get_mut(index) {
+                    *prior = common_type(prior.as_deref(), value.as_deref());
+                } else {
+                    let name = values.column_aliases.get(index).map_or_else(
+                        || format!("column{}", index + 1),
+                        |alias| alias.name.clone(),
+                    );
+                    outputs.push((name, value));
+                }
+            }
+        }
+        outputs
+    }
+
+    fn projection_type(&self, expression: &Expression, aliases: &Sources) -> Option<String> {
+        if matches!(unwrapped(expression), Expression::Null(_)) {
+            Some(NULL_TYPE.to_string())
+        } else {
+            self.expression(expression, aliases).or_else(|| {
+                expression
+                    .inferred_type()
+                    .filter(|data_type| **data_type != DataType::Unknown)
+                    .and_then(|data_type| self.cast_type(data_type))
+            })
+        }
+    }
+
+    fn expression(&self, expression: &Expression, aliases: &Sources) -> Option<String> {
         let expression = unwrapped(expression);
         let function_name = match expression {
             Expression::Function(function) => function.name.as_str(),
@@ -181,17 +247,30 @@ impl TypeContext<'_> {
             Expression::Cast(cast) | Expression::TryCast(cast) => self.cast_type(&cast.to),
             Expression::Column(column) => {
                 if let Some(table) = &column.table {
-                    return lookup(aliases.get(&table.name.to_lowercase())?, &column.name.name)
+                    let key = table.name.to_lowercase();
+                    let (_, source) = aliases.items.iter().find(|(name, _)| name == &key)?;
+                    return lookup(source, &column.name.name)
                         .flatten()
                         .map(str::to_string);
                 }
-                let mut seen: HashSet<*const Outputs> = HashSet::new();
                 let mut values = aliases
-                    .values()
-                    .filter(|source| seen.insert(Rc::as_ptr(source)))
-                    .filter_map(|source| lookup(source, &column.name.name).flatten());
-                let value = values.next()?;
-                values.next().is_none().then(|| value.to_string())
+                    .items
+                    .iter()
+                    .filter_map(|(_, source)| lookup(source, &column.name.name));
+                let value = values.next()??;
+                if aliases
+                    .using_columns
+                    .contains(&column.name.name.to_lowercase())
+                {
+                    for other in values {
+                        if canonical(other?) != canonical(value) {
+                            return None;
+                        }
+                    }
+                    Some(value.to_string())
+                } else {
+                    values.next().is_none().then(|| value.to_string())
+                }
             }
             Expression::Boolean(_)
             | Expression::And(_)
@@ -237,7 +316,7 @@ impl TypeContext<'_> {
         }
     }
 
-    fn string_operand(&self, expression: &Expression, aliases: &Relations) -> Option<String> {
+    fn string_operand(&self, expression: &Expression, aliases: &Sources) -> Option<String> {
         if matches!(unwrapped(expression), Expression::Literal(literal) if matches!(literal.as_ref(), polyglot_sql::expressions::Literal::String(_)))
         {
             Some("TEXT".to_string())
@@ -249,7 +328,7 @@ impl TypeContext<'_> {
     fn results<'a>(
         &self,
         values: impl Iterator<Item = &'a Expression>,
-        aliases: &Relations,
+        aliases: &Sources,
     ) -> Option<String> {
         let mut types = values
             .filter(|value| !matches!(unwrapped(value), Expression::Null(_)))
@@ -265,6 +344,17 @@ impl TypeContext<'_> {
     }
 
     fn cast_type(&self, data_type: &DataType) -> Option<String> {
+        if let DataType::VarChar {
+            length: Some(length),
+            ..
+        }
+        | DataType::String {
+            length: Some(length),
+        }
+        | DataType::TextWithLength { length } = data_type
+        {
+            return Some(format!("VARCHAR({length})"));
+        }
         match Dialect::get(self.dialect).generate(&Expression::DataType(data_type.clone())) {
             Ok(rendered) => Some(rendered.replace(", ", ",")),
             Err(_) => None,
@@ -304,56 +394,45 @@ fn lookup<'a>(outputs: &'a Outputs, name: &str) -> Option<Option<&'a str>> {
         .map(|(_, value)| value.as_deref())
 }
 
-fn star_outputs(star: &Star, aliases: &Relations) -> Outputs {
-    if star
-        .rename
-        .as_ref()
-        .is_some_and(|values| !values.is_empty())
-    {
-        return Vec::new();
-    }
-    let sources: Vec<_> = match &star.table {
-        Some(table) => aliases
-            .get(&table.name.to_lowercase())
-            .into_iter()
-            .collect(),
-        None => {
-            let mut seen: HashSet<*const Outputs> = HashSet::new();
-            aliases
-                .values()
-                .filter(|source| seen.insert(Rc::as_ptr(source)))
-                .collect()
-        }
-    };
+fn star_outputs(star: &Star, aliases: &Sources, context: &TypeContext<'_>) -> Outputs {
     let excluded: HashSet<_> = star
         .except
         .iter()
         .flatten()
         .map(|name| name.name.to_lowercase())
-        .chain(
-            star.replace
-                .iter()
-                .flatten()
-                .map(|alias| alias.alias.name.to_lowercase()),
-        )
         .collect();
     let mut result: Outputs = Vec::new();
-    let mut seen: HashSet<String> = HashSet::new();
-    let mut ambiguous: HashSet<String> = HashSet::new();
-    for source in sources {
+    for (alias, source) in &aliases.items {
+        if star
+            .table
+            .as_ref()
+            .is_some_and(|table| !table.name.eq_ignore_ascii_case(alias))
+        {
+            continue;
+        }
         for (name, value) in source.iter() {
             let key = name.to_lowercase();
-            if excluded.contains(&key) || value.is_none() {
+            if excluded.contains(&key) {
                 continue;
             }
-            if !seen.insert(key.clone()) {
-                ambiguous.insert(key);
-            } else {
-                result.push((name.clone(), value.clone()));
-            }
+            let replacement = star
+                .replace
+                .iter()
+                .flatten()
+                .find(|replacement| replacement.alias.name.eq_ignore_ascii_case(name));
+            let value = replacement.map_or_else(
+                || value.clone(),
+                |replacement| context.projection_type(&replacement.this, aliases),
+            );
+            let renamed = star
+                .rename
+                .iter()
+                .flatten()
+                .find(|(original, _)| original.name.eq_ignore_ascii_case(name))
+                .map_or(name.as_str(), |(_, renamed)| renamed.name.as_str());
+            result.push((renamed.to_string(), value));
         }
     }
-    result.retain(|(name, _)| !ambiguous.contains(&name.to_lowercase()));
     result
 }
 

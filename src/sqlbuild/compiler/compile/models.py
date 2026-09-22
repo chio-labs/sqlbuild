@@ -15,6 +15,7 @@ from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompactBatchResponseCallback,
     CompiledResourceType,
+    CompileInputsReadyCallback,
     DiagnosticPhase,
     DiagnosticSeverity,
     FunctionLanguage,
@@ -622,12 +623,15 @@ class AnalysisCacheContext:
 
 @dataclass(frozen=True)
 class CompileAnalysisSelection:
-    """Selection inputs used to limit deep model SQL analysis."""
+    """Deep-analysis selection and invocation-local preparation observer."""
 
     select: tuple[str, ...] = ()
     exclude: tuple[str, ...] = ()
     auto_load_sources: bool = False
     no_cache: bool = False
+    on_inputs_ready: CompileInputsReadyCallback | None = field(
+        default=None, compare=False, repr=False
+    )
 
 
 @dataclass(frozen=True)

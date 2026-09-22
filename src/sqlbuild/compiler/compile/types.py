@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Protocol
 from sqlbuild.sql_values.models import SqlValue
 
 if TYPE_CHECKING:
-    from sqlbuild.compiler.compile.models import CompactBatchPreparation
+    from sqlbuild.compiler.compile.models import CompactBatchPreparation, CompileProjectInputs
 
 
 class TypedSqlValueRenderer(Protocol):
@@ -29,6 +29,12 @@ class CompactBatchResponseCallback(Protocol):
     """Keyword-only callback for publishing one native compact response."""
 
     def __call__(self, *, preparation: CompactBatchPreparation, response: object) -> None: ...
+
+
+class CompileInputsReadyCallback(Protocol):
+    """Invocation-local observer for the completed pre-semantic input snapshot."""
+
+    def __call__(self, *, inputs: CompileProjectInputs) -> None: ...
 
 
 class AttachedAuditTargetKind(StrEnum):

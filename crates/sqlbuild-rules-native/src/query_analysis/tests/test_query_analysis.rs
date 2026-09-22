@@ -1,6 +1,7 @@
 use crate::query_analysis::main::analyze::analyze_json;
 use crate::query_analysis::main::analyze_project::analyze_project_json;
 use crate::query_analysis::tests::helpers::{
+    borrowed_facts_preserve_named_outputs_and_terminal_sources,
     borrowed_facts_preserve_union_dependencies_and_join_nullability,
     canonical_queries_reuse_semantics_and_project_resources,
     combined_queries_preserve_standalone_binding,
@@ -18,6 +19,11 @@ use serde_json::{Value, json};
 #[test]
 fn given_compact_query_cases_when_analyzing_projects_then_expected_behavior_holds() {
     let test_cases = [
+        CompactQueryAnalysisTestCase {
+            description: "borrowed facts preserve named outputs and actual terminal columns",
+            run: borrowed_facts_preserve_named_outputs_and_terminal_sources,
+            expected_success: true,
+        },
         CompactQueryAnalysisTestCase {
             description: "borrowed output graph preserves union dependencies and outer-join nullability",
             run: borrowed_facts_preserve_union_dependencies_and_join_nullability,

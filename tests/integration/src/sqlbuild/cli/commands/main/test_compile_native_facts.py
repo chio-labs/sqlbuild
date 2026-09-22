@@ -1,4 +1,4 @@
-"""Real CLI and DuckDB coverage for the experimental borrowed query graph."""
+"""Real CLI and DuckDB coverage for the borrowed query graph."""
 
 from __future__ import annotations
 
@@ -11,14 +11,25 @@ import pytest
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    AliasSourceCompileTestCase,
+    BoundProjectionCompileTestCase,
     DerivedNativeCompileTestCase,
-    NativeCompilerModeTestCase,
 )
 
 
 @pytest.mark.parametrize(
     "test_case",
     (
+        DerivedNativeCompileTestCase(
+            description="derived-table column aliases preserve the declared contract",
+            query_sql=(
+                "WITH typed AS (SELECT CAST(1 AS BIGINT) AS original_id) "
+                "SELECT order_id FROM (SELECT original_id FROM typed) AS nested_orders(order_id)"
+            ),
+            expected_exit_code=0,
+            expected_diagnostics=(),
+            expected_rows=((1,),),
+        ),
         DerivedNativeCompileTestCase(
             description="CTE column aliases survive a derived-table star",
             query_sql=(
@@ -46,12 +57,8 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
 def test_given_derived_native_facts_when_compiling_then_contract_and_execution_agree(
     test_case: DerivedNativeCompileTestCase,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setenv("SQLBUILD_EXPERIMENT_FOLDED_COMPILER", "1")
-    monkeypatch.setenv("SQLBUILD_EXPERIMENT_FOLDED_FACTS", "1")
-    monkeypatch.setenv("SQLBUILD_EXPERIMENT_FOLDED_INFERENCE", "1")
     (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
     models: Path = tmp_path / "models"
     models.mkdir()
@@ -75,25 +82,26 @@ def test_given_derived_native_facts_when_compiling_then_contract_and_execution_a
 @pytest.mark.parametrize(
     "test_case",
     (
-        NativeCompilerModeTestCase(description="default compiler", flags=(), expected_edge_count=5),
-        NativeCompilerModeTestCase(
-            description="borrowed native graph",
-            flags=("FOLDED_COMPILER", "FOLDED_FACTS", "FOLDED_INFERENCE"),
+        AliasSourceCompileTestCase(
+            description="direct source",
+            query_prefix="",
+            source_relation='__source("orders")',
+            expected_edge_count=5,
+        ),
+        AliasSourceCompileTestCase(
+            description="CTE source",
+            query_prefix='WITH source_rows AS (SELECT * FROM __source("orders")) ',
+            source_relation="source_rows",
             expected_edge_count=5,
         ),
     ),
     ids=lambda case: case.description,
 )
 def test_given_input_and_output_share_name_when_compiling_then_lineage_keeps_input_dependency(
-    test_case: NativeCompilerModeTestCase,
+    test_case: AliasSourceCompileTestCase,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    for flag in ("FOLDED_COMPILER", "FOLDED_FACTS", "FOLDED_INFERENCE"):
-        monkeypatch.delenv(f"SQLBUILD_EXPERIMENT_{flag}", raising=False)
-    for flag in test_case.flags:
-        monkeypatch.setenv(f"SQLBUILD_EXPERIMENT_{flag}", "1")
     (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
     models: Path = tmp_path / "models"
     models.mkdir()
@@ -109,11 +117,12 @@ def test_given_input_and_output_share_name_when_compiling_then_lineage_keeps_inp
     (models / "order_totals.sql").write_text(
         "MODEL (contract enforced, columns (order_id (type INTEGER), "
         "status (type VARCHAR), total (type DOUBLE)));\n"
+        f"{test_case.query_prefix}"
         "SELECT order_id, "
         "CAST(CASE WHEN order_id % 2 = 0 THEN 'even' ELSE 'odd' END AS VARCHAR) AS status, "
         "CAST(CASE WHEN order_id % 2 = 0 THEN amount + 2 "
         "WHEN status = 'priority' THEN amount * 2 ELSE amount - 1 END AS DOUBLE) AS total "
-        'FROM __source("orders") AS input'
+        f"FROM {test_case.source_relation} AS input"
     )
 
     exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
@@ -140,6 +149,140 @@ def test_given_input_and_output_share_name_when_compiling_then_lineage_keeps_inp
         assert connection.execute(compiled_sql).fetchall() == [(1, "odd", 20.0)]
         connection.execute("UPDATE orders_input SET status = 'standard'")
         assert connection.execute(compiled_sql).fetchall() == [(1, "odd", 9.0)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        BoundProjectionCompileTestCase(
+            description="qualified star exclusions preserve the output shape",
+            query_sql='WITH selected AS (SELECT o.* EXCLUDE (category, amount) FROM __source("orders") o) SELECT * FROM selected ORDER BY order_id',
+            expected_rows=((1,), (2,)),
+            expected_edges=1,
+        ),
+        BoundProjectionCompileTestCase(
+            description="positional CTE aliases retain unnamed nullable expressions",
+            query_sql='WITH selected(a, b) AS (SELECT CAST(NULL AS VARCHAR), order_id FROM __source("orders")) SELECT a AS order_id FROM selected',
+            expected_rows=((None,), (None,)),
+            expected_edges=0,
+            output_contract="order_id (type VARCHAR, nullable true)",
+        ),
+        BoundProjectionCompileTestCase(
+            description="unnamed union branches retain every input dependency",
+            query_sql='WITH selected AS (SELECT MAX(order_id) AS order_id FROM __source("orders") UNION ALL SELECT MAX(CAST(amount AS BIGINT)) FROM __source("orders")) SELECT order_id FROM selected ORDER BY order_id',
+            expected_rows=((2,), (20,)),
+            expected_edges=2,
+            output_contract="order_id (type BIGINT, nullable true)",
+        ),
+        BoundProjectionCompileTestCase(
+            description="named unions align inputs with different projection orders",
+            query_sql='WITH selected AS (SELECT CAST(NULL AS BIGINT) AS order_id, amount FROM __source("orders") UNION ALL BY NAME SELECT amount, order_id FROM __source("orders")) SELECT order_id FROM selected ORDER BY order_id',
+            expected_rows=((1,), (2,), (None,), (None,)),
+            expected_edges=1,
+            output_contract="order_id (type BIGINT, nullable true)",
+        ),
+        BoundProjectionCompileTestCase(
+            description="value rows preserve positional aliases and nullable constants",
+            query_sql='WITH selected AS (SELECT v.id AS order_id FROM (VALUES (CAST(1 AS BIGINT)), (CAST(NULL AS BIGINT))) AS v(id) CROSS JOIN __source("orders") AS o WHERE o.order_id = 1) SELECT order_id FROM selected ORDER BY order_id',
+            expected_rows=((1,), (None,)),
+            expected_edges=0,
+            output_contract="order_id (type BIGINT, nullable true)",
+        ),
+        BoundProjectionCompileTestCase(
+            description="star replacements preserve constant provenance",
+            query_sql='WITH selected AS (SELECT * EXCLUDE (category, amount) REPLACE (CAST(0 AS BIGINT) AS order_id) FROM __source("orders")) SELECT * FROM selected',
+            expected_rows=((0,), (0,)),
+            expected_edges=0,
+        ),
+        BoundProjectionCompileTestCase(
+            description="full using join coalesces its non-null input keys",
+            query_sql='WITH joined AS (SELECT order_id FROM (SELECT order_id FROM __source("orders") WHERE order_id = 1) a FULL JOIN (SELECT order_id FROM __source("orders") WHERE order_id = 2) b USING (order_id)) SELECT order_id FROM joined ORDER BY order_id',
+            expected_rows=((1,), (2,)),
+            expected_edges=1,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_bound_wildcard_or_using_join_when_compiling_then_facts_match_execution(
+    test_case: BoundProjectionCompileTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
+    sources: Path = tmp_path / "sources"
+    sources.mkdir()
+    (sources / "orders.yml").write_text(
+        "sources:\n  - name: orders\n    contract: enforced\n"
+        "    expression: orders_input\n    columns:\n"
+        "      - name: order_id\n        type: BIGINT\n        nullable: false\n"
+        "      - name: category\n        type: VARCHAR\n"
+        "      - name: amount\n        type: DOUBLE\n"
+    )
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "selected_orders.sql").write_text(
+        f"MODEL (contract enforced, columns ({test_case.output_contract}));\n" + test_case.query_sql
+    )
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+    result: dict[str, object] = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert result["diagnostics"] == []
+    resources: dict[str, object] = cast(dict[str, object], result["resources"])
+    compiled_models: list[dict[str, object]] = cast(list[dict[str, object]], resources["models"])
+    lineage: dict[str, object] = cast(dict[str, object], compiled_models[0]["lineage"])
+    assert lineage["edge_count"] == test_case.expected_edges
+    sql: str = (tmp_path / "target" / "compiled" / "models" / "selected_orders.sql").read_text()
+    with duckdb.connect() as connection:
+        connection.execute(
+            "CREATE TABLE orders_input (order_id BIGINT, category VARCHAR, amount DOUBLE)"
+        )
+        connection.execute("INSERT INTO orders_input VALUES (1, 'ready', 10), (2, 'queued', 20)")
+        connection.execute("CREATE MACRO __source(name) AS TABLE SELECT * FROM orders_input")
+        assert tuple(connection.execute(sql).fetchall()) == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        BoundProjectionCompileTestCase(
+            description="object wildcard retains all possible payload inputs",
+            query_sql='WITH packed AS (SELECT OBJECT_CONSTRUCT_KEEP_NULL(*) AS payload FROM __source("orders")) SELECT CAST(payload:order_id AS BIGINT) AS order_id FROM packed',
+            expected_rows=(),
+            expected_edges=2,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_object_wildcard_when_compiling_then_lineage_preserves_payload_inputs(
+    test_case: BoundProjectionCompileTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "snowflake"\n[defaults]\ndatabase = "warehouse"\nschema = "analytics"\n'
+    )
+    sources: Path = tmp_path / "sources"
+    sources.mkdir()
+    (sources / "orders.yml").write_text(
+        "sources:\n  - name: orders\n    contract: enforced\n"
+        "    expression: orders_input\n    columns:\n"
+        "      - name: order_id\n        type: BIGINT\n"
+        "      - name: amount\n        type: DOUBLE\n"
+    )
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "selected_orders.sql").write_text(
+        "MODEL (contract enforced, columns (order_id (type BIGINT, nullable true)));\n"
+        + test_case.query_sql
+    )
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+    result: dict[str, object] = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert result["diagnostics"] == []
+    resources: dict[str, object] = cast(dict[str, object], result["resources"])
+    compiled_models: list[dict[str, object]] = cast(list[dict[str, object]], resources["models"])
+    lineage: dict[str, object] = cast(dict[str, object], compiled_models[0]["lineage"])
+    assert lineage["edge_count"] == test_case.expected_edges
 
 
 if __name__ == "__main__":

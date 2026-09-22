@@ -1,3 +1,14 @@
 """Constants for fresh-process compile performance guards."""
 
 UNLIMITED_CGROUP_MEMORY_VALUE: str = "max"
+
+DENSE_JOIN_THRESHOLDS: tuple[int, ...] = (55, 75, 90, 99)
+DENSE_JOIN_COUNTS: tuple[int, ...] = (0, 1, 4, 8, 20)
+DENSE_UNION_TAIL_INDEX: int = 54
+DENSE_UNION_MEDIUM_INDEX: int = 7
+DENSE_MACRO_SHARE: int = 3
+DENSE_MACRO_QUANTITY_COLUMNS: int = 2
+DENSE_AMOUNT_AUDIT_SHARE: int = 7
+DENSE_DEEP_CTE_PERCENTILE: int = 97
+DENSE_MEDIUM_CTE_PERCENTILE: int = 80
+DENSE_ID_COLUMN: str = "id"

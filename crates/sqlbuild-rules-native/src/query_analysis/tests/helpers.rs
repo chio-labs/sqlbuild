@@ -1,6 +1,59 @@
 use crate::query_analysis::main::analyze_project_compact::analyze_project_compact_json;
 use serde_json::{Value, json};
 
+pub(crate) fn borrowed_facts_preserve_named_outputs_and_terminal_sources() -> bool {
+    let schema: polyglot_sql::ValidationSchema = serde_json::from_value(json!({
+        "tables": [{"name": "orders", "columns": [
+            {"name": "order_id", "type": "BIGINT", "nullable": false},
+            {"name": "selected_id", "type": "BIGINT", "nullable": true}
+        ]}]
+    }))
+    .expect("valid schema");
+    let expression = polyglot_sql::parse_one(
+        "WITH renamed AS (SELECT order_id AS selected_id FROM orders), nested AS (SELECT * FROM (SELECT selected_id FROM renamed) AS selected_orders(order_key)) SELECT order_key FROM nested",
+        polyglot_sql::DialectType::Snowflake,
+    ).expect("valid SQL");
+    let facts = crate::query_analysis::borrowed_facts::infer(
+        &expression,
+        Some(&schema),
+        polyglot_sql::DialectType::Snowflake,
+    );
+    assert_eq!(facts.len(), 1);
+    assert_eq!(facts[0].name, "order_key");
+    assert_eq!(
+        *facts[0].upstream,
+        std::collections::BTreeSet::from([("orders".to_string(), "order_id".to_string())])
+    );
+    assert_eq!(
+        facts[0].nullability,
+        polyglot_sql::ProjectionNullability::NonNull
+    );
+    let expression = polyglot_sql::parse_one(
+        "WITH combined AS (SELECT order_id AS first_key FROM orders UNION ALL BY NAME SELECT order_id AS second_key FROM orders) SELECT first_key, second_key FROM combined",
+        polyglot_sql::DialectType::Snowflake,
+    ).expect("valid SQL");
+    let facts = crate::query_analysis::borrowed_facts::infer(
+        &expression,
+        Some(&schema),
+        polyglot_sql::DialectType::Snowflake,
+    );
+    assert_eq!(facts.len(), 2);
+    assert!(
+        facts
+            .iter()
+            .all(|fact| fact.nullability == polyglot_sql::ProjectionNullability::Nullable)
+    );
+    let types = crate::query_analysis::compatibility_types::infer(
+        &expression,
+        Some(&schema),
+        &std::collections::HashMap::new(),
+        polyglot_sql::DialectType::Snowflake,
+    );
+    assert_eq!(types.get("first_key").map(String::as_str), Some("BIGINT"));
+    assert_eq!(types.get("second_key").map(String::as_str), Some("BIGINT"));
+    true
+}
+
 pub(crate) fn combined_queries_preserve_standalone_binding() -> bool {
     let schema = json!({"strict": true, "tables": [
         {"name": "orders", "columns": [{"name": "order_id", "type": "BIGINT"}]},

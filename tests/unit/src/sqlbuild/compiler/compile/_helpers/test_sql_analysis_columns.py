@@ -190,7 +190,7 @@ def test_given_queries_when_batch_analyzing_then_uses_one_ordered_native_request
     ),
     ids=lambda case: case.description,
 )
-def test_given_uncertain_legacy_cte_type_when_batch_analyzing_then_uses_python_fallback(
+def test_given_cte_cast_when_batch_analyzing_then_cast_type_overrides_input_type(
     test_case: InferColumnsTestCase,
 ) -> None:
     query_sql: str = test_case.query_sql
@@ -226,7 +226,6 @@ def test_given_uncertain_legacy_cte_type_when_batch_analyzing_then_uses_python_f
         precomputed=prepared,
     )
 
-    assert prepared.projected is False
     assert result.analysis_succeeded
     assert result.columns == test_case.expected_columns
 

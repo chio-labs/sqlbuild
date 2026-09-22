@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -43,6 +45,7 @@ from sqlbuild.compiler.pipeline.main.selected_graph import (
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.rule_engine.classes.early_sql_lint import EarlySqlLint
 from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.main.run_rules import run_rules
 from sqlbuild.rule_engine.models import RulesRunResult
@@ -66,6 +69,37 @@ def analyze_compile_project(
     status: TransientStatusReporter | None,
 ) -> CompileAnalysis:
     """Discover, compile, and validate the project into one analysis result."""
+
+    with EarlySqlLint(enabled=not (select or exclude)) as early_lint:
+        return _analyze_compile_project(
+            project_dir=project_dir,
+            no_sql_validation=no_sql_validation,
+            selected_target=selected_target,
+            lineage_mode=lineage_mode,
+            cli_vars=cli_vars,
+            profile_flags=profile_flags,
+            analysis_selection=CompileAnalysisSelection(
+                select=select, exclude=exclude, no_cache=no_cache
+            ),
+            status=status,
+            early_lint=early_lint,
+        )
+
+
+def _analyze_compile_project(
+    *,
+    project_dir: Path,
+    no_sql_validation: bool,
+    selected_target: str | None,
+    lineage_mode: CompileLineageMode,
+    cli_vars: dict[str, object] | None,
+    profile_flags: CompileProfileFlags,
+    analysis_selection: CompileAnalysisSelection,
+    status: TransientStatusReporter | None,
+    early_lint: EarlySqlLint,
+) -> CompileAnalysis:
+    select: tuple[str, ...] = analysis_selection.select
+    exclude: tuple[str, ...] = analysis_selection.exclude
 
     discover_start: float = time.monotonic()
     _ = start_compile_phase(status=status, message="Discovering project...")
@@ -98,10 +132,11 @@ def analyze_compile_project(
             skip_column_inference=profile_flags.skip_column_inference,
             column_lineage_mode=compile_analysis_lineage_mode(lineage_mode),
             cli_vars=cli_vars,
-            analysis_selection=CompileAnalysisSelection(
-                select=select,
-                exclude=exclude,
-                no_cache=no_cache,
+            analysis_selection=replace(
+                analysis_selection,
+                on_inputs_ready=partial(
+                    early_lint.start, dialect=adapter.sql_analysis_dialect() or "generic"
+                ),
             ),
         )
     graph_ms: int = elapsed_ms(graph_start)
@@ -159,6 +194,7 @@ def analyze_compile_project(
             project_dir=project_dir,
             dialect=adapter.sql_analysis_dialect() or "generic",
             selected_keys=selected_keys if select or exclude else None,
+            prepared_sql=early_lint.preparation,
         )
         _ = complete_compile_phase(
             status=status,

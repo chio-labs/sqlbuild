@@ -205,7 +205,9 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
         resolve_threshold_overrides::resolve_threshold_overrides(&request.config)?;
     if selected.is_empty() {
         validate_exception_paths(&request)?;
-        let _ = suppress_faults(&request, &selected, Vec::new())?;
+        if !request.defer_suppressions {
+            let _ = suppress_faults(&request, &selected, Vec::new())?;
+        }
         return serde_json::to_string(&EvaluateResponse {
             version: API_VERSION,
             faults: Vec::new(),
@@ -246,9 +248,7 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
     let (raw_faults, cache_hits, cache_misses, built_in_ms, custom_ms) =
         std::thread::scope(|scope| {
             let custom_parallel_started = Instant::now();
-            let custom_task = (cached_custom.is_none()
-                && std::env::var_os("SQLBUILD_EXPERIMENT_PARALLEL_NATIVE_RULES").is_some())
-            .then(|| {
+            let custom_task = cached_custom.is_none().then(|| {
                 scope.spawn(|| {
                     evaluate_custom_rules_cached(CustomRulesCacheRequest {
                         request: &request,
@@ -313,7 +313,11 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
             Ok::<_, String>((raw_faults, cache_hits, cache_misses, built_in_ms, custom_ms))
         })?;
     validate_exception_paths(&request)?;
-    let faults = suppress_faults(&request, &selected, raw_faults)?;
+    let faults = if request.defer_suppressions {
+        raw_faults
+    } else {
+        suppress_faults(&request, &selected, raw_faults)?
+    };
     serde_json::to_string(&EvaluateResponse {
         version: API_VERSION,
         faults,
@@ -787,14 +791,42 @@ fn suppress_faults(
     selected: &[&RuleMetadata],
     faults: Vec<Fault>,
 ) -> Result<Vec<Fault>, String> {
-    let findings = faults
-        .into_iter()
-        .map(fault_to_finding)
-        .collect::<Result<Vec<_>, _>>()?;
     let evaluated_codes = selected
         .iter()
         .map(|rule| rule.code.clone())
         .collect::<Vec<_>>();
+    apply_fault_policy(request, &evaluated_codes, faults)
+}
+
+pub(crate) fn finalize_findings_json(request_json: &str) -> Result<String, String> {
+    let input: crate::models::FinalizeFindingsRequest = serde_json::from_str(request_json)
+        .map_err(|error| format!("invalid findings request: {error}"))?;
+    if input.version != API_VERSION {
+        return Err(format!(
+            "unsupported rules native API version {}; expected {API_VERSION}",
+            input.version
+        ));
+    }
+    config::validate(&input.config)?;
+    let request = EvaluateRequest {
+        project_dir: input.project_dir,
+        config: input.config,
+        ..Default::default()
+    };
+    validate_exception_paths(&request)?;
+    let faults = apply_fault_policy(&request, &input.evaluated_codes, input.findings)?;
+    serde_json::to_string(&faults).map_err(|error| error.to_string())
+}
+
+fn apply_fault_policy(
+    request: &EvaluateRequest,
+    evaluated_codes: &[String],
+    faults: Vec<Fault>,
+) -> Result<Vec<Fault>, String> {
+    let findings = faults
+        .into_iter()
+        .map(fault_to_finding)
+        .collect::<Result<Vec<_>, _>>()?;
     let suppressions = request
         .config
         .rule_exceptions
@@ -819,7 +851,7 @@ fn suppress_faults(
     let grammar = RulesCodeGrammar;
     apply_suppressions(ApplySuppressionsRequest {
         findings,
-        evaluated_codes: &evaluated_codes,
+        evaluated_codes,
         suppressions: &suppressions,
         scoped_ignores: &scoped_ignores,
         grammar: &grammar,

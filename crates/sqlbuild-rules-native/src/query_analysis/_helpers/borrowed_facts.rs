@@ -1,9 +1,9 @@
-//! Experimental immutable CTE output graph over one borrowed syntax tree.
+//! Immutable CTE output graph over one borrowed syntax tree.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::rc::Rc;
 
-use polyglot_sql::expressions::{Column, JoinKind, Select, Star, With};
+use polyglot_sql::expressions::{Column, Join, JoinKind, Select, Star, Values, With};
 use polyglot_sql::{
     DialectType, Expression, ProjectionNullability, TransformKind, ValidationSchema,
 };
@@ -44,7 +44,11 @@ impl Source {
 }
 
 type Relations = HashMap<String, Source>;
-type Sources = Vec<(String, Source)>;
+#[derive(Default)]
+struct Sources {
+    items: Vec<(String, Source)>,
+    using_columns: HashMap<String, OutputFact>,
+}
 type Aliases = HashMap<String, Option<OutputFact>>;
 
 pub(super) fn infer(
@@ -104,6 +108,7 @@ fn query(expression: &Expression, inherited: &Relations, lateral_aliases: bool) 
     }
     match expression {
         Expression::Select(select) => select_outputs(select, &relations, lateral_aliases),
+        Expression::Values(values) => values_outputs(values),
         Expression::Union(set) => set_outputs(
             query(&set.left, &relations, lateral_aliases),
             query(&set.right, &relations, lateral_aliases),
@@ -166,33 +171,25 @@ fn select_outputs(
     relations: &Relations,
     lateral_aliases: bool,
 ) -> Vec<OutputFact> {
-    let mut sources: Sources = Vec::new();
+    let mut sources = Sources::default();
     for expression in select.from.iter().flat_map(|from| &from.expressions) {
         if let Some(source) = source(expression, relations, &sources, lateral_aliases) {
-            sources.push(source);
+            sources.items.push(source);
         }
     }
     for join in &select.joins {
-        if matches!(join.kind, JoinKind::Right | JoinKind::Full) {
-            for (_, source) in &mut sources {
-                source.null_extended = true;
-            }
-        }
-        if let Some((name, mut source)) = source(&join.this, relations, &sources, lateral_aliases) {
-            source.null_extended = matches!(join.kind, JoinKind::Left | JoinKind::Full);
-            sources.push((name, source));
-        }
+        sources = joined_sources(sources, join, relations, lateral_aliases);
     }
     let mut outputs: Vec<OutputFact> = Vec::new();
     let mut aliases = Aliases::new();
     for projection in &select.expressions {
         let projection = unwrapped(projection);
-        if let Expression::Star(star) = projection {
-            outputs.extend(star_outputs(star, &sources));
+        if let Some(star) = projection_star(projection) {
+            outputs.extend(star_outputs(&star, &sources));
             continue;
         }
         let name = projection.get_output_name();
-        if name.is_empty() || name == SQL_WILDCARD {
+        if name == SQL_WILDCARD {
             continue;
         }
         let expression = match projection {
@@ -228,15 +225,35 @@ fn source(
     match unwrapped(expression) {
         Expression::Table(table) => {
             let name = table.alias.as_ref().unwrap_or(&table.name).name.clone();
-            let source = relations
+            let mut source = relations
                 .get(&table.name.name.to_lowercase())
                 .cloned()
                 .unwrap_or_else(|| Source::new(Vec::new(), Some(table.name.name.clone())));
+            if !table.column_aliases.is_empty() {
+                let mut outputs = source.outputs.as_ref().clone();
+                for (output, alias) in outputs.iter_mut().zip(&table.column_aliases) {
+                    output.name = alias.name.clone();
+                }
+                source = Source::new(outputs, source.physical);
+            }
             Some((name, source))
         }
-        Expression::Subquery(subquery) => Some((
-            subquery.alias.as_ref()?.name.clone(),
-            Source::new(query(&subquery.this, relations, lateral_aliases), None),
+        Expression::Subquery(subquery) => {
+            let mut outputs = query(&subquery.this, relations, lateral_aliases);
+            for (output, alias) in outputs.iter_mut().zip(&subquery.column_aliases) {
+                output.name = alias.name.clone();
+            }
+            Some((
+                subquery.alias.as_ref()?.name.clone(),
+                Source::new(outputs, None),
+            ))
+        }
+        Expression::Values(values) => Some((
+            values
+                .alias
+                .as_ref()
+                .map_or(String::new(), |alias| alias.name.clone()),
+            Source::new(values_outputs(values), None),
         )),
         Expression::Lateral(lateral) if matches!(unwrapped(&lateral.this), Expression::Function(function) if function.name.eq_ignore_ascii_case("FLATTEN")) =>
         {
@@ -268,10 +285,95 @@ fn source(
     }
 }
 
+fn values_outputs(values: &Values) -> Vec<OutputFact> {
+    let mut outputs: Vec<OutputFact> = Vec::new();
+    for row in &values.expressions {
+        let mut facts: Vec<OutputFact> = Vec::new();
+        for (index, expression) in row.expressions.iter().enumerate() {
+            let mut fact = expression_fact(expression, &Sources::default(), &Aliases::new());
+            fact.name = values.column_aliases.get(index).map_or_else(
+                || format!("column{}", index + 1),
+                |alias| alias.name.clone(),
+            );
+            facts.push(fact);
+        }
+        outputs = if outputs.is_empty() {
+            facts
+        } else {
+            set_outputs(outputs, facts, false)
+        };
+    }
+    outputs
+}
+
+fn joined_sources(
+    mut sources: Sources,
+    join: &Join,
+    relations: &Relations,
+    lateral_aliases: bool,
+) -> Sources {
+    let Some((name, mut right)) = source(&join.this, relations, &sources, lateral_aliases) else {
+        return sources;
+    };
+    let right_scope = Sources {
+        items: vec![(name.clone(), right.clone())],
+        ..Default::default()
+    };
+    let mut joined: HashMap<String, OutputFact> = HashMap::new();
+    for identifier in &join.using {
+        let column = Column {
+            name: identifier.clone(),
+            table: None,
+            join_mark: false,
+            trailing_comments: Vec::new(),
+            span: None,
+            inferred_type: None,
+        };
+        let left = column_fact(&column, &sources, &Aliases::new());
+        let right = column_fact(&column, &right_scope, &Aliases::new());
+        let output = match (left, right) {
+            (Some(mut left), Some(right)) if join.kind == JoinKind::Full => {
+                Rc::make_mut(&mut left.upstream).extend(right.upstream.iter().cloned());
+                left.nullability = merge_nullability(left.nullability, right.nullability);
+                left.resolved &= right.resolved;
+                Some(left)
+            }
+            (_, right) if matches!(join.kind, JoinKind::Right | JoinKind::AsOfRight) => right,
+            (left, _) => left,
+        };
+        if let Some(output) = output {
+            joined.insert(identifier.name.to_lowercase(), output);
+        }
+    }
+    if matches!(
+        join.kind,
+        JoinKind::Right | JoinKind::Full | JoinKind::AsOfRight
+    ) {
+        for (_, source) in &mut sources.items {
+            source.null_extended = true;
+        }
+        for output in sources.using_columns.values_mut() {
+            output.nullability = ProjectionNullability::Nullable;
+        }
+    }
+    right.null_extended = matches!(
+        join.kind,
+        JoinKind::Left | JoinKind::Full | JoinKind::AsOfLeft | JoinKind::LeftLateral
+    );
+    sources.items.push((name, right));
+    sources.using_columns.extend(joined);
+    sources
+}
+
 fn column_fact(column: &Column, sources: &Sources, aliases: &Aliases) -> Option<OutputFact> {
     let mut matched = None;
     let column_key = column.name.name.to_lowercase();
-    for (name, source) in sources {
+    if column.table.is_none()
+        && let Some(output) = sources.using_columns.get(&column_key)
+    {
+        return Some(output.clone());
+    }
+    for (name, source) in &sources.items {
         if column
             .table
             .as_ref()
@@ -307,14 +409,18 @@ fn column_fact(column: &Column, sources: &Sources, aliases: &Aliases) -> Option<
         matched = Some(candidate);
     }
     matched.or_else(|| {
-        (column.table.is_none() && sources.iter().all(|(_, source)| !source.outputs.is_empty()))
-            .then(|| {
-                aliases
-                    .get(&column.name.name.to_lowercase())
-                    .cloned()
-                    .flatten()
-            })
-            .flatten()
+        (column.table.is_none()
+            && sources
+                .items
+                .iter()
+                .all(|(_, source)| !source.outputs.is_empty()))
+        .then(|| {
+            aliases
+                .get(&column.name.name.to_lowercase())
+                .cloned()
+                .flatten()
+        })
+        .flatten()
     })
 }
 
@@ -337,10 +443,16 @@ fn expression_fact(expression: &Expression, sources: &Sources, aliases: &Aliases
     let mut upstream: BTreeSet<(String, String)> = BTreeSet::new();
     let mut resolved = true;
     for node in polyglot_sql::scope::walk_in_scope(expression, false) {
-        if let Expression::Column(column) = node {
-            if column.name.name == SQL_WILDCARD {
-                continue;
+        if let Some(star) = projection_star(node) {
+            let outputs = star_outputs(&star, sources);
+            resolved &= !outputs.is_empty();
+            for fact in outputs {
+                upstream.extend(fact.upstream.iter().cloned());
+                resolved &= fact.resolved;
             }
+            continue;
+        }
+        if let Expression::Column(column) = node {
             if let Some(fact) = column_fact(column, sources, aliases) {
                 upstream.extend(fact.upstream.iter().cloned());
                 resolved &= fact.resolved;
@@ -383,6 +495,19 @@ fn nullability(
         | Expression::Count(_)
         | Expression::IsNull(_) => ProjectionNullability::NonNull,
         Expression::Cast(cast) => nullability(&cast.this, sources, aliases),
+        Expression::Lower(function) | Expression::Upper(function) => {
+            nullability(&function.this, sources, aliases)
+        }
+        Expression::IfFunc(function) => {
+            let left = nullability(&function.true_value, sources, aliases);
+            let right = function
+                .false_value
+                .as_ref()
+                .map_or(ProjectionNullability::Nullable, |value| {
+                    nullability(value, sources, aliases)
+                });
+            merge_nullability(left, right)
+        }
         Expression::Coalesce(function) => {
             let values: Vec<_> = function
                 .expressions
@@ -407,12 +532,23 @@ fn nullability(
 
 fn star_outputs(star: &Star, sources: &Sources) -> Vec<OutputFact> {
     let mut outputs: Vec<OutputFact> = Vec::new();
-    for (name, source) in sources {
+    let mut merged: HashSet<String> = HashSet::new();
+    for (name, source) in &sources.items {
         if star
             .table
             .as_ref()
             .is_some_and(|table| !table.name.eq_ignore_ascii_case(name))
         {
+            continue;
+        }
+        if source.outputs.is_empty() {
+            outputs.push(OutputFact {
+                name: SQL_WILDCARD.to_string(),
+                upstream: Rc::new(BTreeSet::new()),
+                nullability: ProjectionNullability::Unknown,
+                resolved: false,
+                transform: TransformKind::Star,
+            });
             continue;
         }
         for output in source.outputs.iter() {
@@ -424,17 +560,18 @@ fn star_outputs(star: &Star, sources: &Sources) -> Vec<OutputFact> {
             {
                 continue;
             }
-            let mut output = output.clone();
-            if source.null_extended {
-                output.nullability = ProjectionNullability::Nullable;
+            let key = output.name.to_lowercase();
+            let using_output = star
+                .table
+                .is_none()
+                .then(|| sources.using_columns.get(&key))
+                .flatten();
+            if using_output.is_some() && !merged.insert(key) {
+                continue;
             }
-            if let Some((_, alias)) = star
-                .rename
-                .iter()
-                .flatten()
-                .find(|(name, _)| name.name.eq_ignore_ascii_case(&output.name))
-            {
-                output.name = alias.name.clone();
+            let mut output = using_output.unwrap_or(output).clone();
+            if source.null_extended && using_output.is_none() {
+                output.nullability = ProjectionNullability::Nullable;
             }
             if let Some(alias) = star
                 .replace
@@ -446,10 +583,33 @@ fn star_outputs(star: &Star, sources: &Sources) -> Vec<OutputFact> {
                 output = expression_fact(&alias.this, sources, &Aliases::new());
                 output.name = name;
             }
+            if let Some((_, alias)) = star
+                .rename
+                .iter()
+                .flatten()
+                .find(|(name, _)| name.name.eq_ignore_ascii_case(&output.name))
+            {
+                output.name = alias.name.clone();
+            }
             outputs.push(output);
         }
     }
     outputs
+}
+
+pub(super) fn projection_star(expression: &Expression) -> Option<Star> {
+    match unwrapped(expression) {
+        Expression::Star(star) => Some(star.clone()),
+        Expression::Column(column) if column.name.name == SQL_WILDCARD => Some(Star {
+            table: column.table.clone(),
+            except: None,
+            replace: None,
+            rename: None,
+            trailing_comments: Vec::new(),
+            span: column.span,
+        }),
+        _ => None,
+    }
 }
 
 fn filtered_non_null(expression: &Expression, column: &Column) -> bool {

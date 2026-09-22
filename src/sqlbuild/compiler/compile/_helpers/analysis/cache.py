@@ -6,7 +6,6 @@ import hashlib
 import hmac
 import inspect
 import json
-import os
 import platform
 import sqlite3
 import time
@@ -45,15 +44,7 @@ from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 
 _ANALYSIS_CACHE_VERSION: int = 10
-_ANALYSIS_ALGORITHM_FINGERPRINT: str = (
-    "model-sql-analysis-v11-combined-binding-and-input-precedence"
-)
-_EXPERIMENTAL_ANALYSIS_FLAGS: tuple[str, ...] = (
-    "SQLBUILD_EXPERIMENT_FOLDED_COMPILER",
-    "SQLBUILD_EXPERIMENT_FOLDED_FACTS",
-    "SQLBUILD_EXPERIMENT_FOLDED_INFERENCE",
-    "SQLBUILD_EXPERIMENT_NATIVE_TYPES",
-)
+_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v12-bound-borrowed-output-graph"
 _MAX_CACHE_ENTRY_BYTES: int = 10_000_000
 _SHA256_HEX_LENGTH: int = 64
 _CACHE_ENTRY_SEPARATOR: str = "\n"
@@ -108,7 +99,7 @@ def build_analysis_cache_context(
 ) -> AnalysisCacheContext | None:
     """Build a reusable cache context, or bypass when profile identity is unstable."""
 
-    if root is None or any(flag in os.environ for flag in _EXPERIMENTAL_ANALYSIS_FLAGS):
+    if root is None:
         return None
     profile_payload: dict[str, object] | None = _inference_profile_payload(inference_profile)
     if profile_payload is None:
