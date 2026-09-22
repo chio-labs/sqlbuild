@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.113.4](https://github.com/chio-labs/sqlbuild/compare/v0.113.3...v0.113.4) (2026-09-22)
+
+
+### Performance Improvements
+
+* speed up warm compiles and upgrade Polyglot to 0.12.2 ([#779](https://github.com/chio-labs/sqlbuild/issues/779)) ([ca25236](https://github.com/chio-labs/sqlbuild/commit/ca25236bb7f8862343c0f38ae0ba8c2277859065))
+
 ## [0.113.3](https://github.com/chio-labs/sqlbuild/compare/v0.113.2...v0.113.3) (2026-09-22)
 
 
