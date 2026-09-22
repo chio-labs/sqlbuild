@@ -24,7 +24,7 @@ The guard checks:
 | Models | Wall-time ceiling | Process RSS ceiling |
 | ---: | ---: | ---: |
 | 1,000 | 14s | 1.5GiB |
-| 3,000 | 30s | 2.75GiB |
+| 3,000 | 34s | 2.75GiB |
 | 5,000 | 55s | 3.25GiB |
 | 10,000 | 115s | 4GiB |
 

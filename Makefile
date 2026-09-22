@@ -245,7 +245,7 @@ test-e2e-dense-compile-performance:
 		tests/e2e/src/sqlbuild/cli/commands/main/compile/test_dense_compile_performance.py \
 		-n auto --dist loadfile \
 		-m cold_compile_performance -k "models_$(SQLBUILD_BENCHMARK_MODELS)_" \
-		-vv --log-cli-level=INFO --color=yes
+		-vv -rP --log-level=INFO --log-cli-level=INFO --color=yes
 
 test-e2e-cache-compile-performance:
 	test -n "$(SQLBUILD_BENCHMARK_MODELS)"
