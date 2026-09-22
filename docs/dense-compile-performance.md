@@ -47,8 +47,9 @@ analysis results in batches of 64. Smaller requests retain a single batch. Both
 use up to four workers; local resolution views avoid copying CTE definitions
 that are already available through the source catalogue.
 These limits change scheduling, not analysis or fallback semantics.
-Projects with at least 10,000 model projections use one native analysis worker to
-leave memory headroom for the isolated custom-rule host after analysis.
+Projects with at least 10,000 model projections and 48MiB of prepared SQL use one
+native analysis worker to leave memory headroom for the isolated custom-rule host
+after analysis. Smaller SQL payloads retain parallel analysis.
 The 10k cold ceiling includes headroom for this memory-bounded scheduling; warm
 cache hits and small edit batches keep their existing scheduling.
 

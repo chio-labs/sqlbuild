@@ -171,6 +171,7 @@ from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
 _LARGE_COMPACT_PROJECT_MODELS: int = 10_000
+_LARGE_COMPACT_SQL_BYTES: int = 48 * 1024 * 1024
 _NATIVE_LEGACY_FALLBACK: str = "native project type recovery requires legacy fallback"
 _REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
 _SEED_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SEED)
@@ -626,7 +627,12 @@ def _prepare_compact_analysis_batch(
 def _run_compact_analysis_batch(*, preparation: CompactBatchPreparation) -> object:
     """Bound resident analysis heaps before the isolated custom-rule host starts."""
 
-    workers: int = 1 if len(preparation.projections) >= _LARGE_COMPACT_PROJECT_MODELS else 4
+    large_project: bool = (
+        len(preparation.projections) >= _LARGE_COMPACT_PROJECT_MODELS
+        and sum(len(sql.encode("utf-8")) for sql in preparation.cleaned_sql)
+        >= _LARGE_COMPACT_SQL_BYTES
+    )
+    workers: int = 1 if large_project else 4
     return orjson.loads(
         cast(NativeQueryAnalysisModule, _native).analyze_project_queries_compact_json(
             orjson.dumps(
