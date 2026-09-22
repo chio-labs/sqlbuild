@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.113.3](https://github.com/chio-labs/sqlbuild/compare/v0.113.2...v0.113.3) (2026-09-22)
+
+
+### Performance Improvements
+
+* integrate conservative cold compiler optimizations ([#776](https://github.com/chio-labs/sqlbuild/issues/776)) ([0356503](https://github.com/chio-labs/sqlbuild/commit/0356503996f22c6b2b7e5cb4e3f65e9691d4588b))
+
 ## [0.113.2](https://github.com/chio-labs/sqlbuild/compare/v0.113.1...v0.113.2) (2026-09-22)
 
 
