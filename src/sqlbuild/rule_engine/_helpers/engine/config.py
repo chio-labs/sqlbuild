@@ -12,6 +12,7 @@ from sqlbuild.compiler.planner.models import PlannerScope
 from sqlbuild.rule_engine._helpers.engine.native import load_native_config
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.models import (
+    GraphEdgeExclusion,
     LayoutConfig,
     RuleExemption,
     RuleIgnore,
@@ -46,6 +47,14 @@ def load_rules_config(project_dir: Path) -> RulesConfig:
                 rule=str(item["rule"]), path=str(item["path"]), reason=str(item["reason"])
             )
             for item in _tables(payload.get("rule_exceptions"))
+        ),
+        graph_edge_exceptions=tuple(
+            GraphEdgeExclusion(
+                consumer=str(item["consumer"]),
+                dependency=str(item["dependency"]),
+                reason=str(item["reason"]),
+            )
+            for item in _tables(payload.get("graph_edge_exceptions"))
         ),
         rule_ignores=tuple(
             RuleIgnore(

@@ -48,7 +48,12 @@ def render_skills(*, config: RulesConfig, project_dir: Path) -> tuple[str, str]:
         }
         if effective:
             body.extend(("", f"Effective options: {effective}"))
-    if config.rule_exceptions or config.rule_ignores or config.select_star_allow:
+    if (
+        config.rule_exceptions
+        or config.graph_edge_exceptions
+        or config.rule_ignores
+        or config.select_star_allow
+    ):
         body.extend(
             (
                 "",
@@ -65,6 +70,11 @@ def render_skills(*, config: RulesConfig, project_dir: Path) -> tuple[str, str]:
             )
             body.append(
                 f"- Ignore `{','.join(entry.rules)}` at `{','.join(scopes)}`: {entry.reason}"
+            )
+        for entry in config.graph_edge_exceptions:
+            body.append(
+                f"- `SQBRGRAPH101` exact edge `{entry.consumer}` -> "
+                f"`{entry.dependency}`: {entry.reason}"
             )
         for entry in config.select_star_allow:
             body.append(f"- Lone-star allowance `{','.join(entry.paths)}`: {entry.reason}")
@@ -103,8 +113,14 @@ def _rule_example(*, rule: Rule) -> str:
     examples: dict[str, str] = {
         "SQBRMODEL101": 'WITH upstream AS (SELECT * FROM __ref("domain__stg__entity")), ...',
         "SQBRMODEL102": "SELECT id, status FROM final; use a lone SELECT * only when allowed.",
-        "SQBRGRAPH101": "stg -> int_clean -> int_enriched -> mart; skipping layers is valid.",
+        "SQBRMODEL103": "A view uses stg_v, int_v, or mart_v; a table uses a non-v layer.",
+        "SQBRMODEL104": "MODEL() omits schema; central path defaults provide it.",
+        "SQBRGRAPH101": (
+            "Internal flow is stg -> int_clean -> int_enriched; marts are published interfaces."
+        ),
         "SQBRPROJECT101": "domain__int_clean__entity or domain__mart_v__entity.",
+        "SQBRPROJECT105": "A domain__int_enriched__entity model lives under intermediate/enriched.",
+        "SQBRPROJECT106": "A domain__stg__entity model resolves to the staging logical schema.",
         "SQBRCONTRACT101": (
             "MODEL (contract enforced, columns (...)); declare authoritative columns."
         ),

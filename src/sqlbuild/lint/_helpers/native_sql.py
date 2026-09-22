@@ -69,6 +69,7 @@ type _NativeCacheKey = tuple[
     tuple[str, ...],
     bool,
     bool,
+    bool,
 ]
 type _NativeResult = dict[str, Any] | NativeLintError
 
@@ -106,6 +107,8 @@ def run_native_sql_lint(
             payload["allows_ceremonial_select"] = True
         if body.allows_dynamic_output_star:
             payload["allows_dynamic_output_star"] = True
+        if body.allows_empty_fixture_star:
+            payload["allows_empty_fixture_star"] = True
         requests[cache_key] = payload
     response_cache: dict[_NativeCacheKey, _NativeResult] = _native_responses(requests=requests)
 
@@ -146,6 +149,7 @@ def _native_cache_key(*, body: LintBody, config: LintConfig) -> _NativeCacheKey:
         body.externally_referenced_ctes,
         body.allows_ceremonial_select,
         body.allows_dynamic_output_star,
+        body.allows_empty_fixture_star,
     )
 
 

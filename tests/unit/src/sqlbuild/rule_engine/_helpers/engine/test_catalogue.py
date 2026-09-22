@@ -46,6 +46,8 @@ RULES_BUILT_IN_CODES: tuple[str, ...] = (
     "SQBRPROJECT102",
     "SQBRPROJECT103",
     "SQBRPROJECT104",
+    "SQBRPROJECT105",
+    "SQBRPROJECT106",
     "SQBRPROJECT201",
     "SQBRPROJECT202",
     "SQBRPROJECT203",
@@ -53,6 +55,7 @@ RULES_BUILT_IN_CODES: tuple[str, ...] = (
     "SQBRMODEL101",
     "SQBRMODEL102",
     "SQBRMODEL103",
+    "SQBRMODEL104",
     "SQBRTEST101",
     "SQBRTEST102",
     "SQBRTEST103",
@@ -68,6 +71,7 @@ STRUCTURE_CODES: tuple[str, ...] = (
     "SQBRMODEL101",
     "SQBRMODEL102",
     "SQBRMODEL103",
+    "SQBRMODEL104",
 )
 SQL_TEST_CODES: tuple[str, ...] = (
     "SQBRTEST101",
@@ -103,6 +107,8 @@ NON_STRUCTURE_CODES: tuple[str, ...] = tuple(
             "SQBRPROJECT102",
             "SQBRPROJECT103",
             "SQBRPROJECT104",
+            "SQBRPROJECT105",
+            "SQBRPROJECT106",
             "SQBRPROJECT201",
             "SQBRPROJECT202",
             "SQBRPROJECT203",

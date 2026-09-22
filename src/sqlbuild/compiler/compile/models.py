@@ -201,8 +201,10 @@ class CompileModelConfig:
     """Pre-semantic effective config layers attached to a model input."""
 
     values: dict[str, object] = field(default_factory=dict)
+    model_header_keys: tuple[str, ...] = field(default_factory=tuple)
     matched_path_default: str | None = None
     logical_schema: str | None = None
+    layer_schema: str | None = None
     logical_database: str | None = None
     time_travel_retention: ResolvedTimeTravelRetention = field(
         default_factory=ResolvedTimeTravelRetention

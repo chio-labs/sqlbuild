@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from sqlbuild.compiler.compile.constants import MODEL_DIRECTORY_NAME
@@ -134,6 +135,7 @@ def _prepared_bodies(
     allows_ceremonial_select: bool = any(
         header.kind in {HEADER_KIND_TEST, HEADER_KIND_SCENARIO} for header in headers
     )
+    allows_empty_fixture_star: bool = any(header.kind == HEADER_KIND_TEST for header in headers)
     body_start: int
     body_end: int
     for body_start, body_end in lint_body_ranges(
@@ -143,17 +145,20 @@ def _prepared_bodies(
         project_dir=project_dir,
     ):
         bodies.append(
-            prepare_lint_body(
-                project_dir=project_dir,
-                file_path=file_path,
-                contents=contents,
-                body_start=body_start,
-                body_end=body_end,
-                context=context,
-                external_identifiers=external_identifiers,
-                allows_ceremonial_select=allows_ceremonial_select,
-                allows_dynamic_output_star=allows_dynamic_output_star,
-                compiled_expansion=compiled_expansion,
+            replace(
+                prepare_lint_body(
+                    project_dir=project_dir,
+                    file_path=file_path,
+                    contents=contents,
+                    body_start=body_start,
+                    body_end=body_end,
+                    context=context,
+                    external_identifiers=external_identifiers,
+                    allows_ceremonial_select=allows_ceremonial_select,
+                    allows_dynamic_output_star=allows_dynamic_output_star,
+                    compiled_expansion=compiled_expansion,
+                ),
+                allows_empty_fixture_star=allows_empty_fixture_star,
             )
         )
     return tuple(bodies)

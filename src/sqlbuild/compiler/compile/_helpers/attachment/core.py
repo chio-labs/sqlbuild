@@ -83,6 +83,7 @@ from sqlbuild.compiler.compile._helpers.render.templating import (
 from sqlbuild.compiler.compile.constants import (
     MACRO_CALL_PATTERN,
     MODEL_FULL_REFRESH_CONFIG_KEY,
+    MODEL_SCHEMA_CONFIG_KEY,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
@@ -586,8 +587,10 @@ def _build_model_inputs(
         )
         expanded_config: CompileModelConfig = CompileModelConfig(
             values=hook_expansion.values,
+            model_header_keys=effective_config.model_header_keys,
             matched_path_default=effective_config.matched_path_default,
             logical_schema=effective_config.logical_schema,
+            layer_schema=effective_config.layer_schema,
             logical_database=effective_config.logical_database,
             time_travel_retention=effective_config.time_travel_retention,
             table_type=effective_config.table_type,
@@ -1040,9 +1043,13 @@ def build_model_config(*, request: ModelConfigBuildRequest) -> CompileModelConfi
         )
     else:
         model_resolved_values = layered_values
-    raw_logical_schema: object | None = model_resolved_values.get("schema")
+    raw_logical_schema: object | None = model_resolved_values.get(MODEL_SCHEMA_CONFIG_KEY)
     raw_logical_database: object | None = model_resolved_values.get("database")
     logical_schema: str | None = raw_logical_schema if isinstance(raw_logical_schema, str) else None
+    layer_schema_is_configured: bool = MODEL_SCHEMA_CONFIG_KEY in model_header_values or (
+        matched_path_default is not None
+        and MODEL_SCHEMA_CONFIG_KEY in path_defaults[matched_path_default]
+    )
     logical_database: str | None = (
         raw_logical_database if isinstance(raw_logical_database, str) else None
     )
@@ -1096,8 +1103,10 @@ def build_model_config(*, request: ModelConfigBuildRequest) -> CompileModelConfi
         validate_model_config_has_no_macros(values=target_resolved_values)
     return CompileModelConfig(
         values=target_resolved_values,
+        model_header_keys=tuple(sorted(model_header_values)),
         matched_path_default=matched_path_default,
         logical_schema=logical_schema,
+        layer_schema=logical_schema if layer_schema_is_configured else None,
         logical_database=logical_database,
         time_travel_retention=retention,
         table_type=table_type,

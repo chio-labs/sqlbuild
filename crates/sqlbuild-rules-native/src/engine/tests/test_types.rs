@@ -6,6 +6,18 @@ pub(crate) struct NativeEvaluationTestCase {
     pub(crate) expected_faults: Value,
 }
 
+pub(crate) struct ModelLayerRulesTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) expected_codes: &'static [&'static str],
+}
+
+pub(crate) struct GraphRuleTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) exceptions: Value,
+    pub(crate) expected_fault_count: usize,
+    pub(crate) expected_message_fragments: &'static [&'static str],
+}
+
 pub(crate) struct DynamicPivotEvaluationTestCase {
     pub(crate) description: &'static str,
     pub(crate) expected_faults: Value,

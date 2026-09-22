@@ -46,6 +46,7 @@ class LintBody:
     externally_referenced_ctes: tuple[str, ...] = ()
     allows_ceremonial_select: bool = False
     allows_dynamic_output_star: bool = False
+    allows_empty_fixture_star: bool = False
 
 
 @dataclass(frozen=True)
