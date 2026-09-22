@@ -80,6 +80,14 @@ pub(super) fn infer_bound(
     schema: Option<&ValidationSchema>,
     dialect: DialectType,
 ) -> Option<Vec<OutputFact>> {
+    if expression.dfs().any(|node| {
+        matches!(
+            node,
+            Expression::Union(_) | Expression::Intersect(_) | Expression::Except(_)
+        )
+    }) {
+        return None;
+    }
     let (outputs, complete) = infer_with_binding_proof(expression, schema, dialect, true);
     complete.then_some(outputs)
 }

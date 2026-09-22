@@ -18,10 +18,12 @@ def strip_ansi(text: str) -> str:
 def chunk_text(*, text: str, max_bytes: int) -> tuple[str, ...]:
     """Split text deterministically without splitting Unicode code points."""
 
-    if len(text.encode("utf-8", "surrogateescape")) <= max_bytes:
-        return (text,)
     if text.isascii() and max_bytes > 0:
+        if len(text) <= max_bytes:
+            return (text,)
         return tuple(text[index : index + max_bytes] for index in range(0, len(text), max_bytes))
+    if len(text) <= max_bytes and len(text.encode("utf-8", "surrogateescape")) <= max_bytes:
+        return (text,)
 
     chunks: list[str] = []
     current: list[str] = []

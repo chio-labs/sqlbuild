@@ -47,6 +47,8 @@ analysis results in batches of 64. Smaller requests retain a single batch. Both
 use up to four workers; local resolution views avoid copying CTE definitions
 that are already available through the source catalogue.
 These limits change scheduling, not analysis or fallback semantics.
+Projects with at least 10,000 model projections use two native analysis workers to
+leave memory headroom for the isolated custom-rule host after analysis.
 
 The compiler reuses borrowed syntax-tree facts when it can prove complete reference
 binding and infer types without consulting mutable type annotations. Unsupported
