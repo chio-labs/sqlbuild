@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.113.2](https://github.com/chio-labs/sqlbuild/compare/v0.113.1...v0.113.2) (2026-09-22)
+
+
+### Bug Fixes
+
+* **rules:** enforce semantic model layers ([#774](https://github.com/chio-labs/sqlbuild/issues/774)) ([6225ee3](https://github.com/chio-labs/sqlbuild/commit/6225ee36d50129457c6aabebd933820a3494f122))
+
 ## [0.113.1](https://github.com/chio-labs/sqlbuild/compare/v0.113.0...v0.113.1) (2026-09-22)
 
 
