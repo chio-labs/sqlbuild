@@ -7,6 +7,7 @@ import re
 from collections.abc import Mapping
 from pathlib import Path
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     expand_declaration_references_result,
     expand_declaration_references_with_spans,
@@ -48,6 +49,10 @@ from sqlbuild.sql_values.types import CollectionRendering
 _SQL_INTERPOLATION_SPECIAL: re.Pattern[str] = re.compile(r"['\"`\-/@]")
 
 _CONTEXT: str = "SQL interpolation"
+_NATIVE_UNCHANGED: int = 0
+_NATIVE_SUBSTITUTED: int = 1
+_NATIVE_FALLBACK: int = 2
+_NATIVE_RESULT_LENGTH: int = 2
 
 
 def validate_var_macro_collision(
@@ -208,6 +213,42 @@ def substitute_sql_vars(
     return rendered_sql
 
 
+def prepare_static_project_vars_batch(
+    *,
+    sqls: tuple[str, ...],
+    effective_vars: dict[str, object],
+) -> tuple[str | None, ...]:
+    """Prepare safe static substitutions, leaving dynamic fallbacks in authored order."""
+
+    scalar_variables: list[tuple[str, str]] = [
+        (name, render_project_var_text(value=value, label=f"SQL variable '@@{name}'"))
+        for name, value in effective_vars.items()
+        if value is None or isinstance(value, str | int | float | bool)
+    ]
+    raw_results: object = _native.substitute_static_project_vars(list(sqls), scalar_variables)
+    if not isinstance(raw_results, list) or len(raw_results) != len(sqls):
+        raise CompileInputError("native static SQL interpolation returned an invalid batch")
+    results: list[str | None] = []
+    for sql, raw_result in zip(sqls, raw_results, strict=True):
+        if not (
+            isinstance(raw_result, tuple)
+            and len(raw_result) == _NATIVE_RESULT_LENGTH
+            and type(raw_result[0]) is int
+            and (raw_result[1] is None or isinstance(raw_result[1], str))
+        ):
+            raise CompileInputError("native static SQL interpolation returned an invalid result")
+        status, rendered = raw_result
+        if status == _NATIVE_UNCHANGED and rendered is None:
+            results.append(sql)
+        elif status == _NATIVE_SUBSTITUTED and rendered is not None:
+            results.append(rendered)
+        elif status == _NATIVE_FALLBACK and rendered is None:
+            results.append(None)
+        else:
+            raise CompileInputError("native static SQL interpolation returned an invalid status")
+    return tuple(results)
+
+
 def substitute_sql_vars_with_spans(
     *,
     sql: str,
@@ -219,7 +260,6 @@ def substitute_sql_vars_with_spans(
 
     if SQL_INTERPOLATION_TOKEN not in sql:
         return sql, ()
-
     parts: list[str] = []
     spans: list[ExpansionSpan] = []
     output_length: int = 0

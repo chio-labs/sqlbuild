@@ -44,7 +44,7 @@ from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 
 _ANALYSIS_CACHE_VERSION: int = 10
-_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v10-incremental-compact-batch"
+_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v12-bound-borrowed-output-graph"
 _MAX_CACHE_ENTRY_BYTES: int = 10_000_000
 _SHA256_HEX_LENGTH: int = 64
 _CACHE_ENTRY_SEPARATOR: str = "\n"

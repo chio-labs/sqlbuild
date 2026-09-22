@@ -112,7 +112,7 @@ class _ModelHeaderToken:
 @dataclass(frozen=True)
 class _ModelHeaderTokenization:
     values: dict[str, object] | None
-    column_offsets: tuple[tuple[str, int, int], ...] | None
+    column_relative_locations: tuple[tuple[str, int, int, int], ...] | None
     error: str | None
 
 
@@ -264,21 +264,25 @@ def header_column_locations(
     """Return authored column locations from a parsed SQLBuild header."""
 
     tokenization: _ModelHeaderTokenization = _model_header_parse(header)
-    if tokenization.column_offsets is None:
-        raise ModelHeaderSyntaxError("Native MODEL header parser returned no column offsets")
-    line_starts: tuple[int, ...] | None = None
-    locations: dict[str, SourceLocation] = {}
-    for name, position, length in tokenization.column_offsets:
-        if line_starts is None:
-            line_starts = _line_starts(contents)
-        locations[name] = _location_for_absolute_span(
-            contents=contents,
-            start=header_start + position,
-            end=header_start + position + length,
-            relative_path=relative_path,
-            line_starts=line_starts,
+    if tokenization.column_relative_locations is None:
+        raise ModelHeaderSyntaxError("Native MODEL header parser returned no column locations")
+    header_line: int = contents.count("\n", 0, header_start) + 1
+    preceding_newline: int = contents.rfind("\n", 0, header_start)
+    header_column: int = (
+        header_start + 1 if preceding_newline < 0 else header_start - preceding_newline
+    )
+    return {
+        name: SourceLocation(
+            path=relative_path,
+            line=header_line + relative_line - 1,
+            column=relative_column + (header_column - 1 if relative_line == 1 else 0),
+            end_line=header_line + relative_line - 1,
+            end_column=(
+                relative_column + (header_column - 1 if relative_line == 1 else 0) + length
+            ),
         )
-    return locations
+        for name, relative_line, relative_column, length in tokenization.column_relative_locations
+    }
 
 
 def model_output_column_locations(
@@ -643,10 +647,37 @@ def prepare_model_header_tokens(headers: list[str]) -> None:
                 values=(
                     _project_native_header_map(native_values) if native_values is not None else None
                 ),
-                column_offsets=(tuple(column_offsets) if column_offsets is not None else None),
+                column_relative_locations=(
+                    _header_column_relative_locations(header=header, offsets=column_offsets)
+                    if column_offsets is not None
+                    else None
+                ),
                 error=error,
             ),
         )
+
+
+def _header_column_relative_locations(
+    *, header: str, offsets: list[tuple[str, int, int]]
+) -> tuple[tuple[str, int, int, int], ...]:
+    """Project ordered header offsets to one-based relative source locations in one pass."""
+
+    locations: list[tuple[str, int, int, int]] = []
+    line: int = 1
+    column: int = 1
+    cursor: int = 0
+    for name, position, length in offsets:
+        while cursor < position:
+            newline: int = header.find("\n", cursor, position)
+            if newline < 0:
+                column += position - cursor
+                cursor = position
+            else:
+                line += 1
+                column = 1
+                cursor = newline + 1
+        locations.append((name, line, column, length))
+    return tuple(locations)
 
 
 def prepare_model_file_headers(contents: list[str]) -> None:

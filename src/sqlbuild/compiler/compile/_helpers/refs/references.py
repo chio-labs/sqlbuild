@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.constants import (
     SQL_ARGUMENT_SEPARATOR_TOKEN,
     SQL_CLOSE_PAREN_TOKEN,
@@ -38,6 +39,25 @@ _REFERENCE_SCAN_PATTERN: re.Pattern[str] = re.compile(r"__|--|/\*|'|\"|`")
 
 def extract_sql_references(sql: str) -> tuple[CompileSqlReference, ...]:
     """Return logical SQL refs found outside comments and quoted text."""
+
+    native_references: list[tuple[str, str, str | None, int | None]] | None = (
+        _native.extract_static_sql_references(sql)
+    )
+    if native_references is not None:
+        return tuple(
+            CompileSqlReference(
+                ref_kind=SqlReferenceKind(kind),
+                ref_name=name,
+                ref_package=package,
+                call_argument_count=call_argument_count,
+            )
+            for kind, name, package, call_argument_count in native_references
+        )
+    return _extract_sql_references_with_python(sql)
+
+
+def _extract_sql_references_with_python(sql: str) -> tuple[CompileSqlReference, ...]:
+    """Return logical SQL refs through the authoritative general scanner."""
 
     references: list[CompileSqlReference] = []
     index: int = 0

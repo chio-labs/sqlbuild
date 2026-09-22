@@ -4,6 +4,12 @@ pub(crate) struct ModelHeaderTokenizationTestCase {
     pub(crate) expected_success: bool,
 }
 
+pub(crate) struct StaticSqlOperationTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) run: fn() -> bool,
+    pub(crate) expected_success: bool,
+}
+
 pub(crate) struct SqlTestExtractionTestCase {
     pub(crate) description: &'static str,
     pub(crate) run: fn() -> bool,

@@ -112,6 +112,12 @@ class ScopePayloadTestCase:
 
 
 @dataclass(frozen=True)
+class ProjectFingerprintRepresentationTestCase:
+    description: str
+    expected_equivalent: bool
+
+
+@dataclass(frozen=True)
 class NativeFactPayloadTestCase:
     description: str
     expected_test_count: int

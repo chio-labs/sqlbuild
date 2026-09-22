@@ -177,6 +177,61 @@ def test_given_queries_when_batch_analyzing_then_uses_one_ordered_native_request
 
 @pytest.mark.parametrize(
     "test_case",
+    (
+        InferColumnsTestCase(
+            description="cast expression overrides input type through CTE",
+            query_sql='WITH typed AS (SELECT COALESCE(CAST(amount AS FLOAT), CAST(0 AS FLOAT)) AS amount FROM __ref("orders")) SELECT amount FROM typed',
+            expected_columns=(
+                InferredColumn(
+                    name="amount", type="FLOAT", nullability=InferredNullability.NON_NULL
+                ),
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_cte_cast_when_batch_analyzing_then_cast_type_overrides_input_type(
+    test_case: InferColumnsTestCase,
+) -> None:
+    query_sql: str = test_case.query_sql
+    references: tuple[CompileSqlReference, ...] = (
+        CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
+    )
+    nullability: dict[str, dict[str, InferredNullability]] = {
+        "orders": {"amount": InferredNullability.NULLABLE}
+    }
+    types: dict[str, dict[str, str]] = {"orders": {"amount": "VARCHAR"}}
+    profile: ExpressionInferenceProfile = ExpressionInferenceProfile(
+        sql_analysis_dialect="snowflake"
+    )
+
+    prepared: NativeCompactAnalysis = analyze_queries_with_compact_polyglot_batch(
+        query_sqls=(query_sql,),
+        references=(references,),
+        placeholders=(None,),
+        column_nullability_by_table=nullability,
+        column_types_by_table=types,
+        inference_profile=profile,
+        recover_cte_facts=(True,),
+        rich_type_inference=False,
+    )[0]
+    result: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+        query_sql=query_sql,
+        references=references,
+        column_nullability_by_table=nullability,
+        column_types_by_table=types,
+        inference_profile=profile,
+        allow_compact_analysis=True,
+        recover_cte_facts=True,
+        precomputed=prepared,
+    )
+
+    assert result.analysis_succeeded
+    assert result.columns == test_case.expected_columns
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [
         QualifiedReferenceAnalysisTestCase(
             description="plain qualified reference",

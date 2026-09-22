@@ -41,12 +41,13 @@ from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
     ResourceIdentity,
+    ResourceRecord,
     ScopeIndex,
     UsageRecord,
     VisibilityRecord,
     VisibilityResolution,
 )
-from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, UsageKind
+from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind, UsageKind
 from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
 from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
@@ -64,6 +65,7 @@ _CONSTANT_REFERENCE_PATTERN: re.Pattern[str] = re.compile(
     r"(?P=quote)\s*\)"
 )
 _DECLARATION_REFERENCE_START_PATTERN: re.Pattern[str] = re.compile(r"@(?P<kind>enum|const)\b")
+_DECLARATION_SCAN_SPECIAL: re.Pattern[str] = re.compile(r"['\"`@/-]")
 _CONTEXT: str = "Enum and constant expansion"
 _ACCEPTED_VALUES_AUDIT: str = "accepted_values"
 _ENUM_REFERENCE_KIND: str = "enum"
@@ -141,6 +143,12 @@ def build_declaration_scope_resolver(
         project_dir=discovered_inputs.project_dir,
         lookup=build_scope_lookup(index=scope_index),
         projection=DeclarationRuntimeProjection(declarations=MappingProxyType(declarations)),
+        resource_specific=frozenset(
+            declaration.identity.owner
+            for declaration in scope_index.declarations
+            if declaration.scope is ScopeKind.PRIVATE and declaration.identity.owner is not None
+        )
+        | frozenset(grant.resource for grant in scope_index.grants),
     )
 
 
@@ -158,6 +166,21 @@ def resolve_declaration_context(
             target_path = file_path.relative_to(resolver.project_dir)
         except ValueError:
             target_path = file_path
+    resources: tuple[ResourceRecord, ...] = (
+        resolver.lookup.resources.get(resource, ())
+        if resource is not None
+        else resolver.lookup.resources_by_path.get(target_path.as_posix(), ())
+    )
+    cache_key: tuple[str, str] | None = None
+    if (
+        len(resources) == 1
+        and resolver.resource_specific is not None
+        and resources[0].identity not in resolver.resource_specific
+    ):
+        cache_key = (Path(resources[0].path).parent.as_posix(), resources[0].ownership_root.path)
+        cached: DeclarationResolutionContext | None = resolver.contexts_by_directory.get(cache_key)
+        if cached is not None:
+            return _rebind_declaration_context(context=cached, consumer=resources[0].identity)
     resolution: VisibilityResolution = resolve_scope_visibility(
         lookup=resolver.lookup, target=resource or target_path
     )
@@ -227,7 +250,7 @@ def resolve_declaration_context(
             constant_visibility[record.identity.name] = records
         elif record.identity.kind is DeclarationKind.MACRO:
             macro_visibility[record.identity.name] = records
-    return DeclarationResolutionContext(
+    context: DeclarationResolutionContext = DeclarationResolutionContext(
         enums=enums,
         constants=constants,
         inaccessible_enums=inaccessible_enums,
@@ -243,6 +266,43 @@ def resolve_declaration_context(
             or (resolution.target.matches[0].identity if resolution.target.matches else None)
         ),
     )
+    if cache_key is not None:
+        resolver.cache_context(key=cache_key, context=context)
+    return context
+
+
+def _rebind_declaration_context(
+    *, context: DeclarationResolutionContext, consumer: ResourceIdentity
+) -> DeclarationResolutionContext:
+    return replace(
+        context,
+        consumer=consumer,
+        enums=dict(context.enums),
+        constants=dict(context.constants),
+        macros=dict(context.macros),
+        macro_records=dict(context.macro_records),
+        inaccessible_enums=dict(context.inaccessible_enums),
+        inaccessible_constants=dict(context.inaccessible_constants),
+        inaccessible_macros=dict(context.inaccessible_macros),
+        enum_visibility=_rebind_visibility(
+            records_by_name=context.enum_visibility, consumer=consumer
+        ),
+        constant_visibility=_rebind_visibility(
+            records_by_name=context.constant_visibility, consumer=consumer
+        ),
+        macro_visibility=_rebind_visibility(
+            records_by_name=context.macro_visibility, consumer=consumer
+        ),
+    )
+
+
+def _rebind_visibility(
+    *, records_by_name: dict[str, tuple[VisibilityRecord, ...]], consumer: ResourceIdentity
+) -> dict[str, tuple[VisibilityRecord, ...]]:
+    result: dict[str, tuple[VisibilityRecord, ...]] = {}
+    for name, records in records_by_name.items():
+        result[name] = tuple(replace(record, resource=consumer) for record in records)
+    return result
 
 
 def declaration_usage_records(
@@ -776,6 +836,10 @@ def _find_next_reference_start(*, sql: str, start: int) -> int | None:
         return None
     index: int = start
     while index < len(sql):
+        special: re.Match[str] | None = _DECLARATION_SCAN_SPECIAL.search(sql, index)
+        if special is None:
+            return None
+        index = special.start()
         character: str = sql[index]
         if character in SQL_QUOTE_TOKENS:
             index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)

@@ -76,8 +76,8 @@ def test_given_invalid_native_response_when_linting_then_boundary_fails_closed(
 ) -> None:
     monkeypatch.setattr(
         native_sql._native,
-        "lint_sql_json",
-        lambda _request: test_case.response,
+        "lint_sql_batch_json",
+        lambda _request: json.dumps([{"Ok": json.loads(test_case.response)}]),
     )
     target: Path = tmp_path / "model.sql"
     body: LintBody = LintBody(
@@ -113,10 +113,11 @@ def test_given_one_unparseable_body_when_linting_then_other_files_still_complete
     tmp_path: Path,
 ) -> None:
     lint_response: Mock = Mock(
-        side_effect=[ValueError(test_case.error_message), '{"version":1,"diagnostics":[]}']
+        return_value=json.dumps(
+            [{"Err": test_case.error_message}, {"Ok": {"version": 1, "diagnostics": []}}]
+        )
     )
-    monkeypatch.setattr(native_sql._native, "lint_sql_json", lint_response)
-    monkeypatch.setattr(native_sql, "_MAX_NATIVE_LINT_WORKERS", 1)
+    monkeypatch.setattr(native_sql._native, "lint_sql_batch_json", lint_response)
     failed_path: Path = tmp_path / "failed.sql"
     healthy_path: Path = tmp_path / "healthy.sql"
     failed_text: str = "SELECT category\nGROUP BY GROUPING SETS ((category))"
@@ -166,10 +167,10 @@ def test_given_identical_expanded_bodies_when_linting_then_native_analysis_is_re
     calls: list[str] = []
 
     def lint_sql_json(request: str) -> str:
-        calls.append(request)
-        return '{"version":1,"diagnostics":[]}'
+        calls.extend(json.dumps(payload) for payload in json.loads(request))
+        return json.dumps([{"Ok": {"version": 1, "diagnostics": []}} for _ in json.loads(request)])
 
-    monkeypatch.setattr(native_sql._native, "lint_sql_json", lint_sql_json)
+    monkeypatch.setattr(native_sql._native, "lint_sql_batch_json", lint_sql_json)
     paths: tuple[Path, Path] = (tmp_path / "first.sql", tmp_path / "second.sql")
     bodies: tuple[LintBody, ...] = tuple(
         LintBody(
@@ -210,10 +211,10 @@ def test_given_different_dependency_identities_when_linting_then_native_cache_is
     calls: list[str] = []
 
     def lint_sql_json(request: str) -> str:
-        calls.append(request)
-        return '{"version":1,"diagnostics":[]}'
+        calls.extend(json.dumps(payload) for payload in json.loads(request))
+        return json.dumps([{"Ok": {"version": 1, "diagnostics": []}} for _ in json.loads(request)])
 
-    monkeypatch.setattr(native_sql._native, "lint_sql_json", lint_sql_json)
+    monkeypatch.setattr(native_sql._native, "lint_sql_batch_json", lint_sql_json)
     sql: str = "WITH imported_orders AS (SELECT * FROM __sqb_lint_0__) SELECT 1"
     paths: tuple[Path, Path] = (tmp_path / "dependency.sql", tmp_path / "dynamic.sql")
     bodies: tuple[LintBody, LintBody] = (
@@ -412,7 +413,11 @@ def test_given_diagnostic_crossing_generated_sql_when_mapping_then_range_falls_b
             ],
         }
     )
-    monkeypatch.setattr(native_sql._native, "lint_sql_json", lambda _request: response)
+    monkeypatch.setattr(
+        native_sql._native,
+        "lint_sql_batch_json",
+        lambda _request: json.dumps([{"Ok": json.loads(response)}]),
+    )
     target: Path = tmp_path / "model.sql"
     body: LintBody = LintBody(
         file_path=target,

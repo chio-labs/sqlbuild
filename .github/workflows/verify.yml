@@ -73,6 +73,7 @@ jobs:
                 ;;
               src/sqlbuild/rule_engine/*|src/sqlbuild/lint/*|scripts/rules_benchmark/*|scripts/benchmark_rules_ci.py|tests/performance/*)
                 broad=true
+                performance=true
                 format_performance=true
                 rules_performance=true
                 ;;
@@ -324,6 +325,53 @@ jobs:
             make test-e2e-cold-compile-performance \
               SQLBUILD_BENCHMARK_MODELS="${BENCHMARK_MODELS}"
 
+  dense_compile_performance:
+    name: Dense all-rules compile (${{ matrix.models }} models)
+    needs: [changes, lockfile]
+    if: needs.changes.outputs.performance == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        models: [1000, 3000, 5000, 10000]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            Cargo.lock
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Install Python
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: uv sync --locked --all-groups --all-extras
+      - name: Run dense all-rules guard under 4 GiB
+        env:
+          BENCHMARK_MODELS: ${{ matrix.models }}
+          MEMORY_LIMIT_BYTES: "4294967296"
+        run: |
+          sudo systemd-run \
+            --unit="sqlbuild-dense-${BENCHMARK_MODELS}-${GITHUB_RUN_ID}" \
+            --uid="$(id -u)" \
+            --gid="$(id -g)" \
+            --same-dir \
+            --setenv="HOME=${HOME}" \
+            --setenv="PATH=${PATH}" \
+            --setenv="SQLBUILD_REQUIRE_MEMORY_LIMIT_BYTES=${MEMORY_LIMIT_BYTES}" \
+            --property="MemoryMax=${MEMORY_LIMIT_BYTES}" \
+            --property="MemorySwapMax=0" \
+            --wait \
+            --collect \
+            --pipe \
+            make test-e2e-dense-compile-performance \
+              SQLBUILD_BENCHMARK_MODELS="${BENCHMARK_MODELS}"
+
   cache_compile_performance:
     name: Fresh-process compile cache (${{ matrix.models }} models)
     needs: [changes, lockfile]
@@ -464,6 +512,7 @@ jobs:
         format_performance,
         performance,
         cold_compile_performance,
+        dense_compile_performance,
         cache_compile_performance,
         rules_performance,
         postgres,
@@ -479,6 +528,7 @@ jobs:
           FORMAT_PERFORMANCE_RESULT: ${{ needs.format_performance.result }}
           PERFORMANCE_RESULT: ${{ needs.performance.result }}
           COLD_COMPILE_PERFORMANCE_RESULT: ${{ needs.cold_compile_performance.result }}
+          DENSE_COMPILE_PERFORMANCE_RESULT: ${{ needs.dense_compile_performance.result }}
           CACHE_COMPILE_PERFORMANCE_RESULT: ${{ needs.cache_compile_performance.result }}
           RULES_PERFORMANCE_RESULT: ${{ needs.rules_performance.result }}
           POSTGRES_RESULT: ${{ needs.postgres.result }}
@@ -494,6 +544,7 @@ jobs:
             "${FORMAT_PERFORMANCE_RESULT}" \
             "${PERFORMANCE_RESULT}" \
             "${COLD_COMPILE_PERFORMANCE_RESULT}" \
+            "${DENSE_COMPILE_PERFORMANCE_RESULT}" \
             "${CACHE_COMPILE_PERFORMANCE_RESULT}" \
             "${RULES_PERFORMANCE_RESULT}" \
             "${POSTGRES_RESULT}"; do

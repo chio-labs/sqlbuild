@@ -9,6 +9,7 @@ from unittest.mock import Mock
 import pytest
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.compile._helpers.analysis import cache as analysis_cache
 from sqlbuild.compiler.compile._helpers.analysis.cache import (
     build_analysis_cache_context,
     model_analysis_cache_key,
@@ -42,6 +43,7 @@ _CACHE_REPO_FILES: dict[str, str] = {
     "sources/raw.yml": """
 sources:
   - name: raw_orders
+    contract: enforced
     expression: "(SELECT 1 AS order_id)"
     columns:
       - name: order_id
@@ -63,6 +65,40 @@ _SELECTION_REPO_FILES: dict[str, str] = {
     "models/leaf.sql": 'MODEL ();\n\nSELECT id FROM __ref("middle")\n',
     "models/unrelated.sql": "MODEL ();\n\nSELECT 2 AS id\n",
 }
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        AnalysisCacheTestCase(
+            description="changed compiler semantics invalidate prior analysis",
+            expected_count=1,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_changed_analysis_algorithm_when_compiling_then_refreshes_cached_facts(
+    test_case: AnalysisCacheTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, _CACHE_REPO_FILES)
+    cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
+    monkeypatch.setattr(
+        analysis_cache, "_ANALYSIS_ALGORITHM_FINGERPRINT", "synthetic-next-algorithm"
+    )
+    with collect_compile_timings() as changed_metrics:
+        changed_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
+    with collect_compile_timings() as normal_metrics:
+        normal_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
+
+    assert changed_metrics.as_milliseconds()["analysis_cache_misses"] == test_case.expected_count
+    assert changed_metrics.as_milliseconds()["analysis_entry_cache_hits"] == 0
+    assert changed_metrics.as_milliseconds()["analysis_batch_cache_hits"] == 0
+    assert normal_metrics.as_milliseconds()["analysis_entry_cache_hits"] == test_case.expected_count
+    assert normal_project.models == changed_project.models == cold_project.models
+    assert normal_project.diagnostics == cold_project.diagnostics
 
 
 @pytest.mark.parametrize(
@@ -101,6 +137,35 @@ def test_given_successful_analysis_when_compiling_again_then_reuses_identical_ca
     assert len(tuple((tmp_path / "target" / "cache" / "compiler").rglob("*.sqlite3"))) == (
         test_case.expected_count + 1
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (AnalysisCacheTestCase(description="completed compact cache reuse", expected_count=1),),
+    ids=lambda case: case.description,
+)
+def test_given_completed_compact_cache_when_compiling_again_then_skips_analysis_and_binding(
+    test_case: AnalysisCacheTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, _CACHE_REPO_FILES)
+    monkeypatch.setattr(
+        assembly_project, "_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT", test_case.expected_count
+    )
+    cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
+    analyzer: Mock = Mock(side_effect=AssertionError("completed facts must not be reanalyzed"))
+    validator: Mock = Mock(side_effect=AssertionError("completed bindings must not be revalidated"))
+    monkeypatch.setattr(assembly_project, "_analyze_model_sql_requests", analyzer)
+    monkeypatch.setattr(assembly_project, "get_schema_validations", validator)
+
+    warm_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
+
+    assert warm_project.models == cold_project.models
+    assert warm_project.diagnostics == cold_project.diagnostics
+    analyzer.assert_not_called()
+    validator.assert_not_called()
 
 
 @pytest.mark.parametrize(

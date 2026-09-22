@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import json
-import os
 import re
 from bisect import bisect_right
-from concurrent.futures import ThreadPoolExecutor
-from itertools import chain
 from pathlib import Path
 from typing import Any, cast
+
+import orjson
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.constants import (
@@ -41,7 +39,6 @@ from sqlbuild.lint.exceptions import NativeLintError
 from sqlbuild.lint.models import LintBody, LintConfig, LintEdit, LintViolation
 
 _NATIVE_LINT_API_VERSION: int = 1
-_MAX_NATIVE_LINT_WORKERS: int = 8
 _NEWLINE_CHARACTER: str = "\n"
 _UNUSED_CTE_CODE: str = "SQBRSQL005"
 _PARSE_ERROR_POSITION_PATTERN: re.Pattern[str] = re.compile(
@@ -155,40 +152,37 @@ def _native_cache_key(*, body: LintBody, config: LintConfig) -> _NativeCacheKey:
 def _native_responses(
     *, requests: dict[_NativeCacheKey, dict[str, object]]
 ) -> dict[_NativeCacheKey, _NativeResult]:
-    """Analyze unique SQL bodies concurrently while preserving request order."""
+    """Analyze unique SQL bodies in one bounded native batch."""
 
     keys: tuple[_NativeCacheKey, ...] = tuple(requests)
     payloads: tuple[dict[str, object], ...] = tuple(requests.values())
-    worker_count: int = min(
-        len(payloads),
-        _MAX_NATIVE_LINT_WORKERS,
-        os.cpu_count() or 1,
-    )
-    if worker_count <= 1:
-        results: tuple[_NativeResult, ...] = tuple(
-            _native_response_or_error(payload=payload) for payload in payloads
+    try:
+        decoded: object = orjson.loads(
+            _native.lint_sql_batch_json(
+                orjson.dumps(payloads, option=orjson.OPT_SORT_KEYS).decode()
+            )
         )
-    else:
-        chunk_size: int = (len(payloads) + worker_count - 1) // worker_count
-        chunks: tuple[tuple[dict[str, object], ...], ...] = tuple(
-            payloads[start : start + chunk_size] for start in range(0, len(payloads), chunk_size)
-        )
-        with ThreadPoolExecutor(max_workers=worker_count) as executor:
-            results = tuple(chain.from_iterable(executor.map(_native_response_chunk, chunks)))
+    except (TypeError, ValueError) as error:
+        raise NativeLintError(str(error)) from error
+    if not isinstance(decoded, list) or len(decoded) != len(keys):
+        raise NativeLintError("native lint engine returned an invalid batch response")
+    results: tuple[_NativeResult, ...] = tuple(_native_result(response=value) for value in decoded)
     return dict(zip(keys, results, strict=True))
 
 
-def _native_response_or_error(payload: dict[str, object]) -> _NativeResult:
-    try:
-        return _native_response(payload=payload)
-    except NativeLintError as error:
-        return error
-
-
-def _native_response_chunk(
-    payloads: tuple[dict[str, object], ...],
-) -> tuple[_NativeResult, ...]:
-    return tuple(_native_response_or_error(payload) for payload in payloads)
+def _native_result(*, response: object) -> _NativeResult:
+    if not isinstance(response, dict):
+        return NativeLintError("native lint engine returned a non-object response")
+    payload: dict[str, object] = cast(dict[str, object], response)
+    if isinstance(payload.get("Err"), str):
+        return NativeLintError(cast(str, payload["Err"]))
+    decoded: object = payload.get("Ok")
+    if not isinstance(decoded, dict):
+        return NativeLintError("native lint engine returned a non-object response")
+    result: dict[str, Any] = cast(dict[str, Any], decoded)
+    if result.get("version") != _NATIVE_LINT_API_VERSION:
+        return NativeLintError("native lint engine returned an unsupported response version")
+    return result
 
 
 def _parse_failure_violation(
@@ -219,20 +213,6 @@ def _parse_failure_violation(
         engine=LINT_ENGINE_NATIVE,
         remediation="Use SQL syntax supported by the native parser or report the parser gap.",
     )
-
-
-def _native_response(*, payload: dict[str, object]) -> dict[str, Any]:
-    try:
-        decoded: object = json.loads(
-            _native.lint_sql_json(json.dumps(payload, sort_keys=True, separators=(",", ":")))
-        )
-    except (TypeError, ValueError) as error:
-        raise NativeLintError(str(error)) from error
-    if not isinstance(decoded, dict):
-        raise NativeLintError("native lint engine returned a non-object response")
-    if decoded.get("version") != _NATIVE_LINT_API_VERSION:
-        raise NativeLintError("native lint engine returned an unsupported response version")
-    return {str(key): value for key, value in decoded.items()}
 
 
 def _authored_violation(

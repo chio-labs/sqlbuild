@@ -14,6 +14,18 @@ from tests.unit.src.sqlbuild.compiler.sql_analysis.main._test_types import (
     "test_case",
     (
         PolyglotSqlNormalizationTestCase(
+            description="normalizes dynamic access after arithmetic and variable tokens",
+            sql=(
+                "SELECT amount / quantity - $discount, "
+                "payload:labels[TO_VARCHAR(product_id)] FROM orders"
+            ),
+            dialect="snowflake",
+            expected_sql=(
+                "SELECT amount / quantity - $discount, "
+                "GET(payload:labels, TO_VARCHAR(product_id)) FROM orders"
+            ),
+        ),
+        PolyglotSqlNormalizationTestCase(
             description="rewrites a dynamic key after a Snowflake variant path",
             sql="SELECT payload:labels[TO_VARCHAR(payload:item_id)] FROM events",
             dialect="snowflake",

@@ -6,6 +6,46 @@ from sqlbuild.compiler.planner.models import CursorOverrides
 
 
 @dataclass(frozen=True)
+class BoundProjectionCompileTestCase:
+    description: str
+    query_sql: str
+    expected_rows: tuple[tuple[int | None, ...], ...]
+    expected_edges: int
+    output_contract: str = "order_id (type BIGINT, nullable false)"
+
+
+@dataclass(frozen=True)
+class AliasSourceCompileTestCase:
+    """Lexical source shape exercised by an input-column precedence regression."""
+
+    description: str
+    query_prefix: str
+    source_relation: str
+    expected_edge_count: int
+
+
+@dataclass(frozen=True)
+class DerivedNativeCompileTestCase:
+    """Expected compiled and executed output from the native query graph."""
+
+    description: str
+    query_sql: str
+    expected_exit_code: int
+    expected_diagnostics: tuple[str, ...]
+    expected_rows: tuple[tuple[int, ...], ...]
+
+
+@dataclass(frozen=True)
+class CombinedCompilationTestCase:
+    """Expected CLI behavior for schema-bound CTE compilation."""
+
+    description: str
+    projection: str
+    expected_exit_code: int
+    expected_diagnostics: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class RulesIntegrationTestCase:
     """One compiler-integrated Rules command expectation."""
 
@@ -423,3 +463,11 @@ class ExpectedCountTestCase:
 class ExpectedMessageTestCase:
     description: str
     expected_message: str
+
+
+@dataclass(frozen=True)
+class DenseCompileFixtureTestCase:
+    description: str
+    model_count: int
+    expected_rule_misses: int
+    expected_tail_lineage_edges: int

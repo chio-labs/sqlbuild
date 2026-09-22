@@ -1,0 +1,55 @@
+# Dense all-rules compile guard
+
+The dense compile guard covers cold compilation of 1,000, 3,000, 5,000 and
+10,000 models with every built-in compiler rule and one custom project rule
+enabled. It complements the existing semantic and incremental-cache benchmarks.
+
+The deterministic fixture uses neutral order data and compiles offline with the
+Snowflake dialect. Each 1,000-model group has 240 sources, 50 seeds, 25 SQL
+functions, 1,700 audits and 1,000 SQL tests. Queries contain dependency import
+CTEs, joins, named unions, explicit contracts, wide projections and Python macro
+expansion. Independent declaration scopes preserve per-model macro visibility
+as the project grows. SQL tests mock immediate inputs to keep test expansion
+bounded. A smaller integration fixture executes its generated tests in DuckDB.
+
+The guard checks:
+
+- Complete built-in rule selection, one selected custom rule, and no ignored
+  rules, scoped exceptions or relaxed thresholds.
+- Resource counts, minimum authored SQL volume, and zero diagnostics.
+- Zero analysis/rule cache hits and analysis bypasses for every model.
+- A fingerprint of semantic JSON and every compiled artifact.
+- Fresh-process wall time and peak RSS, with phase timings in test logs.
+
+| Models | Wall-time ceiling | Process RSS ceiling |
+| ---: | ---: | ---: |
+| 1,000 | 14s | 1.5GiB |
+| 3,000 | 34s | 2.75GiB |
+| 5,000 | 55s | 3.25GiB |
+| 10,000 | 115s | 4GiB |
+
+These are regression ceilings for the implemented compiler, with headroom for
+host variation. They are not a claim of sub-10-second compilation at every size.
+
+CI additionally runs each size in a 4GiB cgroup with swap disabled, covering
+the test harness and child processes together. Compiler, lint and rule-engine
+changes select these jobs. Local process RSS measurements alone do not prove
+the cgroup gate passes.
+
+Run an individual size with:
+
+```sh
+make test-e2e-dense-compile-performance SQLBUILD_BENCHMARK_MODELS=1000
+```
+
+For requests containing at least 32MiB of unique SQL, the compiler compacts native
+analysis results in batches of 64. Smaller requests retain a single batch. Both
+use up to four workers; local resolution views avoid copying CTE definitions
+that are already available through the source catalogue.
+These limits change scheduling, not analysis or fallback semantics.
+
+This fixture protects dense query analysis, declaration expansion, rules and
+artifact generation. It is not an exact reproduction of every application:
+dynamic plugins, incremental materialization mixes and deeply nested query
+tails still require application-specific acceptance measurements. Keep those
+measurements private; publish only neutral fixtures and their own results.

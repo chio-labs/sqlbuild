@@ -11,12 +11,60 @@ import pytest
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    CombinedCompilationTestCase,
     ContractNullabilityCompileIntegrationTestCase,
     ExpectedCountTestCase,
     ExpectedMessageTestCase,
     ProjectDirectoryCompileIntegrationTestCase,
     SnowflakeCompileIntegrationTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CombinedCompilationTestCase(
+            description="typed CTE comparison compiles",
+            projection="order_id > 0",
+            expected_exit_code=0,
+            expected_diagnostics=(),
+        ),
+        CombinedCompilationTestCase(
+            description="missing CTE input retains binding diagnostic",
+            projection="missing > 0",
+            expected_exit_code=1,
+            expected_diagnostics=("B002",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_typed_dependency_when_compiling_cte_then_preserves_binding_and_output_contract(
+    test_case: CombinedCompilationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    sources: Path = tmp_path / "sources"
+    sources.mkdir()
+    (sources / "orders.yml").write_text(
+        "sources:\n  - name: orders\n    contract: enforced\n"
+        '    expression: "(SELECT CAST(1 AS BIGINT) AS order_id)"\n'
+        "    columns:\n      - name: order_id\n        type: BIGINT\n"
+    )
+    (models / "selected_orders.sql").write_text(
+        "MODEL (columns (result (type BOOLEAN)));\n"
+        'WITH selected AS (SELECT order_id FROM __source("orders"))\n'
+        f"SELECT {test_case.projection} AS result FROM selected\n"
+    )
+    exit_code: int = main(
+        ["--project-dir", str(tmp_path), "--no-color", "compile", "--json", "--no-cache"]
+    )
+    result: dict[str, object] = json.loads(capsys.readouterr().out)
+    diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], result["diagnostics"])
+    assert exit_code == test_case.expected_exit_code
+    assert tuple(item["code"] for item in diagnostics) == test_case.expected_diagnostics
 
 
 @pytest.mark.parametrize(
@@ -63,6 +111,45 @@ def test_given_multiple_typed_model_headers_when_compiling_then_cli_preserves_he
     assert summary["models"] == test_case.expected_count
     assert summary["errors"] == 0
     assert (tmp_path / "target" / "compiled" / "models" / "orders.sql").is_file()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedCountTestCase(
+            description="compiler rules reuse expanded macro SQL", expected_count=1
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_model_macro_when_compiling_with_sql_rules_then_expands_once_and_preserves_location(
+    test_case: ExpectedCountTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = ["SQBRSQL001"]\n'
+    )
+    macro_dir: Path = tmp_path / "models" / "orders" / "_sqlbuild" / "_macros"
+    macro_dir.mkdir(parents=True)
+    (macro_dir / "missing_value.py").write_text(
+        "from pathlib import Path\n"
+        "def missing_value() -> str:\n"
+        "    counter = Path(__file__).with_suffix('.calls')\n"
+        "    count = int(counter.read_text()) if counter.exists() else 0\n"
+        "    counter.write_text(str(count + 1))\n"
+        "    return 'NULL'\n"
+    )
+    (tmp_path / "models" / "orders" / "orders.sql").write_text(
+        "MODEL (materialized table);\n\nSELECT 1 AS order_id WHERE 1 = @missing_value()\n"
+    )
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+    result: dict[str, object] = json.loads(capsys.readouterr().out)
+    diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], result["diagnostics"])
+    assert exit_code == 1
+    assert int((macro_dir / "missing_value.calls").read_text()) == test_case.expected_count
+    assert tuple(item["code"] for item in diagnostics) == ("SQBRSQL001",)
+    assert diagnostics[0]["line"] == 3
 
 
 @pytest.mark.parametrize(

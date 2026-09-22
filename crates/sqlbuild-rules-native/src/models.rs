@@ -659,6 +659,7 @@ pub(crate) struct EvaluateRequest {
     pub public_constants: Vec<Declaration>,
     pub scope_index: ScopeIndexFacts,
     pub initial_findings: Vec<Fault>,
+    pub defer_suppressions: bool,
     pub custom_rules: Vec<CustomRule>,
     pub custom_host: Option<CustomHostSpec>,
     pub project_fingerprint: Option<String>,
@@ -696,11 +697,22 @@ impl Default for EvaluateRequest {
             public_constants: vec![],
             scope_index: ScopeIndexFacts::default(),
             initial_findings: vec![],
+            defer_suppressions: false,
             custom_rules: vec![],
             custom_host: None,
             project_fingerprint: None,
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct FinalizeFindingsRequest {
+    pub version: u32,
+    pub project_dir: String,
+    pub config: RulesConfig,
+    pub evaluated_codes: Vec<String>,
+    pub findings: Vec<Fault>,
 }
 
 #[derive(Debug, Serialize)]

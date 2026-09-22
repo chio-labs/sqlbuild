@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import replace
 from typing import Any, cast
 
 import orjson
@@ -37,6 +38,7 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.exceptions import CompactAnalysisInputError
 from sqlbuild.compiler.compile.models import (
+    CompactBatchExecutionOptions,
     CompactBatchPreparation,
     CompactLineageFacts,
     CompactProjectedFacts,
@@ -50,12 +52,13 @@ from sqlbuild.compiler.compile.models import (
     PolyglotAnalysisResult,
     ProjectedAnalysisRequest,
 )
-from sqlbuild.compiler.compile.types import CompactBatchResponseCallback, CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
     ColumnTransformKind,
     InferredNullability,
 )
+from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.compiler.references.main._quoted_reference_call_pattern import (
     quoted_reference_call_pattern,
 )
@@ -154,16 +157,20 @@ from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_PAYLOAD_COLUMN as _POLYGLOT_PAYLOAD_COLUMN,
 )
 from sqlbuild.compiler.sql_analysis.exceptions import SqlAnalysisBoundaryError
+from sqlbuild.compiler.sql_analysis.main._decode_schema_validation import decode_schema_validation
+from sqlbuild.compiler.sql_analysis.main._prepare_schema_validation import prepare_schema_validation
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.compiler.sql_analysis.models import (
     SqlBindingDiagnostic,
+    SqlBindingResult,
     SqlSchemaValidationRequest,
 )
 from sqlbuild.compiler.sql_analysis.types import NativeQueryAnalysisModule
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
+_NATIVE_LEGACY_FALLBACK: str = "native project type recovery requires legacy fallback"
 _REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
 _SEED_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SEED)
 _SOURCE_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SOURCE)
@@ -304,7 +311,14 @@ def analyze_columns_and_lineage_with_polyglot(
         column_nullability_by_table=column_nullability_by_table or {},
         column_types_by_table=column_types_by_table or {},
         inference_profile=profile,
-        allow_compact_analysis=allow_compact_analysis,
+        allow_compact_analysis=(
+            allow_compact_analysis
+            and not (
+                precomputed is not None
+                and not precomputed.projected
+                and precomputed.analysis is None
+            )
+        ),
         recover_cte_facts=recover_cte_facts,
         analysis=precomputed.analysis if precomputed is not None else None,
     )
@@ -374,43 +388,56 @@ def analyze_queries_with_compact_polyglot_batch(
     recover_cte_facts: tuple[bool, ...],
     rich_type_inference: bool = True,
     cached_batch: tuple[CompactBatchPreparation, object] | None = None,
-    on_response: CompactBatchResponseCallback | None = None,
+    execution: CompactBatchExecutionOptions | None = None,
 ) -> tuple[NativeCompactAnalysis, ...]:
     """Analyze rendered SQL in one bounded native call, preserving input order."""
+
+    options: CompactBatchExecutionOptions = execution or CompactBatchExecutionOptions()
+    binding_schemas: tuple[dict[str, dict[str, str]] | None, ...] | None = options.binding_schemas
 
     if not (len(query_sqls) == len(references) == len(placeholders) == len(recover_cte_facts)):
         raise CompactAnalysisInputError(
             "compact query-analysis batch inputs must have equal lengths"
         )
-    preparation: CompactBatchPreparation = (
-        cached_batch[0]
-        if cached_batch is not None
-        else _prepare_compact_analysis_batch(
-            query_sqls=query_sqls,
-            references=references,
-            placeholders=placeholders,
-            column_nullability_by_table=column_nullability_by_table,
-            column_types_by_table=column_types_by_table,
-            inference_profile=inference_profile,
-            recover_cte_facts=recover_cte_facts,
-            rich_type_inference=rich_type_inference,
-        )
-    )
+    if binding_schemas is not None and len(binding_schemas) != len(query_sqls):
+        raise CompactAnalysisInputError("binding schemas must match the query batch length")
+    if cached_batch is not None:
+        preparation: CompactBatchPreparation = cached_batch[0]
+    else:
+        with record_compile_timing("analysis_preparation_ms"):
+            preparation = _prepare_compact_analysis_batch(
+                query_sqls=query_sqls,
+                references=references,
+                placeholders=placeholders,
+                column_nullability_by_table=column_nullability_by_table,
+                column_types_by_table=column_types_by_table,
+                inference_profile=inference_profile,
+                recover_cte_facts=recover_cte_facts,
+                rich_type_inference=rich_type_inference,
+                binding_schemas=binding_schemas,
+            )
     if len(preparation.cleaned_sql) != len(query_sqls):
         raise CompactAnalysisInputError(
             "cached compact query-analysis preparation has an invalid length"
         )
-    response_payload: object = (
-        cached_batch[1]
-        if cached_batch is not None
-        else _run_compact_analysis_batch(preparation=preparation)
-    )
-    projected: tuple[NativeCompactAnalysis, ...] = _project_compact_analysis_batch(
-        preparation=preparation,
-        response_payload=response_payload,
-    )
-    if cached_batch is None and on_response is not None:
-        on_response(preparation=preparation, response=response_payload)
+    if cached_batch is not None:
+        response_payload: object = cached_batch[1]
+    else:
+        with record_compile_timing("analysis_native_ms"):
+            response_payload = _run_compact_analysis_batch(preparation=preparation)
+    with record_compile_timing("analysis_projection_ms"):
+        projected: tuple[NativeCompactAnalysis, ...] = _project_compact_analysis_batch(
+            preparation=preparation,
+            response_payload=response_payload,
+        )
+        if cached_batch is None:
+            projected = _attach_compiled_bindings(
+                preparation=preparation,
+                response=response_payload,
+                analyses=projected,
+            )
+    if cached_batch is None and options.on_response is not None:
+        options.on_response(preparation=preparation, response=response_payload)
     return projected
 
 
@@ -424,11 +451,12 @@ def _prepare_compact_analysis_batch(
     inference_profile: ExpressionInferenceProfile,
     recover_cte_facts: tuple[bool, ...],
     rich_type_inference: bool,
+    binding_schemas: tuple[dict[str, dict[str, str]] | None, ...] | None = None,
 ) -> CompactBatchPreparation:
     dialect: str | None = inference_profile.sql_analysis_dialect
     prepared: list[str] = []
     queries: list[dict[str, object]] = []
-    query_indexes: dict[tuple[str, str, bytes | None], int] = {}
+    query_indexes: dict[tuple[str, str, bytes | None, bytes | None], int] = {}
     templates: list[dict[str, object]] = []
     template_indexes: dict[
         tuple[
@@ -443,8 +471,19 @@ def _prepare_compact_analysis_batch(
     ] = {}
     projections: list[dict[str, object]] = []
     function_return_types: dict[str, str] = dict(inference_profile.function_return_types)
-    for query_sql, query_references, query_placeholders, query_recover_cte_facts in zip(
-        query_sqls, references, placeholders, recover_cte_facts, strict=True
+    for (
+        query_sql,
+        query_references,
+        query_placeholders,
+        query_recover_cte_facts,
+        binding_schema,
+    ) in zip(
+        query_sqls,
+        references,
+        placeholders,
+        recover_cte_facts,
+        binding_schemas if binding_schemas is not None else (None,) * len(query_sqls),
+        strict=True,
     ):
         cleaned_sql: str = _cleaned_analysis_sql(
             query_sql=query_sql,
@@ -454,21 +493,31 @@ def _prepare_compact_analysis_batch(
         lineage_references: dict[str, tuple[CompiledResourceType, str]] = _lineage_reference_map(
             query_references
         )
-        qualified_reference_names: frozenset[str] = _qualified_reference_names(
-            query_sql=cleaned_sql,
-            reference_names=lineage_references.keys(),
+        qualified_reference_names: frozenset[str] = (
+            _qualified_reference_names(
+                query_sql=cleaned_sql,
+                reference_names=lineage_references.keys(),
+            )
+            if binding_schema is None
+            else frozenset()
         )
         canonical_stubs: dict[str, str] = {
             name: (
-                name if name in qualified_reference_names else f"__sqlbuild_project_input_{index}"
+                name
+                if binding_schema is not None or name in qualified_reference_names
+                else f"__sqlbuild_project_input_{index}"
             )
             for index, name in enumerate(lineage_references)
         }
-        analysis_sql: str = _cleaned_analysis_sql(
-            query_sql=query_sql,
-            placeholders=query_placeholders,
-            dialect=dialect,
-            relation_stubs=canonical_stubs,
+        analysis_sql: str = (
+            cleaned_sql
+            if binding_schema is not None
+            else _cleaned_analysis_sql(
+                query_sql=query_sql,
+                placeholders=query_placeholders,
+                dialect=dialect,
+                relation_stubs=canonical_stubs,
+            )
         )
         query: dict[str, object] = {
             "sql": analysis_sql,
@@ -484,10 +533,25 @@ def _prepare_compact_analysis_batch(
         )
         if schema is not None:
             query["schema"] = schema
-        query_key: tuple[str, str, bytes | None] = (
+        binding_payload: dict[str, object] | None = None
+        if binding_schema is not None:
+            binding_payload = prepare_schema_validation(
+                request=SqlSchemaValidationRequest(
+                    sql=cleaned_sql,
+                    dialect=dialect,
+                    schema=binding_schema,
+                )
+            )
+            query["binding_schema"] = binding_payload["schema"]
+        query_key: tuple[str, str, bytes | None, bytes | None] = (
             analysis_sql,
             dialect or "generic",
             (orjson.dumps(schema, option=orjson.OPT_SORT_KEYS) if schema is not None else None),
+            (
+                orjson.dumps(binding_payload["schema"], option=orjson.OPT_SORT_KEYS)
+                if binding_payload is not None
+                else None
+            ),
         )
         query_index: int | None = query_indexes.get(query_key)
         if query_index is None:
@@ -574,6 +638,36 @@ def _run_compact_analysis_batch(*, preparation: CompactBatchPreparation) -> obje
     )
 
 
+def _attach_compiled_bindings(
+    *,
+    preparation: CompactBatchPreparation,
+    response: object,
+    analyses: tuple[NativeCompactAnalysis, ...],
+) -> tuple[NativeCompactAnalysis, ...]:
+    if not isinstance(response, dict):
+        return analyses
+    validations: object = cast(dict[str, object], response).get("validations")
+    if validations is None:
+        return analyses
+    if not isinstance(validations, list) or len(validations) != len(preparation.queries):
+        raise SqlAnalysisBoundaryError("native compilation returned an invalid binding batch")
+    results: list[NativeCompactAnalysis] = []
+    for analysis, projection in zip(analyses, preparation.projections, strict=True):
+        template_index: int = cast(int, projection["templateIndex"])
+        query_index: int = cast(int, preparation.templates[template_index]["queryIndex"])
+        validation: object = validations[query_index]
+        if validation is None:
+            results.append(analysis)
+            continue
+        binding: SqlBindingResult = decode_schema_validation(
+            sql=analysis.cleaned_sql,
+            dialect=cast(str, preparation.queries[query_index]["dialect"]),
+            response=validation,
+        )
+        results.append(replace(analysis, binding_diagnostics=binding.diagnostics))
+    return tuple(results)
+
+
 def _project_compact_analysis_batch(
     *, preparation: CompactBatchPreparation, response_payload: object
 ) -> tuple[NativeCompactAnalysis, ...]:
@@ -631,7 +725,11 @@ def _project_compact_analysis_batch(
                     sqlbuild_error=template,
                 )
                 results.append(
-                    NativeCompactAnalysis(cleaned_sql=cleaned_sql, analysis=None, projected=True)
+                    NativeCompactAnalysis(
+                        cleaned_sql=cleaned_sql,
+                        analysis=None,
+                        projected=template != _NATIVE_LEGACY_FALLBACK,
+                    )
                 )
                 continue
             if not (

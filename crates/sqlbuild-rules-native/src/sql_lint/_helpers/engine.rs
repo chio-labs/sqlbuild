@@ -336,7 +336,7 @@ pub(crate) fn rule_metadata() -> Vec<LintRuleMetadata> {
     ALL_RULE_METADATA.iter().map(|rule| **rule).collect()
 }
 
-fn lint(request: LintRequest) -> Result<LintResponse, String> {
+pub(crate) fn lint(request: LintRequest) -> Result<LintResponse, String> {
     if request.version != LINT_API_VERSION {
         return Err(format!(
             "unsupported native lint request version {}; expected {LINT_API_VERSION}",

@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 
 from sqlbuild.compiler.compile.models import (
+    CompactLineageFacts,
     CompiledObjectKey,
     CompiledProject,
     CompiledSqlScenario,
@@ -14,8 +15,11 @@ from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlScenarioFile,
 )
+from sqlbuild.rule_engine._helpers.engine.native import _custom_fact_fingerprint
+from sqlbuild.rule_engine.constants import RULE_CONTEXT_PROJECT_FACT
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
     NativeFactPayloadTestCase,
+    ProjectFingerprintRepresentationTestCase,
 )
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine.helpers import (
     captured_native_request,
@@ -132,3 +136,56 @@ def test_given_compiled_sql_facts_when_evaluating_native_then_exact_safe_rows_ar
     assert request["models"][0]["targeting_test_count"] == 1
     assert "/private/project" not in str(request["sql_tests"] + request["sql_scenarios"])
     assert "secret fixture value" not in str(request["sql_tests"] + request["sql_scenarios"])
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ProjectFingerprintRepresentationTestCase(
+            "lineage representation preserves cache identity", True
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_compact_or_materialized_lineage_when_fingerprinting_then_semantics_define_identity(
+    test_case: ProjectFingerprintRepresentationTestCase,
+) -> None:
+    project: CompiledProject = build_project(
+        name="selected_orders",
+        relative_path="models/selected_orders.sql",
+        sql="SELECT order_id FROM orders",
+        config_values={},
+    )
+    lineage: CompactLineageFacts = CompactLineageFacts(
+        string_pool=("order_id", "source", "canonical_input", "orders", "other_orders"),
+        rows=((0, 0, 1, ((1, 2, 0),)),),
+        resource_name_indexes={2: 3},
+    )
+    compact: CompiledProject = replace(
+        project, models=(replace(project.models[0], fast_lineage_columns=lineage),)
+    )
+    materialized: CompiledProject = replace(
+        project, models=(replace(project.models[0], fast_lineage_columns=tuple(lineage)),)
+    )
+    changed: CompiledProject = replace(
+        project,
+        models=(
+            replace(
+                project.models[0],
+                fast_lineage_columns=replace(lineage, resource_name_indexes={2: 4}),
+            ),
+        ),
+    )
+    attributes: frozenset[str] = frozenset({RULE_CONTEXT_PROJECT_FACT})
+    compact_fingerprint: str = _custom_fact_fingerprint(project=compact, attributes=attributes)
+    materialized_fingerprint: str = _custom_fact_fingerprint(
+        project=materialized, attributes=attributes
+    )
+    changed_fingerprint: str = _custom_fact_fingerprint(project=changed, attributes=attributes)
+
+    assert (compact_fingerprint == materialized_fingerprint) is test_case.expected_equivalent
+    assert changed_fingerprint != compact_fingerprint
+
+
+if __name__ == "__main__":
+    raise SystemExit(pytest.main([__file__, "-n", "auto", "--dist", "loadfile"]))

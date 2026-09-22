@@ -56,15 +56,21 @@ def normalize_sql_for_polyglot_impl(*, sql: str, dialect: str | None) -> str:
         if sql[index] in SQL_QUOTE_CHARACTERS:
             index = _skip_snowflake_quoted_text(sql=sql, start=index)
             continue
+        if sql[index] != SQL_OPEN_BRACKET:
+            index += 1
+            continue
         close_bracket: int | None = _matching_bracket(sql=sql, open_bracket=index)
         if close_bracket is None:
             index += 1
             continue
         key_sql: str = sql[index + 1 : close_bracket]
+        if _SIMPLE_BRACKET_KEY.fullmatch(key_sql) is not None:
+            index = close_bracket + 1
+            continue
         normalized_key: str = normalize_sql_for_polyglot_impl(sql=key_sql, dialect=dialect)
         base_end: int = _trailing_trivia_start(sql=sql, end=index)
         base_match: re.Match[str] | None = _VARIANT_PATH_SUFFIX.search(sql[:base_end])
-        if base_match is not None and _SIMPLE_BRACKET_KEY.fullmatch(key_sql) is None:
+        if base_match is not None:
             base_sql: str = base_match.group("base")
             trivia: str = sql[base_end:index]
             replacements.append(

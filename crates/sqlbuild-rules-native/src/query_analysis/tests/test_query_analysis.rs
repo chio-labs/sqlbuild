@@ -1,8 +1,15 @@
-use crate::query_analysis::main::{analyze_json, analyze_project_json};
+use crate::query_analysis::main::analyze::analyze_json;
+use crate::query_analysis::main::analyze_project::analyze_project_json;
 use crate::query_analysis::tests::helpers::{
+    borrowed_facts_preserve_named_outputs_and_terminal_sources,
+    borrowed_facts_preserve_union_dependencies_and_join_nullability,
     canonical_queries_reuse_semantics_and_project_resources,
+    combined_queries_preserve_standalone_binding,
     compact_project_query_interns_repeated_lineage_strings,
+    interleaved_query_templates_preserve_template_order,
+    native_compatibility_types_preserve_result_semantics,
     repeated_project_facts_intern_complete_facts,
+    widening_aggregates_require_compatibility_recovery,
 };
 use crate::query_analysis::tests::test_types::{
     CompactQueryAnalysisTestCase, QueryAnalysisExpectedValue, QueryAnalysisTestCase,
@@ -12,6 +19,31 @@ use serde_json::{Value, json};
 #[test]
 fn given_compact_query_cases_when_analyzing_projects_then_expected_behavior_holds() {
     let test_cases = [
+        CompactQueryAnalysisTestCase {
+            description: "borrowed facts preserve named outputs and actual terminal columns",
+            run: borrowed_facts_preserve_named_outputs_and_terminal_sources,
+            expected_success: true,
+        },
+        CompactQueryAnalysisTestCase {
+            description: "borrowed output graph preserves union dependencies and outer-join nullability",
+            run: borrowed_facts_preserve_union_dependencies_and_join_nullability,
+            expected_success: true,
+        },
+        CompactQueryAnalysisTestCase {
+            description: "borrowed native type evaluation preserves expression result semantics",
+            run: native_compatibility_types_preserve_result_semantics,
+            expected_success: true,
+        },
+        CompactQueryAnalysisTestCase {
+            description: "combined compilation preserves standalone analysis and binding",
+            run: combined_queries_preserve_standalone_binding,
+            expected_success: true,
+        },
+        CompactQueryAnalysisTestCase {
+            description: "widening aggregates preserve compatibility recovery",
+            run: widening_aggregates_require_compatibility_recovery,
+            expected_success: true,
+        },
         CompactQueryAnalysisTestCase {
             description: "compact project queries intern repeated lineage strings",
             run: compact_project_query_interns_repeated_lineage_strings,
@@ -25,6 +57,11 @@ fn given_compact_query_cases_when_analyzing_projects_then_expected_behavior_hold
         CompactQueryAnalysisTestCase {
             description: "canonical queries reuse semantics while projecting resource names",
             run: canonical_queries_reuse_semantics_and_project_resources,
+            expected_success: true,
+        },
+        CompactQueryAnalysisTestCase {
+            description: "interleaved query templates preserve request order",
+            run: interleaved_query_templates_preserve_template_order,
             expected_success: true,
         },
     ];
@@ -42,6 +79,44 @@ fn given_compact_query_cases_when_analyzing_projects_then_expected_behavior_hold
 #[test]
 fn given_query_analysis_cases_when_analyzing_batch_then_returns_expected_facts() {
     let test_cases = [
+        QueryAnalysisTestCase {
+            description: "cast output retains both named union branches",
+            request: json!({"requests": [{
+                "sql": "WITH combined AS (SELECT order_id FROM orders UNION ALL BY NAME SELECT customer_id AS order_id FROM customers), typed AS (SELECT CAST(order_id AS BIGINT) AS order_id FROM combined) SELECT order_id FROM typed",
+                "dialect": "snowflake", "recoverCteFacts": true,
+                "references": {
+                    "orders": {"resourceType": "model", "resourceName": "orders"},
+                    "customers": {"resourceType": "model", "resourceName": "customers"}
+                }
+            }]}),
+            analyze: analyze_project_json,
+            expected_length: 1,
+            expected_values: vec![
+                QueryAnalysisExpectedValue {
+                    pointer: "/0/analysis/lineageColumns/0/upstreamColumns/0/resourceName",
+                    value: "customers",
+                },
+                QueryAnalysisExpectedValue {
+                    pointer: "/0/analysis/lineageColumns/0/upstreamColumns/1/resourceName",
+                    value: "orders",
+                },
+            ],
+            expected_nonempty_strings: vec![],
+        },
+        QueryAnalysisTestCase {
+            description: "CTE comparisons preserve Boolean result types",
+            request: json!({"requests": [{
+                "sql": "WITH selected AS (SELECT CAST(1 AS BIGINT) AS order_id) SELECT order_id > 0 AS result FROM selected",
+                "dialect": "duckdb", "recoverCteFacts": true, "richTypeInference": false
+            }]}),
+            analyze: analyze_project_json,
+            expected_length: 1,
+            expected_values: vec![QueryAnalysisExpectedValue {
+                pointer: "/0/analysis/columns/0/type",
+                value: "BOOLEAN",
+            }],
+            expected_nonempty_strings: vec![],
+        },
         QueryAnalysisTestCase {
             description: "raw batches preserve order and isolate parse errors",
             request: json!({
@@ -155,6 +230,110 @@ fn given_query_analysis_cases_when_analyzing_batch_then_returns_expected_facts()
                     value: "BIGINT",
                 },
             ],
+            expected_nonempty_strings: vec![],
+        },
+        QueryAnalysisTestCase {
+            description: "root schema type takes precedence over normalized CTE recovery",
+            request: json!({
+                "requests": [{
+                    "sql": "WITH selected AS (SELECT attributes FROM orders UNION ALL SELECT attributes FROM orders) SELECT attributes FROM selected",
+                    "dialect": "snowflake",
+                    "schema": {"tables": [{
+                        "name": "orders",
+                        "columns": [{"name": "attributes", "type": "VARIANT"}]
+                    }]},
+                    "richTypeInference": false,
+                    "recoverCteFacts": true
+                }]
+            }),
+            analyze: analyze_project_json,
+            expected_length: 1,
+            expected_values: vec![QueryAnalysisExpectedValue {
+                pointer: "/0/analysis/columns/0/type",
+                value: "VARIANT",
+            }],
+            expected_nonempty_strings: vec![],
+        },
+        QueryAnalysisTestCase {
+            description: "specialized aggregate return types propagate through CTEs",
+            request: json!({
+                "requests": [{
+                    "sql": "WITH aggregated AS (SELECT OBJECT_AGG(product_id, TO_VARIANT(quantity)) AS inventory FROM products), selected AS (SELECT inventory FROM aggregated) SELECT inventory FROM selected",
+                    "dialect": "snowflake",
+                    "schema": {"tables": [{
+                        "name": "products",
+                        "columns": [
+                            {"name": "product_id", "type": "NUMBER"},
+                            {"name": "quantity", "type": "NUMBER"}
+                        ]
+                    }]},
+                    "functionReturnTypes": {"OBJECT_AGG": "OBJECT", "TO_VARIANT": "VARIANT"},
+                    "recoverCteFacts": true
+                }]
+            }),
+            analyze: analyze_project_json,
+            expected_length: 1,
+            expected_values: vec![QueryAnalysisExpectedValue {
+                pointer: "/0/analysis/columns/0/type",
+                value: "OBJECT",
+            }],
+            expected_nonempty_strings: vec![],
+        },
+        QueryAnalysisTestCase {
+            description: "outer casts take precedence over nested function return types",
+            request: json!({
+                "requests": [{
+                    "sql": "WITH converted AS (SELECT CAST(TO_OBJECT(attributes) AS VARIANT) AS attributes FROM products) SELECT attributes FROM converted",
+                    "dialect": "snowflake",
+                    "schema": {"tables": [{
+                        "name": "products",
+                        "columns": [{"name": "attributes", "type": "TEXT"}]
+                    }]},
+                    "functionReturnTypes": {"TO_OBJECT": "OBJECT"},
+                    "recoverCteFacts": true
+                }]
+            }),
+            analyze: analyze_project_json,
+            expected_length: 1,
+            expected_values: vec![QueryAnalysisExpectedValue {
+                pointer: "/0/analysis/columns/0/type",
+                value: "VARIANT",
+            }],
+            expected_nonempty_strings: vec![],
+        },
+        QueryAnalysisTestCase {
+            description: "type-preserving aggregates inherit CTE argument types",
+            request: json!({
+                "requests": [{
+                    "sql": "WITH typed AS (SELECT CAST(created_at AS TIMESTAMP_NTZ) AS created_at, CAST(is_active AS BOOLEAN) AS is_active FROM orders), aggregated AS (SELECT MAX(IFF(is_active, created_at, NULL)) AS latest_at FROM typed) SELECT latest_at FROM aggregated",
+                    "dialect": "snowflake",
+                    "recoverCteFacts": true
+                }]
+            }),
+            analyze: analyze_project_json,
+            expected_length: 1,
+            expected_values: vec![QueryAnalysisExpectedValue {
+                pointer: "/0/analysis/columns/0/type",
+                value: "TIMESTAMPNTZ",
+            }],
+            expected_nonempty_strings: vec![],
+        },
+        QueryAnalysisTestCase {
+            description: "conditional expressions inherit CTE value types",
+            request: json!({
+                "requests": [{
+                    "sql": "WITH typed AS (SELECT CAST(fulfilled_at AS DATE) AS fulfilled_at FROM orders), selected AS (SELECT COALESCE(fulfilled_at, CAST(NULL AS DATE)) AS fulfilled_at FROM typed) SELECT fulfilled_at FROM selected",
+                    "dialect": "snowflake",
+                    "recoverCteFacts": true,
+                    "richTypeInference": false
+                }]
+            }),
+            analyze: analyze_project_json,
+            expected_length: 1,
+            expected_values: vec![QueryAnalysisExpectedValue {
+                pointer: "/0/analysis/columns/0/type",
+                value: "DATE",
+            }],
             expected_nonempty_strings: vec![],
         },
         QueryAnalysisTestCase {

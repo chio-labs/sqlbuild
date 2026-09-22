@@ -116,6 +116,7 @@ class LintConfig:
     dialect: str = "generic"
     enabled_native_rules: tuple[str, ...] | None = None
     ignored_native_rules: tuple[str, ...] = ()
+    header_rules_enabled: bool = True
 
 
 @dataclass(frozen=True)

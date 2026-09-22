@@ -13,7 +13,9 @@ from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompactBatchResponseCallback,
     CompiledResourceType,
+    CompileInputsReadyCallback,
     DiagnosticPhase,
     DiagnosticSeverity,
     FunctionLanguage,
@@ -291,6 +293,14 @@ class DeclarationScopeResolver:
     project_dir: Path | None
     lookup: ScopeLookup
     projection: DeclarationRuntimeProjection
+    resource_specific: frozenset[ResourceIdentity] | None = None
+    contexts_by_directory: dict[tuple[str, str], DeclarationResolutionContext] = field(
+        default_factory=dict, compare=False, repr=False
+    )
+
+    def cache_context(self, *, key: tuple[str, str], context: DeclarationResolutionContext) -> None:
+        """Retain a process-local context for equivalent lexical consumers."""
+        self.contexts_by_directory[key] = context
 
 
 @dataclass(frozen=True)
@@ -613,12 +623,15 @@ class AnalysisCacheContext:
 
 @dataclass(frozen=True)
 class CompileAnalysisSelection:
-    """Selection inputs used to limit deep model SQL analysis."""
+    """Deep-analysis selection and invocation-local preparation observer."""
 
     select: tuple[str, ...] = ()
     exclude: tuple[str, ...] = ()
     auto_load_sources: bool = False
     no_cache: bool = False
+    on_inputs_ready: CompileInputsReadyCallback | None = field(
+        default=None, compare=False, repr=False
+    )
 
 
 @dataclass(frozen=True)
@@ -717,6 +730,7 @@ class CompileModelInput:
     macro_deps: tuple[str, ...] = field(default_factory=tuple)
     macro_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
     declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+    sql_expansion: CompiledSqlExpansion | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -1006,6 +1020,9 @@ class CompiledProject:
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
     scope_index: ScopeIndex = field(default_factory=ScopeIndex)
+    sql_expansions: dict[Path, CompiledSqlExpansion] = field(
+        default_factory=dict, compare=False, repr=False
+    )
 
 
 @dataclass(frozen=True)
@@ -1142,6 +1159,15 @@ class ExpansionSpan:
 
 
 @dataclass(frozen=True)
+class CompiledSqlExpansion:
+    """Process-local authored-to-expanded SQL evidence shared with compiler checks."""
+
+    authored_sql: str
+    expanded_sql: str
+    passes: tuple[tuple[ExpansionSpan, ...], ...]
+
+
+@dataclass(frozen=True)
 class MappedOffset:
     """An offset in rendered SQL resolved back onto the text that produced it."""
 
@@ -1224,6 +1250,14 @@ class CompactProjectedFacts:
         tuple[int, int, int, tuple[tuple[int, int, int], ...]],
         ...,
     ]
+
+
+@dataclass(frozen=True)
+class CompactBatchExecutionOptions:
+    """Optional binding work and cache publication for one native batch."""
+
+    binding_schemas: tuple[dict[str, dict[str, str]] | None, ...] | None = None
+    on_response: CompactBatchResponseCallback | None = None
 
 
 @dataclass(frozen=True)

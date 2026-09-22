@@ -566,14 +566,19 @@ def _run_fresh_process_compile_benchmark(
         output_path.open("wb") as output_file,
         stderr_path.open("wb") as stderr_file,
     ):
-        completed: subprocess.CompletedProcess[bytes] = subprocess.run(
+        with subprocess.Popen(
             command,
-            check=False,
             stdout=output_file,
             stderr=stderr_file,
-            timeout=expected_max_wall_seconds + 10.0,
-        )
-    assert completed.returncode == 0, stderr_path.read_text(encoding="utf-8")
+            start_new_session=True,
+        ) as process:
+            try:
+                returncode: int = process.wait(timeout=expected_max_wall_seconds + 10.0)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait()
+                raise
+    assert returncode == 0, stderr_path.read_text(encoding="utf-8")
     elapsed_text, peak_rss_kib_text = measurement_path.read_text(encoding="utf-8").split()
     elapsed_seconds: float = float(elapsed_text)
     payload_object: object = json.loads(output_path.read_bytes())

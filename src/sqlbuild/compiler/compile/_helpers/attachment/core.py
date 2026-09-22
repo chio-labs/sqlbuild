@@ -72,6 +72,7 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
 )
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
     expand_authored_sql_result,
+    prepare_static_project_vars_batch,
     substitute_sql_vars,
 )
 from sqlbuild.compiler.compile._helpers.render.templating import (
@@ -86,6 +87,7 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
+    CompiledSqlExpansion,
     CompileModelConfig,
     CompileModelInput,
     CompileSeedInput,
@@ -173,6 +175,7 @@ class _VisibleModelDeclarations:
 class _VisibleModelDeclarationCache:
     context: ModelInputBuildContext
     reusable_by_parent: bool
+    resource_specific: frozenset[ResourceIdentity] = frozenset()
     by_parent: dict[Path, _VisibleModelDeclarations] = field(default_factory=dict)
 
     @classmethod
@@ -180,16 +183,17 @@ class _VisibleModelDeclarationCache:
         resolver: DeclarationScopeResolver | None = context.declaration_resolver
         return cls(
             context=context,
-            reusable_by_parent=(
-                resolver is not None
-                and not any(
-                    declaration.scope is ScopeKind.PRIVATE
+            reusable_by_parent=resolver is not None,
+            resource_specific=(
+                frozenset(
+                    declaration.identity.owner
                     for declaration in resolver.lookup.index.declarations
+                    if declaration.scope is ScopeKind.PRIVATE
+                    and declaration.identity.owner is not None
                 )
-                and not any(
-                    resource.kind is ResourceKind.MODEL
-                    for resource in resolver.lookup.grants_by_resource
-                )
+                | frozenset(resolver.lookup.grants_by_resource)
+                if resolver is not None
+                else frozenset()
             ),
         )
 
@@ -197,6 +201,8 @@ class _VisibleModelDeclarationCache:
         self, *, model_file: DiscoveredSqlModelFile, consumer: ResourceIdentity
     ) -> _VisibleModelDeclarations:
         parent: Path = model_file.file_path.parent
+        if consumer in self.resource_specific:
+            return _build_visible_declaration_indexes(model_file=model_file, context=self.context)
         cached: _VisibleModelDeclarations | None = self.by_parent.get(parent)
         if self.reusable_by_parent and cached is not None:
             return _rebind_visible_declarations(declarations=cached, consumer=consumer)
@@ -430,8 +436,16 @@ def _build_model_inputs(
         target_config=target_config,
     )
     declaration_cache: _VisibleModelDeclarationCache = _VisibleModelDeclarationCache.build(context)
+    model_files: tuple[DiscoveredSqlModelFile, ...] = discovered_inputs.model_files
+    prepared_var_substituted_sqls: tuple[str | None, ...] = prepare_static_project_vars_batch(
+        sqls=tuple(model_file.query_sql for model_file in model_files),
+        effective_vars=effective_vars,
+    )
     model_file: DiscoveredSqlModelFile
-    for model_file in discovered_inputs.model_files:
+    prepared_var_substituted_sql: str | None
+    for model_file, prepared_var_substituted_sql in zip(
+        model_files, prepared_var_substituted_sqls, strict=True
+    ):
         model_identity: ResourceIdentity = ResourceIdentity(
             ResourceKind.MODEL, model_file.file_path.stem
         )
@@ -483,10 +497,14 @@ def _build_model_inputs(
             hook_functions=discovered_inputs.hook_functions,
             provider_names=frozenset(provider.name for provider in discovered_inputs.providers),
         )
-        var_substituted_sql: str = substitute_sql_vars(
-            sql=model_file.query_sql,
-            file_path=model_file.file_path,
-            effective_vars=effective_vars,
+        var_substituted_sql: str = (
+            prepared_var_substituted_sql
+            if prepared_var_substituted_sql is not None
+            else substitute_sql_vars(
+                sql=model_file.query_sql,
+                file_path=model_file.file_path,
+                effective_vars=effective_vars,
+            )
         )
         declaration_context: DeclarationResolutionContext = DeclarationResolutionContext(
             enums=declarations.enums,
@@ -616,6 +634,15 @@ def _build_model_inputs(
         if header_schema_entry is None:
             model_inputs.append(
                 CompileModelInput(
+                    sql_expansion=(
+                        CompiledSqlExpansion(
+                            authored_sql=model_file.query_sql,
+                            expanded_sql=macro_expansion.sql,
+                            passes=(declaration_expansion.spans, macro_expansion.spans),
+                        )
+                        if var_substituted_sql == model_file.query_sql
+                        else None
+                    ),
                     model_file=model_file,
                     config=model_config,
                     query_sql=expanded_query_sql,
@@ -634,6 +661,15 @@ def _build_model_inputs(
 
         model_inputs.append(
             CompileModelInput(
+                sql_expansion=(
+                    CompiledSqlExpansion(
+                        authored_sql=model_file.query_sql,
+                        expanded_sql=macro_expansion.sql,
+                        passes=(declaration_expansion.spans, macro_expansion.spans),
+                    )
+                    if var_substituted_sql == model_file.query_sql
+                    else None
+                ),
                 model_file=model_file,
                 config=model_config,
                 query_sql=expanded_query_sql,

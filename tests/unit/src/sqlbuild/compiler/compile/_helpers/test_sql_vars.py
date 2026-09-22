@@ -7,10 +7,12 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
+    prepare_static_project_vars_batch,
     substitute_sql_vars,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
+    StaticProjectVarBatchTestCase,
     SubstituteSqlVarsErrorTestCase,
     SubstituteSqlVarsTestCase,
 )
@@ -192,6 +194,18 @@ def test_given_sql_and_vars_when_substituting_then_returns_expected(
                 r'\["analyst","reporter"\]. Use a macro to consume structured vars\.'
             ),
         ),
+        SubstituteSqlVarsErrorTestCase(
+            description="deferred placeholder preserves unclosed quote diagnostics",
+            sql="SELECT @@@partition_start, 'unterminated",
+            effective_vars={},
+            expected_error_fragment="SQL interpolation contains an unclosed quoted string",
+        ),
+        SubstituteSqlVarsErrorTestCase(
+            description="deferred placeholder preserves unclosed comment diagnostics",
+            sql="SELECT @@@partition_start /* unterminated",
+            effective_vars={},
+            expected_error_fragment="SQL interpolation contains an unclosed block comment",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -205,3 +219,40 @@ def test_given_missing_var_when_substituting_then_raises(
             effective_vars=test_case.effective_vars,
             context_values=test_case.context_values,
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StaticProjectVarBatchTestCase(
+            description="static scalars use native results and dynamic values fall back",
+            sqls=(
+                "SELECT @@revision, '@@status', @@@window_start",
+                "-- @@revision\nSELECT 1",
+                "SELECT '@@ENV:SQLBUILD_TEST_BATCH_USER'",
+            ),
+            effective_vars={"revision": 7, "status": "ready"},
+            expected_sqls=(
+                "SELECT 7, 'ready', @@@window_start",
+                "-- @@revision\nSELECT 1",
+                None,
+            ),
+        ),
+        StaticProjectVarBatchTestCase(
+            description="structured project variables fall back",
+            sqls=("SELECT @@grants",),
+            effective_vars={"grants": {"role": "analyst"}},
+            expected_sqls=(None,),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_static_model_sql_when_batch_preparing_then_returns_safe_results_and_fallbacks(
+    test_case: StaticProjectVarBatchTestCase,
+) -> None:
+    result: tuple[str | None, ...] = prepare_static_project_vars_batch(
+        sqls=test_case.sqls,
+        effective_vars=test_case.effective_vars,
+    )
+
+    assert result == test_case.expected_sqls

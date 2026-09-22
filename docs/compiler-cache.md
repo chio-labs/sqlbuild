@@ -77,6 +77,18 @@ nullability, wildcard status, and any other fact consumed by downstream analysis
 invalidates downstream semantic analysis only when this exported interface changes. Its own compiled
 artifact still changes whenever its implementation changes.
 
+For supported, schema-bound queries, the native compiler derives immutable CTE output facts from
+one parsed query tree. It retains every projection position, including unnamed expressions used by
+CTE column lists and positional unions. Known input columns take precedence over same-named SELECT
+aliases. Queries with incomplete facts, unsupported source shapes, or unresolved types retain the
+existing analysis path. Changes to this inference algorithm invalidate prior analysis identities.
+
+Compiler-expanded SQL and its source-location spans are also reused within one invocation. SQL lint
+may start after attachment while semantic analysis continues. Compiler-proven dynamic-output paths
+are checked again with their completed proof. Native and custom rules can execute concurrently;
+their combined findings pass through the same final exception and suppression policy. These
+invocation-local objects and workers are not persisted in the compiler cache.
+
 ### 5. Shared derived indexes
 
 Project-wide indexes are built once per compile and shared by all consumers. They include model
@@ -124,6 +136,9 @@ The target machine-readable contract reports per-layer hits, misses, invalidatio
 written, and phase timings. The current vertical slice reports model-analysis batch hits, entry
 hits, misses, bypasses, and phase timings. Counts describe semantic records, not low-level database
 operations.
+
+Concurrent phase timings can overlap. Use the total compile time and fresh-process wall time for
+end-to-end comparisons rather than summing individual phase durations.
 
 Fresh-process performance guards use representative semantic projects and cover:
 

@@ -7,8 +7,78 @@ use serde_json::{Value, json};
 use crate::compiler::_helpers::model_headers::tokenization::{
     MAX_TOKENIZER_WORKERS, TOKENIZER_WORKER_STACK_BYTES, build_tokenizer_pool, parse_batch,
 };
+use crate::compiler::_helpers::sql_interpolation::substitution::{
+    FALLBACK, SUBSTITUTED, UNCHANGED, substitute_batch,
+};
+use crate::compiler::_helpers::sql_references::extraction::extract;
 use crate::compiler::main::sql_test_extraction::extract_batch_json;
 use crate::compiler::models::AuthoredValue;
+
+pub(crate) fn scalar_variables_preserve_lexical_boundaries() -> bool {
+    let sqls = vec![
+        "SELECT @@revision, '@@status', @@@window_start".to_owned(),
+        "-- @@revision\nSELECT /* @@status */ 1".to_owned(),
+        "SELECT '@@revision''s'".to_owned(),
+    ];
+    substitute_batch(
+        &sqls,
+        &[
+            ("revision".to_owned(), "7".to_owned()),
+            ("status".to_owned(), "ready".to_owned()),
+        ],
+    ) == vec![
+        (
+            SUBSTITUTED,
+            Some("SELECT 7, 'ready', @@@window_start".to_owned()),
+        ),
+        (UNCHANGED, None),
+        (SUBSTITUTED, Some("SELECT '7''s'".to_owned())),
+    ]
+}
+
+pub(crate) fn dynamic_or_malformed_sql_requests_fallback() -> bool {
+    let sqls = vec![
+        "SELECT @@ENV:USER".to_owned(),
+        "SELECT @@missing".to_owned(),
+        "SELECT @@revision, 'unterminated".to_owned(),
+        "SELECT @@revision /* unterminated".to_owned(),
+        "SELECT @@révision".to_owned(),
+    ];
+    substitute_batch(&sqls, &[("revision".to_owned(), "7".to_owned())])
+        == vec![(FALLBACK, None); sqls.len()]
+}
+
+pub(crate) fn simple_references_preserve_authored_order() -> bool {
+    extract(
+        "SELECT * FROM __source('orders') UNION ALL SELECT * FROM __dbt_ref(\"shop\", \"customers\")",
+    ) == Some(vec![
+        ("source".to_owned(), "orders".to_owned(), None, None),
+        (
+            "dbt_ref".to_owned(),
+            "customers".to_owned(),
+            Some("shop".to_owned()),
+            None,
+        ),
+    ])
+}
+
+pub(crate) fn comments_and_quoted_text_hide_references() -> bool {
+    extract("-- __ref(\"ignored\")\nSELECT '__seed(\"also_ignored\")' FROM __ref(orders)")
+        == Some(vec![("ref".to_owned(), "orders".to_owned(), None, None)])
+}
+
+pub(crate) fn complex_or_malformed_sql_requests_fallback() -> bool {
+    [
+        "SELECT * FROM __table_fn(\"orders\")(1)",
+        "SELECT * FROM __ref(concat('ord', 'ers'))",
+        "SELECT * FROM __ref(\"orders\"",
+        "SELECT * FROM __ref(\"orders\") /* unterminated",
+        "SELECT * FROM __ref(\"orders\") WHERE note = 'unterminated",
+        "SELECT * FROM __ref(örders)",
+    ]
+    .into_iter()
+    .all(|sql| extract(sql).is_none())
+}
 
 pub(crate) fn nested_authored_headers_preserve_values_and_offsets() -> bool {
     let headers = vec![
