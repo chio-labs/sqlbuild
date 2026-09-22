@@ -12,6 +12,7 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
+from sqlbuild.compiler.compile.constants import MACRO_TOKEN
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -23,6 +24,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.lint.constants import TEMPLATE_INTERPOLATION_START
 from sqlbuild.lint.main.build_expansion_context import build_expansion_context
 from sqlbuild.lint.main.collect_project_files import collect_project_files
 from sqlbuild.lint.main.run_lint import run_lint
@@ -337,13 +339,36 @@ def _run_sql_rules(
         else:
             findings.extend(cached)
     selected_paths: set[Path] = {project_dir / path for path in misses}
+    file_identities: dict[str, str] = {}
     if selected_model_paths is None:
         model_paths: frozenset[Path] = frozenset(project_dir / path for path in models_by_path)
-        selected_paths.update(
-            path
-            for path in collect_project_files(project_dir=project_dir, selected_paths=None)
-            if path not in model_paths
-        )
+        file_path: Path
+        contents: str
+        for file_path, contents in collect_project_files(
+            project_dir=project_dir, selected_paths=None
+        ).items():
+            if file_path in model_paths:
+                continue
+            relative_path: str = file_path.relative_to(project_dir).as_posix()
+            file_identity: str | None = _sql_file_rule_identity(
+                file_path=file_path,
+                relative_path=relative_path,
+                contents=contents,
+                codes=codes,
+                dialect=dialect,
+                sql_expansions=project.sql_expansions,
+            )
+            cached_file: tuple[Finding, ...] | None = (
+                None
+                if file_identity is None
+                else _cached_sql_findings(entry=bucket.get(relative_path), identity=file_identity)
+            )
+            if cached_file is None:
+                selected_paths.add(file_path)
+                if file_identity is not None:
+                    file_identities[relative_path] = file_identity
+            else:
+                findings.extend(cached_file)
     result: LintRunResult | None = (
         _run_prepared_lint(
             project_dir=project_dir,
@@ -371,15 +396,19 @@ def _run_sql_rules(
         if violation.code in selected_codes
     )
     findings.extend(evaluated)
-    if cache_enabled and misses:
-        by_path: dict[str, list[Finding]] = {path: [] for path in misses}
+    written_identities: dict[str, str] = {
+        **{path: identities[path] for path in misses},
+        **file_identities,
+    }
+    if cache_enabled and written_identities:
+        by_path: dict[str, list[Finding]] = {path: [] for path in written_identities}
         for finding in evaluated:
             path: str = finding.path.as_posix()
             if path in by_path:
                 by_path[path].append(finding)
-        for path in misses:
+        for path, identity in written_identities.items():
             bucket[path] = {
-                "identity": identities[path],
+                "identity": identity,
                 "findings": [_finding_cache_payload(item) for item in by_path[path]],
             }
         _write_sql_rule_cache(project_dir=project_dir, bucket=bucket)
@@ -421,6 +450,38 @@ def _sql_rule_identity(*, model: CompiledModel, codes: tuple[str, ...], dialect:
                 default=str,
             ).encode()
         )
+    return digest.hexdigest()
+
+
+def _sql_file_rule_identity(
+    *,
+    file_path: Path,
+    relative_path: str,
+    contents: str,
+    codes: tuple[str, ...],
+    dialect: str,
+    sql_expansions: dict[Path, CompiledSqlExpansion],
+) -> str | None:
+    """Identify non-model SQL whose lint depends only on its text; expansions return None."""
+
+    if (
+        MACRO_TOKEN in contents
+        or TEMPLATE_INTERPOLATION_START in contents
+        or file_path in sql_expansions
+    ):
+        return None
+    digest: Any = hashlib.sha256()
+    for value in (
+        _SQL_RULE_CACHE_VERSION,
+        "file",
+        _SQLBUILD_VERSION,
+        dialect,
+        "\0".join(codes),
+        relative_path,
+        contents,
+    ):
+        digest.update(value.encode())
+        digest.update(b"\0")
     return digest.hexdigest()
 
 

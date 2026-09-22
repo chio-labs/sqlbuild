@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import cast
 
 import duckdb
+import pytest
+
+from sqlbuild.cli.commands.main.entrypoint.entry import main
 
 
 def unavailable_artifact_directory(*, prefix: str) -> TemporaryDirectory[str]:
@@ -89,3 +94,12 @@ def add_second_contract_source(*, project_dir: Path, database: Path) -> None:
     with duckdb.connect(str(database)) as connection:
         connection.execute("ALTER TABLE raw.orders ADD COLUMN generated_at TIMESTAMP")
         connection.execute("CREATE TABLE raw.customers(customer_id BIGINT, email VARCHAR)")
+
+
+def compile_finding_keys(*, project_dir: Path, capsys: pytest.CaptureFixture[str]) -> set[str]:
+    """Compile through the CLI and return diagnostics as path:code keys."""
+
+    _ = main(["--project-dir", str(project_dir), "compile", "--json"])
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], payload["diagnostics"])
+    return {f"{item['path']}:{item['code']}" for item in diagnostics}

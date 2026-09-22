@@ -225,7 +225,9 @@ def _discover_declaration_file_facts(
             directory_kind, directory_scope_kind = DECLARATION_DIRECTORY_FACTS[directory.name]
             if declaration_kind is not None and directory_kind is not declaration_kind:
                 continue
-            relative_directory: Path = directory.relative_to(project_dir)
+            relative_directory: Path = _project_relative_path(
+                path=directory, project_dir=project_dir
+            )
             descendants: tuple[str, ...] = relative_directory.parts[len(root_components) :]
             if any(part in _SCOPED_DECLARATION_DIRECTORIES for part in descendants[:-1]):
                 raise DeclarationParseError(
@@ -276,7 +278,8 @@ def _validate_declaration_groups(*, project_dir: Path) -> None:
             )
             if unsupported:
                 rendered: str = ", ".join(
-                    path.relative_to(project_dir).as_posix() for path in unsupported
+                    _project_relative_path(path=path, project_dir=project_dir).as_posix()
+                    for path in unsupported
                 )
                 raise DeclarationParseError(
                     f"Declaration group {group.relative_to(project_dir).as_posix()}/ contains "
@@ -298,7 +301,9 @@ def _declaration_files_under_root(
         for path in declaration_root.rglob("*")
         if path.is_dir() and path.name in _SCOPED_DECLARATION_DIRECTORIES
     ):
-        relative_nested_root: str = nested_root.relative_to(project_dir).as_posix()
+        relative_nested_root: str = _project_relative_path(
+            path=nested_root, project_dir=project_dir
+        ).as_posix()
         raise DeclarationParseError(
             f"Declaration root {relative_nested_root}/ is nested inside another declaration tree"
         )
@@ -312,19 +317,23 @@ def _declaration_files_under_root(
         results.append(
             _DeclarationFileFacts(
                 file_path=file_path,
-                relative_path=file_path.relative_to(project_dir),
+                relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
                 declaration_kind=declaration_kind,
                 scope_kind=scope_kind,
                 ownership_root=ownership_root,
                 owning_path=owning_path,
-                declaration_root=declaration_root.relative_to(project_dir),
+                declaration_root=_project_relative_path(
+                    path=declaration_root, project_dir=project_dir
+                ),
             )
         )
     return results
 
 
 def _is_in_scoped_declaration_tree(*, file_path: Path, project_dir: Path) -> bool:
-    relative_parts: tuple[str, ...] = file_path.relative_to(project_dir).parts
+    relative_parts: tuple[str, ...] = _project_relative_path(
+        path=file_path, project_dir=project_dir
+    ).parts
     root_components: tuple[str, ...]
     for root_components in CANONICAL_AUTHORED_ROOTS:
         if relative_parts[: len(root_components)] != root_components:
@@ -414,7 +423,7 @@ def _discover_model_file(
     extract_output_column_locations: bool,
 ) -> DiscoveredSqlModelFile:
     header_values, query_sql = parse_model_sql(contents=contents, file_path=file_path)
-    relative_path: Path = file_path.relative_to(project_dir)
+    relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
     return DiscoveredSqlModelFile(
         file_path=file_path,
         relative_path=relative_path,
@@ -544,7 +553,7 @@ def discover_model_schema_files(*, project_dir: Path) -> tuple[DiscoveredModelSc
     file_path: Path
     for file_path in sorted(schema_root.rglob("*.sql")):
         contents: str = file_path.read_text(encoding="utf-8")
-        relative_path: Path = file_path.relative_to(project_dir)
+        relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
         discovered_files.append(
             DiscoveredModelSchemaFile(
                 file_path=file_path,
@@ -587,7 +596,7 @@ def discover_sql_function_files(
         discovered_function_files.append(
             DiscoveredSqlFunctionFile(
                 file_path=file_path,
-                relative_path=file_path.relative_to(project_dir),
+                relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
                 contents=contents,
                 header_values=header_values,
                 body_sql=body_sql,
@@ -618,7 +627,7 @@ def discover_python_function_files(
         discovered_function_files.append(
             DiscoveredPythonFunctionFile(
                 file_path=file_path,
-                relative_path=file_path.relative_to(project_dir),
+                relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
                 contents=contents,
                 header_values=header_values,
                 entry_point=entry_point,
@@ -661,7 +670,7 @@ def discover_schema_files(*, project_dir: Path) -> tuple[DiscoveredSchemaFile, .
         discovered_schema_files.append(
             DiscoveredSchemaFile(
                 file_path=file_path,
-                relative_path=file_path.relative_to(project_dir),
+                relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
                 contents=contents,
                 model_entries=model_entries,
                 seed_entries=seed_entries,
@@ -698,7 +707,7 @@ def discover_source_files(
         discovered_source_files.append(
             DiscoveredSourceFile(
                 file_path=file_path,
-                relative_path=file_path.relative_to(project_dir),
+                relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
                 contents=contents,
                 source_entries=source_entries,
             )
@@ -716,7 +725,7 @@ def discover_seed_files(*, project_dir: Path) -> tuple[DiscoveredSeedFile, ...]:
     return tuple(
         DiscoveredSeedFile(
             file_path=file_path,
-            relative_path=file_path.relative_to(project_dir),
+            relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
         )
         for file_path in sorted(seeds_root.rglob("*"))
         if file_path.is_file() and file_path.suffix == SEED_FILE_SUFFIX
@@ -767,7 +776,7 @@ def discover_scenario_files(
             scenario: DiscoveredSqlScenarioFile = parse_sql_scenario_file(
                 contents=contents,
                 file_path=file_path,
-                relative_path=file_path.relative_to(project_dir),
+                relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
             )
         except (OSError, UnicodeError, ValueError, SyntaxError) as error:
             if on_fault is None:
@@ -797,7 +806,7 @@ def discover_audit_files(
             discovered_audit_files.append(
                 DiscoveredAuditFile(
                     file_path=file_path,
-                    relative_path=file_path.relative_to(project_dir),
+                    relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
                     contents=contents,
                     blocks=parse_sql_audit_file(contents=contents, file_path=file_path),
                 )
@@ -835,7 +844,7 @@ def discover_macro_files(
 
 def _discovery_fault(*, project_dir: Path, path: Path, error: Exception) -> DiscoveryFileFault:
     try:
-        relative_path: Path | None = path.relative_to(project_dir)
+        relative_path: Path | None = _project_relative_path(path=path, project_dir=project_dir)
     except ValueError:
         relative_path = None
     message: str = str(error).replace(str(project_dir), ".")
@@ -864,7 +873,7 @@ def discover_materialization_files(
         discovered_files.append(
             DiscoveredMaterializationFile(
                 file_path=file_path,
-                relative_path=file_path.relative_to(project_dir),
+                relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
                 name=file_path.stem,
                 provider_usages=(
                     _provider_usages(function=materialize_fn, provider_by_name=provider_by_name)
@@ -972,7 +981,7 @@ def discover_hook_functions(
             discovered_hooks.append(
                 DiscoveredHookFunction(
                     file_path=file_path,
-                    relative_path=file_path.relative_to(project_dir),
+                    relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
                     name=hook_definition.name,
                     function=value,
                     description=hook_definition.description,
@@ -1002,7 +1011,7 @@ def discover_sql_hook_files(
         ):
             continue
         try:
-            relative_path: Path = file_path.relative_to(project_dir)
+            relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
             contents: str = file_path.read_text(encoding="utf-8")
             discovered_hooks.append(
                 parse_sql_hook_file(
@@ -1067,7 +1076,7 @@ def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider,
             discovered_providers.append(
                 DiscoveredProvider(
                     file_path=file_path,
-                    relative_path=file_path.relative_to(project_dir),
+                    relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
                     name=provider_name,
                     provider_class=provider_class,
                     settings=_provider_instance(
@@ -1156,7 +1165,7 @@ def discover_event_exporter_declarations(
             discovered.append(
                 DiscoveredEventExporterDeclaration(
                     file_path=file_path,
-                    relative_path=file_path.relative_to(project_dir),
+                    relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
                     name=definition.name,
                     function=value,
                     event_kinds=definition.event_kinds,
@@ -1205,7 +1214,7 @@ def _validate_event_exporter_declaration_signature(
     file_path: Path,
     project_dir: Path,
 ) -> None:
-    relative_path: Path = file_path.relative_to(project_dir)
+    relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
     if inspect.iscoroutinefunction(function):
         raise EventExporterDiscoveryError(
             f"Event exporter '{exporter_name}' in {relative_path} must be synchronous"
@@ -1261,7 +1270,7 @@ def _bind_event_exporter_provider_usages(
     project_dir: Path,
     provider_by_name: dict[str, DiscoveredProvider],
 ) -> tuple[DiscoveredProviderUsage, ...]:
-    relative_path: Path = file_path.relative_to(project_dir)
+    relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
     parameters: tuple[inspect.Parameter, ...] = tuple(
         inspect.signature(function).parameters.values()
     )
@@ -1296,7 +1305,7 @@ def _public_python_files(*, root: Path) -> tuple[Path, ...]:
 
 
 def _provider_name(*, provider_class: type[Provider], file_path: Path, project_dir: Path) -> str:
-    relative_path: Path = file_path.relative_to(project_dir)
+    relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
     explicit_name: str | None = provider_class.provider_name
     if explicit_name is not None:
         validate_resource_identity(
@@ -1325,7 +1334,7 @@ def _provider_instance(
     try:
         return provider_class()
     except ValidationError as error:
-        relative_path: Path = file_path.relative_to(project_dir)
+        relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
         raise ProviderDiscoveryError(
             f"Provider '{provider_name}' in {relative_path} has invalid settings:\n"
             f"{_format_provider_validation_error(error)}"
@@ -1497,7 +1506,7 @@ def _append_module_audit_factories(
         definition: AuditFactoryDefinition | None = read_audit_factory_definition(value)
         if definition is None:
             continue
-        relative_path: Path = file_path.relative_to(project_dir)
+        relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
         if node_folder != PYTHON_FACTORY_FOLDER:
             raise PythonNodeDiscoveryError(
                 f"Audit factory '{definition.name}' in {relative_path} must live under factories/"
@@ -1552,7 +1561,7 @@ def _call_audit_factory(
     file_path: Path,
     project_dir: Path,
 ) -> tuple[AuditCase, ...]:
-    relative_path: Path = file_path.relative_to(project_dir)
+    relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
     if inspect.signature(factory).parameters:
         raise PythonNodeDiscoveryError(
             f"Audit factory '{definition.name}' in {relative_path} must not require arguments"
@@ -1603,7 +1612,7 @@ def _append_python_node_function(
         bucket.add_loader(
             DiscoveredLoaderFunction(
                 file_path=file_path,
-                relative_path=file_path.relative_to(project_dir),
+                relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
                 name=loader_definition.name,
                 function=function,
                 depends_on=loader_definition.depends_on,
@@ -1633,7 +1642,7 @@ def _append_python_node_function(
         bucket.add_task(
             DiscoveredTaskFunction(
                 file_path=file_path,
-                relative_path=file_path.relative_to(project_dir),
+                relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
                 name=task_definition.name,
                 function=function,
                 depends_on=task_definition.depends_on,
@@ -1662,7 +1671,7 @@ def _append_python_node_function(
         bucket.add_asset(
             DiscoveredAssetFunction(
                 file_path=file_path,
-                relative_path=file_path.relative_to(project_dir),
+                relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
                 name=asset_definition.name,
                 function=function,
                 depends_on=asset_definition.depends_on,
@@ -1693,7 +1702,7 @@ def _append_python_node_function(
         bucket.add_check(
             DiscoveredCheckFunction(
                 file_path=file_path,
-                relative_path=file_path.relative_to(project_dir),
+                relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
                 name=check_definition.name,
                 function=function,
                 depends_on=check_definition.depends_on,
@@ -1723,7 +1732,7 @@ def _validate_python_node_kind(
 ) -> None:
     if expected_kind is None or actual_kind == expected_kind:
         return
-    relative_path: Path = file_path.relative_to(project_dir)
+    relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
     folder: str = relative_path.parts[0]
     if factory_definition is None:
         article: str = "an" if actual_kind[0] in PYTHON_NODE_KIND_VOWELS else "a"
@@ -1796,7 +1805,7 @@ def _normalize_factory_result(
 
 def _load_loader_module(*, file_path: Path, project_dir: Path) -> ModuleType:
     module_name: str = "sqlbuild_project_loader_" + "_".join(
-        file_path.relative_to(project_dir).with_suffix("").parts
+        _project_relative_path(path=file_path, project_dir=project_dir).with_suffix("").parts
     )
     spec: ModuleSpec | None = importlib.util.spec_from_file_location(module_name, file_path)
     if spec is None or spec.loader is None:
@@ -1818,7 +1827,7 @@ def _load_loader_module(*, file_path: Path, project_dir: Path) -> ModuleType:
 
 def _load_python_node_module(*, file_path: Path, project_dir: Path, node_folder: str) -> ModuleType:
     module_name: str = "sqlbuild_project_python_node_" + "_".join(
-        file_path.relative_to(project_dir).with_suffix("").parts
+        _project_relative_path(path=file_path, project_dir=project_dir).with_suffix("").parts
     )
     spec: ModuleSpec | None = importlib.util.spec_from_file_location(module_name, file_path)
     if spec is None or spec.loader is None:
@@ -1839,7 +1848,9 @@ def _load_python_node_module(*, file_path: Path, project_dir: Path, node_folder:
 
 
 def _load_provider_module(*, file_path: Path, project_dir: Path) -> ModuleType:
-    module_name: str = ".".join(file_path.relative_to(project_dir).with_suffix("").parts)
+    module_name: str = ".".join(
+        _project_relative_path(path=file_path, project_dir=project_dir).with_suffix("").parts
+    )
     _evict_stale_project_package_modules(
         root_module=module_name.split(".", maxsplit=1)[0],
         project_dir=project_dir,
@@ -1869,7 +1880,9 @@ def _load_provider_module(*, file_path: Path, project_dir: Path) -> ModuleType:
 
 
 def _load_sink_module(*, file_path: Path, project_dir: Path) -> ModuleType:
-    module_name: str = ".".join(file_path.relative_to(project_dir).with_suffix("").parts)
+    module_name: str = ".".join(
+        _project_relative_path(path=file_path, project_dir=project_dir).with_suffix("").parts
+    )
     _evict_stale_project_package_modules(
         root_module=module_name.split(".", maxsplit=1)[0],
         project_dir=project_dir,
@@ -1923,7 +1936,9 @@ def _evict_stale_project_package_modules(*, root_module: str, project_dir: Path)
 
 
 def _load_materialization_module(*, file_path: Path, project_dir: Path) -> ModuleType:
-    module_name: str = ".".join(file_path.relative_to(project_dir).with_suffix("").parts)
+    module_name: str = ".".join(
+        _project_relative_path(path=file_path, project_dir=project_dir).with_suffix("").parts
+    )
     spec: ModuleSpec | None = importlib.util.spec_from_file_location(module_name, file_path)
     if spec is None or spec.loader is None:
         raise PythonNodeDiscoveryError(f"Could not load materialization file {file_path}")
@@ -1951,8 +1966,21 @@ def discover_adapter_file(*, project_dir: Path) -> DiscoveredAdapterFile | None:
 
     return DiscoveredAdapterFile(
         file_path=file_path,
-        relative_path=file_path.relative_to(project_dir),
+        relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
     )
+
+
+def _project_relative_path(*, path: Path, project_dir: Path) -> Path:
+    """Return path.relative_to(project_dir) without pathlib's per-parent comparison scan."""
+
+    root_parts: tuple[str, ...] = project_dir.parts
+    path_parts: tuple[str, ...] = path.parts
+    if (
+        path.is_absolute() is not project_dir.is_absolute()
+        or path_parts[: len(root_parts)] != root_parts
+    ):
+        return path.relative_to(project_dir)
+    return path.with_segments(*path_parts[len(root_parts) :])
 
 
 def _is_relative_to(*, path: Path, parent: Path) -> bool:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-import copy
 import hashlib
 import heapq
 import inspect
@@ -1046,16 +1045,27 @@ def _load_macro_modules_locked(
 def _rewrite_absolute_project_imports(
     *, tree: ast.Module, module_names: frozenset[str], root: str
 ) -> ast.Module:
-    class Rewriter(ast.NodeTransformer):
-        def visit_ImportFrom(self, node: ast.ImportFrom) -> ast.ImportFrom:  # noqa: N802
-            if node.level == 0 and node.module in module_names:
-                return ast.copy_location(
-                    ast.ImportFrom(module=f"{root}.{node.module}", names=node.names, level=0),
-                    node,
-                )
-            return node
+    """Retarget module-level project imports; analysis already rejects nested ones."""
 
-    return ast.fix_missing_locations(Rewriter().visit(copy.deepcopy(tree)))
+    body: list[ast.stmt] = []
+    statement: ast.stmt
+    for statement in tree.body:
+        if (
+            isinstance(statement, ast.ImportFrom)
+            and statement.level == 0
+            and statement.module in module_names
+        ):
+            body.append(
+                ast.copy_location(
+                    ast.ImportFrom(
+                        module=f"{root}.{statement.module}", names=statement.names, level=0
+                    ),
+                    statement,
+                )
+            )
+        else:
+            body.append(statement)
+    return ast.Module(body=body, type_ignores=tree.type_ignores)
 
 
 def _matches_macro_module(*, imported_name: str, module_names: frozenset[str]) -> bool:

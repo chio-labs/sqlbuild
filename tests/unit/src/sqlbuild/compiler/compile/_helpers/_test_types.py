@@ -11,7 +11,11 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, SqlTestMode
-from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.compiler.lineage.types import (
+    ColumnLineageConfidence,
+    ColumnTransformKind,
+    InferredNullability,
+)
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.scopes.models import UsageRecord
 from sqlbuild.compiler.scopes.types import ScopeKind
@@ -872,3 +876,11 @@ class ExpectedBooleanTestCase:
 class ExpectedCountTestCase:
     description: str
     expected_count: int
+
+
+@dataclass(frozen=True)
+class CachedLineageRoundTripTestCase:
+    description: str
+    transform_kind: ColumnTransformKind
+    confidence: ColumnLineageConfidence
+    expected_compact: bool

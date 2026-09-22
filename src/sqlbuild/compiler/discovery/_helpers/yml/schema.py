@@ -63,7 +63,8 @@ def parse_schema_yml(
 
 def _load_schema_payload(*, contents: str, file_path: Path) -> dict[str, object]:
     try:
-        payload: object = yaml.safe_load(contents)
+        loader: type[yaml.SafeLoader] = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+        payload: object = yaml.load(contents, Loader=loader)
     except YAMLError as error:
         raise SchemaParseError(f"{file_path} contains invalid YAML: {error}") from error
     if payload is None:

@@ -4,7 +4,7 @@ use crate::query_analysis::tests::helpers::{
     binding_warnings_preserve_declared_relationship_evidence,
     borrowed_facts_preserve_named_outputs_and_terminal_sources,
     borrowed_facts_preserve_union_dependencies_and_join_nullability,
-    canonical_queries_reuse_semantics_and_project_resources,
+    bound_lineage_survives_type_recovery, canonical_queries_reuse_semantics_and_project_resources,
     combined_queries_preserve_standalone_binding,
     compact_project_query_interns_repeated_lineage_strings,
     interleaved_query_templates_preserve_template_order,
@@ -54,6 +54,11 @@ fn given_compact_query_cases_when_analyzing_projects_then_expected_behavior_hold
         CompactQueryAnalysisTestCase {
             description: "widening aggregates preserve compatibility recovery",
             run: widening_aggregates_require_compatibility_recovery,
+            expected_success: true,
+        },
+        CompactQueryAnalysisTestCase {
+            description: "resolved bound lineage survives type recovery",
+            run: bound_lineage_survives_type_recovery,
             expected_success: true,
         },
         CompactQueryAnalysisTestCase {

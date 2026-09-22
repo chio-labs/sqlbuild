@@ -122,6 +122,8 @@ struct ProjectAnalysis {
     has_star: bool,
     #[serde(skip)]
     requires_legacy_fallback: bool,
+    #[serde(skip)]
+    preserve_fallback_lineage: bool,
 }
 
 struct ProjectAnalysisInputs<'a> {
@@ -611,18 +613,17 @@ fn try_borrowed_query(
                 upstream_columns,
             });
         }
+        let requires_legacy_fallback = columns.iter().any(|column| column.data_type.is_none());
         projections.push((
             *index,
             Ok(ProjectAnalysis {
                 columns,
                 lineage_columns,
                 has_star: false,
-                requires_legacy_fallback: false,
+                requires_legacy_fallback,
+                preserve_fallback_lineage: true,
             }),
         ));
-    }
-    if projections.iter().any(|(_, result)| matches!(result, Ok(analysis) if analysis.columns.iter().any(|column| column.data_type.is_none()))) {
-        return Err(Box::new(work));
     }
     Ok(CompiledQueryWorkResult {
         projections,
@@ -933,6 +934,7 @@ struct CompactProjectBatch {
 #[serde(untagged)]
 enum CompactProjectResponse {
     Success((Vec<usize>, bool)),
+    LegacyTypeRecovery((Vec<usize>, bool, &'static str)),
     Failure(String),
 }
 
@@ -985,7 +987,7 @@ impl CompactProjectAccumulator {
                 return Ok(());
             }
         };
-        if analysis.requires_legacy_fallback {
+        if analysis.requires_legacy_fallback && !analysis.preserve_fallback_lineage {
             self.set_template(
                 projection_index,
                 CompactProjectResponse::Failure(
@@ -1024,7 +1026,15 @@ impl CompactProjectAccumulator {
         }
         self.set_template(
             projection_index,
-            CompactProjectResponse::Success((columns, analysis.has_star)),
+            if analysis.requires_legacy_fallback {
+                CompactProjectResponse::LegacyTypeRecovery((
+                    columns,
+                    analysis.has_star,
+                    "native project type recovery requires legacy fallback",
+                ))
+            } else {
+                CompactProjectResponse::Success((columns, analysis.has_star))
+            },
         )
     }
 
@@ -1194,6 +1204,7 @@ fn project_analysis(inputs: ProjectAnalysisInputs<'_>) -> ProjectAnalysis {
         lineage_columns,
         has_star: inputs.analysis.has_root_star,
         requires_legacy_fallback,
+        preserve_fallback_lineage: false,
     }
 }
 
