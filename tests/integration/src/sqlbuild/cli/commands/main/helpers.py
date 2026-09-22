@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import duckdb
+
+
+def unavailable_artifact_directory(*, prefix: str) -> TemporaryDirectory[str]:
+    raise OSError("temporary storage unavailable")
 
 
 def write_compile_startup_project(project_dir: Path) -> None:

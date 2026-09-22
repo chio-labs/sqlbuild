@@ -26,7 +26,7 @@ The guard checks:
 | 1,000 | 14s | 1.5GiB |
 | 3,000 | 34s | 2.75GiB |
 | 5,000 | 55s | 3.25GiB |
-| 10,000 | 115s | 4GiB |
+| 10,000 | 145s | 4GiB |
 
 These are regression ceilings for the implemented compiler, with headroom for
 host variation. They are not a claim of sub-10-second compilation at every size.
@@ -47,6 +47,32 @@ analysis results in batches of 64. Smaller requests retain a single batch. Both
 use up to four workers; local resolution views avoid copying CTE definitions
 that are already available through the source catalogue.
 These limits change scheduling, not analysis or fallback semantics.
+Projects with at least 10,000 model projections and 48MiB of prepared SQL use one
+native analysis worker to leave memory headroom for the isolated custom-rule host
+after analysis. Smaller SQL payloads retain parallel analysis.
+The 10k cold ceiling includes headroom for this memory-bounded scheduling; warm
+cache hits and small edit batches keep their existing scheduling.
+
+The compiler reuses borrowed syntax-tree facts when it can prove complete reference
+binding and infer types without consulting mutable type annotations. Unsupported
+clauses, incomplete schemas and unresolved expressions retain the normal validation
+and analysis paths.
+
+For cold projects with 128–5,000 models and selected rules, artifact rendering can overlap rule
+evaluation after graph and contract analysis. Rendering uses one background thread
+and a disposable directory outside the project. The normal write phase publishes
+the staged files only after its existing diagnostic gates pass. Unchanged files
+retain their timestamps, stale files are removed using the normal policy, and
+cached compilation keeps its normal artifact-cache path. Temporary-storage failure
+falls back to ordinary artifact writing.
+Larger projects retain sequential rendering to bound combined compiler and rule-host
+memory; projects without selected rules avoid staging's extra file I/O.
+
+Detailed phase timings can overlap; physical-write time includes any staging work.
+Use whole-process wall time for performance acceptance rather than summing phases.
+Custom rules continue to run in their isolated host. Disabled rules caches avoid
+unused fact fingerprints; enabled caches retain their normal identities and
+invalidation behavior.
 
 This fixture protects dense query analysis, declaration expansion, rules and
 artifact generation. It is not an exact reproduction of every application:

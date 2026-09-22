@@ -19,6 +19,7 @@ from sqlbuild.cli.commands._helpers.compile.status import (
 )
 from sqlbuild.cli.commands._helpers.compile.target_writer import write_static_compile_target
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
+from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import (
     CompileAnalysis,
@@ -48,7 +49,7 @@ from sqlbuild.presentation.classes.transient_status_reporter import TransientSta
 from sqlbuild.rule_engine.classes.early_sql_lint import EarlySqlLint
 from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.main.run_rules import run_rules
-from sqlbuild.rule_engine.models import RulesRunResult
+from sqlbuild.rule_engine.models import RulesConfig, RulesRunResult
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
@@ -59,18 +60,19 @@ def analyze_compile_project(
     *,
     project_dir: Path,
     no_sql_validation: bool,
-    no_cache: bool,
     selected_target: str | None,
     lineage_mode: CompileLineageMode,
     cli_vars: dict[str, object] | None,
     profile_flags: CompileProfileFlags,
-    select: tuple[str, ...],
-    exclude: tuple[str, ...],
+    analysis_selection: CompileAnalysisSelection,
     status: TransientStatusReporter | None,
+    prepared_artifacts: PreparedCompileArtifacts | None = None,
 ) -> CompileAnalysis:
     """Discover, compile, and validate the project into one analysis result."""
 
-    with EarlySqlLint(enabled=not (select or exclude)) as early_lint:
+    with EarlySqlLint(
+        enabled=not (analysis_selection.select or analysis_selection.exclude)
+    ) as early_lint:
         return _analyze_compile_project(
             project_dir=project_dir,
             no_sql_validation=no_sql_validation,
@@ -78,11 +80,10 @@ def analyze_compile_project(
             lineage_mode=lineage_mode,
             cli_vars=cli_vars,
             profile_flags=profile_flags,
-            analysis_selection=CompileAnalysisSelection(
-                select=select, exclude=exclude, no_cache=no_cache
-            ),
+            analysis_selection=analysis_selection,
             status=status,
             early_lint=early_lint,
+            prepared_artifacts=prepared_artifacts,
         )
 
 
@@ -97,6 +98,7 @@ def _analyze_compile_project(
     analysis_selection: CompileAnalysisSelection,
     status: TransientStatusReporter | None,
     early_lint: EarlySqlLint,
+    prepared_artifacts: PreparedCompileArtifacts | None = None,
 ) -> CompileAnalysis:
     select: tuple[str, ...] = analysis_selection.select
     exclude: tuple[str, ...] = analysis_selection.exclude
@@ -186,11 +188,18 @@ def _analyze_compile_project(
         *contract_result.diagnostics,
     )
     if not any(diagnostic.is_error for diagnostic in graph.project.diagnostics):
+        rules_config: RulesConfig = load_rules_config(project_dir=project_dir)
+        if (
+            prepared_artifacts is not None
+            and rules_config.select
+            and not any(item.is_error for item in core_diagnostics)
+        ):
+            prepared_artifacts.start(project=graph.project, adapter=adapter)
         _ = start_compile_phase(status=status, message="Evaluating built-in and custom rules...")
         rules_result = run_rules(
             graph=graph,
             discovered_inputs=discovered_inputs,
-            config=load_rules_config(project_dir=project_dir),
+            config=rules_config,
             project_dir=project_dir,
             dialect=adapter.sql_analysis_dialect() or "generic",
             selected_keys=selected_keys if select or exclude else None,
@@ -310,6 +319,7 @@ def write_compile_artifacts(
     analysis: CompileAnalysis,
     manifest_payload: dict[str, object] | None,
     status: TransientStatusReporter | None,
+    prepared_artifacts: PreparedCompileArtifacts | None = None,
 ) -> CompileWriteResult:
     """Write compiled artifacts to target/ and report the written counts."""
 
@@ -327,11 +337,20 @@ def write_compile_artifacts(
         )
     else:
         _ = start_compile_phase(status=status, message="Writing compiled artifacts...")
-        written = write_static_compile_target(
-            target_dir=target_dir,
-            adapter=analysis.adapter,
-            project=analysis.graph.project,
-            manifest=manifest_payload,
+        staged: WrittenTarget | None = (
+            prepared_artifacts.publish(target_dir=target_dir, manifest=manifest_payload)
+            if prepared_artifacts is not None
+            else None
+        )
+        written = (
+            staged
+            if staged is not None
+            else write_static_compile_target(
+                target_dir=target_dir,
+                adapter=analysis.adapter,
+                project=analysis.graph.project,
+                manifest=manifest_payload,
+            )
         )
     write_ms: int = elapsed_ms(write_start)
     if not profile_skip_write:

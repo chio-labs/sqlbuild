@@ -405,9 +405,10 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
                     expression=inner,
                     context=non_null_filter_context,
                 )
-                else cte_passthrough_nullability.get(
-                    output_column,
-                    (
+                else (
+                    cte_passthrough_nullability[output_column]
+                    if output_column in cte_passthrough_nullability
+                    else (
                         _infer_polyglot_nullability(
                             expression=inner,
                             alias_nullability=alias_nullability,
@@ -419,7 +420,7 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
                             expression=inner,
                             inference_profile=inference_profile,
                         )
-                    ),
+                    )
                 )
             )
         columns.append(InferredColumn(name=output_column, type=col_type, nullability=nullability))

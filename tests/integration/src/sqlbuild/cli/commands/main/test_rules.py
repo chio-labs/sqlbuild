@@ -598,6 +598,20 @@ def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
     assert first_exit == second_exit == test_case.expected_exit_code
     assert first["diagnostics"][0]["code"] == test_case.expected_code
     assert second["compile_timings"]["rule_cache_hits"] >= 1
+    config_path: Path = tmp_path / "sqlbuild_project.toml"
+    original_config: str = config_path.read_text(encoding="utf-8")
+    config_path.write_text(original_config + "\n[rules.cache]\nenabled = false\n", encoding="utf-8")
+    cold_exit: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+    cold: dict[str, object] = json.loads(capsys.readouterr().out)
+    config_path.write_text(original_config, encoding="utf-8")
+    warm_exit: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
+    warm: dict[str, object] = json.loads(capsys.readouterr().out)
+
+    assert cold_exit == warm_exit == test_case.expected_exit_code
+    assert cold["diagnostics"] == warm["diagnostics"] == first["diagnostics"]
+    assert cold["compile_timings"]["rule_cache_hits"] == 0
+    assert warm["compile_timings"]["rule_cache_hits"] >= 1
+    assert not (tmp_path / "target" / "compiled").exists()
     host_inputs: Path = tmp_path / "target" / "rules-cache" / "host-inputs"
     assert not tuple(host_inputs.glob("*.pickle"))
 

@@ -155,6 +155,39 @@ def write_static_compile_target(
     )
 
 
+def publish_static_compile_target(
+    *, prepared: WrittenTarget, target_dir: Path, manifest: dict[str, object] | None
+) -> WrittenTarget:
+    """Publish staged files with the same unchanged-file and stale-file semantics."""
+
+    compiled_dir: Path = target_dir / _COMPILED_DIR
+    staged_dir: Path = prepared.target_dir / _COMPILED_DIR
+    check_existing: bool = compiled_dir.is_dir()
+    managed_paths: set[Path] = set()
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for source in sorted(staged_dir.rglob("*")):
+        if not source.is_file():
+            continue
+        path: Path = compiled_dir / source.relative_to(staged_dir)
+        _write_bytes_if_changed(
+            path=path, contents=source.read_bytes(), check_existing=check_existing
+        )
+        managed_paths.add(path)
+    if check_existing:
+        with record_compile_timing("stale_traversal_ms"):
+            _remove_stale_compiled_files(target_dir=target_dir, managed_paths=managed_paths)
+    if manifest is not None:
+        _write_manifest(target_dir=target_dir, manifest=manifest)
+    return WrittenTarget(
+        model_count=prepared.model_count,
+        seed_count=prepared.seed_count,
+        function_count=prepared.function_count,
+        audit_count=prepared.audit_count,
+        test_count=prepared.test_count,
+        target_dir=target_dir,
+    )
+
+
 def _write_models(*, target_dir: Path, plan_output: PlanOutput, check_existing: bool) -> set[Path]:
     """Write model resolved SQL."""
 

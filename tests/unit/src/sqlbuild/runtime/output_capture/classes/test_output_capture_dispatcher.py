@@ -82,6 +82,9 @@ def test_given_interleaved_partial_writes_when_closed_then_complete_lines_have_g
     (
         ChunkingTestCase("ascii_sql", "SELECT 123456789\n", 8, ("SELECT 1", "23456789", "\n")),
         ChunkingTestCase("unicode_sql", "ééé\n", 4, ("éé", "é\n")),
+        ChunkingTestCase("ascii_exact_boundary", "SELECT 1\n", 9, ("SELECT 1\n",)),
+        ChunkingTestCase("unicode_single_chunk", "é\n", 4, ("é\n",)),
+        ChunkingTestCase("multibyte_boundary", "🙂\n", 4, ("🙂", "\n")),
     ),
     ids=lambda case: case.description,
 )
