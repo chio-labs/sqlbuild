@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.113.1](https://github.com/chio-labs/sqlbuild/compare/v0.113.0...v0.113.1) (2026-09-22)
+
+
+### Performance Improvements
+
+* **compiler:** bound cold analysis and tighten regression budgets ([#772](https://github.com/chio-labs/sqlbuild/issues/772)) ([9f248e6](https://github.com/chio-labs/sqlbuild/commit/9f248e672b52cd7f0abb1647d7c1b68ca1385ff1))
+
 ## [0.113.0](https://github.com/chio-labs/sqlbuild/compare/v0.112.2...v0.113.0) (2026-09-21)
 
 
