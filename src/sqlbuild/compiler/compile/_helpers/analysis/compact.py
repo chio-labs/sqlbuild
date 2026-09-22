@@ -626,7 +626,7 @@ def _prepare_compact_analysis_batch(
 def _run_compact_analysis_batch(*, preparation: CompactBatchPreparation) -> object:
     """Bound resident analysis heaps before the isolated custom-rule host starts."""
 
-    workers: int = 2 if len(preparation.projections) >= _LARGE_COMPACT_PROJECT_MODELS else 4
+    workers: int = 1 if len(preparation.projections) >= _LARGE_COMPACT_PROJECT_MODELS else 4
     return orjson.loads(
         cast(NativeQueryAnalysisModule, _native).analyze_project_queries_compact_json(
             orjson.dumps(
