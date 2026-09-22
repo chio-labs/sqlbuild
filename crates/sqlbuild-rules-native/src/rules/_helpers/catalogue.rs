@@ -33,6 +33,7 @@ macro_rules! rule {
                     | "SQBRPROJECT202"
                     | "SQBRPROJECT203"
                     | "SQBRPROJECT204"
+                    | "SQBRGRAPH101"
                     | "SQBRTEST101"
                     | "SQBRTEST102"
                     | "SQBRTEST103"
@@ -66,7 +67,14 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
             "structure",
             "view-marker",
             "view materialization and model v marker must agree",
-            "Use stg_v/int_v/mart_v for a view, or change the materialization to match the non-view layer name.",
+            "Use stg_v/int_v/mart_v for a view, or change the materialization to match the non-view layer name. Keep _v only in the canonical layer segment.",
+        ),
+        rule!(
+            "SQBRMODEL104",
+            "structure",
+            "central-model-schema",
+            "model schemas must come from central path defaults",
+            "Place the model under the folder matching its semantic layer, then remove the schema declaration. Configure intentional schema differences centrally in sqlbuild_project.toml.",
         ),
         rule!(
             "SQBRGRAPH101",
@@ -109,6 +117,20 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
             "reference-name-policy",
             "referenced model identifiers must follow rule naming grammar",
             "Rename the referenced model and this __ref to the rule model grammar.",
+        ),
+        rule!(
+            "SQBRPROJECT105",
+            "repository",
+            "name-folder-alignment",
+            "model name layer must match its canonical folder",
+            "Make the model name and canonical layer folder agree. Choose the layer from the model's semantic responsibility, not from its dependencies.",
+        ),
+        rule!(
+            "SQBRPROJECT106",
+            "repository",
+            "name-schema-alignment",
+            "model name layer must match its effective logical schema",
+            "Correct the central path default or move the model to its intended semantic-layer folder. Do not add a model-local schema declaration.",
         ),
         rule!(
             "SQBRCONTRACT101",

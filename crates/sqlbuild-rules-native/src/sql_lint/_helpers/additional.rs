@@ -2,6 +2,10 @@ use std::collections::{HashMap, HashSet};
 
 use polyglot_sql::tokens::{Span, Token, TokenType};
 
+use crate::constants::{
+    CLOSE_PAREN, EMPTY_FIXTURE_QUERY_TOKEN_COUNT, ENCLOSING_CTE_TOKEN_COUNT, OPEN_PAREN,
+    SQL_WILDCARD,
+};
 use crate::sql_lint::_helpers::engine::{
     direct_indices, is_comment, is_layout, is_query_from, query_end, significant_after,
     significant_before, token_depths,
@@ -49,6 +53,7 @@ struct SelectFactContext<'a> {
     dependency_identifiers: &'a HashSet<String>,
     allows_ceremonial_select: bool,
     allows_dynamic_output_star: bool,
+    allows_empty_fixture_star: bool,
 }
 
 struct ProjectedStarContext<'a> {
@@ -169,6 +174,7 @@ pub(super) fn collect_additional_facts(
         dependency_identifiers: options.dependency_identifiers,
         allows_ceremonial_select: options.allows_ceremonial_select,
         allows_dynamic_output_star: options.allows_dynamic_output_star,
+        allows_empty_fixture_star: options.allows_empty_fixture_star,
     });
     facts.duplicate_output_aliases = select_facts.duplicate_output_aliases;
     facts.unaliased_calculations = select_facts.unaliased_calculations;
@@ -277,6 +283,7 @@ fn collect_select_additional_facts(context: &SelectFactContext<'_>) -> Additiona
                 &direct,
                 from_position,
             )
+            && !is_canonical_empty_input_fixture(context, select_index, end)
             && !has_irreducible_projected_star(
                 &ProjectedStarContext {
                     tokens,
@@ -356,6 +363,47 @@ fn collect_select_additional_facts(context: &SelectFactContext<'_>) -> Additiona
             .extend(ambiguous_order_direction_spans(tokens, &direct));
     }
     facts
+}
+
+fn is_canonical_empty_input_fixture(
+    context: &SelectFactContext<'_>,
+    select_index: usize,
+    query_end: usize,
+) -> bool {
+    if !context.allows_empty_fixture_star {
+        return false;
+    }
+    let significant_query: Vec<&str> = context.tokens[select_index..query_end]
+        .iter()
+        .filter(|token| !is_layout(token) && !is_comment(token))
+        .map(|token| token.text.as_str())
+        .collect();
+    if significant_query.len() != EMPTY_FIXTURE_QUERY_TOKEN_COUNT
+        || !significant_query[0].eq_ignore_ascii_case("select")
+        || significant_query[1] != SQL_WILDCARD
+        || !significant_query[2].eq_ignore_ascii_case("from")
+        || !significant_query[3].eq_ignore_ascii_case("__empty_fixture")
+        || significant_query[4] != OPEN_PAREN
+        || significant_query[5] != CLOSE_PAREN
+    {
+        return false;
+    }
+    let previous: Vec<&Token> = context.tokens[..select_index]
+        .iter()
+        .filter(|token| !is_layout(token) && !is_comment(token))
+        .rev()
+        .take(ENCLOSING_CTE_TOKEN_COUNT)
+        .collect();
+    if previous.len() != ENCLOSING_CTE_TOKEN_COUNT
+        || previous[0].token_type != TokenType::LParen
+        || !previous[1].text.eq_ignore_ascii_case("as")
+    {
+        return false;
+    }
+    let cte_name = previous[2].text.trim_matches(['"', '`']);
+    ["__ref__", "__source__", "__seed__"]
+        .iter()
+        .any(|prefix| cte_name.starts_with(prefix))
 }
 
 fn is_compiler_proven_dynamic_output_select(

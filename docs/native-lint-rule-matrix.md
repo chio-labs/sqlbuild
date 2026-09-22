@@ -40,7 +40,7 @@ Rewrite classifications describe formatter-owned transformations: **always**, **
 | AM01 DISTINCT with GROUP BY | Core compiler | `SQBRSQL006` | always | SQLBuild reports only demonstrably redundant `DISTINCT`. |
 | AM02 bare UNION | Optional rule | `SQBRSQL008` | conditional | Use `UNION DISTINCT` only in dialects that accept the explicit spelling. |
 | AM03 mixed ORDER direction | Optional rule | `SQBRSQL026` | never | Diagnosis is safe; multi-expression authored edits remain conservative. |
-| AM04 unknown output width | Optional rule | `SQBRSQL021` | never | Column enumeration needs schema evidence. |
+| AM04 unknown output width | Optional rule | `SQBRSQL021` | never | Column enumeration needs schema evidence; canonical `__empty_fixture()` input CTEs in SQL tests are compiler-controlled. |
 | AM05 implicit JOIN type | Optional rule | `SQBRSQL025` | always | Conditioned plain `JOIN` is spelled `INNER JOIN`. |
 | AM06 mixed ordinal/name references | Optional rule | `SQBRSQL011` | never | Rewriting ordinals needs resolved projection names. |
 | AM07 set branch arity | Core compiler | `SQBRSQL020` | never | Invalid branch shape; intended schema requires input. |

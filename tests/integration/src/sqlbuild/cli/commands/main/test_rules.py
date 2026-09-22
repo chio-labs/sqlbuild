@@ -21,6 +21,138 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        RulePassIntegrationTestCase(
+            description="conflicting model metadata reports independent boundaries",
+            expected_exit_code=1,
+            expected_diagnostics=(
+                "SQBRMODEL103",
+                "SQBRMODEL104",
+                "SQBRPROJECT101",
+                "SQBRPROJECT104",
+                "SQBRPROJECT105",
+                "SQBRPROJECT106",
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_conflicting_model_layer_metadata_when_compiling_then_rules_report_each_boundary(
+    test_case: RulePassIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Exercise model-header provenance and layer alignment through the real compiler."""
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "commerce"\nadapter = "duckdb"\n\n'
+        "[rules]\n"
+        'select = ["SQBRMODEL103", "SQBRMODEL104", "SQBRPROJECT101", '
+        '"SQBRPROJECT104", "SQBRPROJECT105", "SQBRPROJECT106"]\n',
+        encoding="utf-8",
+    )
+    model_dir: Path = tmp_path / "models" / "commerce" / "intermediate" / "enriched"
+    model_dir.mkdir(parents=True)
+    (model_dir / "commerce__mart_v__int_v_orders.sql").write_text(
+        "MODEL (\n"
+        '  description "Published orders",\n'
+        "  materialized table,\n"
+        "  schema staging,\n"
+        ");\n\n"
+        'SELECT order_id FROM __ref("commerce__mart__stg_orders")\n',
+        encoding="utf-8",
+    )
+    published_dir: Path = tmp_path / "models" / "commerce" / "mart"
+    published_dir.mkdir()
+    (published_dir / "commerce__mart__stg_orders.sql").write_text(
+        'MODEL (description "Orders");\nSELECT 1 AS order_id\n', encoding="utf-8"
+    )
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+    result: dict[str, object] = json.loads(capsys.readouterr().out)
+    diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], result["diagnostics"])
+    codes: set[object] = {diagnostic["code"] for diagnostic in diagnostics}
+
+    assert exit_code == test_case.expected_exit_code
+    assert set(test_case.expected_diagnostics) <= codes
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RulesIntegrationTestCase(
+            description="live exact edge passes and stale edge fails",
+            expected_exit_code=0,
+            expected_code="SQBRGRAPH101",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_exact_internal_edge_exception_when_compiling_then_live_edge_passes_and_stale_fails(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Exercise exact graph exceptions and stale detection through TOML configuration."""
+    project_file: Path = tmp_path / "sqlbuild_project.toml"
+    base_config = 'name = "commerce"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRGRAPH101"]\n\n'
+    live_exception = (
+        "[[rules.graph_edge_exceptions]]\n"
+        'consumer = "commerce__stg__orders"\n'
+        'dependency = "commerce__int_enriched__orders"\n'
+        'reason = "Tracked cleanup"\n'
+    )
+    project_file.write_text(base_config + live_exception, encoding="utf-8")
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "commerce__stg__orders.sql").write_text(
+        'MODEL ();\nSELECT order_id FROM __ref("commerce__int_enriched__orders")\n',
+        encoding="utf-8",
+    )
+    (models / "commerce__int_enriched__orders.sql").write_text(
+        "MODEL ();\nSELECT 1 AS order_id\n", encoding="utf-8"
+    )
+    (models / "commerce__mart__summary.sql").write_text(
+        "MODEL ();\nSELECT 1 AS order_count\n", encoding="utf-8"
+    )
+
+    live_exit: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+    live_result: dict[str, object] = json.loads(capsys.readouterr().out)
+    focused_exit: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "compile",
+            "--json",
+            "--no-cache",
+            "--select",
+            "commerce__mart__summary",
+        ]
+    )
+    focused_result: dict[str, object] = json.loads(capsys.readouterr().out)
+    project_file.write_text(
+        base_config
+        + live_exception.replace(
+            'dependency = "commerce__int_enriched__orders"',
+            'dependency = "commerce__int_clean__missing"',
+        ),
+        encoding="utf-8",
+    )
+    stale_exit: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+    stale_result: dict[str, object] = json.loads(capsys.readouterr().out)
+
+    assert live_exit == test_case.expected_exit_code
+    assert not cast(list[object], live_result["diagnostics"])
+    assert focused_exit == 0
+    assert not cast(list[object], focused_result["diagnostics"])
+    assert stale_exit == 1
+    assert any(
+        diagnostic["code"] == test_case.expected_code and "stale" in str(diagnostic["message"])
+        for diagnostic in cast(list[dict[str, object]], stale_result["diagnostics"])
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [RulePassIntegrationTestCase("constant-backed numeric decision", 0, ())],
     ids=lambda case: case.description,
 )

@@ -5,7 +5,7 @@ use crate::constants::{
 use crate::models::{Declaration, EvaluateRequest, Fault, Model, RuleMetadata, RulesConfig};
 use crate::rules::_helpers::domain_layout::folder_layer_details;
 use crate::rules::_helpers::{
-    contract_name_types, dynamic_contracts, explicit_output_types, numeric_decisions,
+    contract_name_types, dynamic_contracts, explicit_output_types, model_layers, numeric_decisions,
     typed_contract_columns,
 };
 use crate::rules::models::{
@@ -161,8 +161,8 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
     if let Some(rule) = metadata("SQBRMODEL103") {
         view_marker(&parsed, rule, &faults);
     }
-    if let Some(rule) = metadata("SQBRGRAPH101") {
-        forward_refs(&parsed, rule, &faults);
+    if let Some(rule) = metadata("SQBRMODEL104") {
+        model_layers::explicit_model_schema(parsed.model, rule, &faults);
     }
     if let Some(rule) = metadata("SQBRGRAPH102") {
         raw_qualified_tables(&parsed, rule, &faults);
@@ -178,6 +178,12 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
     }
     if let Some(rule) = metadata("SQBRPROJECT104") {
         reference_name_rule(&parsed, rule, &faults);
+    }
+    if let Some(rule) = metadata("SQBRPROJECT105") {
+        model_layers::name_folder_alignment(parsed.model, rule, &faults);
+    }
+    if let Some(rule) = metadata("SQBRPROJECT106") {
+        model_layers::name_schema_alignment(parsed.model, rule, &faults);
     }
     if let Some(rule) = metadata("SQBRCONTRACT101") {
         contract_required(&parsed, rule, &faults);
@@ -203,6 +209,9 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
 
 pub(crate) fn evaluate_project_rules(request: &ProjectEvaluationRequest<'_>) -> Vec<Fault> {
     let faults = FaultCollector::default();
+    if let Some(rule) = request.selected.get("SQBRGRAPH101") {
+        model_layers::internal_forward_refs(request, rule, &faults);
+    }
     if let Some(rule) = request.selected.get("SQBRDECLARATION201") {
         duplicate_enums(request.request, rule, &faults);
     }
@@ -1039,14 +1048,15 @@ fn select_star(
 }
 
 #[derive(Clone)]
-struct NameParts {
+pub(super) struct NameParts {
     domain: String,
-    layer: String,
+    pub(super) layer: String,
+    subject: String,
     source: Option<String>,
     is_view: bool,
 }
 
-fn parse_name(name: &str) -> Option<NameParts> {
+pub(super) fn parse_name(name: &str) -> Option<NameParts> {
     let parts: Vec<&str> = name.split("__").collect();
     if !(3..=4).contains(&parts.len()) {
         return None;
@@ -1072,6 +1082,7 @@ fn parse_name(name: &str) -> Option<NameParts> {
     Some(NameParts {
         domain: parts[0].into(),
         layer: parts[1].into(),
+        subject: parts[2].into(),
         source: parts.get(3).map(|value| (*value).into()),
         is_view: parts[1].ends_with("_v"),
     })
@@ -1095,40 +1106,6 @@ fn view_marker(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &FaultColl
         == Some(VIEW_MATERIALIZATION);
     if parts.is_view != materialized_view {
         faults.push(fault(parsed.model, rule, None));
-    }
-}
-
-fn layer_order(layer: &str) -> usize {
-    match layer {
-        "stg" | "stg_v" => 0,
-        "int_clean" => 1,
-        "int_v" | "int_enriched" => 2,
-        _ => 3,
-    }
-}
-
-fn forward_refs(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &FaultCollector) {
-    let Some(current) = parse_name(&parsed.model.name) else {
-        return;
-    };
-    for reference in &parsed.model.references {
-        if reference.ref_kind != REFERENCE_KIND {
-            continue;
-        }
-        if let Some(upstream) = parse_name(&reference.ref_name)
-            && layer_order(&upstream.layer) > layer_order(&current.layer)
-        {
-            faults.push(custom_fault!(
-                parsed.model,
-                rule,
-                None,
-                format!(
-                    "{} reaches forward from {} to {} via {}",
-                    parsed.model.name, current.layer, upstream.layer, reference.ref_name
-                ),
-                None,
-            ));
-        }
     }
 }
 
@@ -1179,6 +1156,18 @@ fn name_grammar(
     faults: &FaultCollector,
 ) {
     if let Some(parts) = parse_name(&parsed.model.name) {
+        if let Some(marker) = duplicate_layer_marker(&parts.subject) {
+            faults.push(custom_fault!(
+                parsed.model,
+                rule,
+                None,
+                format!(
+                    "model {:?} declares layer {:?} but its subject starts with a second layer marker {:?}",
+                    parsed.model.name, parts.layer, marker
+                ),
+                Some("Rename the model so exactly one layer appears immediately after the domain. Do not preserve the previous layer inside the subject; resolve any resulting identity collision as a semantic design decision.".into()),
+            ));
+        }
         if !config.domains.is_empty() && !config.domains.contains(&parts.domain) {
             faults.push(custom_fault!(
                 parsed.model,
@@ -1207,6 +1196,21 @@ fn name_grammar(
         )
     };
     faults.push(custom_fault!(parsed.model, rule, None, message, None));
+}
+
+fn duplicate_layer_marker(subject: &str) -> Option<&'static str> {
+    [
+        "int_enriched",
+        "int_clean",
+        "mart_v",
+        "stg_v",
+        "int_v",
+        "mart",
+        "stg",
+        "v",
+    ]
+    .into_iter()
+    .find(|marker| subject.starts_with(&format!("{marker}_")))
 }
 
 fn folder_layer(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &FaultCollector) {
@@ -1286,7 +1290,9 @@ fn source_token_rule(
 
 fn reference_name_rule(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &FaultCollector) {
     for reference in &parsed.model.references {
-        if reference.ref_kind == REFERENCE_KIND && parse_name(&reference.ref_name).is_none() {
+        let invalid = parse_name(&reference.ref_name)
+            .is_none_or(|parts| duplicate_layer_marker(&parts.subject).is_some());
+        if reference.ref_kind == REFERENCE_KIND && invalid {
             faults.push(custom_fault!(
                 parsed.model,
                 rule,

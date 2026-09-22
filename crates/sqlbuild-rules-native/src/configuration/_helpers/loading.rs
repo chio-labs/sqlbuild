@@ -49,6 +49,7 @@ fn validate_raw(value: &toml::Value) -> Result<(), String> {
         "threshold_overrides",
         "rule_options",
         "rule_exceptions",
+        "graph_edge_exceptions",
         "rule_ignores",
         "select_star_allow",
         "domains",
@@ -69,6 +70,10 @@ fn validate_raw(value: &toml::Value) -> Result<(), String> {
     }
     for (key, fields) in [
         ("rule_exceptions", ["rule", "path", "reason"].as_slice()),
+        (
+            "graph_edge_exceptions",
+            ["consumer", "dependency", "reason"].as_slice(),
+        ),
         ("rule_ignores", ["rules", "reason"].as_slice()),
         ("select_star_allow", ["paths", "reason"].as_slice()),
         (
@@ -195,6 +200,22 @@ pub(crate) fn validate(config: &RulesConfig) -> Result<(), String> {
         }
         if !grammar.rule_code_is_exact(&exception.rule) {
             return Err(format!("invalid rule code: {}", exception.rule));
+        }
+    }
+    let mut graph_edges: std::collections::BTreeSet<(&str, &str)> =
+        std::collections::BTreeSet::new();
+    for exception in &config.graph_edge_exceptions {
+        if exception.consumer.trim().is_empty()
+            || exception.dependency.trim().is_empty()
+            || exception.reason.trim().is_empty()
+        {
+            return Err("rules.graph_edge_exceptions fields must be non-empty strings".into());
+        }
+        if !graph_edges.insert((&exception.consumer, &exception.dependency)) {
+            return Err(format!(
+                "duplicate graph edge exception: {} -> {}",
+                exception.consumer, exception.dependency
+            ));
         }
     }
     for ignore in &config.rule_ignores {

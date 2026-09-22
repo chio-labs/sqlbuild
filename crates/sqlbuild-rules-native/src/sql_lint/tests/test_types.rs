@@ -5,6 +5,13 @@ pub(crate) struct LintTestCase {
     pub expected_anchors: &'static [(&'static str, &'static str)],
 }
 
+pub(crate) struct EmptyFixtureLintTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) allows_empty_fixture_star: bool,
+    pub(crate) expected_diagnostic_count: usize,
+}
+
 pub(crate) struct BatchLintTestCase {
     pub(crate) description: &'static str,
     pub(crate) queries: &'static [&'static str],

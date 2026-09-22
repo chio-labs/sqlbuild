@@ -93,7 +93,11 @@ def evaluate_rules(
     )
     selected_project: CompiledProject = _selected_project(graph=graph, model_paths=model_paths)
     selected_config: RulesConfig = replace(
-        _selection_rules_config(config=effective_config, model_paths=model_paths),
+        _selection_rules_config(
+            config=effective_config,
+            model_paths=model_paths,
+            project=selected_project,
+        ),
         select=tuple(rule.code for rule in selected),
         ignore=(),
     )
@@ -210,14 +214,23 @@ def _prepare_sql_lint(
 
 
 def _selection_rules_config(
-    *, config: RulesConfig, model_paths: frozenset[str] | None
+    *,
+    config: RulesConfig,
+    model_paths: frozenset[str] | None,
+    project: CompiledProject,
 ) -> RulesConfig:
     if model_paths is None:
         return config
+    selected_model_names: frozenset[str] = frozenset(model.name for model in project.models)
     return replace(
         config,
         rule_exceptions=tuple(
             entry for entry in config.rule_exceptions if Path(entry.path).as_posix() in model_paths
+        ),
+        graph_edge_exceptions=tuple(
+            entry
+            for entry in config.graph_edge_exceptions
+            if entry.consumer in selected_model_names
         ),
     )
 
