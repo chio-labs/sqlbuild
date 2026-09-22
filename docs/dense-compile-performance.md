@@ -53,13 +53,15 @@ binding and infer types without consulting mutable type annotations. Unsupported
 clauses, incomplete schemas and unresolved expressions retain the normal validation
 and analysis paths.
 
-For cold projects with at least 128 models, artifact rendering can overlap rule
+For cold projects with 128–5,000 models and selected rules, artifact rendering can overlap rule
 evaluation after graph and contract analysis. Rendering uses one background thread
 and a disposable directory outside the project. The normal write phase publishes
 the staged files only after its existing diagnostic gates pass. Unchanged files
 retain their timestamps, stale files are removed using the normal policy, and
 cached compilation keeps its normal artifact-cache path. Temporary-storage failure
 falls back to ordinary artifact writing.
+Larger projects retain sequential rendering to bound combined compiler and rule-host
+memory; projects without selected rules avoid staging's extra file I/O.
 
 Detailed phase timings can overlap; physical-write time includes any staging work.
 Use whole-process wall time for performance acceptance rather than summing phases.

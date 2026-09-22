@@ -49,7 +49,7 @@ from sqlbuild.presentation.classes.transient_status_reporter import TransientSta
 from sqlbuild.rule_engine.classes.early_sql_lint import EarlySqlLint
 from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.main.run_rules import run_rules
-from sqlbuild.rule_engine.models import RulesRunResult
+from sqlbuild.rule_engine.models import RulesConfig, RulesRunResult
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
@@ -187,14 +187,19 @@ def _analyze_compile_project(
         *graph.project.diagnostics,
         *contract_result.diagnostics,
     )
-    if prepared_artifacts is not None and not any(item.is_error for item in core_diagnostics):
-        prepared_artifacts.start(project=graph.project, adapter=adapter)
     if not any(diagnostic.is_error for diagnostic in graph.project.diagnostics):
+        rules_config: RulesConfig = load_rules_config(project_dir=project_dir)
+        if (
+            prepared_artifacts is not None
+            and rules_config.select
+            and not any(item.is_error for item in core_diagnostics)
+        ):
+            prepared_artifacts.start(project=graph.project, adapter=adapter)
         _ = start_compile_phase(status=status, message="Evaluating built-in and custom rules...")
         rules_result = run_rules(
             graph=graph,
             discovered_inputs=discovered_inputs,
-            config=load_rules_config(project_dir=project_dir),
+            config=rules_config,
             project_dir=project_dir,
             dialect=adapter.sql_analysis_dialect() or "generic",
             selected_keys=selected_keys if select or exclude else None,

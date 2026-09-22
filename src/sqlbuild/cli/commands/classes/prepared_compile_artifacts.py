@@ -17,6 +17,7 @@ from sqlbuild.cli.output.models import WrittenTarget
 from sqlbuild.compiler.compile.models import CompiledProject
 
 _MIN_PREPARED_ARTIFACT_MODELS: int = 128
+_MAX_PREPARED_ARTIFACT_MODELS: int = 5000
 
 
 class PreparedCompileArtifacts:
@@ -49,6 +50,7 @@ class PreparedCompileArtifacts:
             not self.enabled
             or project.compile_cache_dir is not None
             or len(project.models) < _MIN_PREPARED_ARTIFACT_MODELS
+            or len(project.models) > _MAX_PREPARED_ARTIFACT_MODELS
         ):
             return
         try:

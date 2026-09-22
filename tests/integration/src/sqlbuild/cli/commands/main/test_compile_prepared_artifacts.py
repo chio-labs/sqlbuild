@@ -35,7 +35,7 @@ def test_given_existing_artifacts_when_rules_fail_then_staged_changes_are_not_pu
         prepared_compile_artifacts, "TemporaryDirectory", test_case.temporary_directory_factory
     )
     config_path: Path = tmp_path / "sqlbuild_project.toml"
-    config: str = 'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = []\n'
+    config: str = 'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = ["SQBRSQL021"]\n'
     config_path.write_text(config, encoding="utf-8")
     models: Path = tmp_path / "models"
     models.mkdir()
@@ -76,7 +76,7 @@ def test_given_existing_artifacts_when_rules_fail_then_staged_changes_are_not_pu
         encoding="utf-8",
     )
     config_path.write_text(
-        config.replace("select = []", 'select = ["XSQBRARCH001"]'), encoding="utf-8"
+        config.replace('select = ["SQBRSQL021"]', 'select = ["XSQBRARCH001"]'), encoding="utf-8"
     )
     assert main(arguments) == 1
     failed: dict[str, object] = json.loads(capsys.readouterr().out)
