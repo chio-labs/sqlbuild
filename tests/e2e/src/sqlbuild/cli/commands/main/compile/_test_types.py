@@ -6,6 +6,25 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class VariedCompileCacheTestCase:
+    description: str
+    model_count: int
+    expected_cold_max_seconds: float
+    expected_warm_max_seconds: float
+    expected_edit_max_seconds: float
+    expected_max_rss_bytes: int
+    expected_min_operator_shapes: int
+    expected_min_component: int
+    expected_min_depth: int
+    expected_max_depth: int
+    expected_min_leaves: int
+    expected_max_leaves: int
+    expected_min_array_models: int
+    expected_min_window_models: int
+    expected_fingerprints: tuple[str, str, str, str]
+
+
+@dataclass(frozen=True)
 class CompilePerformanceGuardTestCase:
     description: str
     model_count: int

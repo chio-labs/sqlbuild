@@ -8,6 +8,13 @@ from sqlbuild.compiler.planner.models import CursorOverrides
 
 
 @dataclass(frozen=True)
+class VariedCompileFixtureTestCase:
+    description: str
+    model_count: int
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
 class PreparedArtifactsCompileTestCase:
     description: str
     model_count: int

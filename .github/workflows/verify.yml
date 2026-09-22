@@ -419,6 +419,26 @@ jobs:
             make test-e2e-cache-compile-performance \
               SQLBUILD_BENCHMARK_MODELS="${BENCHMARK_MODELS}"
 
+      - name: Run varied 1k warm-cache guard under 4 GiB
+        if: matrix.models == 3000
+        env:
+          MEMORY_LIMIT_BYTES: "4294967296"
+        run: |
+          sudo systemd-run \
+            --unit="sqlbuild-varied-cache-${GITHUB_RUN_ID}" \
+            --uid="$(id -u)" \
+            --gid="$(id -g)" \
+            --same-dir \
+            --setenv="HOME=${HOME}" \
+            --setenv="PATH=${PATH}" \
+            --setenv="SQLBUILD_REQUIRE_MEMORY_LIMIT_BYTES=${MEMORY_LIMIT_BYTES}" \
+            --property="MemoryMax=${MEMORY_LIMIT_BYTES}" \
+            --property="MemorySwapMax=0" \
+            --wait \
+            --collect \
+            --pipe \
+            make test-e2e-varied-cache-performance
+
   rules_performance:
     name: Rules performance guards
     needs: [changes, lockfile]

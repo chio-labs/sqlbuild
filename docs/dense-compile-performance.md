@@ -74,6 +74,10 @@ Custom rules continue to run in their isolated host. Disabled rules caches avoid
 unused fact fingerprints; enabled caches retain their normal identities and
 invalidation behavior.
 
+The [varied warm-compile guard](warm-compile-performance.md) adds operator-shape
+diversity and a shared dependency graph, measuring unchanged, leaf, upstream and
+macro-edit compiles against uncached semantic/artifact oracles.
+
 This fixture protects dense query analysis, declaration expansion, rules and
 artifact generation. It is not an exact reproduction of every application:
 dynamic plugins, incremental materialization mixes and deeply nested query
