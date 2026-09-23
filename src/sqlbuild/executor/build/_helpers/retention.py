@@ -10,8 +10,13 @@ from sqlbuild.adapter.contract.types import RetentionChangePhase, RetentionScope
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
-from sqlbuild.compiler.planner.models import PlanOutput, RetentionPlanEntry, TableTypePlanEntry
-from sqlbuild.compiler.planner.types import RetentionPlanPhase
+from sqlbuild.compiler.planner.models import (
+    ModelPlanEntry,
+    PlanOutput,
+    RetentionPlanEntry,
+    TableTypePlanEntry,
+)
+from sqlbuild.compiler.planner.types import IncrementalMode, PlanAction, RetentionPlanPhase
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.runtime.observability.classes.operation_lifecycle import (
     OperationAttributes,
@@ -23,28 +28,20 @@ from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
 from sqlbuild.spec.contracts.types import TableType
 
 
-def apply_table_type_conversions(
-    *, plan: PlanOutput, adapter: BaseAdapter, connection: Any
-) -> None:
-    """Recover by inspection: clean desired targets or recreate and swap undesired targets."""
+def materialization_recreates_relation(entry: ModelPlanEntry) -> bool:
+    """Return whether the build always recreates the relation with the planned table type."""
 
-    _apply_table_type_entries(
-        entries=plan.table_type_entries, adapter=adapter, connection=connection
+    return (
+        entry.action == PlanAction.CREATE_TABLE
+        and entry.incremental_mode != IncrementalMode.MICROBATCH
     )
 
 
-def _apply_table_type_entries(
-    *, entries: tuple[TableTypePlanEntry, ...], adapter: BaseAdapter, connection: Any
-) -> None:
-    if not entries:
-        return
-    _apply_table_type_entry(entry=entries[0], adapter=adapter, connection=connection)
-    _apply_table_type_entries(entries=entries[1:], adapter=adapter, connection=connection)
-
-
-def _apply_table_type_entry(
+def apply_table_type_conversion(
     *, entry: TableTypePlanEntry, adapter: BaseAdapter, connection: Any
 ) -> None:
+    """Recover by inspection: clean a desired target or recreate and swap an undesired one."""
+
     destination: str = resolve_qualified_name_parts(
         adapter=adapter,
         database=entry.destination.database,

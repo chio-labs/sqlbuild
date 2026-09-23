@@ -43,6 +43,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
     build_schema_finding,
     build_seed_entry,
     build_source_load_entry,
+    build_table_type_entry,
     build_warning,
 )
 
@@ -1349,6 +1350,46 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 "    └── task publish_orders (MarkerProvider)",
             ),
             unexpected_fragments=("used by 3 selected Python surfaces", "parameter"),
+        ),
+        FormatPlanTestCase(
+            description="table-type conversions and warnings are capped like other sections",
+            plan_output=build_plan_output(
+                table_type_entries=tuple(
+                    build_table_type_entry(model_name=f"orders_{index:02d}") for index in range(25)
+                ),
+                warnings=tuple(
+                    build_warning(
+                        model_name=f"customers_{index:02d}",
+                        message="enforced column status type mismatch",
+                    )
+                    for index in range(25)
+                ),
+            ),
+            expected_fragments=(
+                "orders_19 desired=permanent actual=transient source=target",
+                "customers_19",
+                "Warnings (25)",
+                "... and 5 more (use --verbose to show all)",
+            ),
+            unexpected_fragments=("orders_20 ", "customers_20"),
+        ),
+        FormatPlanTestCase(
+            description="verbose output shows every table-type conversion and warning",
+            plan_output=build_plan_output(
+                table_type_entries=tuple(
+                    build_table_type_entry(model_name=f"orders_{index:02d}") for index in range(25)
+                ),
+                warnings=tuple(
+                    build_warning(
+                        model_name=f"customers_{index:02d}",
+                        message="enforced column status type mismatch",
+                    )
+                    for index in range(25)
+                ),
+            ),
+            display_options=DisplayOptions(max_entries_per_section=None),
+            expected_fragments=("orders_24 desired=permanent", "customers_24"),
+            unexpected_fragments=("use --verbose",),
         ),
     ],
     ids=lambda case: case.description,

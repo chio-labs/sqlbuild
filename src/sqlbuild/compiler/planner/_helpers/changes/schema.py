@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.models import InferredColumn
@@ -9,6 +11,8 @@ from sqlbuild.compiler.planner.models import SchemaFinding
 from sqlbuild.compiler.planner.types import SchemaChangeKind, SchemaColumnSource
 from sqlbuild.spec.contracts.main.matching_dynamic_families import matching_dynamic_families
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
+
+_CASE_FOLDING_DIALECT: str = "snowflake"
 
 
 def detect_schema_changes(
@@ -19,16 +23,28 @@ def detect_schema_changes(
     type_enforcement: bool,
     inferred_schema_complete: bool,
     dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = (),
+    dialect: str | None = None,
 ) -> tuple[SchemaFinding, ...]:
     """Compare yml and inferred columns against warehouse columns and return findings."""
 
+    if dialect == _CASE_FOLDING_DIALECT:
+        yml_columns = tuple(replace(col, name=col.name.lower()) for col in yml_columns)
+        if inferred_columns is not None:
+            inferred_columns = tuple(
+                replace(col, name=col.name.lower()) for col in inferred_columns
+            )
+        warehouse_columns = tuple(replace(col, name=col.name.lower()) for col in warehouse_columns)
     warehouse_map: dict[str, str] = {col.name: col.type for col in warehouse_columns}
     findings: list[SchemaFinding] = []
 
     seen_names: set[str] = set()
 
     if type_enforcement:
-        findings.extend(_compare_yml_columns(yml_columns=yml_columns, warehouse_map=warehouse_map))
+        findings.extend(
+            _compare_yml_columns(
+                yml_columns=yml_columns, warehouse_map=warehouse_map, dialect=dialect
+            )
+        )
         col: ColumnInfo
         for col in yml_columns:
             seen_names.add(col.name)
@@ -39,6 +55,7 @@ def detect_schema_changes(
                     inferred_columns=inferred_columns,
                     warehouse_map=warehouse_map,
                     seen_names=seen_names,
+                    dialect=dialect,
                 )
             )
             inferred_col: InferredColumn
@@ -51,6 +68,7 @@ def detect_schema_changes(
                     inferred_columns=inferred_columns,
                     warehouse_map=warehouse_map,
                     seen_names=seen_names,
+                    dialect=dialect,
                 )
             )
             inferred_col_ne: InferredColumn
@@ -62,6 +80,7 @@ def detect_schema_changes(
                 yml_columns=yml_columns,
                 warehouse_map=warehouse_map,
                 seen_names=seen_names,
+                dialect=dialect,
             )
         )
         col_ne: ColumnInfo
@@ -79,7 +98,7 @@ def detect_schema_changes(
             continue
         family: SchemaDynamicColumnFamily = matching[0]
         seen_names.add(column_name)
-        if not types_equal(left=family.type, right=column_type, dialect=None):
+        if not types_equal(left=family.type, right=column_type, dialect=dialect):
             findings.append(
                 SchemaFinding(
                     kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
@@ -113,6 +132,7 @@ def _compare_yml_columns(
     *,
     yml_columns: tuple[ColumnInfo, ...],
     warehouse_map: dict[str, str],
+    dialect: str | None,
 ) -> list[SchemaFinding]:
     """Compare yml-declared columns against warehouse state."""
 
@@ -128,7 +148,7 @@ def _compare_yml_columns(
                     expected_type=col.type,
                 )
             )
-        elif not types_equal(left=warehouse_map[col.name], right=col.type, dialect=None):
+        elif not types_equal(left=warehouse_map[col.name], right=col.type, dialect=dialect):
             findings.append(
                 SchemaFinding(
                     kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
@@ -146,6 +166,7 @@ def _compare_yml_columns_non_enforced(
     yml_columns: tuple[ColumnInfo, ...],
     warehouse_map: dict[str, str],
     seen_names: set[str],
+    dialect: str | None,
 ) -> list[SchemaFinding]:
     """Compare yml columns against warehouse when type enforcement is off."""
 
@@ -163,7 +184,7 @@ def _compare_yml_columns_non_enforced(
                     expected_type=col.type,
                 )
             )
-        elif not types_equal(left=warehouse_map[col.name], right=col.type, dialect=None):
+        elif not types_equal(left=warehouse_map[col.name], right=col.type, dialect=dialect):
             findings.append(
                 SchemaFinding(
                     kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
@@ -181,6 +202,7 @@ def _compare_inferred_columns(
     inferred_columns: tuple[InferredColumn, ...],
     warehouse_map: dict[str, str],
     seen_names: set[str],
+    dialect: str | None,
 ) -> list[SchemaFinding]:
     """Compare sql_analysis-inferred columns against warehouse state, skipping yml-covered names."""
 
@@ -199,7 +221,7 @@ def _compare_inferred_columns(
                 )
             )
         elif col.type is not None and not types_equal(
-            left=warehouse_map[col.name], right=col.type, dialect=None
+            left=warehouse_map[col.name], right=col.type, dialect=dialect
         ):
             findings.append(
                 SchemaFinding(

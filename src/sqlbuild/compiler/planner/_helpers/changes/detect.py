@@ -240,6 +240,7 @@ def detect_model_changes(
             dynamic_columns=(
                 model.schema_entry.dynamic_columns if model.schema_entry is not None else ()
             ),
+            dialect=snapshot.column_dialect,
         )
         if schema_findings:
             raw_policy = get_config_str(values=model.config.values, key="replay_on_change")

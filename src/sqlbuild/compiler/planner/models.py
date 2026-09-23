@@ -659,6 +659,7 @@ class WarehouseSnapshot:
     fingerprints: WarehouseFingerprints = field(default_factory=WarehouseFingerprints)
     cursor_snapshots: dict[str, ModelCursorSnapshot] = field(default_factory=dict)
     source_freshness_state_schemas: frozenset[str] = field(default_factory=frozenset)
+    column_dialect: str | None = None
 
 
 @dataclass(frozen=True)

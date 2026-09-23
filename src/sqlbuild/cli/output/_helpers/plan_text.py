@@ -90,10 +90,14 @@ _SCHEMA_CHANGE_SYMBOLS: dict[SchemaChangeKind, str] = {
 }
 
 
-def _format_retention(*, lines: list[str], plan: PlanOutput) -> list[str]:
+def _format_retention(
+    *, lines: list[str], plan: PlanOutput, display_options: DisplayOptions
+) -> list[str]:
     if plan.table_type_entries:
         lines.append("Table type conversions")
-        for table_type_entry in plan.table_type_entries:
+        for table_type_entry in visible_entries(
+            entries=plan.table_type_entries, options=display_options
+        ):
             actual_type: str = table_type_entry.actual_type or "unknown"
             lines.append(
                 f"  {table_type_entry.model_name} desired={table_type_entry.desired_type} "
@@ -101,6 +105,15 @@ def _format_retention(*, lines: list[str], plan: PlanOutput) -> list[str]:
             )
             if table_type_entry.irreversible_warning is not None:
                 lines.append(f"    WARNING: {table_type_entry.irreversible_warning}")
+        lines = append_overflow_line(
+            lines=lines,
+            total_count=len(plan.table_type_entries),
+            visible_count=len(
+                visible_entries(entries=plan.table_type_entries, options=display_options)
+            ),
+            indent="  ",
+            options=display_options,
+        )
     if plan.retention_entries:
         lines.append("Retention")
     for entry in plan.retention_entries:
@@ -159,8 +172,9 @@ def format_plan(
             lines=lines,
             plan=plan,
             include_direct_freshness_diagnostics=(include_direct_freshness_diagnostics),
+            display_options=resolved_display_options,
         )
-        lines = _format_retention(lines=lines, plan=plan)
+        lines = _format_retention(lines=lines, plan=plan, display_options=resolved_display_options)
         result: str = "\n".join(lines)
         return result if use_color else _strip_ansi(result)
 
@@ -211,7 +225,7 @@ def format_plan(
         display_options=resolved_display_options,
         skipped_header_style=style.muted,
     )
-    lines = _format_retention(lines=lines, plan=plan)
+    lines = _format_retention(lines=lines, plan=plan, display_options=resolved_display_options)
 
     lines = _format_python_plan_entries(
         lines=lines,
@@ -329,6 +343,7 @@ def format_plan(
         lines=lines,
         plan=plan,
         include_direct_freshness_diagnostics=include_direct_freshness_diagnostics,
+        display_options=resolved_display_options,
     )
 
     output: str = "\n".join(lines)
@@ -1420,6 +1435,7 @@ def _format_warnings(
     lines: list[str],
     plan: PlanOutput,
     include_direct_freshness_diagnostics: bool,
+    display_options: DisplayOptions,
 ) -> list[str]:
     """Append the warnings section."""
 
@@ -1443,10 +1459,13 @@ def _format_warnings(
     style: CliStyle = CliStyle(use_color=True)
     lines.append("")
     lines.append(style.warning_strong(f"Warnings ({len(warning_entries)})"))
+    shown_warnings: Sequence[PlanWarning] = visible_entries(
+        entries=warning_entries, options=display_options
+    )
     warning: PlanWarning
     warning_index: int
-    for warning_index, warning in enumerate(warning_entries):
-        connector: str = tree_connector(style=style, last=warning_index == len(warning_entries) - 1)
+    for warning_index, warning in enumerate(shown_warnings):
+        connector: str = tree_connector(style=style, last=warning_index == len(shown_warnings) - 1)
         message_lines: list[str] = warning.message.split("\n")
         if warning.model_name is not None:
             lines.append(f"{connector} {style.object_name(warning.model_name)}")
@@ -1462,7 +1481,13 @@ def _format_warnings(
             continuation: str
             for continuation in message_lines[1:]:
                 lines.append(f"    {style.warning(continuation)}")
-    return lines
+    return append_overflow_line(
+        lines=lines,
+        total_count=len(warning_entries),
+        visible_count=len(shown_warnings),
+        indent="  ",
+        options=display_options,
+    )
 
 
 def _format_virtual_metadata(

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.contract.types import RetentionChangePhase
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.compiler.planner.types import RetentionPlanPhase
+from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, RetentionPlanPhase
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.scheduling.types import ExecutionStatus
@@ -156,3 +156,12 @@ class BatchSummaryTestCase:
     batch_size: str | None = None
     expected_absent_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_none: bool = False
+
+
+@dataclass(frozen=True)
+class MaterializationRecreatesRelationTestCase:
+    description: str
+    materialization_type: MaterializationType
+    action: PlanAction
+    incremental_mode: str | None
+    expected_recreates: bool

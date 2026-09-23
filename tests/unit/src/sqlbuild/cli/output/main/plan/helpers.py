@@ -23,6 +23,7 @@ from sqlbuild.compiler.planner.models import (
     SchemaFinding,
     SeedPlanEntry,
     SourceLoadPlanEntry,
+    TableTypePlanEntry,
 )
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
@@ -130,6 +131,7 @@ def build_plan_output(
     warnings: tuple[PlanWarning, ...] = (),
     provider_usages: tuple[PlanProviderUsage, ...] = (),
     metadata: dict[str, object] | None = None,
+    table_type_entries: tuple[TableTypePlanEntry, ...] = (),
 ) -> PlanOutput:
     """Build a minimal PlanOutput for formatter tests."""
 
@@ -146,6 +148,27 @@ def build_plan_output(
         warnings=warnings,
         provider_usages=provider_usages,
         metadata=metadata or {},
+        table_type_entries=table_type_entries,
+    )
+
+
+def build_table_type_entry(*, model_name: str) -> TableTypePlanEntry:
+    """Build one permanent-desired Snowflake table-type entry for formatter tests."""
+
+    return TableTypePlanEntry(
+        model_name=model_name,
+        destination=CompiledRelationLocation(
+            database="analytics",
+            schema="marts",
+            name=model_name,
+            qualified_name=f"analytics.marts.{model_name}",
+        ),
+        copy_name=f"{model_name}__sqlbuild_table_type",
+        desired_type="permanent",
+        actual_type="transient",
+        source="target",
+        downgrade=False,
+        downgrade_policy="warn",
     )
 
 

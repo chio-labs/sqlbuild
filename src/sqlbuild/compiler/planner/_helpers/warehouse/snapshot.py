@@ -275,6 +275,7 @@ def gather_warehouse_snapshot(
         fingerprints=fingerprints,
         cursor_snapshots=cursor_snapshots,
         source_freshness_state_schemas=freshness_state_schemas,
+        column_dialect=adapter.sql_analysis_dialect(),
     )
 
 

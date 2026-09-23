@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Callable
 from pathlib import Path
 from textwrap import dedent
 from typing import Any
 
+import duckdb
+
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
-from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.planner.models import PlanOutput, TableTypePlanEntry
 from sqlbuild.executor.build.main._execute import execute_build_plan
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
@@ -430,3 +435,72 @@ def verify_warehouse_state(
             f"WHERE table_name = '{name}'" + f" AND table_schema = '{schema}'" * bool(schema)
         )
         assert cursor.fetchone() is None, f"Relation {relation} should not exist but was found"
+
+
+def drift_for_models(
+    *, model_names: tuple[str, ...]
+) -> Callable[..., tuple[TableTypePlanEntry, ...]]:
+    """Return a planner stand-in reporting permanent-desired drift for the named models."""
+
+    def plan_table_types(
+        *, runtime: Any, warehouse: Any, scope: Any
+    ) -> tuple[TableTypePlanEntry, ...]:
+        del warehouse, scope
+        models_by_name: dict[str, Any] = {model.name: model for model in runtime.project.models}
+        return tuple(
+            TableTypePlanEntry(
+                model_name=name,
+                destination=models_by_name[name].destination,
+                copy_name=f"__sqb_type_swap__{name}",
+                desired_type="permanent",
+                actual_type="transient",
+                source="target",
+                downgrade=False,
+                downgrade_policy="require_confirmation",
+            )
+            for name in model_names
+        )
+
+    return plan_table_types
+
+
+def recording_table_type_conversion(*, conversions: list[tuple[str, int]]) -> Callable[..., None]:
+    """Record each converted model with its row count at conversion time."""
+
+    def record(*, entry: TableTypePlanEntry, adapter: object, connection: Any) -> None:
+        del adapter
+        rows: list[tuple[int]] = connection.execute(
+            f"SELECT COUNT(*) FROM {entry.model_name}"
+        ).fetchall()
+        conversions.append((entry.model_name, rows[0][0]))
+
+    return record
+
+
+def failing_table_type_conversion(
+    *, conversions: list[tuple[str, int]], error: str
+) -> Callable[..., None]:
+    """Record each attempted conversion, then fail it with the given message."""
+
+    record: Callable[..., None] = recording_table_type_conversion(conversions=conversions)
+
+    def fail(*, entry: TableTypePlanEntry, adapter: object, connection: Any) -> None:
+        record(entry=entry, adapter=adapter, connection=connection)
+        raise RuntimeError(error)
+
+    return fail
+
+
+def build_project_json(*, project_dir: Path, capsys: Any) -> tuple[int, dict[str, Any]]:
+    """Run one real CLI build with JSON output."""
+
+    exit_code: int = main(["--project-dir", str(project_dir), "build", "--json"])
+    return exit_code, json.loads(capsys.readouterr().out)
+
+
+def duckdb_row_count(*, database: Path, table: str) -> int:
+    """Count rows in one table of a DuckDB project database."""
+
+    with duckdb.connect(str(database)) as connection:
+        rows: list[tuple[int]] = connection.execute(f"SELECT COUNT(*) FROM {table}").fetchall()
+    return rows[0][0]

@@ -183,3 +183,13 @@ class SnapshotHardDeleteExecutionTestCase:
     expected_initial_rows: tuple[tuple[object, ...], ...]
     expected_deleted_rows: tuple[tuple[object, ...], ...]
     expected_query: str
+
+
+@dataclass(frozen=True)
+class TableTypeRoutingTestCase:
+    description: str
+    conversion_error: str | None
+    expected_exit_code: int
+    expected_conversions: tuple[tuple[str, int], ...]
+    expected_order_rows: int
+    expected_error_fragment: str | None = None

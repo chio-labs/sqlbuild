@@ -290,6 +290,75 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types impor
             ),
             expected_findings=(),
         ),
+        DetectSchemaChangesTestCase(
+            description="snowflake type aliases match warehouse canonical types",
+            yml_columns=(
+                ColumnInfo(name="order_id", type="INTEGER"),
+                ColumnInfo(name="customer_name", type="VARCHAR"),
+                ColumnInfo(name="notes", type="TEXT"),
+                ColumnInfo(name="ordered_at", type="TIMESTAMP"),
+                ColumnInfo(name="amount", type="NUMERIC(10, 2)"),
+            ),
+            inferred_columns=None,
+            warehouse_columns=(
+                ColumnInfo(name="order_id", type="NUMBER(38,0)"),
+                ColumnInfo(name="customer_name", type="VARCHAR(16777216)"),
+                ColumnInfo(name="notes", type="VARCHAR(16777216)"),
+                ColumnInfo(name="ordered_at", type="TIMESTAMP_NTZ"),
+                ColumnInfo(name="amount", type="NUMBER(10,2)"),
+            ),
+            type_enforcement=True,
+            dialect="snowflake",
+            expected_findings=(),
+        ),
+        DetectSchemaChangesTestCase(
+            description="snowflake still reports a real varchar length change",
+            yml_columns=(ColumnInfo(name="customer_name", type="VARCHAR(20)"),),
+            inferred_columns=None,
+            warehouse_columns=(ColumnInfo(name="customer_name", type="VARCHAR(16777216)"),),
+            type_enforcement=True,
+            dialect="snowflake",
+            expected_findings=(
+                SchemaFinding(
+                    kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
+                    column_name="customer_name",
+                    source=SchemaColumnSource.YML,
+                    expected_type="VARCHAR(20)",
+                    actual_type="VARCHAR(16777216)",
+                ),
+            ),
+        ),
+        DetectSchemaChangesTestCase(
+            description="snowflake matches uppercase declared and inferred names case-insensitively",
+            yml_columns=(ColumnInfo(name="ORDER_DATE", type="DATE"),),
+            inferred_columns=(
+                InferredColumn(name="ORDER_DATE", type="DATE"),
+                InferredColumn(name="STATUS", type="VARCHAR"),
+            ),
+            warehouse_columns=(
+                ColumnInfo(name="order_date", type="DATE"),
+                ColumnInfo(name="status", type="VARCHAR(16777216)"),
+            ),
+            type_enforcement=True,
+            dialect="snowflake",
+            expected_findings=(),
+        ),
+        DetectSchemaChangesTestCase(
+            description="without a dialect aliases and name case still differ",
+            yml_columns=(ColumnInfo(name="ORDER_ID", type="INTEGER"),),
+            inferred_columns=None,
+            warehouse_columns=(ColumnInfo(name="ORDER_ID", type="NUMBER(38,0)"),),
+            type_enforcement=True,
+            expected_findings=(
+                SchemaFinding(
+                    kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
+                    column_name="ORDER_ID",
+                    source=SchemaColumnSource.YML,
+                    expected_type="INTEGER",
+                    actual_type="NUMBER(38,0)",
+                ),
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -303,6 +372,7 @@ def test_given_columns_when_detecting_schema_changes_then_returns_expected_findi
         type_enforcement=test_case.type_enforcement,
         inferred_schema_complete=test_case.inferred_schema_complete,
         dynamic_columns=test_case.dynamic_columns,
+        dialect=test_case.dialect,
     )
 
     assert result == test_case.expected_findings

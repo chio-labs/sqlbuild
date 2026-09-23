@@ -57,6 +57,7 @@ class DetectSchemaChangesTestCase:
     expected_findings: tuple[SchemaFinding, ...]
     inferred_schema_complete: bool = True
     dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = ()
+    dialect: str | None = None
 
 
 @dataclass(frozen=True)
