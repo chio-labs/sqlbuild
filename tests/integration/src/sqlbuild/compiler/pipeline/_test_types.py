@@ -231,3 +231,21 @@ class SetOperationTypeIntegrationTestCase:
 class SetOperationLineageIntegrationTestCase:
     description: str
     expected_sources: frozenset[tuple[str, str]]
+
+
+@dataclass(frozen=True)
+class ReshapedStarIntegrationTestCase:
+    """One PIVOT or UNPIVOT star query whose compiled columns must match DuckDB."""
+
+    description: str
+    query_sql: str
+    expected_columns: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ReshapedStarLineageIntegrationTestCase:
+    """One PIVOT star query with the expected upstream columns of each output."""
+
+    description: str
+    query_sql: str
+    expected_sources: tuple[frozenset[tuple[str, str]], ...]
