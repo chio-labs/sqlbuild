@@ -11,7 +11,14 @@ from sqlbuild.compiler.discovery._helpers.yml.project import (
 )
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.runtime.event_exporting.types import LifecycleEventKind
-from sqlbuild.spec.contracts.models import ExecutionLimitsConfig, LocalConfig, ProjectConfig
+from sqlbuild.spec.contracts.models import (
+    AuthoredTimeTravelRetention,
+    ExecutionLimitsConfig,
+    LocalConfig,
+    ProjectConfig,
+    TargetConfig,
+)
+from sqlbuild.spec.contracts.types import RetentionDecreasePolicy
 from sqlbuild.sql_values.types import CollectionRendering
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ColumnContractModeConfigErrorTestCase,
@@ -31,6 +38,8 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     LoadProjectCostConfigTestCase,
     LoadRetentionConfigErrorTestCase,
     LoadRetentionConfigTestCase,
+    LoadTargetRetentionPoliciesErrorTestCase,
+    LoadTargetRetentionPoliciesTestCase,
     MicrobatchLimitConfigErrorTestCase,
     MicrobatchLimitConfigTestCase,
     StartCursorConfigTestCase,
@@ -504,6 +513,86 @@ def test_given_retention_config_when_loading_project_then_policies_are_typed(
     assert (
         config.targets["prod"].time_travel_retention.desired_days == test_case.expected_target_days
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadTargetRetentionPoliciesTestCase(
+            description="string retention is a target-wide default and decreases are denied",
+            target_lines=('time_travel_retention = "30d"',),
+            expected_default=AuthoredTimeTravelRetention(desired_days=30),
+            expected_by_materialization={},
+            expected_decrease_policy=RetentionDecreasePolicy.DENY,
+        ),
+        LoadTargetRetentionPoliciesTestCase(
+            description="retention table sets per-materialization values",
+            target_lines=(
+                'time_travel_retention = { table = "90d", snapshot = "365d" }',
+                'time_travel_retention_decrease = "require_confirmation"',
+            ),
+            expected_default=None,
+            expected_by_materialization={
+                "table": AuthoredTimeTravelRetention(desired_days=90),
+                "snapshot": AuthoredTimeTravelRetention(desired_days=365),
+            },
+            expected_decrease_policy=RetentionDecreasePolicy.REQUIRE_CONFIRMATION,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_target_retention_policies_when_loading_project_then_they_are_typed(
+    test_case: LoadTargetRetentionPoliciesTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        "\n".join(
+            ('name = "demo"', 'adapter = "snowflake"', "[targets.prod]", *test_case.target_lines)
+        ),
+        encoding="utf-8",
+    )
+
+    target: TargetConfig = load_project_config(project_dir=tmp_path).targets["prod"]
+
+    assert target.time_travel_retention == test_case.expected_default
+    assert target.time_travel_retention_by_materialization == test_case.expected_by_materialization
+    assert target.time_travel_retention_decrease is test_case.expected_decrease_policy
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LoadTargetRetentionPoliciesErrorTestCase(
+            description="retention table rejects non-table materializations",
+            target_lines=('time_travel_retention = { view = "7d" }',),
+            expected_error_fragment="view",
+        ),
+        LoadTargetRetentionPoliciesErrorTestCase(
+            description="retention table values must be whole days",
+            target_lines=('time_travel_retention = { table = "12h" }',),
+            expected_error_fragment="targets.prod.time_travel_retention.table",
+        ),
+        LoadTargetRetentionPoliciesErrorTestCase(
+            description="decrease policy must be a known value",
+            target_lines=('time_travel_retention_decrease = "sometimes"',),
+            expected_error_fragment="'deny', 'require_confirmation', or 'allow'",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_target_retention_policies_when_loading_project_then_config_error_is_raised(
+    test_case: LoadTargetRetentionPoliciesErrorTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        "\n".join(
+            ('name = "demo"', 'adapter = "snowflake"', "[targets.prod]", *test_case.target_lines)
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProjectConfigError, match=test_case.expected_error_fragment):
+        load_project_config(project_dir=tmp_path)
 
 
 @pytest.mark.parametrize(

@@ -49,9 +49,13 @@ def prepare_clone_destination(
 def finish_clone(
     *, results: list[CloneItemResult], inputs: CloneExecutionInput
 ) -> CloneExecutionResult:
-    """Apply namespace decreases only after every clone item succeeds."""
+    """Apply permitted namespace decreases only after every clone item succeeds."""
 
-    if results and all(result.status == CloneStatus.SUCCESS for result in results):
+    if (
+        inputs.allow_namespace_retention_decrease
+        and results
+        and all(result.status == CloneStatus.SUCCESS for result in results)
+    ):
         _ = apply_clone_namespace_retention_phase(
             requests=inputs.destination_retention_requests,
             adapter=inputs.adapter,

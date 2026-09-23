@@ -58,6 +58,7 @@ def format_plan_json(
             "phase": entry.phase.value,
             "statements": entry.statements,
             "irreversible_warning": entry.irreversible_warning,
+            "decrease_policy": entry.decrease_policy,
         }
         for entry in plan.retention_entries
     ]

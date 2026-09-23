@@ -954,6 +954,13 @@ class RetentionPlanEntry:
     phase: RetentionPlanPhase
     statements: tuple[str, ...] = field(default_factory=tuple)
     irreversible_warning: str | None = None
+    decrease_policy: str = "deny"
+
+    @property
+    def decreases(self) -> bool:
+        """Whether this entry lowers any live retention value."""
+
+        return self.direction in (RetentionDirection.DECREASE, RetentionDirection.MIXED)
 
 
 @dataclass(frozen=True)

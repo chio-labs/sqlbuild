@@ -44,6 +44,7 @@ from sqlbuild.executor.clone.types import CloneFingerprintProgressReporter, Clon
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.models import SourceEntry
+from sqlbuild.spec.contracts.types import RetentionDecreasePolicy
 
 
 def execute_clone_plan(
@@ -101,6 +102,14 @@ def execute_clone_plan(
                         local_config=invocation.discovered_inputs.local_config,
                         target_name=invocation.destination_target_name,
                     ).owns_time_travel_retention_namespace,
+                ),
+                allow_namespace_retention_decrease=(
+                    resolve_target_config(
+                        project_config=invocation.discovered_inputs.project_config,
+                        local_config=invocation.discovered_inputs.local_config,
+                        target_name=invocation.destination_target_name,
+                    ).time_travel_retention_decrease
+                    == RetentionDecreasePolicy.ALLOW
                 ),
                 on_item=on_item,
             )

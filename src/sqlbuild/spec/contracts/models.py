@@ -14,6 +14,7 @@ from sqlbuild.spec.contracts.types import (
     EventExportSeverity,
     FutureCursorAction,
     MicrobatchLimitAction,
+    RetentionDecreasePolicy,
     SourceFreshnessStrategy,
     SourceFreshnessValueKind,
     SourceWriteStrategy,
@@ -139,9 +140,13 @@ class TargetConfig:
     state: StateConfig = field(default_factory=StateConfig)
     compile_cache: bool | None = None
     time_travel_retention: AuthoredTimeTravelRetention | None = None
+    time_travel_retention_by_materialization: dict[str, AuthoredTimeTravelRetention] = field(
+        default_factory=dict
+    )
     owns_time_travel_retention_namespace: bool = False
     default_table_type: TableType | None = None
     table_type_downgrade: TableTypeDowngradePolicy = TableTypeDowngradePolicy.REQUIRE_CONFIRMATION
+    time_travel_retention_decrease: RetentionDecreasePolicy = RetentionDecreasePolicy.DENY
     execution_limits: ExecutionLimitsConfig = field(default_factory=ExecutionLimitsConfig)
 
 
@@ -162,9 +167,11 @@ class LocalTargetConfig:
     state: LocalStateConfig = field(default_factory=LocalStateConfig)
     compile_cache: bool | None = None
     time_travel_retention: AuthoredTimeTravelRetention | None = None
+    time_travel_retention_by_materialization: dict[str, AuthoredTimeTravelRetention] | None = None
     owns_time_travel_retention_namespace: bool | None = None
     default_table_type: TableType | None = None
     table_type_downgrade: TableTypeDowngradePolicy | None = None
+    time_travel_retention_decrease: RetentionDecreasePolicy | None = None
     execution_limits: ExecutionLimitsConfig = field(default_factory=ExecutionLimitsConfig)
 
 

@@ -39,3 +39,10 @@ class CloneRetentionSelectionTestCase:
     description: str
     selected_model_names: frozenset[str]
     expected_request_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CloneNamespaceDecreasePolicyTestCase:
+    description: str
+    allow_namespace_retention_decrease: bool
+    expected_statements: tuple[str, ...]

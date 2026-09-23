@@ -2,10 +2,22 @@
 
 from pathlib import Path
 
+from sqlbuild.adapter.contract.models import RetentionRequest
+from sqlbuild.adapter.contract.types import RetentionScope
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner.models import ModelPlanEntry, TableTypePlanEntry
-from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
+from sqlbuild.compiler.planner.models import (
+    ModelPlanEntry,
+    RetentionPlanEntry,
+    TableTypePlanEntry,
+)
+from sqlbuild.compiler.planner.types import (
+    MaterializationType,
+    PlanAction,
+    PlanReason,
+    RetentionDirection,
+    RetentionPlanPhase,
+)
 
 
 def build_snapshot_full_refresh_entry(
@@ -57,4 +69,30 @@ def build_table_type_entry(
         source="model",
         downgrade=downgrade,
         downgrade_policy=policy,
+    )
+
+
+def build_retention_entry(
+    *,
+    name: str = "orders",
+    direction: RetentionDirection = RetentionDirection.DECREASE,
+    policy: str = "deny",
+) -> RetentionPlanEntry:
+    return RetentionPlanEntry(
+        request=RetentionRequest(
+            request_id=name,
+            scope=RetentionScope.RELATION,
+            database=None,
+            schema="main",
+            name=name,
+            desired_days=7,
+        ),
+        model_names=(name,),
+        actual_days=90,
+        effective_days=90,
+        source="target",
+        direction=direction,
+        phase=RetentionPlanPhase.POST,
+        statements=("SELECT 1",),
+        decrease_policy=policy,
     )

@@ -577,3 +577,19 @@ class TargetRetentionViewsTestCase:
     view_header: str
     expected_exit_code: int
     expected_fragment: str
+
+
+@dataclass(frozen=True)
+class RetentionDecreasePolicyTestCase:
+    description: str
+    target_lines: tuple[str, ...]
+    build_flags: tuple[str, ...]
+    expected_exit_code: int
+    expected_fragment: str
+
+
+@dataclass(frozen=True)
+class TargetMaterializationRetentionTestCase:
+    description: str
+    target_lines: tuple[str, ...]
+    expected_requested_days: frozenset[int]

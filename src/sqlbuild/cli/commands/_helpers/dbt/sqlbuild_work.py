@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands._helpers.build_planning.retention_decrease import (
+    enforce_retention_decrease_policy,
+)
 from sqlbuild.cli.commands.classes.build_progress_callbacks import (
     BuildProgressCallbacks,
     format_build_footer,
@@ -46,6 +50,12 @@ def execute_sqlbuild_build_work(
     adapter_name: str = context.adapter_name
     output_stream: TextIO = context.output_stream
     use_color: bool = context.use_color
+    enforce_retention_decrease_policy(
+        plan=plan_output,
+        allow_retention_decrease=False,
+        input_stream=sys.stdin,
+        output_stream=output_stream,
+    )
     callbacks: BuildProgressCallbacks = BuildProgressCallbacks(
         plan=plan_output, use_color=use_color, verbose=verbose, debug=False
     )

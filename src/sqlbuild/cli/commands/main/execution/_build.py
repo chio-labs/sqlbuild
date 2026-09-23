@@ -34,6 +34,9 @@ from sqlbuild.cli.commands._helpers.build_planning.full_refresh import (
 )
 from sqlbuild.cli.commands._helpers.build_planning.invocation import resolve_build_invocation
 from sqlbuild.cli.commands._helpers.build_planning.planning import compile_build_plan
+from sqlbuild.cli.commands._helpers.build_planning.retention_decrease import (
+    enforce_retention_decrease_policy,
+)
 from sqlbuild.cli.commands._helpers.build_planning.table_type import (
     enforce_table_type_downgrade_policy,
 )
@@ -129,6 +132,7 @@ def _run_build(
                     fail_fast=request.fail_fast,
                     allow_snapshot_full_refresh=request.allow_snapshot_full_refresh,
                     allow_table_type_downgrade=request.allow_table_type_downgrade,
+                    allow_retention_decrease=request.allow_retention_decrease,
                     allow_snapshot_schema_change=request.allow_snapshot_schema_change,
                     concurrency=request.concurrency,
                     verbose=request.verbose,
@@ -174,6 +178,12 @@ def _run_build(
         enforce_table_type_downgrade_policy(
             plan=pipeline_result.plan_output,
             allow_table_type_downgrade=request.allow_table_type_downgrade,
+            input_stream=sys.stdin,
+            output_stream=sys.stdout,
+        )
+        enforce_retention_decrease_policy(
+            plan=pipeline_result.plan_output,
+            allow_retention_decrease=request.allow_retention_decrease,
             input_stream=sys.stdin,
             output_stream=sys.stdout,
         )

@@ -222,8 +222,32 @@ def test_given_project_and_local_state_config_when_resolving_then_local_override
                 }
             ),
             target_name="dev",
-            expected_desired_days=2,
-        )
+            expected_default=AuthoredTimeTravelRetention(desired_days=2),
+        ),
+        TargetRetentionResolutionTestCase(
+            description="local retention table replaces project target default",
+            project_config=ProjectConfig(
+                name="demo",
+                adapter="snowflake",
+                targets={
+                    "dev": TargetConfig(
+                        time_travel_retention=AuthoredTimeTravelRetention(desired_days=7)
+                    )
+                },
+            ),
+            local_config=LocalConfig(
+                targets={
+                    "dev": LocalTargetConfig(
+                        time_travel_retention_by_materialization={
+                            "table": AuthoredTimeTravelRetention(desired_days=1)
+                        }
+                    )
+                }
+            ),
+            target_name="dev",
+            expected_default=None,
+            expected_by_materialization={"table": AuthoredTimeTravelRetention(desired_days=1)},
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -236,8 +260,11 @@ def test_given_local_target_retention_when_resolving_then_it_overrides_project_t
         target_name=test_case.target_name,
     )
 
-    assert target_config.time_travel_retention is not None
-    assert target_config.time_travel_retention.desired_days == test_case.expected_desired_days
+    assert target_config.time_travel_retention == test_case.expected_default
+    assert (
+        target_config.time_travel_retention_by_materialization
+        == test_case.expected_by_materialization
+    )
 
 
 @pytest.mark.parametrize(

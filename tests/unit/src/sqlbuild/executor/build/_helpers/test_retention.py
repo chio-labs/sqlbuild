@@ -32,11 +32,13 @@ from sqlbuild.executor.build._helpers.retention import (
     apply_table_type_conversion,
     materialization_recreates_relation,
     reconcile_model_retention,
+    reconcile_retention_after_build,
 )
 from sqlbuild.observability import EventDispatcher, LifecycleEvent, dispatcher_scope
 from tests.unit.src.sqlbuild.executor.build._helpers._test_types import (
     BuildModelRetentionReconciliationTestCase,
     BuildRetentionPhaseTestCase,
+    FinalRetentionReconciliationTestCase,
     LifecycleProgressTestCase,
     MaterializationRecreatesRelationTestCase,
     TableTypeConversionErrorTestCase,
@@ -205,6 +207,92 @@ def test_given_successful_model_when_reconciling_retention_then_defers_decreases
         connection=connection,
         model_name="orders",
     )
+
+    assert adapter.execute.call_args_list == [
+        call(connection=connection, sql=statement) for statement in test_case.expected_statements
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FinalRetentionReconciliationTestCase(
+            description="gated planned decrease is applied",
+            planned_direction=RetentionDirection.DECREASE,
+            desired_days=7,
+            live_days=30,
+            expected_statements=("ALTER RETENTION",),
+        ),
+        FinalRetentionReconciliationTestCase(
+            description="new relation is lowered to its desired retention",
+            planned_direction=RetentionDirection.APPLY_AFTER_CREATE,
+            desired_days=7,
+            live_days=30,
+            expected_statements=("ALTER RETENTION",),
+        ),
+        FinalRetentionReconciliationTestCase(
+            description="retention raised after planning an increase is never lowered",
+            planned_direction=RetentionDirection.INCREASE,
+            desired_days=7,
+            live_days=30,
+            expected_statements=(),
+        ),
+        FinalRetentionReconciliationTestCase(
+            description="recreated table is lowered from its inherited default",
+            planned_direction=RetentionDirection.INCREASE,
+            desired_days=7,
+            live_days=30,
+            expected_statements=("ALTER RETENTION",),
+            model_action=PlanAction.CREATE_TABLE,
+        ),
+        FinalRetentionReconciliationTestCase(
+            description="planned increase still converges upward",
+            planned_direction=RetentionDirection.INCREASE,
+            desired_days=7,
+            live_days=1,
+            expected_statements=("ALTER RETENTION",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_live_retention_after_build_when_reconciling_then_only_gated_decreases_lower_it(
+    test_case: FinalRetentionReconciliationTestCase,
+) -> None:
+    request: RetentionRequest = RetentionRequest(
+        request_id="orders",
+        scope=RetentionScope.RELATION,
+        database=None,
+        schema="analytics",
+        name="orders",
+        desired_days=test_case.desired_days,
+    )
+    plan: PlanOutput = PlanOutput(
+        retention_entries=(
+            RetentionPlanEntry(
+                request=request,
+                model_names=("orders",),
+                actual_days=None,
+                effective_days=None,
+                source="target",
+                direction=test_case.planned_direction,
+                phase=RetentionPlanPhase.POST,
+            ),
+        ),
+        model_entries=(build_model_plan_entry(name="orders", action=test_case.model_action),),
+    )
+    adapter: Mock = Mock()
+    adapter.inspect_retention.return_value = RetentionState(
+        request_id="orders",
+        scope=RetentionScope.RELATION,
+        configured_days=test_case.live_days,
+        effective_days=test_case.live_days,
+    )
+    adapter.render_retention_changes.return_value = (
+        RenderedRetentionChange(phase=RetentionChangePhase.ALTER, statements=("ALTER RETENTION",)),
+    )
+    connection: object = object()
+
+    reconcile_retention_after_build(plan=plan, adapter=adapter, connection=connection)
 
     assert adapter.execute.call_args_list == [
         call(connection=connection, sql=statement) for statement in test_case.expected_statements

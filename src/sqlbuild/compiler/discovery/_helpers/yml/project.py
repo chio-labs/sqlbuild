@@ -79,6 +79,7 @@ from sqlbuild.spec.contracts.types import (
     EventExportSeverity,
     FutureCursorAction,
     MicrobatchLimitAction,
+    RetentionDecreasePolicy,
     TableType,
     TableTypeDowngradePolicy,
     TableTypeValue,
@@ -987,6 +988,63 @@ def _optional_table_type_downgrade_policy(
         ) from exc
 
 
+def _optional_target_retention_default(
+    *, mapping: dict[str, object], target_name: str, file_path: Path
+) -> AuthoredTimeTravelRetention | None:
+    if isinstance(mapping.get("time_travel_retention"), dict):
+        return None
+    return _optional_retention_policy(
+        mapping=mapping,
+        key="time_travel_retention",
+        label=f"targets.{target_name}.time_travel_retention",
+        file_path=file_path,
+    )
+
+
+def _target_retention_by_materialization(
+    *, mapping: dict[str, object], target_name: str, file_path: Path
+) -> dict[str, AuthoredTimeTravelRetention]:
+    payload: object | None = mapping.get("time_travel_retention")
+    if not isinstance(payload, dict):
+        return {}
+    label: str = f"targets.{target_name}.time_travel_retention"
+    retention_mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label=label, file_path=file_path
+    )
+    _validate_allowed_keys(
+        mapping=retention_mapping,
+        allowed_keys=frozenset(TIME_TRAVEL_RETENTION_MATERIALIZATIONS),
+        label=label,
+        file_path=file_path,
+    )
+    loaded: dict[str, AuthoredTimeTravelRetention] = {}
+    for materialization in TIME_TRAVEL_RETENTION_MATERIALIZATIONS:
+        policy: AuthoredTimeTravelRetention | None = _optional_retention_policy(
+            mapping=retention_mapping,
+            key=materialization,
+            label=f"{label}.{materialization}",
+            file_path=file_path,
+        )
+        if policy is not None:
+            loaded[materialization] = policy
+    return loaded
+
+
+def _optional_retention_decrease_policy(
+    *, mapping: dict[str, object], target_name: str, file_path: Path
+) -> RetentionDecreasePolicy | None:
+    value: object | None = mapping.get("time_travel_retention_decrease")
+    if value is None:
+        return None
+    try:
+        return RetentionDecreasePolicy(value)
+    except (TypeError, ValueError) as exc:
+        raise ProjectConfigError(
+            f"{file_path} targets.{target_name}.time_travel_retention_decrease must be "
+            "'deny', 'require_confirmation', or 'allow'"
+        ) from exc
+
+
 def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig]:
     mapping: dict[str, object] = _coerce_mapping(
         payload=payload, label="targets", file_path=file_path
@@ -1038,11 +1096,11 @@ def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig
             defer_clone_from=_optional_str(payload=target_mapping, key="defer_clone_from"),
             changes_only=_optional_nullable_bool(mapping=target_mapping, key="changes_only"),
             compile_cache=_optional_nullable_bool(mapping=target_mapping, key="compile_cache"),
-            time_travel_retention=_optional_retention_policy(
-                mapping=target_mapping,
-                key="time_travel_retention",
-                label=f"targets.{target_name}.time_travel_retention",
-                file_path=file_path,
+            time_travel_retention=_optional_target_retention_default(
+                mapping=target_mapping, target_name=target_name, file_path=file_path
+            ),
+            time_travel_retention_by_materialization=_target_retention_by_materialization(
+                mapping=target_mapping, target_name=target_name, file_path=file_path
             ),
             owns_time_travel_retention_namespace=_optional_bool(
                 mapping=target_mapping,
@@ -1063,6 +1121,12 @@ def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig
                     file_path=file_path,
                 )
                 or TableTypeDowngradePolicy.REQUIRE_CONFIRMATION
+            ),
+            time_travel_retention_decrease=(
+                _optional_retention_decrease_policy(
+                    mapping=target_mapping, target_name=target_name, file_path=file_path
+                )
+                or RetentionDecreasePolicy.DENY
             ),
             execution_limits=execution_limits,
             clone=ClonePolicy(
@@ -1146,11 +1210,15 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
             defer_clone_from=_optional_str(payload=target_mapping, key="defer_clone_from"),
             changes_only=_optional_nullable_bool(mapping=target_mapping, key="changes_only"),
             compile_cache=_optional_nullable_bool(mapping=target_mapping, key="compile_cache"),
-            time_travel_retention=_optional_retention_policy(
-                mapping=target_mapping,
-                key="time_travel_retention",
-                label=f"targets.{target_name}.time_travel_retention",
-                file_path=file_path,
+            time_travel_retention=_optional_target_retention_default(
+                mapping=target_mapping, target_name=target_name, file_path=file_path
+            ),
+            time_travel_retention_by_materialization=(
+                _target_retention_by_materialization(
+                    mapping=target_mapping, target_name=target_name, file_path=file_path
+                )
+                if isinstance(target_mapping.get("time_travel_retention"), dict)
+                else None
             ),
             owns_time_travel_retention_namespace=_optional_nullable_bool(
                 mapping=target_mapping,
@@ -1167,6 +1235,9 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
                 key="table_type_downgrade",
                 label=f"targets.{target_name}.table_type_downgrade",
                 file_path=file_path,
+            ),
+            time_travel_retention_decrease=_optional_retention_decrease_policy(
+                mapping=target_mapping, target_name=target_name, file_path=file_path
             ),
             execution_limits=execution_limits,
             clone=LocalClonePolicy(
@@ -1245,6 +1316,7 @@ def _validate_target_keys(
                 "owns_time_travel_retention_namespace",
                 "default_table_type",
                 "table_type_downgrade",
+                "time_travel_retention_decrease",
                 "clone",
                 "state",
                 "execution_limits",

@@ -45,6 +45,14 @@ def resolve_time_travel_retention(
         if materialization_policy is not None:
             policy = materialization_policy
             source = TimeTravelRetentionSource.MATERIALIZATION
+        target_materialization_policy: AuthoredTimeTravelRetention | None = (
+            target_config.time_travel_retention_by_materialization.get(materialized)
+            if target_config is not None
+            else None
+        )
+        if target_materialization_policy is not None:
+            policy = target_materialization_policy
+            source = TimeTravelRetentionSource.TARGET
     if model_value is not None:
         if not isinstance(model_value, str):
             raise CompileInputError(

@@ -101,3 +101,11 @@ class TableTypeDowngradePolicy(StrEnum):
     DENY = "deny"
     REQUIRE_CONFIRMATION = "require_confirmation"
     ALLOW = "allow"
+
+
+class RetentionDecreasePolicy(StrEnum):
+    """Policy for lowering live time-travel retention."""
+
+    DENY = "deny"
+    REQUIRE_CONFIRMATION = "require_confirmation"
+    ALLOW = "allow"
