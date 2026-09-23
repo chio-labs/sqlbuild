@@ -29,15 +29,16 @@ def resolve_time_travel_retention(
 ) -> ResolvedTimeTravelRetention:
     """Resolve target, materialization, and model retention precedence."""
 
+    table_backed: bool = isinstance(materialized, str) and MaterializationType.is_table_backed(
+        materialized=materialized
+    )
     policy: AuthoredTimeTravelRetention | None = (
-        target_config.time_travel_retention if target_config is not None else None
+        target_config.time_travel_retention if table_backed and target_config is not None else None
     )
     source: TimeTravelRetentionSource | None = (
         TimeTravelRetentionSource.TARGET if policy is not None else None
     )
-    if isinstance(materialized, str) and MaterializationType.is_table_backed(
-        materialized=materialized
-    ):
+    if table_backed and isinstance(materialized, str):
         materialization_policy: AuthoredTimeTravelRetention | None = getattr(
             materialization_defaults, materialized
         ).time_travel_retention
