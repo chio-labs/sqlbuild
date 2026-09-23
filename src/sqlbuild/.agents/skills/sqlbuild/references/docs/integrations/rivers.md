@@ -1,0 +1,181 @@
+<!-- generated-by: sqlbuild skills -->
+
+# Rivers
+
+> Orchestrate SQLBuild pipelines with Rivers scheduling, jobs, and asset tracking.
+
+Online: https://docs.sqlbuild.com/integrations/rivers
+
+## Contents
+
+- Install
+- Try it
+- How it works
+- Quickstart
+- SqlBuildProject
+- sqlbuild_assets
+- SqlBuildRiversTranslator
+- Running locally
+
+SQLBuild includes a Rivers integration that maps your project's models, sources, seeds, loaders, tasks, assets, and functions into Rivers assets with dependency edges preserved. SQLBuild handles the SQL transformation layer. Rivers handles scheduling, execution, and the asset-centric UI.
+
+## Install
+
+```bash
+pip install 'sqlbuild[rivers]'
+# or
+uv pip install 'sqlbuild[rivers]'
+```
+
+This installs `rivers` alongside SQLBuild.
+
+## Try it
+
+```bash
+sqb playground --template rivers
+cd sqlbuild-playground
+uv run rivers dev rivers_pipeline.definitions
+```
+
+This creates the waffle shop project with a `rivers_pipeline/definitions.py` that includes asset definitions and a configured job. Open the Rivers UI to inspect assets and trigger materializations.
+
+## How it works
+
+1. `sqb compile --dag` generates a static `sqlbuild_dag.json` artifact with your project's full graph (nodes, edges)
+2. `@sqlbuild_assets()` reads the artifact and creates one Rivers `AssetDef` per source, loader, seed, model, function, task, and asset, with dependency edges preserved
+3. The decorated function runs `sqb build` as a subprocess and yields `Materialization` events for each output
+
+## Quickstart
+
+```python
+# definitions.py
+from __future__ import annotations
+
+import subprocess
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
+
+import rivers as rs
+
+from sqlbuild.integrations.rivers import SqlBuildProject, sqlbuild_assets
+
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+SQLBUILD_PROJECT = SqlBuildProject(project_dir=PROJECT_DIR)
+SQLBUILD_PROJECT.prepare_if_dev()
+
+@sqlbuild_assets(project=SQLBUILD_PROJECT)
+def my_assets(context: Any) -> Iterator[Any]:
+    completed = subprocess.run(
+        ["sqb", "build"],
+        cwd=PROJECT_DIR,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(completed.stderr or completed.stdout)
+    for output_name in context.output_selection:
+        yield rs.Materialization(output_name=output_name)
+
+repo = rs.CodeRepository(
+    assets=[my_assets],
+    jobs=[
+        rs.Job(
+            name="sqlbuild_pipeline",
+            assets=[my_assets],
+            executor=rs.Executor.in_process(),
+        ),
+    ],
+)
+```
+
+## SqlBuildProject
+
+`SqlBuildProject` manages paths and DAG artifact generation:
+
+```python
+project = SqlBuildProject(project_dir=Path("."))
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `project_dir` | required | Path to the SQLBuild project root |
+| `target_path` | `target` | Directory for build artifacts |
+| `dag_filename` | `sqlbuild_dag.json` | DAG artifact filename |
+| `sqb_command` | `("sqb",)` | Command to invoke SQLBuild |
+| `prepare_project_cli_args` | `("compile", "--dag")` | CLI arguments for DAG generation |
+
+### Methods
+
+| Method | Description |
+|--------|-------------|
+| `prepare()` | Generate the DAG artifact by running `sqb compile --dag` |
+| `prepare_if_dev()` | Generate the DAG artifact only when `RIVERS_DEPLOYMENT=dev` |
+| `dag_path` | Property returning the full path to the DAG artifact |
+
+Use `prepare_if_dev()` so the DAG artifact is auto-generated during local development but not during production deployments where it should already exist.
+
+## sqlbuild_assets
+
+The `@sqlbuild_assets()` decorator creates a Rivers multi-asset definition from a SQLBuild DAG artifact:
+
+```python
+@sqlbuild_assets(project=project)
+def my_assets(context):
+    ...
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `project` | `SqlBuildProject` instance (generates and locates the DAG artifact) |
+| `dag` | Alternative: pass a DAG path or dict directly instead of a project |
+| `translator` | Optional `SqlBuildRiversTranslator` for custom name/tag/metadata mapping |
+| `name` | Optional asset name override |
+
+Pass either `project` or `dag`, not both.
+
+## SqlBuildRiversTranslator
+
+Override the default mapping from SQLBuild DAG nodes to Rivers asset metadata:
+
+```python
+from sqlbuild.integrations.rivers import SqlBuildRiversTranslator
+
+class CustomTranslator(SqlBuildRiversTranslator):
+    def get_group_name(self, node):
+        return "my_custom_group"
+
+    def get_tags(self, node):
+        tags = super().get_tags(node)
+        tags.append("team:analytics")
+        return tags
+
+@sqlbuild_assets(project=project, translator=CustomTranslator())
+def my_assets(context):
+    ...
+```
+
+### Translator methods
+
+| Method | Default behavior |
+|--------|-----------------|
+| `get_asset_name(node)` | Joins the asset key parts with `__` (e.g. `task__prepare_orders`, `asset__orders_export`) |
+| `get_group_name(node)` | Uses the project name |
+| `get_tags(node)` | Includes `sqlbuild/kind:<kind>` plus model tags |
+| `get_kinds(node)` | Returns `["sqlbuild", "<materialization_type>"]` |
+| `get_metadata(node)` | Includes SQLBuild name, kind, path, target, columns, etc. |
+
+## Running locally
+
+Run the pipeline directly without the Rivers UI:
+
+```bash
+uv run python rivers_pipeline/definitions.py
+```
+
+Or start the Rivers development server:
+
+```bash
+uv run rivers dev rivers_pipeline.definitions
+```

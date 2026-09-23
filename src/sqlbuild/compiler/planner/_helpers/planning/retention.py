@@ -8,6 +8,7 @@ from dataclasses import replace
 
 from sqlbuild.adapter.contract.models import (
     RelationInfo,
+    RelationLookup,
     RenderedRetentionChange,
     RetentionRequest,
     RetentionState,
@@ -188,10 +189,16 @@ def _plan_relation_retention(
                 statements=_flatten_changes(changes=changes),
             ),
         )
-    relation_is_transient: bool | None = warehouse.snapshot.existing_relations[
-        model.name
-    ].is_transient
-    state: RetentionState = runtime.adapter.inspect_retention(
+    relation: RelationInfo = warehouse.snapshot.existing_relations[model.name]
+    relation_is_transient: bool | None = relation.is_transient
+    listed_state: RetentionState | None = None
+    if relation.identity == RelationLookup.key(
+        database=model.destination.database, schema=schema, name=model.destination.name
+    ):
+        listed_state = runtime.adapter.retention_state_from_relation(
+            request=request, relation=relation
+        )
+    state: RetentionState = listed_state or runtime.adapter.inspect_retention(
         connection=runtime.connection, request=request
     )
     if (

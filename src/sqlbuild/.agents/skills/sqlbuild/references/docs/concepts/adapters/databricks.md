@@ -1,0 +1,45 @@
+<!-- generated-by: sqlbuild skills -->
+
+# Databricks
+
+> Databricks adapter configuration for SQLBuild.
+
+Online: https://docs.sqlbuild.com/concepts/adapters/databricks
+
+Databricks requires the optional `databricks-sql-connector` dependency:
+
+```bash
+pip install 'sqlbuild[databricks]'
+# or
+uv pip install 'sqlbuild[databricks]'
+```
+
+## Connection config
+
+```toml
+adapter = "databricks"
+default_target = "dev"
+
+[connections.workspace]
+server_hostname = "my-workspace.cloud.databricks.com"
+http_path = "/sql/1.0/warehouses/abc123"
+token = "dapi_my_access_token"
+
+[targets.dev]
+connection = "workspace"
+database = "my_catalog"
+schema = "my_schema"
+```
+
+| Field | Description |
+|-------|-------------|
+| `server_hostname` | Databricks workspace hostname (required) |
+| `http_path` | SQL warehouse or cluster HTTP path (required) |
+| `token` | Personal access token (required) |
+
+The target's `database` selects the Unity Catalog catalog, and its `schema` selects the schema.
+
+## Session initialization
+
+On connect, SQLBuild runs `USE CATALOG` and `USE SCHEMA` statements from the active target to set
+the authoritative session namespace.

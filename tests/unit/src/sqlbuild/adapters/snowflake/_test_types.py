@@ -177,3 +177,20 @@ class SnowflakeQualifiedColumnInspectionTestCase:
     description: str
     relation_count: int
     expected_statement_count: int
+
+
+@dataclass(frozen=True)
+class SnowflakeBatchedRetentionTestCase:
+    description: str
+    requests: tuple[tuple[str, str], ...]
+    schema_rows: tuple[list[tuple[object, ...]], ...]
+    expected_query_schemas: tuple[str, ...]
+    expected_days: dict[str, int]
+
+
+@dataclass(frozen=True)
+class SnowflakeBatchedRetentionErrorTestCase:
+    description: str
+    requests: tuple[tuple[str, str], ...]
+    rows: list[tuple[object, ...]]
+    expected_error: str

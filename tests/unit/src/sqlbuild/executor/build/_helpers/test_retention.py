@@ -36,6 +36,7 @@ from sqlbuild.executor.build._helpers.retention import (
 )
 from sqlbuild.observability import EventDispatcher, LifecycleEvent, dispatcher_scope
 from tests.unit.src.sqlbuild.executor.build._helpers._test_types import (
+    BatchedRetentionReconciliationTestCase,
     BuildModelRetentionReconciliationTestCase,
     BuildRetentionPhaseTestCase,
     FinalRetentionReconciliationTestCase,
@@ -44,7 +45,11 @@ from tests.unit.src.sqlbuild.executor.build._helpers._test_types import (
     TableTypeConversionErrorTestCase,
     TableTypeConversionTestCase,
 )
-from tests.unit.src.sqlbuild.executor.build._helpers.helpers import build_model_plan_entry
+from tests.unit.src.sqlbuild.executor.build._helpers.helpers import (
+    batched_retention_request_ids,
+    build_model_plan_entry,
+    retention_mock_adapter,
+)
 
 _TARGET: RelationInfo = RelationInfo(
     database="warehouse",
@@ -95,7 +100,7 @@ _TRANSIENT_COPY: RelationInfo = RelationInfo(
 def test_given_retention_plan_when_applying_phase_then_executes_only_ordered_phase_statements(
     test_case: BuildRetentionPhaseTestCase,
 ) -> None:
-    adapter: Mock = Mock()
+    adapter: Mock = retention_mock_adapter()
     connection: object = object()
     request: RetentionRequest = RetentionRequest(
         request_id="orders",
@@ -186,7 +191,7 @@ def test_given_successful_model_when_reconciling_retention_then_defers_decreases
             ),
         )
     )
-    adapter: Mock = Mock()
+    adapter: Mock = retention_mock_adapter()
     adapter.inspect_retention.return_value = RetentionState(
         request_id="orders",
         scope=RetentionScope.RELATION,
@@ -280,7 +285,7 @@ def test_given_live_retention_after_build_when_reconciling_then_only_gated_decre
         ),
         model_entries=(build_model_plan_entry(name="orders", action=test_case.model_action),),
     )
-    adapter: Mock = Mock()
+    adapter: Mock = retention_mock_adapter()
     adapter.inspect_retention.return_value = RetentionState(
         request_id="orders",
         scope=RetentionScope.RELATION,
@@ -348,7 +353,7 @@ def test_given_live_retention_after_build_when_reconciling_then_only_gated_decre
 def test_given_recoverable_table_type_state_when_converting_then_uses_inspection_only_recovery(
     test_case: TableTypeConversionTestCase,
 ) -> None:
-    adapter: Mock = Mock()
+    adapter: Mock = retention_mock_adapter()
     adapter.render_qualified_name.side_effect = lambda *, database, schema, name: ".".join(
         (database, schema, name)
     )
@@ -400,7 +405,7 @@ def test_given_recoverable_table_type_state_when_converting_then_uses_inspection
 def test_given_unknown_live_table_type_when_converting_then_fails_closed(
     test_case: TableTypeConversionTestCase,
 ) -> None:
-    adapter: Mock = Mock()
+    adapter: Mock = retention_mock_adapter()
     adapter.render_qualified_name.side_effect = lambda *, database, schema, name: ".".join(
         (database, schema, name)
     )
@@ -466,7 +471,7 @@ def test_given_unknown_live_table_type_when_converting_then_fails_closed(
 def test_given_unrecoverable_table_type_state_when_converting_then_fails_before_swap(
     test_case: TableTypeConversionErrorTestCase,
 ) -> None:
-    adapter: Mock = Mock()
+    adapter: Mock = retention_mock_adapter()
     adapter.render_qualified_name.side_effect = lambda *, database, schema, name: ".".join(
         (database, schema, name)
     )
@@ -511,7 +516,7 @@ def test_given_retention_inspection_when_adapter_blocks_then_start_is_already_di
     barrier_events: list[LifecycleEvent] = []
     dispatcher: EventDispatcher = EventDispatcher()
     dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
-    adapter: Mock = Mock()
+    adapter: Mock = retention_mock_adapter()
     request: RetentionRequest = RetentionRequest(
         request_id="orders",
         scope=RetentionScope.RELATION,
@@ -576,7 +581,7 @@ def test_given_table_type_conversion_when_ddl_blocks_then_start_is_already_dispa
     barrier_events: list[LifecycleEvent] = []
     dispatcher: EventDispatcher = EventDispatcher()
     dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
-    adapter: Mock = Mock()
+    adapter: Mock = retention_mock_adapter()
     adapter.render_qualified_name.side_effect = lambda *, database, schema, name: ".".join(
         (database, schema, name)
     )
@@ -663,3 +668,97 @@ def test_given_model_action_when_checking_recreation_then_matches_materializatio
 
 if __name__ == "__main__":
     pytest.main([__file__, "-vv"])
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BatchedRetentionReconciliationTestCase(
+            description="matching relations are inspected in one batch and left alone",
+            entry_request_ids=("orders", "customers", "products"),
+            live_days=7,
+            desired_days=7,
+            expected_batch_request_ids=(("orders", "customers", "products"),),
+            expected_single_inspections=(),
+            expected_statements=(),
+        ),
+        BatchedRetentionReconciliationTestCase(
+            description="a relation changed by an earlier entry is re-inspected before the next",
+            entry_request_ids=("orders", "orders", "customers"),
+            live_days=1,
+            desired_days=7,
+            expected_batch_request_ids=(("orders", "customers"),),
+            expected_single_inspections=("orders",),
+            expected_statements=("ALTER orders", "ALTER customers"),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_many_retention_entries_after_build_when_reconciling_then_inspection_is_batched(
+    test_case: BatchedRetentionReconciliationTestCase,
+) -> None:
+    requests: dict[str, RetentionRequest] = {
+        request_id: RetentionRequest(
+            request_id=request_id,
+            scope=RetentionScope.RELATION,
+            database=None,
+            schema="analytics",
+            name=request_id,
+            desired_days=test_case.desired_days,
+        )
+        for request_id in test_case.entry_request_ids
+    }
+    plan: PlanOutput = PlanOutput(
+        retention_entries=tuple(
+            RetentionPlanEntry(
+                request=requests[request_id],
+                model_names=(request_id,),
+                actual_days=test_case.live_days,
+                effective_days=test_case.live_days,
+                source="target",
+                direction=RetentionDirection.INCREASE,
+                phase=RetentionPlanPhase.PRE,
+            )
+            for request_id in test_case.entry_request_ids
+        ),
+    )
+    live: dict[str, int] = dict.fromkeys(requests, test_case.live_days)
+    adapter: Mock = Mock()
+    adapter.inspect_retentions.side_effect = lambda *, connection, requests: {
+        request.request_id: RetentionState(
+            request_id=request.request_id,
+            scope=RetentionScope.RELATION,
+            configured_days=live[request.request_id],
+            effective_days=live[request.request_id],
+        )
+        for request in requests
+    }
+    adapter.inspect_retention.side_effect = lambda *, connection, request: RetentionState(
+        request_id=request.request_id,
+        scope=RetentionScope.RELATION,
+        configured_days=live[request.request_id],
+        effective_days=live[request.request_id],
+    )
+    adapter.render_retention_changes.side_effect = lambda *, request, state: (
+        RenderedRetentionChange(
+            phase=RetentionChangePhase.ALTER, statements=(f"ALTER {request.request_id}",)
+        ),
+    )
+    adapter.execute.side_effect = lambda *, connection, sql: live.update(
+        {sql.removeprefix("ALTER "): test_case.desired_days}
+    )
+    connection: object = object()
+
+    reconcile_retention_after_build(plan=plan, adapter=adapter, connection=connection)
+
+    assert batched_retention_request_ids(adapter=adapter) == (test_case.expected_batch_request_ids)
+    assert (
+        tuple(
+            single.kwargs["request"].request_id
+            for single in adapter.inspect_retention.call_args_list
+        )
+        == test_case.expected_single_inspections
+    )
+    assert tuple(executed.kwargs["sql"] for executed in adapter.execute.call_args_list) == (
+        test_case.expected_statements
+    )

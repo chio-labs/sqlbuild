@@ -137,13 +137,84 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             raise AdapterUserError(
                 message=f"Snowflake retention metadata not found for {request.name}"
             )
-        effective_days: int = int(row[0])
-        is_transient: bool = str(row[1]).upper() == TRUE_METADATA_VALUE
+        return self._relation_retention_state(
+            request=request, retention_time=row[0], is_transient_value=row[1]
+        )
+
+    def inspect_retentions(
+        self, *, connection: Any, requests: tuple[RetentionRequest, ...]
+    ) -> dict[str, RetentionState]:
+        """Inspect relation retention with one metadata query per database and schema."""
+
+        grouped: dict[tuple[str | None, str], list[RetentionRequest]] = {}
+        for request in requests:
+            self._validate_relation_retention_request(request=request)
+            grouped.setdefault((request.database, request.schema), []).append(request)
+        states: dict[str, RetentionState] = {}
+        for (database, schema), group in grouped.items():
+            names: tuple[str, ...] = tuple(
+                dict.fromkeys(
+                    self._information_schema_identifier(str(request.name)) for request in group
+                )
+            )
+            clauses: list[str] = [
+                f"table_name IN ({', '.join(['%s'] * len(names))})",
+                "table_schema = %s",
+            ]
+            params: list[str] = [*names, self._information_schema_identifier(schema)]
+            if database is not None:
+                clauses.append("table_catalog = %s")
+                params.append(self._information_schema_identifier(database))
+            cursor: Any = connection.cursor()
+            try:
+                cursor.execute(
+                    "SELECT table_name, retention_time, is_transient FROM "
+                    + self._information_schema_relation(database=database, name="tables")
+                    + " WHERE "
+                    + " AND ".join(clauses),
+                    tuple(params),
+                )
+                rows: list[tuple[Any, ...]] = cursor.fetchall()
+            finally:
+                cursor.close()
+            rows_by_name: dict[str, tuple[Any, ...]] = {str(row[0]): row for row in rows}
+            for request in group:
+                row: tuple[Any, ...] | None = rows_by_name.get(
+                    self._information_schema_identifier(str(request.name))
+                )
+                if row is None:
+                    raise AdapterUserError(
+                        message=f"Snowflake retention metadata not found for {request.name}"
+                    )
+                states[request.request_id] = self._relation_retention_state(
+                    request=request, retention_time=row[1], is_transient_value=row[2]
+                )
+        return states
+
+    def retention_state_from_relation(
+        self, *, request: RetentionRequest, relation: RelationInfo
+    ) -> RetentionState | None:
+        if relation.retention_days is None or relation.is_transient is None:
+            return None
         return RetentionState(
             request_id=request.request_id,
             scope=request.scope,
             configured_days=None,
-            effective_days=effective_days,
+            effective_days=relation.retention_days,
+            relation_kind="TRANSIENT" if relation.is_transient else "PERMANENT",
+            is_transient=relation.is_transient,
+        )
+
+    @staticmethod
+    def _relation_retention_state(
+        *, request: RetentionRequest, retention_time: Any, is_transient_value: Any
+    ) -> RetentionState:
+        is_transient: bool = str(is_transient_value).upper() == TRUE_METADATA_VALUE
+        return RetentionState(
+            request_id=request.request_id,
+            scope=request.scope,
+            configured_days=None,
+            effective_days=int(retention_time),
             relation_kind="TRANSIENT" if is_transient else "PERMANENT",
             is_transient=is_transient,
         )
@@ -1706,7 +1777,8 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         names: tuple[str, ...] | None = None,
     ) -> tuple[Any, ...]:
         query: str = (
-            "SELECT table_name, table_schema, table_type, is_transient, created, last_altered "
+            "SELECT table_name, table_schema, table_type, is_transient, created, last_altered, "
+            "retention_time "
             f"FROM {self._information_schema_relation(database=database, name='tables')} WHERE 1=1"
         )
         params: list[str] = []
@@ -1740,6 +1812,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 ),
                 created_at=None if row[4] is None else row[4],
                 last_altered_at=None if row[5] is None else row[5],
+                retention_days=None if row[6] is None else int(row[6]),
             )
             for row in rows
         )

@@ -379,6 +379,7 @@ def test_given_lowercase_schema_when_listing_relations_then_uppercases_filter_bi
                 "YES",
                 datetime(2026, 8, 1, tzinfo=UTC),
                 datetime(2026, 8, 2, tzinfo=UTC),
+                1,
             )
         ]
     )
@@ -398,6 +399,7 @@ def test_given_lowercase_schema_when_listing_relations_then_uppercases_filter_bi
     assert len(relations) == 1
     assert relations[0].schema == "staging"
     assert relations[0].name == "commerce__stg_order"
+    assert relations[0].retention_days == 1
     assert relations[0].is_transient is True
     assert relations[0].created_at == datetime(2026, 8, 1, tzinfo=UTC)
     assert relations[0].last_altered_at == datetime(2026, 8, 2, tzinfo=UTC)

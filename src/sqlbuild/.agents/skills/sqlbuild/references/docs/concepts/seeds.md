@@ -1,0 +1,133 @@
+<!-- generated-by: sqlbuild skills -->
+
+# Seeds
+
+> Load static CSV data into your pipeline as tables.
+
+Online: https://docs.sqlbuild.com/concepts/seeds
+
+## Contents
+
+- Defining a seed
+- Referencing seeds
+- Loading seeds
+- Target overrides
+- CSV settings
+
+Seeds are CSV files under `seeds/` that SQLBuild loads as tables in the warehouse. They're useful for small, static reference data like lookup tables, category mappings, or configuration values.
+
+## Defining a seed
+
+Place a CSV file in your `seeds/` directory:
+
+```csv
+waffle_type_id,waffle_name,category,price_cents
+1,Classic Belgian,sweet,850
+2,Liege,sweet,950
+3,Brussels,sweet,750
+4,Cheddar Herb,savory,1050
+```
+
+Declare the seed's column types in any `.yml` file under `seeds/`. You can use any filename and organize declarations however you like - one file per seed, or group related seeds together:
+
+```yaml
+# seeds/lookups.yml
+seeds:
+  - name: waffle_types
+    description: Waffle menu items with pricing.
+    columns:
+      - name: waffle_type_id
+        type: INTEGER
+      - name: waffle_name
+        type: VARCHAR
+      - name: category
+        type: VARCHAR
+      - name: price_cents
+        type: INTEGER
+```
+
+Every seed must have a YAML declaration with at least one typed column. CSV filenames must be unique across the entire `seeds/` directory (including subdirectories). The seed name in the YAML must match the CSV filename (without the `.csv` extension).
+
+## Referencing seeds
+
+Seeds are referenced in models with `__seed()`:
+
+```sql
+SELECT
+  o.order_id,
+  w.waffle_name,
+  w.price_cents * o.quantity AS line_total_cents
+FROM __ref("stg_orders") o
+LEFT JOIN __seed("waffle_types") w ON o.waffle_type_id = w.waffle_type_id
+```
+
+`__seed()` is distinct from `__ref()`. Using `__ref()` with a seed name raises a compile error with a message pointing you to `__seed()`.
+
+## Loading seeds
+
+Seeds are loaded automatically during `sqb build`. You can also load them standalone:
+
+```bash
+sqb seed
+```
+
+Seeds are fully replaced on every run. If the CSV changes, the table is recreated with the new data.
+
+## Target overrides
+
+Seeds inherit the project's default database and schema. You can override these per seed:
+
+```yaml
+seeds:
+  - name: waffle_types
+    database: analytics
+    schema: lookups
+    columns:
+      - name: waffle_type_id
+        type: INTEGER
+      - name: waffle_name
+        type: VARCHAR
+```
+
+## CSV settings
+
+For non-standard CSV formats, configure parsing behavior with `csv_settings`:
+
+```yaml
+seeds:
+  - name: european_prices
+    csv_settings:
+      delimiter: ";"
+      encoding: utf-8
+      quotechar: '"'
+    columns:
+      - name: product_id
+        type: INTEGER
+      - name: price
+        type: VARCHAR
+```
+
+### Available CSV settings
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `delimiter` | string | Field delimiter (default: `,`) |
+| `quotechar` | string | Character used to quote fields (default: `"`) |
+| `doublequote` | boolean | Whether the quotechar is doubled to escape itself |
+| `escapechar` | string | Character used to escape the delimiter or quotechar |
+| `skipinitialspace` | boolean | Skip whitespace after the delimiter |
+| `lineterminator` | string | Line terminator character |
+| `encoding` | string | File encoding (default: `utf-8`) |
+| `na_values` | list or mapping | Values to treat as null - a global list or per-column mapping |
+| `keep_default_na` | boolean | Whether to use the default set of NA values in addition to `na_values` |
+
+### Per-column NA values
+
+`na_values` can be a flat list (applied to all columns) or a mapping from column names to their NA values:
+
+```yaml
+csv_settings:
+  na_values:
+    price: ["N/A", ""]
+    category: ["unknown"]
+```

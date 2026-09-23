@@ -1,0 +1,79 @@
+<!-- generated-by: sqlbuild skills -->
+
+# MotherDuck
+
+> MotherDuck adapter configuration for SQLBuild.
+
+Online: https://docs.sqlbuild.com/concepts/adapters/motherduck
+
+MotherDuck uses DuckDB's built-in `md:` connection support. No extra installation needed beyond the core DuckDB dependency.
+
+## Connection config
+
+```toml
+adapter = "motherduck"
+default_target = "dev"
+
+[connections.motherduck]
+database = "my_database"
+token = "your_motherduck_token"
+
+[targets.dev]
+connection = "motherduck"
+database = "my_database"
+schema = "dev"
+```
+
+| Field | Description |
+|-------|-------------|
+| `database` | MotherDuck database name. Automatically prefixed with `md:` if not already present. Defaults to `md:` (your default MotherDuck database). |
+| `token` | MotherDuck access token. Can also be set via environment variable. |
+
+## Authentication
+
+MotherDuck requires an access token. Generate one from the MotherDuck UI and pass it via the connection config or an environment variable:
+
+```toml
+[connections.motherduck]
+database = "my_database"
+token = "${ENV:MOTHERDUCK_TOKEN}"
+```
+
+## Shared connections across targets
+
+Use targets to separate production and development databases on MotherDuck:
+
+```toml
+adapter = "motherduck"
+
+[connections.motherduck]
+token = "${ENV:MOTHERDUCK_TOKEN}"
+database = "my_database"
+
+[targets.prod]
+connection = "motherduck"
+database = "prod_db"
+schema = "prod"
+
+[targets.dev]
+connection = "motherduck"
+database = "dev_db"
+schema = "dev"
+```
+
+## Local development with DuckDB
+
+Use `sqlbuild_local.toml` to override the adapter for local development against a plain DuckDB file:
+
+```toml
+adapter = "duckdb"
+
+[connections.local]
+database = "local_dev.duckdb"
+
+[targets.dev]
+connection = "local"
+schema = "dev"
+```
+
+This lets you develop and test locally with zero MotherDuck compute cost, then deploy to MotherDuck in production. SQLBuild's [scenario replay](../scenarios.md) also runs locally in DuckDB regardless of the production adapter.

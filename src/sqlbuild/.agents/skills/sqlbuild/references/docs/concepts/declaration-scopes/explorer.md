@@ -1,0 +1,345 @@
+<!-- generated-by: sqlbuild skills -->
+
+# Scope Explorer
+
+> Inspect visibility, explain resolution, browse declarations, and preview moves offline.
+
+Online: https://docs.sqlbuild.com/concepts/declaration-scopes/explorer
+
+## Contents
+
+- Example project
+- See available and used declarations
+- Follow composed dependencies
+- Find declarations outside the scope
+- See declarations available through expected output
+- Preview a resource move
+- Check a prospective path
+- Browse large declaration sets
+- Automation
+
+Scope Explorer answers questions about declaration visibility through `sqb scope`. It is read-only
+and offline: it never connects to the warehouse, moves files, or edits configuration.
+
+Use this page for common workflows. See the [`sqb scope` CLI reference](../../cli/scope.md) for every flag,
+filter, text section, and JSON field.
+
+## Example project
+
+The examples below use two domains with project-wide currency helpers:
+
+```text
+project/
+├── macros/
+│   └── currency.py                      add_tax, round_money
+├── models/
+│   ├── commerce/
+│   │   ├── constants/limits.sql        minimum_order_value
+│   │   ├── enums/status.sql            order_status
+│   │   ├── macros/orders.py            formatted_order_total
+│   │   ├── orders.sql
+│   │   └── returns/returns.sql
+│   └── finance/
+│       ├── enums/status.sql            finance_status
+│       ├── macros/margin.py            calculate_margin
+│       ├── finance_summary.sql
+│       └── reports/margin_report.sql
+└── tests/
+    └── unit/orders__completed_only.sql
+```
+
+`formatted_order_total` composes the project-wide functions through ordinary Python calls:
+
+```python
+from macros.currency import add_tax, round_money
+
+def formatted_order_total(expression: str) -> str:
+    return round_money(add_tax(expression))
+```
+
+`orders.sql` uses the commerce constant and macro. The returns model also uses all three commerce
+declarations, so they are correctly published throughout that domain. The two finance models use
+both finance declarations. This gives every scoped declaration a real consumer and valid placement.
+
+## See available and used declarations
+
+Start with a model, test, scenario, hook, function, audit, source, or authored resource path to
+inspect its directory-derived scope. A declaration identity instead opens its explanation. This
+excerpt of the main report sections puts actual usage beside the complete directory-derived scope:
+
+```console
+$ sqb scope model:orders
+Scope
+  Target: model:orders
+  Resource: model:orders
+  Path: models/commerce/orders.sql
+
+Used (2)
+  ├─ ● constant:minimum_order_value  [constant; descendant-public; inherited_ancestor; type integer; role models/commerce/constants]  models/commerce/constants/limits.sql:1:1
+  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:4:1
+
+Scope chain
+  ├─ exact-owner-private models/commerce (3)
+  ├─ descendant-public models (0)
+  └─ project global (2)
+
+Available (3 of 5, 2 collapsed)
+  ├─ ● constant:minimum_order_value  [constant; descendant-public; inherited_ancestor; type integer; role models/commerce/constants]  models/commerce/constants/limits.sql:1:1
+  ├─ ○ enum:order_status  [enum; descendant-public; inherited_ancestor; members 4; type VARCHAR; role models/commerce/enums]  models/commerce/enums/status.sql:1:1
+  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:4:1
+  … 2 globals collapsed; run sqb scope model:orders --globals all
+
+Diagnostics (0)
+  (none)
+Completeness: complete
+```
+
+`●` marks a declaration included in `Used`: a direct usage by default, or a followed declaration
+dependency when `--dependency-depth` is nonzero. `○` marks a declaration present in the section but
+not in `Used`.
+
+The compact labels translate to ordinary folder rules:
+
+| Output label | Meaning in this report |
+|--------------|------------------------|
+| `project` | Available throughout the project |
+| `descendant-public` | Available from a folder at or above this resource |
+| `exact-owner-private` | Available directly in this resource's owner folder only |
+| `inherited_ancestor` | Visible because an unprefixed role publishes it down the folder tree |
+| `role models/commerce/macros` | The declaration role begins at this path |
+
+In the scope chain, the first path is the resource's owner folder, followed by parent folders and
+the project declaration roles. The counts show declarations defined at each path; the chain label
+describes how SQLBuild reaches that path, not the visibility of every declaration counted there.
+Unused project-wide declarations stay collapsed by default so a large project API does not hide the
+owner-folder facts.
+
+## Follow composed dependencies
+
+`Used` is direct by default. Add `--dependency-depth` to follow declarations used by those
+declarations. The expanded `Used` section is:
+
+```console
+$ sqb scope model:orders --used-only --dependency-depth 1
+Used (4)
+  ├─ ● constant:minimum_order_value  [constant; descendant-public; inherited_ancestor; type integer; role models/commerce/constants]  models/commerce/constants/limits.sql:1:1
+  ├─ ● macro:add_tax  [macro; project; dependency; params 1; role macros]  macros/currency.py:1:1
+  ├─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:4:1
+  └─ ● macro:round_money  [macro; project; dependency; params 1; role macros]  macros/currency.py:5:1
+```
+
+SQLBuild derives these edges from actual Python calls, including nested calls and calls reached
+through private helpers. Merely importing a macro does not make it used. Increase the depth to
+follow longer chains.
+
+Explain the composed macro to see its direct dependencies, consumers, and required placement. The
+ordinary report appears first; its `Explanation` section is:
+
+```console
+$ sqb scope model:orders --explain macro:formatted_order_total
+Explanation
+  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:4:1
+     Owner: (none)
+     Owning path: models/commerce
+     Consumers: model:orders, model:returns
+     Dependencies: macro:add_tax, macro:round_money
+     Grants: (none)
+     Required scope: descendant-public
+     Required path: models/commerce
+     Promotion impact: (none)
+```
+
+### Catch placement that is too broad
+
+If `returns.sql` stopped using `formatted_order_total`, only `orders.sql` would consume it. The same
+explanation would then show that descendant-public placement is broader than necessary:
+
+```console
+Explanation
+  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:4:1
+     Owner: (none)
+     Owning path: models/commerce
+     Consumers: model:orders
+     Dependencies: macro:add_tax, macro:round_money
+     Grants: (none)
+     Required scope: exact-owner-private
+     Required path: models/commerce
+     Promotion impact: model:orders
+
+Diagnostics (1)
+  ERROR S008 models/commerce/macros/orders.py: Declaration 'macro:formatted_order_total' is currently descendant-public at 'models/commerce' (models/commerce/macros/orders.py); required exact-owner-private at 'models/commerce'. Consumers: model:orders. Move it to 'models/commerce/_sqlbuild/_macros/'
+Completeness: complete
+```
+
+This is actionable placement guidance, not only a visibility lookup.
+
+## Find declarations outside the scope
+
+Nearby discovery is useful when you know a declaration exists but not why the current resource
+cannot use it. The relevant section is:
+
+```console
+$ sqb scope model:orders --include-nearby
+Nearby unavailable (2 of 2)
+  ├─ ○ enum:finance_status  [enum; descendant-public; sibling_scope; members 3; type VARCHAR; role models/finance/enums]  models/finance/enums/status.sql:1:1
+  └─ ○ macro:calculate_margin  [macro; descendant-public; sibling_scope; params 2; role models/finance/macros]  models/finance/macros/margin.py:4:1
+```
+
+The declarations are known, but they belong to a different folder branch. Here, the inspected
+resource belongs to `models/commerce`, while the declarations belong to `models/finance`.
+`sibling_scope` is the compact output label for that situation. Ask for one complete explanation
+when you know a declaration's identity. After the ordinary report, the command adds:
+
+```console
+$ sqb scope model:orders --explain macro:calculate_margin
+Explanation
+  └─ ○ macro:calculate_margin  [macro; descendant-public; sibling_scope; params 2; role models/finance/macros]  models/finance/macros/margin.py:4:1
+     Owner: (none)
+     Owning path: models/finance
+     Consumers: model:finance_summary, model:margin_report
+     Dependencies: (none)
+     Grants: (none)
+     Required scope: descendant-public
+     Required path: models/finance
+     Promotion impact: (none)
+```
+
+An explanation distinguishes a known but inaccessible declaration from an unknown name. It also
+shows whether the declaration is placed more broadly than its real consumers require.
+
+## See declarations available through expected output
+
+Tests can use file-based macros, enums, and constants available to a model when they define that
+model's expected output. Scenarios receive the model's file-based enums and constants but not its
+macros. Neither receives declarations inside `MODEL()`. The access applies to the whole test or
+scenario and remains separate from declarations visible through its own folder tree. The relevant
+report sections are:
+
+```console
+$ sqb scope test:orders__completed_only --used-only
+Used (1)
+  └─ ● enum:order_status  [enum; descendant-public; expected_model through model:orders; members 4; type VARCHAR; role models/commerce/enums]  models/commerce/enums/status.sql:1:1
+
+Relationship grants (1 of 1)
+  └─ ● enum:order_status  [enum; descendant-public; expected_model through model:orders; members 4; type VARCHAR; role models/commerce/enums]  models/commerce/enums/status.sql:1:1
+```
+
+The compact reason `expected_model through model:orders` means **available through expected output
+for model `orders`**. With multiple expected models, SQLBuild combines their eligible file-based
+declarations into one deterministic set. Tests include macros in that union; scenarios include only
+enums and constants. Neither receives declarations defined inside a model's `MODEL()` header.
+
+Macro-mode tests also report `tested_macro through macro:<name>` relationships. Those grants contain
+the tested macro and scoped file-based declarations available from its production owner.
+
+## Preview a resource move
+
+Use `--as-path` to see the scope delta before moving an existing model, test, hook, or function. The
+ordinary report is followed by:
+
+```console
+$ sqb scope model:orders --as-path models/finance/orders.sql
+Move preview
+  Resource: model:orders
+  Destination: models/finance/orders.sql
+  Ownership root: models
+  Retained (2)
+    ├─ ○ macro:add_tax  [macro; project; global; params 1; role macros]  macros/currency.py:1:1
+    └─ ○ macro:round_money  [macro; project; global; params 1; role macros]  macros/currency.py:5:1
+  Gained (2)
+    ├─ ○ enum:finance_status  [enum; descendant-public; inherited_ancestor; members 3; type VARCHAR; role models/finance/enums]  models/finance/enums/status.sql:1:1
+    └─ ○ macro:calculate_margin  [macro; descendant-public; inherited_ancestor; params 2; role models/finance/macros]  models/finance/macros/margin.py:4:1
+  Lost (3)
+    ├─ ● constant:minimum_order_value  [constant; descendant-public; inherited_ancestor; type integer; role models/commerce/constants]  models/commerce/constants/limits.sql:1:1
+    ├─ ○ enum:order_status  [enum; descendant-public; inherited_ancestor; members 4; type VARCHAR; role models/commerce/enums]  models/commerce/enums/status.sql:1:1
+    └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:4:1
+  Private retained (0)
+    (none)
+  Relationship retained (0)
+    (none)
+  Invalidated usages (2)
+    - constant:minimum_order_value
+    - macro:formatted_order_total
+```
+
+The move would gain finance declarations and lose commerce declarations. More importantly,
+`Invalidated usages` separates the losses that break the model from declarations that happened to
+be available but were never used. The preview does not move or rewrite any file.
+
+## Check a prospective path
+
+Inspect visibility before a resource exists:
+
+```console
+$ sqb scope --at models/commerce/returns/new_return.sql
+Scope
+  Target: models/commerce/returns/new_return.sql
+  Path: models/commerce/returns/new_return.sql
+  Status: prospective
+
+Used (0)
+  (none)
+
+Scope chain
+  ├─ exact-owner-private models/commerce/returns (0)
+  ├─ descendant-public models/commerce (3)
+  ├─ descendant-public models (0)
+  └─ project global (2)
+
+Available (3 of 5, 2 collapsed)
+  ├─ ○ constant:minimum_order_value  [constant; descendant-public; inherited_ancestor; type integer; role models/commerce/constants]  models/commerce/constants/limits.sql:1:1
+  ├─ ○ enum:order_status  [enum; descendant-public; inherited_ancestor; members 4; type VARCHAR; role models/commerce/enums]  models/commerce/enums/status.sql:1:1
+  └─ ○ macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:4:1
+  … 2 globals collapsed; run sqb scope --at models/commerce/returns/new_return.sql --globals all
+
+Relationship grants (0 of 0)
+  (none)
+
+Nearby unavailable (0 of 0)
+  (none)
+
+Diagnostics (1)
+  ERROR S013 models/commerce/returns/new_return.sql: Runtime usage and relationship facts are unavailable for a prospective path
+Completeness: partial
+```
+
+Visibility is available from the proposed path. Actual usage and expected-output relationships do
+not exist yet, so the command preserves the useful static result while clearly marking it partial.
+
+## Browse large declaration sets
+
+In a larger project, browse returns folder summaries rather than an arbitrary prefix of the
+declaration inventory. The `used` counts are direct usages by this target; browse does not apply
+dependency-depth expansion:
+
+```console
+$ sqb scope model:orders --browse global
+Scope folders
+  Path: global
+
+  ├─ constants/  146 declarations, 18 used, 4 children; constant 146
+     sqb scope model:orders --browse global/constants
+     sqb scope model:orders --list global/constants
+  ├─ enums/  84 declarations, 11 used, 3 children; enum 84
+     sqb scope model:orders --browse global/enums
+     sqb scope model:orders --list global/enums
+  └─ macros/  231 declarations, 27 used, 8 children; macro 231
+     sqb scope model:orders --browse global/macros
+     sqb scope model:orders --list global/macros
+
+Diagnostics (0)
+  (none)
+Completeness: complete
+```
+
+Choose a bounded folder, then use `--list`. Definition-path, kind, glob, and actual-usage filters
+can be combined, and paged sections use stable declaration identities as cursors.
+
+## Automation
+
+Use `--json` for editor integrations and repository tooling. Output has a versioned schema, stable
+ordering, filters, pagination, and move-preview results. Constant values, credentials, and secret
+connection settings are not included.
+
+    Review the directory rules behind the report.
+    See all selectors, filters, pagination options, output sections, and JSON behavior.
