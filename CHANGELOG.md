@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.113.9](https://github.com/chio-labs/sqlbuild/compare/v0.113.8...v0.113.9) (2026-09-23)
+
+
+### Bug Fixes
+
+* skip target retention defaults for views ([#793](https://github.com/chio-labs/sqlbuild/issues/793)) ([3d1dd48](https://github.com/chio-labs/sqlbuild/commit/3d1dd48d0388302977dfb994bfa639c42660ab7b))
+
 ## [0.113.8](https://github.com/chio-labs/sqlbuild/compare/v0.113.7...v0.113.8) (2026-09-23)
 
 
