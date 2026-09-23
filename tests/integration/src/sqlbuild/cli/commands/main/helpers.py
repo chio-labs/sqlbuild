@@ -28,6 +28,42 @@ def write_compile_startup_project(project_dir: Path) -> None:
     )
 
 
+def write_from_values_format_project(*, tmp_path: Path, adapter: str) -> tuple[Path, Path]:
+    """Write a format project containing an authored values relation."""
+
+    project_dir: Path = tmp_path / adapter
+    project_dir.mkdir()
+    (project_dir / "sqlbuild_project.toml").write_text(
+        f'name = "orders"\nadapter = "{adapter}"\n\n[rules]\nselect = ["SQBRSQL039"]\n',
+        encoding="utf-8",
+    )
+    models: Path = project_dir / "models"
+    models.mkdir()
+    (models / "customers.sql").write_text(
+        'MODEL (description "Customers.");\nSELECT 1 AS customer_key\n', encoding="utf-8"
+    )
+    (models / "orders.sql").write_text(
+        'MODEL (description "Orders.");\nSELECT customer_key, 1 AS order_count '
+        'FROM __ref("customers")\n',
+        encoding="utf-8",
+    )
+    test_file: Path = project_dir / "tests" / "unit" / "test_orders.sql"
+    test_file.parent.mkdir(parents=True)
+    test_file.write_text(
+        'TEST (name "orders_from_values");\n\n'
+        "WITH __ref__customers AS (\n"
+        "    SELECT COLUMN1::VARCHAR AS customer_key, COLUMN2::INTEGER AS order_count\n"
+        "    FROM VALUES\n"
+        "        ('c1', 1),\n"
+        "        ('c2', 2)\n"
+        "),\n"
+        "__expected__orders AS (SELECT 'c1' AS customer_key, 1 AS order_count)\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+    return project_dir, test_file
+
+
 def prepare_contract_project(tmp_path: Path, *, prod_connection_toml: str = "") -> Path:
     database: Path = tmp_path / "warehouse.duckdb"
     _ = (tmp_path / "sqlbuild_project.toml").write_text(

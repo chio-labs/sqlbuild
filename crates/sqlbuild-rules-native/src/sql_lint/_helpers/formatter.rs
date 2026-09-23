@@ -119,6 +119,7 @@ fn format_once(neutral_sql: &str, context: &FormatOnceContext<'_>) -> Result<Str
     let mut formatted = format_by_name(neutral_sql, context.dialect_name)
         .map_err(|error| error.to_string())?
         .join(";\n");
+    formatted = restore_unparenthesized_from_values(formatted, context)?;
     formatted = restore_string_literals(formatted, context)?;
     formatted = restore_cast_type_spellings(formatted, context)?;
     if context.comments.is_empty() {
@@ -151,6 +152,82 @@ fn format_once(neutral_sql: &str, context: &FormatOnceContext<'_>) -> Result<Str
         formatted.insert_str(char_to_byte(&formatted, char_offset)?, &text);
     }
     Ok(formatted)
+}
+
+fn restore_unparenthesized_from_values(
+    mut formatted: String,
+    context: &FormatOnceContext<'_>,
+) -> Result<String, String> {
+    let authored_count = context
+        .original_tokens
+        .windows(2)
+        .filter(|tokens| {
+            token_text(context.original_sql, &tokens[0]).as_deref() == Some("FROM")
+                && token_text(context.original_sql, &tokens[1]).as_deref() == Some("VALUES")
+        })
+        .count();
+    if authored_count == 0 {
+        return Ok(formatted);
+    }
+    let formatted_tokens = context
+        .dialect
+        .tokenize(&formatted)
+        .map_err(|error| error.to_string())?;
+    let mut removals: Vec<(usize, usize)> = Vec::new();
+    let mut search_start = 0_usize;
+    for _ in 0..authored_count {
+        let Some(from_index) =
+            (search_start..formatted_tokens.len().saturating_sub(1)).find(|&index| {
+                token_text(&formatted, &formatted_tokens[index]).as_deref() == Some("FROM")
+                    && (token_text(&formatted, &formatted_tokens[index + 1]).as_deref()
+                        == Some("VALUES")
+                        || (index + 2 < formatted_tokens.len()
+                            && token_text(&formatted, &formatted_tokens[index + 1]).as_deref()
+                                == Some(OPEN_PARENTHESIS)
+                            && token_text(&formatted, &formatted_tokens[index + 2]).as_deref()
+                                == Some("VALUES")))
+            })
+        else {
+            return Err(UNSUPPORTED_SQL_FAILURE.to_string());
+        };
+        if token_text(&formatted, &formatted_tokens[from_index + 1]).as_deref() == Some("VALUES") {
+            search_start = from_index + 2;
+            continue;
+        }
+        let wrapper_index = from_index + 1;
+        let mut depth = 0_i32;
+        let mut close_index: Option<usize> = None;
+        for (index, token) in formatted_tokens.iter().enumerate().skip(wrapper_index) {
+            match token_text(&formatted, token).as_deref() {
+                Some(OPEN_PARENTHESIS) => depth += 1,
+                Some(CLOSE_PARENTHESIS) => {
+                    depth -= 1;
+                    if depth == 0 {
+                        close_index = Some(index);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let close_index = close_index.ok_or_else(|| UNSUPPORTED_SQL_FAILURE.to_string())?;
+        let open = &formatted_tokens[wrapper_index];
+        let close = &formatted_tokens[close_index];
+        removals.push((open.span.start, open.span.end));
+        removals.push((close.span.start, close.span.end));
+        search_start = close_index + 1;
+    }
+    removals.sort_unstable();
+    for (start, end) in removals.into_iter().rev() {
+        let start = char_to_byte(&formatted, start)?;
+        let end = char_to_byte(&formatted, end)?;
+        formatted.replace_range(start..end, "");
+    }
+    Ok(formatted)
+}
+
+fn token_text(sql: &str, token: &Token) -> Option<String> {
+    char_slice(sql, token.span.start, token.span.end).map(|value| value.to_ascii_uppercase())
 }
 
 fn comment_insertion(

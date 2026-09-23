@@ -63,12 +63,15 @@ def _scan_delimited_regions(
     """Return line-leading parenthesized regions with one of the requested names."""
 
     spans: list[HeaderSpan] = []
+    covered_until: int = 0
     match: re.Match[str]
     for match in _delimited_region_pattern(kinds).finditer(contents):
         kind: str | None = match.group("kind")
         if kind is None:
             continue
         keyword_start: int = match.start("kind")
+        if keyword_start < covered_until:
+            continue
         span: HeaderSpan | None = _match_header_span(
             contents=contents,
             kind=kind,
@@ -77,6 +80,7 @@ def _scan_delimited_regions(
         )
         if span is not None:
             spans.append(span)
+            covered_until = span.end
             if first_only:
                 break
     return tuple(spans)

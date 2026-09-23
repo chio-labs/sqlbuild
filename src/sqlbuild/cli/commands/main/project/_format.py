@@ -114,7 +114,7 @@ def run_format_command(
             show_formatted=True,
             formatted_heading="Would format files:" if check or diff else "Formatted files:",
         )
-    return 1 if result.violations or (check and result.formatted_files) else 0
+    return 1 if result.faults or (check and result.formatted_files) else 0
 
 
 def _render_format_diff(*, result: LintRunResult) -> None:

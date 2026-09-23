@@ -55,6 +55,14 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
             expected_kinds=("MODEL",),
         ),
         ScanHeadersTestCase(
+            description="ignores header keyword used as a nested column name",
+            contents=(
+                "MODEL (\n  columns (\n    object_id (type INTEGER),\n"
+                "    SCHEMA (type VARCHAR(100)),\n  ),\n);\nSELECT 1 AS object_id\n"
+            ),
+            expected_kinds=("MODEL",),
+        ),
+        ScanHeadersTestCase(
             description="ignores header-like text inside comments",
             contents=(
                 '-- TEST ();\n/*\nMODEL (not a header);\n*/\nMODEL (description "ok");\nSELECT 1\n'
