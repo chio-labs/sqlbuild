@@ -144,6 +144,9 @@ class FreshProcessCompileCachePerformanceGuardTestCase:
     expected_leaf_edit_fingerprint: str
     expected_macro_edit_fingerprint: str
     expected_project_config_fingerprint: str
+    macro_call_interval: int
+    scoped_macros: bool
+    expected_macro_edit_misses: int
 
 
 @dataclass(frozen=True)

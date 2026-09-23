@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import statistics
 import subprocess
@@ -442,6 +443,8 @@ def run_fresh_process_compile_cache_benchmark(
     expected_cold_max_wall_seconds: float,
     expected_warm_max_wall_seconds: float,
     expected_edit_max_wall_seconds: float,
+    macro_call_interval: int,
+    scoped_macros: bool,
 ) -> FreshProcessCompileCacheBenchmarkResult:
     """Measure exact and incremental cache reuse across independent CLI processes."""
 
@@ -454,6 +457,8 @@ def run_fresh_process_compile_cache_benchmark(
         macro_count=macro_count,
         test_count=test_count,
         audit_count=audit_count,
+        macro_call_interval=macro_call_interval,
+        scoped_macros=scoped_macros,
     )
     target_dir: Path = project_dir / "target"
     assert not target_dir.exists()
@@ -482,7 +487,7 @@ def run_fresh_process_compile_cache_benchmark(
         expected_max_wall_seconds=expected_warm_max_wall_seconds,
         compile_args=(),
     )
-    macro_path: Path = project_dir / "macros" / "macro_00000.py"
+    macro_path: Path = next(project_dir.rglob("macro_00000.py"))
     _replace_benchmark_text(
         path=macro_path,
         old='return f"({expression} + 1)"',
@@ -1011,6 +1016,7 @@ _REPRESENTATIVE_AUDIT_COUNT: int = 700
 _TOP_LEVEL_WITH_INTERVAL: int = 20
 _NESTED_QUERY_INTERVAL: int = 15
 _MACRO_INTERVAL: int = 13
+_BENCHMARK_MACRO_CALL: re.Pattern[str] = re.compile(r"@(macro_\d{5})\(")
 _FUNCTION_INTERVAL: int = 43
 _SEED_INTERVAL: int = 67
 _SEED_REFERENCE_START_INDEX: int = 300
@@ -1086,6 +1092,8 @@ def write_semantic_compile_project(
     macro_count: int,
     test_count: int,
     audit_count: int,
+    macro_call_interval: int = _MACRO_INTERVAL,
+    scoped_macros: bool = False,
 ) -> None:
     """Write a neutral project with broad resources and dense SQL semantics."""
 
@@ -1103,6 +1111,10 @@ def write_semantic_compile_project(
         function_count=function_count,
         macro_count=macro_count,
         audit_count=audit_count,
+        macro_call_interval=macro_call_interval,
+    )
+    {True: _scope_single_folder_macros, False: _keep_project_macros}[scoped_macros](
+        project_dir=project_dir
     )
     _layered_write_tests(
         project_dir=project_dir,
@@ -1221,6 +1233,29 @@ def macro_{index:05d}(expression: str) -> str:
 """,
             encoding="utf-8",
         )
+
+
+def _keep_project_macros(*, project_dir: Path) -> None:
+    """Leave generated macros in the project-wide macro directory."""
+
+
+def _scope_single_folder_macros(*, project_dir: Path) -> None:
+    """Move each macro beside its only consuming folder and drop unused macros."""
+
+    consumer_folders: dict[str, set[str]] = {}
+    for model_path in sorted((project_dir / "models").rglob("*.sql")):
+        for call in _BENCHMARK_MACRO_CALL.findall(model_path.read_text(encoding="utf-8")):
+            consumer_folders.setdefault(call, set()).add(model_path.parent.name)
+    macros_dir: Path = project_dir / "macros"
+    generated: set[str] = {path.stem for path in macros_dir.glob("macro_*.py")}
+    for unused_stem in sorted(generated - set(consumer_folders)):
+        (macros_dir / f"{unused_stem}.py").unlink()
+    assert all(len(folders) == 1 for folders in consumer_folders.values())
+    for stem, folders in sorted(consumer_folders.items()):
+        (folder,) = folders
+        scoped_dir: Path = project_dir / "models" / folder / "_sqlbuild" / "_macros"
+        scoped_dir.mkdir(parents=True, exist_ok=True)
+        (macros_dir / f"{stem}.py").rename(scoped_dir / f"{stem}.py")
 
 
 def _layered_write_schemas(*, project_dir: Path) -> None:
@@ -1447,6 +1482,7 @@ def _semantic_write_models(
     function_count: int,
     macro_count: int,
     audit_count: int,
+    macro_call_interval: int = _MACRO_INTERVAL,
 ) -> None:
     for index in range(model_count):
         model_dir: Path = project_dir / "models" / _layered_model_folder(index=index)
@@ -1469,6 +1505,7 @@ def _semantic_write_models(
                 macro_count=macro_count,
                 audit_count=audit_count,
                 column_count=column_count,
+                macro_call_interval=macro_call_interval,
             ),
         }
         sql: str = builders[index == _SEMANTIC_SET_OPERATION_MODEL_INDEX]()
@@ -1522,6 +1559,7 @@ def _semantic_regular_model_sql(
     macro_count: int,
     audit_count: int,
     column_count: int,
+    macro_call_interval: int = _MACRO_INTERVAL,
 ) -> str:
     header: str = _semantic_model_header(
         index=index,
@@ -1551,11 +1589,11 @@ def _semantic_regular_model_sql(
         True: f'__udf("fn_{function_index:05d}")(amount)',
         False: "amount + CAST(@@benchmark_revision AS INTEGER)",
     }[index % _FUNCTION_INTERVAL == 0]
-    macro_index: int = (index // _MACRO_INTERVAL) % macro_count
+    macro_index: int = (index // macro_call_interval) % macro_count
     id_expression: str = {
         True: f'@macro_{macro_index:05d}("id")',
         False: "id",
-    }[index % _MACRO_INTERVAL == 0]
+    }[index % macro_call_interval == 0]
     direct_sql: str = f"""SELECT
   CAST({id_expression} AS INTEGER) AS id,
   CAST({amount_expression} AS DOUBLE) AS amount,

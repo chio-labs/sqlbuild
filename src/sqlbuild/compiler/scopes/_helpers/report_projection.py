@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import cast
 
-from sqlbuild.compiler.scopes._helpers.identities import format_identity
+from sqlbuild.compiler.scopes._helpers.lookup import identity_key
 from sqlbuild.compiler.scopes._helpers.paths import normalize_path
 from sqlbuild.compiler.scopes.constants import (
     DECLARATION_GROUP_DIRECTORY,
@@ -38,7 +38,7 @@ def build_projection(*, index: ScopeIndex) -> dict[str, JsonValue]:
     declarations: list[DeclarationRecord] = sorted(
         index.declarations,
         key=lambda item: (
-            format_identity(identity=item.identity),
+            identity_key(item.identity),
             item.path,
             item.line,
             item.column,
@@ -46,41 +46,41 @@ def build_projection(*, index: ScopeIndex) -> dict[str, JsonValue]:
     )
     resources: list[ResourceRecord] = sorted(
         index.resources,
-        key=lambda item: (format_identity(identity=item.identity), item.path),
+        key=lambda item: (identity_key(item.identity), item.path),
     )
     grants: list[GrantRecord] = sorted(
         index.grants,
         key=lambda item: (
-            format_identity(identity=item.resource),
-            format_identity(identity=item.declaration),
-            format_identity(identity=item.through),
+            identity_key(item.resource),
+            identity_key(item.declaration),
+            identity_key(item.through),
             item.kind.value,
         ),
     )
     usages: list[UsageRecord] = sorted(
         index.usages,
         key=lambda item: (
-            format_identity(identity=item.consumer),
-            format_identity(identity=item.declaration),
+            identity_key(item.consumer),
+            identity_key(item.declaration),
             item.kind.value,
-            format_identity(identity=item.through) if item.through is not None else "",
+            identity_key(item.through) if item.through is not None else "",
             item.enum_member or "",
         ),
     )
     visibility: list[VisibilityRecord] = sorted(
         index.visibility,
         key=lambda item: (
-            format_identity(identity=item.resource),
-            format_identity(identity=item.declaration),
+            identity_key(item.resource),
+            identity_key(item.declaration),
             item.reason.value,
-            format_identity(identity=item.through) if item.through is not None else "",
+            identity_key(item.through) if item.through is not None else "",
         ),
     )
     inaccessible: list[InaccessibleRecord] = sorted(
         index.inaccessible,
         key=lambda item: (
-            format_identity(identity=item.resource),
-            format_identity(identity=item.declaration),
+            identity_key(item.resource),
+            identity_key(item.declaration),
             item.reason.value,
         ),
     )
@@ -103,7 +103,7 @@ def build_projection(*, index: ScopeIndex) -> dict[str, JsonValue]:
         ],
         "resources": [
             {
-                "identity": format_identity(identity=record.identity),
+                "identity": identity_key(record.identity),
                 "kind": record.identity.kind.value,
                 "name": record.identity.name,
                 "path": safe_scope_path(path=record.path),
@@ -119,40 +119,36 @@ def build_projection(*, index: ScopeIndex) -> dict[str, JsonValue]:
         "declarations": [_declaration_projection(record=record) for record in declarations],
         "grants": [
             {
-                "resource": format_identity(identity=record.resource),
-                "declaration": format_identity(identity=record.declaration),
-                "through": format_identity(identity=record.through),
+                "resource": identity_key(record.resource),
+                "declaration": identity_key(record.declaration),
+                "through": identity_key(record.through),
                 "kind": record.kind.value,
             }
             for record in grants
         ],
         "usages": [
             {
-                "consumer": format_identity(identity=record.consumer),
-                "declaration": format_identity(identity=record.declaration),
+                "consumer": identity_key(record.consumer),
+                "declaration": identity_key(record.declaration),
                 "kind": record.kind.value,
-                "through": (
-                    format_identity(identity=record.through) if record.through is not None else None
-                ),
+                "through": (identity_key(record.through) if record.through is not None else None),
                 "enum_member": record.enum_member,
             }
             for record in usages
         ],
         "visibility": [
             {
-                "resource": format_identity(identity=record.resource),
-                "declaration": format_identity(identity=record.declaration),
+                "resource": identity_key(record.resource),
+                "declaration": identity_key(record.declaration),
                 "reason": record.reason.value,
-                "through": (
-                    format_identity(identity=record.through) if record.through is not None else None
-                ),
+                "through": (identity_key(record.through) if record.through is not None else None),
             }
             for record in visibility
         ],
         "inaccessible": [
             {
-                "resource": format_identity(identity=record.resource),
-                "declaration": format_identity(identity=record.declaration),
+                "resource": identity_key(record.resource),
+                "declaration": identity_key(record.declaration),
                 "reason": record.reason.value,
             }
             for record in inaccessible
@@ -172,14 +168,12 @@ def build_projection(*, index: ScopeIndex) -> dict[str, JsonValue]:
                 "line": diagnostic.line,
                 "column": diagnostic.column,
                 "declaration": (
-                    format_identity(identity=diagnostic.declaration)
+                    identity_key(diagnostic.declaration)
                     if diagnostic.declaration is not None
                     else None
                 ),
                 "resource": (
-                    format_identity(identity=diagnostic.resource)
-                    if diagnostic.resource is not None
-                    else None
+                    identity_key(diagnostic.resource) if diagnostic.resource is not None else None
                 ),
             }
             for diagnostic in sorted(
@@ -201,7 +195,7 @@ def _declaration_projection(*, record: DeclarationRecord) -> dict[str, JsonValue
         metadata["macro"] = {
             "parameters": list(record.macro.parameters),
             "dependencies": sorted(
-                format_identity(identity=identity) for identity in record.macro.dependencies
+                identity_key(identity) for identity in record.macro.dependencies
             ),
             "source_digest": record.macro.source_digest,
         }
@@ -220,13 +214,11 @@ def _declaration_projection(*, record: DeclarationRecord) -> dict[str, JsonValue
         }
     role, visibility, role_root, bucket_path = _declaration_container(record=record)
     return {
-        "identity": format_identity(identity=record.identity),
+        "identity": identity_key(record.identity),
         "kind": record.identity.kind.value,
         "name": record.identity.name,
         "owner": (
-            format_identity(identity=record.identity.owner)
-            if record.identity.owner is not None
-            else None
+            identity_key(record.identity.owner) if record.identity.owner is not None else None
         ),
         "path": safe_scope_path(path=record.path),
         "line": record.line,
@@ -275,15 +267,11 @@ def declaration_report(
     """Project a declaration without source, values, callables, or process data."""
 
     usages: tuple[UsageRecord, ...] = lookup.usages_by_declaration.get(record.identity, ())
-    consumers: tuple[str, ...] = tuple(
-        sorted({format_identity(identity=usage.consumer) for usage in usages})
-    )
+    consumers: tuple[str, ...] = tuple(sorted({identity_key(usage.consumer) for usage in usages}))
     dependencies: tuple[str, ...] = ()
     metadata: list[tuple[str, object]] = []
     if record.macro is not None:
-        dependencies = tuple(
-            sorted(format_identity(identity=item) for item in record.macro.dependencies)
-        )
+        dependencies = tuple(sorted(identity_key(item) for item in record.macro.dependencies))
         metadata.extend(
             (("parameters", record.macro.parameters), ("dependency_count", len(dependencies)))
         )
@@ -326,7 +314,7 @@ def declaration_report(
     grants: tuple[str, ...] = tuple(
         sorted(
             {
-                format_identity(identity=grant.resource)
+                identity_key(grant.resource)
                 for grant in lookup.index.grants
                 if grant.declaration == record.identity
             }
@@ -334,14 +322,10 @@ def declaration_report(
     )
     required_scope, required_path, promotion = required_placement(lookup=lookup, record=record)
     return DeclarationReport(
-        identity=format_identity(identity=record.identity),
+        identity=identity_key(record.identity),
         kind=record.identity.kind.value,
         name=record.identity.name,
-        owner=(
-            format_identity(identity=record.identity.owner)
-            if record.identity.owner is not None
-            else None
-        ),
+        owner=(identity_key(record.identity.owner) if record.identity.owner is not None else None),
         definition=SourceLocation(safe_scope_path(path=record.path), record.line, record.column),
         scope=record.scope.value,
         owning_path=record.owning_path,
@@ -406,7 +390,7 @@ def records_for_identities(
         sorted(
             records,
             key=lambda item: (
-                format_identity(identity=item.identity),
+                identity_key(item.identity),
                 item.path,
                 item.line,
                 item.column,
@@ -430,4 +414,4 @@ def _identity_text(*, identity: DeclarationIdentity | object | None) -> str | No
     typed_identity: DeclarationIdentity | ResourceIdentity = cast(
         "DeclarationIdentity | ResourceIdentity", identity
     )
-    return format_identity(identity=typed_identity)
+    return identity_key(typed_identity)

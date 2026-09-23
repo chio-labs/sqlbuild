@@ -39,27 +39,30 @@ _MAX_WARM_TO_COLD_RATIO: float = 0.67
             source_count=713,
             seed_count=141,
             function_count=71,
-            macro_count=37,
+            macro_count=500,
             test_count=2_945,
             audit_count=5_056,
             expected_cold_max_wall_seconds=14.0,
             expected_warm_max_wall_seconds=8.0,
-            expected_edit_max_wall_seconds=7.0,
+            expected_edit_max_wall_seconds=7.5,
             expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=96 * _MIB,
             expected_cold_fingerprint=(
-                "6841a94fc2d3a740cb0db14fe6cee46bfe32171b9580949134cd40379a31bf94"
+                "36e2274af2bd6840f41d88ee1140a91034505a50f7fa27b61e2e47aa06765314"
             ),
             expected_leaf_edit_fingerprint=(
-                "a58095a0cd5c2866cd99df92c2503174b400a136379b68dc5889272cef30f17e"
+                "f6cfcbb21bf7e011b76f08f5d8e61b2095316b6845d987090e79b1718ed54175"
             ),
             expected_macro_edit_fingerprint=(
-                "fdef695e0e1d08cb3809bb0589b0c535b1bbb604bf81a428627dce09317911f3"
+                "ae102976a43c0fd6a68e5e55a7feeb9fac5f49ffc56bd3cdfcd389e199582081"
             ),
             expected_project_config_fingerprint=(
-                "990efe5eee76ba8e0690e5203264aa948e59c39e12463120a3661ea976f9ec8d"
+                "96e996a556119f452e966096747b35219941bf7bd324624242aadf6375ba1a31"
             ),
+            macro_call_interval=6,
+            scoped_macros=True,
+            expected_macro_edit_misses=1,
         ),
         FreshProcessCompileCachePerformanceGuardTestCase(
             description="models_5000_fresh_process_compile_cache_stays_incremental",
@@ -67,27 +70,30 @@ _MAX_WARM_TO_COLD_RATIO: float = 0.67
             source_count=1_189,
             seed_count=236,
             function_count=118,
-            macro_count=61,
+            macro_count=834,
             test_count=4_908,
             audit_count=8_427,
             expected_cold_max_wall_seconds=23.0,
-            expected_warm_max_wall_seconds=12.0,
-            expected_edit_max_wall_seconds=11.0,
+            expected_warm_max_wall_seconds=14.0,
+            expected_edit_max_wall_seconds=13.5,
             expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=160 * _MIB,
             expected_cold_fingerprint=(
-                "32dac15ee9c15a2aea2e4783e888231e402f15a8fe83270ef55af1aa75924b6c"
+                "686664bcadbbb0e339205d71b8fb3ab2d3f1226ca888eb4b2e6a5aa97ade1efb"
             ),
             expected_leaf_edit_fingerprint=(
-                "4b1d9da0a0141ded2db0cfb7719fb0ccc12353f129638822e451c11e98f55724"
+                "43fa1db2d5db12c5031aef8f6fb2a0e4af89c51ece58b1f1772db0a9ea4d43a0"
             ),
             expected_macro_edit_fingerprint=(
-                "3a8d7e4ebe24a354f4d9f470e4b37b0286cf12a2f36f850053651c17d9f8e3b3"
+                "fd0cc80586b11d8d79a904d1daa6da4d559d22d6b4ebea02139a7d12626b770f"
             ),
             expected_project_config_fingerprint=(
-                "c1efca198bc601d5135898ad059cfb6e016872e15f216cc357662bb185ba29f3"
+                "44a292e9ada77cc7038036fb593d9d8d8cd4883062a07254d963963ed0b4bb45"
             ),
+            macro_call_interval=6,
+            scoped_macros=True,
+            expected_macro_edit_misses=1,
         ),
         FreshProcessCompileCachePerformanceGuardTestCase(
             description="models_10000_fresh_process_compile_cache_stays_incremental",
@@ -95,27 +101,30 @@ _MAX_WARM_TO_COLD_RATIO: float = 0.67
             source_count=2_377,
             seed_count=471,
             function_count=236,
-            macro_count=123,
+            macro_count=1_667,
             test_count=9_816,
             audit_count=16_855,
-            expected_cold_max_wall_seconds=42.5,
-            expected_warm_max_wall_seconds=24.0,
-            expected_edit_max_wall_seconds=20.5,
+            expected_cold_max_wall_seconds=46.5,
+            expected_warm_max_wall_seconds=27.0,
+            expected_edit_max_wall_seconds=24.5,
             expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=320 * _MIB,
             expected_cold_fingerprint=(
-                "7e1410c35f6026c7520711224aea2a95d8fe46515a2d2d370a3ee21180a36fdc"
+                "c1364cae404ee768c4443c3b964c42370e33268fbf83b101890b13558290e3e0"
             ),
             expected_leaf_edit_fingerprint=(
-                "059dc35c437adacfe0098e0cc19ccfeaae9fc5ca9aa682721cd3f37cbff92f77"
+                "fe35feb1b239a17ed0e7b22bca20c2af06e0f25335fe5f9fae212491a693911b"
             ),
             expected_macro_edit_fingerprint=(
-                "e2cfd1b086c42ce4d181380a3be1d7a3d1360ee7ccea6f5dfbb5a8d2af5a76ce"
+                "bec17e83316ca926b76f450fa8a035e83f19c061e14a11b8effe04b7fa2e26fd"
             ),
             expected_project_config_fingerprint=(
-                "38323964889d18747f10614c8442d9a2cdd9d38efed88369cb10c3bf1099ed85"
+                "780e26aa973459fbc803dd8d64315d445aab8bc57e90b0ad1ecb94f074b22474"
             ),
+            macro_call_interval=6,
+            scoped_macros=True,
+            expected_macro_edit_misses=1,
         ),
     ],
     ids=lambda case: case.description,
@@ -137,6 +146,8 @@ def test_given_semantic_project_when_compiling_across_processes_then_cache_is_in
         expected_cold_max_wall_seconds=test_case.expected_cold_max_wall_seconds,
         expected_warm_max_wall_seconds=test_case.expected_warm_max_wall_seconds,
         expected_edit_max_wall_seconds=test_case.expected_edit_max_wall_seconds,
+        macro_call_interval=test_case.macro_call_interval,
+        scoped_macros=test_case.scoped_macros,
     )
     measurements: dict[str, FreshProcessCompileBenchmarkResult] = {
         "cold": result.cold,
@@ -214,7 +225,7 @@ def test_given_semantic_project_when_compiling_across_processes_then_cache_is_in
     assert macro_batch_hits + macro_entry_hits + macro_misses == test_case.model_count
     assert macro_batch_hits > 0
     assert macro_entry_hits > 0
-    assert macro_misses == 7
+    assert macro_misses == test_case.expected_macro_edit_misses
     assert macro_bypasses == 0
     assert_complete_compile_cache_hit(
         measurement=result.after_macro_edit,
