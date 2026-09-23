@@ -48,6 +48,7 @@ from sqlbuild.executor.build._helpers.end_audits import run_end_audits
 from sqlbuild.executor.build._helpers.indexes import build_execution_indexes
 from sqlbuild.executor.build._helpers.retention import (
     apply_table_type_conversion,
+    materialization_recreates_relation,
     reconcile_model_retention,
 )
 from sqlbuild.executor.build._helpers.scheduler import (
@@ -1020,7 +1021,9 @@ class BuildScheduler:
                 table_type_entry: TableTypePlanEntry | None = self._table_type_entries.get(
                     model_entry.name
                 )
-                if table_type_entry is not None and model_entry.action != PlanAction.CREATE_TABLE:
+                if table_type_entry is not None and not materialization_recreates_relation(
+                    model_entry
+                ):
                     apply_table_type_conversion(
                         entry=table_type_entry, adapter=self._adapter, connection=connection
                     )

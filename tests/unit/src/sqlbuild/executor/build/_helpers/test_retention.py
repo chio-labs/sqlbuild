@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from unittest.mock import Mock, call
 
 import pytest
@@ -12,8 +13,16 @@ from sqlbuild.adapter.contract.models import (
 )
 from sqlbuild.adapter.contract.types import RetentionChangePhase, RetentionScope
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
-from sqlbuild.compiler.planner.models import PlanOutput, RetentionPlanEntry, TableTypePlanEntry
+from sqlbuild.compiler.planner.models import (
+    ModelPlanEntry,
+    PlanOutput,
+    RetentionPlanEntry,
+    TableTypePlanEntry,
+)
 from sqlbuild.compiler.planner.types import (
+    IncrementalMode,
+    MaterializationType,
+    PlanAction,
     RetentionDirection,
     RetentionPlanPhase,
 )
@@ -21,6 +30,7 @@ from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.build._helpers.retention import (
     apply_retention_phase,
     apply_table_type_conversion,
+    materialization_recreates_relation,
     reconcile_model_retention,
 )
 from sqlbuild.observability import EventDispatcher, LifecycleEvent, dispatcher_scope
@@ -28,9 +38,11 @@ from tests.unit.src.sqlbuild.executor.build._helpers._test_types import (
     BuildModelRetentionReconciliationTestCase,
     BuildRetentionPhaseTestCase,
     LifecycleProgressTestCase,
+    MaterializationRecreatesRelationTestCase,
     TableTypeConversionErrorTestCase,
     TableTypeConversionTestCase,
 )
+from tests.unit.src.sqlbuild.executor.build._helpers.helpers import build_model_plan_entry
 
 _TARGET: RelationInfo = RelationInfo(
     database="warehouse",
@@ -503,6 +515,62 @@ def test_given_table_type_conversion_when_ddl_blocks_then_start_is_already_dispa
 
     assert tuple(event.event_type for event in events) == test_case.expected_event_types
     assert barrier_events[0].event_type == "operation_started"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MaterializationRecreatesRelationTestCase(
+            description="table rebuild recreates the relation",
+            materialization_type=MaterializationType.TABLE,
+            action=PlanAction.CREATE_TABLE,
+            incremental_mode=None,
+            expected_recreates=True,
+        ),
+        MaterializationRecreatesRelationTestCase(
+            description="incremental full rebuild recreates the relation",
+            materialization_type=MaterializationType.INCREMENTAL,
+            action=PlanAction.CREATE_TABLE,
+            incremental_mode=IncrementalMode.FULL,
+            expected_recreates=True,
+        ),
+        MaterializationRecreatesRelationTestCase(
+            description="microbatch full refresh may keep the relation without batches",
+            materialization_type=MaterializationType.INCREMENTAL,
+            action=PlanAction.CREATE_TABLE,
+            incremental_mode=IncrementalMode.MICROBATCH,
+            expected_recreates=False,
+        ),
+        MaterializationRecreatesRelationTestCase(
+            description="incremental run keeps the relation",
+            materialization_type=MaterializationType.INCREMENTAL,
+            action=PlanAction.INCREMENTAL_MERGE,
+            incremental_mode=IncrementalMode.FULL,
+            expected_recreates=False,
+        ),
+        MaterializationRecreatesRelationTestCase(
+            description="planned skip keeps the relation",
+            materialization_type=MaterializationType.TABLE,
+            action=PlanAction.SKIP,
+            incremental_mode=None,
+            expected_recreates=False,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_model_action_when_checking_recreation_then_matches_materialization_contract(
+    test_case: MaterializationRecreatesRelationTestCase,
+) -> None:
+    entry: ModelPlanEntry = replace(
+        build_model_plan_entry(
+            name="orders",
+            materialization_type=test_case.materialization_type,
+            action=test_case.action,
+        ),
+        incremental_mode=test_case.incremental_mode,
+    )
+
+    assert materialization_recreates_relation(entry) is test_case.expected_recreates
 
 
 if __name__ == "__main__":

@@ -10,8 +10,13 @@ from sqlbuild.adapter.contract.types import RetentionChangePhase, RetentionScope
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
-from sqlbuild.compiler.planner.models import PlanOutput, RetentionPlanEntry, TableTypePlanEntry
-from sqlbuild.compiler.planner.types import RetentionPlanPhase
+from sqlbuild.compiler.planner.models import (
+    ModelPlanEntry,
+    PlanOutput,
+    RetentionPlanEntry,
+    TableTypePlanEntry,
+)
+from sqlbuild.compiler.planner.types import IncrementalMode, PlanAction, RetentionPlanPhase
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.runtime.observability.classes.operation_lifecycle import (
     OperationAttributes,
@@ -21,6 +26,15 @@ from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
     canonicalize_operation_adapter,
 )
 from sqlbuild.spec.contracts.types import TableType
+
+
+def materialization_recreates_relation(entry: ModelPlanEntry) -> bool:
+    """Return whether the build always recreates the relation with the planned table type."""
+
+    return (
+        entry.action == PlanAction.CREATE_TABLE
+        and entry.incremental_mode != IncrementalMode.MICROBATCH
+    )
 
 
 def apply_table_type_conversion(
