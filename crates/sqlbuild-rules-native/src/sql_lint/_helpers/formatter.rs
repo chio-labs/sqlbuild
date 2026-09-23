@@ -163,13 +163,11 @@ fn restore_unparenthesized_from_values(
         .original_tokens
         .iter()
         .enumerate()
-        .filter_map(|(index, token)| {
-            (token_text(context.original_sql, token).as_deref() == Some("VALUES")).then(|| {
-                index > 0
-                    && token_text(context.original_sql, &context.original_tokens[index - 1])
-                        .as_deref()
-                        == Some(OPEN_PARENTHESIS)
-            })
+        .filter(|(_, token)| token_text(context.original_sql, token).as_deref() == Some("VALUES"))
+        .map(|(index, _)| {
+            index > 0
+                && token_text(context.original_sql, &context.original_tokens[index - 1]).as_deref()
+                    == Some(OPEN_PARENTHESIS)
         })
         .collect();
     if authored_parenthesized.is_empty() {
