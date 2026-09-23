@@ -138,6 +138,7 @@ class FreshProcessCompileCachePerformanceGuardTestCase:
     expected_warm_max_wall_seconds: float
     expected_edit_max_wall_seconds: float
     expected_max_warm_to_cold_ratio: float
+    expected_max_edit_to_cold_ratio: float
     expected_max_rss_bytes: int
     expected_max_cache_bytes: int
     expected_cold_fingerprint: str
