@@ -28,6 +28,8 @@ def uncommented_matches_by_pattern(
 ) -> tuple[tuple[re.Match[str], ...], ...]:
     """Find matches for multiple patterns with one protected-region scan."""
 
+    if all(pattern.search(sql) is None for pattern in patterns):
+        return tuple(() for _pattern in patterns)
     protected_ranges: tuple[tuple[int, int], ...] = tuple(
         (match.start(), match.end()) for match in _SQL_NON_CODE_PATTERN.finditer(sql)
     )

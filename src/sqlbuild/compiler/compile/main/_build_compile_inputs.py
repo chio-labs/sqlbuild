@@ -235,6 +235,7 @@ def build_compile_inputs(
         diagnostics=diagnostics,
         external_sql_reference_resolver=external_sql_reference_resolver,
         scope_index=declaration_scope.index,
+        declaration_scope=declaration_scope,
     )
 
 

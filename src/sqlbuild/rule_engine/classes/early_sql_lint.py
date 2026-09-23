@@ -7,13 +7,14 @@ from types import TracebackType
 
 from sqlbuild.compiler.compile.models import CompileProjectInputs
 from sqlbuild.rule_engine.main._prepare_sql_rules import prepare_sql_rules
-from sqlbuild.rule_engine.models import PreparedSqlLint
+from sqlbuild.rule_engine.models import PreparedSqlLint, SqlExpansionReuse
 
 
 class EarlySqlLint:
     def __init__(self, *, enabled: bool) -> None:
         self.enabled: bool = enabled
         self.preparation: PreparedSqlLint | None = None
+        self.expansion_reuse: SqlExpansionReuse | None = None
         self.executor: ThreadPoolExecutor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="sqlbuild-lint"
         )
@@ -33,4 +34,12 @@ class EarlySqlLint:
         if self.enabled:
             self.preparation = prepare_sql_rules(
                 inputs=inputs, executor=self.executor, dialect=dialect
+            )
+            self.expansion_reuse = (
+                None
+                if inputs.declaration_scope is None
+                else SqlExpansionReuse(
+                    discovered_inputs=inputs.discovered_inputs,
+                    declaration_scope=inputs.declaration_scope,
+                )
             )

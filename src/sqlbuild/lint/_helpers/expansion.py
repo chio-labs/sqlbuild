@@ -19,6 +19,7 @@ from sqlbuild.compiler.compile.main.expand_sql_with_spans import expand_sql_with
 from sqlbuild.compiler.compile.main.sql_expansion_context import build_sql_expansion_context
 from sqlbuild.compiler.compile.models import (
     CompiledSqlExpansion,
+    DeclarationScopeBuild,
     ExpansionSpan,
     SqlExpansionContext,
 )
@@ -85,6 +86,7 @@ def build_lint_expansion_context(
     project_dir: Path,
     value_renderer: TypedSqlValueRenderer | None = None,
     discovered_inputs: DiscoveredProjectInputs | None = None,
+    declaration_scope: DeclarationScopeBuild | None = None,
 ) -> SqlExpansionContext:
     """Build the expansion context, reporting compile failures as lint failures."""
 
@@ -106,6 +108,7 @@ def build_lint_expansion_context(
             project_dir=project_dir,
             discovered_inputs=effective_discovered_inputs,
             value_renderer=effective_renderer,
+            declaration_scope=declaration_scope,
         )
     except (AdapterUserError, CompileInputError, DiscoveryError) as error:
         raise ProjectCompileError(
