@@ -60,6 +60,7 @@ class CompilePipelineOptions:
     no_cache: bool = False
     max_microbatches: int | None = None
     selection_diagnostics: bool = False
+    plan_sql_tests: bool = True
 
 
 @dataclass(frozen=True)

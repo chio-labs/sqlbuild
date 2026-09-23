@@ -47,6 +47,7 @@ from sqlbuild.compiler.planner.models import (
     FunctionChangeResult,
     FunctionPlanEntry,
     ModelPlanEntry,
+    PlannedSqlTests,
     PlannerChangeResults,
     PlannerModelEntryResults,
     PlannerRelationsContext,
@@ -133,13 +134,13 @@ def build_plan_output(
         relations=relations,
         model_materializations=model_materializations,
     )
-    test_entries: list[SqlTestPlanEntry]
-    test_warnings: list[PlanWarning]
-    test_entries, test_warnings = build_selected_test_entries(
-        project=project,
-        adapter=adapter,
-        selected_keys=scope.selected_keys,
-    )
+    planned_tests: PlannedSqlTests | None = resolved_extras.planned_sql_tests
+    if planned_tests is None or planned_tests.selected_keys != scope.selected_keys:
+        planned_tests = plan_selected_sql_tests(
+            project=project, adapter=adapter, selected_keys=scope.selected_keys
+        )
+    test_entries: list[SqlTestPlanEntry] = list(planned_tests.entries)
+    test_warnings: list[PlanWarning] = list(planned_tests.warnings)
     selected_test_keys: frozenset[CompiledObjectKey] = frozenset(
         entry.key for entry in test_entries
     )
@@ -437,6 +438,24 @@ def build_selected_audit_entries(
             )
         )
     return entries
+
+
+def plan_selected_sql_tests(
+    *,
+    project: CompiledProject,
+    adapter: BaseAdapter,
+    selected_keys: frozenset[CompiledObjectKey],
+) -> PlannedSqlTests:
+    """Plan SQL tests overlapping one selection into a reusable result."""
+
+    entries: list[SqlTestPlanEntry]
+    warnings: list[PlanWarning]
+    entries, warnings = build_selected_test_entries(
+        project=project, adapter=adapter, selected_keys=selected_keys
+    )
+    return PlannedSqlTests(
+        selected_keys=selected_keys, entries=tuple(entries), warnings=tuple(warnings)
+    )
 
 
 def build_selected_test_entries(

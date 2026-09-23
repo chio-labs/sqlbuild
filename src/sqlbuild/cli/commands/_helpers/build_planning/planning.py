@@ -50,6 +50,7 @@ def compile_build_plan(
             resolve_python_run_selectors=(request.include_python or invocation.should_load_sources),
             max_microbatches=request.max_microbatches,
             selection_diagnostics=request.selection_diagnostics,
+            plan_sql_tests=request.run_tests,
         ),
         hooks=ConnectionHooks(
             on_progress=invocation.planning_progress.on_progress,

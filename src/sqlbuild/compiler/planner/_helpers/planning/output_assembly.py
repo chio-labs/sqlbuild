@@ -6,10 +6,12 @@ from dataclasses import replace
 
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner._helpers.output.plan_output import build_plan_output
+from sqlbuild.compiler.planner._helpers.planning.retention import plan_retention, plan_table_types
 from sqlbuild.compiler.planner._helpers.pruning.selection_staleness import (
     build_stale_out_of_selection_warnings,
 )
 from sqlbuild.compiler.planner.models import (
+    PlannedSqlTests,
     PlannerChangeReconciliation,
     PlannerChangeResults,
     PlannerEntryResults,
@@ -39,6 +41,7 @@ def assemble_base_plan_output(
     reconciliation: PlannerChangeReconciliation,
     entries: PlannerEntryResults,
     source_freshness: DirectSourceFreshnessPlanningResult,
+    planned_sql_tests: PlannedSqlTests | None = None,
 ) -> PlanOutput:
     """Assemble the base plan output with freshness and pruning metadata attached."""
 
@@ -54,6 +57,7 @@ def assemble_base_plan_output(
         extras=PlanOutputExtras(
             seed_version_hashes=identities.version_identities.seed_version_hashes,
             seed_metadata_jsons=identities.version_identities.seed_metadata_jsons,
+            planned_sql_tests=planned_sql_tests,
         ),
     )
     plan_output = replace(plan_output, source_freshness=source_freshness)
@@ -66,6 +70,26 @@ def assemble_base_plan_output(
             },
         )
     return plan_output
+
+
+def with_storage_policies(
+    *,
+    plan_output: PlanOutput,
+    runtime: PlannerRuntime,
+    warehouse: PlannerWarehouseState,
+    scopes: PlannerScopeResolution,
+) -> PlanOutput:
+    """Attach selected Snowflake table-type and retention work to the plan."""
+
+    return replace(
+        plan_output,
+        table_type_entries=plan_table_types(
+            runtime=runtime, warehouse=warehouse, scope=scopes.selected_scope
+        ),
+        retention_entries=plan_retention(
+            runtime=runtime, warehouse=warehouse, scope=scopes.selected_scope
+        ),
+    )
 
 
 def with_plan_warnings(

@@ -232,6 +232,7 @@ def _build_result(
         policies=PlannerPolicies(
             auto_load_sources=options.auto_load_sources,
             selection_diagnostics=options.selection_diagnostics,
+            plan_sql_tests=options.plan_sql_tests,
         ),
         on_progress=on_progress,
         project_config=discovered_inputs.project_config,
