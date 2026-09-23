@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.113.7](https://github.com/chio-labs/sqlbuild/compare/v0.113.6...v0.113.7) (2026-09-23)
+
+
+### Bug Fixes
+
+* faster Snowflake table-type conversion and accurate schema diffs ([#789](https://github.com/chio-labs/sqlbuild/issues/789)) ([a7a7e08](https://github.com/chio-labs/sqlbuild/commit/a7a7e082fa44cc9ba9eeb7905b2939aa35256796))
+
 ## [0.113.6](https://github.com/chio-labs/sqlbuild/compare/v0.113.5...v0.113.6) (2026-09-23)
 
 
