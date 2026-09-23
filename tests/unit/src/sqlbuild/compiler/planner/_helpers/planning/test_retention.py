@@ -41,6 +41,7 @@ from sqlbuild.spec.contracts.models import (
 )
 from sqlbuild.spec.contracts.types import TableType, TableTypeDowngradePolicy, TableTypeSource
 from tests.unit.src.sqlbuild.compiler.planner._helpers.planning._test_types import (
+    ForeignSnapshotRelationTestCase,
     RetentionPlanningErrorTestCase,
     RetentionPlanningTestCase,
     SnapshotRetentionPlanningTestCase,
@@ -823,3 +824,67 @@ def test_given_snowflake_snapshot_retention_when_planning_then_no_table_is_inspe
     )
 
     assert tuple(entry.direction.value for entry in entries) == test_case.expected_directions
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ForeignSnapshotRelationTestCase(
+            description="same-named table in another schema is not trusted for retention",
+            snapshot_schema="staging",
+            snapshot_days=0,
+            live_days=7,
+            desired_days=1,
+            expected_direction="decrease",
+            expected_inspections=1,
+        ),
+        ForeignSnapshotRelationTestCase(
+            description="destination table in the snapshot is used without inspection",
+            snapshot_schema="analytics",
+            snapshot_days=7,
+            live_days=7,
+            desired_days=1,
+            expected_direction="decrease",
+            expected_inspections=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_snapshot_relation_identity_when_planning_retention_then_only_destination_is_trusted(
+    test_case: ForeignSnapshotRelationTestCase,
+) -> None:
+    adapter: Mock = Mock(wraps=SnowflakeAdapter())
+    adapter.adapter_name = BuiltinAdapter.SNOWFLAKE.value
+    adapter.inspect_retention.side_effect = lambda *, connection, request: RetentionState(
+        request_id=request.request_id,
+        scope=RetentionScope.RELATION,
+        configured_days=None,
+        effective_days=test_case.live_days,
+        relation_kind="PERMANENT",
+        is_transient=False,
+    )
+    runtime: PlannerRuntime
+    warehouse: PlannerWarehouseState
+    scope: PlannerScope
+    runtime, warehouse, scope = build_retention_planner_inputs(
+        adapter=adapter,
+        desired_days=test_case.desired_days,
+        existing_relations={
+            "orders": RelationInfo(
+                database="warehouse",
+                schema=test_case.snapshot_schema,
+                name="orders",
+                relation_type="base table",
+                is_transient=False,
+                retention_days=test_case.snapshot_days,
+            )
+        },
+        config_values={},
+    )
+
+    entries: tuple[RetentionPlanEntry, ...] = plan_retention(
+        runtime=runtime, warehouse=warehouse, scope=scope
+    )
+
+    assert entries[0].direction.value == test_case.expected_direction
+    assert adapter.inspect_retention.call_count == test_case.expected_inspections

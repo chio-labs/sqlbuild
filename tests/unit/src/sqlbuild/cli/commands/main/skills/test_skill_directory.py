@@ -64,7 +64,7 @@ def test_given_skill_directory_when_updating_then_it_matches_the_package(
     installed: dict[str, str] = installed_skill_files(skill_dir=skill_dir)
     packaged: dict[str, str] = load_packaged_skill_files()
     assert {path: installed[path] for path in packaged} == packaged
-    assert "references/docs/INDEX.md" in packaged
+    assert "references/docs/CONTENTS.md" in packaged
     assert not any((tmp_path / path).exists() for path in test_case.expected_absent_paths)
     assert {
         path: (tmp_path / path).read_text(encoding="utf-8")
@@ -105,7 +105,7 @@ def test_given_custom_file_in_skill_directory_when_updating_then_nothing_is_writ
         SkillDirectoryMaintenanceTestCase(
             description="stale bundled page is reported",
             project_config='name = "demo"\nadapter = "duckdb"\n\n[skills]\ntargets = ["agents"]\n',
-            stale_relative_path="references/docs/INDEX.md",
+            stale_relative_path="references/docs/CONTENTS.md",
             expected_message_fragment="SQLBuild skill files are out of date",
             expected_restored=False,
         ),
@@ -115,7 +115,7 @@ def test_given_custom_file_in_skill_directory_when_updating_then_nothing_is_writ
                 'name = "demo"\nadapter = "duckdb"\n\n[skills]\n'
                 'targets = ["agents"]\nauto_update = true\n'
             ),
-            stale_relative_path="references/docs/INDEX.md",
+            stale_relative_path="references/docs/CONTENTS.md",
             expected_message_fragment="Updated stale SQLBuild skill files",
             expected_restored=True,
         ),
@@ -170,6 +170,7 @@ def test_given_packaged_skill_when_reading_then_entry_is_short_and_references_re
     )
 
     assert packaged[skill_entry_file].count("\n") <= test_case.max_entry_lines
+    assert len({path.casefold() for path in packaged}) == len(packaged)
     assert links - packaged.keys() == test_case.expected_broken_links
     assert commands - {command.value for command in CliCommand} == (
         test_case.expected_unknown_commands

@@ -80,7 +80,7 @@ jobs:
             exit 1
           fi
           unzip -l dist/*.whl | grep 'scripts/dupscore/dupscore.toml'
-          unzip -l dist/*.whl | grep 'sqlbuild/.agents/skills/sqlbuild/references/docs/INDEX.md'
+          unzip -l dist/*.whl | grep 'sqlbuild/.agents/skills/sqlbuild/references/docs/CONTENTS.md'
           python -m venv /tmp/sqlbuild-wheel-smoke
           /tmp/sqlbuild-wheel-smoke/bin/python -m pip install dist/*.whl
           /tmp/sqlbuild-wheel-smoke/bin/python -c "import sqlbuild._native as native; assert native.catalogue_json()"

@@ -54,3 +54,14 @@ class SnapshotRetentionPlanningTestCase:
     live_days: int
     desired_days: int
     expected_directions: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ForeignSnapshotRelationTestCase:
+    description: str
+    snapshot_schema: str
+    snapshot_days: int
+    live_days: int
+    desired_days: int
+    expected_direction: str
+    expected_inspections: int
