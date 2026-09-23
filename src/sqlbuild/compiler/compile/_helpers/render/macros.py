@@ -1291,9 +1291,23 @@ def find_macro_call_names(sql: str) -> tuple[str, ...]:
     )
 
 
+def find_nested_macro_call_names(sql: str) -> tuple[str, ...]:
+    """Return unique macro call names, including calls inside other calls' arguments."""
+
+    return tuple(
+        name
+        for name in _scan_sqlbuild_call_names(sql=sql, include_nested=True)
+        if name not in DECLARATION_REFERENCE_NAMES
+    )
+
+
 def _find_sqlbuild_call_names(sql: str) -> tuple[str, ...]:
     """Return executable SQLBuild call names, excluding quoted and commented text."""
 
+    return _scan_sqlbuild_call_names(sql=sql, include_nested=False)
+
+
+def _scan_sqlbuild_call_names(*, sql: str, include_nested: bool) -> tuple[str, ...]:
     if MACRO_TOKEN not in sql:
         return ()
 
@@ -1311,7 +1325,11 @@ def _find_sqlbuild_call_names(sql: str) -> tuple[str, ...]:
         opening_paren_index: int = _skip_whitespace(
             sql=sql, start_index=macro_start_index + 1 + len(macro_name)
         )
-        cursor = _find_matching_paren(sql=sql, opening_paren_index=opening_paren_index) + 1
+        cursor = (
+            opening_paren_index + 1
+            if include_nested
+            else _find_matching_paren(sql=sql, opening_paren_index=opening_paren_index) + 1
+        )
     return tuple(names)
 
 

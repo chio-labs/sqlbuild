@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable, Hashable, Iterable
+from functools import lru_cache
 from types import MappingProxyType
 
 from sqlbuild.compiler.scopes._helpers.identities import format_identity
@@ -128,6 +129,7 @@ def build_lookup(*, index: ScopeIndex) -> ScopeLookup:
     )
 
 
+@lru_cache(maxsize=65_536)
 def identity_key(identity: ResourceIdentity | DeclarationIdentity) -> str:
     return format_identity(identity=identity)
 

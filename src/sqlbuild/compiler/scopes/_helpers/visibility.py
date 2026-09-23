@@ -15,6 +15,7 @@ from sqlbuild.compiler.scopes.constants import (
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
+    GrantRecord,
     InaccessibleRecord,
     OwnershipRoot,
     ResourceIdentity,
@@ -66,9 +67,9 @@ def resolve_visibility(
     inaccessible: list[InaccessibleRecord] = []
     resource: ResourceRecord
     for resource in query.matches:
-        granted_declarations: set[DeclarationIdentity] = {
-            grant.declaration for grant in lookup.grants_by_resource.get(resource.identity, ())
-        }
+        grants_by_declaration: dict[DeclarationIdentity, list[GrantRecord]] = {}
+        for grant in lookup.grants_by_resource.get(resource.identity, ()):
+            grants_by_declaration.setdefault(grant.declaration, []).append(grant)
         declaration: DeclarationRecord
         for declaration in lookup.index.declarations:
             positive: VisibilityReason | None = _visibility_reason(
@@ -76,7 +77,10 @@ def resolve_visibility(
             )
             if positive is not None:
                 visible.append(VisibilityRecord(resource.identity, declaration.identity, positive))
-            if declaration.identity in granted_declarations:
+            declaration_grants: list[GrantRecord] | None = grants_by_declaration.get(
+                declaration.identity
+            )
+            if declaration_grants is not None:
                 visible.extend(
                     VisibilityRecord(
                         resource.identity,
@@ -88,8 +92,7 @@ def resolve_visibility(
                         ),
                         grant.through,
                     )
-                    for grant in lookup.grants_by_resource.get(resource.identity, ())
-                    if grant.declaration == declaration.identity
+                    for grant in declaration_grants
                 )
             elif positive is None:
                 inaccessible.append(

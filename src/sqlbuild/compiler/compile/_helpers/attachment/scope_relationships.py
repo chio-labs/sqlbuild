@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.compile._helpers.render.macros import find_macro_call_names
+from sqlbuild.compiler.compile._helpers.render.macros import (
+    find_macro_call_names,
+    find_nested_macro_call_names,
+)
 from sqlbuild.compiler.compile._helpers.scenarios.core import (
     extract_sql_scenario_expected_model_names,
 )
@@ -30,11 +33,14 @@ from sqlbuild.compiler.scopes.models import (
     DeclarationRecord,
     GrantRecord,
     ResourceIdentity,
+    ResourceRecord,
     ScopeIndex,
     ScopeLookup,
     VisibilityResolution,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, GrantKind, ResourceKind, ScopeKind
+
+type _SharedDeclarations = dict[tuple[str, str], tuple[DeclarationRecord, ...]]
 
 
 def build_scope_relationship_grants(
@@ -43,11 +49,16 @@ def build_scope_relationship_grants(
     """Return expected-model grants while retaining independent extraction faults."""
 
     lookup: ScopeLookup = build_scope_lookup(index=index)
+    shared_declarations: _SharedDeclarations = _shared_declarations_by_directory(lookup=lookup)
     test_grants, test_faults = _test_relationship_grants(
-        discovered_inputs=discovered_inputs, lookup=lookup
+        discovered_inputs=discovered_inputs,
+        lookup=lookup,
+        shared_declarations=shared_declarations,
     )
     scenario_grants, scenario_faults = _scenario_relationship_grants(
-        discovered_inputs=discovered_inputs, lookup=lookup
+        discovered_inputs=discovered_inputs,
+        lookup=lookup,
+        shared_declarations=shared_declarations,
     )
     return ScopeRelationshipBuild(
         grants=tuple(dict.fromkeys((*test_grants, *scenario_grants))),
@@ -56,7 +67,10 @@ def build_scope_relationship_grants(
 
 
 def _test_relationship_grants(
-    *, discovered_inputs: DiscoveredProjectInputs, lookup: ScopeLookup
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    lookup: ScopeLookup,
+    shared_declarations: _SharedDeclarations,
 ) -> tuple[tuple[GrantRecord, ...], tuple[ScopeRelationshipFault, ...]]:
     grants: list[GrantRecord] = []
     faults: list[ScopeRelationshipFault] = []
@@ -75,7 +89,8 @@ def _test_relationship_grants(
                             ResourceKind.TEST, block.name or test_file.relative_path.stem
                         ),
                         expected_model_names=expected_names,
-                        include_macros=True,
+                        shared_declarations=shared_declarations,
+                        called_macros=frozenset(find_nested_macro_call_names(block.sql_body)),
                     )
                 )
                 if block.mode is SqlTestMode.MACRO:
@@ -95,7 +110,10 @@ def _test_relationship_grants(
 
 
 def _scenario_relationship_grants(
-    *, discovered_inputs: DiscoveredProjectInputs, lookup: ScopeLookup
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    lookup: ScopeLookup,
+    shared_declarations: _SharedDeclarations,
 ) -> tuple[tuple[GrantRecord, ...], tuple[ScopeRelationshipFault, ...]]:
     grants: list[GrantRecord] = []
     faults: list[ScopeRelationshipFault] = []
@@ -109,6 +127,7 @@ def _scenario_relationship_grants(
                     lookup=lookup,
                     resource=ResourceIdentity(ResourceKind.SCENARIO, scenario.name),
                     expected_model_names=expected_names,
+                    shared_declarations=shared_declarations,
                 )
             )
         except Exception as error:
@@ -121,21 +140,18 @@ def _expected_model_grants(
     lookup: ScopeLookup,
     resource: ResourceIdentity,
     expected_model_names: tuple[str, ...],
-    include_macros: bool = False,
+    shared_declarations: _SharedDeclarations,
+    called_macros: frozenset[str] = frozenset(),
 ) -> list[GrantRecord]:
     grants: list[GrantRecord] = []
     for model_name in expected_model_names:
         through: ResourceIdentity = ResourceIdentity(ResourceKind.MODEL, model_name)
-        resolution: VisibilityResolution = resolve_scope_visibility(lookup=lookup, target=through)
-        for visible in resolution.visible:
-            records: tuple[DeclarationRecord, ...] = lookup.declarations.get(
-                visible.declaration, ()
-            )
-            if not records:
-                continue
-            declaration: DeclarationRecord = records[0]
-            if declaration.scope is ScopeKind.PRIVATE or (
-                declaration.identity.kind is DeclarationKind.MACRO and not include_macros
+        for declaration in _shared_visible_declarations(
+            lookup=lookup, resource=through, shared=shared_declarations
+        ):
+            if (
+                declaration.identity.kind is DeclarationKind.MACRO
+                and declaration.identity.name not in called_macros
             ):
                 continue
             grants.append(
@@ -146,6 +162,54 @@ def _expected_model_grants(
                 )
             )
     return grants
+
+
+def _shared_declarations_by_directory(*, lookup: ScopeLookup) -> _SharedDeclarations:
+    """Resolve shared non-private visibility once per model directory and ownership root."""
+
+    representatives: dict[tuple[str, str], ResourceIdentity] = {}
+    for identity, records in lookup.resources.items():
+        if (
+            identity.kind is ResourceKind.MODEL
+            and len(records) == 1
+            and identity not in lookup.grants_by_resource
+        ):
+            representatives.setdefault(_directory_key(record=records[0]), identity)
+    return {
+        key: _resolve_shared_declarations(lookup=lookup, resource=identity)
+        for key, identity in representatives.items()
+    }
+
+
+def _directory_key(*, record: ResourceRecord) -> tuple[str, str]:
+    return (Path(record.path).parent.as_posix(), record.ownership_root.path)
+
+
+def _shared_visible_declarations(
+    *, lookup: ScopeLookup, resource: ResourceIdentity, shared: _SharedDeclarations
+) -> tuple[DeclarationRecord, ...]:
+    """Return non-private declarations a resource sees, reusing its directory's resolution."""
+
+    records: tuple[ResourceRecord, ...] = lookup.resources.get(resource, ())
+    if len(records) == 1 and resource not in lookup.grants_by_resource:
+        directory_declarations: tuple[DeclarationRecord, ...] | None = shared.get(
+            _directory_key(record=records[0])
+        )
+        if directory_declarations is not None:
+            return directory_declarations
+    return _resolve_shared_declarations(lookup=lookup, resource=resource)
+
+
+def _resolve_shared_declarations(
+    *, lookup: ScopeLookup, resource: ResourceIdentity
+) -> tuple[DeclarationRecord, ...]:
+    resolution: VisibilityResolution = resolve_scope_visibility(lookup=lookup, target=resource)
+    declarations: list[DeclarationRecord] = []
+    for visible in resolution.visible:
+        records: tuple[DeclarationRecord, ...] = lookup.declarations.get(visible.declaration, ())
+        if records and records[0].scope is not ScopeKind.PRIVATE:
+            declarations.append(records[0])
+    return tuple(declarations)
 
 
 def _tested_macro_grants(
