@@ -47,3 +47,6 @@ unused_must_use = "deny"
 
 [workspace.lints.clippy]
 await_holding_lock = "deny"
+
+[profile.release]
+strip = "symbols"
