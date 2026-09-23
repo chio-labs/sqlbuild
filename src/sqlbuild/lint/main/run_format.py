@@ -12,14 +12,16 @@ from sqlbuild.lint._helpers.native import (
     format_native_headers,
     lint_native_headers,
     prepare_native_header_cache,
+    reject_unparseable_header_rewrites,
+    safe_format_files,
 )
 from sqlbuild.lint._helpers.native_format import (
     format_native_sql_bodies,
-    newline_style,
     with_newline_style,
 )
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
 from sqlbuild.lint._helpers.suppressions import apply_suppressions
+from sqlbuild.lint.constants import VIOLATION_SEVERITY_WARNING
 from sqlbuild.lint.models import (
     FormatChange,
     HeaderSpan,
@@ -44,11 +46,9 @@ def run_format(
     files: dict[Path, str] = collect_project_files(
         project_dir=project_dir, selected_paths=selected_paths
     )
-    newline_by_path: dict[Path, str] = {
-        file_path: newline_style(contents=contents) for file_path, contents in files.items()
-    }
-    updated_contents: dict[Path, str] = _apply_fixes(
-        files=files,
+    safe_files, newline_by_path = safe_format_files(files=files, config=config)
+    updated_contents, format_faults = _apply_fixes(
+        files=safe_files,
         config=config,
         project_dir=project_dir,
         discovered_inputs=discovered_inputs,
@@ -89,6 +89,7 @@ def run_format(
             value_renderer=value_renderer,
         )
     )
+    violations.extend(format_faults)
     final_contents: dict[Path, str] = {
         path: updated_contents.get(path, contents) for path, contents in files.items()
     }
@@ -113,7 +114,7 @@ def _apply_fixes(
     project_dir: Path,
     discovered_inputs: DiscoveredProjectInputs | None,
     fixtures_only: bool,
-) -> dict[Path, str]:
+) -> tuple[dict[Path, str], list[LintViolation]]:
     """Return contents after native header and supported SQL body fixes."""
 
     updated: dict[Path, str] = (
@@ -126,7 +127,7 @@ def _apply_fixes(
         else {}
     )
     if fixtures_only:
-        return updated
+        return updated, []
     file_path: Path
     contents: str
     current_files: dict[Path, str] = {
@@ -142,18 +143,45 @@ def _apply_fixes(
         if native_result[0] != contents:
             updated[file_path] = native_result[0]
     if not config.native_enabled:
-        return updated
+        return reject_unparseable_header_rewrites(
+            updated=updated,
+            config=config,
+            faults=[],
+        )
     current_files = {
         file_path: updated.get(file_path, contents) for file_path, contents in files.items()
     }
-    updated.update(
-        format_native_sql_bodies(
-            files=current_files,
+    native_formatted: dict[Path, str] = format_native_sql_bodies(
+        files=current_files,
+        config=config,
+        project_dir=project_dir,
+    )
+    updated.update(native_formatted)
+    post_native_files: dict[Path, str] = {
+        file_path: updated.get(file_path, contents) for file_path, contents in files.items()
+    }
+    fixture_formatted: dict[Path, str] = (
+        FixtureNullAutofix.apply(
+            files=post_native_files,
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+        )
+        if discovered_inputs is not None
+        else {}
+    )
+    if fixture_formatted:
+        final_native: dict[Path, str] = format_native_sql_bodies(
+            files=fixture_formatted,
             config=config,
             project_dir=project_dir,
         )
+        updated.update(fixture_formatted)
+        updated.update(final_native)
+    return reject_unparseable_header_rewrites(
+        updated=updated,
+        config=config,
+        faults=[],
     )
-    return updated
 
 
 def _lint_final_contents(
@@ -179,6 +207,7 @@ def _lint_final_contents(
                 file_path=file_path,
                 headers=headers,
                 config=config,
+                description_present_severity=VIOLATION_SEVERITY_WARNING,
             )
         )
     return violations

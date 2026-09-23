@@ -66,6 +66,37 @@ def resolve_lint_inputs(
     )
     if not select and not exclude:
         return adapter, None, discovered
+    combined_paths: frozenset[Path] | None = _resolve_combined_lint_paths(
+        project_dir=project_dir,
+        discovered=discovered,
+        adapter=adapter,
+        select=select,
+        exclude=exclude,
+    )
+    if combined_paths is not None:
+        _validate_selected_paths(paths=combined_paths)
+        return adapter, combined_paths, discovered
+    paths: frozenset[Path] = _resolve_model_paths(
+        project_dir=project_dir,
+        discovered=discovered,
+        adapter=adapter,
+        select=select,
+        exclude=exclude,
+    )
+    _validate_selected_paths(paths=paths)
+    return adapter, paths, discovered
+
+
+def _resolve_model_paths(
+    *,
+    project_dir: Path,
+    discovered: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    select: tuple[str, ...],
+    exclude: tuple[str, ...],
+) -> frozenset[Path]:
+    """Resolve model selectors to authored model paths."""
+
     exact_paths: frozenset[Path] | None = _resolve_exact_model_paths(
         project_dir=project_dir,
         discovered=discovered,
@@ -73,8 +104,7 @@ def resolve_lint_inputs(
         exclude=exclude,
     )
     if exact_paths is not None:
-        _validate_selected_paths(paths=exact_paths)
-        return adapter, exact_paths, discovered
+        return exact_paths
     graph: ProjectGraph = build_project_graph(discovered_inputs=discovered, adapter=adapter)
     selected_keys: frozenset[CompiledObjectKey] = resolve_project_selectors(
         select=select,
@@ -88,13 +118,84 @@ def resolve_lint_inputs(
     selected_names: frozenset[str] = frozenset(
         key.name for key in selected_keys if key.resource_type == CompiledResourceType.MODEL
     )
-    paths: frozenset[Path] = frozenset(
+    return frozenset(
         (project_dir / model.relative_path).resolve()
         for model in graph.project.models
         if model.name in selected_names
     )
-    _validate_selected_paths(paths=paths)
-    return adapter, paths, discovered
+
+
+def _resolve_combined_lint_paths(
+    *,
+    project_dir: Path,
+    discovered: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    select: tuple[str, ...],
+    exclude: tuple[str, ...],
+) -> frozenset[Path] | None:
+    """Resolve default or path-based format scopes before graph selector expansion."""
+
+    if any(not selector.strip() for selector in (*select, *exclude)):
+        return None
+    selected_path_tokens, selected_model_tokens = _partition_lint_selectors(select)
+    excluded_path_tokens, excluded_model_tokens = _partition_lint_selectors(exclude)
+    has_path_selector: bool = bool(selected_path_tokens or excluded_path_tokens)
+    if not has_path_selector and select:
+        return None
+    all_paths: frozenset[Path] = frozenset(
+        _paths_for_prefixes(project_dir=project_dir, prefixes=())
+    )
+    if select:
+        selected: set[Path] = set(
+            _paths_for_prefixes(project_dir=project_dir, prefixes=selected_path_tokens)
+            if selected_path_tokens
+            else ()
+        )
+        if selected_model_tokens:
+            selected.update(
+                _resolve_model_paths(
+                    project_dir=project_dir,
+                    discovered=discovered,
+                    adapter=adapter,
+                    select=selected_model_tokens,
+                    exclude=(),
+                )
+            )
+    else:
+        selected = set(all_paths)
+    excluded: set[Path] = set(
+        _paths_for_prefixes(project_dir=project_dir, prefixes=excluded_path_tokens)
+        if excluded_path_tokens
+        else ()
+    )
+    if excluded_model_tokens:
+        excluded.update(
+            _resolve_model_paths(
+                project_dir=project_dir,
+                discovered=discovered,
+                adapter=adapter,
+                select=excluded_model_tokens,
+                exclude=(),
+            )
+        )
+    return frozenset(selected - excluded)
+
+
+def _partition_lint_selectors(
+    raw_selectors: tuple[str, ...],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Separate valid formatter-root paths from model selectors."""
+
+    path_tokens: list[str] = []
+    model_tokens: list[str] = []
+    for raw_selector in raw_selectors:
+        for token in raw_selector.split():
+            prefixes: tuple[str, ...] | None = _lint_path_prefixes(raw_selectors=(token,))
+            if prefixes is not None:
+                path_tokens.extend(prefixes)
+            else:
+                model_tokens.append(token)
+    return tuple(path_tokens), tuple(model_tokens)
 
 
 def _resolve_discovered_adapter(

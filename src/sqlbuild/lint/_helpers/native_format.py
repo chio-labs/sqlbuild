@@ -10,7 +10,10 @@ from typing import Any
 import sqlbuild._native as _native
 from sqlbuild.lint._helpers.headers import lint_body_ranges, scan_headers
 from sqlbuild.lint._helpers.sqlbuild_tokens import neutralize_interpolation, restore_interpolation
-from sqlbuild.lint.constants import CARRIAGE_RETURN_LINE_FEED, LINE_FEED
+from sqlbuild.lint.constants import (
+    CARRIAGE_RETURN_LINE_FEED,
+    LINE_FEED,
+)
 from sqlbuild.lint.exceptions import NativeLintError
 from sqlbuild.lint.models import HeaderSpan, InterpolationSite, LintConfig
 
@@ -46,7 +49,7 @@ def with_newline_style(*, contents: str, newline: str) -> str:
 def format_native_sql_bodies(
     *, files: dict[Path, str], config: LintConfig, project_dir: Path
 ) -> dict[Path, str]:
-    """Format supported authored SQL bodies and preserve unsupported bodies unchanged."""
+    """Format supported SQL bodies while leaving declined bodies unchanged."""
 
     prepared_by_path: dict[Path, tuple[_PreparedBody, ...]] = {}
     requests_by_key: dict[tuple[str, str], dict[str, object]] = {}
@@ -93,8 +96,15 @@ def format_native_sql_bodies(
             response: dict[str, Any] = response_cache[prepared.cache_key]
             raw_sql: object = response.get("sql")
             changed: object = response.get("changed")
-            if not isinstance(raw_sql, str) or not isinstance(changed, bool):
+            formatted: object = response.get("formatted")
+            if (
+                not isinstance(raw_sql, str)
+                or not isinstance(changed, bool)
+                or not isinstance(formatted, bool)
+            ):
                 raise NativeLintError("native formatter returned invalid SQL or changed state")
+            if not formatted:
+                continue
             if not changed:
                 continue
             restored: str = restore_interpolation(

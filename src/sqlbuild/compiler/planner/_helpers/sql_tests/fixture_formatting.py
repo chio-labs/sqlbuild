@@ -15,6 +15,7 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileSqlTestCte
 from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_columns
+from sqlbuild.compiler.discovery.main._parse_sql_test_file import parse_sql_test_file
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSqlModelFile,
@@ -56,6 +57,14 @@ _PROJECTION_ALIAS_PATTERN: re.Pattern[str] = re.compile(
     re.IGNORECASE,
 )
 _SELECT_LINE_PATTERN: re.Pattern[str] = re.compile(r"^\s*SELECT\b(?P<body>.*)$", re.IGNORECASE)
+_EMPTY_TYPED_NULL_QUERY_PATTERN: re.Pattern[str] = re.compile(
+    r"^\s*SELECT\s+(?P<projection>.+?)\s+WHERE\s+FALSE\s*$",
+    re.IGNORECASE | re.DOTALL,
+)
+_SQL_QUOTE_CHARACTERS: frozenset[str] = frozenset({"'", '"', "`"})
+_OPEN_PARENTHESIS_CHARACTER: str = "("
+_CLOSE_PARENTHESIS_CHARACTER: str = ")"
+_COMMA_CHARACTER: str = ","
 
 
 def format_redundant_fixture_nulls(
@@ -78,8 +87,15 @@ def format_redundant_fixture_nulls(
         contents: str | None = updated.get(file_path, files.get(file_path))
         if contents is None:
             continue
+        try:
+            current_blocks: tuple[DiscoveredSqlTestBlock, ...] = parse_sql_test_file(
+                contents=contents,
+                file_path=file_path,
+            )
+        except (OSError, UnicodeError, ValueError, SyntaxError):
+            continue
         block: DiscoveredSqlTestBlock
-        for block in test_file.blocks:
+        for block in current_blocks:
             fixed_block: str = _format_test_block(
                 block=block,
                 file_label=str(test_file.relative_path),
@@ -215,6 +231,8 @@ def _remove_redundant_typed_null_lines(*, sql: str, relation: FixtureRelationMet
     metadata_by_name: dict[str, FixtureColumnMetadata] = {
         column.name.casefold(): column for column in relation.columns
     }
+    if _is_empty_typed_null_query(sql=sql, metadata_by_name=metadata_by_name):
+        return "SELECT * FROM __empty_fixture()"
     lines: list[str] = sql.splitlines()
     typed_null_indexes: set[int] = set()
     remove_indexes: set[int] = set()
@@ -254,6 +272,64 @@ def _remove_redundant_typed_null_lines(*, sql: str, relation: FixtureRelationMet
     if not _names_form_schema_prefix(names=retained_names, relation=relation):
         return sql
     return candidate
+
+
+def _is_empty_typed_null_query(
+    *, sql: str, metadata_by_name: dict[str, FixtureColumnMetadata]
+) -> bool:
+    """Return whether an empty fixture projects only known typed-null columns."""
+
+    query_match: re.Match[str] | None = _EMPTY_TYPED_NULL_QUERY_PATTERN.fullmatch(sql)
+    if query_match is None:
+        return False
+    projections: tuple[str, ...] = _split_top_level_expressions(
+        value=query_match.group("projection")
+    )
+    if not projections:
+        return False
+    for projection in projections:
+        typed_null_match: re.Match[str] | None = _TYPED_NULL_LINE_PATTERN.fullmatch(
+            projection.strip()
+        )
+        if typed_null_match is None:
+            return False
+        alias: str = typed_null_match.group("alias").strip('"`')
+        column: FixtureColumnMetadata | None = metadata_by_name.get(alias.casefold())
+        if column is None or column.type is None:
+            return False
+    return True
+
+
+def _split_top_level_expressions(*, value: str) -> tuple[str, ...]:
+    """Split a projection list without splitting commas inside types or quoted values."""
+
+    expressions: list[str] = []
+    start: int = 0
+    depth: int = 0
+    quote: str | None = None
+    index: int = 0
+    while index < len(value):
+        character: str = value[index]
+        if quote is not None:
+            if character == quote:
+                if index + 1 < len(value) and value[index + 1] == quote:
+                    index += 2
+                    continue
+                quote = None
+            index += 1
+            continue
+        if character in _SQL_QUOTE_CHARACTERS:
+            quote = character
+        elif character == _OPEN_PARENTHESIS_CHARACTER:
+            depth += 1
+        elif character == _CLOSE_PARENTHESIS_CHARACTER:
+            depth = max(0, depth - 1)
+        elif character == _COMMA_CHARACTER and depth == 0:
+            expressions.append(value[start:index])
+            start = index + 1
+        index += 1
+    expressions.append(value[start:])
+    return tuple(expression for expression in expressions if expression.strip())
 
 
 def _projection_aliases(*, lines: list[str]) -> tuple[str, ...] | None:

@@ -6,6 +6,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::sql_lint::constants::{
     CAST_TYPE_SEPARATOR_KEYWORD, CLOSE_PARENTHESIS, LINT_API_VERSION, OPEN_PARENTHESIS,
+    VALUES_RELATION_PREFIX_TOKEN_COUNT,
 };
 use crate::sql_lint::models::{FormatRequest, FormatResponse};
 
@@ -119,6 +120,7 @@ fn format_once(neutral_sql: &str, context: &FormatOnceContext<'_>) -> Result<Str
     let mut formatted = format_by_name(neutral_sql, context.dialect_name)
         .map_err(|error| error.to_string())?
         .join(";\n");
+    formatted = restore_unparenthesized_from_values(formatted, context)?;
     formatted = restore_string_literals(formatted, context)?;
     formatted = restore_cast_type_spellings(formatted, context)?;
     if context.comments.is_empty() {
@@ -151,6 +153,90 @@ fn format_once(neutral_sql: &str, context: &FormatOnceContext<'_>) -> Result<Str
         formatted.insert_str(char_to_byte(&formatted, char_offset)?, &text);
     }
     Ok(formatted)
+}
+
+fn restore_unparenthesized_from_values(
+    mut formatted: String,
+    context: &FormatOnceContext<'_>,
+) -> Result<String, String> {
+    let authored_parenthesized: Vec<bool> = context
+        .original_tokens
+        .iter()
+        .enumerate()
+        .filter(|(_, token)| token_text(context.original_sql, token).as_deref() == Some("VALUES"))
+        .map(|(index, _)| {
+            index > 0
+                && token_text(context.original_sql, &context.original_tokens[index - 1]).as_deref()
+                    == Some(OPEN_PARENTHESIS)
+        })
+        .collect();
+    if authored_parenthesized.is_empty() {
+        return Ok(formatted);
+    }
+    let formatted_tokens = context
+        .dialect
+        .tokenize(&formatted)
+        .map_err(|error| error.to_string())?;
+    let formatted_values: Vec<usize> = formatted_tokens
+        .iter()
+        .enumerate()
+        .filter_map(|(index, token)| {
+            (token_text(&formatted, token).as_deref() == Some("VALUES")).then_some(index)
+        })
+        .collect();
+    if authored_parenthesized.len() != formatted_values.len() {
+        return Ok(formatted);
+    }
+    let mut removals: Vec<(usize, usize)> = Vec::new();
+    for (was_parenthesized, values_index) in
+        authored_parenthesized.into_iter().zip(formatted_values)
+    {
+        if was_parenthesized || values_index < VALUES_RELATION_PREFIX_TOKEN_COUNT {
+            continue;
+        }
+        let wrapper_index = values_index - 1;
+        let relation_index = values_index - 2;
+        let relation_keyword = token_text(&formatted, &formatted_tokens[relation_index]);
+        if token_text(&formatted, &formatted_tokens[wrapper_index]).as_deref()
+            != Some(OPEN_PARENTHESIS)
+            || !matches!(relation_keyword.as_deref(), Some("FROM" | "JOIN"))
+        {
+            continue;
+        }
+        let mut depth = 0_i32;
+        let mut close_index: Option<usize> = None;
+        for (index, token) in formatted_tokens.iter().enumerate().skip(wrapper_index) {
+            match token_text(&formatted, token).as_deref() {
+                Some(OPEN_PARENTHESIS) => depth += 1,
+                Some(CLOSE_PARENTHESIS) => {
+                    depth -= 1;
+                    if depth == 0 {
+                        close_index = Some(index);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let Some(close_index) = close_index else {
+            return Ok(formatted);
+        };
+        let open = &formatted_tokens[wrapper_index];
+        let close = &formatted_tokens[close_index];
+        removals.push((open.span.start, open.span.end));
+        removals.push((close.span.start, close.span.end));
+    }
+    removals.sort_unstable();
+    for (start, end) in removals.into_iter().rev() {
+        let start = char_to_byte(&formatted, start)?;
+        let end = char_to_byte(&formatted, end)?;
+        formatted.replace_range(start..end, "");
+    }
+    Ok(formatted)
+}
+
+fn token_text(sql: &str, token: &Token) -> Option<String> {
+    char_slice(sql, token.span.start, token.span.end).map(|value| value.to_ascii_uppercase())
 }
 
 fn comment_insertion(

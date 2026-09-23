@@ -14,12 +14,14 @@ from sqlbuild.compiler.discovery._helpers.sql.model_files import (
 )
 from sqlbuild.compiler.discovery.exceptions import ModelSqlParseError
 from sqlbuild.lint.constants import (
+    CARRIAGE_RETURN_LINE_FEED,
     CLOSING_PAREN_CHARACTER,
     DESCRIPTION_HEADER_KINDS,
     DESCRIPTION_REQUIRED_HEADER_KINDS,
     HEADER_KIND_FUNCTION,
     HEADER_KIND_MODEL,
     IDENTIFIER_SEPARATOR_CHARACTER,
+    LINE_FEED,
     RULE_DESCRIPTION_LENGTH,
     RULE_DESCRIPTION_PRESENT,
     RULE_HEADER_PARSE,
@@ -29,6 +31,7 @@ from sqlbuild.lint.constants import (
     VIOLATION_SEVERITY_WARNING,
 )
 from sqlbuild.lint.models import HeaderSpan, LintConfig, LintViolation
+from sqlbuild.lint.types import LintSeverity
 
 _QUOTE_CHARACTERS: frozenset[str] = frozenset({"'", '"'})
 _ESCAPE_CHARACTER: str = "\\"
@@ -59,6 +62,7 @@ def lint_native_headers(
     file_path: Path,
     headers: tuple[HeaderSpan, ...],
     config: LintConfig,
+    description_present_severity: LintSeverity = VIOLATION_SEVERITY_FAULT,
 ) -> tuple[LintViolation, ...]:
     """Run all native header rules and return their violations."""
 
@@ -73,6 +77,7 @@ def lint_native_headers(
                 header=header,
                 config=config,
                 line_starts=line_starts,
+                description_present_severity=description_present_severity,
             )
         )
         violations.extend(
@@ -98,6 +103,64 @@ def prepare_native_header_cache(*, files: dict[Path, str]) -> None:
             for header in scan_headers(contents=contents)
         )
     prepare_model_header_tokens(headers)
+
+
+def safe_format_files(
+    *, files: dict[Path, str], config: LintConfig
+) -> tuple[dict[Path, str], dict[Path, str]]:
+    """Return parse-safe files together with every authored newline convention."""
+
+    safe_files: dict[Path, str] = {
+        file_path: contents
+        for file_path, contents in files.items()
+        if not _header_parse_faults(file_path=file_path, contents=contents, config=config)
+    }
+    newline_by_path: dict[Path, str] = {
+        file_path: CARRIAGE_RETURN_LINE_FEED if CARRIAGE_RETURN_LINE_FEED in contents else LINE_FEED
+        for file_path, contents in files.items()
+    }
+    return safe_files, newline_by_path
+
+
+def reject_unparseable_header_rewrites(
+    *,
+    updated: dict[Path, str],
+    config: LintConfig,
+    faults: list[LintViolation],
+) -> tuple[dict[Path, str], list[LintViolation]]:
+    """Discard every file rewrite whose resulting header cannot be parsed."""
+
+    accepted: dict[Path, str] = dict(updated)
+    for file_path, contents in tuple(updated.items()):
+        parse_faults: tuple[LintViolation, ...] = _header_parse_faults(
+            file_path=file_path,
+            contents=contents,
+            config=config,
+        )
+        if not parse_faults:
+            continue
+        accepted.pop(file_path, None)
+        faults.extend(parse_faults)
+    return accepted, faults
+
+
+def _header_parse_faults(
+    *, file_path: Path, contents: str, config: LintConfig
+) -> tuple[LintViolation, ...]:
+    from sqlbuild.lint._helpers.headers import scan_headers
+
+    headers: tuple[HeaderSpan, ...] = scan_headers(contents=contents)
+    return tuple(
+        violation
+        for violation in lint_native_headers(
+            contents=contents,
+            file_path=file_path,
+            headers=headers,
+            config=config,
+            description_present_severity=VIOLATION_SEVERITY_WARNING,
+        )
+        if violation.code == RULE_HEADER_PARSE
+    )
 
 
 def format_native_headers(
@@ -134,6 +197,7 @@ def _lint_header_values(
     header: HeaderSpan,
     config: LintConfig,
     line_starts: tuple[int, ...],
+    description_present_severity: LintSeverity,
 ) -> tuple[LintViolation, ...]:
     header_text: str = contents[header.start : header.end]
     try:
@@ -180,6 +244,7 @@ def _lint_header_values(
                 code=RULE_DESCRIPTION_PRESENT,
                 message=f"{header.kind}() header requires a description",
                 remediation=f"Add a description to the {header.kind}() header.",
+                severity=description_present_severity,
             )
         )
     if header.kind in DESCRIPTION_HEADER_KINDS and isinstance(effective_description, str):
@@ -598,6 +663,7 @@ def _violation_for_header_start(
     code: str,
     message: str,
     remediation: str,
+    severity: LintSeverity = VIOLATION_SEVERITY_FAULT,
 ) -> LintViolation:
     position: tuple[int, int] = _offset_to_position(
         offset=header.start, line_starts=_line_starts(contents)
@@ -608,7 +674,7 @@ def _violation_for_header_start(
         column=position[1],
         code=code,
         message=message,
-        severity=VIOLATION_SEVERITY_FAULT,
+        severity=severity,
         engine="sqlbuild",
         remediation=remediation,
     )

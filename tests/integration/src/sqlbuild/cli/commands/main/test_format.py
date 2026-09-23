@@ -2,14 +2,28 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
+from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    CanonicalFixtureFormatIntegrationTestCase,
     DescriptionFormatIntegrationTestCase,
     FormatCompileIntegrationTestCase,
+    FormatSafetyIntegrationTestCase,
+    FormatScopeIntegrationTestCase,
+    FormatterDeclineIntegrationTestCase,
+    FormatWarningIntegrationTestCase,
+    FromValuesFormatIntegrationTestCase,
+    MixedFromValuesFormatIntegrationTestCase,
+    TypedNullFormatIntegrationTestCase,
+)
+from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
+    write_from_values_format_project,
+    write_snowflake_format_test,
 )
 
 
@@ -303,3 +317,479 @@ def test_given_description_width_when_formatting_then_wrapped_model_compiles(
     assert f'description "{test_case.expected_formatted_description}"' in model.read_text(
         encoding="utf-8"
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FormatCompileIntegrationTestCase(
+            description="schema column remains valid and idempotent",
+            expected_literal="SCHEMA (type VARCHAR)",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_schema_column_when_formatting_then_header_remains_valid_and_idempotent(
+    test_case: FormatCompileIntegrationTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "catalog"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "catalog_objects.sql"
+    model.parent.mkdir()
+    model.write_text(
+        "MODEL (\n"
+        '  description "Catalog objects.",\n'
+        "  materialized table,\n"
+        "  columns (\n"
+        "    object_id (type INTEGER),\n"
+        "    SCHEMA (type VARCHAR),\n"
+        "  ),\n"
+        ");\n\n"
+        "select 1 as object_id, 'analytics' as \"SCHEMA\"\n",
+        encoding="utf-8",
+    )
+
+    first_exit: int = main(["--project-dir", str(tmp_path), "format"])
+    compile_exit: int = main(["--project-dir", str(tmp_path), "compile", "--no-cache"])
+    formatted_once: str = model.read_text(encoding="utf-8")
+    second_exit: int = main(["--project-dir", str(tmp_path), "format", "--check"])
+
+    assert first_exit == 0
+    assert compile_exit == 0
+    assert second_exit == 0
+    assert formatted_once == model.read_text(encoding="utf-8")
+    assert formatted_once.count(test_case.expected_literal) == 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FormatSafetyIntegrationTestCase(
+            description="unparseable header is untouched",
+            authored_sql="MODEL (description);\nselect 1 as order_id\n",
+            expected_fault_code="header-parse",
+            expected_exit_code=1,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unparseable_file_when_formatting_then_file_is_untouched_and_faults(
+    test_case: FormatSafetyIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(test_case.authored_sql, encoding="utf-8")
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "format"])
+
+    captured: CaptureResult[str] = capsys.readouterr()
+    assert exit_code == test_case.expected_exit_code
+    assert test_case.expected_fault_code in captured.out
+    assert model.read_text(encoding="utf-8") == test_case.authored_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FormatterDeclineIntegrationTestCase(
+            description="unsupported SQL body is skipped while header formats",
+            authored_body="select from\n",
+            expected_exit_code=0,
+        ),
+        FormatterDeclineIntegrationTestCase(
+            description="comment attachment decline is skipped while header formats",
+            authored_body="select order_id order_key /* keep */ from orders\n",
+            expected_exit_code=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_native_formatter_decline_when_formatting_then_header_formats_and_body_is_unchanged(
+    test_case: FormatterDeclineIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        "MODEL (\n"
+        '  description "Orders.",    \n'
+        "  materialized table,\n"
+        ");\n\n"
+        f"{test_case.authored_body}",
+        encoding="utf-8",
+    )
+
+    first_exit: int = main(["--project-dir", str(tmp_path), "format"])
+    first_output: str = capsys.readouterr().out
+    formatted_once: str = model.read_text(encoding="utf-8")
+    second_exit: int = main(["--project-dir", str(tmp_path), "format", "--check"])
+    second_output: str = capsys.readouterr().out
+
+    assert first_exit == test_case.expected_exit_code
+    assert second_exit == test_case.expected_exit_code
+    assert '  description "Orders.",\n' in formatted_once
+    assert test_case.authored_body in formatted_once
+    assert "FAULT=0  WARN=0" in first_output
+    assert "FAULT=0  WARN=0" in second_output
+    assert formatted_once == model.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TypedNullFormatIntegrationTestCase(
+            description="inline colon casts reach empty fixture fixed point in one pass",
+            fixture_projection=("NULL::VARCHAR AS customer_key, NULL::BIGINT AS order_count"),
+            expected_literal="__EMPTY_FIXTURE()",
+            expected_exit_code=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_inline_typed_null_fixture_when_formatting_then_one_pass_is_idempotent(
+    test_case: TypedNullFormatIntegrationTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "customers"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "customers.sql"
+    model.parent.mkdir()
+    model.write_text(
+        "MODEL (\n"
+        '  description "Customers.",\n'
+        "  contract enforced,\n"
+        "  columns (\n"
+        "    customer_key (type VARCHAR),\n"
+        "    order_count (type BIGINT),\n"
+        "  ),\n"
+        ");\n\n"
+        "SELECT 'c1' AS customer_key, 1 AS order_count\n",
+        encoding="utf-8",
+    )
+    test_file: Path = tmp_path / "tests" / "unit" / "test_customers.sql"
+    test_file.parent.mkdir(parents=True)
+    test_file.write_text(
+        "TEST();\n\n"
+        "WITH __ref__customers AS (\n"
+        f"    SELECT {test_case.fixture_projection}\n"
+        "    WHERE FALSE\n"
+        "),\n"
+        "__expected__customers AS (\n"
+        "    SELECT 'c1' AS customer_key, 1 AS order_count\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+    first_exit: int = main(["--project-dir", str(tmp_path), "format"])
+    formatted_once: str = test_file.read_text(encoding="utf-8")
+    second_exit: int = main(["--project-dir", str(tmp_path), "format", "--check"])
+
+    assert first_exit == test_case.expected_exit_code
+    assert second_exit == test_case.expected_exit_code
+    assert test_case.expected_literal in formatted_once
+    assert "CAST(NULL" not in formatted_once
+    assert formatted_once == test_file.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CanonicalFixtureFormatIntegrationTestCase(
+            description="post-native fixture simplification reaches fixed point in one pass",
+            expected_retained_literal="CAST(COLUMN2 AS TEXT) AS CLUSTER_ID",
+            expected_removed_literal="is_archived",
+            expected_exit_code=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_redundant_typed_null_after_multi_projection_when_formatting_then_is_idempotent(
+    test_case: CanonicalFixtureFormatIntegrationTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "customer_segments"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "customer_clusters.sql"
+    model.parent.mkdir()
+    model.write_text(
+        "MODEL (\n"
+        '  description "Customer clusters.",\n'
+        "  contract enforced,\n"
+        "  columns (\n"
+        "    customer_key (type VARCHAR),\n"
+        "    cluster_id (type VARCHAR),\n"
+        "    is_archived (type BOOLEAN),\n"
+        "  ),\n"
+        ");\n\n"
+        "SELECT 'c1' AS customer_key, 'k1' AS cluster_id, FALSE AS is_archived\n",
+        encoding="utf-8",
+    )
+    test_file: Path = tmp_path / "tests" / "unit" / "test_customer_clusters.sql"
+    test_file.parent.mkdir(parents=True)
+    test_file.write_text(
+        "TEST();\n\n"
+        "WITH __ref__customer_clusters AS (\n"
+        "    SELECT COLUMN1::VARCHAR AS CUSTOMER_KEY, COLUMN2::VARCHAR AS CLUSTER_ID,\n"
+        "        NULL::BOOLEAN AS is_archived\n"
+        "    FROM VALUES\n"
+        "        ('c1', 'k1')\n"
+        "),\n"
+        "__expected__customer_clusters AS (\n"
+        "    SELECT 'c1' AS customer_key, 'k1' AS cluster_id, FALSE AS is_archived\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+    first_exit: int = main(["--project-dir", str(tmp_path), "format"])
+    formatted_once: str = test_file.read_text(encoding="utf-8")
+    second_exit: int = main(["--project-dir", str(tmp_path), "format", "--check"])
+    fixture_section: str = formatted_once.split("__expected__customer_clusters", maxsplit=1)[0]
+
+    assert first_exit == test_case.expected_exit_code
+    assert second_exit == test_case.expected_exit_code
+    assert test_case.expected_retained_literal in fixture_section
+    assert test_case.expected_removed_literal not in fixture_section
+    assert formatted_once == test_file.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FromValuesFormatIntegrationTestCase(
+            description="snowflake preserves unparenthesized values relation",
+            adapter="snowflake",
+            expected_exit_code=0,
+            expected_literal="FROM VALUES",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_snowflake_from_values_when_formatting_then_form_is_preserved(
+    test_case: FromValuesFormatIntegrationTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir, test_file = write_from_values_format_project(
+        tmp_path=tmp_path, adapter=test_case.adapter
+    )
+
+    first_exit: int = main(["--project-dir", str(project_dir), "format"])
+    formatted_once: str = test_file.read_text(encoding="utf-8")
+    second_exit: int = main(["--project-dir", str(project_dir), "format", "--check"])
+
+    assert first_exit == test_case.expected_exit_code
+    assert second_exit == test_case.expected_exit_code
+    assert test_case.expected_literal in formatted_once
+    assert "FROM (VALUES" not in formatted_once
+    assert formatted_once == test_file.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FromValuesFormatIntegrationTestCase(
+            description="duckdb values relation remains valid and idempotent",
+            adapter="duckdb",
+            expected_exit_code=0,
+            expected_literal="FROM VALUES",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_duckdb_from_values_when_formatting_then_project_compiles(
+    test_case: FromValuesFormatIntegrationTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir, test_file = write_from_values_format_project(
+        tmp_path=tmp_path, adapter=test_case.adapter
+    )
+
+    first_exit: int = main(["--project-dir", str(project_dir), "format"])
+    compile_exit: int = main(["--project-dir", str(project_dir), "compile", "--no-cache"])
+    formatted_once: str = test_file.read_text(encoding="utf-8")
+    second_exit: int = main(["--project-dir", str(project_dir), "format", "--check"])
+
+    assert first_exit == test_case.expected_exit_code
+    assert compile_exit == test_case.expected_exit_code
+    assert second_exit == test_case.expected_exit_code
+    assert test_case.expected_literal in formatted_once
+    assert formatted_once == test_file.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MixedFromValuesFormatIntegrationTestCase(
+            description="mixed values forms retain positional authorship through real CLI",
+            authored_query=(
+                'TEST (name "mixed_product_values");\n\n'
+                "-- VALUES inside this comment is not a relation.\n"
+                "SELECT 'VALUES' AS label FROM (VALUES (1)) AS first_values(id)\n"
+                "UNION ALL\n"
+                "SELECT 'second' AS label FROM VALUES (2)\n"
+            ),
+            expected_parenthesized_literal="FROM (VALUES (1)) AS first_values(id)",
+            expected_unparenthesized_literal="FROM VALUES (2)",
+            expected_exit_code=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_mixed_values_forms_when_formatting_then_each_relation_preserves_authorship(
+    test_case: MixedFromValuesFormatIntegrationTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir, test_file = write_snowflake_format_test(
+        tmp_path=tmp_path,
+        test_sql=test_case.authored_query,
+    )
+
+    first_exit: int = main(["--project-dir", str(project_dir), "format"])
+    formatted_once: str = test_file.read_text(encoding="utf-8")
+    second_exit: int = main(["--project-dir", str(project_dir), "format", "--check"])
+
+    assert first_exit == test_case.expected_exit_code
+    assert second_exit == test_case.expected_exit_code
+    assert test_case.expected_parenthesized_literal in formatted_once
+    assert test_case.expected_unparenthesized_literal in formatted_once
+    assert formatted_once == test_file.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FormatScopeIntegrationTestCase(
+            description="default exclusions and path selectors share format scope",
+            expected_exclude_exit=1,
+            expected_selected_model_exit=0,
+            expected_path_with_exclude_exit=1,
+            expected_exclude_path_exit=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_format_selectors_when_scoping_then_paths_and_default_exclusions_are_consistent(
+    test_case: FormatScopeIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "customers.sql").write_text(
+        "MODEL (materialized table, columns (customer_id (type INTEGER),));\n"
+        "SELECT\n"
+        "  1 AS customer_id\n",
+        encoding="utf-8",
+    )
+    (models / "orders.sql").write_text(
+        'MODEL (description "Orders.", materialized table, '
+        "columns (order_id (type INTEGER),));\n"
+        "SELECT\n"
+        "  customer_id AS order_id\n"
+        'FROM __ref("customers")\n',
+        encoding="utf-8",
+    )
+    test_file: Path = tmp_path / "tests" / "unit" / "test_orders.sql"
+    test_file.parent.mkdir(parents=True)
+    unformatted_test: str = (
+        'TEST (name "orders_returns_one_row");\n\n'
+        "WITH __ref__customers AS (\n    SELECT 1 AS customer_id\n),\n"
+        "__expected__orders AS (\n    SELECT 1 AS order_id\n)\nSELECT 1\n"
+    )
+    test_file.write_text(unformatted_test, encoding="utf-8")
+
+    exclude_exit: int = main(
+        ["--project-dir", str(tmp_path), "format", "--check", "--exclude", "customers"]
+    )
+    exclude_output: str = capsys.readouterr().err
+    selected_model_exit: int = main(
+        ["--project-dir", str(tmp_path), "format", "--check", "--select", "orders"]
+    )
+    selected_model_output: str = capsys.readouterr().err
+    path_with_exclude_exit: int = main(
+        [
+            "--project-dir",
+            str(tmp_path),
+            "format",
+            "--check",
+            "--select",
+            "path:tests",
+            "--exclude",
+            "orders",
+        ]
+    )
+    path_with_exclude_output: str = capsys.readouterr().err
+    exclude_path_exit: int = main(
+        ["--project-dir", str(tmp_path), "format", "--check", "--exclude", "path:tests"]
+    )
+    exclude_path_output: str = capsys.readouterr().err
+
+    assert exclude_exit == test_case.expected_exclude_exit
+    assert "2 files checked" in exclude_output
+    assert selected_model_exit == test_case.expected_selected_model_exit
+    assert "1 files checked" in selected_model_output
+    assert path_with_exclude_exit == test_case.expected_path_with_exclude_exit
+    assert "1 files checked" in path_with_exclude_output
+    assert exclude_path_exit == test_case.expected_exclude_path_exit
+    assert "2 files checked" in exclude_path_output
+    assert test_file.read_text(encoding="utf-8") == unformatted_test
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FormatWarningIntegrationTestCase(
+            description="missing model description warns without failing format",
+            expected_exit_code=0,
+            expected_code="description-present",
+            expected_severity="warning",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_missing_description_when_formatting_then_warning_does_not_fail(
+    test_case: FormatWarningIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text("MODEL (materialized table);\nSELECT 1 AS order_id\n", encoding="utf-8")
+
+    write_exit: int = main(["--project-dir", str(tmp_path), "format"])
+    _ = capsys.readouterr()
+    text_exit: int = main(["--project-dir", str(tmp_path), "format", "--check"])
+    text_output: str = capsys.readouterr().out
+    json_exit: int = main(["--project-dir", str(tmp_path), "format", "--check", "--json"])
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+
+    assert write_exit == test_case.expected_exit_code
+    assert text_exit == test_case.expected_exit_code
+    assert f"warning[{test_case.expected_code}]" in text_output
+    assert json_exit == test_case.expected_exit_code
+    assert payload["faults"] == 0
+    assert payload["warnings"] == 1
+    violations: object = payload["violations"]
+    assert isinstance(violations, list)
+    assert violations[0]["code"] == test_case.expected_code
+    assert violations[0]["severity"] == test_case.expected_severity

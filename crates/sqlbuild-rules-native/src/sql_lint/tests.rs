@@ -8,3 +8,5 @@ mod helpers;
 mod sql_lint;
 #[path = "tests/test_types.rs"]
 mod test_types;
+#[path = "tests/test_values_formatter.rs"]
+mod values_formatter;

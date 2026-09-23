@@ -160,6 +160,87 @@ class DescriptionFormatIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class FormatSafetyIntegrationTestCase:
+    """One format safety expectation through the real CLI."""
+
+    description: str
+    authored_sql: str
+    expected_fault_code: str
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class FormatterDeclineIntegrationTestCase:
+    """One expected native formatter decline through the real CLI."""
+
+    description: str
+    authored_body: str
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class TypedNullFormatIntegrationTestCase:
+    """One single-pass typed-null fixture formatting expectation."""
+
+    description: str
+    fixture_projection: str
+    expected_literal: str
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class CanonicalFixtureFormatIntegrationTestCase:
+    """One post-native fixture simplification expectation."""
+
+    description: str
+    expected_retained_literal: str
+    expected_removed_literal: str
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class FromValuesFormatIntegrationTestCase:
+    """One dialect expectation for an unparenthesized values relation."""
+
+    description: str
+    adapter: str
+    expected_exit_code: int
+    expected_literal: str
+
+
+@dataclass(frozen=True)
+class MixedFromValuesFormatIntegrationTestCase:
+    """One positional values-relation preservation expectation."""
+
+    description: str
+    authored_query: str
+    expected_parenthesized_literal: str
+    expected_unparenthesized_literal: str
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class FormatScopeIntegrationTestCase:
+    """Expected CLI outcomes for the format selection contract."""
+
+    description: str
+    expected_exclude_exit: int
+    expected_selected_model_exit: int
+    expected_path_with_exclude_exit: int
+    expected_exclude_path_exit: int
+
+
+@dataclass(frozen=True)
+class FormatWarningIntegrationTestCase:
+    """One non-failing format warning expectation."""
+
+    description: str
+    expected_exit_code: int
+    expected_code: str
+    expected_severity: str
+
+
+@dataclass(frozen=True)
 class ContractCommandIntegrationTestCase:
     """One target-backed contract CLI expectation."""
 
