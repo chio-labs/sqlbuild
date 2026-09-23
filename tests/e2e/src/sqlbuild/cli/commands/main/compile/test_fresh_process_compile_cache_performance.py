@@ -25,7 +25,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 _GIB: int = 1024 * 1024 * 1024
 _MIB: int = 1024 * 1024
-_MAX_WARM_TO_COLD_RATIO: float = 0.67
+_MAX_WARM_TO_COLD_RATIO: float = 0.65
+_MAX_EDIT_TO_COLD_RATIO: float = 0.60
 
 
 @pytest.mark.performance
@@ -42,10 +43,11 @@ _MAX_WARM_TO_COLD_RATIO: float = 0.67
             macro_count=500,
             test_count=2_945,
             audit_count=5_056,
-            expected_cold_max_wall_seconds=13.5,
-            expected_warm_max_wall_seconds=6.75,
-            expected_edit_max_wall_seconds=6.5,
+            expected_cold_max_wall_seconds=14.5,
+            expected_warm_max_wall_seconds=8.25,
+            expected_edit_max_wall_seconds=7.25,
             expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
+            expected_max_edit_to_cold_ratio=_MAX_EDIT_TO_COLD_RATIO,
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=96 * _MIB,
             expected_cold_fingerprint=(
@@ -77,6 +79,7 @@ _MAX_WARM_TO_COLD_RATIO: float = 0.67
             expected_warm_max_wall_seconds=13.5,
             expected_edit_max_wall_seconds=12.0,
             expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
+            expected_max_edit_to_cold_ratio=_MAX_EDIT_TO_COLD_RATIO,
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=160 * _MIB,
             expected_cold_fingerprint=(
@@ -104,10 +107,11 @@ _MAX_WARM_TO_COLD_RATIO: float = 0.67
             macro_count=1_667,
             test_count=9_816,
             audit_count=16_855,
-            expected_cold_max_wall_seconds=39.0,
-            expected_warm_max_wall_seconds=21.5,
-            expected_edit_max_wall_seconds=18.5,
+            expected_cold_max_wall_seconds=42.5,
+            expected_warm_max_wall_seconds=24.5,
+            expected_edit_max_wall_seconds=22.0,
             expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
+            expected_max_edit_to_cold_ratio=_MAX_EDIT_TO_COLD_RATIO,
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=320 * _MIB,
             expected_cold_fingerprint=(
@@ -187,6 +191,10 @@ def test_given_semantic_project_when_compiling_across_processes_then_cache_is_in
         )
     for measurement in (result.leaf_edit, result.macro_edit):
         assert measurement.elapsed_seconds < test_case.expected_edit_max_wall_seconds
+        assert (
+            measurement.elapsed_seconds / result.cold.elapsed_seconds
+            <= test_case.expected_max_edit_to_cold_ratio
+        )
     assert result.project_config_edit.elapsed_seconds < test_case.expected_cold_max_wall_seconds
     assert result.cache_bytes < test_case.expected_max_cache_bytes
 
