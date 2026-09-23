@@ -157,6 +157,26 @@ def _apply_fixes(
         project_dir=project_dir,
     )
     updated.update(native_formatted)
+    post_native_files: dict[Path, str] = {
+        file_path: updated.get(file_path, contents) for file_path, contents in files.items()
+    }
+    fixture_formatted: dict[Path, str] = (
+        FixtureNullAutofix.apply(
+            files=post_native_files,
+            project_dir=project_dir,
+            discovered_inputs=discovered_inputs,
+        )
+        if discovered_inputs is not None
+        else {}
+    )
+    if fixture_formatted:
+        final_native: dict[Path, str] = format_native_sql_bodies(
+            files=fixture_formatted,
+            config=config,
+            project_dir=project_dir,
+        )
+        updated.update(fixture_formatted)
+        updated.update(final_native)
     return reject_unparseable_header_rewrites(
         updated=updated,
         config=config,

@@ -10,6 +10,7 @@ from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    CanonicalFixtureFormatIntegrationTestCase,
     DescriptionFormatIntegrationTestCase,
     FormatCompileIntegrationTestCase,
     FormatSafetyIntegrationTestCase,
@@ -500,6 +501,69 @@ def test_given_inline_typed_null_fixture_when_formatting_then_one_pass_is_idempo
     assert second_exit == test_case.expected_exit_code
     assert test_case.expected_literal in formatted_once
     assert "CAST(NULL" not in formatted_once
+    assert formatted_once == test_file.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CanonicalFixtureFormatIntegrationTestCase(
+            description="post-native fixture simplification reaches fixed point in one pass",
+            expected_retained_literal="CAST(COLUMN2 AS TEXT) AS CLUSTER_ID",
+            expected_removed_literal="is_archived",
+            expected_exit_code=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_redundant_typed_null_after_multi_projection_when_formatting_then_is_idempotent(
+    test_case: CanonicalFixtureFormatIntegrationTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "customer_segments"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "customer_clusters.sql"
+    model.parent.mkdir()
+    model.write_text(
+        "MODEL (\n"
+        '  description "Customer clusters.",\n'
+        "  contract enforced,\n"
+        "  columns (\n"
+        "    customer_key (type VARCHAR),\n"
+        "    cluster_id (type VARCHAR),\n"
+        "    is_archived (type BOOLEAN),\n"
+        "  ),\n"
+        ");\n\n"
+        "SELECT 'c1' AS customer_key, 'k1' AS cluster_id, FALSE AS is_archived\n",
+        encoding="utf-8",
+    )
+    test_file: Path = tmp_path / "tests" / "unit" / "test_customer_clusters.sql"
+    test_file.parent.mkdir(parents=True)
+    test_file.write_text(
+        "TEST();\n\n"
+        "WITH __ref__customer_clusters AS (\n"
+        "    SELECT COLUMN1::VARCHAR AS CUSTOMER_KEY, COLUMN2::VARCHAR AS CLUSTER_ID,\n"
+        "        NULL::BOOLEAN AS is_archived\n"
+        "    FROM VALUES\n"
+        "        ('c1', 'k1')\n"
+        "),\n"
+        "__expected__customer_clusters AS (\n"
+        "    SELECT 'c1' AS customer_key, 'k1' AS cluster_id, FALSE AS is_archived\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+    first_exit: int = main(["--project-dir", str(tmp_path), "format"])
+    formatted_once: str = test_file.read_text(encoding="utf-8")
+    second_exit: int = main(["--project-dir", str(tmp_path), "format", "--check"])
+    fixture_section: str = formatted_once.split("__expected__customer_clusters", maxsplit=1)[0]
+
+    assert first_exit == test_case.expected_exit_code
+    assert second_exit == test_case.expected_exit_code
+    assert test_case.expected_retained_literal in fixture_section
+    assert test_case.expected_removed_literal not in fixture_section
     assert formatted_once == test_file.read_text(encoding="utf-8")
 
 

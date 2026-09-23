@@ -15,6 +15,7 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileSqlTestCte
 from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_columns
+from sqlbuild.compiler.discovery.main._parse_sql_test_file import parse_sql_test_file
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSqlModelFile,
@@ -86,8 +87,15 @@ def format_redundant_fixture_nulls(
         contents: str | None = updated.get(file_path, files.get(file_path))
         if contents is None:
             continue
+        try:
+            current_blocks: tuple[DiscoveredSqlTestBlock, ...] = parse_sql_test_file(
+                contents=contents,
+                file_path=file_path,
+            )
+        except (OSError, UnicodeError, ValueError, SyntaxError):
+            continue
         block: DiscoveredSqlTestBlock
-        for block in test_file.blocks:
+        for block in current_blocks:
             fixed_block: str = _format_test_block(
                 block=block,
                 file_label=str(test_file.relative_path),

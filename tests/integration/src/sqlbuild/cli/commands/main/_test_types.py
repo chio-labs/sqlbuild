@@ -189,6 +189,16 @@ class TypedNullFormatIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class CanonicalFixtureFormatIntegrationTestCase:
+    """One post-native fixture simplification expectation."""
+
+    description: str
+    expected_retained_literal: str
+    expected_removed_literal: str
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
 class FromValuesFormatIntegrationTestCase:
     """One dialect expectation for an unparenthesized values relation."""
 
