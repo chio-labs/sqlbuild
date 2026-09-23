@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.113.5](https://github.com/chio-labs/sqlbuild/compare/v0.113.4...v0.113.5) (2026-09-23)
+
+
+### Performance Improvements
+
+* scale declaration scope resolution with many scoped macros ([#782](https://github.com/chio-labs/sqlbuild/issues/782)) ([eb21a7a](https://github.com/chio-labs/sqlbuild/commit/eb21a7a29b553d3ac75ccaeffb9c13a12ea8789f))
+
 ## [0.113.4](https://github.com/chio-labs/sqlbuild/compare/v0.113.3...v0.113.4) (2026-09-22)
 
 
