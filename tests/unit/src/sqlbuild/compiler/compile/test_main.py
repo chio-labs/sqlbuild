@@ -4596,6 +4596,30 @@ def test_given_typed_hook_defaults_when_building_config_then_layers_values(
             expected_unmanaged=True,
             expected_source=TimeTravelRetentionSource.MODEL,
         ),
+        BuildModelRetentionConfigTestCase(
+            description="incremental model inherits target retention",
+            defaults=DefaultsConfig(materialized="incremental"),
+            model_header_values={},
+            target_config=TargetConfig(
+                time_travel_retention=AuthoredTimeTravelRetention(desired_days=90)
+            ),
+            materialization_defaults=MaterializationDefaultsConfig(),
+            expected_desired_days=90,
+            expected_unmanaged=False,
+            expected_source=TimeTravelRetentionSource.TARGET,
+        ),
+        BuildModelRetentionConfigTestCase(
+            description="view does not inherit target retention",
+            defaults=DefaultsConfig(materialized="view"),
+            model_header_values={},
+            target_config=TargetConfig(
+                time_travel_retention=AuthoredTimeTravelRetention(desired_days=90)
+            ),
+            materialization_defaults=MaterializationDefaultsConfig(),
+            expected_desired_days=None,
+            expected_unmanaged=True,
+            expected_source=None,
+        ),
     ],
     ids=lambda case: case.description,
 )

@@ -569,3 +569,11 @@ class DenseCompileFixtureTestCase:
     model_count: int
     expected_rule_misses: int
     expected_tail_lineage_edges: int
+
+
+@dataclass(frozen=True)
+class TargetRetentionViewsTestCase:
+    description: str
+    view_header: str
+    expected_exit_code: int
+    expected_fragment: str

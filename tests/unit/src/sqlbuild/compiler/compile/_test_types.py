@@ -92,7 +92,7 @@ class BuildModelRetentionConfigTestCase:
     materialization_defaults: MaterializationDefaultsConfig
     expected_desired_days: int | None
     expected_unmanaged: bool
-    expected_source: TimeTravelRetentionSource
+    expected_source: TimeTravelRetentionSource | None
 
 
 @dataclass(frozen=True)
