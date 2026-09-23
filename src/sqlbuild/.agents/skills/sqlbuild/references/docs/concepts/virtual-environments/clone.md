@@ -1,0 +1,77 @@
+<!-- generated-by: sqlbuild skills -->
+
+# Clone
+
+> Hydrate physical versions from a source warehouse.
+
+Online: https://docs.sqlbuild.com/concepts/virtual-environments/clone
+
+In virtual mode, `sqb clone` hydrates physical version relations from a source warehouse into the target physical storage layer. It does not copy VDE pointer sets or create logical views - it copies the underlying physical data so that builds and promotions can reference those versions locally.
+
+This is useful for seeding a new target from an existing one, or restoring physical versions that were cleaned up by the janitor.
+
+As in direct mode, `--from` selects an origin namespace and clone-origin policy, not a
+connection. `--to` (or the active target) supplies the only physical connection. The origin
+physical namespace must be readable through that destination connection; SQLBuild never opens
+the origin target connection or transfers data across accounts, servers, or files using a
+second connection.
+
+## How it works
+
+Virtual clone looks up expected physical version relations in the source warehouse by their naming convention (`<schema>__sqb_physical.<model>__v_<hash>`) and copies them into the target warehouse. It then registers the copied relations in the target state store.
+
+Target VDE refs and logical views are not changed. Clone only populates the physical layer.
+
+## Default mode
+
+Without `--virtual-env`, clone hydrates physical versions matching the current workspace's expected fingerprints:
+
+```bash
+sqb clone --from prod --to dev
+```
+
+This computes expected version hashes from the current code, looks for matching physical relations in the source warehouse, and copies them into the target.
+
+## VDE ref mode
+
+With `--virtual-env`, clone hydrates physical versions referenced by a specific VDE in the target state store:
+
+```bash
+sqb clone --from prod --to dev --virtual-env pr_123
+```
+
+This reads VDE `pr_123`'s refs from the target state, looks for those physical relations in the source warehouse, and copies them into the target. Useful when a VDE's physical versions have been deleted (by janitor or manual cleanup) but the state refs still exist.
+
+## Selection
+
+Scope which models are hydrated:
+
+```bash
+sqb clone --from prod --to dev --select fact_orders
+```
+
+## Missing source artifacts
+
+If a source physical relation does not exist, clone reports it as missing and continues with the remaining models. The exit code is non-zero if any models are missing.
+
+## Model version locks
+
+If a target model version is locked (another process is building that version), clone blocks by default:
+
+```bash
+# Skip locked versions and hydrate the rest
+sqb clone --from prod --to dev --skip-locked
+```
+
+## What clone does not do
+
+- Does not create or update VDE refs
+- Does not create or refresh logical VDE views
+- Does not read the source state database (it uses warehouse-level artifact discovery)
+- Does not change the target VDE status
+
+Clone is a physical-layer operation. VDE pointer management is handled by [build](building.md) and [promote](promotion.md).
+
+## Comparison with direct-mode clone
+
+In direct mode, `sqb clone` copies model relations between targets using zero-copy cloning where supported. In virtual mode, clone hydrates versioned physical relations instead. The source and target are still physical targets, but the copied objects are physical version relations rather than normal model targets.

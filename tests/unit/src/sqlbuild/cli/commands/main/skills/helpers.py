@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
+import re
+from pathlib import Path, PurePosixPath
+
+from sqlbuild.cli.commands._helpers.skills.update import update_sqlbuild_skills
+from sqlbuild.cli.output.models import SkillUpdateResult
 
 
 def write_project_files(*, project_dir: Path, files: dict[Path, str]) -> None:
@@ -45,3 +49,31 @@ def write_git_marker(*, repository_dir: Path, marker_is_file: bool | None) -> No
     {None: _skip_git_marker, False: _write_git_directory, True: _write_git_file}[marker_is_file](
         repository_dir=repository_dir
     )
+
+
+def install_packaged_skill(*, project_dir: Path, target: str) -> Path:
+    """Install the packaged skill for one target and return its skill directory."""
+
+    result: SkillUpdateResult = update_sqlbuild_skills(
+        project_dir=project_dir, requested_targets=(target,)
+    )
+    return result.written_paths[0].parent
+
+
+def installed_skill_files(*, skill_dir: Path) -> dict[str, str]:
+    return {
+        path.relative_to(skill_dir).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted(skill_dir.rglob("*.md"))
+    }
+
+
+def relative_markdown_links(*, text: str, base: str) -> frozenset[str]:
+    """Return skill-relative targets of non-URL Markdown links in one skill file."""
+
+    return frozenset(
+        str(PurePosixPath(base, link)) for link in re.findall(r"\]\(((?!https?:)[^)#\s]+)", text)
+    )
+
+
+def mentioned_sqb_commands(*, text: str) -> frozenset[str]:
+    return frozenset(re.findall(r"(?:^|[`\s(])sqb ([a-z][a-z-]*)", text, flags=re.MULTILINE))

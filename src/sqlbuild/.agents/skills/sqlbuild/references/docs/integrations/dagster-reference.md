@@ -1,0 +1,261 @@
+<!-- generated-by: sqlbuild skills -->
+
+# API Reference
+
+> Dagster integration classes, decorators, and translator hooks.
+
+Online: https://docs.sqlbuild.com/integrations/dagster-reference
+
+## Contents
+
+- SqlBuildProject
+- SqlBuildCliResource
+- SqlBuildCliInvocation
+- sqlbuild_assets
+- sqlbuild_scenario_checks
+- SqlBuildDagsterTranslator
+
+## SqlBuildProject
+
+Project metadata and DAG artifact preparation.
+
+```python
+from sqlbuild.integrations.dagster import SqlBuildProject
+
+project = SqlBuildProject(
+    project_dir=".",
+    target_path="target",
+    dag_filename="sqlbuild_dag.json",
+    sqb_command=("sqb",),
+    prepare_project_cli_args=("compile", "--dag"),
+)
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `project_dir` | (required) | Path to the SQLBuild project root |
+| `target_path` | `"target"` | Relative path to the target directory |
+| `dag_filename` | `"sqlbuild_dag.json"` | DAG artifact filename |
+| `sqb_command` | `("sqb",)` | Command to invoke SQLBuild CLI |
+| `prepare_project_cli_args` | `("compile", "--dag")` | CLI args used by `prepare()` to generate the DAG |
+
+### Methods
+
+| Method | Description |
+|--------|-------------|
+| `dag_path` | Property. Returns the full path to the DAG artifact (`project_dir / target_path / dag_filename`). |
+| `prepare()` | Runs `sqb compile --dag <dag_path>` to generate the DAG artifact. Raises `DagsterProjectPrepareError` on failure. |
+| `prepare_if_dev()` | Calls `prepare()` only when the `DAGSTER_IS_DEV_CLI` environment variable is set. |
+
+## SqlBuildCliResource
+
+Dagster `ConfigurableResource` that shells out to the SQLBuild CLI.
+
+```python
+from sqlbuild.integrations.dagster import SqlBuildCliResource, SqlBuildProject
+
+# From a project
+resource = SqlBuildCliResource(SqlBuildProject(project_dir="."))
+
+# Or with explicit paths
+resource = SqlBuildCliResource(
+    project_dir=".",
+    sqb_command=["sqb"],
+    dag_path="target/sqlbuild_dag.json",
+)
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `project_dir` | `"."` | Path to the SQLBuild project root, or a `SqlBuildProject` instance |
+| `sqb_command` | `["sqb"]` | Command to invoke SQLBuild CLI |
+| `dag_path` | `None` | Path to the DAG artifact. When set, enables asset selection bridging and structured event emission. |
+
+### cli()
+
+Create a CLI invocation for the provided command arguments.
+
+```python
+invocation = resource.cli(
+    ["build"],
+    context=context,        # Dagster execution context (optional)
+    raise_on_error=True,    # raise Failure on non-zero exit (default)
+)
+```
+
+Returns a `SqlBuildCliInvocation`.
+
+## SqlBuildCliInvocation
+
+A running or completed SQLBuild CLI subprocess.
+
+### Methods
+
+| Method | Description |
+|--------|-------------|
+| `wait()` | Wait for the process to complete. Streams stdout/stderr in real time. Returns `self`. |
+| `stream()` | Wait for the process, then yield Dagster `MaterializeResult` and `AssetCheckResult` events parsed from execution JSON. |
+| `is_successful()` | Returns `True` if exit code is 0. |
+| `get_error()` | Returns a Dagster `Failure` if the process failed, `None` otherwise. |
+| `get_artifact(name)` | Read a JSON artifact from the project's `target/` directory. |
+
+### Properties
+
+| Property | Description |
+|----------|-------------|
+| `stdout` | Captured stdout after `wait()` or `stream()`. |
+| `stderr` | Captured stderr after `wait()` or `stream()`. |
+| `returncode` | Process exit code after completion. |
+| `execution_payload` | Parsed execution JSON, if available. |
+
+### stream() behavior
+
+`stream()` is the primary way to emit Dagster events from a SQLBuild execution:
+
+1. Waits for the subprocess to complete while streaming output to stdout/stderr
+2. Reads the structured execution JSON (from `--json-output` tempfile)
+3. Maps each completed asset to a `MaterializeResult` with metadata (status, duration, row counts)
+4. Maps each check result to an `AssetCheckResult` with pass/fail, severity, and check metadata
+5. If the DAG artifact is available, results are matched to the correct Dagster asset keys
+6. Raises `Failure` if the process exited non-zero and `raise_on_error` is set
+
+## sqlbuild_assets
+
+Decorator that creates a Dagster multi-asset definition from a SQLBuild DAG artifact.
+
+```python
+from sqlbuild.integrations.dagster import sqlbuild_assets
+
+@sqlbuild_assets(
+    project=project,                    # or dag=path_or_dict
+    translator=MyTranslator(),          # optional
+    name="my_sqlbuild_assets",          # optional
+    include_scenario_checks=True,       # default: True
+    required_resource_keys={"sqb"},     # optional
+)
+def my_assets(context, sqb):
+    yield from sqb.cli(["build"], context=context).stream()
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `project` | `None` | `SqlBuildProject` instance. Mutually exclusive with `dag`. |
+| `dag` | `None` | DAG artifact as a path, string, or pre-loaded dict. Mutually exclusive with `project`. |
+| `translator` | `SqlBuildDagsterTranslator()` | Translator for asset keys, groups, tags, and metadata. |
+| `name` | `None` | Override the Dagster multi-asset name. |
+| `include_scenario_checks` | `True` | Whether to include scenario checks alongside test and audit checks. |
+| `required_resource_keys` | `None` | Additional Dagster resource keys to require. |
+
+If neither `project` nor `dag` is provided, the decorator looks for `target/sqlbuild_dag.json` in the current directory.
+
+## sqlbuild_scenario_checks
+
+Decorator that creates a Dagster multi-asset-check definition for SQLBuild scenarios only. Useful when you want to run scenarios separately from the main build.
+
+```python
+from sqlbuild.integrations.dagster import sqlbuild_scenario_checks
+
+@sqlbuild_scenario_checks(project=project)
+def my_scenario_checks(context, sqb):
+    yield from sqb.cli(["scenario", "test"], context=context).stream()
+```
+
+Parameters are the same as `sqlbuild_assets` except there is no `include_scenario_checks` flag.
+
+## SqlBuildDagsterTranslator
+
+Customise how SQLBuild DAG nodes map to Dagster asset metadata. Subclass and override any method.
+
+### Methods
+
+| Method | Arguments | Returns | Default behavior |
+|--------|-----------|---------|------------------|
+| `get_asset_key` | `node` | `AssetKey` | Authored source `meta.dagster.asset_key`, otherwise `AssetKey(node["asset_key"])` |
+| `is_asset_node` | `node` | `bool` | Include the node as a Dagster asset |
+| `is_asset_check` | `check` | `bool` | Include the check in the multi-asset definition |
+| `get_group_name` | `node` | `str \| None` | Authored group, project name, then `sqlbuild` |
+| `get_tags` | `node` | `dict[str, str]` | `sqlbuild/kind` tag plus any model tags |
+| `get_metadata` | `node` | `dict[str, Any]` | SQLBuild identity/selector plus available path, target, SQL, columns, lineage, group, language, materialization, loader, and authored metadata |
+| `get_description` | `node` | `str \| None` | Node description if present |
+| `get_check_name` | `check` | `str` | `"{kind}__{name}"` with optional column/target suffix |
+| `get_check_metadata` | `check` | `dict[str, Any]` | Check ID, kind, name, and selector |
+
+### Node structure
+
+Each `node` dict passed to translator methods contains:
+
+```json
+{
+  "id": "model:fact_orders",
+  "kind": "model",
+  "name": "fact_orders",
+  "asset_key": ["dev", "fact_orders"],
+  "target": {
+    "database": null,
+    "schema": "dev",
+    "name": "fact_orders",
+    "qualified_name": "dev.fact_orders"
+  },
+  "path": "models/marts/fact_orders.sql",
+  "description": "Order fact table with waffle and payment details.",
+  "tags": ["marts"],
+  "columns": [
+    {"name": "order_id", "type": "INTEGER"}
+  ],
+  "materialization_type": "table"
+}
+```
+
+Python node asset keys use a two-part key with the node kind as prefix:
+
+| Kind | Asset key example |
+|------|-------------------|
+| Task | `("task", "prepare_orders")` |
+| Asset | `("asset", "orders_export")` |
+| Loader | `("loader", "raw_orders")` |
+
+A source can provide a stable Dagster-native key without replacing the translator:
+
+```yaml
+sources:
+  - name: raw__orders
+    meta:
+      dagster:
+        asset_key: [warehouse, raw, orders]
+```
+
+Override `is_asset_node` or `is_asset_check` when one SQLBuild project intentionally exposes only a
+subset through a particular Dagster definition. Filtering changes Dagster ownership; it does not
+remove the resource from SQLBuild's compiled graph.
+
+### Check structure
+
+Each `check` dict passed to check translator methods contains:
+
+```json
+{
+  "id": "audit:not_null:model:fact_orders:order_id",
+  "kind": "audit",
+  "name": "not_null",
+  "checked_asset_ids": ["model:fact_orders"],
+  "path": "audits/generic/not_null.sql",
+  "severity": "error",
+  "attached_target_name": "fact_orders",
+  "attached_column_name": "order_id"
+}
+```
+
+Scenario checks include additional fields:
+
+```json
+{
+  "id": "scenario:daily_revenue_minimal",
+  "kind": "scenario",
+  "name": "daily_revenue_minimal",
+  "checked_asset_ids": ["model:daily_revenue"],
+  "path": "tests/scenarios/revenue/daily_revenue_minimal.sql",
+  "assertion_names": ["no_negative_revenue"],
+  "expected_model_names": ["daily_revenue"],
+  "fixture_refs": ["stg_orders", "stg_payments"]
+}
+```

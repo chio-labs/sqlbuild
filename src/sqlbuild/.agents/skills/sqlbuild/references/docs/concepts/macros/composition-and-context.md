@@ -1,0 +1,139 @@
+<!-- generated-by: sqlbuild skills -->
+
+# Composition and Context
+
+> Compose macros through Python, use compile context, and understand scoped imports.
+
+Online: https://docs.sqlbuild.com/concepts/macros/composition-and-context
+
+## Contents
+
+- Compose helpers in one file
+- Compose macros from different files
+- Macro output is final SQL
+- Nested calls written in SQL
+- Macro context
+
+Macros are Python functions, so reusable macros should compose through ordinary Python calls. A
+macro returns final SQL; SQLBuild does not treat its output as another layer of macro source.
+
+## Compose helpers in one file
+
+Use underscore-prefixed helpers for implementation details that should not be callable from SQL:
+
+```python
+# macros/currency.py
+def _divide_by_100(expression: str) -> str:
+    return f"({expression} / 100.0)"
+
+def cents_to_dollars(expression: str) -> str:
+    return f"ROUND({_divide_by_100(expression)}, 2)"
+```
+
+Only `cents_to_dollars` is exported as a SQLBuild macro.
+
+Public macros in the same file are also ordinary Python functions and may call one another:
+
+```python
+def add_tax(expression: str) -> str:
+    return f"({expression} * 1.2)"
+
+def round_money(expression: str) -> str:
+    return f"ROUND({expression}, 2)"
+
+def formatted_total(expression: str) -> str:
+    return round_money(add_tax(expression))
+```
+
+## Compose macros from different files
+
+Import another project macro when it is visible from the importing macro file:
+
+```python
+# macros/orders.py
+from macros.currency import add_tax, round_money
+
+def formatted_order_total(expression: str) -> str:
+    return round_money(add_tax(expression))
+```
+
+SQLBuild records the imported macro files as dependencies. It rejects an import when the target
+macro is outside the importing file's declaration scope or when imports form a cycle.
+
+Imported functions do not become duplicate exports from the importing file. In the example above,
+`add_tax` and `round_money` retain their original identities; only `formatted_order_total` is newly
+exported by `orders.py`.
+
+The same visibility direction applies to scoped macros:
+
+- A scoped macro may import a project-wide macro.
+- A scoped macro may import a macro available from its own or an ancestor directory.
+- A project-wide macro cannot import a narrower macro.
+- A macro cannot import from a sibling or unrelated scope.
+
+See [Declarations and Scopes](../declaration-scopes.md) when macros are stored under `macros/`
+or `_macros/`.
+
+## Macro output is final SQL
+
+Do not return SQL containing another `@macro()` call:
+
+```python
+# Invalid: creates another macro-expansion layer.
+def formatted_order_total(expression: str) -> str:
+    return f"@round_money(@add_tax({expression!r}))"
+```
+
+SQLBuild rejects this output. Import and call the Python functions instead:
+
+```python
+from macros.currency import add_tax, round_money
+
+def formatted_order_total(expression: str) -> str:
+    return round_money(add_tax(expression))
+```
+
+This keeps macro behavior readable in Python and ensures one expansion produces final SQL.
+
+## Nested calls written in SQL
+
+The SQL author may explicitly pass one macro's result to another:
+
+```sql
+SELECT @round_money(@add_tax("subtotal")) AS order_total
+```
+
+SQLBuild evaluates `add_tax` first and passes its returned string to `round_money`. This is not a
+second expansion of generated output: both calls are visible in the SQL source.
+
+Inner macros may return any Python value accepted by the outer macro. A macro used directly in SQL
+must return a string.
+
+## Macro context
+
+When the first parameter is named `ctx`, SQLBuild passes a `MacroContext` with adapter, target, and
+project-variable information:
+
+```python
+# macros/datetime.py
+def timestamp_trunc(ctx, grain: str, expression: str) -> str:
+    if ctx.adapter_name == "bigquery":
+        return f"TIMESTAMP_TRUNC({expression}, {grain.upper()})"
+    return f"DATE_TRUNC('{grain}', {expression})"
+```
+
+| Field | Description |
+|-------|-------------|
+| `adapter_name` | Active adapter, such as `duckdb` or `snowflake` |
+| `sql_analysis_enabled` | Whether SQL analysis is enabled |
+| `target_name` | Active target name, when selected |
+| `vars` | Effective project variables after project, target, local, and CLI merging |
+
+```python
+def schema_qualified(ctx, table: str) -> str:
+    schema = ctx.vars.get("schema_prefix", "public")
+    return f"{schema}.{table}"
+```
+
+Use context when generated SQL genuinely differs by adapter or target. Prefer ordinary parameters
+for values that the SQL caller should choose explicitly.

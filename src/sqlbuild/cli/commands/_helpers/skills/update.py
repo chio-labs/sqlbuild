@@ -23,7 +23,9 @@ legacy_generated_marker: str = "<!-- generated-by: sqlbuild skills update -->"
 generated_markers: tuple[str, ...] = (generated_marker, legacy_generated_marker)
 skill_name: str = "sqlbuild"
 skill_source_package: str = "sqlbuild"
-skill_source_path: str = ".agents/skills/sqlbuild/SKILL.md"
+skill_source_dir: str = ".agents/skills/sqlbuild"
+skill_entry_file: str = "SKILL.md"
+skill_file_suffix: str = ".md"
 valid_skill_targets: tuple[str, ...] = ("opencode", "claude", "agents")
 default_skill_targets: tuple[str, ...] = ("agents", "claude")
 opencode_skill_target: str = "opencode"
@@ -50,11 +52,26 @@ def update_sqlbuild_skills(
         global_install=global_install,
         home_dir=home_dir,
     )
-    source_content: str = load_packaged_skill_content()
-    generated_content: str = ensure_generated_marker(source_content)
+    expected_files: dict[str, str] = load_packaged_skill_files()
+    if not force:
+        collisions: list[Path] = []
+        for install_target in install_targets:
+            collisions.extend(
+                _skill_collisions(
+                    skill_dir=install_target.path.parent, expected_files=expected_files
+                )
+            )
+        if collisions:
+            raise CliUserError(
+                f"refusing to overwrite non-generated skill file: {collisions[0]}",
+                code="C806",
+                help="rerun with --force to replace it",
+            )
     written_paths: list[Path] = []
     for install_target in install_targets:
-        write_skill_file(path=install_target.path, content=generated_content, force=force)
+        _install_skill_directory(
+            skill_dir=install_target.path.parent, expected_files=expected_files, force=force
+        )
         written_paths.append(install_target.path)
 
     return SkillUpdateResult(written_paths=tuple(written_paths))
@@ -167,25 +184,23 @@ def maintain_sqlbuild_skills(*, project_dir: Path) -> SkillMaintenanceResult:
         project_dir=project_dir,
         target_names=target_names,
     )
-    expected_content: str = ensure_generated_marker(load_packaged_skill_content())
+    expected_files: dict[str, str] = load_packaged_skill_files()
     stale_paths: list[Path] = []
     collision_paths: list[Path] = []
     for install_target in install_targets:
-        path: Path = install_target.path
-        if not path.exists():
-            stale_paths.append(path)
+        skill_dir: Path = install_target.path.parent
+        collisions: tuple[Path, ...] = _skill_collisions(
+            skill_dir=skill_dir, expected_files=expected_files
+        )
+        if collisions:
+            collision_paths.extend(collisions)
             continue
-        existing_content: str = path.read_text(encoding="utf-8")
-        if existing_content == expected_content:
-            continue
-        if not any(marker in existing_content for marker in generated_markers):
-            collision_paths.append(path)
-            continue
-        stale_paths.append(path)
+        if _skill_directory_is_stale(skill_dir=skill_dir, expected_files=expected_files):
+            stale_paths.append(install_target.path)
 
     if settings.auto_update and stale_paths:
         for path in stale_paths:
-            write_skill_file(path=path, content=expected_content)
+            _install_skill_directory(skill_dir=path.parent, expected_files=expected_files)
         message: str = "Updated stale SQLBuild skill files:\n" + "".join(
             f"  {path}\n" for path in stale_paths
         )
@@ -253,7 +268,7 @@ def _find_git_root(*, project_dir: Path) -> Path | None:
 
 
 def load_packaged_skill_content() -> str:
-    skill_file: Traversable = files(skill_source_package).joinpath(*skill_source_path.split("/"))
+    skill_file: Traversable = _packaged_skill_root().joinpath(skill_entry_file)
     if not skill_file.is_file():
         raise CliUserError(
             "packaged SQLBuild skill is missing",
@@ -297,3 +312,85 @@ def write_skill_file(*, path: Path, content: str, force: bool = False) -> None:
         _ = temporary_file.write(content)
         temporary_path: Path = Path(temporary_file.name)
     replace(temporary_path, path)
+
+
+def load_packaged_skill_files() -> dict[str, str]:
+    """Return every packaged skill file keyed by skill-relative path, with generated markers."""
+
+    entry_content: str = load_packaged_skill_content()
+    collected: dict[str, str] = _collect_skill_files(node=_packaged_skill_root(), prefix="")
+    collected[skill_entry_file] = entry_content
+    return {
+        relative_path: ensure_generated_marker(content)
+        for relative_path, content in sorted(collected.items())
+    }
+
+
+def _packaged_skill_root() -> Traversable:
+    return files(skill_source_package).joinpath(*skill_source_dir.split("/"))
+
+
+def _collect_skill_files(*, node: Traversable, prefix: str) -> dict[str, str]:
+    collected: dict[str, str] = {}
+    for child in node.iterdir():
+        if child.name.startswith((".", "__")):
+            continue
+        if child.is_dir():
+            collected.update(_collect_skill_files(node=child, prefix=f"{prefix}{child.name}/"))
+        elif child.name.endswith(skill_file_suffix):
+            collected[f"{prefix}{child.name}"] = child.read_text(encoding="utf-8")
+    return collected
+
+
+def _is_generated(path: Path) -> bool:
+    content: str = path.read_text(encoding="utf-8")
+    return any(marker in content for marker in generated_markers)
+
+
+def _skill_collisions(*, skill_dir: Path, expected_files: dict[str, str]) -> tuple[Path, ...]:
+    """Return expected install paths occupied by files SQLBuild did not generate."""
+
+    return tuple(
+        skill_dir / relative_path
+        for relative_path in expected_files
+        if (skill_dir / relative_path).is_file() and not _is_generated(skill_dir / relative_path)
+    )
+
+
+def _stale_generated_files(*, skill_dir: Path, expected_files: dict[str, str]) -> tuple[Path, ...]:
+    if not skill_dir.is_dir():
+        return ()
+    return tuple(
+        path
+        for path in sorted(skill_dir.rglob(f"*{skill_file_suffix}"))
+        if path.relative_to(skill_dir).as_posix() not in expected_files and _is_generated(path)
+    )
+
+
+def _skill_directory_is_stale(*, skill_dir: Path, expected_files: dict[str, str]) -> bool:
+    for relative_path, content in expected_files.items():
+        path: Path = skill_dir / relative_path
+        if not path.is_file() or path.read_text(encoding="utf-8") != content:
+            return True
+    return bool(_stale_generated_files(skill_dir=skill_dir, expected_files=expected_files))
+
+
+def _install_skill_directory(
+    *, skill_dir: Path, expected_files: dict[str, str], force: bool = False
+) -> None:
+    """Write all packaged skill files and remove generated files no longer shipped."""
+
+    for relative_path, content in expected_files.items():
+        path: Path = skill_dir / relative_path
+        if path.is_file() and path.read_text(encoding="utf-8") == content:
+            continue
+        write_skill_file(path=path, content=content, force=force)
+    for stale_path in _stale_generated_files(skill_dir=skill_dir, expected_files=expected_files):
+        stale_path.unlink()
+    for directory in sorted(
+        (path for path in skill_dir.rglob("*") if path.is_dir()),
+        key=lambda path: len(path.parts),
+        reverse=True,
+    ):
+        if not any(directory.iterdir()):
+            directory.rmdir()

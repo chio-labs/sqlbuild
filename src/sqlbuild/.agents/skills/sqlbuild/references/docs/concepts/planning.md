@@ -1,0 +1,150 @@
+<!-- generated-by: sqlbuild skills -->
+
+# Planning and change detection
+
+> How SQLBuild explains build work, detects changes, and chooses safe model actions.
+
+Online: https://docs.sqlbuild.com/concepts/planning
+
+## Contents
+
+- Reading a plan
+- What SQLBuild compares
+- Change reasons
+- Cascades and incremental actions
+- Selection and coherence
+- Recorded state
+- Related topics
+
+`sqb plan` previews the work for a build without executing it. `sqb build` uses the same planner
+before running the selected resources.
+
+Planning and selection are separate concerns:
+
+- **Selection** determines which resources are in scope. By default, that is the whole project; use
+  `--select` and `--exclude` to choose a smaller scope.
+- **Change detection** compares compiled resources with recorded warehouse state. It explains why a
+  resource needs work, chooses the correct action for incremental models, propagates upstream
+  changes, and warns when a partial selection would be incoherent.
+
+In the default **direct mode**, a build runs its selected scope. Change detection still matters: the
+plan can show query and configuration differences, calculate replay or full-refresh actions, and
+identify stale upstreams. It does not filter a direct build to stale models.
+
+[Virtual environments](virtual-environments.md) additionally bind each model to a versioned
+physical relation. Virtual builds can use those bindings to reuse existing versions or limit an
+invocation to stale work. That virtual execution behavior is documented under
+[Building in a virtual environment](virtual-environments/building.md#stale-driven-execution).
+
+## Reading a plan
+
+Run the plan command with the same target and selectors you intend to build:
+
+```bash
+sqb plan
+sqb --target dev plan --select +fact_orders
+```
+
+A plan answers four questions:
+
+1. Which resources are selected?
+2. What does SQLBuild know about their current warehouse state?
+3. Why does each selected model need work?
+4. What materialization or incremental action will the build take?
+
+Plans may include query diffs, schema changes, backfill ranges, source freshness signals, cascade
+reasons, and warnings about stale dependencies. Planning does not modify model relations.
+
+## What SQLBuild compares
+
+### Models and functions
+
+Each model and function has a version identity derived from the inputs that affect its result:
+
+- normalized SQL after macro expansion and reference resolution;
+- materialization settings, contracts, rendered SQL hooks, Python hook versions, and other
+  version-relevant configuration;
+- referenced function identities; and
+- upstream version identities where dependency changes must propagate.
+
+A function change therefore appears on the function itself and on dependent models.
+
+### Seeds
+
+Seeds use a content hash plus load-affecting configuration. SQLBuild can distinguish an unchanged
+seed from one whose file or loading behavior changed.
+
+### Python nodes
+
+Loaders, tasks, assets, checks, and Python hooks have identities derived from project-owned source,
+transitive project dependencies, and decorator configuration. Python hook identities also
+participate in the identity of models that invoke them.
+
+For standalone Python nodes, this identity is primarily planning evidence. SQLBuild cannot observe
+arbitrary external inputs such as APIs or files, so a node controls its own no-work decision with
+`ctx.skip()` rather than relying on SQL identity alone.
+
+### Sources
+
+[Source freshness](planning/source-freshness.md) records an observable data version for a
+source. A new observation can mark downstream models as affected even when their SQL is unchanged.
+
+## Change reasons
+
+The plan assigns reasons to explain detected work:
+
+| Reason | Meaning |
+|--------|---------|
+| First run | No previous identity exists for the resource |
+| Query changed / checksum changed | Compiled SQL or seed content differs from the recorded identity |
+| Config changed | Version-relevant configuration differs |
+| Schema changed | A relevant warehouse or upstream schema changed |
+| Function changed | A referenced function has a different identity |
+| Upstream changed | A dependency change propagated to this model |
+| Run despite unchanged | A table's explicit policy requires another run despite an unchanged identity |
+
+These reasons explain the plan; they are not a promise that direct mode will skip entries labelled
+current. Direct builds execute the selected scope. Virtual mode can compare expected identities with
+the versions already bound to a VDE and avoid unnecessary version creation.
+
+## Cascades and incremental actions
+
+Changes propagate through the DAG in dependency order. The resulting action depends on the
+materialization:
+
+- views are recreated when selected for a direct build;
+- tables rebuild when selected;
+- incremental models use their cursor state, backfill policy, and `replay_on_change` setting to
+  determine the affected range; and
+- a changed upstream can alter the action of downstream models even when their own SQL is unchanged.
+
+See [Cascade propagation](planning/cascade-propagation.md) for the detailed materialization
+rules.
+
+## Selection and coherence
+
+SQLBuild reasons about dependencies outside a scoped selection without silently adding them to the
+plan. If building the selected resources would use a stale or missing upstream, the planner warns or
+blocks instead of presenting an incoherent partial build as current.
+
+See [Selection and staleness](planning/selection-and-staleness.md) for closure selectors and
+stale-upstream handling.
+
+## Recorded state
+
+Direct mode records append-only planning evidence in the warehouse:
+
+- `_sqlbuild_fingerprints` stores resource identities;
+- `_sqlbuild_source_freshness` stores source observations; and
+- `_sqlbuild_node_results` stores Python node outcomes.
+
+The planner reads the latest applicable facts and appends new facts after successful work. Virtual
+mode stores version bindings and environment-scoped planning state in its configured state backend;
+see [Virtual environment setup](virtual-environments/setup.md).
+
+## Related topics
+
+- [Cascade propagation](planning/cascade-propagation.md)
+- [Source freshness](planning/source-freshness.md)
+- [Selection and staleness](planning/selection-and-staleness.md)
+- [Building in a virtual environment](virtual-environments/building.md)

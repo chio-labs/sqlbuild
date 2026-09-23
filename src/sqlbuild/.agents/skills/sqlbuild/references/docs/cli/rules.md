@@ -1,0 +1,52 @@
+<!-- generated-by: sqlbuild skills -->
+
+# rules
+
+> List, inspect, or run compiler-integrated Rules and generate project guidance.
+
+Online: https://docs.sqlbuild.com/cli/rules
+
+# sqb rules
+
+Configured Rules run automatically through `sqb compile` and build planning. The `rules` command
+provides focused catalogue, inspection, execution, and guidance operations.
+
+## Usage
+
+```bash
+sqb rules list
+sqb rules show <rule-code>
+sqb rules run <rule-code-or-family> [--select <selector>] [--exclude <selector>]
+sqb rules skills [--check]
+```
+
+Add `--json` after `rules` for machine-readable list or run output:
+
+```bash
+sqb rules --json list
+sqb rules --json run SQBRSQL
+```
+
+Lifecycle progress is written to stderr so stdout remains valid JSON.
+
+## Commands
+
+- `list`: print built-in and repository-defined Rules.
+- `show`: print metadata for one exact code.
+- `run`: compile and evaluate only one exact code or family prefix.
+- `skills`: install guidance derived from configured Rules; `--check` verifies freshness without writing.
+
+`run` accepts normal SQLBuild model selectors. Native built-ins execute before custom Python Rules.
+
+## Exit codes
+
+| Command | Code | Meaning |
+|---|---:|---|
+| `rules list` | 0 | Catalogue printed |
+| `rules show` | 0 | Exact code found |
+| `rules show` | 2 | Unknown code |
+| `rules run` | 0 | No findings |
+| `rules run` | 1 | Findings reported or compilation failed |
+| `rules run` | 2 | Unknown code or family |
+| `rules skills --check` | 0 | Guidance is fresh |
+| `rules skills --check` | 1 | Guidance is missing or stale |

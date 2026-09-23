@@ -79,7 +79,7 @@ def test_given_skills_update_cli_when_running_then_writes_expected_skill_files(
             existing_file=Path(".opencode/skills/sqlbuild/SKILL.md"),
             existing_content="custom project instructions\n",
             expected_exit_code=0,
-            expected_content_fragment="# SQLBuild Skill",
+            expected_content_fragment="## Reach for these tools",
         ),
     ],
     ids=lambda case: case.description,

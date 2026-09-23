@@ -55,7 +55,7 @@ def _clean_mdx_body(body: str) -> str:
         stripped: str = line.strip()
         if _is_mdx_only_line(stripped):
             continue
-        cleaned_lines.append(_shift_markdown_heading(line))
+        cleaned_lines.append(line)
 
     return normalize_blank_lines("\n".join(cleaned_lines)).strip()
 
@@ -70,12 +70,6 @@ def _is_mdx_only_line(stripped: str) -> bool:
     if re.fullmatch(r"<[A-Z][^>]*/>", stripped):
         return True
     return bool(re.fullmatch(r"<img\s+[^>]*/>", stripped))
-
-
-def _shift_markdown_heading(line: str) -> str:
-    if re.match(r"^#{1,6} ", line):
-        return f"#{line}"
-    return line
 
 
 def normalize_blank_lines(contents: str) -> str:

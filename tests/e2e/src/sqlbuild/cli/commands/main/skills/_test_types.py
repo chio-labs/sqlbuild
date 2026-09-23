@@ -9,7 +9,7 @@ class SkillsCliTestCase:
     expected_exit_code: int
     expected_files: tuple[Path, ...]
     unexpected_files: tuple[Path, ...] = ()
-    expected_content_fragment: str = "# SQLBuild Skill"
+    expected_content_fragment: str = "## Reach for these tools"
 
 
 @dataclass(frozen=True)

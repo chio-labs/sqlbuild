@@ -1,0 +1,73 @@
+<!-- generated-by: sqlbuild skills -->
+
+# Selection and staleness
+
+> How selection interacts with change detection, and the stale warnings that stop silent partial rebuilds.
+
+Online: https://docs.sqlbuild.com/concepts/planning/selection-and-staleness
+
+Change detection is selection-aware. When you scope a run with `--select`, SQLBuild only runs (and only displays) the resources you selected, but it still reasons about the *whole* graph to keep the result honest. The key case it handles: a selected model whose upstream changed but is **not** in the selection.
+
+## Only selected resources appear in the plan
+
+For a scoped run like `sqb dbt build --select agg_daily_revenue`, the plan shows only the selected resources, not their passive upstream closure. SQLBuild still walks upstreams internally for change propagation (a selected model flips to run when an upstream changed), but those passive upstreams are not listed as plan entries or counted in the header.
+
+`--full-refresh` is likewise scoped to the selected models, not the expanded upstream closure.
+
+## Stale warnings instead of silent partial rebuilds
+
+If a selected model has an upstream that changed but is **outside the selection**, rebuilding the selected model alone would run it on top of a stale upstream and silently produce a result that looks current but isn't. SQLBuild does not do that. It leaves the selected model current (it is not rebuilt) and emits a stale warning naming the changed upstreams, with the selector you can use to incorporate them.
+
+Suppose `stg_orders` (upstream) changed, and you select only the downstream `agg_daily_revenue`:
+
+```bash
+sqb dbt plan --select agg_daily_revenue
+```
+
+```
+Plan ready (1 selected resources)
+
+dbt (1 selected resources)
+  planned models: 0 run, 1 current, 0 blocked
+
+  Model plan
+    Current (1)
+      model.jaffle_analytics.agg_daily_revenue  no change
+
+Warnings (1)
+  - selected dbt model 'agg_daily_revenue' is stale: upstream stg_orders changed
+    but will not be rebuilt or is stale; rebuild with a closure selector
+    (e.g. +model) to incorporate it
+```
+
+The model stays current rather than being rebuilt on a stale input, and the warning tells you exactly which upstreams changed and how to pull them in.
+
+## Incorporating the changed upstreams
+
+Use a closure selector to include the changed upstreams in the run. With `+agg_daily_revenue`, SQLBuild pulls in the changed `stg_orders`, cascades the change through the intermediate models, and rebuilds:
+
+```bash
+sqb dbt plan --select +agg_daily_revenue
+```
+
+```
+Plan ready (8 selected resources)
+  planned models: 5 run, 1 current, 0 blocked
+
+  Model plan
+    Checksum changed (1)
+      model.jaffle_analytics.stg_orders         checksum changed
+    Upstream changed (4)
+      model.jaffle_analytics.agg_daily_revenue  upstream changed
+      model.jaffle_analytics.fct_orders         upstream changed
+      model.jaffle_analytics.int_order_payments upstream changed
+      model.jaffle_analytics.stg_order_statuses upstream changed
+```
+
+## Seeds follow the same rule
+
+Seed changes are tracked the same selection-aware way. A changed seed that is outside the current selection does not trigger a partial rebuild of its dependents; instead the dependents are left current and a stale warning is emitted, exactly as for models. This keeps a scoped run from quietly building on a seed that the run didn't reload.
+
+## Why this matters
+
+A run that reports success but silently built a model on stale inputs is a correctness hazard - the data looks fresh but isn't. Surfacing staleness as an explicit warning (and refusing the misleading partial rebuild) keeps scoped runs honest: you either get a result built on current inputs, or a clear warning telling you it would not be, with the fix.
