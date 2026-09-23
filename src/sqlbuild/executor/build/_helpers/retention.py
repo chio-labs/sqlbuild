@@ -16,7 +16,12 @@ from sqlbuild.compiler.planner.models import (
     RetentionPlanEntry,
     TableTypePlanEntry,
 )
-from sqlbuild.compiler.planner.types import IncrementalMode, PlanAction, RetentionPlanPhase
+from sqlbuild.compiler.planner.types import (
+    IncrementalMode,
+    PlanAction,
+    RetentionDirection,
+    RetentionPlanPhase,
+)
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.runtime.observability.classes.operation_lifecycle import (
     OperationAttributes,
@@ -214,13 +219,33 @@ def reconcile_retention_after_build(
             request=entry.request,
             state=state,
         )
+        lowering_permitted: bool = _lowering_permitted(entry=entry, state=state)
         for change in changes:
+            if not lowering_permitted and change.phase != RetentionChangePhase.PREPARE:
+                continue
             _apply_retention_statements(
                 adapter=adapter,
                 connection=connection,
                 statements=change.statements,
                 target_kind=entry.request.scope.value,
             )
+
+
+def _lowering_permitted(*, entry: RetentionPlanEntry, state: RetentionState) -> bool:
+    """Only lower live retention for gated planned decreases or newly created relations."""
+
+    if entry.decreases or entry.direction == RetentionDirection.APPLY_AFTER_CREATE:
+        return True
+    desired_days: int = entry.request.desired_days
+    values: tuple[int, ...] = tuple(
+        value
+        for value in (
+            state.delta_log_retention_days,
+            state.delta_deleted_file_retention_days,
+        )
+        if value is not None
+    ) or (state.effective_days,)
+    return all(value <= desired_days for value in values)
 
 
 def _safe_before_build_success(

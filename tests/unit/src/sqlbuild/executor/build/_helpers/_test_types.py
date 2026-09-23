@@ -4,7 +4,12 @@ from dataclasses import dataclass, field
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.contract.types import RetentionChangePhase
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
-from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, RetentionPlanPhase
+from sqlbuild.compiler.planner.types import (
+    MaterializationType,
+    PlanAction,
+    RetentionDirection,
+    RetentionPlanPhase,
+)
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.scheduling.types import ExecutionStatus
@@ -67,6 +72,15 @@ class BuildModelRetentionReconciliationTestCase:
     desired_days: int
     effective_days: int
     change_phase: RetentionChangePhase
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FinalRetentionReconciliationTestCase:
+    description: str
+    planned_direction: RetentionDirection
+    desired_days: int
+    live_days: int
     expected_statements: tuple[str, ...]
 
 

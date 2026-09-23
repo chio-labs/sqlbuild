@@ -58,6 +58,7 @@ from sqlbuild.executor.clone.models import (
 )
 from sqlbuild.executor.clone.types import CloneStatus
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
+from sqlbuild.spec.contracts.types import RetentionDecreasePolicy
 
 
 def build_defer_clone_boundary_selectors(
@@ -303,6 +304,14 @@ def run_defer_clone_prephase(
                             local_config=discovered_inputs.local_config,
                             target_name=destination_target_name,
                         ).owns_time_travel_retention_namespace,
+                    ),
+                    allow_namespace_retention_decrease=(
+                        resolve_target_config(
+                            project_config=discovered_inputs.project_config,
+                            local_config=discovered_inputs.local_config,
+                            target_name=destination_target_name,
+                        ).time_travel_retention_decrease
+                        == RetentionDecreasePolicy.ALLOW
                     ),
                     on_item=on_item,
                 )

@@ -48,6 +48,7 @@ class CloneExecutionInput:
         default_factory=dict
     )
     destination_retention_requests: dict[str, RetentionRequest] = field(default_factory=dict)
+    allow_namespace_retention_decrease: bool = False
     on_item: CloneItemCallback | None = None
 
 
