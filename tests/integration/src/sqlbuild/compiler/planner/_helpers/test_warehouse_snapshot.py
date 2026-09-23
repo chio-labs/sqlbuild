@@ -266,6 +266,7 @@ def test_given_warehouse_state_when_gathering_snapshot_then_returns_expected(
     assert (
         frozenset(snapshot.fingerprints.seeds.keys()) == test_case.expected_seed_fingerprint_names
     )
+    assert snapshot.column_dialect == adapter.sql_analysis_dialect()
 
 
 @pytest.mark.parametrize(
