@@ -19,6 +19,7 @@ from sqlbuild.compiler.planner.models import (
     DeferralInputs,
     ModelChangesPlanInputs,
     PlanEntryBuildInputs,
+    PlannedSqlTests,
     PlannerChangeResults,
     PlannerModelEntryResults,
     PlannerRelationsContext,
@@ -115,5 +116,10 @@ def build_plan_output_from_model_changes_phase(
             seed_version_hashes=resolved.seed_version_hashes,
             seed_metadata_jsons=resolved.seed_metadata_jsons,
             seed_plan_reasons=resolved.seed_plan_reasons,
+            planned_sql_tests=(
+                None
+                if resolved.plan_sql_tests
+                else PlannedSqlTests(selected_keys=scope.selected_keys)
+            ),
         ),
     )

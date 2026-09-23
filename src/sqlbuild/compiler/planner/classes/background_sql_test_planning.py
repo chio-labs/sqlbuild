@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from concurrent.futures import Future, ThreadPoolExecutor
+import threading
+from concurrent.futures import Future
 from types import TracebackType
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -22,19 +23,21 @@ class BackgroundSqlTestPlanning:
         selected_keys: frozenset[CompiledObjectKey],
         enabled: bool,
     ) -> None:
-        self._executor: ThreadPoolExecutor = ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="sqlbuild-test-planning"
-        )
-        self._future: Future[PlannedSqlTests] | None = (
-            self._executor.submit(
-                plan_selected_sql_tests,
-                project=project,
-                adapter=adapter,
-                selected_keys=selected_keys,
-            )
-            if enabled
-            else None
-        )
+        self._future: Future[PlannedSqlTests] | None = None
+        if enabled:
+            future: Future[PlannedSqlTests] = Future()
+            self._future = future
+            threading.Thread(
+                target=_plan_into,
+                kwargs={
+                    "future": future,
+                    "project": project,
+                    "adapter": adapter,
+                    "selected_keys": selected_keys,
+                },
+                name="sqlbuild-test-planning",
+                daemon=True,
+            ).start()
         self._selected_keys: frozenset[CompiledObjectKey] = selected_keys
 
     def __enter__(self) -> BackgroundSqlTestPlanning:
@@ -46,7 +49,7 @@ class BackgroundSqlTestPlanning:
         exception: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        self._executor.shutdown(wait=False, cancel_futures=True)
+        del exception_type, exception, traceback
 
     def result(self) -> PlannedSqlTests:
         """Return planned tests, raising any planning error at the original assembly point."""
@@ -54,3 +57,20 @@ class BackgroundSqlTestPlanning:
         if self._future is None:
             return PlannedSqlTests(selected_keys=self._selected_keys)
         return self._future.result()
+
+
+def _plan_into(
+    *,
+    future: Future[PlannedSqlTests],
+    project: CompiledProject,
+    adapter: BaseAdapter,
+    selected_keys: frozenset[CompiledObjectKey],
+) -> None:
+    """Run planning on a daemon thread so a failed plan never waits for it at exit."""
+
+    try:
+        future.set_result(
+            plan_selected_sql_tests(project=project, adapter=adapter, selected_keys=selected_keys)
+        )
+    except BaseException as error:  # noqa: BLE001 - re-raised on the joining thread
+        future.set_exception(error)

@@ -848,6 +848,7 @@ class ModelChangesPlanInputs:
     seed_metadata_jsons: dict[str, str] | None = None
     seed_plan_reasons: dict[str, PlanReason] | None = None
     max_microbatches: int | None = None
+    plan_sql_tests: bool = True
 
 
 @dataclass(frozen=True)

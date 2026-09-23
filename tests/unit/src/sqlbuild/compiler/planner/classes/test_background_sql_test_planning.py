@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 import pytest
 
 import sqlbuild.compiler.planner.classes.background_sql_test_planning as background_module
@@ -131,3 +133,46 @@ def test_given_failing_planning_when_joining_then_raises_original_error(
     ) as planning:
         with pytest.raises(PlannerInputError, match=str(test_case.expected_error)):
             planning.result()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BackgroundSqlTestPlanningTestCase(
+            description="running planning never keeps the process alive",
+            enabled=True,
+            expected_planner_calls=1,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_running_planning_when_planner_fails_then_worker_is_daemon(
+    test_case: BackgroundSqlTestPlanningTestCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started: threading.Event = threading.Event()
+    release: threading.Event = threading.Event()
+
+    def plan(
+        *, project: object, adapter: object, selected_keys: frozenset[CompiledObjectKey]
+    ) -> PlannedSqlTests:
+        del project, adapter
+        started.set()
+        release.wait(timeout=5)
+        return PlannedSqlTests(selected_keys=selected_keys)
+
+    monkeypatch.setattr(background_module, "plan_selected_sql_tests", plan)
+
+    with BackgroundSqlTestPlanning(
+        project=object(),  # ty: ignore[invalid-argument-type]
+        adapter=object(),  # ty: ignore[invalid-argument-type]
+        selected_keys=_KEYS,
+        enabled=test_case.enabled,
+    ):
+        assert started.wait(timeout=5)
+        daemon_by_name: dict[str, bool] = {
+            thread.name: thread.daemon for thread in threading.enumerate()
+        }
+    release.set()
+
+    assert daemon_by_name["sqlbuild-test-planning"] is True
+    assert test_case.expected_planner_calls == 1
