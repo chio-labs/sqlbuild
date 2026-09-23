@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.114.1](https://github.com/chio-labs/sqlbuild/compare/v0.114.0...v0.114.1) (2026-09-23)
+
+
+### Performance Improvements
+
+* focused agent skill and batched Snowflake retention inspection ([#798](https://github.com/chio-labs/sqlbuild/issues/798)) ([2a5a54e](https://github.com/chio-labs/sqlbuild/commit/2a5a54e54179d57cd72886ca2e9a3a1fb0f03542))
+
 ## [0.114.0](https://github.com/chio-labs/sqlbuild/compare/v0.113.9...v0.114.0) (2026-09-23)
 
 
