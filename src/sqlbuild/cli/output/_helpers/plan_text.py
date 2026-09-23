@@ -116,7 +116,7 @@ def _format_retention(
         )
     if plan.retention_entries:
         lines.append("Retention")
-    for entry in visible_entries(entries=plan.retention_entries, options=display_options):
+    for entry in plan.retention_entries:
         scope: str = ".".join(
             part
             for part in (entry.request.database, entry.request.schema, entry.request.name)
@@ -131,13 +131,7 @@ def _format_retention(
         )
         if entry.irreversible_warning is not None:
             lines.append(f"    WARNING: {entry.irreversible_warning}")
-    return append_overflow_line(
-        lines=lines,
-        total_count=len(plan.retention_entries),
-        visible_count=len(visible_entries(entries=plan.retention_entries, options=display_options)),
-        indent="  ",
-        options=display_options,
-    )
+    return lines
 
 
 def format_plan(
