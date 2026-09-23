@@ -593,3 +593,11 @@ class TargetMaterializationRetentionTestCase:
     description: str
     target_lines: tuple[str, ...]
     expected_requested_days: frozenset[int]
+
+
+@dataclass(frozen=True)
+class BuildTestPlanningTestCase:
+    description: str
+    build_flags: tuple[str, ...]
+    expected_exit_code: int
+    expected_fragment: str

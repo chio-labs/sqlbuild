@@ -980,11 +980,21 @@ class TableTypePlanEntry:
 
 @dataclass(frozen=True)
 class PlanOutputExtras:
-    """Optional supplemental seed fingerprints for plan output assembly."""
+    """Optional supplemental seed fingerprints and precomputed SQL tests for plan assembly."""
 
     seed_version_hashes: dict[str, str] | None = None
     seed_metadata_jsons: dict[str, str] | None = None
     seed_plan_reasons: dict[str, PlanReason] | None = None
+    planned_sql_tests: PlannedSqlTests | None = None
+
+
+@dataclass(frozen=True)
+class PlannedSqlTests:
+    """SQL test entries planned for one selection; reusable only for the same selected keys."""
+
+    selected_keys: frozenset[CompiledObjectKey]
+    entries: tuple[SqlTestPlanEntry, ...] = ()
+    warnings: tuple[PlanWarning, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1418,6 +1428,7 @@ class PlannerPolicies:
 
     auto_load_sources: bool = False
     selection_diagnostics: bool = False
+    plan_sql_tests: bool = True
 
 
 @dataclass(frozen=True)
