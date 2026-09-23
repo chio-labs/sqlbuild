@@ -80,6 +80,7 @@ class RelationInfo:
     created_at: datetime | None = None
     last_altered_at: datetime | None = None
     is_transient: bool | None = None
+    retention_days: int | None = None
 
     @property
     def identity(self) -> tuple[str | None, str | None, str]:

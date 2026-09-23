@@ -180,3 +180,14 @@ class MaterializationRecreatesRelationTestCase:
     action: PlanAction
     incremental_mode: str | None
     expected_recreates: bool
+
+
+@dataclass(frozen=True)
+class BatchedRetentionReconciliationTestCase:
+    description: str
+    entry_request_ids: tuple[str, ...]
+    live_days: int
+    desired_days: int
+    expected_batch_request_ids: tuple[tuple[str, ...], ...]
+    expected_single_inspections: tuple[str, ...]
+    expected_statements: tuple[str, ...]

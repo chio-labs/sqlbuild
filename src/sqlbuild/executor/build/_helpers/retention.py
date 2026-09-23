@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.models import RelationInfo, RenderedRetentionChange, RetentionState
+from sqlbuild.adapter.contract.models import (
+    RelationInfo,
+    RenderedRetentionChange,
+    RetentionRequest,
+    RetentionState,
+)
 from sqlbuild.adapter.contract.types import RetentionChangePhase, RetentionScope
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
@@ -178,13 +183,17 @@ def reconcile_model_retention(
 ) -> None:
     """Reconcile a successfully materialized relation before item completion."""
 
+    entries: tuple[RetentionPlanEntry, ...] = tuple(
+        entry
+        for entry in plan.retention_entries
+        if model_name in entry.model_names and entry.request.scope == RetentionScope.RELATION
+    )
+    states: _RetentionStates = _RetentionStates.inspect(
+        adapter=adapter, connection=connection, entries=entries
+    )
     entry: RetentionPlanEntry
-    for entry in plan.retention_entries:
-        if model_name not in entry.model_names or entry.request.scope != RetentionScope.RELATION:
-            continue
-        state: RetentionState = _inspect_retention(
-            adapter=adapter, connection=connection, entry=entry
-        )
+    for entry in entries:
+        state: RetentionState = states.current(entry=entry)
         if _state_matches(entry=entry, state=state):
             continue
         changes: tuple[RenderedRetentionChange, ...] = adapter.render_retention_changes(
@@ -194,6 +203,7 @@ def reconcile_model_retention(
         for change in changes:
             if not _safe_before_build_success(entry=entry, state=state, change=change):
                 continue
+            states.mark_changed(entry=entry, statements=change.statements)
             _apply_retention_statements(
                 adapter=adapter,
                 connection=connection,
@@ -212,12 +222,14 @@ def reconcile_retention_after_build(
         for model_entry in plan.model_entries
         if materialization_recreates_relation(model_entry)
     )
-    for entry in plan.retention_entries:
-        if entry.phase == RetentionPlanPhase.NONE:
-            continue
-        state: RetentionState = _inspect_retention(
-            adapter=adapter, connection=connection, entry=entry
-        )
+    entries: tuple[RetentionPlanEntry, ...] = tuple(
+        entry for entry in plan.retention_entries if entry.phase != RetentionPlanPhase.NONE
+    )
+    states: _RetentionStates = _RetentionStates.inspect(
+        adapter=adapter, connection=connection, entries=entries
+    )
+    for entry in entries:
+        state: RetentionState = states.current(entry=entry)
         if _state_matches(entry=entry, state=state):
             continue
         changes: tuple[RenderedRetentionChange, ...] = adapter.render_retention_changes(
@@ -230,6 +242,7 @@ def reconcile_retention_after_build(
         for change in changes:
             if not lowering_permitted and change.phase != RetentionChangePhase.PREPARE:
                 continue
+            states.mark_changed(entry=entry, statements=change.statements)
             _apply_retention_statements(
                 adapter=adapter,
                 connection=connection,
@@ -289,6 +302,87 @@ def _state_matches(*, entry: RetentionPlanEntry, state: RetentionState) -> bool:
         if value is not None
     ) or (state.effective_days,)
     return all(value == desired_days for value in values)
+
+
+class _RetentionStates:
+    """Batched retention states, re-inspected per request once this build has changed it."""
+
+    def __init__(
+        self,
+        *,
+        adapter: BaseAdapter,
+        connection: Any,
+        states: dict[str, RetentionState],
+    ) -> None:
+        self._adapter: BaseAdapter = adapter
+        self._connection: Any = connection
+        self._states: dict[str, RetentionState] = states
+        self._changed: set[str] = set()
+
+    @classmethod
+    def inspect(
+        cls,
+        *,
+        adapter: BaseAdapter,
+        connection: Any,
+        entries: tuple[RetentionPlanEntry, ...],
+    ) -> _RetentionStates:
+        return cls(
+            adapter=adapter,
+            connection=connection,
+            states=_inspect_retentions(adapter=adapter, connection=connection, entries=entries),
+        )
+
+    def current(self, *, entry: RetentionPlanEntry) -> RetentionState:
+        request_id: str = entry.request.request_id
+        if request_id in self._changed or request_id not in self._states:
+            self._states[request_id] = _inspect_retention(
+                adapter=self._adapter, connection=self._connection, entry=entry
+            )
+            self._changed.discard(request_id)
+        return self._states[request_id]
+
+    def mark_changed(self, *, entry: RetentionPlanEntry, statements: tuple[str, ...]) -> None:
+        if statements:
+            self._changed.add(entry.request.request_id)
+
+
+def _inspect_retentions(
+    *, adapter: BaseAdapter, connection: Any, entries: tuple[RetentionPlanEntry, ...]
+) -> dict[str, RetentionState]:
+    """Inspect every distinct request in one adapter call per retention scope."""
+
+    requests_by_scope: dict[RetentionScope, dict[str, RetentionRequest]] = {}
+    for entry in entries:
+        requests_by_scope.setdefault(entry.request.scope, {})[entry.request.request_id] = (
+            entry.request
+        )
+    states: dict[str, RetentionState] = {}
+    for scope, requests in requests_by_scope.items():
+        with OperationLifecycle(
+            operation_kind="warehouse",
+            operation_name="retention_inspection",
+            attributes=OperationAttributes(
+                phase="inspect",
+                adapter=canonicalize_operation_adapter(adapter.adapter_name),
+                target_kind=scope.value,
+            ),
+        ) as lifecycle:
+            inspected: dict[str, RetentionState] = adapter.inspect_retentions(
+                connection=connection, requests=tuple(requests.values())
+            )
+            lifecycle.completed(
+                metadata={
+                    "item_count": len(inspected),
+                    "changed_count": sum(
+                        not _state_matches(entry=entry, state=inspected[entry.request.request_id])
+                        for entry in entries
+                        if entry.request.request_id in inspected
+                    ),
+                }
+            )
+        states.update(inspected)
+    return states
 
 
 def _inspect_retention(

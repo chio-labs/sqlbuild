@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
+from sqlbuild.adapter.contract.classes.retention_adapter import RetentionAdapterMixin
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditOutcome,
@@ -236,3 +238,27 @@ def build_plan_output(
         model_entries=model_entries,
         seed_entries=seed_entries,
     )
+
+
+def retention_mock_adapter(**attributes: Any) -> Mock:
+    """Return a Mock adapter whose batched retention hooks use the real default implementations."""
+
+    adapter: Mock = Mock(**attributes)
+    adapter.inspect_retentions.side_effect = lambda *, connection, requests: (
+        RetentionAdapterMixin.inspect_retentions(adapter, connection=connection, requests=requests)
+    )
+    adapter.retention_state_from_relation.side_effect = lambda *, request, relation: (
+        RetentionAdapterMixin.retention_state_from_relation(
+            adapter, request=request, relation=relation
+        )
+    )
+    return adapter
+
+
+def batched_retention_request_ids(*, adapter: Mock) -> tuple[tuple[str, ...], ...]:
+    """Return the request IDs passed to each batched retention inspection call."""
+
+    batches: list[tuple[str, ...]] = []
+    for batch in adapter.inspect_retentions.call_args_list:
+        batches.append(tuple(request.request_id for request in batch.kwargs["requests"]))
+    return tuple(batches)

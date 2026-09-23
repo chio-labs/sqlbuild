@@ -188,12 +188,11 @@ def _plan_relation_retention(
                 statements=_flatten_changes(changes=changes),
             ),
         )
-    relation_is_transient: bool | None = warehouse.snapshot.existing_relations[
-        model.name
-    ].is_transient
-    state: RetentionState = runtime.adapter.inspect_retention(
-        connection=runtime.connection, request=request
-    )
+    relation: RelationInfo = warehouse.snapshot.existing_relations[model.name]
+    relation_is_transient: bool | None = relation.is_transient
+    state: RetentionState = runtime.adapter.retention_state_from_relation(
+        request=request, relation=relation
+    ) or runtime.adapter.inspect_retention(connection=runtime.connection, request=request)
     if (
         state.is_transient
         and desired_days > 1

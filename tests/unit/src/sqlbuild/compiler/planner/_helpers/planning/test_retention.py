@@ -16,6 +16,7 @@ from sqlbuild.adapter.contract.types import (
     RetentionChangePhase,
     RetentionScope,
 )
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.planning.retention import plan_retention, plan_table_types
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -42,10 +43,12 @@ from sqlbuild.spec.contracts.types import TableType, TableTypeDowngradePolicy, T
 from tests.unit.src.sqlbuild.compiler.planner._helpers.planning._test_types import (
     RetentionPlanningErrorTestCase,
     RetentionPlanningTestCase,
+    SnapshotRetentionPlanningTestCase,
     TableTypePlanningTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.planning.helpers import (
     build_retention_planner_inputs,
+    retention_mock_adapter,
 )
 
 _EXISTING_ORDERS: dict[str, RelationInfo] = {
@@ -97,7 +100,7 @@ _EXISTING_ORDERS: dict[str, RelationInfo] = {
 def test_given_table_type_drift_when_planning_then_independent_entry_tracks_actual_and_policy(
     test_case: TableTypePlanningTestCase,
 ) -> None:
-    adapter: Mock = Mock(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
+    adapter: Mock = retention_mock_adapter(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
     adapter.maximum_identifier_length.return_value = 255
     relation: RelationInfo = RelationInfo(
         database="warehouse",
@@ -148,7 +151,7 @@ def test_given_table_type_drift_when_planning_then_independent_entry_tracks_actu
 def test_given_matched_or_missing_table_when_planning_type_then_no_entry_is_created(
     test_case: TableTypePlanningTestCase,
 ) -> None:
-    adapter: Mock = Mock(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
+    adapter: Mock = retention_mock_adapter(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
     adapter.maximum_identifier_length.return_value = 255
     runtime, warehouse, scope = build_retention_planner_inputs(
         adapter=adapter,
@@ -195,7 +198,7 @@ def test_given_matched_or_missing_table_when_planning_type_then_no_entry_is_crea
 def test_given_missing_table_when_planning_type_then_no_entry_is_created(
     test_case: TableTypePlanningTestCase,
 ) -> None:
-    adapter: Mock = Mock(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
+    adapter: Mock = retention_mock_adapter(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
     adapter.maximum_identifier_length.return_value = 255
     runtime, warehouse, scope = build_retention_planner_inputs(
         adapter=adapter,
@@ -315,7 +318,7 @@ def test_given_missing_table_when_planning_type_then_no_entry_is_created(
 def test_given_materialization_family_when_planning_table_types_then_only_tables_have_drift(
     test_case: TableTypePlanningTestCase,
 ) -> None:
-    adapter: Mock = Mock(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
+    adapter: Mock = retention_mock_adapter(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
     adapter.maximum_identifier_length.return_value = 255
     relation: RelationInfo = RelationInfo(
         database="warehouse",
@@ -361,7 +364,7 @@ def test_given_materialization_family_when_planning_table_types_then_only_tables
 def test_given_declared_table_type_on_non_snowflake_when_planning_then_raises(
     test_case: RetentionPlanningErrorTestCase,
 ) -> None:
-    adapter: Mock = Mock(adapter_name=BuiltinAdapter.DUCKDB.value)
+    adapter: Mock = retention_mock_adapter(adapter_name=BuiltinAdapter.DUCKDB.value)
     runtime, warehouse, scope = build_retention_planner_inputs(
         adapter=adapter,
         desired_days=test_case.desired_days,
@@ -397,7 +400,7 @@ def test_given_declared_table_type_on_non_snowflake_when_planning_then_raises(
 def test_given_changes_only_current_model_when_planning_type_then_selection_still_produces_entry(
     test_case: TableTypePlanningTestCase,
 ) -> None:
-    adapter: Mock = Mock(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
+    adapter: Mock = retention_mock_adapter(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
     adapter.maximum_identifier_length.return_value = 255
     runtime: PlannerRuntime
     warehouse: PlannerWarehouseState
@@ -497,7 +500,7 @@ def test_given_changes_only_current_model_when_planning_type_then_selection_stil
 def test_given_retention_policy_when_planning_then_orders_metadata_safely(
     test_case: RetentionPlanningTestCase,
 ) -> None:
-    adapter: Mock = Mock(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
+    adapter: Mock = retention_mock_adapter(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
     adapter.inspect_retention.return_value = test_case.observed_state
     rendered_phase: RetentionChangePhase = {
         RetentionPlanPhase.NONE: RetentionChangePhase.ALTER,
@@ -543,7 +546,7 @@ def test_given_retention_policy_when_planning_then_orders_metadata_safely(
 def test_given_missing_snowflake_relation_above_transient_limit_when_planning_then_fails_closed(
     test_case: RetentionPlanningErrorTestCase,
 ) -> None:
-    adapter: Mock = Mock(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
+    adapter: Mock = retention_mock_adapter(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
     runtime, warehouse, scope = build_retention_planner_inputs(
         adapter=adapter,
         desired_days=test_case.desired_days,
@@ -569,7 +572,7 @@ def test_given_missing_snowflake_relation_above_transient_limit_when_planning_th
 def test_given_existing_transient_snowflake_relation_above_limit_when_planning_then_fails_closed(
     test_case: RetentionPlanningErrorTestCase,
 ) -> None:
-    adapter: Mock = Mock(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
+    adapter: Mock = retention_mock_adapter(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
     adapter.inspect_retention.return_value = RetentionState(
         request_id="orders",
         scope=RetentionScope.RELATION,
@@ -610,7 +613,7 @@ def test_given_existing_transient_snowflake_relation_above_limit_when_planning_t
 def test_given_transient_live_table_and_permanent_effective_type_when_planning_then_converts_first(
     test_case: RetentionPlanningTestCase,
 ) -> None:
-    adapter: Mock = Mock(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
+    adapter: Mock = retention_mock_adapter(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
     adapter.maximum_identifier_length.return_value = 255
     adapter.inspect_retention.return_value = test_case.observed_state
     adapter.render_retention_changes.return_value = (
@@ -673,7 +676,7 @@ def test_given_transient_live_table_and_permanent_effective_type_when_planning_t
 def test_given_permanent_live_table_with_retention_drift_when_planning_then_only_alters_retention(
     test_case: RetentionPlanningTestCase,
 ) -> None:
-    adapter: Mock = Mock(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
+    adapter: Mock = retention_mock_adapter(adapter_name=BuiltinAdapter.SNOWFLAKE.value)
     adapter.maximum_identifier_length.return_value = 255
     adapter.inspect_retention.return_value = test_case.observed_state
     adapter.render_retention_changes.return_value = (
@@ -736,7 +739,7 @@ def test_given_permanent_live_table_with_retention_drift_when_planning_then_only
 def test_given_missing_bigquery_dataset_when_planning_then_defers_retention_until_after_create(
     test_case: RetentionPlanningTestCase,
 ) -> None:
-    adapter: Mock = Mock(adapter_name=BuiltinAdapter.BIGQUERY.value)
+    adapter: Mock = retention_mock_adapter(adapter_name=BuiltinAdapter.BIGQUERY.value)
     adapter.inspect_retention.return_value = test_case.observed_state
     adapter.render_retention_changes.return_value = (
         RenderedRetentionChange(
@@ -769,3 +772,54 @@ def test_given_missing_bigquery_dataset_when_planning_then_defers_retention_unti
     assert entries[0].direction == test_case.expected_direction
     assert entries[0].phase == test_case.expected_phase
     assert RetentionPlanPhase.PRE not in tuple(entry.phase for entry in entries)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnapshotRetentionPlanningTestCase(
+            description="many matching tables plan from the snapshot without metadata queries",
+            model_names=("orders", "customers", "products", "inventory"),
+            live_days=7,
+            desired_days=7,
+            expected_directions=("match", "match", "match", "match"),
+        ),
+        SnapshotRetentionPlanningTestCase(
+            description="drifted tables plan increases from the snapshot without metadata queries",
+            model_names=("orders", "customers"),
+            live_days=1,
+            desired_days=7,
+            expected_directions=("increase", "increase"),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_snowflake_snapshot_retention_when_planning_then_no_table_is_inspected(
+    test_case: SnapshotRetentionPlanningTestCase,
+) -> None:
+    runtime: PlannerRuntime
+    warehouse: PlannerWarehouseState
+    scope: PlannerScope
+    runtime, warehouse, scope = build_retention_planner_inputs(
+        adapter=SnowflakeAdapter(),
+        desired_days=test_case.desired_days,
+        existing_relations={
+            name: RelationInfo(
+                database="warehouse",
+                schema="analytics",
+                name=name,
+                relation_type="base table",
+                is_transient=False,
+                retention_days=test_case.live_days,
+            )
+            for name in test_case.model_names
+        },
+        config_values={},
+        model_names=test_case.model_names,
+    )
+
+    entries: tuple[RetentionPlanEntry, ...] = plan_retention(
+        runtime=runtime, warehouse=warehouse, scope=scope
+    )
+
+    assert tuple(entry.direction.value for entry in entries) == test_case.expected_directions

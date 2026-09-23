@@ -45,3 +45,12 @@ class ReusableExecutionModelNamesTestCase:
     stale_warning_hash: str
     query_change_tracking: bool
     expected_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class SnapshotRetentionPlanningTestCase:
+    description: str
+    model_names: tuple[str, ...]
+    live_days: int
+    desired_days: int
+    expected_directions: tuple[str, ...]
