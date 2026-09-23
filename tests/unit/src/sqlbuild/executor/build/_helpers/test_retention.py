@@ -20,7 +20,7 @@ from sqlbuild.compiler.planner.types import (
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.build._helpers.retention import (
     apply_retention_phase,
-    apply_table_type_conversions,
+    apply_table_type_conversion,
     reconcile_model_retention,
 )
 from sqlbuild.observability import EventDispatcher, LifecycleEvent, dispatcher_scope
@@ -270,9 +270,7 @@ def test_given_recoverable_table_type_state_when_converting_then_uses_inspection
         downgrade_policy="require_confirmation",
     )
 
-    apply_table_type_conversions(
-        plan=PlanOutput(table_type_entries=(entry,)), adapter=adapter, connection=connection
-    )
+    apply_table_type_conversion(entry=entry, adapter=adapter, connection=connection)
 
     assert tuple(item.kwargs["sql"] for item in adapter.execute.call_args_list) == (
         test_case.expected_statements
@@ -324,9 +322,7 @@ def test_given_unknown_live_table_type_when_converting_then_fails_closed(
     )
 
     with pytest.raises(ExecutorInputError, match="metadata is unknown"):
-        apply_table_type_conversions(
-            plan=PlanOutput(table_type_entries=(entry,)), adapter=adapter, connection=object()
-        )
+        apply_table_type_conversion(entry=entry, adapter=adapter, connection=object())
 
     assert tuple(item.kwargs["sql"] for item in adapter.execute.call_args_list) == (
         test_case.expected_statements
@@ -392,9 +388,7 @@ def test_given_unrecoverable_table_type_state_when_converting_then_fails_before_
     )
 
     with pytest.raises(ExecutorInputError, match=test_case.expected_error_fragment):
-        apply_table_type_conversions(
-            plan=PlanOutput(table_type_entries=(entry,)), adapter=adapter, connection=object()
-        )
+        apply_table_type_conversion(entry=entry, adapter=adapter, connection=object())
 
     assert tuple(item.kwargs["sql"] for item in adapter.execute.call_args_list) == (
         test_case.expected_statements
@@ -505,11 +499,7 @@ def test_given_table_type_conversion_when_ddl_blocks_then_start_is_already_dispa
     )
 
     with dispatcher_scope(dispatcher):
-        apply_table_type_conversions(
-            plan=PlanOutput(table_type_entries=(entry,)),
-            adapter=adapter,
-            connection=object(),
-        )
+        apply_table_type_conversion(entry=entry, adapter=adapter, connection=object())
 
     assert tuple(event.event_type for event in events) == test_case.expected_event_types
     assert barrier_events[0].event_type == "operation_started"

@@ -9,8 +9,8 @@ import pytest
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.planner._helpers.planning.retention import table_type_copy_name
-from sqlbuild.compiler.planner.models import PlanOutput, TableTypePlanEntry
-from sqlbuild.executor.build._helpers.retention import apply_table_type_conversions
+from sqlbuild.compiler.planner.models import TableTypePlanEntry
+from sqlbuild.executor.build._helpers.retention import apply_table_type_conversion
 from sqlbuild.spec.contracts.types import TableType
 from tests.integration.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeTableTypeConversionTestCase,
@@ -99,11 +99,7 @@ def test_given_existing_snowflake_table_when_applying_table_type_then_metadata_a
     )
     adapter.statement_recorder.events.clear()
 
-    apply_table_type_conversions(
-        plan=PlanOutput(table_type_entries=(entry,)),
-        adapter=adapter,
-        connection=connection,
-    )
+    apply_table_type_conversion(entry=entry, adapter=adapter, connection=connection)
     conversion_statement_count: int = len(adapter.statement_recorder.snapshot())
     relations: tuple[RelationInfo, ...] = adapter.list_relations(
         connection=connection,

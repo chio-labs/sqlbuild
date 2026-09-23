@@ -23,28 +23,11 @@ from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
 from sqlbuild.spec.contracts.types import TableType
 
 
-def apply_table_type_conversions(
-    *, plan: PlanOutput, adapter: BaseAdapter, connection: Any
-) -> None:
-    """Recover by inspection: clean desired targets or recreate and swap undesired targets."""
-
-    _apply_table_type_entries(
-        entries=plan.table_type_entries, adapter=adapter, connection=connection
-    )
-
-
-def _apply_table_type_entries(
-    *, entries: tuple[TableTypePlanEntry, ...], adapter: BaseAdapter, connection: Any
-) -> None:
-    if not entries:
-        return
-    _apply_table_type_entry(entry=entries[0], adapter=adapter, connection=connection)
-    _apply_table_type_entries(entries=entries[1:], adapter=adapter, connection=connection)
-
-
-def _apply_table_type_entry(
+def apply_table_type_conversion(
     *, entry: TableTypePlanEntry, adapter: BaseAdapter, connection: Any
 ) -> None:
+    """Recover by inspection: clean a desired target or recreate and swap an undesired one."""
+
     destination: str = resolve_qualified_name_parts(
         adapter=adapter,
         database=entry.destination.database,

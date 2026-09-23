@@ -30,6 +30,7 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     SeedPlanEntry,
     SqlTestPlanEntry,
+    TableTypePlanEntry,
 )
 from sqlbuild.compiler.planner.types import (
     IncrementalMode,
@@ -45,7 +46,10 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build._helpers.blocking import downstream_blocked_keys
 from sqlbuild.executor.build._helpers.end_audits import run_end_audits
 from sqlbuild.executor.build._helpers.indexes import build_execution_indexes
-from sqlbuild.executor.build._helpers.retention import reconcile_model_retention
+from sqlbuild.executor.build._helpers.retention import (
+    apply_table_type_conversion,
+    reconcile_model_retention,
+)
 from sqlbuild.executor.build._helpers.scheduler import (
     _build_worker_failure_completion,
     _build_worker_success_completion,
@@ -158,6 +162,9 @@ class BuildScheduler:
         self._callbacks: BuildCallbacks = callbacks
         self._plan: PlanOutput = plan
         self._indexes: BuildIndexes = build_execution_indexes(plan)
+        self._table_type_entries: dict[str, TableTypePlanEntry] = {
+            entry.model_name: entry for entry in plan.table_type_entries
+        }
         self._adapter: BaseAdapter = adapter
         self._connection_config: dict[str, object] = connection_config
         self._connections: tuple[Any, ...] = connections
@@ -1010,6 +1017,13 @@ class BuildScheduler:
             sqlbuild_kind=model_entry.materialization_type,
         ):
             try:
+                table_type_entry: TableTypePlanEntry | None = self._table_type_entries.get(
+                    model_entry.name
+                )
+                if table_type_entry is not None and model_entry.action != PlanAction.CREATE_TABLE:
+                    apply_table_type_conversion(
+                        entry=table_type_entry, adapter=self._adapter, connection=connection
+                    )
                 if self._before_model_materialize is not None:
                     self._before_model_materialize(entry=model_entry, connection=connection)
                 if (
