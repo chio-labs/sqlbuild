@@ -8,11 +8,18 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
-from sqlbuild.compiler.compile.models import CompileAdapterContext, CompileAuditInput
+from sqlbuild.compiler.compile.models import (
+    CompileAdapterContext,
+    CompileAuditInput,
+    CompiledLineageColumnFact,
+    CompiledModel,
+    CompiledProject,
+)
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
+from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.sql_values.types import CollectionRendering
@@ -20,6 +27,11 @@ from sqlbuild.sql_values.types import CollectionRendering
 _SCHEMA_FIXTURE_PATH: Path = (
     Path(__file__).resolve().parents[5] / "fixtures" / "dbt_manifest_v12_schema.json"
 )
+_RESHAPED_STAR_PROJECT_TOML: str = 'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = []\n'
+RESHAPED_STAR_UPSTREAM_MODELS: dict[str, str] = {
+    "staged_orders": "SELECT 1 AS customer_id, 'books' AS category, 10 AS amount",
+    "wide_orders": "SELECT 1 AS customer_id, 2 AS books, 3 AS games",
+}
 _SEMANTIC_BINDING_PROJECT_TOML: str = 'name = "semantic_binding"\nadapter = "duckdb"\n'
 _AUDIT_FACTORY_ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
     value_renderer=DuckDbAdapter(),
@@ -125,3 +137,34 @@ def write_semantic_binding_project(
     models_dir.mkdir()
     _ = (models_dir / "upstream.sql").write_text(upstream_sql, encoding="utf-8")
     _ = (models_dir / "downstream.sql").write_text(downstream_sql, encoding="utf-8")
+
+
+def compile_reshaped_star_model(
+    *, project_dir: Path, query_sql: str
+) -> tuple[CompiledProject, CompiledModel]:
+    """Compile one reshaped-star model over the shared upstream order models."""
+
+    (project_dir / "sqlbuild_project.toml").write_text(
+        _RESHAPED_STAR_PROJECT_TOML, encoding="utf-8"
+    )
+    models: Path = project_dir / "models"
+    models.mkdir()
+    for name, sql in RESHAPED_STAR_UPSTREAM_MODELS.items():
+        (models / f"{name}.sql").write_text(f"MODEL (materialized table);\n{sql}", encoding="utf-8")
+    (models / "reshaped_orders.sql").write_text(
+        f"MODEL (materialized table);\n{query_sql}", encoding="utf-8"
+    )
+    project: CompiledProject = compile_project(
+        discovered_inputs=discover_project_inputs(project_dir=project_dir),
+        adapter=DuckDbAdapter(),
+    )
+    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    return project, models_by_name["reshaped_orders"]
+
+
+def lineage_source_pairs(column: CompiledLineageColumnFact) -> frozenset[tuple[str, str]]:
+    """Return one lineage column's upstream (resource, column) pairs."""
+
+    return frozenset(
+        (source.resource_name, source.column_name) for source in column.upstream_columns
+    )
