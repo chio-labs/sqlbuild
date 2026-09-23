@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.113.6](https://github.com/chio-labs/sqlbuild/compare/v0.113.5...v0.113.6) (2026-09-23)
+
+
+### Performance Improvements
+
+* reuse compiler declaration scope in warm SQL rules ([#787](https://github.com/chio-labs/sqlbuild/issues/787)) ([3304b9d](https://github.com/chio-labs/sqlbuild/commit/3304b9db14be34c7890c748d996ab696ee174ba4))
+
 ## [0.113.5](https://github.com/chio-labs/sqlbuild/compare/v0.113.4...v0.113.5) (2026-09-23)
 
 
