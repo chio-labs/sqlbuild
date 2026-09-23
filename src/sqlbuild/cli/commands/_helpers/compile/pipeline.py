@@ -204,6 +204,7 @@ def _analyze_compile_project(
             dialect=adapter.sql_analysis_dialect() or "generic",
             selected_keys=selected_keys if select or exclude else None,
             prepared_sql=early_lint.preparation,
+            expansion_reuse=early_lint.expansion_reuse,
         )
         _ = complete_compile_phase(
             status=status,

@@ -8,10 +8,19 @@ from sqlbuild.lint.constants import LINT_DIRECTORY_NAMES
 
 
 def collect_project_files(
-    *, project_dir: Path, selected_paths: frozenset[Path] | None = None
+    *,
+    project_dir: Path,
+    selected_paths: frozenset[Path] | None = None,
+    source_files: dict[Path, str] | None = None,
 ) -> dict[Path, str]:
-    """Return all authored SQL files in the project keyed by absolute path."""
+    """Return authored SQL files keyed by path, reusing contents a caller already read."""
 
+    if source_files is not None:
+        return {
+            file_path: contents
+            for file_path, contents in source_files.items()
+            if selected_paths is None or file_path.resolve() in selected_paths
+        }
     files: dict[Path, str] = {}
     directory_name: str
     for directory_name in LINT_DIRECTORY_NAMES:

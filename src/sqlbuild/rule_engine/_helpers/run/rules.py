@@ -19,6 +19,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledSqlExpansion,
     CompileProjectInputs,
+    DeclarationScopeBuild,
     SqlExpansionContext,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -47,6 +48,7 @@ from sqlbuild.rule_engine.models import (
     RulesConfig,
     RulesResult,
     RulesRunResult,
+    SqlExpansionReuse,
 )
 
 _SQL_RULE_CACHE_VERSION: str = "sql-rules-v2"
@@ -70,6 +72,7 @@ def evaluate_rules(
     dialect: str,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
     prepared_sql: PreparedSqlLint | None = None,
+    expansion_reuse: SqlExpansionReuse | None = None,
 ) -> RulesRunResult:
     """Evaluate independent rule phases concurrently, then finalize their combined findings."""
     effective_config: RulesConfig = resolve_rule_ignore_selectors(
@@ -123,6 +126,7 @@ def evaluate_rules(
             selected_model_paths=model_paths,
             cache_enabled=effective_config.cache.enabled,
             prepared_sql=prepared_sql,
+            expansion_reuse=expansion_reuse,
         )
         sql_ms: int = round((time.monotonic() - sql_started) * 1000)
         result: RulesResult = native_result.result()
@@ -186,6 +190,7 @@ def prepare_sql_rules(
                 dialect=dialect, enabled_native_rules=codes, header_rules_enabled=False
             ),
             discovered_inputs=inputs.discovered_inputs,
+            declaration_scope=inputs.declaration_scope,
             compiled_expansions={
                 model.model_file.file_path: model.sql_expansion
                 for model in inputs.model_inputs
@@ -200,10 +205,13 @@ def _prepare_sql_lint(
     project_dir: Path,
     config: LintConfig,
     discovered_inputs: DiscoveredProjectInputs,
+    declaration_scope: DeclarationScopeBuild | None,
     compiled_expansions: dict[Path, CompiledSqlExpansion],
 ) -> PreparedSqlLintResult:
     context: SqlExpansionContext = build_expansion_context(
-        project_dir=project_dir, discovered_inputs=discovered_inputs
+        project_dir=project_dir,
+        discovered_inputs=discovered_inputs,
+        declaration_scope=declaration_scope,
     )
     result: LintRunResult = run_lint(
         project_dir=project_dir,
@@ -272,6 +280,8 @@ def _run_prepared_lint(
     compiled_expansions: dict[Path, CompiledSqlExpansion],
     dynamic_output_paths: frozenset[Path],
     prepared_sql: PreparedSqlLint | None,
+    expansion_reuse: SqlExpansionReuse | None,
+    source_files: dict[Path, str] | None,
 ) -> LintRunResult:
     if prepared_sql is None or set(prepared_sql.codes) != set(config.enabled_native_rules or ()):
         return run_lint(
@@ -281,6 +291,16 @@ def _run_prepared_lint(
             discovered_inputs=discovered_inputs,
             compiled_expansions=compiled_expansions,
             dynamic_output_paths=dynamic_output_paths,
+            expansion_context=(
+                _lint_expansion_context(
+                    project_dir=project_dir,
+                    discovered_inputs=discovered_inputs,
+                    expansion_reuse=expansion_reuse,
+                )
+                if config.native_enabled
+                else None
+            ),
+            source_files=source_files,
         )
     completed: PreparedSqlLintResult = prepared_sql.future.result()
     prepared: LintRunResult = completed.result
@@ -314,6 +334,7 @@ def _run_sql_rules(
     selected_model_paths: frozenset[str] | None,
     cache_enabled: bool,
     prepared_sql: PreparedSqlLint | None = None,
+    expansion_reuse: SqlExpansionReuse | None = None,
 ) -> _SqlRulesEvaluation:
     codes: tuple[str, ...] = tuple(rule.code for rule in rules if rule.code.startswith("SQBRSQL"))
     if not codes:
@@ -340,13 +361,13 @@ def _run_sql_rules(
             findings.extend(cached)
     selected_paths: set[Path] = {project_dir / path for path in misses}
     file_identities: dict[str, str] = {}
+    project_files: dict[Path, str] | None = None
     if selected_model_paths is None:
         model_paths: frozenset[Path] = frozenset(project_dir / path for path in models_by_path)
+        project_files = collect_project_files(project_dir=project_dir, selected_paths=None)
         file_path: Path
         contents: str
-        for file_path, contents in collect_project_files(
-            project_dir=project_dir, selected_paths=None
-        ).items():
+        for file_path, contents in project_files.items():
             if file_path in model_paths:
                 continue
             relative_path: str = file_path.relative_to(project_dir).as_posix()
@@ -385,6 +406,8 @@ def _run_sql_rules(
                 and model.dynamic_column_contract.output_proven
             ),
             prepared_sql=prepared_sql,
+            expansion_reuse=expansion_reuse,
+            source_files=project_files,
         )
         if selected_paths
         else None
@@ -416,6 +439,26 @@ def _run_sql_rules(
         findings=tuple(findings),
         cache_hits=len(identities) - len(misses),
         cache_misses=len(misses),
+    )
+
+
+def _lint_expansion_context(
+    *,
+    project_dir: Path,
+    discovered_inputs: DiscoveredProjectInputs,
+    expansion_reuse: SqlExpansionReuse | None,
+) -> SqlExpansionContext:
+    """Build lint expansion, reusing the compiler's scope only for the same discovery."""
+
+    declaration_scope: DeclarationScopeBuild | None = (
+        expansion_reuse.declaration_scope
+        if expansion_reuse is not None and expansion_reuse.discovered_inputs is discovered_inputs
+        else None
+    )
+    return build_expansion_context(
+        project_dir=project_dir,
+        discovered_inputs=discovered_inputs,
+        declaration_scope=declaration_scope,
     )
 
 

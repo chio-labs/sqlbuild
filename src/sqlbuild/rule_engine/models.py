@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.compiler.compile.models import SqlExpansionContext
+from sqlbuild.compiler.compile.models import DeclarationScopeBuild, SqlExpansionContext
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.lint.models import LintRunResult
 from sqlbuild.rule_engine.types import RuleCheck, RuleOptionValue, RuleSubject
 
@@ -312,6 +313,14 @@ class PreparedSqlLintResult:
 
     result: LintRunResult
     context: SqlExpansionContext
+
+
+@dataclass(frozen=True)
+class SqlExpansionReuse:
+    """Compiler-built declaration scope reusable for SQL checks over the same discovery."""
+
+    discovered_inputs: DiscoveredProjectInputs
+    declaration_scope: DeclarationScopeBuild
 
 
 @dataclass(frozen=True)

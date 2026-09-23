@@ -835,6 +835,7 @@ class CompileProjectInputs:
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
     scope_index: ScopeIndex = field(default_factory=ScopeIndex)
+    declaration_scope: DeclarationScopeBuild | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True)

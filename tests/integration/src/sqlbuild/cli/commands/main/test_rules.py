@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
 import pytest
 from _pytest.capture import CaptureResult
 
+import sqlbuild.compiler.compile._helpers.attachment.declaration_scope as declaration_scope_module
+import sqlbuild.compiler.compile.main._build_compile_inputs as compile_inputs_module
+import sqlbuild.compiler.compile.main.sql_expansion_context as expansion_context_module
 from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild.compiler.compile.models import DeclarationScopeBuild, LoadedMacro
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     DynamicPivotRulesIntegrationTestCase,
     ExplicitContractOutputRuleIntegrationTestCase,
@@ -605,6 +611,57 @@ def test_given_cached_sql_test_rules_when_test_or_macro_changes_then_findings_ar
     assert macro_finding in after_test_edit
     assert macro_finding not in after_macro_edit
     assert (tmp_path / "target" / "rules-cache" / "bulk" / "sql.json").is_file()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [RulesIntegrationTestCase("warm SQL rules reuse compiler declaration scope", 1, "SQBRSQL004")],
+    ids=lambda case: case.description,
+)
+def test_given_warm_scoped_macro_sql_test_when_compiling_then_rules_reuse_compiler_scope(
+    test_case: RulesIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["{test_case.expected_code}"]\n',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text('MODEL (description "Orders");\nSELECT 1 AS order_id\n', encoding="utf-8")
+    tests_dir: Path = tmp_path / "tests" / "unit"
+    macro: Path = tests_dir / "_macros" / "row_limit.py"
+    macro.parent.mkdir(parents=True)
+    macro.write_text('def row_limit() -> str:\n    return "LIMIT 1"\n', encoding="utf-8")
+    (tests_dir / "test_macro_orders.sql").write_text(
+        "TEST ();\nWITH\n__ref__orders AS (SELECT 1 AS order_id),\n"
+        "__expected__orders AS (SELECT order_id FROM __ref__orders @row_limit())\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+    macro_finding: str = f"tests/unit/test_macro_orders.sql:{test_case.expected_code}"
+    cold: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
+    scope_builds: list[Path] = []
+    original_build: Callable[..., DeclarationScopeBuild] = (
+        declaration_scope_module.build_declaration_scope
+    )
+
+    def counting_build(
+        *, discovered_inputs: DiscoveredProjectInputs, loaded_macros: dict[str, LoadedMacro]
+    ) -> DeclarationScopeBuild:
+        scope_builds.append(tmp_path)
+        return original_build(discovered_inputs=discovered_inputs, loaded_macros=loaded_macros)
+
+    monkeypatch.setattr(compile_inputs_module, "build_declaration_scope", counting_build)
+    monkeypatch.setattr(expansion_context_module, "build_declaration_scope", counting_build)
+
+    warm: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
+
+    assert macro_finding in cold
+    assert warm == cold
+    assert len(scope_builds) == 1
 
 
 @pytest.mark.parametrize(

@@ -33,11 +33,12 @@ def run_lint(
     dynamic_output_paths: frozenset[Path] = frozenset(),
     compiled_expansions: dict[Path, CompiledSqlExpansion] | None = None,
     expansion_context: SqlExpansionContext | None = None,
+    source_files: dict[Path, str] | None = None,
 ) -> LintRunResult:
     """Lint all DSL files in the project without modifying anything."""
 
     files: dict[Path, str] = collect_project_files(
-        project_dir=project_dir, selected_paths=selected_paths
+        project_dir=project_dir, selected_paths=selected_paths, source_files=source_files
     )
     violations: list[LintViolation] = []
     bodies: list[LintBody] = []

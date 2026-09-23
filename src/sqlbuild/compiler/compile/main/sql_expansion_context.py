@@ -39,6 +39,7 @@ def build_sql_expansion_context(
     value_renderer: TypedSqlValueRenderer,
     cli_vars: dict[str, object] | None = None,
     discovered_inputs: DiscoveredProjectInputs | None = None,
+    declaration_scope: DeclarationScopeBuild | None = None,
 ) -> SqlExpansionContext:
     """Assemble project vars, macros and declarations for SQL expansion."""
 
@@ -53,13 +54,10 @@ def build_sql_expansion_context(
         target_config=None,
         cli_vars={} if cli_vars is None else cli_vars,
     )
-    loaded_macros: dict[str, LoadedMacro] = load_project_macros(
-        effective_discovered_inputs.macro_files
+    scope: DeclarationScopeBuild = declaration_scope or _build_declaration_scope(
+        discovered_inputs=effective_discovered_inputs
     )
-    declaration_scope: DeclarationScopeBuild = build_declaration_scope(
-        discovered_inputs=effective_discovered_inputs,
-        loaded_macros=loaded_macros,
-    )
+    loaded_macros: dict[str, LoadedMacro] = scope.loaded_macros
     enums: dict[str, EnumDeclaration]
     constants: dict[str, ConstantDeclaration]
     enums, constants = build_public_declaration_indexes(
@@ -99,5 +97,14 @@ def build_sql_expansion_context(
             declaration_override=None,
         ),
         local_declarations=local_declarations,
-        declaration_resolver=declaration_scope.resolver,
+        declaration_resolver=scope.resolver,
+    )
+
+
+def _build_declaration_scope(
+    *, discovered_inputs: DiscoveredProjectInputs
+) -> DeclarationScopeBuild:
+    return build_declaration_scope(
+        discovered_inputs=discovered_inputs,
+        loaded_macros=load_project_macros(discovered_inputs.macro_files),
     )
