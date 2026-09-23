@@ -64,6 +64,18 @@ def write_from_values_format_project(*, tmp_path: Path, adapter: str) -> tuple[P
     return project_dir, test_file
 
 
+def write_snowflake_format_test(*, tmp_path: Path, test_sql: str) -> tuple[Path, Path]:
+    """Write a minimal Snowflake-dialect project for real CLI formatting."""
+
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "products"\nadapter = "snowflake"\n', encoding="utf-8"
+    )
+    test_file: Path = tmp_path / "tests" / "unit" / "test_products.sql"
+    test_file.parent.mkdir(parents=True)
+    test_file.write_text(test_sql, encoding="utf-8")
+    return tmp_path, test_file
+
+
 def prepare_contract_project(tmp_path: Path, *, prod_connection_toml: str = "") -> Path:
     database: Path = tmp_path / "warehouse.duckdb"
     _ = (tmp_path / "sqlbuild_project.toml").write_text(

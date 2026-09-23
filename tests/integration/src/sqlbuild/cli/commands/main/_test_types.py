@@ -180,6 +180,17 @@ class FromValuesFormatIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class MixedFromValuesFormatIntegrationTestCase:
+    """One positional values-relation preservation expectation."""
+
+    description: str
+    authored_query: str
+    expected_parenthesized_literal: str
+    expected_unparenthesized_literal: str
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
 class FormatScopeIntegrationTestCase:
     """Expected CLI outcomes for the format selection contract."""
 

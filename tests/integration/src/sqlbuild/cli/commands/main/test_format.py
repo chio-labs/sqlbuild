@@ -16,9 +16,11 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     FormatScopeIntegrationTestCase,
     FormatWarningIntegrationTestCase,
     FromValuesFormatIntegrationTestCase,
+    MixedFromValuesFormatIntegrationTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
     write_from_values_format_project,
+    write_snowflake_format_test,
 )
 
 
@@ -456,6 +458,45 @@ def test_given_duckdb_from_values_when_formatting_then_project_compiles(
     assert compile_exit == test_case.expected_exit_code
     assert second_exit == test_case.expected_exit_code
     assert test_case.expected_literal in formatted_once
+    assert formatted_once == test_file.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MixedFromValuesFormatIntegrationTestCase(
+            description="mixed values forms retain positional authorship through real CLI",
+            authored_query=(
+                'TEST (name "mixed_product_values");\n\n'
+                "-- VALUES inside this comment is not a relation.\n"
+                "SELECT 'VALUES' AS label FROM (VALUES (1)) AS first_values(id)\n"
+                "UNION ALL\n"
+                "SELECT 'second' AS label FROM VALUES (2)\n"
+            ),
+            expected_parenthesized_literal="FROM (VALUES (1)) AS first_values(id)",
+            expected_unparenthesized_literal="FROM VALUES (2)",
+            expected_exit_code=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_mixed_values_forms_when_formatting_then_each_relation_preserves_authorship(
+    test_case: MixedFromValuesFormatIntegrationTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir, test_file = write_snowflake_format_test(
+        tmp_path=tmp_path,
+        test_sql=test_case.authored_query,
+    )
+
+    first_exit: int = main(["--project-dir", str(project_dir), "format"])
+    formatted_once: str = test_file.read_text(encoding="utf-8")
+    second_exit: int = main(["--project-dir", str(project_dir), "format", "--check"])
+
+    assert first_exit == test_case.expected_exit_code
+    assert second_exit == test_case.expected_exit_code
+    assert test_case.expected_parenthesized_literal in formatted_once
+    assert test_case.expected_unparenthesized_literal in formatted_once
     assert formatted_once == test_file.read_text(encoding="utf-8")
 
 
