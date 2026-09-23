@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.113.8](https://github.com/chio-labs/sqlbuild/compare/v0.113.7...v0.113.8) (2026-09-23)
+
+
+### Bug Fixes
+
+* **format:** make sqb format safe and idempotent ([#791](https://github.com/chio-labs/sqlbuild/issues/791)) ([041a264](https://github.com/chio-labs/sqlbuild/commit/041a2646a2b787084d5f89412b9ade639e90cb88))
+
 ## [0.113.7](https://github.com/chio-labs/sqlbuild/compare/v0.113.6...v0.113.7) (2026-09-23)
 
 
