@@ -317,7 +317,7 @@ class PreparedSqlLintResult:
 
 @dataclass(frozen=True)
 class SqlExpansionReuse:
-    """Compiler-built declaration scope reusable for SQL checks over the same discovery."""
+    """Compiler declaration scope for post-assembly SQL checks; assembly still runs its macros."""
 
     discovered_inputs: DiscoveredProjectInputs
     declaration_scope: DeclarationScopeBuild
