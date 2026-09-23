@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlbuild.spec.contracts.models import (
+    AuthoredTimeTravelRetention,
     ExecutionLimitsConfig,
     LoaderDestinationParts,
     LocalConfig,
@@ -50,7 +51,10 @@ class TargetRetentionResolutionTestCase:
     project_config: ProjectConfig
     local_config: LocalConfig
     target_name: str
-    expected_desired_days: int
+    expected_default: AuthoredTimeTravelRetention | None
+    expected_by_materialization: dict[str, AuthoredTimeTravelRetention] = field(
+        default_factory=dict
+    )
 
 
 @dataclass(frozen=True)

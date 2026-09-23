@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 
+from sqlbuild.spec.contracts.models import AuthoredTimeTravelRetention
+from sqlbuild.spec.contracts.types import RetentionDecreasePolicy
 from sqlbuild.sql_values.types import CollectionRendering
 
 
@@ -801,3 +803,19 @@ class ExpectedCountTestCase:
 class ExpectedMessageTestCase:
     description: str
     expected_message: str
+
+
+@dataclass(frozen=True)
+class LoadTargetRetentionPoliciesTestCase:
+    description: str
+    target_lines: tuple[str, ...]
+    expected_default: AuthoredTimeTravelRetention | None
+    expected_by_materialization: dict[str, AuthoredTimeTravelRetention]
+    expected_decrease_policy: RetentionDecreasePolicy
+
+
+@dataclass(frozen=True)
+class LoadTargetRetentionPoliciesErrorTestCase:
+    description: str
+    target_lines: tuple[str, ...]
+    expected_error_fragment: str

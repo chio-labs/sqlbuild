@@ -96,6 +96,7 @@ def execute_virtual_build(
             full_refresh=request.full_refresh,
             allow_snapshot_full_refresh=request.allow_snapshot_full_refresh,
             allow_table_type_downgrade=request.allow_table_type_downgrade,
+            allow_retention_decrease=request.allow_retention_decrease,
             use_color=request.use_color,
             verbose=request.verbose,
             debug=request.debug,

@@ -165,6 +165,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 include_python=args.include_python,
                 allow_snapshot_full_refresh=args.allow_snapshot_full_refresh,
                 allow_table_type_downgrade=args.allow_table_type_downgrade,
+                allow_retention_decrease=args.allow_retention_decrease,
                 allow_snapshot_schema_change=args.allow_snapshot_schema_change,
                 concurrency=args.concurrency,
                 select=select,

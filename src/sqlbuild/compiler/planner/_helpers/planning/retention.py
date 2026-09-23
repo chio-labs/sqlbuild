@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import defaultdict
+from dataclasses import replace
 
 from sqlbuild.adapter.contract.models import (
     RelationInfo,
@@ -130,12 +131,16 @@ def plan_retention(
     )
     if not selected_models:
         return ()
-    if runtime.adapter.adapter_name == BuiltinAdapter.BIGQUERY:
-        return _plan_bigquery_retention(runtime=runtime, models=selected_models)
     entries: list[RetentionPlanEntry] = []
-    for model in selected_models:
-        entries.extend(_plan_relation_retention(runtime=runtime, warehouse=warehouse, model=model))
-    return tuple(entries)
+    if runtime.adapter.adapter_name == BuiltinAdapter.BIGQUERY:
+        entries.extend(_plan_bigquery_retention(runtime=runtime, models=selected_models))
+    else:
+        for model in selected_models:
+            entries.extend(
+                _plan_relation_retention(runtime=runtime, warehouse=warehouse, model=model)
+            )
+    decrease_policy: str = _effective_target(runtime=runtime).time_travel_retention_decrease.value
+    return tuple(replace(entry, decrease_policy=decrease_policy) for entry in entries)
 
 
 def _plan_relation_retention(

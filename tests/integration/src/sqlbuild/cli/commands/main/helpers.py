@@ -8,6 +8,13 @@ from typing import cast
 import duckdb
 import pytest
 
+from sqlbuild.adapter.contract.models import (
+    RenderedRetentionChange,
+    RetentionRequest,
+    RetentionState,
+)
+from sqlbuild.adapter.contract.types import RetentionChangePhase
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 
 
@@ -151,3 +158,91 @@ def compile_finding_keys(*, project_dir: Path, capsys: pytest.CaptureFixture[str
     payload: dict[str, object] = json.loads(capsys.readouterr().out)
     diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], payload["diagnostics"])
     return {f"{item['path']}:{item['code']}" for item in diagnostics}
+
+
+class LiveRetentionFake:
+    """Pretend every managed table currently keeps a fixed number of retention days."""
+
+    def __init__(self, *, live_days: int) -> None:
+        self.live_days: int = live_days
+        self.requested_days: list[int] = []
+
+    def inspect_retention(self, *, connection: object, request: RetentionRequest) -> RetentionState:
+        del connection
+        return RetentionState(
+            request_id=request.request_id,
+            scope=request.scope,
+            configured_days=self.live_days,
+            effective_days=self.live_days,
+        )
+
+    def render_retention_changes(
+        self, *, request: RetentionRequest, state: RetentionState | None = None
+    ) -> tuple[RenderedRetentionChange, ...]:
+        del state
+        self.requested_days.append(request.desired_days)
+        return (
+            RenderedRetentionChange(phase=RetentionChangePhase.ALTER, statements=("SELECT 1",)),
+        )
+
+
+def install_live_retention_fake(
+    *, monkeypatch: pytest.MonkeyPatch, fake: LiveRetentionFake
+) -> None:
+    """Route DuckDB retention inspection and rendering through the fake."""
+
+    monkeypatch.setattr(
+        DuckDbAdapter,
+        "inspect_retention",
+        lambda _self, *, connection, request: fake.inspect_retention(
+            connection=connection, request=request
+        ),
+    )
+    monkeypatch.setattr(
+        DuckDbAdapter,
+        "render_retention_changes",
+        lambda _self, *, request, state=None: fake.render_retention_changes(
+            request=request, state=state
+        ),
+    )
+
+
+def write_retention_policy_project(*, project_dir: Path, target_lines: tuple[str, ...]) -> None:
+    """Write a DuckDB project with one table and one view under a prod target."""
+
+    (project_dir / "models").mkdir(parents=True, exist_ok=True)
+    _ = (project_dir / "sqlbuild_project.toml").write_text(
+        "\n".join(
+            (
+                'name = "demo"',
+                'adapter = "duckdb"',
+                'default_target = "prod"',
+                "",
+                "[connection]",
+                'database = "demo.duckdb"',
+                "",
+                "[materialization_defaults.table]",
+                'time_travel_retention = "90d"',
+                "",
+                "[targets.prod]",
+                *target_lines,
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+    _ = (project_dir / "models" / "orders.sql").write_text(
+        "MODEL (materialized table);\n\nSELECT 1 AS order_id\n", encoding="utf-8"
+    )
+    _ = (project_dir / "models" / "order_view.sql").write_text(
+        'MODEL (materialized view);\n\nSELECT order_id FROM __ref("orders")\n', encoding="utf-8"
+    )
+
+
+def run_build(
+    *, project_dir: Path, flags: tuple[str, ...], capsys: pytest.CaptureFixture[str]
+) -> tuple[int, str]:
+    """Run one real CLI build and return its exit code and combined output."""
+
+    exit_code: int = main(["--project-dir", str(project_dir), "--no-color", "build", *flags])
+    return exit_code, "".join(capsys.readouterr())

@@ -45,3 +45,15 @@ class UnsupportedDurationLimitTestCase:
     remediation: str
     expected_code: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class RetentionDecreasePolicyTestCase:
+    description: str
+    plan_output: PlanOutput
+    allow_retention_decrease: bool
+    expected_error_fragment: str | None = None
+    expected_help_fragment: str = ""
+    expected_output: str = ""
+    input_text: str = ""
+    input_is_tty: bool = False

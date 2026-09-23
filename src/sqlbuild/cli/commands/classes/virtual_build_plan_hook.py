@@ -17,6 +17,9 @@ from sqlbuild.cli.commands._helpers.build_planning.execution_limits import (
 from sqlbuild.cli.commands._helpers.build_planning.full_refresh import (
     enforce_snapshot_full_refresh_policy,
 )
+from sqlbuild.cli.commands._helpers.build_planning.retention_decrease import (
+    enforce_retention_decrease_policy,
+)
 from sqlbuild.cli.commands._helpers.build_planning.table_type import (
     enforce_table_type_downgrade_policy,
 )
@@ -52,6 +55,7 @@ class VirtualBuildPlanHook:
         self._full_refresh = config.full_refresh
         self._allow_snapshot_full_refresh = config.allow_snapshot_full_refresh
         self._allow_table_type_downgrade = config.allow_table_type_downgrade
+        self._allow_retention_decrease = config.allow_retention_decrease
         self._use_color = config.use_color
         self._verbose = config.verbose
         self._debug = config.debug
@@ -106,6 +110,12 @@ class VirtualBuildPlanHook:
         enforce_table_type_downgrade_policy(
             plan=plan_output,
             allow_table_type_downgrade=self._allow_table_type_downgrade,
+            input_stream=sys.stdin,
+            output_stream=sys.stdout,
+        )
+        enforce_retention_decrease_policy(
+            plan=plan_output,
+            allow_retention_decrease=self._allow_retention_decrease,
             input_stream=sys.stdin,
             output_stream=sys.stdout,
         )

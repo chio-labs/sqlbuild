@@ -49,6 +49,10 @@ def resolve_target_config(
     local_target: LocalTargetConfig | None = local_config.targets.get(target_name)
     if local_target is None:
         return project_target
+    local_overrides_retention: bool = (
+        local_target.time_travel_retention is not None
+        or local_target.time_travel_retention_by_materialization is not None
+    )
     target_config: TargetConfig = TargetConfig(
         connection={**project_target.connection, **local_target.connection},
         connection_name=(
@@ -88,8 +92,13 @@ def resolve_target_config(
         ),
         time_travel_retention=(
             local_target.time_travel_retention
-            if local_target.time_travel_retention is not None
+            if local_overrides_retention
             else project_target.time_travel_retention
+        ),
+        time_travel_retention_by_materialization=(
+            local_target.time_travel_retention_by_materialization or {}
+            if local_overrides_retention
+            else project_target.time_travel_retention_by_materialization
         ),
         owns_time_travel_retention_namespace=(
             local_target.owns_time_travel_retention_namespace
@@ -105,6 +114,11 @@ def resolve_target_config(
             local_target.table_type_downgrade
             if local_target.table_type_downgrade is not None
             else project_target.table_type_downgrade
+        ),
+        time_travel_retention_decrease=(
+            local_target.time_travel_retention_decrease
+            if local_target.time_travel_retention_decrease is not None
+            else project_target.time_travel_retention_decrease
         ),
         execution_limits=_merge_execution_limits(
             project_limits=project_target.execution_limits,
