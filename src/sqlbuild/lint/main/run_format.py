@@ -28,7 +28,6 @@ from sqlbuild.lint.models import (
     LintConfig,
     LintRunResult,
     LintViolation,
-    NativeFormatResult,
 )
 
 
@@ -152,18 +151,16 @@ def _apply_fixes(
     current_files = {
         file_path: updated.get(file_path, contents) for file_path, contents in files.items()
     }
-    native_result: NativeFormatResult = format_native_sql_bodies(
+    native_formatted: dict[Path, str] = format_native_sql_bodies(
         files=current_files,
         config=config,
         project_dir=project_dir,
     )
-    updated.update(native_result.formatted_files)
-    for fault in native_result.faults:
-        updated.pop(fault.file_path, None)
+    updated.update(native_formatted)
     return reject_unparseable_header_rewrites(
         updated=updated,
         config=config,
-        faults=list(native_result.faults),
+        faults=[],
     )
 
 

@@ -14,9 +14,11 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     FormatCompileIntegrationTestCase,
     FormatSafetyIntegrationTestCase,
     FormatScopeIntegrationTestCase,
+    FormatterDeclineIntegrationTestCase,
     FormatWarningIntegrationTestCase,
     FromValuesFormatIntegrationTestCase,
     MixedFromValuesFormatIntegrationTestCase,
+    TypedNullFormatIntegrationTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
     write_from_values_format_project,
@@ -369,12 +371,6 @@ def test_given_schema_column_when_formatting_then_header_remains_valid_and_idemp
             expected_fault_code="header-parse",
             expected_exit_code=1,
         ),
-        FormatSafetyIntegrationTestCase(
-            description="unparseable SQL is untouched",
-            authored_sql='MODEL (description "Orders."  );\nselect from\n',
-            expected_fault_code="format-safety",
-            expected_exit_code=1,
-        ),
     ],
     ids=lambda case: case.description,
 )
@@ -396,6 +392,115 @@ def test_given_unparseable_file_when_formatting_then_file_is_untouched_and_fault
     assert exit_code == test_case.expected_exit_code
     assert test_case.expected_fault_code in captured.out
     assert model.read_text(encoding="utf-8") == test_case.authored_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FormatterDeclineIntegrationTestCase(
+            description="unsupported SQL body is skipped while header formats",
+            authored_body="select from\n",
+            expected_exit_code=0,
+        ),
+        FormatterDeclineIntegrationTestCase(
+            description="comment attachment decline is skipped while header formats",
+            authored_body="select order_id order_key /* keep */ from orders\n",
+            expected_exit_code=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_native_formatter_decline_when_formatting_then_header_formats_and_body_is_unchanged(
+    test_case: FormatterDeclineIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        "MODEL (\n"
+        '  description "Orders.",    \n'
+        "  materialized table,\n"
+        ");\n\n"
+        f"{test_case.authored_body}",
+        encoding="utf-8",
+    )
+
+    first_exit: int = main(["--project-dir", str(tmp_path), "format"])
+    first_output: str = capsys.readouterr().out
+    formatted_once: str = model.read_text(encoding="utf-8")
+    second_exit: int = main(["--project-dir", str(tmp_path), "format", "--check"])
+    second_output: str = capsys.readouterr().out
+
+    assert first_exit == test_case.expected_exit_code
+    assert second_exit == test_case.expected_exit_code
+    assert '  description "Orders.",\n' in formatted_once
+    assert test_case.authored_body in formatted_once
+    assert "FAULT=0  WARN=0" in first_output
+    assert "FAULT=0  WARN=0" in second_output
+    assert formatted_once == model.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TypedNullFormatIntegrationTestCase(
+            description="inline colon casts reach empty fixture fixed point in one pass",
+            fixture_projection=("NULL::VARCHAR AS customer_key, NULL::BIGINT AS order_count"),
+            expected_literal="__EMPTY_FIXTURE()",
+            expected_exit_code=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_inline_typed_null_fixture_when_formatting_then_one_pass_is_idempotent(
+    test_case: TypedNullFormatIntegrationTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "customers"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    model: Path = tmp_path / "models" / "customers.sql"
+    model.parent.mkdir()
+    model.write_text(
+        "MODEL (\n"
+        '  description "Customers.",\n'
+        "  contract enforced,\n"
+        "  columns (\n"
+        "    customer_key (type VARCHAR),\n"
+        "    order_count (type BIGINT),\n"
+        "  ),\n"
+        ");\n\n"
+        "SELECT 'c1' AS customer_key, 1 AS order_count\n",
+        encoding="utf-8",
+    )
+    test_file: Path = tmp_path / "tests" / "unit" / "test_customers.sql"
+    test_file.parent.mkdir(parents=True)
+    test_file.write_text(
+        "TEST();\n\n"
+        "WITH __ref__customers AS (\n"
+        f"    SELECT {test_case.fixture_projection}\n"
+        "    WHERE FALSE\n"
+        "),\n"
+        "__expected__customers AS (\n"
+        "    SELECT 'c1' AS customer_key, 1 AS order_count\n"
+        ")\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+
+    first_exit: int = main(["--project-dir", str(tmp_path), "format"])
+    formatted_once: str = test_file.read_text(encoding="utf-8")
+    second_exit: int = main(["--project-dir", str(tmp_path), "format", "--check"])
+
+    assert first_exit == test_case.expected_exit_code
+    assert second_exit == test_case.expected_exit_code
+    assert test_case.expected_literal in formatted_once
+    assert "CAST(NULL" not in formatted_once
+    assert formatted_once == test_file.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize(

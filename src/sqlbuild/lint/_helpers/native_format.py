@@ -13,18 +13,9 @@ from sqlbuild.lint._helpers.sqlbuild_tokens import neutralize_interpolation, res
 from sqlbuild.lint.constants import (
     CARRIAGE_RETURN_LINE_FEED,
     LINE_FEED,
-    LINT_ENGINE_NATIVE,
-    RULE_FORMAT_SAFETY,
-    VIOLATION_SEVERITY_FAULT,
 )
 from sqlbuild.lint.exceptions import NativeLintError
-from sqlbuild.lint.models import (
-    HeaderSpan,
-    InterpolationSite,
-    LintConfig,
-    LintViolation,
-    NativeFormatResult,
-)
+from sqlbuild.lint.models import HeaderSpan, InterpolationSite, LintConfig
 
 _NATIVE_FORMAT_API_VERSION: int = 1
 
@@ -57,8 +48,8 @@ def with_newline_style(*, contents: str, newline: str) -> str:
 
 def format_native_sql_bodies(
     *, files: dict[Path, str], config: LintConfig, project_dir: Path
-) -> NativeFormatResult:
-    """Format authored SQL bodies without partially rewriting rejected files."""
+) -> dict[Path, str]:
+    """Format supported SQL bodies while leaving declined bodies unchanged."""
 
     prepared_by_path: dict[Path, tuple[_PreparedBody, ...]] = {}
     requests_by_key: dict[tuple[str, str], dict[str, object]] = {}
@@ -99,10 +90,8 @@ def format_native_sql_bodies(
         requests_by_key=requests_by_key
     )
     formatted_files: dict[Path, str] = {}
-    faults: list[LintViolation] = []
     for file_path, contents in sorted(files.items()):
         updated: str = contents
-        file_faults: list[LintViolation] = []
         for prepared in reversed(prepared_by_path[file_path]):
             response: dict[str, Any] = response_cache[prepared.cache_key]
             raw_sql: object = response.get("sql")
@@ -115,14 +104,6 @@ def format_native_sql_bodies(
             ):
                 raise NativeLintError("native formatter returned invalid SQL or changed state")
             if not formatted:
-                file_faults.append(
-                    _format_safety_fault(
-                        file_path=file_path,
-                        contents=contents,
-                        body_start=prepared.start,
-                        reason=response.get("reason"),
-                    )
-                )
                 continue
             if not changed:
                 continue
@@ -133,30 +114,9 @@ def format_native_sql_bodies(
             updated = (
                 f"{updated[: prepared.start]}{restored}{prepared.trailing}{updated[prepared.end :]}"
             )
-        if file_faults:
-            faults.extend(reversed(file_faults))
-        elif updated != contents:
+        if updated != contents:
             formatted_files[file_path] = updated
-    return NativeFormatResult(formatted_files=formatted_files, faults=tuple(faults))
-
-
-def _format_safety_fault(
-    *, file_path: Path, contents: str, body_start: int, reason: object
-) -> LintViolation:
-    line: int = contents.count("\n", 0, body_start) + 1
-    previous_newline: int = contents.rfind("\n", 0, body_start)
-    column: int = body_start - previous_newline
-    detail: str = reason if isinstance(reason, str) and reason else "unknown formatter rejection"
-    return LintViolation(
-        file_path=file_path,
-        line=line,
-        column=column,
-        code=RULE_FORMAT_SAFETY,
-        message=f"SQL body could not be formatted safely: {detail}",
-        severity=VIOLATION_SEVERITY_FAULT,
-        engine=LINT_ENGINE_NATIVE,
-        remediation="Correct the SQL syntax or leave the file unchanged and report the parser gap.",
-    )
+    return formatted_files
 
 
 def _format_responses(

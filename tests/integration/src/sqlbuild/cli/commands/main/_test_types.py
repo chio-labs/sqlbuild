@@ -170,6 +170,25 @@ class FormatSafetyIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class FormatterDeclineIntegrationTestCase:
+    """One expected native formatter decline through the real CLI."""
+
+    description: str
+    authored_body: str
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class TypedNullFormatIntegrationTestCase:
+    """One single-pass typed-null fixture formatting expectation."""
+
+    description: str
+    fixture_projection: str
+    expected_literal: str
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
 class FromValuesFormatIntegrationTestCase:
     """One dialect expectation for an unparenthesized values relation."""
 

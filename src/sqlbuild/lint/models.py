@@ -96,14 +96,6 @@ class FormatChange:
 
 
 @dataclass(frozen=True)
-class NativeFormatResult:
-    """Safe SQL body rewrites and files rejected by the formatter boundary."""
-
-    formatted_files: dict[Path, str]
-    faults: tuple[LintViolation, ...]
-
-
-@dataclass(frozen=True)
 class LintFixRecord:
     """One applied or skipped lint repair for human and machine reporting."""
 

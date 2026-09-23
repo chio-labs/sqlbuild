@@ -60,7 +60,6 @@ RULE_DESCRIPTION_LENGTH: str = "description-length"
 RULE_LEADING_COMMENT_DESCRIPTION: str = "leading-comment-description"
 RULE_HEADER_WHITESPACE: str = "header-whitespace"
 RULE_HEADER_PARSE: str = "header-parse"
-RULE_FORMAT_SAFETY: str = "format-safety"
 
 PROJECT_CONFIG_FILENAME_KEY: str = "sqlbuild_project.toml"
 FORMAT_SECTION_KEY: str = "format"

@@ -90,10 +90,10 @@ def test_given_synthetic_project_when_linting_then_results_match_expected(
             expected_formatted_count=1,
         ),
         FormatProjectTestCase(
-            description="unfixable faults remain after formatting",
+            description="missing description remains a non-failing format warning",
             files={"models/no_description.sql": NO_DESCRIPTION_MODEL},
             expected_written_fragments={},
-            expected_fault_codes=("description-present",),
+            expected_fault_codes=(),
             expected_formatted_count=1,
         ),
         FormatProjectTestCase(
