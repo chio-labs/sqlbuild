@@ -207,6 +207,11 @@ def reconcile_retention_after_build(
 ) -> None:
     """Converge all remaining retention drift after the full build succeeds."""
 
+    recreated_model_names: frozenset[str] = frozenset(
+        model_entry.name
+        for model_entry in plan.model_entries
+        if materialization_recreates_relation(model_entry)
+    )
     for entry in plan.retention_entries:
         if entry.phase == RetentionPlanPhase.NONE:
             continue
@@ -219,7 +224,9 @@ def reconcile_retention_after_build(
             request=entry.request,
             state=state,
         )
-        lowering_permitted: bool = _lowering_permitted(entry=entry, state=state)
+        lowering_permitted: bool = _lowering_permitted(
+            entry=entry, state=state, recreated_model_names=recreated_model_names
+        )
         for change in changes:
             if not lowering_permitted and change.phase != RetentionChangePhase.PREPARE:
                 continue
@@ -231,10 +238,14 @@ def reconcile_retention_after_build(
             )
 
 
-def _lowering_permitted(*, entry: RetentionPlanEntry, state: RetentionState) -> bool:
-    """Only lower live retention for gated planned decreases or newly created relations."""
+def _lowering_permitted(
+    *, entry: RetentionPlanEntry, state: RetentionState, recreated_model_names: frozenset[str]
+) -> bool:
+    """Only lower live retention for gated planned decreases or relations created this build."""
 
     if entry.decreases or entry.direction == RetentionDirection.APPLY_AFTER_CREATE:
+        return True
+    if entry.model_names and all(name in recreated_model_names for name in entry.model_names):
         return True
     desired_days: int = entry.request.desired_days
     values: tuple[int, ...] = tuple(

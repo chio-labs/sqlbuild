@@ -82,6 +82,7 @@ class FinalRetentionReconciliationTestCase:
     desired_days: int
     live_days: int
     expected_statements: tuple[str, ...]
+    model_action: PlanAction = PlanAction.INCREMENTAL_MERGE
 
 
 @dataclass(frozen=True)

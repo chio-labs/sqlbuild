@@ -238,6 +238,14 @@ def test_given_successful_model_when_reconciling_retention_then_defers_decreases
             expected_statements=(),
         ),
         FinalRetentionReconciliationTestCase(
+            description="recreated table is lowered from its inherited default",
+            planned_direction=RetentionDirection.INCREASE,
+            desired_days=7,
+            live_days=30,
+            expected_statements=("ALTER RETENTION",),
+            model_action=PlanAction.CREATE_TABLE,
+        ),
+        FinalRetentionReconciliationTestCase(
             description="planned increase still converges upward",
             planned_direction=RetentionDirection.INCREASE,
             desired_days=7,
@@ -269,7 +277,8 @@ def test_given_live_retention_after_build_when_reconciling_then_only_gated_decre
                 direction=test_case.planned_direction,
                 phase=RetentionPlanPhase.POST,
             ),
-        )
+        ),
+        model_entries=(build_model_plan_entry(name="orders", action=test_case.model_action),),
     )
     adapter: Mock = Mock()
     adapter.inspect_retention.return_value = RetentionState(
