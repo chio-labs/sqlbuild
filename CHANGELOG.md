@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.114.0](https://github.com/chio-labs/sqlbuild/compare/v0.113.9...v0.114.0) (2026-09-23)
+
+
+### Features
+
+* deny time travel retention decreases by default and support per-materialization target retention ([#795](https://github.com/chio-labs/sqlbuild/issues/795)) ([2eea4d9](https://github.com/chio-labs/sqlbuild/commit/2eea4d92d2446d6188599e8e7ae4a79953acdbc7))
+
+
+### Performance Improvements
+
+* plan SQL tests during warehouse inspection and skip them without tests ([#796](https://github.com/chio-labs/sqlbuild/issues/796)) ([6f1a086](https://github.com/chio-labs/sqlbuild/commit/6f1a0861fbf41c9fd317a21c0d9512532db8dc63))
+
 ## [0.113.9](https://github.com/chio-labs/sqlbuild/compare/v0.113.8...v0.113.9) (2026-09-23)
 
 
