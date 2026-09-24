@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 
 
 def build_downstream_model_name_closure(
@@ -31,17 +32,8 @@ def _build_model_name_closure(
     start_keys: tuple[CompiledObjectKey, ...],
     deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> frozenset[str]:
-    model_names: set[str] = set()
-    visited: set[CompiledObjectKey] = set()
-    stack: list[CompiledObjectKey] = list(start_keys)
-    while stack:
-        current: CompiledObjectKey = stack.pop()
-        if current in visited:
-            continue
-        visited.add(current)
-        if current.resource_type == CompiledResourceType.MODEL:
-            model_names.add(current.name)
-        neighbor: CompiledObjectKey
-        for neighbor in deps.get(current, ()):  # pragma: no branch
-            stack.append(neighbor)
-    return frozenset(model_names)
+    return frozenset(
+        key.name
+        for key in transitive_closure_many(starts=start_keys, edges=deps, include_starts=True)
+        if key.resource_type == CompiledResourceType.MODEL
+    )

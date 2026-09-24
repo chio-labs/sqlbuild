@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.identity.seed_identity import build_seed_identity
@@ -168,21 +169,13 @@ def build_source_freshness_incomplete_model_names(
     incomplete_source_keys: tuple[Any, ...] = tuple(
         source.key for source in graph.project.sources if source.name not in source_version_hashes
     )
-    incomplete_model_names: set[str] = set()
-    source_key: Any
-    for source_key in incomplete_source_keys:
-        stack: list[Any] = list(graph.downstream_deps.get(source_key, ()))
-        visited: set[Any] = set()
-        while stack:
-            current: Any = stack.pop()
-            if current in visited:
-                continue
-            visited.add(current)
-            if current.resource_type == CompiledResourceType.MODEL:
-                incomplete_model_names.add(current.name)
-            downstream_key: Any
-            for downstream_key in graph.downstream_deps.get(current, ()):  # pragma: no branch
-                stack.append(downstream_key)
+    incomplete_model_names: frozenset[str] = frozenset(
+        key.name
+        for key in transitive_closure_many(
+            starts=incomplete_source_keys, edges=graph.downstream_deps, include_starts=False
+        )
+        if key.resource_type == CompiledResourceType.MODEL
+    )
     return tuple(sorted(incomplete_model_names))
 
 

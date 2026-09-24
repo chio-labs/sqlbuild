@@ -34,6 +34,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.graph.main.path_nodes import path_nodes
 from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.lineage.main.columns import build_project_column_lineage
@@ -706,30 +707,16 @@ def _find_path_keys(
     end: CompiledObjectKey,
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> frozenset[CompiledObjectKey]:
-    reachable_from_start: frozenset[CompiledObjectKey] = transitive_closure(
-        start=start, edges=downstream
+    path_keys: frozenset[CompiledObjectKey] | None = path_nodes(
+        start=start, end=end, downstream=downstream
     )
-    if end not in reachable_from_start:
+    if path_keys is None:
         raise CliUserError(
             f"'{end.resource_type}:{end.name}' is not downstream of "
             f"'{start.resource_type}:{start.name}'",
             code="C319",
         )
-    upstream: dict[CompiledObjectKey, list[CompiledObjectKey]] = {}
-    for key, dep_keys in downstream.items():
-        for dep_key in dep_keys:
-            upstream.setdefault(dep_key, []).append(key)
-    upstream_from_end: set[CompiledObjectKey] = set()
-    stack: list[CompiledObjectKey] = [end]
-    while stack:
-        current: CompiledObjectKey = stack.pop()
-        if current in upstream_from_end:
-            continue
-        upstream_from_end.add(current)
-        for parent in upstream.get(current, ()):
-            if parent in reachable_from_start or parent == start:
-                stack.append(parent)
-    return frozenset(reachable_from_start & upstream_from_end | {start, end})
+    return path_keys
 
 
 def _match_path(
