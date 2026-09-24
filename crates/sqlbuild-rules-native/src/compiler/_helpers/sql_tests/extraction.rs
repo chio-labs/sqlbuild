@@ -866,8 +866,10 @@ fn split_unions(sql: &str) -> Result<Vec<&str>, String> {
                 values.push(value);
             }
             index = skip_ignorable(sql, end)?;
-            if let Some(all_end) = consume_keyword(sql, index, "ALL") {
-                index = skip_ignorable(sql, all_end)?;
+            if let Some(quantifier_end) = consume_keyword(sql, index, "ALL")
+                .or_else(|| consume_keyword(sql, index, "DISTINCT"))
+            {
+                index = skip_ignorable(sql, quantifier_end)?;
             }
             start = index;
             continue;

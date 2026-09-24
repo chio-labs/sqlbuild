@@ -50,6 +50,15 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
             expected_contains_select_star=False,
         ),
         ExpectedProjectionScanTestCase(
+            description="union distinct splits branches",
+            sql="SELECT 1 AS a UNION DISTINCT SELECT 2 AS a",
+            expected_branches=("SELECT 1 AS a", "SELECT 2 AS a"),
+            expected_select_list_end=len("SELECT 1 AS a UNION DISTINCT SELECT 2 AS a"),
+            expected_commas=("SELECT 1 AS a UNION DISTINCT SELECT 2 AS a",),
+            expected_alias="a",
+            expected_contains_select_star=False,
+        ),
+        ExpectedProjectionScanTestCase(
             description="backtick identifiers are quoted",
             sql="SELECT `a, b` AS `c`, * FROM t",
             expected_branches=("SELECT `a, b` AS `c`, * FROM t",),
