@@ -215,16 +215,18 @@ def extract_top_level_ctes_with_scanner[CteT](
     """Scan top-level `WITH` CTEs followed by the ceremonial `SELECT 1` of a test file."""
 
     with_end: int | None = _try_consume_keyword(
-        sql=sql, start=_skip_ignorable(sql=sql, start=0), keyword=SQL_WITH_KEYWORD
+        sql=sql,
+        start=_skip_ignorable(sql=sql, start=0, context_label=context_label),
+        keyword=SQL_WITH_KEYWORD,
     )
     if with_end is None:
         raise CompileInputError(
             f"{context_label} '{file_label}' must declare {with_requirement} before `SELECT 1`"
         )
-    index: int = _skip_ignorable(sql=sql, start=with_end)
+    index: int = _skip_ignorable(sql=sql, start=with_end, context_label=context_label)
     recursive_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="RECURSIVE")
     if recursive_end is not None:
-        index = _skip_ignorable(sql=sql, start=recursive_end)
+        index = _skip_ignorable(sql=sql, start=recursive_end, context_label=context_label)
 
     ctes: list[CteT] = []
     seen_cte_names: set[str] = set()
@@ -238,10 +240,10 @@ def extract_top_level_ctes_with_scanner[CteT](
             )
         seen_cte_names.add(cte_name)
 
-        index = _skip_ignorable(sql=sql, start=index)
+        index = _skip_ignorable(sql=sql, start=index, context_label=context_label)
         if index < len(sql) and sql[index] == SQL_OPEN_PAREN_TOKEN:
             index = find_matching_paren(sql=sql, open_paren_index=index, context=context_label) + 1
-            index = _skip_ignorable(sql=sql, start=index)
+            index = _skip_ignorable(sql=sql, start=index, context_label=context_label)
         index = _consume_keyword(
             sql=sql,
             start=index,
@@ -249,7 +251,7 @@ def extract_top_level_ctes_with_scanner[CteT](
             file_label=file_label,
             context_label=context_label,
         )
-        index = _skip_ignorable(sql=sql, start=index)
+        index = _skip_ignorable(sql=sql, start=index, context_label=context_label)
         if index >= len(sql) or sql[index] != SQL_OPEN_PAREN_TOKEN:
             raise CompileInputError(
                 f"{context_label} '{file_label}' CTE '{cte_name}' must use AS (...)"
@@ -259,9 +261,9 @@ def extract_top_level_ctes_with_scanner[CteT](
             sql=sql, open_paren_index=index, context=context_label
         )
         ctes.append(cte_type(name=cte_name, sql_body=sql[cte_body_start:cte_body_end].strip()))
-        index = _skip_ignorable(sql=sql, start=cte_body_end + 1)
+        index = _skip_ignorable(sql=sql, start=cte_body_end + 1, context_label=context_label)
         if index < len(sql) and sql[index] == SQL_ARGUMENT_SEPARATOR_TOKEN:
-            index = _skip_ignorable(sql=sql, start=index + 1)
+            index = _skip_ignorable(sql=sql, start=index + 1, context_label=context_label)
             continue
         break
 
@@ -857,7 +859,7 @@ def _validate_ceremonial_select(
     file_label: str,
     context_label: str = _CONTEXT,
 ) -> None:
-    if _is_ceremonial_select_statement(sql=sql, start=start):
+    if _is_ceremonial_select_statement(sql=sql, start=start, context_label=context_label):
         return
     raise CompileInputError(
         f"{context_label} '{file_label}' must end with a ceremonial top-level `SELECT 1` "
@@ -865,22 +867,22 @@ def _validate_ceremonial_select(
     )
 
 
-def _is_ceremonial_select_statement(*, sql: str, start: int) -> bool:
-    index: int = _skip_ignorable(sql=sql, start=start)
+def _is_ceremonial_select_statement(*, sql: str, start: int, context_label: str = _CONTEXT) -> bool:
+    index: int = _skip_ignorable(sql=sql, start=start, context_label=context_label)
     select_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="SELECT")
     if select_end is None:
         return False
-    index = _skip_ignorable(sql=sql, start=select_end)
+    index = _skip_ignorable(sql=sql, start=select_end, context_label=context_label)
     if index >= len(sql) or sql[index] != SQL_CEREMONIAL_SELECT_VALUE:
         return False
-    index = _skip_ignorable(sql=sql, start=index + 1)
-    return _is_statement_end(sql=sql, start=index)
+    index = _skip_ignorable(sql=sql, start=index + 1, context_label=context_label)
+    return _is_statement_end(sql=sql, start=index, context_label=context_label)
 
 
-def _is_statement_end(*, sql: str, start: int) -> bool:
+def _is_statement_end(*, sql: str, start: int, context_label: str = _CONTEXT) -> bool:
     index: int = start
     if index < len(sql) and sql[index] == SQL_STATEMENT_TERMINATOR_TOKEN:
-        index = _skip_ignorable(sql=sql, start=index + 1)
+        index = _skip_ignorable(sql=sql, start=index + 1, context_label=context_label)
     return index == len(sql)
 
 
@@ -1097,7 +1099,7 @@ def _read_identifier(
     return sql[start:index], index
 
 
-def _skip_ignorable(*, sql: str, start: int) -> int:
+def _skip_ignorable(*, sql: str, start: int, context_label: str = _CONTEXT) -> int:
     index: int = start
     while index < len(sql):
         if sql[index].isspace():
@@ -1107,7 +1109,7 @@ def _skip_ignorable(*, sql: str, start: int) -> int:
             index = skip_line_comment(sql=sql, start=index)
             continue
         if sql.startswith("/*", index):
-            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
+            index = skip_block_comment(sql=sql, start=index, context=context_label)
             continue
         return index
     return index

@@ -60,7 +60,7 @@ def extract_sql_scenario_ctes(*, sql: str, file_label: str) -> CompileSqlScenari
 def extract_sql_scenario_expected_model_names(*, sql: str, file_label: str) -> tuple[str, ...]:
     """Extract explicit expected-model relationships without inspecting CTE bodies."""
 
-    start: int = _skip_ignorable(sql=sql, start=0)
+    start: int = _skip_ignorable(sql=sql, start=0, context_label=_CONTEXT)
     if _try_consume_keyword(sql=sql, start=start, keyword=SQL_WITH_KEYWORD) is None:
         return ()
     ctes: tuple[CompileSqlScenarioCte, ...] = extract_top_level_ctes_with_scanner(

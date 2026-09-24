@@ -458,6 +458,16 @@ def test_given_invalid_scenario_source_refs_when_building_inputs_then_it_raises_
             ),
         ),
         CteScannerMessageTestCase(
+            description="unclosed comment before a fixture uses scenario wording",
+            sql="WITH /* unfinished",
+            expected_message="SQL scenario contains an unclosed block comment",
+        ),
+        CteScannerMessageTestCase(
+            description="unclosed trailing comment uses scenario wording",
+            sql="WITH __expected__orders AS (SELECT 1 AS order_id) SELECT 1; /* unfinished",
+            expected_message="SQL scenario contains an unclosed block comment",
+        ),
+        CteScannerMessageTestCase(
             description="scenario with an invalid cte name uses scenario wording",
             sql="WITH 1orders AS (SELECT 1) SELECT 1",
             expected_message="SQL scenario 'tests/scenarios/orders.sql' expected a CTE name",
@@ -504,6 +514,16 @@ def test_given_malformed_scenario_ctes_when_extracting_then_messages_name_the_sc
             description="expected model scan without AS uses scenario wording",
             sql="WITH __source__raw_orders (SELECT 1 AS order_id) SELECT 1",
             expected_message="SQL scenario 'tests/scenarios/orders.sql' expected keyword AS",
+        ),
+        CteScannerMessageTestCase(
+            description="expected model scan unclosed comment uses scenario wording",
+            sql="WITH /* unfinished",
+            expected_message="SQL scenario contains an unclosed block comment",
+        ),
+        CteScannerMessageTestCase(
+            description="expected model scan leading unclosed comment uses scenario wording",
+            sql="/* unfinished",
+            expected_message="SQL scenario contains an unclosed block comment",
         ),
         CteScannerMessageTestCase(
             description="expected model scan without a target uses scenario wording",
