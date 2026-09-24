@@ -129,11 +129,12 @@ def _resolve_atomic(
         return matched
 
     matched = _match_parsed_selector(parsed=parsed, dag=dag, nodes_by_id=nodes_by_id)
+    anchors: frozenset[str] = frozenset(matched)
     if parsed.upstream:
-        matched.update(transitive_closure_many(starts=matched, edges=upstream, include_starts=True))
+        matched.update(transitive_closure_many(starts=anchors, edges=upstream, include_starts=True))
     if parsed.downstream:
         matched.update(
-            transitive_closure_many(starts=matched, edges=downstream, include_starts=True)
+            transitive_closure_many(starts=anchors, edges=downstream, include_starts=True)
         )
     return matched
 
