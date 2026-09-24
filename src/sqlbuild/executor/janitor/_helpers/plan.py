@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,
@@ -42,16 +43,45 @@ def collect_desired_keys(project: CompiledProject) -> set[JanitorRelationKey]:
 
 
 def collect_target_schemas(project: CompiledProject) -> set[tuple[str | None, str | None]]:
-    """Collect schemas where the compiled project writes relations."""
+    """Collect schemas where the compiled project writes relations, one spelling per schema."""
 
-    schemas: set[tuple[str | None, str | None]] = set()
+    schemas: list[tuple[str | None, str | None]] = []
     model: CompiledModel
     for model in project.models:
-        schemas.add((model.destination.database, model.destination.schema))
+        schemas.append((model.destination.database, model.destination.schema))
     seed: CompiledSeed
     for seed in project.seeds:
-        schemas.add((seed.destination.database, seed.destination.schema))
-    return schemas
+        schemas.append((seed.destination.database, seed.destination.schema))
+    return _dedupe_schema_keys(schemas)
+
+
+def collect_scan_schemas(
+    *,
+    managed_target_schemas: set[tuple[str | None, str | None]],
+    relation_keys: frozenset[JanitorRelationKey],
+) -> set[tuple[str | None, str | None]]:
+    """Add schemas of scanned or protected relations without duplicating folded spellings."""
+
+    return _dedupe_schema_keys(
+        [
+            *sorted(managed_target_schemas, key=_schema_sort_key),
+            *sorted(((key.database, key.schema) for key in relation_keys), key=_schema_sort_key),
+        ]
+    )
+
+
+def _dedupe_schema_keys(
+    schema_keys: list[tuple[str | None, str | None]],
+) -> set[tuple[str | None, str | None]]:
+    kept: dict[tuple[str | None, str | None], tuple[str | None, str | None]] = {}
+    schema_key: tuple[str | None, str | None]
+    for schema_key in schema_keys:
+        kept.setdefault(normalized_schema_key(schema_key), schema_key)
+    return set(kept.values())
+
+
+def _schema_sort_key(schema_key: tuple[str | None, str | None]) -> tuple[str, str]:
+    return (schema_key[0] or "", schema_key[1] or "")
 
 
 def collect_source_schemas(
@@ -85,8 +115,11 @@ def list_target_schema_relations(
     connection: object,
     target_schemas: set[tuple[str | None, str | None]],
 ) -> dict[tuple[str | None, str | None], tuple[RelationInfo, ...]]:
-    """List warehouse relations for the target schemas."""
+    """List relations matched case-insensitively and respelled as their target schema."""
 
+    target_by_normalized: dict[tuple[str | None, str | None], tuple[str | None, str | None]] = {
+        normalized_schema_key(schema_key): schema_key for schema_key in target_schemas
+    }
     by_database: dict[str | None, set[str | None]] = defaultdict(set)
     schema_key: tuple[str | None, str | None]
     for schema_key in target_schemas:
@@ -107,11 +140,25 @@ def list_target_schema_relations(
             database=database,
             schemas=concrete_schemas,
         ):
-            key: tuple[str | None, str | None] = (relation.database, relation.schema)
-            if key in target_schemas:
-                result[key].append(relation)
+            target_key: tuple[str | None, str | None] | None = target_by_normalized.get(
+                normalized_schema_key((relation.database, relation.schema))
+            )
+            if target_key is None:
+                continue
+            result[target_key].append(
+                replace(relation, database=target_key[0], schema=target_key[1])
+            )
 
     return {key: tuple(value) for key, value in result.items()}
+
+
+def normalized_schema_key(
+    schema_key: tuple[str | None, str | None],
+) -> tuple[str | None, str | None]:
+    """Return the case-insensitive comparison form of one database and schema pair."""
+
+    database, schema, _ = RelationLookup.key(database=schema_key[0], schema=schema_key[1], name="")
+    return (database, schema)
 
 
 def relation_key(relation: RelationInfo) -> JanitorRelationKey:
@@ -140,4 +187,4 @@ def relation_age_timestamp(relation: RelationInfo) -> datetime | None:
 def _ensure_aware(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
-    return value
+    return value.astimezone(UTC)

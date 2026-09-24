@@ -132,3 +132,21 @@ class JanitorRetentionResolutionTestCase:
     configured: int | None
     virtual_environments: bool
     expected_retention_days: int
+
+
+@dataclass(frozen=True)
+class JanitorFoldedIdentifierPlanTestCase:
+    description: str
+    relation_infos: tuple[RelationInfo, ...]
+    direct_mode: bool = True
+    delete_tracked_only: bool = False
+    tracked_relations: tuple[tuple[str | None, str | None, str], ...] = field(default_factory=tuple)
+    source_database: str | None = None
+    source_schema: str | None = None
+    protected_relation_keys: frozenset[JanitorRelationKey] = frozenset()
+    expected_candidate_display_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_archive_display_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_archive_deletion_display_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_skipped_relations: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    expected_blocked_sources: tuple[str, ...] = field(default_factory=tuple)
+    expected_suppressed_names: tuple[str, ...] = field(default_factory=tuple)

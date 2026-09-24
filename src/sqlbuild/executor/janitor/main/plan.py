@@ -14,7 +14,7 @@ from sqlbuild.executor.janitor._helpers.classification import (
     collect_query_diff_artifact_candidates,
     gather_janitor_warehouse_facts,
 )
-from sqlbuild.executor.janitor._helpers.plan import collect_target_schemas
+from sqlbuild.executor.janitor._helpers.plan import collect_scan_schemas, collect_target_schemas
 from sqlbuild.executor.janitor._helpers.schema_planning import classify_target_schemas
 from sqlbuild.executor.janitor.models import (
     JanitorArchivePlanning,
@@ -51,9 +51,10 @@ def build_janitor_plan(
     )
     direct: JanitorDirectModeSettings = direct_settings or JanitorDirectModeSettings()
     managed_target_schemas: set[tuple[str | None, str | None]] = collect_target_schemas(project)
-    target_schemas: set[tuple[str | None, str | None]] = set(managed_target_schemas)
-    target_schemas.update((key.database, key.schema) for key in scope.protected_relation_keys)
-    target_schemas.update((key.database, key.schema) for key in scope.scan_relation_keys)
+    target_schemas: set[tuple[str | None, str | None]] = collect_scan_schemas(
+        managed_target_schemas=managed_target_schemas,
+        relation_keys=scope.protected_relation_keys | scope.scan_relation_keys,
+    )
     query_artifact_schemas: set[tuple[str | None, str]] = {
         (database, schema) for database, schema in target_schemas if schema is not None
     }

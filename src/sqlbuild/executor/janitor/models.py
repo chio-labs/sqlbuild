@@ -5,16 +5,29 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class JanitorRelationKey:
-    """Physical identity for a warehouse relation considered by janitor."""
+    """Physical relation identity compared case-insensitively but rendered as spelled."""
 
     database: str | None
     schema: str | None
     name: str
+
+    def identity(self) -> tuple[str | None, str | None, str]:
+        """Return the case-insensitive comparison identity."""
+
+        return RelationLookup.key(database=self.database, schema=self.schema, name=self.name)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, JanitorRelationKey):
+            return NotImplemented
+        return self.identity() == other.identity()
+
+    def __hash__(self) -> int:
+        return hash(self.identity())
 
     def display_name(self) -> str:
         """Render a qualified display name."""

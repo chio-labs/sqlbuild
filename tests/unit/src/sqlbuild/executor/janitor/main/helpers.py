@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
@@ -460,6 +461,43 @@ class FailingDropAdapter(FakeJanitorAdapter):
         raise RuntimeError(self.message)
 
 
+class FoldingJanitorAdapter(FakeJanitorAdapter):
+    """Warehouse double that filters case-insensitively and lists lowercase identifiers."""
+
+    def list_relations(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[RelationInfo, ...]:
+        requested_schemas: frozenset[str] = frozenset(schema.lower() for schema in schemas or ())
+        requested_names: frozenset[str] = frozenset(name.lower() for name in names or ())
+        matching: tuple[RelationInfo, ...] = tuple(
+            filter(
+                lambda relation: (
+                    (relation.database or "").lower() == (database or "").lower()
+                    and (
+                        not requested_schemas
+                        or (relation.schema or "").lower() in requested_schemas
+                    )
+                    and (not requested_names or relation.name.lower() in requested_names)
+                ),
+                self._available_relations,
+            )
+        )
+        return tuple(
+            replace(
+                relation,
+                database=database,
+                schema=(relation.schema or "").lower(),
+                name=relation.name.lower(),
+            )
+            for relation in matching
+        )
+
+
 class FailingJanitorEventAdapter(FakeJanitorAdapter):
     def _execute(self, connection: Any, sql: str) -> Any:
         is_event_insert: bool = sql.startswith("INSERT INTO") and JANITOR_EVENTS_TABLE_NAME in sql
@@ -490,7 +528,13 @@ class _FakeResult:
         return list(self.rows)
 
 
-def build_project(*, source_schema: str | None = None) -> CompiledProject:
+def build_project(
+    *,
+    source_schema: str | None = None,
+    source_database: str | None = None,
+    destination_database: str | None = None,
+    destination_schema: str = "analytics",
+) -> CompiledProject:
     source: CompiledSource = CompiledSource(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.SOURCE,
@@ -498,7 +542,12 @@ def build_project(*, source_schema: str | None = None) -> CompiledProject:
         ),
         deps=(),
         name="raw_orders",
-        source_entry=SourceEntry(name="raw_orders", schema=source_schema or "", table="orders"),
+        source_entry=SourceEntry(
+            name="raw_orders",
+            database=source_database,
+            schema=source_schema or "",
+            table="orders",
+        ),
         source_file=cast(Any, object()),
     )
     sources: tuple[CompiledSource, ...] = {True: (), False: (source,)}[source_schema is None]
@@ -516,10 +565,10 @@ def build_project(*, source_schema: str | None = None) -> CompiledProject:
                 query_sql="select 1",
                 config=CompileModelConfig(),
                 destination=CompiledRelationLocation(
-                    database=None,
-                    schema="analytics",
+                    database=destination_database,
+                    schema=destination_schema,
                     name="orders",
-                    qualified_name="analytics.orders",
+                    qualified_name=f"{destination_schema}.orders",
                 ),
             ),
         ),
@@ -532,10 +581,10 @@ def build_project(*, source_schema: str | None = None) -> CompiledProject:
                 schema_entry=SchemaSeedEntry(name="countries"),
                 schema_file=cast(Any, object()),
                 destination=CompiledRelationLocation(
-                    database=None,
-                    schema="analytics",
+                    database=destination_database,
+                    schema=destination_schema,
                     name="countries",
-                    qualified_name="analytics.countries",
+                    qualified_name=f"{destination_schema}.countries",
                 ),
             ),
         ),
