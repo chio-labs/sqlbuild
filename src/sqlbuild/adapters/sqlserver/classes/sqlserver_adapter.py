@@ -20,7 +20,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _render_ansi_typed_scalar,
     _render_typed_value_list,
     _snapshot_initial_valid_from_expr,
-    _snapshot_key_condition,
     _typed_scalar_payload,
 )
 from sqlbuild.adapter.contract.classes.historical_snapshot_sql import (
@@ -28,6 +27,7 @@ from sqlbuild.adapter.contract.classes.historical_snapshot_sql import (
     historical_insert_validity_sql,
 )
 from sqlbuild.adapter.contract.classes.microbatch import MicrobatchMixin
+from sqlbuild.adapter.contract.classes.snapshot_sql import SnapshotSql
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.classes.unkeyed_diff import UnkeyedDiffMixin
 from sqlbuild.adapter.contract.constants import (
@@ -160,7 +160,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str,
         change_time_column: str,
     ) -> str:
-        close_candidate_condition: str = _snapshot_key_condition(
+        close_candidate_condition: str = SnapshotSql.key_condition(
             left_alias="__close_candidates", right_alias="__target", unique_key=unique_key
         )
         candidate_key_sql: str = ", ".join(unique_key)
@@ -196,7 +196,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str,
         current_timestamp: str,
     ) -> str:
-        missing_key_condition: str = _snapshot_key_condition(
+        missing_key_condition: str = SnapshotSql.key_condition(
             left_alias="__source", right_alias="__target", unique_key=unique_key
         )
         first_key: str = unique_key[0]
@@ -234,7 +234,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             ).new_changes_ctes_sql(destination=destination)
         partition_sql: str = ", ".join(unique_key)
         first_key: str = unique_key[0]
-        latest_join_condition: str = _snapshot_key_condition(
+        latest_join_condition: str = SnapshotSql.key_condition(
             left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
         )
         updated_changed: str = self._distinct_condition(
@@ -297,7 +297,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             self._distinct_condition(left=column, right=f"__prev_{column}")
             for column in check_columns
         )
-        latest_join_condition: str = _snapshot_key_condition(
+        latest_join_condition: str = SnapshotSql.key_condition(
             left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
         )
         latest_change_condition: str = " OR ".join(
@@ -1793,7 +1793,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             source_alias="__source",
             current_timestamp=current_timestamp,
         )
-        key_condition: str = _snapshot_key_condition(
+        key_condition: str = SnapshotSql.key_condition(
             left_alias="__target", right_alias="__source", unique_key=unique_key
         )
         change_condition: str = " OR ".join(
@@ -1809,7 +1809,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
         insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
         output_select_sql: str = ", ".join(f"__source.{column}" for column in output_columns)
-        active_join_condition: str = _snapshot_key_condition(
+        active_join_condition: str = SnapshotSql.key_condition(
             left_alias="__active", right_alias="__source", unique_key=unique_key
         )
         active_change_condition: str = " OR ".join(
@@ -1866,7 +1866,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             valid_to_column=valid_to_column,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        key_condition: str = _snapshot_key_condition(
+        key_condition: str = SnapshotSql.key_condition(
             left_alias="__target", right_alias="__new_changes", unique_key=unique_key
         )
         if invalidate_hard_deletes:
@@ -1929,7 +1929,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             updated_at_column=updated_at_column,
             valid_to_column=valid_to_column,
         )
-        key_condition: str = _snapshot_key_condition(
+        key_condition: str = SnapshotSql.key_condition(
             left_alias="__target", right_alias="__new_changes", unique_key=unique_key
         )
         close_sql: str = (
@@ -1984,7 +1984,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             valid_from_column=valid_from_column,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        key_condition: str = _snapshot_key_condition(
+        key_condition: str = SnapshotSql.key_condition(
             left_alias="__target", right_alias="__new_changes", unique_key=unique_key
         )
         if invalidate_hard_deletes:
@@ -2052,7 +2052,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             source_alias="__source",
             current_timestamp=current_timestamp,
         )
-        key_condition: str = _snapshot_key_condition(
+        key_condition: str = SnapshotSql.key_condition(
             left_alias="__target", right_alias="__source", unique_key=unique_key
         )
         close_sql: str = (
@@ -2064,7 +2064,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
         insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
         output_select_sql: str = ", ".join(f"__source.{column}" for column in output_columns)
-        active_join_condition: str = _snapshot_key_condition(
+        active_join_condition: str = SnapshotSql.key_condition(
             left_alias="__active", right_alias="__source", unique_key=unique_key
         )
         first_key: str = unique_key[0]
