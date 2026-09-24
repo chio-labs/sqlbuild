@@ -175,3 +175,13 @@ class ScenarioCaptureMissingFixtureMessageTestCase:
     description: str
     fixture_error_message: str | None
     expected_error_message: str
+
+
+@dataclass(frozen=True)
+class FirstFailureDetailsTestCase:
+    description: str
+    step_outcomes: tuple[tuple[ExecutionStatus, str | None, str | None, str | None], ...]
+    fallback_code: str | None
+    expected_error_code: str | None
+    expected_error_help: str | None
+    expected_error_message: str | None

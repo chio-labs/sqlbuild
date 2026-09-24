@@ -30,6 +30,7 @@ from sqlbuild.executor.scenario._helpers.lifecycle.expectations import (
     execute_scenario_assertion_expectations,
     execute_scenario_expected_expectations,
 )
+from sqlbuild.executor.scenario._helpers.lifecycle.failures import first_failure_details
 from sqlbuild.executor.scenario._helpers.local.snapshots import (
     load_scenario_snapshot_into_duckdb,
     local_snapshot_table_name,
@@ -70,6 +71,8 @@ from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,
 )
 from sqlbuild.spec.contracts.models import SourceEntry
+
+_LOCAL_STEP_FAILED_MESSAGE: str = "local scenario step failed"
 
 
 def execute_local_scenario_load_only_run(
@@ -302,10 +305,10 @@ def _execute_local_plan(
             duckdb_path=duckdb_path,
             loaded_relations=loaded_relations,
             function_results=function_results,
-            failure=ScenarioFailureDetails(
-                error_code=_first_error_code(function_results) or SCENARIO_LOCAL_FUNCTION_FAILED,
-                error_help=_first_error_help(function_results),
-                error_message=_first_error(function_results),
+            failure=first_failure_details(
+                results=function_results,
+                fallback_message=_LOCAL_STEP_FAILED_MESSAGE,
+                fallback_code=SCENARIO_LOCAL_FUNCTION_FAILED,
             ),
         )
 
@@ -327,10 +330,10 @@ def _execute_local_plan(
             loaded_relations=loaded_relations,
             function_results=function_results,
             model_results=local_model_results,
-            failure=ScenarioFailureDetails(
-                error_code=_first_error_code(local_model_results) or SCENARIO_LOCAL_MODEL_FAILED,
-                error_help=_first_error_help(local_model_results),
-                error_message=_first_error(local_model_results),
+            failure=first_failure_details(
+                results=local_model_results,
+                fallback_message=_LOCAL_STEP_FAILED_MESSAGE,
+                fallback_code=SCENARIO_LOCAL_MODEL_FAILED,
             ),
         )
 
@@ -362,10 +365,10 @@ def _execute_local_plan(
             model_results=model_results,
             expected_results=expected_results,
             assertion_results=assertion_results,
-            failure=ScenarioFailureDetails(
-                error_code=_first_error_code(check_results) or SCENARIO_LOCAL_MODEL_FAILED,
-                error_help=_first_error_help(check_results),
-                error_message=_first_error(check_results),
+            failure=first_failure_details(
+                results=check_results,
+                fallback_message=_LOCAL_STEP_FAILED_MESSAGE,
+                fallback_code=SCENARIO_LOCAL_MODEL_FAILED,
             ),
         )
     if _has_failed(check_results):
@@ -379,10 +382,9 @@ def _execute_local_plan(
             model_results=model_results,
             expected_results=expected_results,
             assertion_results=assertion_results,
-            failure=ScenarioFailureDetails(
-                error_code=_first_error_code(check_results),
-                error_help=_first_error_help(check_results),
-                error_message=_first_error(check_results),
+            failure=first_failure_details(
+                results=check_results,
+                fallback_message=_LOCAL_STEP_FAILED_MESSAGE,
             ),
         )
     return _local_result(
@@ -717,35 +719,6 @@ def _has_local_check_error(results: tuple[object, ...]) -> bool:
         for result in results
         if getattr(result, "status", None) == ExecutionStatus.FAILED
     )
-
-
-def _first_error(results: tuple[object, ...]) -> str | None:
-    result: object
-    for result in results:
-        if getattr(result, "status", None) == ExecutionStatus.FAILED:
-            message: object | None = getattr(result, "error_message", None)
-            return message if isinstance(message, str) and message else "local scenario step failed"
-    return None
-
-
-def _first_error_code(results: tuple[object, ...]) -> str | None:
-    result: object
-    for result in results:
-        if getattr(result, "status", None) == ExecutionStatus.FAILED:
-            code: object | None = getattr(result, "error_code", None)
-            if isinstance(code, str) and code:
-                return code
-    return None
-
-
-def _first_error_help(results: tuple[object, ...]) -> str | None:
-    result: object
-    for result in results:
-        if getattr(result, "status", None) == ExecutionStatus.FAILED:
-            help_text: object | None = getattr(result, "error_help", None)
-            if isinstance(help_text, str) and help_text:
-                return help_text
-    return None
 
 
 def _remove_local_duckdb_files(duckdb_path: Path) -> None:
