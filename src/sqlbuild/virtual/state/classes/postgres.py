@@ -8,13 +8,6 @@ from datetime import datetime
 from typing import Any, ClassVar
 
 from sqlbuild.adapter.contract.classes.observed_connection import ObservedConnection
-from sqlbuild.executor.node_results.main.decode_json import decode_node_result_json
-from sqlbuild.executor.node_results.main.encode_json import encode_node_result_json
-from sqlbuild.executor.node_results.models import (
-    NodeResultEnvelope,
-    NodeResultQuery,
-    NodeResultRecord,
-)
 from sqlbuild.microbatches.classes.event_codec import MicrobatchEventCodec
 from sqlbuild.microbatches.constants import (
     MICROBATCH_COLUMNS,
@@ -34,16 +27,12 @@ from sqlbuild.virtual.state.constants import (
     CURRENT_STATE_SCHEMA_VERSION,
     LOCK_TABLE,
     MICROBATCH_EVENT_TABLE,
-    NODE_RESULTS_TABLE,
     NON_UNIQUE_STATE_INDEXES,
     POSTGRES_INTEGER_TYPES,
     POSTGRES_TEXT_TYPES,
     PYTHON_NODE_VERSION_TABLE,
-    RECONCILE_EVENT_TABLE,
     SOURCE_FRESHNESS_OBSERVATION_TABLE,
-    STATE_BOOLEAN_TRUE,
     STATE_MIGRATION_EVENTS_TABLE,
-    STATE_OPERATION_EVENT_TABLE,
     STATE_TABLE_COLUMNS,
     STATE_TABLE_INDEXES,
     STATE_TABLES,
@@ -57,11 +46,9 @@ from sqlbuild.virtual.state.exceptions import (
     StateSchemaInvalidError,
 )
 from sqlbuild.virtual.state.models import (
-    ReconcileEventRecord,
     SourceFreshnessRecord,
     StateBackupRecord,
     StateLockLease,
-    StateOperationEventRecord,
     StateSchemaValidationResult,
     VirtualEnvironmentNodeRefRecord,
 )
@@ -333,90 +320,6 @@ class PostgresStateBackend(SqlStateBackend):
                 cursor.execute("ROLLBACK")
                 raise
 
-    def insert_node_result(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        virtual_environment_name: str,
-        record: NodeResultRecord,
-    ) -> None:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                f"INSERT INTO {self._qualified_name(schema=schema, table=NODE_RESULTS_TABLE)} "
-                "(virtual_environment_name, node_type, node_name, target_database, target_schema, "
-                "target_name, run_id, status, payload_json_b64, metadata_json_b64, error_message, "
-                "materialized, created_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
-                "%s, %s)",
-                [
-                    virtual_environment_name,
-                    record.node_type,
-                    record.node_name,
-                    record.target_database,
-                    record.target_schema,
-                    record.target_name,
-                    record.run_id,
-                    record.status,
-                    encode_node_result_json(
-                        value=record.payload, label="payload", node_name=record.node_name
-                    ),
-                    encode_node_result_json(
-                        value=record.metadata, label="metadata", node_name=record.node_name
-                    ),
-                    record.error_message,
-                    self._materialized_storage(record.materialized),
-                    record.ts,
-                ],
-            )
-
-    def read_node_results(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        virtual_environment_name: str,
-        query: NodeResultQuery,
-    ) -> tuple[NodeResultEnvelope, ...]:
-        if query.limit < 1:
-            return ()
-        predicates: list[str] = [
-            "virtual_environment_name = %s",
-            "node_type = %s",
-            "node_name = %s",
-            self._optional_equality_sql(
-                column="target_database", value=query.target_database, placeholder="%s"
-            ),
-            self._optional_equality_sql(
-                column="target_schema", value=query.target_schema, placeholder="%s"
-            ),
-            self._optional_equality_sql(
-                column="target_name", value=query.target_name, placeholder="%s"
-            ),
-        ]
-        params: list[object] = [virtual_environment_name, query.node_type, query.node_name]
-        for value in (query.target_database, query.target_schema, query.target_name):
-            if value is not None:
-                params.append(value)
-        if query.statuses is not None:
-            placeholders: str = ", ".join("%s" for _ in query.statuses)
-            predicates.append(f"status IN ({placeholders})")
-            params.extend(query.statuses)
-        if query.run_id is not None:
-            predicates.append("run_id = %s")
-            params.append(query.run_id)
-        params.append(query.limit)
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT node_type, node_name, run_id, status, payload_json_b64, "
-                "metadata_json_b64, error_message, materialized, created_at "
-                f"FROM {self._qualified_name(schema=schema, table=NODE_RESULTS_TABLE)} "
-                f"WHERE {' AND '.join(predicates)} "
-                "ORDER BY created_at DESC, run_id DESC LIMIT %s",
-                params,
-            )
-            rows: list[tuple[Any, ...]] = cursor.fetchall()
-        return tuple(self._node_result_row_to_envelope(row) for row in rows)
-
     def append_microbatch_event(
         self, *, connection: Any, schema: str, event: MicrobatchEvent
     ) -> None:
@@ -661,35 +564,6 @@ class PostgresStateBackend(SqlStateBackend):
                 cursor.execute("ROLLBACK")
                 raise
 
-    def create_state_operation_event(
-        self, *, connection: Any, schema: str, record: StateOperationEventRecord
-    ) -> None:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "INSERT INTO "
-                f"{self._qualified_name(schema=schema, table=STATE_OPERATION_EVENT_TABLE)} "
-                "(event_id, operation_id, action, status, message, created_at) "
-                "VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)",
-                [
-                    record.event_id,
-                    record.operation_id,
-                    record.action,
-                    record.status.value,
-                    record.message,
-                ],
-            )
-
-    def create_reconcile_event(
-        self, *, connection: Any, schema: str, record: ReconcileEventRecord
-    ) -> None:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                f"INSERT INTO {self._qualified_name(schema=schema, table=RECONCILE_EVENT_TABLE)} "
-                "(event_id, action, status, message, created_at) "
-                "VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)",
-                [record.event_id, record.action.value, record.status.value, record.message],
-            )
-
     def acquire_lock(
         self,
         *,
@@ -875,45 +749,6 @@ class PostgresStateBackend(SqlStateBackend):
             case StateColumnType.TIMESTAMP:
                 return "TIMESTAMP"
         raise StateBackendConfigError(f"Unsupported state column type: {column_type}")
-
-    def _node_result_row_to_envelope(self, row: tuple[Any, ...]) -> NodeResultEnvelope:
-        node_name: str = str(row[1])
-        metadata: object = decode_node_result_json(
-            value=str(row[5]), label="metadata", node_name=node_name
-        )
-        normalized_metadata: dict[str, object] = (
-            {str(key): value for key, value in metadata.items()}
-            if isinstance(metadata, dict)
-            else {}
-        )
-        return NodeResultEnvelope(
-            node_type=str(row[0]),
-            node_name=node_name,
-            run_id=str(row[2]),
-            status=str(row[3]),
-            payload=decode_node_result_json(
-                value=str(row[4]), label="payload", node_name=node_name
-            ),
-            metadata=normalized_metadata,
-            error_message=str(row[6]) if row[6] is not None else None,
-            materialized=self._parse_materialized(row[7]),
-            ts=row[8],
-        )
-
-    def _optional_equality_sql(self, *, column: str, value: object | None, placeholder: str) -> str:
-        if value is None:
-            return f"{column} IS NULL"
-        return f"{column} = {placeholder}"
-
-    def _materialized_storage(self, value: bool | None) -> str | None:
-        if value is None:
-            return None
-        return "true" if value else "false"
-
-    def _parse_materialized(self, value: object) -> bool | None:
-        if value is None:
-            return None
-        return str(value).lower() == STATE_BOOLEAN_TRUE
 
     def _validate_source_freshness_records(
         self,
