@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from scripts.dupscore.models import CloneAllowlistEntry
+from scripts.dupscore.models import CloneAllowlistEntry, ContractExemptionEntry
 
 
 @dataclass(frozen=True)
@@ -63,3 +63,19 @@ class SinceUnchangedTestCase:
     description: str
     changed_files: dict[str, str]
     expected_cluster_count: int
+
+
+@dataclass(frozen=True)
+class ContractExemptionReportTestCase:
+    description: str
+    entries: tuple[ContractExemptionEntry, ...]
+    expected_clusters: list[list[str]]
+    expected_contract_exempt_members: int
+
+
+@dataclass(frozen=True)
+class ContractExemptionSinceTestCase:
+    description: str
+    changed_files: dict[str, str]
+    expected_clusters: list[list[str]]
+    expected_member_changes: dict[str, str | None]

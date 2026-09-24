@@ -20,7 +20,8 @@ def render_clone_text(*, report: CloneReport, top: int) -> str:
     scope: str = f" changed since {report.since}" if report.since is not None else ""
     lines: list[str] = [
         f"dupscore clones{scope}: {len(report.clusters)} clusters "
-        f"({counts}; {report.allowlisted_pairs} allowlisted pairs hidden)"
+        f"({counts}; {report.allowlisted_pairs} allowlisted pairs hidden; "
+        f"{report.contract_exempt_members} contract-exempt members hidden)"
     ]
     for position, cluster in enumerate(report.clusters[:top], start=1):
         lines.append(f"{position:3d}. {_cluster_heading(cluster)}")
@@ -43,6 +44,7 @@ def render_clone_json(*, report: CloneReport, top: int) -> str:
         "since": report.since,
         "unit_counts": report.unit_counts,
         "allowlisted_pairs": report.allowlisted_pairs,
+        "contract_exempt_members": report.contract_exempt_members,
         "total_clusters": len(report.clusters),
         "clusters": [
             {"rank": position, **asdict(cluster)}

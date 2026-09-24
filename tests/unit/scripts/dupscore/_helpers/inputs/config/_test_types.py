@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from scripts.dupscore.models import CloneAllowlistEntry
+from scripts.dupscore.models import CloneAllowlistEntry, ContractExemptionEntry
 
 
 @dataclass(frozen=True)
@@ -41,3 +41,11 @@ class ShippedConfigTestCase:
     relative_path: str
     expected_pair_allowlist_size: int
     expected_clone_allowlist_size: int
+    expected_contract_exemption_size: int
+
+
+@dataclass(frozen=True)
+class ContractExemptionConfigTestCase:
+    description: str
+    toml_text: str
+    expected_entries: tuple[ContractExemptionEntry, ...]

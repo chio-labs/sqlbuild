@@ -74,6 +74,7 @@ def test_given_seeded_tree_when_running_json_cli_then_prints_cluster_document(
     assert payload["total_clusters"] == test_case.expected_total_clusters
     assert payload["unit_counts"] == test_case.expected_unit_counts
     assert payload["since"] is None
+    assert payload["contract_exempt_members"] == 0
     assert [set(cluster) for cluster in clusters] == [set(test_case.expected_cluster_keys)]
     assert all(set(member) == test_case.expected_member_keys for member in members)
     assert all(fragment in errors for fragment in test_case.expected_progress_fragments)

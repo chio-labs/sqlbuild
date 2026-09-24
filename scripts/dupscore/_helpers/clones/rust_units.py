@@ -100,6 +100,7 @@ _PATH_SEPARATOR: str = "::"
 _RUST_SUFFIX: str = ".rs"
 _DIRECTORY_SUFFIX: str = "/"
 _OWNER_SEPARATOR: str = "::"
+_CALL_SUFFIXES: frozenset[str] = frozenset({"(", "!"})
 
 
 def extract_rust_units(
@@ -123,10 +124,27 @@ def extract_rust_units(
     )
 
 
-def _normalize(item: RustToken) -> str:
-    if item.kind == RUST_KIND_IDENTIFIER:
-        return item.text if item.text in _RUST_KEYWORDS else PLACEHOLDER_IDENTIFIER
-    return _LITERAL_PLACEHOLDERS.get(item.kind, item.text)
+def _normalize_stream(tokens: list[RustToken]) -> list[str]:
+    normalized: list[str] = []
+    for index, item in enumerate(tokens):
+        if item.kind == RUST_KIND_IDENTIFIER:
+            keep: bool = item.text in _RUST_KEYWORDS or _is_call_target(tokens=tokens, index=index)
+            normalized.append(item.text if keep else PLACEHOLDER_IDENTIFIER)
+        else:
+            normalized.append(_LITERAL_PLACEHOLDERS.get(item.kind, item.text))
+    return normalized
+
+
+def _is_call_target(*, tokens: list[RustToken], index: int) -> bool:
+    """Name a called function, method, or macro: an identifier directly before ``(`` or ``!``."""
+
+    following: int = index + 1
+    if following >= len(tokens):
+        return False
+    after: RustToken = tokens[following]
+    if after.kind != RUST_KIND_PUNCTUATION or after.text not in _CALL_SUFFIXES:
+        return False
+    return index == 0 or tokens[index - 1].text != _FUNCTION_KEYWORD
 
 
 def _match_brackets(tokens: list[RustToken]) -> list[int]:
@@ -341,7 +359,7 @@ class _ItemScanner:
                 name=f"{owner}{_OWNER_SEPARATOR}{function_name}" if owner else function_name,
                 start_line=self._tokens[item_start].line,
                 end_line=self._tokens[close].line,
-                normalized=[_normalize(item) for item in body],
+                normalized=_normalize_stream(body),
                 concrete=[item.text for item in body],
             )
         )

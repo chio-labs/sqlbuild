@@ -15,6 +15,7 @@ from scripts.dupscore._helpers.clones.filters import (
 from scripts.dupscore._helpers.clones.fingerprints import fingerprint_tokens
 from scripts.dupscore._helpers.clones.matching import find_clone_pairs
 from scripts.dupscore._helpers.clones.sources import collect_clone_units
+from scripts.dupscore._helpers.contracts.forced_overrides import find_forced_overrides
 from scripts.dupscore.models import (
     CloneCluster,
     CloneOptions,
@@ -49,9 +50,19 @@ def build_clone_report(
         fingerprints=fingerprints,
         min_similarity=options.min_similarity,
     )
+    paired: list[int] = sorted(_paired_units(candidate_pairs))
+    flags: tuple[bool, ...] = find_forced_overrides(
+        repo_root=repo_root,
+        entries=config.contract_exemptions,
+        units=[units[unit_index] for unit_index in paired],
+    )
+    forced: set[int] = {unit_index for unit_index, flag in zip(paired, flags, strict=True) if flag}
+    retained_pairs: list[ClonePair] = [
+        pair for pair in candidate_pairs if pair.left not in forced or pair.right not in forced
+    ]
     pairs: list[ClonePair] = [
         pair
-        for pair in candidate_pairs
+        for pair in retained_pairs
         if allowlist_reason(
             left_path=units[pair.left].path,
             right_path=units[pair.right].path,
@@ -79,9 +90,17 @@ def build_clone_report(
     return CloneReport(
         since=options.since,
         unit_counts={language: unit_counts[language] for language in options.languages},
-        allowlisted_pairs=len(candidate_pairs) - len(pairs),
+        allowlisted_pairs=len(retained_pairs) - len(pairs),
+        contract_exempt_members=len(forced - _paired_units(retained_pairs)),
         clusters=tuple(clusters),
     )
+
+
+def _paired_units(pairs: list[ClonePair]) -> set[int]:
+    indexes: set[int] = set()
+    for pair in pairs:
+        indexes.update((pair.left, pair.right))
+    return indexes
 
 
 def _cluster_selected(*, cluster: CloneCluster, options: CloneOptions) -> bool:

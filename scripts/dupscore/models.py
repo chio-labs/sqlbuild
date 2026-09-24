@@ -128,12 +128,24 @@ class CloneAllowlistEntry:
 
 
 @dataclass(frozen=True, slots=True)
+class ContractExemptionEntry:
+    """Methods of a contract class that classes under ``paths`` must each define themselves."""
+
+    contract_path: str
+    contract_class: str
+    paths: tuple[str, ...]
+    reason: str
+    forbidden_owners: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class DupscoreConfig:
     """User configuration loaded from dupscore.toml."""
 
     persisted_state_surfaces: tuple[str, ...] = ()
     allowlisted_pairs: dict[tuple[str, str], str] = field(default_factory=dict)
     clone_allowlist: tuple[CloneAllowlistEntry, ...] = ()
+    contract_exemptions: tuple[ContractExemptionEntry, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,6 +235,7 @@ class CloneReport:
     since: str | None
     unit_counts: dict[str, int]
     allowlisted_pairs: int
+    contract_exempt_members: int
     clusters: tuple[CloneCluster, ...]
 
 
