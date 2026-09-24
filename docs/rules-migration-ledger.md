@@ -46,6 +46,14 @@ for the new rules.
 | `SQBKX001`–`SQBKX002` | project-aware rules | `SQBRTEST201`–`SQBRTEST202` | Audit and test minima require compiled model evidence. |
 | `SQBKX201` | project-aware rules | `SQBRTEST301` | Custom-rule coverage requires the configured Rules catalogue and test inventory. |
 
+## Rules added after the migration
+
+These built-ins have no former `SQBK` counterpart.
+
+| Code | Owner | Reason |
+| --- | --- | --- |
+| `SQBRTEST203` | project-aware rules | Rejecting empty-input-only SQL tests requires compiled test fixtures and assertions; see [SQL test coverage rules](sql-test-coverage-rules.md). |
+
 ## Rules families
 
 - `SQBRCONTRACT`: contracts and declared column semantics.

@@ -74,3 +74,14 @@ class NativePlanningDifferentialTestCase:
     planning_case: PlanTestChainTestCase
     sql_analysis_enabled: bool = True
     expected_matches: bool = True
+
+
+@dataclass(frozen=True)
+class CursorWindowRenderingTestCase:
+    description: str
+    adapter_name: str
+    cursor_type: str
+    cursor_grain: str | None
+    cursor_start: str | None
+    cursor_end: str | None
+    expected_sql: str

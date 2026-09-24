@@ -156,3 +156,23 @@ class MissingMockCliE2ETestCase:
     expected_error: str
     compile_error_line: str
     compile_summary_fragment: str
+
+
+@dataclass(frozen=True)
+class HelperScopeE2ETestCase:
+    """Test case for helper CTEs referenced by expected and assertion SQL."""
+
+    description: str
+    command: tuple[str, ...]
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CursorWindowE2ETestCase:
+    """Test case for SQL tests of models that use cursor intrinsics."""
+
+    description: str
+    tests: dict[str, str]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+    expected_compiled_fragments: tuple[str, ...] = ()

@@ -303,6 +303,8 @@ class DiscoveredSqlTestBlock:
     mode: SqlTestMode = DEFAULT_SQL_TEST_MODE
     parameters: tuple[SqlTestParameterDeclaration, ...] = field(default_factory=tuple)
     cases: tuple[DiscoveredSqlTestCase, ...] = field(default_factory=tuple)
+    cursor_start: str | None = None
+    cursor_end: str | None = None
 
 
 @dataclass(frozen=True)
@@ -581,6 +583,16 @@ class DiscoveredProjectInputs:
     command_output_sinks: tuple[DiscoveredCommandOutputSink, ...] = field(default_factory=tuple)
     providers: tuple[DiscoveredProvider, ...] = field(default_factory=tuple)
     adapter_file: DiscoveredAdapterFile | None = None
+
+
+@dataclass(frozen=True)
+class DiscoveredRuntimeExtensions:
+    """Command-startup providers, typed sinks, and lifecycle delivery settings."""
+
+    providers: tuple[DiscoveredProvider, ...] = field(default_factory=tuple)
+    event_exporters: tuple[DiscoveredEventExporter, ...] = field(default_factory=tuple)
+    command_output_sinks: tuple[DiscoveredCommandOutputSink, ...] = field(default_factory=tuple)
+    lifecycle_shutdown_timeout_seconds: int | None = None
 
 
 @dataclass(frozen=True)

@@ -23,9 +23,11 @@ from sqlbuild.compiler.compile.models import (
     CompactLineageFacts,
     CompiledLineageColumnFact,
     CompiledModel,
+    CompiledModelSqlTestPayload,
     CompiledProject,
     CompiledSqlScenario,
     CompiledSqlTest,
+    CompileSqlTestCte,
     DynamicColumnContractProof,
     InferredColumn,
 )
@@ -340,6 +342,16 @@ def _sql_test_payload(test: CompiledSqlTest) -> dict[str, object]:
             for resource in test.tested_resources
         ],
     }
+    if isinstance(test.payload, CompiledModelSqlTestPayload):
+        payload.update(
+            {
+                "authored_ctes": _sql_test_cte_payloads(test.payload.authored_ctes),
+                "expected_ctes": _sql_test_cte_payloads(test.payload.expected_ctes),
+                "assertion_ctes": _sql_test_cte_payloads(test.payload.assertion_ctes),
+                "has_macro_mocks": bool(test.payload.macro_mocks),
+                "has_model_query_overrides": bool(test.payload.model_query_overrides),
+            }
+        )
     if test.case_name is not None:
         parameter_types: dict[str, str] = {
             parameter.name: parameter.value_type.value for parameter in test.parameter_schema
@@ -369,6 +381,10 @@ def _sql_test_payload(test: CompiledSqlTest) -> dict[str, object]:
             }
         )
     return payload
+
+
+def _sql_test_cte_payloads(ctes: tuple[CompileSqlTestCte, ...]) -> list[dict[str, str]]:
+    return [{"name": cte.name, "sql": cte.sql_body} for cte in ctes]
 
 
 def _sql_scenario_payloads(project: CompiledProject) -> list[dict[str, object]]:

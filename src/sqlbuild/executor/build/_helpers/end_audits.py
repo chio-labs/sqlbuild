@@ -9,6 +9,9 @@ from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.executor.auditing.main._execute import execute_audit
+from sqlbuild.executor.auditing.main.publish_completed_audit_results import (
+    publish_completed_audit_results,
+)
 from sqlbuild.executor.auditing.main.resource_id import audit_resource_id
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
@@ -58,4 +61,5 @@ def run_end_audits(
             if result.outcome == AuditOutcome.ERROR:
                 lifecycle.failed()
         results.append(result)
+        publish_completed_audit_results((result,))
     return tuple(results)

@@ -1185,3 +1185,260 @@ def build_expected_column_subset_project_files(
             "SELECT 1\n"
         )
     return files
+
+
+_HELPER_SCOPE_SOURCE_MOCK: str = (
+    "__source__raw_orders AS (SELECT 1 AS id, 10 AS amount UNION ALL SELECT 2 AS id, 20 AS amount)"
+)
+_HELPER_SCOPE_TESTS: dict[str, str] = {
+    "helper_in_assert_passes": (
+        f"{_HELPER_SCOPE_SOURCE_MOCK},\n"
+        "expected_rows AS (SELECT 1 AS order_id, 20 AS amount UNION ALL SELECT 2, 40),\n"
+        "__assert__all_expected_rows_built AS (\n"
+        "  SELECT order_id, amount FROM expected_rows\n"
+        '  EXCEPT SELECT order_id, amount FROM __ref("orders")\n'
+        ")\n"
+    ),
+    "helper_in_assert_fails": (
+        f"{_HELPER_SCOPE_SOURCE_MOCK},\n"
+        "expected_rows AS (SELECT 1 AS order_id, 20 AS amount UNION ALL SELECT 3, 60),\n"
+        "__assert__all_expected_rows_built AS (\n"
+        "  SELECT order_id, amount FROM expected_rows\n"
+        '  EXCEPT SELECT order_id, amount FROM __ref("orders")\n'
+        ")\n"
+    ),
+    "helper_in_expected_passes": (
+        f"{_HELPER_SCOPE_SOURCE_MOCK},\n"
+        "expected_rows AS (SELECT 1 AS order_id, 20 AS amount UNION ALL SELECT 2, 40),\n"
+        "__expected__orders AS (SELECT order_id, amount FROM expected_rows)\n"
+    ),
+    "helper_in_expected_fails": (
+        f"{_HELPER_SCOPE_SOURCE_MOCK},\n"
+        "expected_rows AS (SELECT 1 AS order_id, 20 AS amount UNION ALL SELECT 2, 41),\n"
+        "__expected__orders AS (SELECT order_id, amount FROM expected_rows)\n"
+    ),
+    "mock_reads_helper_reading_mock": (
+        "__source__raw_orders AS (SELECT 1 AS id, 10 AS amount UNION ALL SELECT 2, 20),\n"
+        "base_rows AS (SELECT id AS order_id, amount FROM __source__raw_orders),\n"
+        "__ref__stg_orders AS (SELECT order_id, amount FROM base_rows),\n"
+        "expected_rows AS (SELECT order_id, amount * 2 AS amount FROM __ref__stg_orders),\n"
+        "__expected__orders AS (SELECT order_id, amount FROM expected_rows),\n"
+        "__assert__every_order_built AS (\n"
+        "  SELECT order_id, amount FROM expected_rows\n"
+        '  EXCEPT SELECT order_id, amount FROM __ref("orders")\n'
+        ")\n"
+    ),
+    "helper_reads_mock_and_helper": (
+        "__ref__stg_orders AS (SELECT 1 AS order_id, 10 AS amount UNION ALL SELECT 2, 20),\n"
+        "doubled AS (SELECT order_id, amount * 2 AS amount FROM __ref__stg_orders),\n"
+        "expected_rows AS (SELECT order_id, amount FROM doubled),\n"
+        "__expected__orders AS (SELECT order_id, amount FROM expected_rows),\n"
+        "__assert__every_order_doubled AS (\n"
+        "  SELECT order_id, amount FROM expected_rows\n"
+        '  EXCEPT SELECT order_id, amount FROM __ref("orders")\n'
+        ")\n"
+    ),
+}
+
+
+def build_helper_scope_project_files() -> dict[str, str]:
+    """Build an orders chain whose SQL tests read helper CTEs from expected and assertion SQL."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            'name = "helper_scope_demo"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "helper_scope_demo.duckdb"\n\n'
+            "[defaults]\n"
+            'materialized = "table"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+        ),
+        "models/stg_orders.sql": (
+            "MODEL (materialized table);\n\n"
+            'SELECT id AS order_id, amount FROM __source("raw_orders")\n'
+        ),
+        "models/orders.sql": (
+            "MODEL (materialized table);\n\n"
+            'SELECT order_id, amount * 2 AS amount FROM __ref("stg_orders")\n'
+        ),
+    }
+    for test_name, ctes in _HELPER_SCOPE_TESTS.items():
+        files[f"tests/unit/{test_name}.sql"] = (
+            f'TEST (name "{test_name}");\n\nWITH\n{ctes}SELECT 1\n'
+        )
+    return files
+
+
+_CURSOR_ORDER_ROWS: str = (
+    "__source__raw_orders AS (\n"
+    "  SELECT TIMESTAMP '1990-06-01' AS order_date, 1 AS amount\n"
+    "  UNION ALL SELECT TIMESTAMP '2026-01-31' AS order_date, 2 AS amount\n"
+    "  UNION ALL SELECT TIMESTAMP '2026-02-01' AS order_date, 3 AS amount\n"
+    "  UNION ALL SELECT TIMESTAMP '2026-02-02' AS order_date, 4 AS amount\n"
+    "  UNION ALL SELECT TIMESTAMP '2026-02-03' AS order_date, 5 AS amount\n"
+    ")"
+)
+_CURSOR_EVENT_ROWS: str = (
+    "__source__raw_events AS (\n"
+    "  SELECT 5 AS event_id, 1 AS amount\n"
+    "  UNION ALL SELECT 10 AS event_id, 2 AS amount\n"
+    "  UNION ALL SELECT 20 AS event_id, 3 AS amount\n"
+    ")"
+)
+_ALL_ORDER_DATES: str = (
+    "SELECT TIMESTAMP '1990-06-01' AS order_date, 1 AS amount\n"
+    "  UNION ALL SELECT TIMESTAMP '2026-01-31' AS order_date, 2 AS amount\n"
+    "  UNION ALL SELECT TIMESTAMP '2026-02-01' AS order_date, 3 AS amount\n"
+    "  UNION ALL SELECT TIMESTAMP '2026-02-02' AS order_date, 4 AS amount\n"
+    "  UNION ALL SELECT TIMESTAMP '2026-02-03' AS order_date, 5 AS amount"
+)
+CURSOR_WINDOW_PASSING_TESTS: dict[str, str] = {
+    "default_window_keeps_every_row": (
+        'TEST (name "default_window_keeps_every_row");\n\nWITH\n'
+        f"{_CURSOR_ORDER_ROWS},\n"
+        f"__expected__daily_orders AS (\n  {_ALL_ORDER_DATES}\n)\n"
+        "SELECT 1\n"
+    ),
+    "default_window_supports_date_arithmetic": (
+        'TEST (name "default_window_supports_date_arithmetic");\n\nWITH\n'
+        f"{_CURSOR_ORDER_ROWS},\n"
+        "__expected__order_lookback AS (\n"
+        "  SELECT DATE '1899-12-25' AS scan_start, DATE '3000-01-01' AS scan_end, 15 AS amount\n"
+        ")\n"
+        "SELECT 1\n"
+    ),
+    "declared_window_excludes_rows_outside": (
+        'TEST (name "declared_window_excludes_rows_outside", '
+        'cursor_start "2026-02-01", cursor_end "2026-02-03");\n\nWITH\n'
+        f"{_CURSOR_ORDER_ROWS},\n"
+        "__expected__daily_orders AS (\n"
+        "  SELECT TIMESTAMP '2026-02-01' AS order_date, 3 AS amount\n"
+        "  UNION ALL SELECT TIMESTAMP '2026-02-02' AS order_date, 4 AS amount\n"
+        ")\n"
+        "SELECT 1\n"
+    ),
+    "integer_default_window_keeps_every_row": (
+        'TEST (name "integer_default_window_keeps_every_row");\n\nWITH\n'
+        f"{_CURSOR_EVENT_ROWS},\n"
+        "__expected__event_totals AS (\n"
+        "  SELECT 5 AS event_id, 1 AS amount\n"
+        "  UNION ALL SELECT 10 AS event_id, 2 AS amount\n"
+        "  UNION ALL SELECT 20 AS event_id, 3 AS amount\n"
+        ")\n"
+        "SELECT 1\n"
+    ),
+    "integer_declared_window_excludes_rows_outside": (
+        'TEST (name "integer_declared_window_excludes_rows_outside", '
+        "cursor_start 10, cursor_end 20);\n\nWITH\n"
+        f"{_CURSOR_EVENT_ROWS},\n"
+        "__expected__event_totals AS (SELECT 10 AS event_id, 2 AS amount)\n"
+        "SELECT 1\n"
+    ),
+    "microbatch_runs_one_pass": (
+        'TEST (name "microbatch_runs_one_pass");\n\nWITH\n'
+        f"{_CURSOR_ORDER_ROWS},\n"
+        "__expected__hourly_orders AS (SELECT 5 AS order_count)\n"
+        "SELECT 1\n"
+    ),
+}
+
+
+def build_cursor_window_project_files(*, tests: dict[str, str]) -> dict[str, str]:
+    """Build intrinsic-using timestamp, integer and microbatch models plus one plain model."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            'name = "cursor_window_demo"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "cursor_window_demo.duckdb"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+            "  - name: raw_events\n    schema: main\n    table: raw_events\n"
+        ),
+        "models/daily_orders.sql": (
+            "MODEL (\n"
+            "  materialized incremental,\n"
+            "  incremental_strategy delete_insert,\n"
+            "  cursor order_date,\n"
+            "  cursor_type timestamp,\n"
+            "  cursor_grain day,\n"
+            '  cursor_start "2026-01-01",\n'
+            "  cursor_inputs (raw_orders order_date,),\n"
+            ");\n\n"
+            "SELECT order_date, amount\n"
+            'FROM __source("raw_orders")\n'
+            "WHERE order_date >= __cursor_start() AND order_date < __cursor_end()\n"
+        ),
+        "models/order_lookback.sql": (
+            "MODEL (\n"
+            "  materialized incremental,\n"
+            "  incremental_strategy delete_insert,\n"
+            "  cursor scan_start,\n"
+            "  cursor_type timestamp,\n"
+            "  cursor_grain day,\n"
+            "  cursor_inputs (raw_orders order_date,),\n"
+            ");\n\n"
+            "SELECT\n"
+            "  CAST(__cursor_start() AS DATE) - INTERVAL 7 DAY AS scan_start,\n"
+            "  CAST(__cursor_end() + INTERVAL 1 DAY AS DATE) AS scan_end,\n"
+            "  SUM(amount) AS amount\n"
+            'FROM __source("raw_orders")\n'
+            "WHERE order_date >= CAST(__cursor_start() AS DATE) - INTERVAL 7 DAY\n"
+        ),
+        "models/event_totals.sql": (
+            "MODEL (\n"
+            "  materialized incremental,\n"
+            "  incremental_strategy delete_insert,\n"
+            "  cursor event_id,\n"
+            "  cursor_type integer,\n"
+            "  cursor_inputs (raw_events event_id,),\n"
+            ");\n\n"
+            "SELECT event_id, amount\n"
+            'FROM __source("raw_events")\n'
+            "WHERE event_id >= __cursor_start() AND event_id < __cursor_end()\n"
+            "  AND event_id - 1 < __cursor_end() + 1\n"
+        ),
+        "models/plain_orders.sql": (
+            'MODEL (materialized table);\n\nSELECT amount FROM __source("raw_orders")\n'
+        ),
+        "models/hourly_orders.sql": (
+            "MODEL (\n"
+            "  materialized incremental,\n"
+            "  incremental_strategy delete_insert,\n"
+            "  incremental_mode microbatch,\n"
+            "  microbatch_strategy watermark,\n"
+            "  cursor_watermark_mode all,\n"
+            "  cursor order_hour,\n"
+            "  cursor_type timestamp,\n"
+            "  cursor_grain hour,\n"
+            "  cursor_inputs (raw_orders (column order_date, roles [filter, watermark]),),\n"
+            "  batch_size 1h,\n"
+            ");\n\n"
+            "SELECT COUNT(*) AS order_count\n"
+            'FROM __source("raw_orders")\n'
+            "WHERE order_date >= __cursor_start() AND order_date < __cursor_end()\n"
+        ),
+    }
+    for test_name, sql in tests.items():
+        files[f"tests/unit/{test_name}.sql"] = sql
+    return files
+
+
+def build_declared_window_test(*, window: str, model_name: str) -> dict[str, str]:
+    """Build one SQL test declaring a cursor window and expecting rows from one model."""
+
+    return {
+        "declared_window_case": (
+            f'TEST (name "declared_window_case", {window});\n\nWITH\n'
+            f"{_CURSOR_ORDER_ROWS},\n"
+            f"{_CURSOR_EVENT_ROWS},\n"
+            f"__expected__{model_name} AS (SELECT 1 AS amount)\n"
+            "SELECT 1\n"
+        )
+    }

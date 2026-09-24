@@ -5,8 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import threading
 from collections import defaultdict
-from contextvars import ContextVar
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import Context, ContextVar, Token, copy_context
 from datetime import UTC, datetime
 from typing import Any
 
@@ -34,6 +37,141 @@ _LAST_AUDIT_RESULT_PROJECTION: ContextVar[AuditResultProjection | None] = Contex
 )
 
 
+class _AuditResultPublisher:
+    """Publish each confirmed audit once, in the captured run context, and keep its record."""
+
+    def __init__(
+        self,
+        *,
+        plan: PlanOutput,
+        storage_database: str | None,
+        storage_schema: str | None,
+    ) -> None:
+        self.plan: PlanOutput = plan
+        self.identity: ExecutionIdentity | None = current_execution_identity()
+        self.database, self.schema = _storage_location(
+            plan=plan, database=storage_database, schema=storage_schema
+        )
+        self._context: Context = copy_context()
+        self._lock: threading.Lock = threading.Lock()
+        self._occurrence: defaultdict[tuple[str, str], int] = defaultdict(int)
+        self._records: dict[int, tuple[AuditExecutionResult, AuditResultRecord | None]] = {}
+        self.build_error: Exception | None = None
+
+    @property
+    def available(self) -> bool:
+        return (
+            self.identity is not None
+            and self.identity.run_id is not None
+            and self.schema is not None
+        )
+
+    def publish(self, results: tuple[AuditExecutionResult, ...]) -> None:
+        """Build and publish records for newly confirmed, non-reused results."""
+
+        if not self.available:
+            return
+        with self._lock:
+            for result in results:
+                if result.reused or id(result) in self._records:
+                    continue
+                record: AuditResultRecord | None = self._build(result)
+                self._records[id(result)] = (result, record)
+                if record is not None:
+                    self._context.run(_publish_safely, record)
+
+    def records_for(
+        self, results: tuple[AuditExecutionResult, ...]
+    ) -> tuple[AuditResultRecord, ...]:
+        """Return batch-ordered records, publishing any result not yet confirmed."""
+
+        self.publish(results)
+        if self.build_error is not None:
+            raise self.build_error
+        records: list[AuditResultRecord] = []
+        with self._lock:
+            for result in results:
+                record: AuditResultRecord | None = (
+                    None if result.reused else self._records[id(result)][1]
+                )
+                if record is not None:
+                    records.append(record)
+        return tuple(records)
+
+    def _build(self, result: AuditExecutionResult) -> AuditResultRecord | None:
+        if self.build_error is not None or self.identity is None or self.schema is None:
+            return None
+        try:
+            entry: AuditPlanEntry | None = next(
+                (
+                    candidate
+                    for candidate in self.plan.audit_entries
+                    if _matches(entry=candidate, result=result)
+                ),
+                None,
+            )
+            if entry is None:
+                _LOGGER.warning(
+                    "Audit result projection skipped unknown audit result '%s'", result.audit_name
+                )
+                return None
+            audit_id: AuditIdentity = build_audit_gate_identity(audits=(entry,)).audits[0]
+            occurrence_key: tuple[str, str] = (audit_id.binding_key, result.run_scope_phase.value)
+            ordinal: int = self._occurrence[occurrence_key]
+            self._occurrence[occurrence_key] = ordinal + 1
+            return _build_record(
+                result=result,
+                entry=entry,
+                audit_id=audit_id,
+                ordinal=ordinal,
+                plan=self.plan,
+                identity=self.identity,
+                storage_database=self.database,
+                storage_schema=self.schema,
+            )
+        except Exception as error:
+            self.build_error = error
+            return None
+
+
+_ACTIVE_AUDIT_RESULT_PUBLISHER: ContextVar[_AuditResultPublisher | None] = ContextVar(
+    "sqlbuild_active_audit_result_publisher", default=None
+)
+
+
+@contextmanager
+def audit_result_publication_scope_impl(
+    *,
+    plan: PlanOutput,
+    storage_database: str | None = None,
+    storage_schema: str | None = None,
+) -> Iterator[None]:
+    """Publish audit completions incrementally until the batch projection finalizes them."""
+
+    publisher: _AuditResultPublisher = _AuditResultPublisher(
+        plan=plan,
+        storage_database=storage_database,
+        storage_schema=storage_schema,
+    )
+    token: Token[_AuditResultPublisher | None] = _ACTIVE_AUDIT_RESULT_PUBLISHER.set(publisher)
+    try:
+        yield
+    finally:
+        _ACTIVE_AUDIT_RESULT_PUBLISHER.reset(token)
+
+
+def publish_completed_audit_results_impl(results: tuple[AuditExecutionResult, ...]) -> None:
+    """Publish confirmed audit outcomes through the active scope without raising."""
+
+    publisher: _AuditResultPublisher | None = _ACTIVE_AUDIT_RESULT_PUBLISHER.get()
+    if publisher is None:
+        return
+    try:
+        publisher.publish(results)
+    except Exception as error:
+        _LOGGER.warning("Audit result lifecycle publication degraded (%s)", error)
+
+
 def current_audit_result_projection_impl() -> AuditResultProjection | None:
     """Return the most recent audit projection report in this execution context."""
 
@@ -58,7 +196,15 @@ def project_audit_result_batch_impl(
         projection: AuditResultProjection = AuditResultProjection()
         _LAST_AUDIT_RESULT_PROJECTION.set(projection)
         return projection
-    identity: ExecutionIdentity | None = current_execution_identity()
+    active: _AuditResultPublisher | None = _ACTIVE_AUDIT_RESULT_PUBLISHER.get()
+    publisher: _AuditResultPublisher = (
+        active
+        if active is not None and active.plan is plan
+        else _AuditResultPublisher(
+            plan=plan, storage_database=storage_database, storage_schema=storage_schema
+        )
+    )
+    identity: ExecutionIdentity | None = publisher.identity
     if identity is None or identity.run_id is None:
         _LOGGER.warning("Audit result projection skipped because runtime identity is unavailable")
         projection = AuditResultProjection(
@@ -66,11 +212,8 @@ def project_audit_result_batch_impl(
         )
         _LAST_AUDIT_RESULT_PROJECTION.set(projection)
         return projection
-    database, schema = _storage_location(
-        plan=plan,
-        database=storage_database,
-        schema=storage_schema,
-    )
+    database: str | None = publisher.database
+    schema: str | None = publisher.schema
     if schema is None:
         _LOGGER.warning("Audit result projection skipped because target schema is unavailable")
         projection = AuditResultProjection(
@@ -80,13 +223,7 @@ def project_audit_result_batch_impl(
         return projection
 
     try:
-        records: tuple[AuditResultRecord, ...] = _build_records(
-            plan=plan,
-            results=executed,
-            identity=identity,
-            storage_database=database,
-            storage_schema=schema,
-        )
+        records: tuple[AuditResultRecord, ...] = publisher.records_for(executed)
     except Exception as error:
         _LOGGER.warning(
             "Audit result projection degraded: attempted=%d written=0 failed=%d (%s)",
@@ -100,15 +237,6 @@ def project_audit_result_batch_impl(
         _LAST_AUDIT_RESULT_PROJECTION.set(projection)
         return projection
     unmatched_count: int = len(executed) - len(records)
-    for record in records:
-        try:
-            _publish_audit_completed(record)
-        except Exception as error:
-            _LOGGER.warning(
-                "Audit result lifecycle publication degraded for '%s' (%s)",
-                record.audit_name,
-                error,
-            )
     if not records:
         projection = AuditResultProjection(
             attempted_count=len(executed), failed_count=len(executed)
@@ -148,103 +276,93 @@ def project_audit_result_batch_impl(
     return projection
 
 
-def _build_records(
+def _build_record(  # noqa: PLR0913
     *,
+    result: AuditExecutionResult,
+    entry: AuditPlanEntry,
+    audit_id: AuditIdentity,
+    ordinal: int,
     plan: PlanOutput,
-    results: tuple[AuditExecutionResult, ...],
     identity: ExecutionIdentity,
     storage_database: str | None,
     storage_schema: str,
-) -> tuple[AuditResultRecord, ...]:
-    entries: list[AuditPlanEntry] = list(plan.audit_entries)
-    occurrence: defaultdict[tuple[str, str], int] = defaultdict(int)
-    records: list[AuditResultRecord] = []
-    for result in results:
-        entry: AuditPlanEntry | None = next(
-            (candidate for candidate in entries if _matches(entry=candidate, result=result)),
-            None,
-        )
-        if entry is None:
-            _LOGGER.warning(
-                "Audit result projection skipped unknown audit result '%s'", result.audit_name
-            )
-            continue
-        audit_id: AuditIdentity = build_audit_gate_identity(audits=(entry,)).audits[0]
-        occurrence_key: tuple[str, str] = (audit_id.binding_key, result.run_scope_phase.value)
-        ordinal: int = occurrence[occurrence_key]
-        occurrence[occurrence_key] += 1
-        attempt_key: str = f"{result.run_scope_phase.value}:{ordinal}"
-        result_id: str = build_audit_result_id(
-            invocation_id=identity.invocation_id,
-            run_id=identity.run_id or "",
-            binding_key=audit_id.binding_key,
-            execution_fingerprint=audit_id.execution_fingerprint,
-            run_scope_phase=result.run_scope_phase.value,
-            attempt_key=attempt_key,
-        )
-        target: CompiledRelationLocation | None = (
-            plan.model_locations.get(result.attached_target_name)
-            if result.attached_target_name is not None
+) -> AuditResultRecord:
+    attempt_key: str = f"{result.run_scope_phase.value}:{ordinal}"
+    result_id: str = build_audit_result_id(
+        invocation_id=identity.invocation_id,
+        run_id=identity.run_id or "",
+        binding_key=audit_id.binding_key,
+        execution_fingerprint=audit_id.execution_fingerprint,
+        run_scope_phase=result.run_scope_phase.value,
+        attempt_key=attempt_key,
+    )
+    target: CompiledRelationLocation | None = (
+        plan.model_locations.get(result.attached_target_name)
+        if result.attached_target_name is not None
+        else None
+    )
+    thresholds: dict[str, object] | None = _render_thresholds(entry)
+    evidence: list[dict[str, object]] = [dict(row) for row in result.evidence_rows]
+    return AuditResultRecord(
+        result_id=result_id,
+        schema_version=AUDIT_RESULT_SCHEMA_VERSION,
+        occurred_at=datetime.now(UTC),
+        invocation_id=identity.invocation_id,
+        run_id=identity.run_id or "",
+        audit_name=result.audit_name,
+        audit_definition_name=result.audit_definition_name,
+        audit_description=result.audit_description,
+        binding_key=audit_id.binding_key,
+        definition_fingerprint=audit_id.definition_fingerprint,
+        execution_fingerprint=audit_id.execution_fingerprint,
+        evaluation_mode=result.evaluation_mode.value,
+        run_scope_phase=result.run_scope_phase.value,
+        attachment_kind=result.attachment_kind.value,
+        attached_target_kind=(
+            None if result.attached_target_kind is None else result.attached_target_kind.value
+        ),
+        attached_target_name=result.attached_target_name,
+        attached_column_name=result.attached_column_name,
+        target_database=(target.database if target is not None else storage_database),
+        target_schema=(target.schema if target is not None else storage_schema),
+        target_name=(target.name if target is not None else result.attached_target_name),
+        severity=result.severity.value,
+        outcome=result.outcome.value,
+        execution_error=result.execution_error,
+        violation_count=(
+            result.row_count if result.evaluation_mode == AuditEvaluationMode.VIOLATIONS else None
+        ),
+        measured_value=result.measured_value,
+        sample_count=result.sample_count,
+        sample_unit=result.sample_unit,
+        minimum_samples=result.minimum_samples,
+        thresholds_json=_json_or_none(thresholds),
+        evidence_json=_json_or_none(evidence) if evidence else None,
+        evidence_count=len(evidence),
+        evidence_truncated=result.evidence_truncated,
+        evidence_error=result.evidence_error,
+        measurement_sql=(
+            result.executed_sql
+            if result.evaluation_mode == AuditEvaluationMode.MEASUREMENT
             else None
+        ),
+        evidence_sql=result.evidence_sql,
+        executed_sql=result.executed_sql,
+        sql_digest=hashlib.sha256(result.executed_sql.encode("utf-8")).hexdigest(),
+        metadata_json=None,
+        reused=False,
+    )
+
+
+def _publish_safely(record: AuditResultRecord) -> None:
+    try:
+        _publish_audit_completed(record)
+    except Exception as error:
+        _LOGGER.warning(
+            "Audit result lifecycle publication degraded for '%s' (%s)",
+            record.audit_name,
+            error,
         )
-        thresholds: dict[str, object] | None = _render_thresholds(entry)
-        evidence: list[dict[str, object]] = [dict(row) for row in result.evidence_rows]
-        records.append(
-            AuditResultRecord(
-                result_id=result_id,
-                schema_version=AUDIT_RESULT_SCHEMA_VERSION,
-                occurred_at=datetime.now(UTC),
-                invocation_id=identity.invocation_id,
-                run_id=identity.run_id or "",
-                audit_name=result.audit_name,
-                audit_definition_name=result.audit_definition_name,
-                audit_description=result.audit_description,
-                binding_key=audit_id.binding_key,
-                definition_fingerprint=audit_id.definition_fingerprint,
-                execution_fingerprint=audit_id.execution_fingerprint,
-                evaluation_mode=result.evaluation_mode.value,
-                run_scope_phase=result.run_scope_phase.value,
-                attachment_kind=result.attachment_kind.value,
-                attached_target_kind=(
-                    None
-                    if result.attached_target_kind is None
-                    else result.attached_target_kind.value
-                ),
-                attached_target_name=result.attached_target_name,
-                attached_column_name=result.attached_column_name,
-                target_database=(target.database if target is not None else storage_database),
-                target_schema=(target.schema if target is not None else storage_schema),
-                target_name=(target.name if target is not None else result.attached_target_name),
-                severity=result.severity.value,
-                outcome=result.outcome.value,
-                execution_error=result.execution_error,
-                violation_count=(
-                    result.row_count
-                    if result.evaluation_mode == AuditEvaluationMode.VIOLATIONS
-                    else None
-                ),
-                measured_value=result.measured_value,
-                sample_count=result.sample_count,
-                sample_unit=result.sample_unit,
-                minimum_samples=result.minimum_samples,
-                thresholds_json=_json_or_none(thresholds),
-                evidence_json=_json_or_none(evidence) if evidence else None,
-                evidence_count=len(evidence),
-                evidence_truncated=result.evidence_truncated,
-                evidence_error=result.evidence_error,
-                measurement_sql=(
-                    result.executed_sql
-                    if result.evaluation_mode == AuditEvaluationMode.MEASUREMENT
-                    else None
-                ),
-                evidence_sql=result.evidence_sql,
-                executed_sql=result.executed_sql,
-                sql_digest=hashlib.sha256(result.executed_sql.encode("utf-8")).hexdigest(),
-                metadata_json=None,
-                reused=False,
-            )
-        )
-    return tuple(records)
 
 
 def _publish_audit_completed(record: AuditResultRecord) -> None:

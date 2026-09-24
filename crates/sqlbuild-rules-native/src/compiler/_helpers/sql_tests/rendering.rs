@@ -4,7 +4,9 @@ use std::collections::HashMap;
 
 use polyglot_sql::{Dialect, DialectType, Expression};
 
-use crate::compiler::_helpers::sql_tests::planning::leading_with_prefix_end;
+use crate::compiler::_helpers::sql_tests::cte_sql::{
+    cte_definition_sql, leading_with_prefix_end, with_leading_ctes,
+};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
@@ -67,6 +69,8 @@ pub(crate) struct ChainStep {
     pub(crate) resolved_sql: String,
     #[serde(default)]
     pub(crate) expected_cte_sql: Option<String>,
+    #[serde(default)]
+    pub(crate) expected_lifted_ctes: Vec<(String, String)>,
     #[serde(default)]
     pub(crate) lifted_ctes: Vec<(String, String)>,
     #[serde(default)]
@@ -139,6 +143,17 @@ impl<'a> RenderCteState<'a> {
                 .unwrap_or(&step.resolved_sql),
             enabled,
         )
+    }
+
+    /// Place an expected step's helper CTEs at top level and return its comparison body.
+    fn expected_step_sql(&mut self, step: &ChainStep, expected_sql: &str, enabled: bool) -> String {
+        if step.expected_lifted_ctes.is_empty() {
+            return self.lift(expected_sql, enabled);
+        }
+        if !self.merge(&step.expected_lifted_ctes) {
+            return with_leading_ctes(&step.expected_lifted_ctes, expected_sql);
+        }
+        self.lift(expected_sql, enabled)
     }
 
     fn merge(&mut self, ctes: &[(String, String)]) -> bool {
@@ -246,7 +261,8 @@ fn render_difference_sample_sql(request: &DifferenceSampleRequest, dialect: &Dia
     };
     let mut cte_state = RenderCteState::new(dialect);
     let actual_sql = cte_state.actual_step_sql(step, request.sql_analysis_enabled);
-    let expected_sql = cte_state.lift(expected_input, request.sql_analysis_enabled);
+    let expected_sql =
+        cte_state.expected_step_sql(step, expected_input, request.sql_analysis_enabled);
     let mut cte_parts: Vec<String> = cte_state
         .lifted
         .iter()
@@ -309,7 +325,8 @@ pub(crate) fn render_comparison_sql(request: &RenderRequest, dialect: &Dialect) 
         let Some(expected_input) = step.expected_cte_sql.as_deref() else {
             continue;
         };
-        let expected_sql = cte_state.lift(expected_input, request.sql_analysis_enabled);
+        let expected_sql =
+            cte_state.expected_step_sql(step, expected_input, request.sql_analysis_enabled);
         comparison_ctes.push(cte_definition_sql(&expected_cte, &expected_sql));
         let projection = compared_projection(step);
         select_parts.push(format!(
@@ -483,13 +500,6 @@ fn sanitize_cte_suffix(model_name: &str) -> String {
     } else {
         suffix.to_string()
     }
-}
-
-fn cte_definition_sql(name: &str, sql: &str) -> String {
-    let body = sql.trim_end();
-    let final_line = body.rsplit_once('\n').map_or(body, |(_, line)| line);
-    let terminator = if final_line.contains("--") { "\n" } else { "" };
-    format!("{name} AS ({body}{terminator})")
 }
 
 fn assertions_use_actual(assertions: &[AssertionStep], actual_cte: &str) -> bool {

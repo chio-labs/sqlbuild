@@ -17,6 +17,13 @@ class EventExporterConfigTestCase:
 
 
 @dataclass(frozen=True)
+class LifecycleShutdownTimeoutTestCase:
+    description: str
+    config: str
+    expected_seconds: int | None
+
+
+@dataclass(frozen=True)
 class DiscoverProjectInputsTestCase:
     description: str
     repo_files: dict[str, str]

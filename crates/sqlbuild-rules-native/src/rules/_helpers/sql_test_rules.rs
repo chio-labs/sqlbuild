@@ -1,12 +1,25 @@
+use crate::compiler::main::sql_test_fixture_facts::fixture_facts;
 use crate::models::{
-    DeclarationKind, Fault, ResourceKind, RuleMetadata, ScopeResource, SqlScenarioFact,
-    SqlTestFact, SqlTestMode,
+    DeclarationKind, EvaluateRequest, Fault, Model, ResourceKind, RuleMetadata, RulesConfig,
+    ScopeResource, SqlScenarioFact, SqlTestCteFact, SqlTestFact, SqlTestMode,
+};
+use crate::rules::_helpers::evaluation::{
+    dependency_name, group_by_empty, normalize_rules_sql, parse_rule_statements, unwrap_nested,
 };
 use crate::rules::models::ProjectEvaluationRequest;
+use sqlparser::ast::{
+    BinaryOperator, Expr, FunctionArg, FunctionArgExpr, LimitClause, Query, Select, SetExpr,
+    Statement, TableFactor, Value, Visit, Visitor,
+};
+use std::collections::BTreeMap;
+use std::ops::ControlFlow;
 use std::path::Path;
 
 const UNIT_ROOT: &str = "tests/unit";
 const SCENARIO_ROOT: &str = "tests/scenarios";
+const EMPTY_INPUT_RULE_CODE: &str = "SQBRTEST203";
+const ALLOWED_TESTS_OPTION: &str = "allowed_tests";
+const PROJECT_CONFIG_PATH: &str = "sqlbuild_project.toml";
 
 pub(crate) fn evaluate_project(
     evaluation: ProjectEvaluationRequest<'_>,
@@ -33,6 +46,13 @@ pub(crate) fn evaluate_project(
     }
     if let Some(rule) = evaluation.selected.get("SQBRTEST105") {
         faults.extend(scenario_descriptions(rule, &scenarios));
+    }
+    if let Some(rule) = evaluation.selected.get(EMPTY_INPUT_RULE_CODE) {
+        faults.extend(empty_input_only_faults(
+            rule,
+            &evaluation.request.config,
+            &tests,
+        ));
     }
     Ok(faults)
 }
@@ -544,4 +564,277 @@ fn slug(value: &str) -> String {
         }
     }
     output
+}
+
+pub(crate) fn annotate_empty_input_only_tests(mut request: EvaluateRequest) -> EvaluateRequest {
+    for test in &mut request.sql_tests {
+        test.empty_input_only = is_empty_input_only(test, &request.dialect);
+    }
+    let allowed = allowed_tests(&request.config);
+    let mut excluded: BTreeMap<String, u32> = BTreeMap::new();
+    for test in &request.sql_tests {
+        if !test.empty_input_only || is_allowlisted(test, &allowed) {
+            continue;
+        }
+        for name in &test.target_model_names {
+            *excluded.entry(name.clone()).or_default() += 1;
+        }
+    }
+    for model in &mut request.models {
+        model.empty_input_only_test_count = excluded.get(&model.name).copied().unwrap_or(0);
+    }
+    request
+}
+
+pub(crate) fn minimum_tests_shortfall(model: &Model, minimum: u32) -> Option<String> {
+    let excluded = model.empty_input_only_test_count;
+    let counted = model.targeting_test_count.saturating_sub(excluded);
+    if counted >= minimum {
+        return None;
+    }
+    let mut message = format!(
+        "model {:?} has {counted} tests; {minimum} required",
+        model.name
+    );
+    if excluded > 0 {
+        let noun = if excluded == 1 { "test" } else { "tests" };
+        message.push_str(&format!(
+            " ({excluded} empty-input-only {noun} not counted; see {EMPTY_INPUT_RULE_CODE})"
+        ));
+    }
+    Some(message)
+}
+
+fn empty_input_only_faults(
+    rule: &RuleMetadata,
+    config: &RulesConfig,
+    tests: &[&SqlTestFact],
+) -> Vec<Fault> {
+    let allowed = allowed_tests(config);
+    let mut faults: Vec<Fault> = Vec::new();
+    for test in tests {
+        if test.empty_input_only && !is_allowlisted(test, &allowed) {
+            faults.push(path_fault(
+                rule,
+                &test.source_path,
+                format!(
+                    "unit test block {} ({:?}) mocks only empty inputs and asserts only that no rows are produced",
+                    test.block_index, test.name
+                ),
+                rule.remediation.clone(),
+            ));
+        }
+    }
+    for entry in &allowed {
+        if !tests.iter().any(|test| test_named(test, entry)) {
+            faults.push(path_fault(
+                rule,
+                PROJECT_CONFIG_PATH,
+                format!("stale {ALLOWED_TESTS_OPTION} entry {entry:?} names no existing SQL test"),
+                format!(
+                    "Remove {entry:?} from [rules.rule_options.{EMPTY_INPUT_RULE_CODE}] {ALLOWED_TESTS_OPTION}, or correct it to the name of an existing test."
+                ),
+            ));
+        }
+    }
+    faults
+}
+
+fn allowed_tests(config: &RulesConfig) -> Vec<String> {
+    config.rule_option_strings(EMPTY_INPUT_RULE_CODE, ALLOWED_TESTS_OPTION)
+}
+
+fn is_allowlisted(test: &SqlTestFact, allowed: &[String]) -> bool {
+    allowed.iter().any(|entry| test_named(test, entry))
+}
+
+fn test_named(test: &SqlTestFact, entry: &str) -> bool {
+    test.name == entry || (test.case_name.is_some() && test.parent_name.as_deref() == Some(entry))
+}
+
+fn is_empty_input_only(test: &SqlTestFact, dialect: &str) -> bool {
+    if !matches!(test.mode, SqlTestMode::Model)
+        || test.has_macro_mocks
+        || test.has_model_query_overrides
+        || (test.expected_ctes.is_empty() && test.assertion_ctes.is_empty())
+    {
+        return false;
+    }
+    let mut mocks = test
+        .authored_ctes
+        .iter()
+        .filter(|cte| fixture_facts(&cte.name, &cte.sql).mock)
+        .peekable();
+    mocks.peek().is_some()
+        && mocks.all(|cte| empty_relation(cte, dialect))
+        && test
+            .expected_ctes
+            .iter()
+            .all(|cte| empty_relation(cte, dialect))
+        && test
+            .assertion_ctes
+            .iter()
+            .all(|cte| bare_row_existence(&cte.sql, &test.target_model_names, dialect))
+}
+
+fn empty_relation(cte: &SqlTestCteFact, dialect: &str) -> bool {
+    if fixture_facts(&cte.name, &cte.sql).empty_fixture_marker {
+        return true;
+    }
+    let Some(query) = parse_fixture_query(&cte.sql, dialect) else {
+        return false;
+    };
+    let SetExpr::Select(select) = query.body.as_ref() else {
+        return false;
+    };
+    query.with.is_none()
+        && (limited_to_zero_rows(&query)
+            || (filtered_to_zero_rows(select) && !contains_function(&query.order_by)))
+}
+
+fn parse_fixture_query(sql: &str, dialect: &str) -> Option<Query> {
+    let mut statements = match parse_rule_statements(&normalize_rules_sql(dialect, sql), dialect) {
+        Ok(statements) => statements,
+        Err(_) => return None,
+    };
+    match (statements.pop(), statements.is_empty()) {
+        (Some(Statement::Query(query)), true) => Some(*query),
+        _ => None,
+    }
+}
+
+fn limited_to_zero_rows(query: &Query) -> bool {
+    let limit = match &query.limit_clause {
+        Some(LimitClause::LimitOffset {
+            limit: Some(limit), ..
+        }) => limit,
+        Some(LimitClause::OffsetCommaLimit { limit, .. }) => limit,
+        _ => return false,
+    };
+    numeric_literal(limit) == Some(0.0)
+}
+
+fn filtered_to_zero_rows(select: &Select) -> bool {
+    let global_aggregate_possible = contains_function(select);
+    select.having.is_none()
+        && group_by_empty(&select.group_by)
+        && !global_aggregate_possible
+        && select.selection.as_ref().is_some_and(constant_false)
+}
+
+fn constant_false(predicate: &Expr) -> bool {
+    match unwrap_nested(predicate) {
+        Expr::Value(value) => matches!(value.value, Value::Boolean(false)),
+        Expr::BinaryOp {
+            left,
+            op: BinaryOperator::Eq,
+            right,
+        } => numeric_literal(left)
+            .zip(numeric_literal(right))
+            .is_some_and(|(left, right)| left != right),
+        _ => false,
+    }
+}
+
+fn numeric_literal(expression: &Expr) -> Option<f64> {
+    let Expr::Value(value) = unwrap_nested(expression) else {
+        return None;
+    };
+    let Value::Number(number, _) = &value.value else {
+        return None;
+    };
+    let Ok(parsed) = number.parse::<f64>() else {
+        return None;
+    };
+    Some(parsed)
+}
+
+fn bare_row_existence(sql: &str, targets: &[String], dialect: &str) -> bool {
+    let Some(query) = parse_fixture_query(sql, dialect) else {
+        return false;
+    };
+    let SetExpr::Select(select) = query.body.as_ref() else {
+        return false;
+    };
+    let [source] = select.from.as_slice() else {
+        return false;
+    };
+    let unfiltered = select.selection.is_none()
+        && select.prewhere.is_none()
+        && select.having.is_none()
+        && select.qualify.is_none()
+        && select.connect_by.is_none()
+        && select.lateral_views.is_empty()
+        && group_by_empty(&select.group_by);
+    query.with.is_none()
+        && unfiltered
+        && source.joins.is_empty()
+        && reference_target(&source.relation).is_some_and(|target| targets.contains(&target))
+        && !contains_function(&select.projection)
+        && !contains_function(&query.order_by)
+        && query.limit_clause.is_none()
+        && query.fetch.is_none()
+        && query_count(&query) == 1
+}
+
+fn reference_target(factor: &TableFactor) -> Option<String> {
+    if dependency_name(factor).as_deref() != Some("__ref") {
+        return None;
+    }
+    let TableFactor::Table {
+        args: Some(arguments),
+        ..
+    } = factor
+    else {
+        return None;
+    };
+    let [FunctionArg::Unnamed(FunctionArgExpr::Expr(argument))] = arguments.args.as_slice() else {
+        return None;
+    };
+    match unwrap_nested(argument) {
+        Expr::Identifier(identifier) => Some(identifier.value.clone()),
+        Expr::Value(value) => match &value.value {
+            Value::SingleQuotedString(name) | Value::DoubleQuotedString(name) => Some(name.clone()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn contains_function<T: Visit>(node: &T) -> bool {
+    struct Functions;
+
+    impl Visitor for Functions {
+        type Break = ();
+
+        fn pre_visit_expr(&mut self, expression: &Expr) -> ControlFlow<Self::Break> {
+            if matches!(expression, Expr::Function(_)) {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        }
+    }
+
+    node.visit(&mut Functions).is_break()
+}
+
+fn query_count(query: &Query) -> usize {
+    #[derive(Default)]
+    struct Queries {
+        count: usize,
+    }
+
+    impl Visitor for Queries {
+        type Break = ();
+
+        fn pre_visit_query(&mut self, _query: &Query) -> ControlFlow<Self::Break> {
+            self.count += 1;
+            ControlFlow::Continue(())
+        }
+    }
+
+    let mut queries = Queries::default();
+    let _ = query.visit(&mut queries);
+    queries.count
 }

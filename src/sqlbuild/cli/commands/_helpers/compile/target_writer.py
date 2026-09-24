@@ -361,18 +361,34 @@ def _write_tests(
     return managed_paths
 
 
-def _write_static_tests(
-    *,
-    target_dir: Path,
-    adapter: BaseAdapter,
-    project: CompiledProject,
-    check_existing: bool,
-) -> tuple[set[Path], tuple[CompilerDiagnostic, ...]]:
-    """Write offline SQL-native test SQL and report uncached planning errors."""
+def static_sql_test_planning_diagnostics(
+    *, target_dir: Path, adapter: BaseAdapter, project: CompiledProject
+) -> tuple[CompilerDiagnostic, ...]:
+    """Plan uncached SQL tests and report their errors without writing artifacts or cache."""
+
+    pending, _, _ = _partition_cached_static_tests(
+        tests_root=target_dir / _COMPILED_DIR / _TESTS_DIR, adapter=adapter, project=project
+    )
+    tests: tuple[CompiledSqlTest, ...] = tuple(test for test, _, _ in pending)
+    artifacts: tuple[NativeSqlTestArtifact, ...] = _plan_static_test_artifacts(
+        adapter=adapter, project=project, tests=tests
+    )
+    diagnostics: list[CompilerDiagnostic] = []
+    for test, artifact in zip(tests, artifacts, strict=True):
+        diagnostics.extend(_sql_test_artifact_diagnostics(test=test, artifact=artifact))
+    return tuple(diagnostics)
+
+
+def _partition_cached_static_tests(
+    *, tests_root: Path, adapter: BaseAdapter, project: CompiledProject
+) -> tuple[
+    list[tuple[CompiledSqlTest, str | None, str | None]],
+    set[Path],
+    dict[str, SqlTestArtifactCacheRecord],
+]:
+    """Split SQL tests into pending work and reusable cached artifacts."""
 
     managed_paths: set[Path] = set()
-    diagnostics: list[CompilerDiagnostic] = []
-    tests_root: Path = target_dir / _COMPILED_DIR / _TESTS_DIR
     cached_records: dict[str, SqlTestArtifactCacheRecord] = read_sql_test_artifact_cache(
         cache_dir=project.compile_cache_dir
     )
@@ -411,19 +427,44 @@ def _write_static_tests(
                     current_records[record_key] = cached_record
                     continue
         pending.append((test, record_key, artifact_identity))
+    return pending, managed_paths, current_records
 
-    native_artifacts: tuple[NativeSqlTestArtifact, ...] = ()
-    if pending:
-        with OperationLifecycle(
-            operation_kind="project", operation_name="sql_test_planning"
-        ) as lifecycle:
-            native_artifacts = plan_and_render_sql_test_artifacts(
-                project=project,
-                tests=tuple(test for test, _, _ in pending),
-                adapter=adapter,
-                sql_analysis_enabled=project.settings.sql_analysis,
-            )
-            lifecycle.completed(metadata={"item_count": len(native_artifacts)})
+
+def _plan_static_test_artifacts(
+    *, adapter: BaseAdapter, project: CompiledProject, tests: tuple[CompiledSqlTest, ...]
+) -> tuple[NativeSqlTestArtifact, ...]:
+    if not tests:
+        return ()
+    with OperationLifecycle(
+        operation_kind="project", operation_name="sql_test_planning"
+    ) as lifecycle:
+        native_artifacts: tuple[NativeSqlTestArtifact, ...] = plan_and_render_sql_test_artifacts(
+            project=project,
+            tests=tests,
+            adapter=adapter,
+            sql_analysis_enabled=project.settings.sql_analysis,
+        )
+        lifecycle.completed(metadata={"item_count": len(native_artifacts)})
+    return native_artifacts
+
+
+def _write_static_tests(
+    *,
+    target_dir: Path,
+    adapter: BaseAdapter,
+    project: CompiledProject,
+    check_existing: bool,
+) -> tuple[set[Path], tuple[CompilerDiagnostic, ...]]:
+    """Write offline SQL-native test SQL and report uncached planning errors."""
+
+    diagnostics: list[CompilerDiagnostic] = []
+    tests_root: Path = target_dir / _COMPILED_DIR / _TESTS_DIR
+    pending, managed_paths, current_records = _partition_cached_static_tests(
+        tests_root=tests_root, adapter=adapter, project=project
+    )
+    native_artifacts: tuple[NativeSqlTestArtifact, ...] = _plan_static_test_artifacts(
+        adapter=adapter, project=project, tests=tuple(test for test, _, _ in pending)
+    )
     for (test, record_key, artifact_identity), artifact in zip(
         pending, native_artifacts, strict=True
     ):
@@ -433,11 +474,11 @@ def _write_static_tests(
         )
         _write_sql(path=test_path, sql=artifact.sql, check_existing=check_existing)
         managed_paths.add(test_path)
-        if artifact.error_messages:
-            diagnostics.extend(
-                _sql_test_error_diagnostic(test=test, message=message)
-                for message in artifact.error_messages
-            )
+        artifact_diagnostics: tuple[CompilerDiagnostic, ...] = _sql_test_artifact_diagnostics(
+            test=test, artifact=artifact
+        )
+        if artifact_diagnostics:
+            diagnostics.extend(artifact_diagnostics)
             continue
         if record_key is not None and artifact_identity is not None:
             record: SqlTestArtifactCacheRecord | None = build_sql_test_artifact_cache_record(
@@ -455,15 +496,20 @@ def _write_static_tests(
     return managed_paths, tuple(diagnostics)
 
 
-def _sql_test_error_diagnostic(*, test: CompiledSqlTest, message: str) -> CompilerDiagnostic:
-    return CompilerDiagnostic(
-        phase=DiagnosticPhase.TEST,
-        severity=DiagnosticSeverity.ERROR,
-        code=_SQL_TEST_PLANNING_ERROR_CODE,
-        message=message,
-        resource_type=CompiledResourceType.SQL_TEST,
-        resource_name=test.name,
-        path=test.source_path,
+def _sql_test_artifact_diagnostics(
+    *, test: CompiledSqlTest, artifact: NativeSqlTestArtifact
+) -> tuple[CompilerDiagnostic, ...]:
+    return tuple(
+        CompilerDiagnostic(
+            phase=DiagnosticPhase.TEST,
+            severity=DiagnosticSeverity.ERROR,
+            code=_SQL_TEST_PLANNING_ERROR_CODE,
+            message=message,
+            resource_type=CompiledResourceType.SQL_TEST,
+            resource_name=test.name,
+            path=test.source_path,
+        )
+        for message in artifact.error_messages
     )
 
 

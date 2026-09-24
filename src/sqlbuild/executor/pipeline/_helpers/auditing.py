@@ -23,6 +23,12 @@ from sqlbuild.diagnostics.classes.diagnostic_record_redactor import DiagnosticRe
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.main._execute import execute_audit
 from sqlbuild.executor.auditing.main._project_results import project_audit_result_batch
+from sqlbuild.executor.auditing.main.audit_result_publication_scope import (
+    audit_result_publication_scope,
+)
+from sqlbuild.executor.auditing.main.publish_completed_audit_results import (
+    publish_completed_audit_results,
+)
 from sqlbuild.executor.auditing.main.resource_id import audit_resource_id
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.pipeline._helpers.connections import (
@@ -76,6 +82,7 @@ class _AuditProjection:
                     callbacks.on_audit_error(entries[completion.index])
             elif completion.result is not None:
                 self.results[completion.index] = completion.result
+                publish_completed_audit_results((completion.result,))
                 if callbacks.on_audit_physical_complete is not None:
                     callbacks.on_audit_physical_complete(completion.result)
         except BaseException as error:
@@ -299,33 +306,38 @@ def _run_audits(
             callbacks.on_connection_complete(
                 worker_count, elapsed_seconds=time.monotonic() - connection_started
             )
-        if worker_count == 1:
-            results: tuple[AuditExecutionResult, ...] = _run_serial_audits(
-                entries=entries,
-                plan=plan,
-                adapter=adapter,
-                connection=connections[0],
-                callbacks=callbacks,
-                run_id=run_id,
-            )
-        else:
-            results = _run_concurrent_audits(
-                entries=entries,
-                plan=plan,
-                adapter=adapter,
-                connections=connections,
-                worker_count=worker_count,
-                callbacks=callbacks,
-                run_id=run_id,
-            )
-        project_audit_result_batch(
+        with audit_result_publication_scope(
             plan=plan,
-            results=results,
-            adapter=adapter,
-            connection=connections[0],
             storage_database=storage_database,
             storage_schema=storage_schema,
-        )
+        ):
+            if worker_count == 1:
+                results: tuple[AuditExecutionResult, ...] = _run_serial_audits(
+                    entries=entries,
+                    plan=plan,
+                    adapter=adapter,
+                    connection=connections[0],
+                    callbacks=callbacks,
+                    run_id=run_id,
+                )
+            else:
+                results = _run_concurrent_audits(
+                    entries=entries,
+                    plan=plan,
+                    adapter=adapter,
+                    connections=connections,
+                    worker_count=worker_count,
+                    callbacks=callbacks,
+                    run_id=run_id,
+                )
+            project_audit_result_batch(
+                plan=plan,
+                results=results,
+                adapter=adapter,
+                connection=connections[0],
+                storage_database=storage_database,
+                storage_schema=storage_schema,
+            )
         return results
     except BaseException as error:
         active_error = error

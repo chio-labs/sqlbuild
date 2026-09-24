@@ -135,7 +135,9 @@ Effective kinds are the intersection of declaration, global, and named sets. Eff
 severity is the strictest of all three. Omitting declaration options means all kinds at `debug`.
 Unknown lifecycle sink names, keys, kinds, or severities fail before execution.
 Python declarations should use `LifecycleEventKind`; TOML continues to use the corresponding string
-values. The `audit` kind carries `audit_completed` after an audit outcome is confirmed. Its payload
+values. The `audit` kind carries `audit_completed` as soon as each audit outcome is confirmed during
+the run: standalone, source, and end audits publish per audit, and model audits publish when their
+model result completes. Each executed (non-reused) audit publishes exactly once. Its payload
 includes audit and attachment identity, evaluation mode, outcome and severity, run scope, optional
 measurement/sample/threshold summary, bounded evidence metadata and rendered audit SQL diagnostics.
 
@@ -165,7 +167,18 @@ injection, constructs providers, and calls each required provider's `setup` at m
 use. Shared providers are torn down once in reverse setup order.
 
 Shutdown stops lifecycle-event acceptance, performs a bounded drain, and only then requests provider
-teardown. Each lifecycle sink invocation runs on its own daemon isolation thread. A call has a one-second
+teardown. The drain defaults to two seconds and is configurable for all lifecycle sinks:
+
+```toml
+[sinks.lifecycle]
+shutdown_timeout = "30s"
+```
+
+`shutdown_timeout` is a fixed duration string from `"0s"` to `"10m"` such as `"30s"` or `"2m"`;
+values outside that range, calendar units, or non-strings fail before execution. `"0s"` drops anything still queued at exit. The setting is global only and is not
+accepted under `[sinks.lifecycle.named.<sink>]`. It bounds how long the command waits at exit; it does
+not change the per-invocation timeout below. A sink that exports audit results should keep each call
+well below that one-second invocation bound and use a drain long enough to flush the tail of a run. Each lifecycle sink invocation runs on its own daemon isolation thread. A call has a one-second
 default timeout; after timeout that sink is blocked from later invocations. Python cannot kill
 the thread or reverse destination side effects. Provider teardown is deferred until all live
 invocations return, so a forever-hung daemon retains its provider session until process exit. A
@@ -207,6 +220,19 @@ periodic slot is overwritten by the latest snapshot while notification is blocke
 coalesced rather than backlogged. Failure notices use a separate bounded queue and may be dropped.
 The final summary has a retained write-once slot. Notification callbacks run on one daemon worker;
 exceptions are swallowed, and shutdown does not wait for callbacks.
+
+When the final summary reports any `dropped` or `failed` lifecycle attempts, the command prints one
+warning line to stderr after its own output, for example:
+
+```text
+Warning: command completed successfully, but lifecycle event export was incomplete: 140 of 248 events dropped, 0 failed (sink 'orders_events'). Increase sinks.lifecycle.shutdown_timeout or check sink health.
+```
+
+The success clause appears only when the command itself succeeded, so the warning never makes a
+successful run look failed; otherwise it starts `Warning: lifecycle event export was incomplete`.
+Export loss never changes the exit code, and stdout (including `--json`) is unaffected. Nothing is
+printed when every accepted attempt was delivered. With several sinks the counts are event
+deliveries and only affected sinks are named.
 
 Nonfinal health always has `flush_complete=false`. Final `flush_complete=true` means the dispatcher
 stopped, no exporter invocation remains live, the queue is empty, and all accepted pairs satisfy the

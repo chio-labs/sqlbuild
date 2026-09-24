@@ -39,6 +39,7 @@ macro_rules! rule {
                     | "SQBRTEST103"
                     | "SQBRTEST104"
                     | "SQBRTEST105"
+                    | "SQBRTEST203"
                     | "SQBRTEST301"
             ),
             custom: false,
@@ -309,6 +310,13 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
         ),
         minimum_tests_rule(),
         rule!(
+            "SQBRTEST203",
+            "tests",
+            "empty-input-only-test",
+            "SQL unit tests must not only prove that empty inputs produce no rows",
+            "Mock representative input rows and assert concrete transformed output in __expected__<model> or a targeted __assert__ CTE, or delete this test. An empty-input test is legitimate only when it asserts concrete output, for example a global aggregate that must return one zero-valued summary row compared against expected rows. List a reviewed exception by test name in [rules.rule_options.SQBRTEST203] allowed_tests.",
+        ),
+        rule!(
             "SQBRTEST301",
             "tests",
             "custom-rule-test-coverage",
@@ -351,7 +359,7 @@ fn minimum_tests_rule() -> RuleMetadata {
         slug: "minimum-tests".into(),
         message: "non-passthrough models must have the configured minimum unit tests".into(),
         remediation: guidance.remediation(
-            "Add a SQL unit test that mocks each real import and asserts concrete transformed rows.",
+            "Add a SQL unit test that mocks each real import and asserts concrete transformed rows. Empty-input-only tests flagged by SQBRTEST203 do not count toward this minimum unless they are listed in its allowed_tests option; do not write them to satisfy the minimum.",
         ),
         guidance: Some(guidance),
         implementation_fingerprint: env!("CARGO_PKG_VERSION").into(),

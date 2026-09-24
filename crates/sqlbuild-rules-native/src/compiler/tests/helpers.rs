@@ -1011,3 +1011,188 @@ pub(crate) fn snowflake_plan_keeps_quoted_expected_columns() -> bool {
     ), "{sql}");
     true
 }
+
+fn plan_helper_scope_request(
+    sql_analysis_enabled: bool,
+    helper_name: &str,
+) -> Result<String, String> {
+    crate::compiler::main::sql_test_planning::plan_and_render_json(
+        &json!({
+            "models": [
+                {
+                    "name": "orders",
+                    "querySql": "SELECT order_id, amount FROM __ref(\"stg_orders\")",
+                    "modelDependencies": ["stg_orders"]
+                }
+            ],
+            "tests": [{
+                "name": "orders_case",
+                "fileLabel": "tests/orders.sql",
+                "payload": {
+                    "kind": "model",
+                    "authoredCtes": [
+                        {"name": "__ref__stg_orders", "sqlBody": "SELECT 1 AS order_id, 10 AS amount"},
+                        {"name": "expected_rows", "sqlBody": "SELECT 1 AS order_id, 10 AS amount"},
+                        {"name": helper_name, "sqlBody": "SELECT s.order_id FROM __ref__stg_orders AS s JOIN expected_rows AS e ON e.order_id = s.order_id"},
+                        {"name": "unused_rows", "sqlBody": "SELECT 3 AS order_id"}
+                    ],
+                    "expectedCtes": [{
+                        "name": "__expected__orders",
+                        "sqlBody": "SELECT order_id, amount FROM expected_rows"
+                    }],
+                    "expectedModelNames": ["orders"],
+                    "assertionCtes": [{
+                        "name": "__assert__ids_match",
+                        "sqlBody": format!("SELECT order_id FROM __ref(\"orders\") EXCEPT SELECT order_id FROM {helper_name}")
+                    }]
+                }
+            }],
+            "sqlAnalysisEnabled": sql_analysis_enabled,
+            "sqlAnalysisDialect": "duckdb",
+            "setDifferenceOperator": "EXCEPT"
+        })
+        .to_string(),
+    )
+}
+
+fn top_level_cte_position(sql: &str, name: &str) -> usize {
+    let needle = format!("{name} AS (");
+    let positions: Vec<usize> = sql
+        .match_indices(&needle)
+        .map(|(index, _)| index)
+        .filter(|index| *index == 5 || sql[..*index].ends_with(",\n"))
+        .collect();
+    assert_eq!(
+        positions.len(),
+        1,
+        "{name} must be defined once at top level: {sql}"
+    );
+    positions[0]
+}
+
+pub(crate) fn helper_ctes_are_in_scope_for_assertions_and_expected_rows() -> bool {
+    for sql_analysis_enabled in [true, false] {
+        let response: Value = serde_json::from_str(
+            &plan_helper_scope_request(sql_analysis_enabled, "matched_ids")
+                .expect("test assumption must hold"),
+        )
+        .expect("test assumption must hold");
+        let sql = response["artifacts"][0]["sql"]
+            .as_str()
+            .expect("test assumption must hold");
+        let mock = top_level_cte_position(sql, "__ref__stg_orders");
+        let expected_rows = top_level_cte_position(sql, "expected_rows");
+        let matched_ids = top_level_cte_position(sql, "matched_ids");
+        let expected = top_level_cte_position(sql, "__expected__orders");
+        let assertion = top_level_cte_position(sql, "__assert__ids_match");
+        assert!(mock < matched_ids && expected_rows < matched_ids, "{sql}");
+        assert!(expected_rows < expected && matched_ids < assertion, "{sql}");
+        assert!(
+            !sql.contains(",\nunused_rows AS ("),
+            "unreferenced helpers stay out of top-level scope: {sql}"
+        );
+        assert_eq!(response["artifacts"][0]["warnings"], json!([]), "{sql}");
+    }
+    true
+}
+
+pub(crate) fn scoped_helper_named_like_generated_cte_is_rejected() -> bool {
+    let error =
+        plan_helper_scope_request(true, "__actual__orders").expect_err("test assumption must hold");
+    assert_eq!(
+        error,
+        "compile_input:SQL test 'tests/orders.sql' defines CTE '__actual__orders', which conflicts with the generated CTE"
+    );
+    true
+}
+
+pub(crate) fn difference_sample_lifts_expected_helper_ctes() -> bool {
+    let response: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_difference_sampling::render_difference_sample_json(
+            &json!({
+                "step": {
+                    "modelName": "orders",
+                    "resolvedSql": "SELECT 1 AS order_id",
+                    "expectedCteSql": "SELECT order_id FROM expected_rows",
+                    "expectedLiftedCtes": [["expected_rows", "SELECT 2 AS order_id"]],
+                    "expectedColumns": ["order_id"]
+                },
+                "sqlAnalysisEnabled": false,
+                "setDifferenceOperator": "EXCEPT",
+                "sqlAnalysisDialect": "duckdb",
+                "direction": "missing",
+                "sampleLimit": 3
+            })
+            .to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+    assert_eq!(
+        response["sql"],
+        json!(
+            "WITH expected_rows AS (SELECT 2 AS order_id),\n\
+             __actual AS (SELECT 1 AS order_id),\n\
+             __expected AS (SELECT order_id FROM expected_rows)\n\
+             SELECT * FROM (SELECT order_id FROM __expected EXCEPT SELECT order_id FROM __actual) \
+             AS __sqlbuild_difference LIMIT 3"
+        )
+    );
+    true
+}
+
+pub(crate) fn mock_read_through_helper_brings_its_mock_dependencies_into_scope() -> bool {
+    for sql_analysis_enabled in [true, false] {
+        let response: Value = serde_json::from_str(
+            &crate::compiler::main::sql_test_planning::plan_and_render_json(
+                &json!({
+                    "models": [
+                        {"name": "raw_orders", "querySql": "SELECT 1 AS order_id", "modelDependencies": []},
+                        {"name": "stg_orders", "querySql": "SELECT order_id FROM __ref(\"raw_orders\")", "modelDependencies": ["raw_orders"]},
+                        {"name": "orders", "querySql": "SELECT order_id FROM __ref(\"stg_orders\")", "modelDependencies": ["stg_orders"]}
+                    ],
+                    "tests": [{
+                        "name": "orders_case",
+                        "fileLabel": "tests/orders.sql",
+                        "payload": {
+                            "kind": "model",
+                            "authoredCtes": [
+                                {"name": "__ref__raw_orders", "sqlBody": "SELECT 1 AS order_id"},
+                                {"name": "base_rows", "sqlBody": "SELECT order_id FROM __ref__raw_orders"},
+                                {"name": "__ref__stg_orders", "sqlBody": "SELECT order_id FROM base_rows"},
+                                {"name": "expected_rows", "sqlBody": "SELECT order_id FROM __ref__stg_orders"}
+                            ],
+                            "expectedCtes": [{
+                                "name": "__expected__orders",
+                                "sqlBody": "SELECT order_id FROM expected_rows"
+                            }],
+                            "expectedModelNames": ["orders"],
+                            "assertionCtes": [{
+                                "name": "__assert__rows_match",
+                                "sqlBody": "SELECT order_id FROM expected_rows EXCEPT SELECT order_id FROM __ref(\"orders\")"
+                            }]
+                        }
+                    }],
+                    "sqlAnalysisEnabled": sql_analysis_enabled,
+                    "sqlAnalysisDialect": "duckdb",
+                    "setDifferenceOperator": "EXCEPT"
+                })
+                .to_string(),
+            )
+            .expect("test assumption must hold"),
+        )
+        .expect("test assumption must hold");
+        let sql = response["artifacts"][0]["sql"]
+            .as_str()
+            .expect("test assumption must hold");
+        let raw_mock = top_level_cte_position(sql, "__ref__raw_orders");
+        let stg_mock = top_level_cte_position(sql, "__ref__stg_orders");
+        let expected_rows = top_level_cte_position(sql, "expected_rows");
+        let actual = top_level_cte_position(sql, "__actual__orders");
+        let assertion = top_level_cte_position(sql, "__assert__rows_match");
+        assert!(raw_mock < stg_mock && stg_mock < expected_rows, "{sql}");
+        assert!(raw_mock < actual && expected_rows < assertion, "{sql}");
+        assert_eq!(response["artifacts"][0]["warnings"], json!([]), "{sql}");
+    }
+    true
+}

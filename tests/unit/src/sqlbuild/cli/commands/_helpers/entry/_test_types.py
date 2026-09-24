@@ -35,3 +35,11 @@ class QueryDiffParsingTestCase:
     expected_right_query: str | None
     expected_keys: tuple[str, ...]
     expected_unkeyed: bool
+
+
+@dataclass(frozen=True)
+class EventExportWarningTestCase:
+    description: str
+    exporter_counts: tuple[tuple[str, int, int, int, int], ...]
+    command_succeeded: bool
+    expected_message: str | None

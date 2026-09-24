@@ -150,3 +150,18 @@ pub(crate) struct SqlTestRulesCacheTestCase {
     pub(crate) expected_second_hits: u64,
     pub(crate) expected_second_misses: u64,
 }
+
+pub(crate) struct EmptyInputTestRuleTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) test: Value,
+    pub(crate) allowed_tests: Value,
+    pub(crate) expected_messages: &'static [&'static str],
+}
+
+pub(crate) struct EmptyInputMinimumTestsTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) select: Value,
+    pub(crate) tests: Value,
+    pub(crate) allowed_tests: Value,
+    pub(crate) expected_messages: &'static [&'static str],
+}

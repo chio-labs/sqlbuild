@@ -15,6 +15,13 @@ from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.audit_results.exceptions import AuditResultStorageError
 from sqlbuild.executor.audit_results.models import AuditResultRecord
 from sqlbuild.executor.auditing.main._project_results import project_audit_result_batch
+from sqlbuild.executor.auditing.main.audit_result_publication_scope import (
+    audit_result_publication_scope,
+)
+from sqlbuild.executor.auditing.main.publish_completed_audit_results import (
+    publish_completed_audit_results,
+)
+from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.runtime.observability.classes.event_dispatcher import EventDispatcher
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from sqlbuild.runtime.observability.main.dispatcher_scope import dispatcher_scope
@@ -178,11 +185,11 @@ def test_given_record_build_failure_when_projected_then_reports_degradation_with
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    def fail_record_build(**kwargs: object) -> tuple[AuditResultRecord, ...]:
+    def fail_record_build(**kwargs: object) -> AuditResultRecord:
         del kwargs
         raise RuntimeError("invalid record")
 
-    monkeypatch.setattr(projection_module, "_build_records", fail_record_build)
+    monkeypatch.setattr(projection_module, "_build_record", fail_record_build)
 
     with identity_scope(ExecutionIdentity(invocation_id="invocation", run_id="run")):
         projection: Any = project_audit_result_batch(
@@ -285,6 +292,55 @@ def test_given_lifecycle_validation_failure_when_projected_then_continues_and_pe
     assert lifecycle_publisher.call_count == 2
     assert "Audit result lifecycle publication degraded" in caplog.text
     assert build_projection_result().outcome == test_case.expected_outcome
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [AuditExecutionCase("incremental publication", AuditOutcome.WARN)],
+    ids=lambda case: case.description,
+)
+def test_given_publication_scope_when_audits_complete_then_events_precede_batch_without_duplicates(
+    test_case: AuditExecutionCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    writer_calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        projection_module,
+        "write_audit_result_records",
+        lambda **kwargs: writer_calls.append(kwargs),
+    )
+    dispatcher: EventDispatcher = EventDispatcher()
+    events: list[LifecycleEvent] = []
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+    plan: PlanOutput = PlanOutput(audit_entries=(build_projection_entry(),))
+    early: AuditExecutionResult = build_projection_result()
+    late: AuditExecutionResult = build_projection_result()
+
+    with (
+        identity_scope(ExecutionIdentity(invocation_id="invocation", run_id="run")),
+        dispatcher_scope(dispatcher),
+        audit_result_publication_scope(plan=plan, storage_schema="analytics"),
+    ):
+        publish_completed_audit_results((early,))
+        publish_completed_audit_results((early,))
+        events_before_batch: int = len(events)
+        projection: Any = project_audit_result_batch(
+            plan=plan,
+            results=(early, late),
+            adapter=writer_adapter(),
+            connection=object(),
+            storage_schema="analytics",
+        )
+
+    records: tuple[AuditResultRecord, ...] = writer_calls[0]["records"]
+    assert events_before_batch == 1
+    assert len(events) == 2
+    assert [event.payload["result_id"] for event in events] == [
+        record.result_id for record in records
+    ]
+    assert records[0].result_id != records[1].result_id
+    assert projection.written_count == 2
+    assert early.outcome == test_case.expected_outcome
 
 
 if __name__ == "__main__":

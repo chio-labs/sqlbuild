@@ -10,7 +10,17 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::compiler::_helpers::sql_tests::cte_sql::{
+    cte_definition_sql, leading_with_prefix_end, with_leading_ctes, with_unique_ctes,
+};
 use crate::compiler::_helpers::sql_tests::expected_columns::expected_columns;
+use crate::compiler::_helpers::sql_tests::helper_scope::{
+    ScopeGraph, helper_scope_ctes, merged_scoped_ctes,
+};
+use crate::compiler::_helpers::sql_tests::markers::{
+    in_protected_range, marker_names, protected_ranges, replace_callable_markers,
+    replace_dbt_ref_markers, replace_named_markers,
+};
 use crate::compiler::_helpers::sql_tests::rendering::{
     AssertionStep, ChainStep, RenderRequest, render_comparison_sql, render_dialect,
     rendered_chain_steps,
@@ -20,11 +30,18 @@ use crate::constants::{TABLE_FUNCTION_TEST_MODE, UDF_TEST_MODE};
 const DEFAULT_WORKERS: usize = 4;
 const MAX_WORKERS: usize = 4;
 const WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
-const REF_PREFIX: &str = "__ref__";
-const SOURCE_PREFIX: &str = "__source__";
-const SEED_PREFIX: &str = "__seed__";
-const DBT_REF_PREFIX: &str = "__dbt_ref__";
+pub(crate) const REF_PREFIX: &str = "__ref__";
+pub(crate) const SOURCE_PREFIX: &str = "__source__";
+pub(crate) const SEED_PREFIX: &str = "__seed__";
+pub(crate) const DBT_REF_PREFIX: &str = "__dbt_ref__";
 const TABLE_FUNCTION_PREFIX: &str = "__table_fn__";
+pub(crate) const MOCK_CTE_PREFIXES: [&str; 5] = [
+    REF_PREFIX,
+    SOURCE_PREFIX,
+    SEED_PREFIX,
+    DBT_REF_PREFIX,
+    TABLE_FUNCTION_PREFIX,
+];
 const EXPECTED_PREFIX: &str = "__expected__";
 const ASSERT_PREFIX: &str = "__assert__";
 const REF_FUNCTION: &str = "__ref";
@@ -131,9 +148,9 @@ enum TestPayload {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CteInput {
-    name: String,
-    sql_body: String,
+pub(crate) struct CteInput {
+    pub(crate) name: String,
+    pub(crate) sql_body: String,
 }
 
 /// One planned SQL test: the executable chain and assertion steps plus optional rendered SQL.
@@ -183,7 +200,7 @@ struct ProjectContext {
 }
 
 #[derive(Clone)]
-struct SqlTestPatterns {
+pub(crate) struct SqlTestPatterns {
     reference: Regex,
     source: Regex,
     seed: Regex,
@@ -191,7 +208,8 @@ struct SqlTestPatterns {
     table_function: Regex,
     dbt_reference: Regex,
     test_reference: Regex,
-    protected: Regex,
+    pub(crate) protected: Regex,
+    pub(crate) identifier: Regex,
 }
 
 impl SqlTestPatterns {
@@ -209,6 +227,7 @@ impl SqlTestPatterns {
             protected: compile_pattern(
                 r#"(?s)'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\$\$.*?\$\$|--[^\n]*|/\*.*?\*/"#,
             )?,
+            identifier: compile_pattern(r"[A-Za-z_][A-Za-z0-9_$]*")?,
         })
     }
 }
@@ -236,13 +255,14 @@ pub(crate) struct AnalysisTemplate {
 type AnalysisTemplateCell = Arc<OnceLock<Option<AnalysisTemplate>>>;
 type AnalysisTemplateCache = Mutex<HashMap<String, AnalysisTemplateCell>>;
 
-struct TestFixtures {
-    mock_refs: BTreeMap<String, String>,
-    mock_sources: BTreeMap<String, String>,
-    mock_seeds: BTreeMap<String, String>,
-    mock_dbt_refs: BTreeMap<String, String>,
+pub(crate) struct TestFixtures {
+    pub(crate) mock_refs: BTreeMap<String, String>,
+    pub(crate) mock_sources: BTreeMap<String, String>,
+    pub(crate) mock_seeds: BTreeMap<String, String>,
+    pub(crate) mock_dbt_refs: BTreeMap<String, String>,
     mock_table_functions: BTreeMap<String, String>,
-    helpers: Vec<CteInput>,
+    pub(crate) helpers: Vec<CteInput>,
+    pub(crate) scope: ScopeGraph,
     expected: BTreeMap<String, String>,
     assertions: Vec<(String, String)>,
 }
@@ -279,6 +299,7 @@ struct TextualChain {
     cte_names: HashMap<String, String>,
     bodies: HashMap<String, String>,
     dependencies: HashMap<String, Vec<String>>,
+    mock_ctes: HashMap<String, Vec<(String, String)>>,
     order: Vec<String>,
 }
 
@@ -307,7 +328,7 @@ impl TextualChain {
             };
             let query_sql = inputs.overrides.get(model_name).unwrap_or(&model.query_sql);
             let mut chain_references: Vec<String> = Vec::new();
-            let (resolved_sql, reached) = resolve_textual_sql(TextualResolutionRequest {
+            let resolution = resolve_textual_sql(TextualResolutionRequest {
                 query_sql,
                 fixtures: inputs.fixtures,
                 resolved_chain: &self.cte_names,
@@ -315,8 +336,10 @@ impl TextualChain {
                 functions: &inputs.context.functions,
                 patterns: &inputs.context.patterns,
             })?;
-            reachable.extend(reached);
-            self.insert(model_name, resolved_sql, chain_references);
+            reachable.extend(resolution.reached);
+            self.mock_ctes
+                .insert(model_name.to_string(), resolution.mock_ctes);
+            self.insert(model_name, resolution.sql, chain_references);
         }
         Ok(reachable)
     }
@@ -349,42 +372,37 @@ impl TextualChain {
                 stack.extend(dependencies.iter().cloned());
             }
         }
-        self.order
-            .iter()
-            .filter(|name| needed.contains(*name))
-            .filter_map(|name| {
-                Some((
-                    self.cte_names.get(name)?.clone(),
-                    self.bodies.get(name)?.clone(),
-                ))
-            })
-            .collect()
+        let mut ctes: Vec<(String, String)> = with_unique_ctes(
+            Vec::new(),
+            self.order
+                .iter()
+                .filter(|name| needed.contains(*name) || roots.contains(name))
+                .filter_map(|name| self.mock_ctes.get(name))
+                .flatten()
+                .cloned(),
+        );
+        ctes.extend(
+            self.order
+                .iter()
+                .filter(|name| needed.contains(*name))
+                .filter_map(|name| {
+                    Some((
+                        self.cte_names.get(name)?.clone(),
+                        self.bodies.get(name)?.clone(),
+                    ))
+                }),
+        );
+        ctes
     }
 
     fn step(&self, model_name: &str) -> Option<TextualStep> {
         let body_sql = self.bodies.get(model_name)?.clone();
         let lifted_ctes = self.closure_ctes(&[model_name.to_string()], false);
         Some(TextualStep {
-            resolved_sql: with_generated_ctes(&lifted_ctes, &body_sql),
+            resolved_sql: with_leading_ctes(&lifted_ctes, &body_sql),
             lifted_ctes,
             body_sql,
         })
-    }
-}
-
-/// Prefix generated CTEs to a query, merging into its own leading WITH clause when present.
-fn with_generated_ctes(ctes: &[(String, String)], body: &str) -> String {
-    if ctes.is_empty() {
-        return body.to_string();
-    }
-    let definitions: String = ctes
-        .iter()
-        .map(|(name, sql)| cte_definition_sql(name, sql))
-        .collect::<Vec<_>>()
-        .join(", ");
-    match leading_with_prefix_end(body) {
-        Some(end) => format!("{}{definitions}, {}", &body[..end], &body[end..]),
-        None => format!("WITH {definitions} {body}"),
     }
 }
 
@@ -463,9 +481,9 @@ impl GeneratedCteState {
     }
 
     fn mock_target(&mut self, request: MockTargetRequest<'_>) -> Result<Option<String>, String> {
-        let Some(mock_body) = request.mocks.get(request.referenced_name) else {
+        if !request.mocks.contains_key(request.referenced_name) {
             return Ok(None);
-        };
+        }
         self.reachable.insert(request.referenced_name.to_string());
         let generated_name = format!("{}{}", request.prefix, request.referenced_name);
         if self.names.contains(&generated_name)
@@ -480,14 +498,20 @@ impl GeneratedCteState {
                 request.file_label, request.referenced_name
             )));
         }
-        let sql = if request.fixtures.helpers.is_empty() {
-            mock_body.clone()
-        } else {
-            format!(
-                "{} {mock_body}",
-                helper_with_clause(&request.fixtures.helpers)
-            )
-        };
+        for dependency in request.fixtures.scope.mock_dependencies(&generated_name) {
+            self.reachable.insert(dependency.mock_name.clone());
+            self.insert(
+                &dependency.generated_name,
+                &dependency.sql,
+                request.file_label,
+            )?;
+        }
+        let sql = request
+            .fixtures
+            .scope
+            .mock_sql(&generated_name)
+            .ok_or_else(|| planner_error("SQL-test mock scope is incomplete"))?
+            .to_string();
         self.insert(&generated_name, &sql, request.file_label)?;
         Ok(Some(generated_name))
     }
@@ -680,7 +704,6 @@ fn plan_direct_test(
     plan: DirectTestPlan,
     context: &ProjectContext,
 ) -> Result<PlannedResponse, String> {
-    let helper_with = helper_with_clause(&plan.helpers);
     let mut actual_sql = plan.actual_cte.sql_body;
     if plan.mode == UDF_TEST_MODE {
         actual_sql =
@@ -693,8 +716,9 @@ fn plan_direct_test(
     let request = RenderRequest {
         chain: vec![ChainStep {
             model_name: model_name.clone(),
-            resolved_sql: wrap_direct_sql(&actual_sql, &helper_with),
-            expected_cte_sql: Some(wrap_direct_sql(&plan.expected_cte.sql_body, &helper_with)),
+            resolved_sql: with_helper_ctes(&actual_sql, &plan.helpers),
+            expected_cte_sql: Some(with_helper_ctes(&plan.expected_cte.sql_body, &plan.helpers)),
+            expected_lifted_ctes: Vec::new(),
             lifted_ctes: Vec::new(),
             comparison_body_sql: None,
             expected_columns: None,
@@ -716,7 +740,9 @@ fn plan_model_test(
     plan: ModelTestPlan,
     context: &ProjectContext,
 ) -> Result<PlannedResponse, String> {
-    let fixtures = classify_fixtures(plan.authored_ctes, plan.expected_ctes, plan.assertion_ctes);
+    let mut fixtures =
+        classify_fixtures(plan.authored_ctes, plan.expected_ctes, plan.assertion_ctes);
+    fixtures.scope = ScopeGraph::new(&fixtures, &context.patterns);
     let expected_names = chain_root_names(plan.expected_model_names, &fixtures, &context.patterns);
     let ordered_names = topo_sort_model_chain(TopoSortRequest {
         expected_names: &expected_names,
@@ -797,6 +823,14 @@ fn plan_model_test(
             reported: &mut reported_missing_mocks,
         }));
         let expected_cte_sql = fixtures.expected.get(model_name).cloned();
+        let expected_lifted_ctes = match expected_cte_sql.as_deref() {
+            Some(sql) => {
+                let scope = helper_scope_ctes(sql, &fixtures, &context.patterns, &plan.file_label)?;
+                reachable_mocks.extend(scope.reached_mocks);
+                scope.ctes
+            }
+            None => Vec::new(),
+        };
         chain.push(ChainStep {
             model_name: model_name.clone(),
             resolved_sql,
@@ -804,6 +838,7 @@ fn plan_model_test(
                 .as_deref()
                 .and_then(|sql| expected_columns(sql, &context.render_dialect)),
             expected_cte_sql,
+            expected_lifted_ctes,
             lifted_ctes,
             comparison_body_sql,
         });
@@ -834,7 +869,7 @@ fn plan_model_test(
             } else {
                 None
             };
-        let (resolved_sql, lifted_ctes, comparison_body_sql) = match analyzed {
+        let (mut resolved_sql, mut lifted_ctes, comparison_body_sql) = match analyzed {
             Some(value)
                 if !has_unresolved_test_reference(&value.resolved_sql, &context.patterns) =>
             {
@@ -876,6 +911,20 @@ fn plan_model_test(
                 )
             }
         };
+        let scope = helper_scope_ctes(
+            &fixture_resolved_sql,
+            &fixtures,
+            &context.patterns,
+            &plan.file_label,
+        )?;
+        if !scope.ctes.is_empty() {
+            reachable_mocks.extend(scope.reached_mocks);
+            lifted_ctes = merged_scoped_ctes(lifted_ctes, scope.ctes, &plan.file_label)?;
+            resolved_sql = with_leading_ctes(
+                &lifted_ctes,
+                comparison_body_sql.as_deref().unwrap_or(&resolved_sql),
+            );
+        }
         assertions.push(AssertionStep {
             name: assertion_name.clone(),
             resolved_sql,
@@ -919,6 +968,7 @@ fn omit_unrendered_step_sql(chain: Vec<ChainStep>, assertions: &[AssertionStep])
                     model_name: step.model_name,
                     resolved_sql: String::new(),
                     expected_cte_sql: step.expected_cte_sql,
+                    expected_lifted_ctes: step.expected_lifted_ctes,
                     lifted_ctes: Vec::new(),
                     comparison_body_sql: None,
                     expected_columns: step.expected_columns,
@@ -992,8 +1042,7 @@ fn resolve_assertion_textual_sql(
         }
         referenced.push(name);
     }
-    let lifted_ctes: Vec<(String, String)> = request.chain.closure_ctes(&referenced, true);
-    let (body_sql, reached) = resolve_textual_sql(TextualResolutionRequest {
+    let resolution = resolve_textual_sql(TextualResolutionRequest {
         query_sql: request.assertion_sql,
         fixtures: request.fixtures,
         resolved_chain: &request.chain.cte_names,
@@ -1001,6 +1050,12 @@ fn resolve_assertion_textual_sql(
         functions: request.functions,
         patterns: request.patterns,
     })?;
+    let lifted_ctes: Vec<(String, String)> = with_unique_ctes(
+        resolution.mock_ctes,
+        request.chain.closure_ctes(&referenced, true),
+    );
+    let body_sql = resolution.sql;
+    let reached = resolution.reached;
     let resolved_sql = if lifted_ctes.is_empty() {
         body_sql.clone()
     } else {
@@ -1032,6 +1087,7 @@ fn classify_fixtures(
         mock_dbt_refs: BTreeMap::new(),
         mock_table_functions: BTreeMap::new(),
         helpers: Vec::new(),
+        scope: ScopeGraph::default(),
         expected: BTreeMap::new(),
         assertions: Vec::new(),
     };
@@ -1204,7 +1260,7 @@ fn analyze_and_resolve_sql(
         }
     }
     let cte_body_sql = replace_relation_markers(request.query_sql, &replacements, request.patterns);
-    let resolved_sql = assemble_resolved_sql(&cte_body_sql, &generated_state.generated);
+    let resolved_sql = with_leading_ctes(&generated_state.generated, &cte_body_sql);
     Ok(Some(AnalysisResolvedSql {
         resolved_sql,
         cte_body_sql,
@@ -1259,11 +1315,16 @@ where
     Ok(cached.get_or_init(initialize).clone())
 }
 
-fn resolve_textual_sql(
-    request: TextualResolutionRequest<'_>,
-) -> Result<(String, HashSet<String>), String> {
-    let helper_with = helper_with_clause(&request.fixtures.helpers);
+/// Textually resolved SQL plus the mocks it reached and the mock CTEs its inlined mocks read.
+struct TextualResolution {
+    sql: String,
+    reached: HashSet<String>,
+    mock_ctes: Vec<(String, String)>,
+}
+
+fn resolve_textual_sql(request: TextualResolutionRequest<'_>) -> Result<TextualResolution, String> {
     let mut reached: HashSet<String> = HashSet::new();
+    let mut inlined: Vec<String> = Vec::new();
     let mut chain_references = request.chain_references;
     let mut result = replace_named_markers(
         request.query_sql,
@@ -1278,10 +1339,12 @@ fn resolve_textual_sql(
                 }
                 return Some(sql.clone());
             }
-            request.fixtures.mock_refs.get(name).map(|sql| {
-                reached.insert(name.to_string());
-                wrap_mock(sql, &helper_with)
-            })
+            request.fixtures.mock_refs.get(name)?;
+            let generated_name = format!("{REF_PREFIX}{name}");
+            let sql = request.fixtures.scope.inlined_mock_sql(&generated_name)?;
+            reached.insert(name.to_string());
+            inlined.push(generated_name);
+            Some(sql)
         },
     );
     result = replace_named_markers(
@@ -1289,10 +1352,12 @@ fn resolve_textual_sql(
         &request.patterns.source,
         &request.patterns.protected,
         |name| {
-            request.fixtures.mock_sources.get(name).map(|sql| {
-                reached.insert(name.to_string());
-                wrap_mock(sql, &helper_with)
-            })
+            request.fixtures.mock_sources.get(name)?;
+            let generated_name = format!("{SOURCE_PREFIX}{name}");
+            let sql = request.fixtures.scope.inlined_mock_sql(&generated_name)?;
+            reached.insert(name.to_string());
+            inlined.push(generated_name);
+            Some(sql)
         },
     );
     result = replace_named_markers(
@@ -1300,10 +1365,12 @@ fn resolve_textual_sql(
         &request.patterns.seed,
         &request.patterns.protected,
         |name| {
-            request.fixtures.mock_seeds.get(name).map(|sql| {
-                reached.insert(name.to_string());
-                wrap_mock(sql, &helper_with)
-            })
+            request.fixtures.mock_seeds.get(name)?;
+            let generated_name = format!("{SEED_PREFIX}{name}");
+            let sql = request.fixtures.scope.inlined_mock_sql(&generated_name)?;
+            reached.insert(name.to_string());
+            inlined.push(generated_name);
+            Some(sql)
         },
     );
     result = replace_dbt_ref_markers(
@@ -1311,10 +1378,12 @@ fn resolve_textual_sql(
         &request.patterns.dbt_reference,
         &request.patterns.protected,
         |name| {
-            request.fixtures.mock_dbt_refs.get(name).map(|sql| {
-                reached.insert(name.to_string());
-                wrap_mock(sql, &helper_with)
-            })
+            request.fixtures.mock_dbt_refs.get(name)?;
+            let generated_name = format!("{DBT_REF_PREFIX}{name}");
+            let sql = request.fixtures.scope.inlined_mock_sql(&generated_name)?;
+            reached.insert(name.to_string());
+            inlined.push(generated_name);
+            Some(sql)
         },
     );
     let (table_resolved, table_reached) = resolve_table_function_fixtures(
@@ -1326,7 +1395,22 @@ fn resolve_textual_sql(
     reached.extend(table_reached);
     result = resolve_function_calls(&table_resolved, request.functions, false, request.patterns)?;
     result = resolve_function_calls(&result, request.functions, true, request.patterns)?;
-    Ok((result, reached))
+    let mut mock_ctes: Vec<(String, String)> = Vec::new();
+    for generated_name in inlined {
+        let dependencies = request.fixtures.scope.mock_dependencies(&generated_name);
+        reached.extend(dependencies.iter().map(|mock| mock.mock_name.clone()));
+        mock_ctes = with_unique_ctes(
+            mock_ctes,
+            dependencies
+                .into_iter()
+                .map(|mock| (mock.generated_name.clone(), mock.sql.clone())),
+        );
+    }
+    Ok(TextualResolution {
+        sql: result,
+        reached,
+        mock_ctes,
+    })
 }
 
 fn resolve_table_function_fixtures(
@@ -1338,7 +1422,6 @@ fn resolve_table_function_fixtures(
     if fixtures.is_empty() {
         return Ok((sql.to_string(), HashSet::new()));
     }
-    let helper_with = helper_with_clause(helpers);
     replace_callable_markers(
         sql,
         &patterns.table_function,
@@ -1346,7 +1429,7 @@ fn resolve_table_function_fixtures(
         |name, _call_suffix| {
             fixtures
                 .get(name)
-                .map(|body| (wrap_mock(body, &helper_with), true))
+                .map(|body| (format!("({})", with_helper_ctes(body, helpers)), true))
         },
     )
 }
@@ -1379,108 +1462,6 @@ fn resolve_function_calls(
             Some((format!("{prefix}{call_suffix}{suffix}"), false))
         })?;
     Ok(result)
-}
-
-fn replace_callable_markers<F>(
-    sql: &str,
-    pattern: &Regex,
-    protected_pattern: &Regex,
-    mut replacement: F,
-) -> Result<(String, HashSet<String>), String>
-where
-    F: FnMut(&str, &str) -> Option<(String, bool)>,
-{
-    let protected = protected_ranges(protected_pattern, sql);
-    let mut output = String::with_capacity(sql.len());
-    let mut reached: HashSet<String> = HashSet::new();
-    let mut cursor = 0;
-    for captures in pattern.captures_iter(sql) {
-        let Some(full) = captures.get(0) else {
-            continue;
-        };
-        if full.start() < cursor || in_protected_range(full.start(), &protected) {
-            continue;
-        }
-        let suffix_start = skip_whitespace(sql, full.end());
-        if !sql[suffix_start..].starts_with('(') {
-            continue;
-        }
-        let suffix_end = matching_paren_end(sql, suffix_start)?;
-        let Some(name) = captures.get(1).map(|value| value.as_str()) else {
-            continue;
-        };
-        let call_suffix = &sql[suffix_start..suffix_end];
-        let Some((value, records_reach)) = replacement(name, call_suffix) else {
-            continue;
-        };
-        output.push_str(&sql[cursor..full.start()]);
-        output.push_str(&value);
-        cursor = suffix_end;
-        if records_reach {
-            reached.insert(name.to_string());
-        }
-    }
-    output.push_str(&sql[cursor..]);
-    Ok((output, reached))
-}
-
-fn matching_paren_end(sql: &str, open: usize) -> Result<usize, String> {
-    let bytes = sql.as_bytes();
-    let mut depth = 0usize;
-    let mut index = open;
-    while index < bytes.len() {
-        match bytes[index] {
-            b'\'' | b'"' | b'`' => index = skip_quoted(sql, index)?,
-            b'-' if bytes.get(index + 1) == Some(&b'-') => {
-                index = sql[index..]
-                    .find('\n')
-                    .map_or(bytes.len(), |offset| index + offset + 1)
-            }
-            b'/' if bytes.get(index + 1) == Some(&b'*') => {
-                let Some(offset) = sql[index + 2..].find("*/") else {
-                    return Err(compile_error(
-                        "SQL function call contains an unclosed block comment",
-                    ));
-                };
-                index += offset + 4;
-            }
-            b'(' => {
-                depth += 1;
-                index += 1;
-            }
-            b')' => {
-                depth -= 1;
-                index += 1;
-                if depth == 0 {
-                    return Ok(index);
-                }
-            }
-            _ => index += 1,
-        }
-    }
-    Err(compile_error(
-        "SQL function call contains an unclosed parenthesis",
-    ))
-}
-
-fn skip_quoted(sql: &str, start: usize) -> Result<usize, String> {
-    let quote = sql.as_bytes()[start];
-    let bytes = sql.as_bytes();
-    let mut index = start + 1;
-    while index < bytes.len() {
-        if bytes[index] != quote {
-            index += 1;
-            continue;
-        }
-        if bytes.get(index + 1) == Some(&quote) {
-            index += 2;
-            continue;
-        }
-        return Ok(index + 1);
-    }
-    Err(compile_error(
-        "SQL function call contains an unclosed quoted string",
-    ))
 }
 
 fn relation_marker_calls(value: &Value) -> Vec<(String, String)> {
@@ -1587,172 +1568,6 @@ fn replace_relation_markers(
                 .cloned()
         },
     )
-}
-
-fn replace_named_markers<F>(
-    sql: &str,
-    pattern: &Regex,
-    protected_pattern: &Regex,
-    mut replacement: F,
-) -> String
-where
-    F: FnMut(&str) -> Option<String>,
-{
-    let protected = protected_ranges(protected_pattern, sql);
-    let mut output = String::with_capacity(sql.len());
-    let mut cursor = 0;
-    for captures in pattern.captures_iter(sql) {
-        let Some(full) = captures.get(0) else {
-            continue;
-        };
-        if in_protected_range(full.start(), &protected) {
-            continue;
-        }
-        let Some(name) = captures.get(1).map(|value| value.as_str()) else {
-            continue;
-        };
-        let Some(value) = replacement(name) else {
-            continue;
-        };
-        output.push_str(&sql[cursor..full.start()]);
-        output.push_str(&value);
-        cursor = full.end();
-    }
-    output.push_str(&sql[cursor..]);
-    output
-}
-
-fn replace_dbt_ref_markers<F>(
-    sql: &str,
-    pattern: &Regex,
-    protected_pattern: &Regex,
-    mut replacement: F,
-) -> String
-where
-    F: FnMut(&str) -> Option<String>,
-{
-    let protected = protected_ranges(protected_pattern, sql);
-    let mut output = String::with_capacity(sql.len());
-    let mut cursor = 0;
-    for captures in pattern.captures_iter(sql) {
-        let Some(full) = captures.get(0) else {
-            continue;
-        };
-        if in_protected_range(full.start(), &protected) {
-            continue;
-        }
-        let Some(first) = captures.get(1).map(|value| value.as_str()) else {
-            continue;
-        };
-        let name = captures.get(2).map_or_else(
-            || first.to_string(),
-            |second| format!("{first}__{}", second.as_str()),
-        );
-        let Some(value) = replacement(&name) else {
-            continue;
-        };
-        output.push_str(&sql[cursor..full.start()]);
-        output.push_str(&value);
-        cursor = full.end();
-    }
-    output.push_str(&sql[cursor..]);
-    output
-}
-
-fn marker_names(pattern: &Regex, protected_pattern: &Regex, sql: &str) -> Vec<String> {
-    let protected = protected_ranges(protected_pattern, sql);
-    let mut names: Vec<String> = Vec::new();
-    for captures in pattern.captures_iter(sql) {
-        let Some(full) = captures.get(0) else {
-            continue;
-        };
-        if in_protected_range(full.start(), &protected) {
-            continue;
-        }
-        if let Some(name) = captures.get(1) {
-            names.push(name.as_str().to_string());
-        }
-    }
-    names
-}
-
-fn protected_ranges(pattern: &Regex, sql: &str) -> Vec<(usize, usize)> {
-    pattern
-        .find_iter(sql)
-        .map(|value| (value.start(), value.end()))
-        .collect()
-}
-
-fn in_protected_range(index: usize, ranges: &[(usize, usize)]) -> bool {
-    ranges
-        .iter()
-        .any(|(start, end)| index >= *start && index < *end)
-}
-
-fn assemble_resolved_sql(cte_body_sql: &str, generated: &[(String, String)]) -> String {
-    if generated.is_empty() {
-        return cte_body_sql.to_string();
-    }
-    let generated_sql = generated
-        .iter()
-        .map(|(name, sql)| cte_definition_sql(name, sql))
-        .collect::<Vec<_>>()
-        .join(", ");
-    if let Some(with_end) = leading_with_prefix_end(cte_body_sql) {
-        format!(
-            "{}{generated_sql}, {}",
-            &cte_body_sql[..with_end],
-            &cte_body_sql[with_end..]
-        )
-    } else {
-        format!("WITH {generated_sql} {cte_body_sql}")
-    }
-}
-
-pub(crate) fn leading_with_prefix_end(sql: &str) -> Option<usize> {
-    let mut index = skip_leading_ignorable(sql, 0);
-    index = keyword_end(sql, index, "WITH")?;
-    index = skip_leading_ignorable(sql, index);
-    if let Some(recursive_end) = keyword_end(sql, index, "RECURSIVE") {
-        index = skip_leading_ignorable(sql, recursive_end);
-    }
-    Some(index)
-}
-
-fn skip_leading_ignorable(sql: &str, mut index: usize) -> usize {
-    while index < sql.len() {
-        let byte = sql.as_bytes()[index];
-        if byte.is_ascii_whitespace() {
-            index += 1;
-        } else if sql[index..].starts_with("--") {
-            index = sql[index..]
-                .find('\n')
-                .map_or(sql.len(), |offset| index + offset + 1);
-        } else if sql[index..].starts_with("/*") {
-            let Some(offset) = sql[index + 2..].find("*/") else {
-                return index;
-            };
-            index += offset + 4;
-        } else {
-            break;
-        }
-    }
-    index
-}
-
-fn keyword_end(sql: &str, start: usize, keyword: &str) -> Option<usize> {
-    let end = start + keyword.len();
-    if !sql.get(start..end)?.eq_ignore_ascii_case(keyword) {
-        return None;
-    }
-    if sql
-        .as_bytes()
-        .get(end)
-        .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
-    {
-        return None;
-    }
-    Some(end)
 }
 
 struct UnresolvedReferenceRequest<'a> {
@@ -1894,38 +1709,13 @@ fn helper_with_clause(helpers: &[CteInput]) -> String {
     )
 }
 
-fn cte_definition_sql(name: &str, sql: &str) -> String {
-    let body = sql.trim_end();
-    let final_line = body.rsplit_once('\n').map_or(body, |(_, line)| line);
-    let terminator = if final_line.contains("--") { "\n" } else { "" };
-    format!("{name} AS ({body}{terminator})")
-}
-
-fn wrap_mock(sql: &str, helper_with: &str) -> String {
-    if helper_with.is_empty() {
-        format!("({sql})")
-    } else {
-        format!("({helper_with} {sql})")
-    }
-}
-
-fn wrap_direct_sql(sql: &str, helper_with: &str) -> String {
-    if helper_with.is_empty() {
+/// Prefix every helper CTE to a query; mock and direct-test bodies all see helpers this way.
+pub(crate) fn with_helper_ctes(sql: &str, helpers: &[CteInput]) -> String {
+    if helpers.is_empty() {
         sql.to_string()
     } else {
-        format!("{helper_with} {sql}")
+        format!("{} {sql}", helper_with_clause(helpers))
     }
-}
-
-fn skip_whitespace(sql: &str, mut index: usize) -> usize {
-    while sql
-        .as_bytes()
-        .get(index)
-        .is_some_and(u8::is_ascii_whitespace)
-    {
-        index += 1;
-    }
-    index
 }
 
 fn dedupe(mut values: Vec<String>) -> Vec<String> {
@@ -1951,7 +1741,7 @@ fn default_set_difference() -> String {
     "EXCEPT".to_string()
 }
 
-fn compile_error(message: &str) -> String {
+pub(crate) fn compile_error(message: &str) -> String {
     format!("compile_input:{message}")
 }
 

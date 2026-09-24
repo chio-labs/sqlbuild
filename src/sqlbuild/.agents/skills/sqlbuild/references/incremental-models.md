@@ -58,7 +58,10 @@ Behaviour to rely on:
   cannot run ahead of a slow one.
 - `__cursor_start()` (inclusive) and `__cursor_end()` (exclusive) expose the effective bounds when
   SQL needs them explicitly, for example to filter an unlisted input or compute a derived range.
-  They are valid only in cursor incremental model SQL, not in tests, hooks, audits or functions.
+  They are valid only in cursor incremental model SQL, not in test, hook, audit or function SQL.
+  SQL unit tests of such a model render them with a wide default window, or the window declared
+  with `cursor_start`/`cursor_end` in the `TEST(...)` header; see
+  [testing.md](testing.md#cursor-windows-in-tests).
 - For `delete_insert` and `merge`, only target rows whose cursor falls inside the window are
   rewritten. A change in an unlisted input does not rewrite older rows.
 

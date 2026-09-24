@@ -24,6 +24,9 @@ from sqlbuild.compiler.planner._helpers.resolve.cursor import (
     compute_cursor_bounds,
     without_destination_cursor,
 )
+from sqlbuild.compiler.planner._helpers.resolve.cursor_intrinsics import (
+    render_cursor_intrinsic_bounds,
+)
 from sqlbuild.compiler.planner._helpers.resolve.cursor_policies import (
     resolve_future_cursor_config,
     resolve_start_cursor_config,
@@ -53,7 +56,6 @@ from sqlbuild.compiler.references.main.assert_no_unresolved_sql_markers import (
     assert_no_unresolved_sql_markers,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.cursor_algebra.types import BoundSentinel
 from sqlbuild.spec.contracts.main.get_config_cursor_bound import get_config_cursor_bound
 from sqlbuild.spec.contracts.main.get_config_str import get_config_str
@@ -149,16 +151,8 @@ def resolve_model_sql(
                 f"Model '{model.name}' uses cursor intrinsics, but cursor bounds could not be "
                 "resolved"
             )
-        query_sql, _ = resolve_cursor_intrinsics(
-            sql=query_sql,
-            start_sql=adapter.render_cursor_bound_literal(
-                value=sentinel_to_token(sentinel=cursor_bounds.start),
-                cursor_type=cursor_type,
-            ),
-            end_sql=adapter.render_cursor_bound_literal(
-                value=sentinel_to_token(sentinel=cursor_bounds.end),
-                cursor_type=cursor_type,
-            ),
+        query_sql = render_cursor_intrinsic_bounds(
+            sql=query_sql, bounds=cursor_bounds, cursor_type=cursor_type, adapter=adapter
         )
 
     assert_no_unresolved_sql_markers(sql=query_sql, context=f"Model '{model.name}' planned SQL")

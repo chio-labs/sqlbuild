@@ -17,7 +17,10 @@ from sqlbuild.cli.commands._helpers.compile.status import (
     elapsed_ms,
     start_compile_phase,
 )
-from sqlbuild.cli.commands._helpers.compile.target_writer import write_static_compile_target
+from sqlbuild.cli.commands._helpers.compile.target_writer import (
+    static_sql_test_planning_diagnostics,
+    write_static_compile_target,
+)
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
 from sqlbuild.cli.commands.types import CompileLineageMode
@@ -29,6 +32,7 @@ from sqlbuild.cli.compile.models import (
 from sqlbuild.cli.output.models import (
     WrittenTarget,
 )
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
     CompiledObjectKey,
@@ -44,6 +48,7 @@ from sqlbuild.compiler.pipeline.main.selected_graph import (
     build_project_graph_with_analysis_selection,
 )
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.rule_engine.classes.early_sql_lint import EarlySqlLint
@@ -311,6 +316,36 @@ def write_compile_dag_artifact(
     _ = complete_compile_phase(
         status=status, message=f"Wrote DAG artifact. ({time.monotonic() - dag_start:.2f}s)"
     )
+
+
+def compile_sql_test_planning_diagnostics(
+    *,
+    project_dir: Path,
+    analysis: CompileAnalysis,
+    prepared_artifacts: PreparedCompileArtifacts | None,
+) -> tuple[CompilerDiagnostic, ...]:
+    """Report SQL test planning errors when artifacts are withheld, reusing staged planning."""
+
+    try:
+        staged: tuple[CompilerDiagnostic, ...] | None = (
+            prepared_artifacts.planning_diagnostics() if prepared_artifacts is not None else None
+        )
+        if staged is not None:
+            return staged
+        return static_sql_test_planning_diagnostics(
+            target_dir=project_dir / "target",
+            adapter=analysis.adapter,
+            project=analysis.graph.project,
+        )
+    except (CompileInputError, PlannerInputError) as error:
+        return (
+            CompilerDiagnostic(
+                phase=DiagnosticPhase.TEST,
+                severity=DiagnosticSeverity.ERROR,
+                code=error.code,
+                message=str(error),
+            ),
+        )
 
 
 def write_compile_artifacts(

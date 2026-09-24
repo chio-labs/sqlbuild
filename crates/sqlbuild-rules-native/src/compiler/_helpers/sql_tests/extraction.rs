@@ -4,6 +4,9 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
+use crate::compiler::_helpers::sql_tests::sql_scan::{
+    self, Unclosed, comment_end, quoted_end, skip_whitespace,
+};
 use crate::constants::{
     DIRECT_DEPENDENCY_PATH_LENGTH, MACRO_TEST_MODE, TABLE_FUNCTION_TEST_MODE, UDF_TEST_MODE,
 };
@@ -442,7 +445,7 @@ fn validate_expected(
     Ok(())
 }
 
-fn empty_fixture_marker_matches(sql: &str) -> Result<bool, String> {
+pub(crate) fn empty_fixture_marker_matches(sql: &str) -> Result<bool, String> {
     let mut index = skip_ignorable(sql, 0)?;
     let Some(select_end) = consume_keyword(sql, index, "SELECT") else {
         return Ok(false);
@@ -1054,48 +1057,21 @@ fn byte_at(sql: &str, index: usize) -> Option<u8> {
 fn char_len(sql: &str, index: usize) -> usize {
     sql[index..].chars().next().map_or(1, char::len_utf8)
 }
-fn skip_whitespace(sql: &str, mut index: usize) -> usize {
-    while index < sql.len() {
-        let Some(c) = sql[index..].chars().next() else {
-            break;
-        };
-        if !c.is_whitespace() {
-            break;
-        }
-        index += c.len_utf8();
-    }
-    index
-}
-
 fn skip_ignorable(sql: &str, mut index: usize) -> Result<usize, String> {
     loop {
         index = skip_whitespace(sql, index);
-        if sql[index..].starts_with("--") {
-            index = sql[index..]
-                .find('\n')
-                .map_or(sql.len(), |value| index + value + 1);
-        } else if sql[index..].starts_with("/*") {
-            index = sql[index + 2..].find("*/").map_or_else(
-                || Err("SQL test contains an unclosed block comment".to_owned()),
-                |value| Ok(index + 2 + value + 2),
-            )?;
-        } else {
-            return Ok(index);
+        match comment_end(sql, index).map_err(|error| scan_error_message(error, "SQL test"))? {
+            Some(end) => index = end,
+            None => return Ok(index),
         }
     }
 }
 
 fn skip_non_code(sql: &str, index: usize) -> Result<usize, String> {
-    if sql[index..].starts_with("--") {
-        return Ok(sql[index..]
-            .find('\n')
-            .map_or(sql.len(), |value| index + value + 1));
-    }
-    if sql[index..].starts_with("/*") {
-        return sql[index + 2..]
-            .find("*/")
-            .map(|value| index + 2 + value + 2)
-            .ok_or_else(|| "SQL test contains an unclosed block comment".to_owned());
+    if let Some(end) =
+        comment_end(sql, index).map_err(|error| scan_error_message(error, "SQL test"))?
+    {
+        return Ok(end);
     }
     if matches!(byte_at(sql, index), Some(b'\'') | Some(b'"') | Some(b'`')) {
         return skip_quote(sql, index, "SQL test");
@@ -1104,46 +1080,25 @@ fn skip_non_code(sql: &str, index: usize) -> Result<usize, String> {
 }
 
 fn skip_quote(sql: &str, start: usize, context: &str) -> Result<usize, String> {
-    let Some(quote) = byte_at(sql, start) else {
+    if byte_at(sql, start).is_none() {
         return Err(format!("{context} expected a quote"));
-    };
-    let mut index = start + 1;
-    while index < sql.len() {
-        if byte_at(sql, index) == Some(quote) {
-            if byte_at(sql, index + 1) == Some(quote) {
-                index += 2;
-            } else {
-                return Ok(index + 1);
-            }
-        } else {
-            index += char_len(sql, index)
-        }
     }
-    Err(format!("{context} contains an unclosed quoted string"))
+    quoted_end(sql, start).map_err(|error| scan_error_message(error, context))
 }
 
 fn matching_paren(sql: &str, open: usize, context: &str) -> Result<usize, String> {
-    let mut depth = 0;
-    let mut index = open;
-    while index < sql.len() {
-        let next = skip_non_code(sql, index)?;
-        if next != index {
-            index = next;
-            continue;
-        }
-        match byte_at(sql, index) {
-            Some(b'(') => depth += 1,
-            Some(b')') => {
-                depth -= 1;
-                if depth == 0 {
-                    return Ok(index);
-                }
-            }
-            _ => {}
-        }
-        index += char_len(sql, index);
+    sql_scan::matching_paren(sql, open).map_err(|error| match error {
+        Unclosed::Parenthesis => scan_error_message(error, context),
+        _ => scan_error_message(error, "SQL test"),
+    })
+}
+
+fn scan_error_message(error: Unclosed, context: &str) -> String {
+    match error {
+        Unclosed::BlockComment => "SQL test contains an unclosed block comment".to_owned(),
+        Unclosed::Quote => format!("{context} contains an unclosed quoted string"),
+        Unclosed::Parenthesis => format!("{context} contains an unclosed parenthesis"),
     }
-    Err(format!("{context} contains an unclosed parenthesis"))
 }
 
 fn read_string(sql: &str, start: usize) -> Result<(String, usize), String> {

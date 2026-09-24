@@ -157,3 +157,13 @@ class ResolveEffectiveAdapterNameTestCase:
 class ExpectedMessageTestCase:
     description: str
     expected_message: str
+
+
+@dataclass(frozen=True)
+class RuleGatedTestPlanningTestCase:
+    description: str
+    min_prepared_models: int
+    test_header: str
+    expected_codes: tuple[str, ...]
+    expected_message_fragment: str
+    expected_inline_planning_calls: int

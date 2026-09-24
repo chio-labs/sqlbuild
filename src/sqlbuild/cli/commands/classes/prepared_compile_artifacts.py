@@ -14,7 +14,7 @@ from sqlbuild.cli.commands._helpers.compile.target_writer import (
     write_static_compile_target,
 )
 from sqlbuild.cli.output.models import WrittenTarget
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
 
 _MIN_PREPARED_ARTIFACT_MODELS: int = 128
 _MAX_PREPARED_ARTIFACT_MODELS: int = 5000
@@ -83,3 +83,13 @@ class PreparedCompileArtifacts:
         return publish_static_compile_target(
             prepared=prepared, target_dir=target_dir, manifest=manifest
         )
+
+    def planning_diagnostics(self) -> tuple[CompilerDiagnostic, ...] | None:
+        """Return staged SQL test planning diagnostics without publishing any artifact."""
+
+        if self._future is None:
+            return None
+        try:
+            return self._future.result().diagnostics
+        except OSError:
+            return None

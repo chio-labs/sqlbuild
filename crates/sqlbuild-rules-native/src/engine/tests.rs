@@ -1,5 +1,7 @@
 #[path = "tests/test_domain_layout.rs"]
 mod domain_layout;
+#[path = "tests/test_empty_input_tests.rs"]
+mod empty_input_tests;
 #[path = "tests/test_evaluation.rs"]
 mod evaluation;
 #[path = "tests/helpers.rs"]

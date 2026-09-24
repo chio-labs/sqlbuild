@@ -105,7 +105,8 @@ to restore the terminal index's observed order among records from the same invoc
 callback without matching terminal evidence emits no record, and final aggregate JSON omits that
 incomplete resource rather than inventing an outcome. Closing the writer emits nothing.
 
-Each confirmed audit also emits `audit_completed`. The event records the case name, reusable audit
+Each confirmed audit also emits `audit_completed` during the run, as soon as its outcome is
+confirmed (model audits when their model result completes). The event records the case name, reusable audit
 definition name, optional authored description, attachment identity, evaluation mode, outcome,
 severity and run scope, plus applicable measurement, threshold and bounded evidence details. `pass`
 and `insufficient` are non-failing outcomes; `insufficient` remains distinct for consumers.

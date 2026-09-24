@@ -449,7 +449,7 @@ check-fensu:
 
 
 dupscore:
-	uv run dupscore report
+	uv run dupscore clones
 
 
 check:

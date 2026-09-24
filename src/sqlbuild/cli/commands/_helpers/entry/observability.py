@@ -7,6 +7,7 @@ import sys
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from contextvars import Token
+from functools import partial
 from pathlib import Path
 
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
@@ -30,15 +31,21 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredCommandOutputSink,
     DiscoveredEventExporter,
     DiscoveredProvider,
+    DiscoveredRuntimeExtensions,
 )
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.runtime.event_exporting.classes.command_scope import EventExporterCommandScope
 from sqlbuild.runtime.event_exporting.classes.dispatcher import EventExporterDispatcher
+from sqlbuild.runtime.event_exporting.constants import (
+    DEFAULT_EVENT_EXPORT_SHUTDOWN_TIMEOUT_SECONDS,
+    INVOCATION_TERMINAL_EVENT_TYPES,
+)
 from sqlbuild.runtime.event_exporting.main.event_exporter_command_scope import (
     event_exporter_command_scope,
 )
 from sqlbuild.runtime.event_exporting.models import (
+    EventExporterAccounting,
     EventExporterCounts,
     EventExporterFailure,
     EventExportSummary,
@@ -48,10 +55,16 @@ from sqlbuild.runtime.observability.main.current_execution_identity import (
     current_execution_identity,
 )
 from sqlbuild.runtime.observability.main.dispatcher_scope import dispatcher_scope
-from sqlbuild.runtime.observability.models import DispatchFailure, ExecutionIdentity
+from sqlbuild.runtime.observability.models import (
+    DispatchFailure,
+    ExecutionIdentity,
+    LifecycleEvent,
+)
 from sqlbuild.runtime.observability.types import Unsubscribe
 
 _LOGGER: logging.Logger = logging.getLogger("sqlbuild.cli.observability")
+_INVOCATION_COMPLETED_EVENT_TYPE: str = "invocation_completed"
+_SHUTDOWN_TIMEOUT_SETTING: str = "sinks.lifecycle.shutdown_timeout"
 
 
 @contextmanager
@@ -85,18 +98,27 @@ def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> Iterato
     projector_token: Token[NativeProgressProjector | None] = projector.install()
     exporter_scope: EventExporterCommandScope | None = None
     unsubscribe_exporters: Unsubscribe | None = None
+    unsubscribe_invocation_outcome: Unsubscribe | None = None
+    invocation_outcome: _InvocationOutcome = _InvocationOutcome()
+    final_export_summary: EventExportSummary | None = None
     try:
-        providers: tuple[DiscoveredProvider, ...]
-        event_exporters: tuple[DiscoveredEventExporter, ...]
-        command_output_sinks: tuple[DiscoveredCommandOutputSink, ...]
-        if args.command == LINEAGE_COMMAND:
-            providers, event_exporters, command_output_sinks = (), (), ()
-        else:
-            providers, event_exporters, command_output_sinks = discover_runtime_extensions(
-                project_dir=project_dir
-            )
+        extensions: DiscoveredRuntimeExtensions = (
+            DiscoveredRuntimeExtensions()
+            if args.command == LINEAGE_COMMAND
+            else discover_runtime_extensions(project_dir=project_dir)
+        )
+        providers: tuple[DiscoveredProvider, ...] = extensions.providers
+        event_exporters: tuple[DiscoveredEventExporter, ...] = extensions.event_exporters
+        command_output_sinks: tuple[DiscoveredCommandOutputSink, ...] = (
+            extensions.command_output_sinks
+        )
         if event_exporters or command_output_sinks:
             exporter_delivery: EventExporterDispatcher = EventExporterDispatcher(
+                shutdown_timeout_seconds=(
+                    DEFAULT_EVENT_EXPORT_SHUTDOWN_TIMEOUT_SECONDS
+                    if extensions.lifecycle_shutdown_timeout_seconds is None
+                    else float(extensions.lifecycle_shutdown_timeout_seconds)
+                ),
                 failure_callback=_log_exporter_failure,
                 summary_callback=_log_exporter_summary,
             )
@@ -109,6 +131,10 @@ def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> Iterato
             )
             unsubscribe_exporters = dispatcher.subscribe_lifecycle(
                 subscriber=exporter_delivery.enqueue,
+                accepts_opaque=False,
+            )
+            unsubscribe_invocation_outcome = dispatcher.subscribe_lifecycle(
+                subscriber=invocation_outcome.consume,
                 accepts_opaque=False,
             )
         with ExitStack() as stack:
@@ -129,8 +155,12 @@ def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> Iterato
     finally:
         if unsubscribe_exporters is not None:
             _run_cleanup(action=unsubscribe_exporters, phase="event_exporter_unsubscribe")
+        if unsubscribe_invocation_outcome is not None:
+            _run_cleanup(
+                action=unsubscribe_invocation_outcome, phase="invocation_outcome_unsubscribe"
+            )
         if exporter_scope is not None:
-            _run_cleanup(action=exporter_scope.close, phase="event_exporter_shutdown")
+            final_export_summary = _close_exporter_scope(exporter_scope)
         _run_cleanup(action=unsubscribe_terminal_index, phase="terminal_index_unsubscribe")
         _run_cleanup(action=unsubscribe_progress, phase="progress_unsubscribe")
         _run_cleanup(action=projector.close, phase="progress_close")
@@ -138,6 +168,69 @@ def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> Iterato
             action=lambda: projector.restore(projector_token),
             phase="progress_context_restore",
         )
+        if final_export_summary is not None:
+            _run_cleanup(
+                action=partial(
+                    _warn_incomplete_export,
+                    summary=final_export_summary,
+                    command_succeeded=invocation_outcome.succeeded,
+                ),
+                phase="event_exporter_warning",
+            )
+
+
+def format_event_export_warning(
+    *, summary: EventExportSummary, command_succeeded: bool
+) -> str | None:
+    """Return one stderr warning line when lifecycle events were dropped or failed."""
+
+    if summary.dropped == 0 and summary.failed == 0:
+        return None
+    affected: tuple[EventExporterAccounting, ...] = tuple(
+        exporter
+        for exporter in summary.per_exporter
+        if exporter.counts.dropped > 0 or exporter.counts.failed > 0
+    )
+    names: str = ", ".join(f"'{exporter.exporter_name}'" for exporter in affected)
+    sink_label: str = "sink" if len(affected) == 1 else "sinks"
+    unit: str = "events" if len(summary.per_exporter) == 1 else "event deliveries"
+    prefix: str = (
+        "Warning: command completed successfully, but lifecycle event export was incomplete"
+        if command_succeeded
+        else "Warning: lifecycle event export was incomplete"
+    )
+    return (
+        f"{prefix}: {summary.dropped} of {summary.accepted} {unit} dropped, "
+        f"{summary.failed} failed ({sink_label} {names}). "
+        f"Increase {_SHUTDOWN_TIMEOUT_SETTING} or check sink health."
+    )
+
+
+class _InvocationOutcome:
+    """Record whether the invocation published a successful terminal fact."""
+
+    def __init__(self) -> None:
+        self.succeeded: bool = False
+
+    def consume(self, event: LifecycleEvent) -> None:
+        if event.event_type in INVOCATION_TERMINAL_EVENT_TYPES:
+            self.succeeded = event.event_type == _INVOCATION_COMPLETED_EVENT_TYPE
+
+
+def _warn_incomplete_export(*, summary: EventExportSummary, command_succeeded: bool) -> None:
+    message: str | None = format_event_export_warning(
+        summary=summary, command_succeeded=command_succeeded
+    )
+    if message is not None:
+        print(message, file=sys.stderr, flush=True)
+
+
+def _close_exporter_scope(scope: EventExporterCommandScope) -> EventExportSummary | None:
+    try:
+        return scope.close()
+    except BaseException as error:
+        _report_cleanup_failure(error=error, phase="event_exporter_shutdown")
+        return None
 
 
 def _run_cleanup(*, action: Callable[[], object], phase: str) -> None:

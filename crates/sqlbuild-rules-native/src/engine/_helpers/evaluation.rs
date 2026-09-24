@@ -9,7 +9,7 @@ use crate::models::{
 };
 use crate::rules::main::{
     assemble_catalogue, evaluate as rules, evaluate_project, fingerprint,
-    resolve_threshold_overrides, select,
+    resolve_threshold_overrides, select, sql_test_coverage,
 };
 use crate::rules::models::{
     ModelEvaluationRequest, ProjectEvaluationRequest, ResolvedThresholdOverride,
@@ -194,6 +194,14 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
     config::validate(&request.config)?;
     let all_rules = assemble_catalogue::assemble_catalogue(&request.custom_rules)?;
     let selected = select::select(&all_rules, &request.config.select, &request.config.ignore)?;
+    let request = if selected
+        .iter()
+        .any(|rule| matches!(rule.code.as_str(), "SQBRTEST202" | "SQBRTEST203"))
+    {
+        sql_test_coverage::annotate(request)
+    } else {
+        request
+    };
     validate_suppression_codes(&request, &all_rules)?;
     let ruleset_fingerprint =
         fingerprint::fingerprint(&selected, &request.config, &request.dialect)?;

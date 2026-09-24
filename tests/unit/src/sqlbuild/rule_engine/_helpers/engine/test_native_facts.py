@@ -119,6 +119,11 @@ def test_given_compiled_sql_facts_when_evaluating_native_then_exact_safe_rows_ar
         "assertion_target_model_names": ["orders"],
         "target_model_names": ["orders"],
         "tested_resources": [],
+        "authored_ctes": [],
+        "expected_ctes": [],
+        "assertion_ctes": [],
+        "has_macro_mocks": False,
+        "has_model_query_overrides": False,
     }
     assert len(request["sql_scenarios"]) == test_case.expected_scenario_count
     assert request["sql_scenarios"] == [
