@@ -1,9 +1,11 @@
 use crate::compiler::_helpers::sql_references::extraction::extract;
-use crate::compiler::_helpers::sql_tests::sql_scan::{self, Unclosed};
 use crate::engine::tests::test_types::SqlScannerTestCase;
 use crate::rules::_helpers::evaluation::normalize_rules_sql;
 use crate::rules::_helpers::numeric_decisions::compact_sql;
 use crate::sql_lint::_helpers::preparation::prepare;
+use crate::sql_scan::main::matching_paren::matching_paren;
+use crate::sql_scan::models::QuotePolicy;
+use crate::sql_scan::models::Unclosed;
 
 #[test]
 fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scanner_is_characterised()
@@ -206,7 +208,11 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
     for test_case in test_cases {
         let fragment = test_case.fragment;
         assert_eq!(
-            sql_scan::matching_paren(&format!("({fragment} x) y"), 0),
+            matching_paren(
+                format!("({fragment} x) y").as_bytes(),
+                0,
+                QuotePolicy::COMPILER
+            ),
             test_case.expected_compiler_paren,
             "compiler matching paren: {}",
             test_case.description

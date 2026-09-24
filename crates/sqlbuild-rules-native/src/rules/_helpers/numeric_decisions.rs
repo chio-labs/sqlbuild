@@ -1,3 +1,7 @@
+use crate::sql_scan::main::comment_end::comment_end;
+use crate::sql_scan::main::quote_end::quote_end;
+use crate::sql_scan::models::QuotePolicy;
+
 const CANONICAL_NUMERIC_DECISIONS: [&str; 3] = ["-1", "0", "1"];
 
 pub(crate) struct AuthoredDecision<'a> {
@@ -9,59 +13,35 @@ pub(crate) struct AuthoredDecision<'a> {
 }
 
 pub(crate) fn compact_sql(sql: &str) -> String {
+    let policy = QuotePolicy::RULES;
     let bytes = sql.as_bytes();
     let mut compact = Vec::with_capacity(bytes.len());
     let mut index = 0;
-    let mut quote: Option<u8> = None;
-    let mut line_comment = false;
-    let mut block_comment = false;
     while index < bytes.len() {
         let byte = bytes[index];
-        let next = bytes.get(index + 1).copied();
-        if line_comment {
-            line_comment = byte != b'\n';
-            index += 1;
-            continue;
-        }
-        if block_comment {
-            if byte == b'*' && next == Some(b'/') {
-                block_comment = false;
-                index += 2;
-            } else {
-                index += 1;
+        let unclosed_end = match comment_end(bytes, index) {
+            Ok(Some(end)) => {
+                index = end;
+                continue;
             }
-            continue;
-        }
-        if let Some(active_quote) = quote {
-            compact.push(byte.to_ascii_lowercase());
-            if byte == active_quote {
-                if next == Some(active_quote) {
-                    compact.push(active_quote);
-                    index += 2;
-                    continue;
+            Ok(None) if policy.is_quote(byte) => {
+                quote_end(bytes, index, policy).unwrap_or(bytes.len())
+            }
+            Ok(None) => {
+                if !byte.is_ascii_whitespace() {
+                    compact.push(byte.to_ascii_lowercase());
                 }
-                quote = None;
+                index += 1;
+                continue;
             }
-            index += 1;
-            continue;
-        }
-        if byte == b'-' && next == Some(b'-') {
-            line_comment = true;
-            index += 2;
-            continue;
-        }
-        if byte == b'/' && next == Some(b'*') {
-            block_comment = true;
-            index += 2;
-            continue;
-        }
-        if matches!(byte, b'\'' | b'"') {
-            quote = Some(byte);
-        }
-        if !byte.is_ascii_whitespace() {
-            compact.push(byte.to_ascii_lowercase());
-        }
-        index += 1;
+            Err(_) => break,
+        };
+        compact.extend(
+            bytes[index..unclosed_end]
+                .iter()
+                .map(u8::to_ascii_lowercase),
+        );
+        index = unclosed_end;
     }
     String::from_utf8(compact).unwrap_or_default()
 }
