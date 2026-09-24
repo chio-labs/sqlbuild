@@ -14,6 +14,7 @@ from sqlbuild.adapter.contract.classes.historical_check_snapshot_sql import (
 )
 from sqlbuild.adapter.contract.classes.historical_snapshot_sql import (
     historical_insert_validity_sql,
+    render_is_distinct_from,
 )
 from sqlbuild.adapter.contract.classes.historical_timestamp_snapshot_sql import (
     HistoricalTimestampSnapshotSql,
@@ -48,14 +49,19 @@ from sqlbuild.adapter.contract.models import (
     RowDiffTolerances,
     SchemaDiffResult,
     SnapshotChangeTarget,
+    SnapshotSqlDialect,
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
 from sqlbuild.adapter.contract.types import (
     CursorKind,
     FrameworkType,
+    HistoricalSnapshotCloseStyle,
+    HistoricalSnapshotInsertStyle,
     LoaderLogicalType,
     PromotionStrategy,
+    SnapshotLatestVersionStyle,
+    SnapshotUpdateStyle,
     TablePromotionMode,
 )
 from sqlbuild.adapter.relations.main.get_columns_for_relations import (
@@ -96,6 +102,14 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     state_tables_transient: ClassVar[bool] = False
     allows_implicit_managed_write_schema: ClassVar[bool] = False
     execution_duration_limit_seconds: ClassVar[int | None] = None
+    _snapshot_sql_dialect: ClassVar[SnapshotSqlDialect] = SnapshotSqlDialect(
+        timestamp_type="TIMESTAMP",
+        distinct_condition=render_is_distinct_from,
+        update_style=SnapshotUpdateStyle.UPDATE_FROM,
+        latest_version=SnapshotLatestVersionStyle.QUALIFY,
+        historical_close=HistoricalSnapshotCloseStyle.CORRELATED,
+        historical_insert=HistoricalSnapshotInsertStyle.WITH_INSERT,
+    )
 
     def supports_zero_copy_clone(self) -> bool:
         return False
@@ -1213,7 +1227,9 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
-        historical_sql: str = HistoricalCheckSnapshotSql.initial_select_sql(
+        historical_sql: str = HistoricalCheckSnapshotSql(
+            dialect=self._snapshot_sql_dialect
+        ).initial_select_sql(
             origin=origin,
             unique_key=unique_key,
             check_columns=check_columns,
@@ -1238,7 +1254,7 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
-        new_changes_sql: str = HistoricalCheckSnapshotSql.new_changes_ctes_sql(
+        return HistoricalCheckSnapshotSql(dialect=self._snapshot_sql_dialect).apply_sql(
             destination=destination,
             origin=origin,
             unique_key=unique_key,
@@ -1246,51 +1262,9 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
             observed_at_column=observed_at_column,
             valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
+            output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        key_condition: str = SnapshotSql.key_condition(
-            left_alias="__target", right_alias="__new_changes", unique_key=unique_key
-        )
-        if invalidate_hard_deletes:
-            close_sql: str = _historical_snapshot_combined_close_sql(
-                destination=destination,
-                new_changes_sql=new_changes_sql,
-                unique_key=unique_key,
-                valid_from_column=valid_from_column,
-                valid_to_column=valid_to_column,
-                change_time_column=SNAPSHOT_VERSION_START_COLUMN,
-            )
-        else:
-            close_sql = (
-                f"WITH {new_changes_sql} "
-                f"UPDATE {destination} AS __target "
-                f"SET {valid_to_column} = ("
-                f"SELECT MIN(__new_changes.{observed_at_column}) "
-                f"FROM __new_changes WHERE {key_condition}"
-                f") "
-                f"WHERE __target.{valid_to_column} IS NULL "
-                f"AND __target.{valid_from_column} < ("
-                f"SELECT MIN(__new_changes.{observed_at_column}) "
-                f"FROM __new_changes WHERE {key_condition}"
-                f") "
-                f"AND EXISTS (SELECT 1 FROM __new_changes WHERE {key_condition})"
-            )
-        insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
-        output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
-        partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
-        version_columns_sql: str = (
-            f"__new_changes.{observed_at_column}, LEAD(__new_changes.{observed_at_column}) OVER ("
-            f"PARTITION BY {partition_sql} ORDER BY __new_changes.{observed_at_column})"
-        )
-        if invalidate_hard_deletes:
-            version_columns_sql = historical_insert_validity_sql()
-        insert_sql: str = (
-            f"WITH {new_changes_sql} "
-            f"INSERT INTO {destination} ({insert_column_sql}) "
-            f"SELECT {output_select_sql}, {version_columns_sql} "
-            f"FROM __new_changes"
-        )
-        return (close_sql, insert_sql)
 
     def create_table_as(
         self,
