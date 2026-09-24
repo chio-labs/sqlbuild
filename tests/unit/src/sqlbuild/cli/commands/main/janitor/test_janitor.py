@@ -266,9 +266,9 @@ def test_given_direct_archive_plan_when_confirming_then_requires_exact_archive_p
                 "  archives to delete     1",
                 "  archives retained      0",
                 "Relations to archive\n  dev.old_orders  ->  "
-                "dev._SQB_ARCHIVE__20260924T101500Z__old_orders  "
+                "dev._sqb_archive__20260924t101500z__old_orders  "
                 "age 20d, delete after 2026-10-08 10:15:00 UTC",
-                "Archives to delete\n  dev._SQB_ARCHIVE__20260101T000000Z__old_products  "
+                "Archives to delete\n  dev._sqb_archive__20260101t000000z__old_products  "
                 "archived 2026-01-01 00:00:00 UTC, age 266d, expired 2026-01-15 00:00:00 UTC",
             ),
             unexpected_output_fragments=("eligible for deletion", "Eligible objects"),

@@ -320,7 +320,7 @@ def write_janitor_test_settings(
 def archive_timestamp_text(value: datetime) -> str:
     """Render the UTC timestamp component embedded in janitor archive names."""
 
-    return value.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
+    return value.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ").lower()
 
 
 def list_archive_names(*, db_path: Path, schema: str = "main") -> tuple[str, ...]:
@@ -330,7 +330,7 @@ def list_archive_names(*, db_path: Path, schema: str = "main") -> tuple[str, ...
         db_path=db_path,
         sql=(
             "SELECT table_name FROM information_schema.tables "
-            f"WHERE table_schema = '{schema}' AND starts_with(table_name, '_SQB_ARCHIVE__') "
+            f"WHERE table_schema = '{schema}' AND starts_with(table_name, '_sqb_archive__') "
             "ORDER BY table_name"
         ),
     )

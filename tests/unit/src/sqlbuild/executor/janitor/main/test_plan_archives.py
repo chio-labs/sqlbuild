@@ -7,7 +7,11 @@ from itertools import chain
 
 import pytest
 
-from sqlbuild.executor.janitor.constants import MALFORMED_ARCHIVE_REASON
+from sqlbuild.executor.janitor.constants import (
+    CASE_COLLISION_REASON,
+    MALFORMED_ARCHIVE_REASON,
+    UNQUOTED_ADDRESSING_REASON,
+)
 from sqlbuild.executor.janitor.main.plan import build_janitor_plan
 from sqlbuild.executor.janitor.models import (
     JanitorArchivedRelation,
@@ -17,6 +21,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorSkippedRelation,
 )
 from tests.unit.src.sqlbuild.executor.janitor.main._test_types import (
+    JanitorAddressingPlanTestCase,
     JanitorArchivePlanTestCase,
     relation_info,
 )
@@ -28,7 +33,7 @@ from tests.unit.src.sqlbuild.executor.janitor.main.helpers import (
 OLD_TIME: datetime = datetime.now(UTC) - timedelta(days=30)
 RECENT_ARCHIVE_NAME: str = (
     f"_SQB_ARCHIVE__{(datetime.now(UTC) - timedelta(days=1)):%Y%m%dT%H%M%SZ}__old_customers"
-)
+).lower()
 LONG_ORDERS_NAME: str = "orders_" + "x" * 60
 
 
@@ -51,11 +56,11 @@ LONG_ORDERS_NAME: str = "orders_" + "x" * 60
         JanitorArchivePlanTestCase(
             description="expired archive is deleted and recent archive is retained",
             relation_infos=(
-                relation_info("_SQB_ARCHIVE__20200101T000000Z__old_products"),
+                relation_info("_sqb_archive__20200101t000000z__old_products"),
                 relation_info(RECENT_ARCHIVE_NAME),
             ),
             expected_existing_archive_deletion_names=(
-                "_SQB_ARCHIVE__20200101T000000Z__old_products",
+                "_sqb_archive__20200101t000000z__old_products",
             ),
             expected_retained_archive_names=(RECENT_ARCHIVE_NAME,),
         ),
@@ -69,7 +74,7 @@ LONG_ORDERS_NAME: str = "orders_" + "x" * 60
         JanitorArchivePlanTestCase(
             description="malformed archive look-alikes are reported and never archived or deleted",
             relation_infos=(
-                relation_info("_SQB_ARCHIVE__20201399T000000Z__orders", created_at=OLD_TIME),
+                relation_info("_sqb_archive__20201399t000000z__orders", created_at=OLD_TIME),
                 relation_info("_SQB_ARCHIVE_20200101T000000Z__orders", created_at=OLD_TIME),
                 relation_info("_SQB_ARCHIVE__2020010T000000Z__orders", created_at=OLD_TIME),
                 relation_info("_SQB_ARCHIVE__20200101T000000Z__", created_at=OLD_TIME),
@@ -78,7 +83,7 @@ LONG_ORDERS_NAME: str = "orders_" + "x" * 60
             retention_days=0,
             archive_retention_days=0,
             expected_skipped_relations=(
-                ("_SQB_ARCHIVE__20201399T000000Z__orders", MALFORMED_ARCHIVE_REASON),
+                ("_sqb_archive__20201399t000000z__orders", MALFORMED_ARCHIVE_REASON),
                 ("_SQB_ARCHIVE_20200101T000000Z__orders", MALFORMED_ARCHIVE_REASON),
                 ("_SQB_ARCHIVE__2020010T000000Z__orders", MALFORMED_ARCHIVE_REASON),
                 ("_SQB_ARCHIVE__20200101T000000Z__", MALFORMED_ARCHIVE_REASON),
@@ -87,28 +92,28 @@ LONG_ORDERS_NAME: str = "orders_" + "x" * 60
         ),
         JanitorArchivePlanTestCase(
             description="archive matching an exclude pattern is skipped",
-            relation_infos=(relation_info("_SQB_ARCHIVE__20200101T000000Z__keep_orders"),),
+            relation_infos=(relation_info("_sqb_archive__20200101t000000z__keep_orders"),),
             exclude_patterns=("*keep_*",),
             expected_skipped_relations=(
                 (
-                    "_SQB_ARCHIVE__20200101T000000Z__keep_orders",
+                    "_sqb_archive__20200101t000000z__keep_orders",
                     "relation matches exclude pattern '*keep_*'",
                 ),
             ),
         ),
         JanitorArchivePlanTestCase(
             description="blocked schema suppresses expired archive deletion",
-            relation_infos=(relation_info("_SQB_ARCHIVE__20200101T000000Z__old_products"),),
+            relation_infos=(relation_info("_sqb_archive__20200101t000000z__old_products"),),
             source_schema="analytics",
             expected_suppressed_archive_deletion_names=(
-                "_SQB_ARCHIVE__20200101T000000Z__old_products",
+                "_sqb_archive__20200101t000000z__old_products",
             ),
         ),
         JanitorArchivePlanTestCase(
             description="virtual mode neither archives nor expires archive-named relations",
             relation_infos=(
                 relation_info("old_orders", created_at=OLD_TIME),
-                relation_info("_SQB_ARCHIVE__20200101T000000Z__old_products", created_at=OLD_TIME),
+                relation_info("_sqb_archive__20200101t000000z__old_products", created_at=OLD_TIME),
             ),
             direct_mode=False,
         ),
@@ -215,10 +220,81 @@ def test_given_long_relation_name_when_planning_archive_then_fits_name_with_time
     archive_name: str = plan.archive_candidates[0].archive_key.name
     expected_prefix: str = (
         f"_SQB_ARCHIVE__{plan.archive_candidates[0].archived_at:%Y%m%dT%H%M%SZ}__orders_"
-    )
+    ).lower()
     assert len(archive_name) == test_case.identifier_limit
     assert archive_name.startswith(expected_prefix)
     assert archive_name != f"{expected_prefix[:-7]}{LONG_ORDERS_NAME}"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorAddressingPlanTestCase(
+            description="unaddressable stale relations and archives are skipped, plain ones act",
+            relation_infos=(
+                relation_info("old_orders", created_at=OLD_TIME),
+                relation_info("LegacyCustomers", created_at=OLD_TIME),
+                relation_info("old-products", created_at=OLD_TIME),
+                relation_info("stale_items", created_at=OLD_TIME),
+                relation_info("STALE_ITEMS", created_at=OLD_TIME),
+                relation_info("_sqb_archive__20200101t000000z__old_products"),
+                relation_info("_SQB_ARCHIVE__20200101T000000Z__old_customers"),
+                relation_info("_sqb_archive__20200101t000000z__old_invoices"),
+                relation_info("_SQB_ARCHIVE__20200101T000000Z__OLD_INVOICES"),
+            ),
+            direct_mode=True,
+            expected_candidate_names=("old_orders",),
+            expected_archive_source_names=("old_orders",),
+            expected_archive_deletion_names=("_sqb_archive__20200101t000000z__old_products",),
+            expected_skipped_relations=(
+                ("LegacyCustomers", UNQUOTED_ADDRESSING_REASON),
+                ("old-products", UNQUOTED_ADDRESSING_REASON),
+                ("stale_items", CASE_COLLISION_REASON),
+                ("STALE_ITEMS", UNQUOTED_ADDRESSING_REASON),
+                ("_SQB_ARCHIVE__20200101T000000Z__old_customers", UNQUOTED_ADDRESSING_REASON),
+                ("_sqb_archive__20200101t000000z__old_invoices", CASE_COLLISION_REASON),
+                ("_SQB_ARCHIVE__20200101T000000Z__OLD_INVOICES", UNQUOTED_ADDRESSING_REASON),
+            ),
+        ),
+        JanitorAddressingPlanTestCase(
+            description="virtual mode keeps deleting mixed-case relations as before",
+            relation_infos=(relation_info("LegacyCustomers", created_at=OLD_TIME),),
+            direct_mode=False,
+            expected_candidate_names=("LegacyCustomers",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unaddressable_names_when_planning_direct_janitor_then_they_are_skipped(
+    test_case: JanitorAddressingPlanTestCase,
+) -> None:
+    adapter: FakeJanitorAdapter = FakeJanitorAdapter(relation_infos=test_case.relation_infos)
+
+    plan: JanitorPlan = build_janitor_plan(
+        project=build_project(),
+        adapter=adapter,
+        connection=object(),
+        retention_days=7,
+        delete_tracked_only=False,
+        direct_settings=JanitorDirectModeSettings(enabled=test_case.direct_mode),
+    )
+
+    assert (
+        tuple(candidate.key.name for candidate in plan.archive_candidates)
+        == test_case.expected_archive_source_names
+    )
+    assert (
+        tuple(archive.key.name for archive in plan.archive_deletion_candidates)
+        == test_case.expected_archive_deletion_names
+    )
+    assert (
+        tuple((skipped.key.name, skipped.reason) for skipped in plan.skipped_relations)
+        == test_case.expected_skipped_relations
+    )
+    assert (
+        tuple(candidate.key.name for candidate in plan.candidates)
+        == test_case.expected_candidate_names
+    )
 
 
 if __name__ == "__main__":

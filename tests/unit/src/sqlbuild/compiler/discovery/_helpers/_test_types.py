@@ -262,7 +262,7 @@ class LoadProjectConfigTestCase:
     expected_vars: dict[str, str]
     expected_targets: dict[str, dict[str, object]]
     expected_janitor_enabled: bool
-    expected_retention_days: int
+    expected_retention_days: int | None
     expected_janitor_max_checkpoints: int
     expected_janitor_delete_tracked_only: bool
     expected_janitor_exclude_patterns: tuple[str, ...]

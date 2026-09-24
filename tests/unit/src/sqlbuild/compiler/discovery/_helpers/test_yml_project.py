@@ -667,7 +667,7 @@ schema = "dev"
                 }
             },
             expected_janitor_enabled=False,
-            expected_retention_days=14,
+            expected_retention_days=None,
             expected_janitor_max_checkpoints=20,
             expected_janitor_delete_tracked_only=True,
             expected_janitor_exclude_patterns=(),

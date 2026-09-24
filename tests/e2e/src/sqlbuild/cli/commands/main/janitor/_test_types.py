@@ -218,3 +218,14 @@ class JanitorArchiveInterruptionE2ETestCase:
     expected_first_output_fragments: tuple[str, ...]
     expected_second_exit_code: int
     expected_second_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JanitorUnaddressableRelationE2ETestCase:
+    """Test case for relations the janitor cannot safely address unquoted."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    plain_relation: str
+    quoted_relation: str
+    expected_stdout_fragments: tuple[str, ...]

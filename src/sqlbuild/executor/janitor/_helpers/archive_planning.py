@@ -15,6 +15,10 @@ from sqlbuild.executor.janitor._helpers.archive_names import (
 )
 from sqlbuild.executor.janitor._helpers.classification import matching_exclude_pattern
 from sqlbuild.executor.janitor._helpers.plan import relation_key as build_relation_key
+from sqlbuild.executor.janitor._helpers.relation_addressing import (
+    case_colliding_names,
+    unaddressable_relation_reason,
+)
 from sqlbuild.executor.janitor.constants import BUILT_IN_EXCLUDE_PATTERNS, MALFORMED_ARCHIVE_REASON
 from sqlbuild.executor.janitor.models import (
     JanitorArchiveCandidate,
@@ -97,8 +101,12 @@ def _plan_direct_archives(
     effective_patterns: tuple[str, ...] = BUILT_IN_EXCLUDE_PATTERNS + exclude_patterns
     schema_key: tuple[str | None, str | None]
     for schema_key in sorted(managed_target_schemas, key=lambda key: (key[0] or "", key[1] or "")):
+        schema_relations: tuple[RelationInfo, ...] = facts.relations_by_schema.get(schema_key, ())
+        colliding_names: frozenset[str] = case_colliding_names(
+            relation.name for relation in schema_relations
+        )
         relation: RelationInfo
-        for relation in facts.relations_by_schema.get(schema_key, ()):
+        for relation in schema_relations:
             key: JanitorRelationKey = build_relation_key(relation)
             if key in facts.desired_keys or not is_archive_lookalike_name(key.name):
                 continue
@@ -110,16 +118,12 @@ def _plan_direct_archives(
                     )
                 )
                 continue
-            exclude_pattern: str | None = matching_exclude_pattern(
-                key=key, patterns=effective_patterns
+            skip_reason: str | None = _archive_skip_reason(
+                key=key, colliding_names=colliding_names, effective_patterns=effective_patterns
             )
-            if exclude_pattern is not None:
+            if skip_reason is not None:
                 skipped.append(
-                    JanitorSkippedRelation(
-                        key=key,
-                        relation=relation,
-                        reason=f"relation matches exclude pattern {exclude_pattern!r}",
-                    )
+                    JanitorSkippedRelation(key=key, relation=relation, reason=skip_reason)
                 )
                 continue
             archived: JanitorArchivedRelation = JanitorArchivedRelation(
@@ -160,6 +164,23 @@ def _plan_direct_archives(
             for blocked in blocked_schemas
         ),
     )
+
+
+def _archive_skip_reason(
+    *,
+    key: JanitorRelationKey,
+    colliding_names: frozenset[str],
+    effective_patterns: tuple[str, ...],
+) -> str | None:
+    addressing_reason: str | None = unaddressable_relation_reason(
+        name=key.name, colliding_names=colliding_names
+    )
+    if addressing_reason is not None:
+        return addressing_reason
+    exclude_pattern: str | None = matching_exclude_pattern(key=key, patterns=effective_patterns)
+    if exclude_pattern is not None:
+        return f"relation matches exclude pattern {exclude_pattern!r}"
+    return None
 
 
 def _archive_candidate(

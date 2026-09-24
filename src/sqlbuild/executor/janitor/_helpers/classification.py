@@ -27,6 +27,10 @@ from sqlbuild.executor.janitor._helpers.plan import (
 from sqlbuild.executor.janitor._helpers.plan import (
     relation_key as build_relation_key,
 )
+from sqlbuild.executor.janitor._helpers.relation_addressing import (
+    case_colliding_names,
+    unaddressable_relation_reason,
+)
 from sqlbuild.executor.janitor._helpers.tracking import collect_tracked_relation_keys
 from sqlbuild.executor.janitor.models import (
     JanitorDeleteCandidate,
@@ -176,6 +180,9 @@ def classify_janitor_relations(
 
     candidates: list[JanitorDeleteCandidate] = []
     skipped_relations: list[JanitorSkippedRelation] = []
+    colliding_names: frozenset[str] = case_colliding_names(
+        relation.name for relation in schema_relations
+    )
     relation: RelationInfo
     for relation in schema_relations:
         relation_key: JanitorRelationKey = build_relation_key(relation)
@@ -191,6 +198,10 @@ def classify_janitor_relations(
             effective_exclude_patterns=effective_exclude_patterns,
             delete_tracked_only=delete_tracked_only,
         )
+        if skip_reason is None and direct_mode:
+            skip_reason = unaddressable_relation_reason(
+                name=relation_key.name, colliding_names=colliding_names
+            )
         if skip_reason is not None:
             skipped_relations.append(
                 JanitorSkippedRelation(key=relation_key, relation=relation, reason=skip_reason)

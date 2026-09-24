@@ -89,7 +89,7 @@ def test_given_default_config_when_running_janitor_then_it_reports_disabled(
                 "relations to archive   1",
                 "archives to delete     0",
                 "objects skipped        4",
-                "main.janitor_tracked_extra  ->  main._SQB_ARCHIVE__",
+                "main.janitor_tracked_extra  ->  main._sqb_archive__",
                 "main.janitor_untracked_extra  relation is not tracked by SQLBuild",
                 "main.partition_state  relation matches exclude pattern 'partition_*'",
                 "main._sqlbuild_fingerprints  relation matches exclude pattern",
@@ -157,7 +157,7 @@ def test_given_stale_relations_when_running_direct_janitor_then_it_archives_trac
             db_path=db_path,
             sql=(
                 "SELECT COUNT(*) FROM information_schema.tables "
-                f"WHERE table_name LIKE '_SQB_ARCHIVE__%__{original_name}'"
+                f"WHERE table_name LIKE '_sqb_archive__%__{original_name}'"
             ),
         ) == [(1,)]
     assert "Eligible expired VDEs" not in janitor_result.stdout
@@ -372,8 +372,8 @@ def test_given_virtual_microbatch_history_when_running_janitor_then_events_remai
             expected_stdout_fragments=(
                 "relations to archive   2",
                 "objects skipped        2",
-                "main.__sqb_a13f09c2e7b8__model__daily_revenue  ->  main._SQB_ARCHIVE__",
-                "main.__sqb_a13f09c2e7b8__source__raw_orders  ->  main._SQB_ARCHIVE__",
+                "main.__sqb_a13f09c2e7b8__model__daily_revenue  ->  main._sqb_archive__",
+                "main.__sqb_a13f09c2e7b8__source__raw_orders  ->  main._sqb_archive__",
                 "main.__sqb_a13f09c2e7b__model__daily_revenue  relation is not tracked by SQLBuild",
             ),
             expected_existing_tables=(

@@ -28,3 +28,11 @@ class ArchiveNameBuildTestCase:
     expected_prefix: str
     expected_length: int
     expected_logical_name_is_original: bool
+
+
+@dataclass(frozen=True)
+class RelationAddressingTestCase:
+    description: str
+    name: str
+    listing: tuple[str, ...]
+    expected_reason: str | None

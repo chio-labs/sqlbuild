@@ -18,11 +18,21 @@ BUILT_IN_EXCLUDE_PATTERNS: tuple[str, ...] = (
     JANITOR_EVENTS_TABLE_NAME,
 )
 
+DIRECT_DEFAULT_RETENTION_DAYS: int = 14
+VIRTUAL_DEFAULT_RETENTION_DAYS: int = 30
+
 ARCHIVE_NAME_PREFIX: str = "_SQB_ARCHIVE__"
 ARCHIVE_NAME_SEPARATOR: str = "__"
 ARCHIVE_TIMESTAMP_FORMAT: str = "%Y%m%dT%H%M%SZ"
 ARCHIVE_LOOKALIKE_PREFIX: str = "_sqb_archive"
 ARCHIVE_ARTIFACT_LABEL: str = "Janitor archive"
+UNQUOTED_ADDRESSING_REASON: str = (
+    "relation name is not a plain lowercase identifier and may require quoting; "
+    "janitor does not act on it"
+)
+CASE_COLLISION_REASON: str = (
+    "relation name collides case-insensitively with another relation; janitor does not act on it"
+)
 MALFORMED_ARCHIVE_REASON: str = (
     "name resembles a janitor archive but does not match the strict archive grammar"
 )

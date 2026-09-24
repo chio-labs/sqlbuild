@@ -112,3 +112,23 @@ class JanitorArchiveEventFailureTestCase:
     expected_error_fragment: str
     expected_renamed_origins: tuple[str, ...]
     expected_dropped_targets: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JanitorAddressingPlanTestCase:
+    description: str
+    relation_infos: tuple[RelationInfo, ...]
+    direct_mode: bool
+    expected_archive_source_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_archive_deletion_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_skipped_relations: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    expected_candidate_names: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class JanitorRetentionResolutionTestCase:
+    description: str
+    override: int | None
+    configured: int | None
+    virtual_environments: bool
+    expected_retention_days: int

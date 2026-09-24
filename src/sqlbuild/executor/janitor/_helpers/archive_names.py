@@ -32,7 +32,7 @@ def archive_timestamp(value: datetime) -> datetime:
 
 
 def build_archive_name(*, original_name: str, archived_at: datetime, identifier_limit: int) -> str:
-    """Build the fitted archive name, keeping the prefix and timestamp intact."""
+    """Build the fitted, case-folded archive name, keeping the prefix and timestamp intact."""
 
     fixed_prefix: str = (
         f"{ARCHIVE_NAME_PREFIX}"
@@ -45,7 +45,7 @@ def build_archive_name(*, original_name: str, archived_at: datetime, identifier_
         identifier_limit=identifier_limit,
         artifact_label=ARCHIVE_ARTIFACT_LABEL,
     )
-    return f"{fixed_prefix}{logical_part}"
+    return f"{fixed_prefix}{logical_part}".lower()
 
 
 def parse_archive_name(name: str) -> JanitorParsedArchiveName | None:

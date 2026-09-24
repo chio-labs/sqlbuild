@@ -1427,7 +1427,7 @@ def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:
         payload=payload, label="janitor", file_path=file_path
     )
     enabled: bool = _optional_bool(mapping=mapping, key="enabled", default=False)
-    retention_days: int = _optional_int(mapping=mapping, key="retention_days", default=14)
+    retention_days: int | None = _optional_nullable_int(mapping=mapping, key="retention_days")
     archive_retention_days: int = _optional_int(
         mapping=mapping, key="archive_retention_days", default=14
     )
@@ -1449,7 +1449,7 @@ def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:
             file_path=file_path,
         )
     )
-    if retention_days < 0:
+    if retention_days is not None and retention_days < 0:
         raise ProjectConfigError(f"{file_path} janitor.retention_days must be >= 0")
     if archive_retention_days < 0:
         raise ProjectConfigError(f"{file_path} janitor.archive_retention_days must be >= 0")

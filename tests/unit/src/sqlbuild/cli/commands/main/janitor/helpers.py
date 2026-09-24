@@ -140,7 +140,7 @@ def build_direct_archive_plan() -> JanitorPlan:
                 archive_key=JanitorRelationKey(
                     database=None,
                     schema="dev",
-                    name="_SQB_ARCHIVE__20260924T101500Z__old_orders",
+                    name="_sqb_archive__20260924t101500z__old_orders",
                 ),
                 archived_at=archived_at,
                 expires_at=archived_at + timedelta(days=14),
@@ -151,7 +151,7 @@ def build_direct_archive_plan() -> JanitorPlan:
                 key=JanitorRelationKey(
                     database=None,
                     schema="dev",
-                    name="_SQB_ARCHIVE__20260101T000000Z__old_products",
+                    name="_sqb_archive__20260101t000000z__old_products",
                 ),
                 relation_type="table",
                 archived_at=datetime(2026, 1, 1, tzinfo=UTC),

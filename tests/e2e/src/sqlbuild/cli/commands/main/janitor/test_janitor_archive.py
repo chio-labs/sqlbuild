@@ -15,6 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.janitor._test_types import (
     JanitorArchiveInterruptionE2ETestCase,
     JanitorArchiveNameFittingE2ETestCase,
     JanitorArchiveRetentionE2ETestCase,
+    JanitorUnaddressableRelationE2ETestCase,
     JanitorZeroRetentionE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.janitor.helpers import (
@@ -34,10 +35,10 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 )
 
 ARCHIVE_NAME_PATTERN: re.Pattern[str] = re.compile(
-    r"^_SQB_ARCHIVE__(?P<timestamp>[0-9]{8}T[0-9]{6}Z)__(?P<logical_name>.+)$"
+    r"^_sqb_archive__(?P<timestamp>[0-9]{8}t[0-9]{6}z)__(?P<logical_name>.+)$"
 )
 RECENT_ARCHIVE_NAME: str = (
-    f"_SQB_ARCHIVE__{archive_timestamp_text(datetime.now(UTC) - timedelta(days=1))}__recent_orders"
+    f"_sqb_archive__{archive_timestamp_text(datetime.now(UTC) - timedelta(days=1))}__recent_orders"
 )
 
 
@@ -55,7 +56,7 @@ RECENT_ARCHIVE_NAME: str = (
                 "archive retention      14 days",
                 "relations to archive   1",
                 "Relations to archive",
-                "main.customers  ->  main._SQB_ARCHIVE__",
+                "main.customers  ->  main._sqb_archive__",
                 "age 20d, delete after",
                 "main.products  relation is newer than 14 days",
                 "Archived 1 relations.",
@@ -137,28 +138,31 @@ def test_given_retired_tracked_relation_past_retention_when_running_janitor_then
             description="only expired strict archives in managed schemas are deleted",
             janitor_command=("--no-color", "janitor", "--auto-approve"),
             expected_deleted_names=(
-                "_SQB_ARCHIVE__20200101T000000Z__old_customers_view",
-                "_SQB_ARCHIVE__20200101T000000Z__old_products",
+                "_sqb_archive__20200101t000000z__old_customers_view",
+                "_sqb_archive__20200101t000000z__old_products",
             ),
             expected_kept_names=(
                 RECENT_ARCHIVE_NAME,
-                "_SQB_ARCHIVE__20201399T000000Z__bad_month",
+                "_sqb_archive__20201399t000000z__bad_month",
                 "_SQB_ARCHIVE_20200101T000000Z__one_separator",
                 "_sqb_archive_notes",
+                "_SQB_ARCHIVE__20200101T000000Z__legacy_orders",
             ),
-            expected_kept_other_schema_names=("_SQB_ARCHIVE__20200101T000000Z__orders",),
+            expected_kept_other_schema_names=("_sqb_archive__20200101t000000z__orders",),
             expected_stdout_fragments=(
                 "archives to delete     2",
                 "archives retained      1",
                 "Archives to delete",
-                "main._SQB_ARCHIVE__20200101T000000Z__old_products  archived 2020-01-01 00:00:00",
+                "main._sqb_archive__20200101t000000z__old_products  archived 2020-01-01 00:00:00",
                 "expired 2020-01-15 00:00:00 UTC",
                 "Retained archives",
                 f"main.{RECENT_ARCHIVE_NAME}  archived",
-                "main._SQB_ARCHIVE__20201399T000000Z__bad_month  name resembles a janitor archive "
+                "main._sqb_archive__20201399t000000z__bad_month  name resembles a janitor archive "
                 "but does not match the strict archive grammar",
                 "main._SQB_ARCHIVE_20200101T000000Z__one_separator  name resembles a janitor archive",
                 "main._sqb_archive_notes  name resembles a janitor archive",
+                "main._SQB_ARCHIVE__20200101T000000Z__legacy_orders  relation name is not a plain "
+                "lowercase identifier and may require quoting; janitor does not act on it",
                 "Deleted 2 objects",
             ),
             expected_delete_event_count=2,
@@ -184,29 +188,30 @@ def test_given_archive_named_relations_when_running_janitor_then_deletes_only_ex
     execute_duckdb(
         db_path=db_path,
         sql=(
-            'CREATE TABLE main."_SQB_ARCHIVE__20200101T000000Z__old_products" AS SELECT 1 AS id; '
-            'CREATE VIEW main."_SQB_ARCHIVE__20200101T000000Z__old_customers_view" AS '
+            'CREATE TABLE main."_sqb_archive__20200101t000000z__old_products" AS SELECT 1 AS id; '
+            'CREATE VIEW main."_sqb_archive__20200101t000000z__old_customers_view" AS '
             "SELECT 1 AS id; "
             f'CREATE TABLE main."{RECENT_ARCHIVE_NAME}" AS SELECT 1 AS id; '
-            'CREATE TABLE main."_SQB_ARCHIVE__20201399T000000Z__bad_month" AS SELECT 1 AS id; '
+            'CREATE TABLE main."_sqb_archive__20201399t000000z__bad_month" AS SELECT 1 AS id; '
             'CREATE TABLE main."_SQB_ARCHIVE_20200101T000000Z__one_separator" AS SELECT 1 AS id; '
             'CREATE TABLE main."_sqb_archive_notes" AS SELECT 1 AS id; '
+            'CREATE TABLE main."_SQB_ARCHIVE__20200101T000000Z__legacy_orders" AS SELECT 1 AS id; '
             "CREATE SCHEMA other; "
-            'CREATE TABLE other."_SQB_ARCHIVE__20200101T000000Z__orders" AS SELECT 1 AS id; '
+            'CREATE TABLE other."_sqb_archive__20200101t000000z__orders" AS SELECT 1 AS id; '
             + DuckDbAdapter().render_create_janitor_event_table_sql(database=None, schema="main")
             + "; INSERT INTO main._sqlbuild_janitor_events "
             "(event_id, schema_version, event_type, occurred_at, run_id, relation_schema, "
             "original_name, archive_name, archive_qualified_name, archived_at) VALUES "
             "('misleading_delete', 1, 'delete', TIMESTAMP '2020-02-01 00:00:00', 'run_old', "
-            "'main', 'old_products', '_SQB_ARCHIVE__20200101T000000Z__old_products', "
-            "'main._SQB_ARCHIVE__20200101T000000Z__old_products', "
+            "'main', 'old_products', '_sqb_archive__20200101t000000z__old_products', "
+            "'main._sqb_archive__20200101t000000z__old_products', "
             "TIMESTAMP '2020-01-01 00:00:00'), "
             "('misleading_archive', 1, 'archive', TIMESTAMP '2020-01-01 00:00:00', 'run_old', "
             f"'main', 'recent_orders', '{RECENT_ARCHIVE_NAME}', 'main.{RECENT_ARCHIVE_NAME}', "
             "TIMESTAMP '2020-01-01 00:00:00'), "
             "('misleading_malformed', 1, 'archive', TIMESTAMP '2020-01-01 00:00:00', 'run_old', "
-            "'main', 'bad_month', '_SQB_ARCHIVE__20201399T000000Z__bad_month', "
-            "'main._SQB_ARCHIVE__20201399T000000Z__bad_month', TIMESTAMP '2020-01-01 00:00:00')"
+            "'main', 'bad_month', '_sqb_archive__20201399t000000z__bad_month', "
+            "'main._sqb_archive__20201399t000000z__bad_month', TIMESTAMP '2020-01-01 00:00:00')"
         ),
     )
 
@@ -372,9 +377,9 @@ def test_given_small_identifier_limit_when_archiving_long_name_then_fits_name_an
     archive_name: str = archive_names[0]
     match: re.Match[str] | None = ARCHIVE_NAME_PATTERN.match(archive_name)
     assert match is not None
-    archived_at: datetime = datetime.strptime(match.group("timestamp"), "%Y%m%dT%H%M%SZ").replace(
-        tzinfo=UTC
-    )
+    archived_at: datetime = datetime.strptime(
+        match.group("timestamp").upper(), "%Y%m%dT%H%M%SZ"
+    ).replace(tzinfo=UTC)
     assert before <= archived_at <= after
     logical_name: str = match.group("logical_name")
     assert len(archive_name) == test_case.identifier_limit
@@ -465,4 +470,66 @@ def test_given_audit_write_interrupted_after_rename_when_janitor_reruns_then_arc
     assert list_archive_names(db_path=db_path) == ()
     assert [(event[0], event[1], event[3]) for event in read_janitor_events(db_path=db_path)] == [
         ("delete", None, stranded_archives[0])
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorUnaddressableRelationE2ETestCase(
+            description="quoted mixed-case relation is reported and left while plain one archives",
+            janitor_command=("--no-color", "janitor", "--auto-approve"),
+            plain_relation="old_orders",
+            quoted_relation="LegacyCustomers",
+            expected_stdout_fragments=(
+                "relations to archive   1",
+                "main.old_orders  ->  main._sqb_archive__",
+                "main.LegacyCustomers  relation name is not a plain lowercase identifier and may "
+                "require quoting; janitor does not act on it",
+                "Archived 1 relations.",
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_quoted_mixed_case_relation_when_running_janitor_then_it_is_reported_and_untouched(
+    test_case: JanitorUnaddressableRelationE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_archive_janitor_project(
+        tmp_path=tmp_path,
+        project_name="janitor_unaddressable_relation",
+        janitor_config="enabled = true\nretention_days = 0\ndelete_tracked_only = false\n",
+    )
+    db_path: Path = project_dir / "janitor.duckdb"
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+    execute_duckdb(
+        db_path=db_path,
+        sql=(
+            f"CREATE TABLE main.{test_case.plain_relation} AS SELECT 1 AS id; "
+            f'CREATE TABLE main."{test_case.quoted_relation}" AS SELECT 2 AS id'
+        ),
+    )
+
+    janitor_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.janitor_command, project_dir=project_dir
+    )
+
+    assert janitor_result.returncode == 0, janitor_result.stdout + janitor_result.stderr
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in janitor_result.stdout
+    assert not table_exists(db_path=db_path, table_name=test_case.plain_relation)
+    assert table_exists(db_path=db_path, table_name=test_case.quoted_relation)
+    assert query_duckdb(
+        db_path=db_path, sql=f'SELECT id FROM main."{test_case.quoted_relation}"'
+    ) == [(2,)]
+    archive_names: tuple[str, ...] = list_archive_names(db_path=db_path)
+    assert tuple(ARCHIVE_NAME_PATTERN.sub(r"\g<logical_name>", name) for name in archive_names) == (
+        test_case.plain_relation,
+    )
+    assert [(event[0], event[1]) for event in read_janitor_events(db_path=db_path)] == [
+        ("archive", test_case.plain_relation)
     ]
