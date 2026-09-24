@@ -12,6 +12,9 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.virtual.state._helpers.state_storage.datetime import (
     from_naive_utc_wall_clock,
 )
+from sqlbuild.virtual.state._helpers.state_storage.validation import (
+    validate_conditional_virtual_environment_publication,
+)
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.constants import (
     FUNCTION_VERSION_TABLE,
@@ -39,6 +42,7 @@ from sqlbuild.virtual.state.models import (
     PythonNodeVersionRecord,
     SeedVersionRecord,
     SourceFreshnessRecord,
+    StateLockLease,
     StateLockRecord,
     StateOperationRecord,
     VirtualEnvironmentCheckpointFunctionRefRecord,
@@ -87,8 +91,20 @@ class SqlStateBackend(StateBackend):
         ...
 
     @abstractmethod
-    def _execute_in(self, *, executor: Any, sql: str, params: Sequence[object]) -> None:
-        """Run one statement on a transaction executor."""
+    def _statement_executor(self, *, connection: Any) -> AbstractContextManager[Any]:
+        """Open an executor for explicitly delimited statements on a connection."""
+        ...
+
+    @abstractmethod
+    def _execute_in(
+        self, *, executor: Any, sql: str, params: Sequence[object] | None = None
+    ) -> None:
+        """Run one statement on an executor."""
+        ...
+
+    @abstractmethod
+    def _lease_is_owned(self, *, executor: Any, schema: str, lease: StateLockLease) -> bool:
+        """Fence one lock lease inside an open transaction and report whether it is held."""
         ...
 
     @abstractmethod
@@ -500,6 +516,168 @@ class SqlStateBackend(StateBackend):
                     f"Duplicate node ref for node type '{node_type}' and name '{ref.node_name}'"
                 )
             seen_node_names.add(ref.node_name)
+
+    def upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
+        self,
+        *,
+        connection: Any,
+        schema: str,
+        record: VirtualEnvironmentRecord,
+        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
+        leases: tuple[StateLockLease, ...],
+        checkpoint: VirtualEnvironmentCheckpointRecord | None = None,
+        checkpoint_refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...] = (),
+        checkpoint_function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...] = (),
+        checkpoint_seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (),
+    ) -> bool:
+        validate_conditional_virtual_environment_publication(
+            record=record,
+            refs_by_node_type=refs_by_node_type,
+            checkpoint=checkpoint,
+            checkpoint_refs=checkpoint_refs,
+            checkpoint_function_refs=checkpoint_function_refs,
+            checkpoint_seed_refs=checkpoint_seed_refs,
+        )
+        with self._statement_executor(connection=connection) as executor:
+            self._execute_in(executor=executor, sql="BEGIN")
+            try:
+                lease: StateLockLease
+                for lease in leases:
+                    if not self._lease_is_owned(executor=executor, schema=schema, lease=lease):
+                        self._execute_in(executor=executor, sql="ROLLBACK")
+                        return False
+                self._upsert_virtual_environment_record(
+                    executor=executor, schema=schema, record=record
+                )
+                self._replace_virtual_environment_node_ref_groups(
+                    executor=executor,
+                    schema=schema,
+                    virtual_environment_name=record.virtual_environment_name,
+                    refs_by_node_type=refs_by_node_type,
+                )
+                if checkpoint is not None:
+                    self._insert_virtual_environment_checkpoint_rows(
+                        executor=executor,
+                        schema=schema,
+                        checkpoint=checkpoint,
+                        refs=checkpoint_refs,
+                        function_refs=checkpoint_function_refs,
+                        seed_refs=checkpoint_seed_refs,
+                    )
+                self._execute_in(executor=executor, sql="COMMIT")
+                return True
+            except BaseException:
+                self._execute_in(executor=executor, sql="ROLLBACK")
+                raise
+
+    def create_virtual_environment_checkpoint(
+        self,
+        *,
+        connection: Any,
+        schema: str,
+        checkpoint: VirtualEnvironmentCheckpointRecord,
+        refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...],
+        function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...] = (),
+        seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (),
+    ) -> None:
+        with self._write_transaction(connection=connection) as executor:
+            self._insert_virtual_environment_checkpoint_rows(
+                executor=executor,
+                schema=schema,
+                checkpoint=checkpoint,
+                refs=refs,
+                function_refs=function_refs,
+                seed_refs=seed_refs,
+            )
+
+    def delete_virtual_environment_checkpoint(
+        self, *, connection: Any, schema: str, checkpoint_id: str
+    ) -> None:
+        p: str = self._placeholder
+        table_names: tuple[str, ...] = (
+            VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
+            VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
+            VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
+            VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE,
+        )
+        with self._write_transaction(connection=connection) as executor:
+            table_name: str
+            for table_name in table_names:
+                self._execute_in(
+                    executor=executor,
+                    sql=(
+                        f"DELETE FROM {self._qualified_name(schema=schema, table=table_name)} "
+                        f"WHERE checkpoint_id = {p}"
+                    ),
+                    params=[checkpoint_id],
+                )
+
+    def _insert_virtual_environment_checkpoint_rows(
+        self,
+        *,
+        executor: Any,
+        schema: str,
+        checkpoint: VirtualEnvironmentCheckpointRecord,
+        refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...],
+        function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...],
+        seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...],
+    ) -> None:
+        p: str = self._placeholder
+        checkpoint_table: str = self._qualified_name(
+            schema=schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE
+        )
+        model_ref_table: str = self._qualified_name(
+            schema=schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE
+        )
+        function_ref_table: str = self._qualified_name(
+            schema=schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE
+        )
+        seed_ref_table: str = self._qualified_name(
+            schema=schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE
+        )
+        self._execute_in(
+            executor=executor,
+            sql=(
+                f"INSERT INTO {checkpoint_table} "
+                "(checkpoint_id, virtual_environment_name, created_at) "
+                f"VALUES ({p}, {p}, CURRENT_TIMESTAMP)"
+            ),
+            params=[checkpoint.checkpoint_id, checkpoint.virtual_environment_name],
+        )
+        ref: VirtualEnvironmentCheckpointModelRefRecord
+        for ref in refs:
+            self._execute_in(
+                executor=executor,
+                sql=(
+                    f"INSERT INTO {model_ref_table} "
+                    f"(checkpoint_id, model_name, version_hash) VALUES ({p}, {p}, {p})"
+                ),
+                params=[ref.checkpoint_id, ref.model_name, ref.version_hash],
+            )
+        function_ref: VirtualEnvironmentCheckpointFunctionRefRecord
+        for function_ref in function_refs:
+            self._execute_in(
+                executor=executor,
+                sql=(
+                    f"INSERT INTO {function_ref_table} "
+                    f"(checkpoint_id, function_name, version_hash) VALUES ({p}, {p}, {p})"
+                ),
+                params=[
+                    function_ref.checkpoint_id,
+                    function_ref.function_name,
+                    function_ref.version_hash,
+                ],
+            )
+        seed_ref: VirtualEnvironmentCheckpointSeedRefRecord
+        for seed_ref in seed_refs:
+            self._execute_in(
+                executor=executor,
+                sql=(
+                    f"INSERT INTO {seed_ref_table} "
+                    f"(checkpoint_id, seed_name, version_hash) VALUES ({p}, {p}, {p})"
+                ),
+                params=[seed_ref.checkpoint_id, seed_ref.seed_name, seed_ref.version_hash],
+            )
 
     def _replace_row_preserving_created_at(
         self,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from datetime import datetime
 from typing import Any, ClassVar
 
@@ -28,9 +28,6 @@ from sqlbuild.virtual.state._helpers.state_storage.microbatch_events import (
     read_duckdb_microbatch_scope_history,
 )
 from sqlbuild.virtual.state._helpers.state_storage.validation import build_validation_result
-from sqlbuild.virtual.state.classes._duckdb_conditional_publish import (
-    DuckDbConditionalPublishMixin,
-)
 from sqlbuild.virtual.state.classes._sql_state_backend import SqlStateBackend
 from sqlbuild.virtual.state.constants import (
     CURRENT_STATE_SCHEMA_VERSION,
@@ -51,10 +48,6 @@ from sqlbuild.virtual.state.constants import (
     STATE_TABLE_INDEXES,
     STATE_TABLES,
     STATE_VERSION_TABLE,
-    VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
-    VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
-    VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
-    VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE,
     VIRTUAL_ENVIRONMENT_NODE_REF_TABLE,
     VIRTUAL_ENVIRONMENT_TABLE,
 )
@@ -67,12 +60,9 @@ from sqlbuild.virtual.state.models import (
     ReconcileEventRecord,
     SourceFreshnessRecord,
     StateBackupRecord,
+    StateLockLease,
     StateOperationEventRecord,
     StateSchemaValidationResult,
-    VirtualEnvironmentCheckpointFunctionRefRecord,
-    VirtualEnvironmentCheckpointModelRefRecord,
-    VirtualEnvironmentCheckpointRecord,
-    VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentNodeRefRecord,
 )
 from sqlbuild.virtual.state.types import (
@@ -82,7 +72,7 @@ from sqlbuild.virtual.state.types import (
 )
 
 
-class DuckDbStateBackend(DuckDbConditionalPublishMixin, SqlStateBackend):
+class DuckDbStateBackend(SqlStateBackend):
     """DuckDB implementation for virtual state."""
 
     _placeholder: ClassVar[str] = "?"
@@ -122,8 +112,26 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, SqlStateBackend):
             connection.execute("ROLLBACK")
             raise
 
-    def _execute_in(self, *, executor: Any, sql: str, params: Sequence[object]) -> None:
+    def _statement_executor(self, *, connection: Any) -> AbstractContextManager[Any]:
+        return nullcontext(connection)
+
+    def _execute_in(
+        self, *, executor: Any, sql: str, params: Sequence[object] | None = None
+    ) -> None:
+        if params is None:
+            executor.execute(sql)
+            return
         executor.execute(sql, params)
+
+    def _lease_is_owned(self, *, executor: Any, schema: str, lease: StateLockLease) -> bool:
+        owned: tuple[Any, ...] | None = executor.execute(
+            f"UPDATE {self._qualified_name(schema=schema, table=LOCK_TABLE)} "
+            "SET updated_at = CURRENT_TIMESTAMP "
+            "WHERE lock_key = ? AND owner_id = ? AND expires_at > CURRENT_TIMESTAMP "
+            "RETURNING lock_key",
+            [lease.lock_key, lease.owner_id],
+        ).fetchone()
+        return owned is not None
 
     def _fetch_one_in(
         self, *, executor: Any, sql: str, params: Sequence[object]
@@ -560,72 +568,6 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, SqlStateBackend):
                 "updated_at = now()"
             )
             connection.execute(f"DROP TABLE IF EXISTS {temp_table_name}")
-            connection.execute("COMMIT")
-        except BaseException:
-            connection.execute("ROLLBACK")
-            raise
-
-    def create_virtual_environment_checkpoint(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        checkpoint: VirtualEnvironmentCheckpointRecord,
-        refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...],
-        function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...] = (),
-        seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (),
-    ) -> None:
-        connection.execute("BEGIN")
-        try:
-            self._insert_virtual_environment_checkpoint_rows(
-                connection=connection,
-                schema=schema,
-                checkpoint=checkpoint,
-                refs=refs,
-                function_refs=function_refs,
-                seed_refs=seed_refs,
-            )
-            connection.execute("COMMIT")
-        except BaseException:
-            connection.execute("ROLLBACK")
-            raise
-
-    def delete_virtual_environment_checkpoint(
-        self, *, connection: Any, schema: str, checkpoint_id: str
-    ) -> None:
-        connection.execute("BEGIN")
-        try:
-            checkpoint_function_ref_table: str = self._qualified_name(
-                schema=schema,
-                table=VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
-            )
-            checkpoint_seed_ref_table: str = self._qualified_name(
-                schema=schema,
-                table=VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
-            )
-            checkpoint_model_ref_table: str = self._qualified_name(
-                schema=schema,
-                table=VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
-            )
-            connection.execute(
-                f"DELETE FROM {checkpoint_seed_ref_table} WHERE checkpoint_id = ?",
-                [checkpoint_id],
-            )
-            connection.execute(
-                f"DELETE FROM {checkpoint_function_ref_table} WHERE checkpoint_id = ?",
-                [checkpoint_id],
-            )
-            connection.execute(
-                f"DELETE FROM {checkpoint_model_ref_table} WHERE checkpoint_id = ?",
-                [checkpoint_id],
-            )
-            connection.execute(
-                "DELETE FROM "
-                f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE)}"
-                " "
-                "WHERE checkpoint_id = ?",
-                [checkpoint_id],
-            )
             connection.execute("COMMIT")
         except BaseException:
             connection.execute("ROLLBACK")

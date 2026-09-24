@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from datetime import datetime
 from typing import Any, ClassVar
 
@@ -28,7 +28,6 @@ from sqlbuild.virtual.state._helpers.state_storage.datetime import (
 from sqlbuild.virtual.state._helpers.state_storage.events import backup_id, event_id
 from sqlbuild.virtual.state._helpers.state_storage.validation import (
     build_validation_result,
-    validate_conditional_virtual_environment_publication,
 )
 from sqlbuild.virtual.state.classes._sql_state_backend import SqlStateBackend
 from sqlbuild.virtual.state.constants import (
@@ -49,10 +48,6 @@ from sqlbuild.virtual.state.constants import (
     STATE_TABLE_INDEXES,
     STATE_TABLES,
     STATE_VERSION_TABLE,
-    VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
-    VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
-    VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
-    VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE,
     VIRTUAL_ENVIRONMENT_NODE_REF_TABLE,
     VIRTUAL_ENVIRONMENT_TABLE,
 )
@@ -68,12 +63,7 @@ from sqlbuild.virtual.state.models import (
     StateLockLease,
     StateOperationEventRecord,
     StateSchemaValidationResult,
-    VirtualEnvironmentCheckpointFunctionRefRecord,
-    VirtualEnvironmentCheckpointModelRefRecord,
-    VirtualEnvironmentCheckpointRecord,
-    VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentNodeRefRecord,
-    VirtualEnvironmentRecord,
 )
 from sqlbuild.virtual.state.types import (
     StateColumnType,
@@ -145,8 +135,26 @@ class PostgresStateBackend(SqlStateBackend):
                 cursor.execute("ROLLBACK")
                 raise
 
-    def _execute_in(self, *, executor: Any, sql: str, params: Sequence[object]) -> None:
+    def _statement_executor(self, *, connection: Any) -> AbstractContextManager[Any]:
+        return connection.cursor()
+
+    def _execute_in(
+        self, *, executor: Any, sql: str, params: Sequence[object] | None = None
+    ) -> None:
+        if params is None:
+            executor.execute(sql)
+            return
         executor.execute(sql, params)
+
+    def _lease_is_owned(self, *, executor: Any, schema: str, lease: StateLockLease) -> bool:
+        lock_table: str = self._qualified_name(schema=schema, table=LOCK_TABLE)
+        executor.execute(
+            f"SELECT lock_key FROM {lock_table} "
+            "WHERE lock_key = %s AND owner_id = %s "
+            "AND expires_at > CURRENT_TIMESTAMP FOR UPDATE",
+            [lease.lock_key, lease.owner_id],
+        )
+        return executor.fetchone() is not None
 
     def _fetch_one_in(
         self, *, executor: Any, sql: str, params: Sequence[object]
@@ -544,66 +552,6 @@ class PostgresStateBackend(SqlStateBackend):
                 cursor.execute("ROLLBACK")
                 raise
 
-    def upsert_virtual_environment_and_replace_node_ref_groups_if_locks_owned(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        record: VirtualEnvironmentRecord,
-        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
-        leases: tuple[StateLockLease, ...],
-        checkpoint: VirtualEnvironmentCheckpointRecord | None = None,
-        checkpoint_refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...] = (),
-        checkpoint_function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...] = (),
-        checkpoint_seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (),
-    ) -> bool:
-        validate_conditional_virtual_environment_publication(
-            record=record,
-            refs_by_node_type=refs_by_node_type,
-            checkpoint=checkpoint,
-            checkpoint_refs=checkpoint_refs,
-            checkpoint_function_refs=checkpoint_function_refs,
-            checkpoint_seed_refs=checkpoint_seed_refs,
-        )
-        with connection.cursor() as cursor:
-            cursor.execute("BEGIN")
-            try:
-                lease: StateLockLease
-                for lease in leases:
-                    lock_table: str = self._qualified_name(schema=schema, table=LOCK_TABLE)
-                    cursor.execute(
-                        f"SELECT lock_key FROM {lock_table} "
-                        "WHERE lock_key = %s AND owner_id = %s "
-                        "AND expires_at > CURRENT_TIMESTAMP FOR UPDATE",
-                        [lease.lock_key, lease.owner_id],
-                    )
-                    if cursor.fetchone() is None:
-                        cursor.execute("ROLLBACK")
-                        return False
-                self._upsert_virtual_environment_record(
-                    executor=cursor, schema=schema, record=record
-                )
-                self._replace_virtual_environment_node_ref_groups(
-                    executor=cursor,
-                    schema=schema,
-                    virtual_environment_name=record.virtual_environment_name,
-                    refs_by_node_type=refs_by_node_type,
-                )
-                if checkpoint is not None:
-                    self._insert_virtual_environment_checkpoint_rows(
-                        cursor=cursor,
-                        schema=schema,
-                        checkpoint=checkpoint,
-                        refs=checkpoint_refs,
-                        function_refs=checkpoint_function_refs,
-                        seed_refs=checkpoint_seed_refs,
-                    )
-                cursor.execute("COMMIT")
-                return True
-            except BaseException:
-                cursor.execute("ROLLBACK")
-                raise
-
     def upsert_virtual_environment_node_ref(
         self,
         *,
@@ -708,127 +656,6 @@ class PostgresStateBackend(SqlStateBackend):
                             to_naive_utc_wall_clock(record.observed_at),
                         ],
                     )
-                cursor.execute("COMMIT")
-            except BaseException:
-                cursor.execute("ROLLBACK")
-                raise
-
-    def create_virtual_environment_checkpoint(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        checkpoint: VirtualEnvironmentCheckpointRecord,
-        refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...],
-        function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...] = (),
-        seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (),
-    ) -> None:
-        with connection.cursor() as cursor:
-            cursor.execute("BEGIN")
-            try:
-                self._insert_virtual_environment_checkpoint_rows(
-                    cursor=cursor,
-                    schema=schema,
-                    checkpoint=checkpoint,
-                    refs=refs,
-                    function_refs=function_refs,
-                    seed_refs=seed_refs,
-                )
-                cursor.execute("COMMIT")
-            except BaseException:
-                cursor.execute("ROLLBACK")
-                raise
-
-    def _insert_virtual_environment_checkpoint_rows(
-        self,
-        *,
-        cursor: Any,
-        schema: str,
-        checkpoint: VirtualEnvironmentCheckpointRecord,
-        refs: tuple[VirtualEnvironmentCheckpointModelRefRecord, ...],
-        function_refs: tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...],
-        seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...],
-    ) -> None:
-        checkpoint_table: str = self._qualified_name(
-            schema=schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE
-        )
-        model_ref_table: str = self._qualified_name(
-            schema=schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE
-        )
-        function_ref_table: str = self._qualified_name(
-            schema=schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE
-        )
-        seed_ref_table: str = self._qualified_name(
-            schema=schema, table=VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE
-        )
-        cursor.execute(
-            f"INSERT INTO {checkpoint_table} "
-            "(checkpoint_id, virtual_environment_name, created_at) "
-            "VALUES (%s, %s, CURRENT_TIMESTAMP)",
-            [checkpoint.checkpoint_id, checkpoint.virtual_environment_name],
-        )
-        ref: VirtualEnvironmentCheckpointModelRefRecord
-        for ref in refs:
-            cursor.execute(
-                f"INSERT INTO {model_ref_table} "
-                "(checkpoint_id, model_name, version_hash) VALUES (%s, %s, %s)",
-                [ref.checkpoint_id, ref.model_name, ref.version_hash],
-            )
-        function_ref: VirtualEnvironmentCheckpointFunctionRefRecord
-        for function_ref in function_refs:
-            cursor.execute(
-                f"INSERT INTO {function_ref_table} "
-                "(checkpoint_id, function_name, version_hash) VALUES (%s, %s, %s)",
-                [function_ref.checkpoint_id, function_ref.function_name, function_ref.version_hash],
-            )
-        seed_ref: VirtualEnvironmentCheckpointSeedRefRecord
-        for seed_ref in seed_refs:
-            cursor.execute(
-                f"INSERT INTO {seed_ref_table} "
-                "(checkpoint_id, seed_name, version_hash) VALUES (%s, %s, %s)",
-                [seed_ref.checkpoint_id, seed_ref.seed_name, seed_ref.version_hash],
-            )
-
-    def delete_virtual_environment_checkpoint(
-        self, *, connection: Any, schema: str, checkpoint_id: str
-    ) -> None:
-        with connection.cursor() as cursor:
-            cursor.execute("BEGIN")
-            try:
-                checkpoint_function_ref_table: str = self._qualified_name(
-                    schema=schema,
-                    table=VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
-                )
-                checkpoint_model_ref_table: str = self._qualified_name(
-                    schema=schema,
-                    table=VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
-                )
-                checkpoint_seed_ref_table: str = self._qualified_name(
-                    schema=schema,
-                    table=VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
-                )
-                cursor.execute(
-                    f"DELETE FROM {checkpoint_seed_ref_table} WHERE checkpoint_id = %s",
-                    [checkpoint_id],
-                )
-                cursor.execute(
-                    f"DELETE FROM {checkpoint_function_ref_table} WHERE checkpoint_id = %s",
-                    [checkpoint_id],
-                )
-                cursor.execute(
-                    f"DELETE FROM {checkpoint_model_ref_table} WHERE checkpoint_id = %s",
-                    [checkpoint_id],
-                )
-                cursor.execute(
-                    "DELETE FROM "
-                    + self._qualified_name(
-                        schema=schema,
-                        table=VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE,
-                    )
-                    + " "
-                    "WHERE checkpoint_id = %s",
-                    [checkpoint_id],
-                )
                 cursor.execute("COMMIT")
             except BaseException:
                 cursor.execute("ROLLBACK")
