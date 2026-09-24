@@ -24,6 +24,7 @@ class SqlAnalysisChainSqlTestE2ETestCase:
     sql_analysis_enabled: bool
     expected_artifact_fragments: tuple[str, ...]
     unexpected_artifact_fragments: tuple[str, ...]
+    expected_runtime_fragments: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)

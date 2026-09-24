@@ -121,6 +121,7 @@ OPERATION_NAMES: frozenset[str] = frozenset(
         "python_materialization",
         "python_task",
         "sql_hook",
+        "sql_test_planning",
         "scenario_capture",
         "scenario_cleanup",
         "scenario_execution",

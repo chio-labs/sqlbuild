@@ -408,3 +408,80 @@ pub(crate) fn ordered_comparison_batch_preserves_order() -> bool {
     assert!(sql.contains("EXCEPT"));
     true
 }
+
+pub(crate) fn shared_textual_chain_renders_each_model_once() -> bool {
+    const LAYERS: usize = 16;
+    let mut models: Vec<Value> = vec![json!({
+        "name": "orders_00",
+        "querySql": "SELECT order_id, amount FROM __source(\"raw_orders\")",
+        "modelDependencies": []
+    })];
+    for side in ["left", "right"] {
+        models.push(diamond_model(1, side, "orders_00", "orders_00"));
+    }
+    for layer in 2..=LAYERS {
+        let previous: String = format!("orders_{:02}_left", layer - 1);
+        let other: String = format!("orders_{:02}_right", layer - 1);
+        for side in ["left", "right"] {
+            models.push(diamond_model(layer, side, &previous, &other));
+        }
+    }
+    let top: String = format!("orders_{LAYERS:02}_left");
+    let response: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+            &json!({
+                "models": models,
+                "functions": [],
+                "tests": [{
+                    "name": "orders_totals",
+                    "fileLabel": "tests/orders_totals.sql",
+                    "payload": {
+                        "kind": "model",
+                        "authoredCtes": [{
+                            "name": "__source__raw_orders",
+                            "sqlBody": "SELECT 1 AS order_id, 1 AS amount"
+                        }],
+                        "expectedCtes": [{
+                            "name": format!("__expected__{top}"),
+                            "sqlBody": "SELECT 1 AS order_id, 65536 AS amount"
+                        }],
+                        "expectedModelNames": [top],
+                        "assertionCtes": []
+                    }
+                }],
+                "sqlAnalysisEnabled": false,
+                "sqlAnalysisDialect": "duckdb",
+                "setDifferenceOperator": "EXCEPT",
+                "workers": 1
+            })
+            .to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+
+    let sql = response["artifacts"][0]["sql"]
+        .as_str()
+        .expect("test assumption must hold");
+    assert!(sql.len() < 50_000, "rendered {} bytes", sql.len());
+    for layer in 1..LAYERS {
+        for side in ["left", "right"] {
+            let definition = format!("__ref__orders_{layer:02}_{side} AS (");
+            assert_eq!(sql.matches(&definition).count(), 1, "{definition}");
+        }
+    }
+    assert_eq!(sql.matches("__ref__orders_00 AS (").count(), 1);
+    true
+}
+
+fn diamond_model(layer: usize, side: &str, previous: &str, other: &str) -> Value {
+    json!({
+        "name": format!("orders_{layer:02}_{side}"),
+        "querySql": format!(
+            "SELECT a.order_id, a.amount + b.amount AS amount \
+             FROM __ref(\"{previous}\") AS a \
+             INNER JOIN __ref(\"{other}\") AS b ON a.order_id = b.order_id"
+        ),
+        "modelDependencies": [previous, other]
+    })
+}

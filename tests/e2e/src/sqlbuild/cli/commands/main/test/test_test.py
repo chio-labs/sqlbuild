@@ -660,19 +660,25 @@ def test_given_waffle_shop_project_when_running_test_then_all_tests_pass(
             ),
         ),
         SqlAnalysisChainSqlTestE2ETestCase(
-            description="sql_analysis disabled chain test runs and keeps nested fallback sql",
+            description="sql_analysis disabled chain test renders each upstream model once",
             sql_analysis_enabled=False,
             expected_artifact_fragments=(
+                "__actual__fact_orders AS (",
+                "__ref__stg_orders AS (",
+                "FROM __ref__stg_orders",
+                "'US' AS country",
+                "' + x + ' AS literal_text",
+                "'active' AS status",
+                "'fact_orders' AS model_name",
+            ),
+            unexpected_artifact_fragments=("__actual_0",),
+            expected_runtime_fragments=(
                 "__actual__fact_orders AS (",
                 "FROM (",
                 "'US' AS country",
                 "' + x + ' AS literal_text",
                 "'active' AS status",
                 "'fact_orders' AS model_name",
-            ),
-            unexpected_artifact_fragments=(
-                "__ref__stg_orders AS (",
-                "__actual_0",
             ),
         ),
     ],
@@ -708,7 +714,10 @@ def test_given_chain_sql_test_when_running_test_then_generated_sql_is_valid(
         / "test_chain.sql"
     ).read_text(encoding="utf-8")
     expected_runtime_fragment: str
-    for expected_runtime_fragment in test_case.expected_artifact_fragments:
+    runtime_fragments: tuple[str, ...] = (
+        test_case.expected_runtime_fragments or test_case.expected_artifact_fragments
+    )
+    for expected_runtime_fragment in runtime_fragments:
         assert expected_runtime_fragment in runtime_artifact_sql
 
     compile_result: subprocess.CompletedProcess[str] = run_sqb(

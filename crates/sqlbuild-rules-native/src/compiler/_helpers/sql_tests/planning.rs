@@ -247,13 +247,128 @@ struct TextualChainRequest<'a> {
     overrides: &'a BTreeMap<String, String>,
     fixtures: &'a TestFixtures,
     context: &'a ProjectContext,
-    resolved_chain: &'a mut HashMap<String, String>,
+    chain: &'a mut TextualChain,
+}
+
+/// Chain models resolved once each as named CTE bodies, so work scales with models not paths.
+#[derive(Default)]
+struct TextualChain {
+    cte_names: HashMap<String, String>,
+    bodies: HashMap<String, String>,
+    dependencies: HashMap<String, Vec<String>>,
+    order: Vec<String>,
+}
+
+struct TextualChainInputs<'a> {
+    ordered_names: &'a [String],
+    overrides: &'a BTreeMap<String, String>,
+    fixtures: &'a TestFixtures,
+    context: &'a ProjectContext,
+}
+
+struct TextualStep {
+    resolved_sql: String,
+    lifted_ctes: Vec<(String, String)>,
+    body_sql: String,
+}
+
+impl TextualChain {
+    fn extend(&mut self, inputs: &TextualChainInputs<'_>) -> Result<HashSet<String>, String> {
+        let mut reachable: HashSet<String> = HashSet::new();
+        for model_name in inputs.ordered_names {
+            if self.bodies.contains_key(model_name) {
+                continue;
+            }
+            let Some(model) = inputs.context.models.get(model_name) else {
+                continue;
+            };
+            let query_sql = inputs.overrides.get(model_name).unwrap_or(&model.query_sql);
+            let mut chain_references: Vec<String> = Vec::new();
+            let (resolved_sql, reached) = resolve_textual_sql(TextualResolutionRequest {
+                query_sql,
+                fixtures: inputs.fixtures,
+                resolved_chain: &self.cte_names,
+                chain_references: Some(&mut chain_references),
+                functions: &inputs.context.functions,
+                patterns: &inputs.context.patterns,
+            })?;
+            reachable.extend(reached);
+            self.insert(model_name, resolved_sql, chain_references);
+        }
+        Ok(reachable)
+    }
+
+    fn insert(&mut self, model_name: &str, body: String, dependencies: Vec<String>) {
+        self.cte_names
+            .insert(model_name.to_string(), format!("{REF_PREFIX}{model_name}"));
+        self.bodies.insert(model_name.to_string(), body);
+        self.dependencies
+            .insert(model_name.to_string(), dependencies);
+        self.order.push(model_name.to_string());
+    }
+
+    /// Return the generated CTEs needed by `roots`, dependencies first, each exactly once.
+    fn closure_ctes(&self, roots: &[String], include_roots: bool) -> Vec<(String, String)> {
+        let mut needed: HashSet<String> = HashSet::new();
+        let mut stack: Vec<String> = Vec::new();
+        for root in roots {
+            if include_roots {
+                stack.push(root.clone());
+            } else if let Some(dependencies) = self.dependencies.get(root) {
+                stack.extend(dependencies.iter().cloned());
+            }
+        }
+        while let Some(name) = stack.pop() {
+            if !needed.insert(name.clone()) {
+                continue;
+            }
+            if let Some(dependencies) = self.dependencies.get(&name) {
+                stack.extend(dependencies.iter().cloned());
+            }
+        }
+        self.order
+            .iter()
+            .filter(|name| needed.contains(*name))
+            .filter_map(|name| {
+                Some((
+                    self.cte_names.get(name)?.clone(),
+                    self.bodies.get(name)?.clone(),
+                ))
+            })
+            .collect()
+    }
+
+    fn step(&self, model_name: &str) -> Option<TextualStep> {
+        let body_sql = self.bodies.get(model_name)?.clone();
+        let lifted_ctes = self.closure_ctes(&[model_name.to_string()], false);
+        Some(TextualStep {
+            resolved_sql: with_generated_ctes(&lifted_ctes, &body_sql),
+            lifted_ctes,
+            body_sql,
+        })
+    }
+}
+
+/// Prefix generated CTEs to a query, merging into its own leading WITH clause when present.
+fn with_generated_ctes(ctes: &[(String, String)], body: &str) -> String {
+    if ctes.is_empty() {
+        return body.to_string();
+    }
+    let definitions: String = ctes
+        .iter()
+        .map(|(name, sql)| cte_definition_sql(name, sql))
+        .collect::<Vec<_>>()
+        .join(", ");
+    match leading_with_prefix_end(body) {
+        Some(end) => format!("{}{definitions}, {}", &body[..end], &body[end..]),
+        None => format!("WITH {definitions} {body}"),
+    }
 }
 
 struct AssertionResolutionRequest<'a> {
     assertion_sql: &'a str,
     fixtures: &'a TestFixtures,
-    resolved_chain: &'a HashMap<String, String>,
+    chain: &'a TextualChain,
     functions: &'a HashMap<String, FunctionInput>,
     requires_flat_ctes: bool,
     patterns: &'a SqlTestPatterns,
@@ -274,6 +389,7 @@ struct TextualResolutionRequest<'a> {
     query_sql: &'a str,
     fixtures: &'a TestFixtures,
     resolved_chain: &'a HashMap<String, String>,
+    chain_references: Option<&'a mut Vec<String>>,
     functions: &'a HashMap<String, FunctionInput>,
     patterns: &'a SqlTestPatterns,
 }
@@ -526,7 +642,7 @@ fn plan_model_test(
     let mut warnings: Vec<PlanWarning> = Vec::new();
     let mut reachable_mocks: HashSet<String> = HashSet::new();
     let mut analysis_resolved: HashMap<String, AnalysisResolvedSql> = HashMap::new();
-    let mut textual_resolved: HashMap<String, String> = HashMap::new();
+    let mut textual_chain: TextualChain = TextualChain::default();
     let mut chain: Vec<ChainStep> = Vec::new();
 
     for (model_index, model_name) in ordered_names.iter().enumerate() {
@@ -576,15 +692,15 @@ fn plan_model_test(
             analysis_resolved.insert(model_name.clone(), analyzed);
             result
         } else {
-            let (resolved, reached) = ensure_textual_chain_through(TextualChainRequest {
+            let (step, reached) = ensure_textual_chain_through(TextualChainRequest {
                 ordered_names: &ordered_names[..=model_index],
                 overrides: &plan.model_query_overrides,
                 fixtures: &fixtures,
                 context,
-                resolved_chain: &mut textual_resolved,
+                chain: &mut textual_chain,
             })?;
             reachable_mocks.extend(reached);
-            (resolved, Vec::new(), None)
+            (step.resolved_sql, step.lifted_ctes, Some(step.body_sql))
         };
         warnings.extend(unresolved_reference_warnings(
             &resolved_sql,
@@ -602,7 +718,7 @@ fn plan_model_test(
     }
 
     let mut assertions: Vec<AssertionStep> = Vec::new();
-    let mut textual_assertion_chain: Option<HashMap<String, String>> = None;
+    let mut textual_assertion_chain: Option<TextualChain> = None;
     for (assertion_name, assertion_sql) in &fixtures.assertions {
         let (fixture_resolved_sql, reached_table_functions) = resolve_table_function_fixtures(
             assertion_sql,
@@ -647,14 +763,14 @@ fn plan_model_test(
                     reachable_mocks.extend(reached);
                     textual_assertion_chain = Some(chain);
                 }
-                let resolved_chain = textual_assertion_chain
+                let chain = textual_assertion_chain
                     .as_ref()
                     .ok_or_else(|| planner_error("textual assertion chain is unavailable"))?;
                 let (resolved, reached) =
                     resolve_assertion_textual_sql(AssertionResolutionRequest {
                         assertion_sql: &fixture_resolved_sql,
                         fixtures: &fixtures,
-                        resolved_chain,
+                        chain,
                         functions: &context.functions,
                         requires_flat_ctes: context.requires_derived_table_aliases,
                         patterns: &context.patterns,
@@ -692,45 +808,22 @@ fn plan_model_test(
 
 fn ensure_textual_chain_through(
     request: TextualChainRequest<'_>,
-) -> Result<(String, HashSet<String>), String> {
-    let mut reachable: HashSet<String> = HashSet::new();
-    for model_name in request.ordered_names {
-        if request.resolved_chain.contains_key(model_name) {
-            continue;
-        }
-        let Some(model) = request.context.models.get(model_name) else {
-            continue;
-        };
-        let query_sql = request
-            .overrides
-            .get(model_name)
-            .unwrap_or(&model.query_sql);
-        let (resolved_sql, reached) = resolve_textual_sql(TextualResolutionRequest {
-            query_sql,
-            fixtures: request.fixtures,
-            resolved_chain: request.resolved_chain,
-            functions: &request.context.functions,
-            patterns: &request.context.patterns,
-        })?;
-        reachable.extend(reached);
-        request
-            .resolved_chain
-            .insert(model_name.clone(), format!("({resolved_sql})"));
-    }
+) -> Result<(TextualStep, HashSet<String>), String> {
+    let reachable: HashSet<String> = request.chain.extend(&TextualChainInputs {
+        ordered_names: request.ordered_names,
+        overrides: request.overrides,
+        fixtures: request.fixtures,
+        context: request.context,
+    })?;
     let current_name = request
         .ordered_names
         .last()
         .ok_or_else(|| "textual SQL-test chain is empty".to_string())?;
-    let wrapped = request
-        .resolved_chain
-        .get(current_name)
+    let step = request
+        .chain
+        .step(current_name)
         .ok_or_else(|| format!("SQL-test model '{current_name}' could not be resolved"))?;
-    let body = wrapped
-        .strip_prefix('(')
-        .and_then(|value| value.strip_suffix(')'))
-        .unwrap_or(wrapped)
-        .to_string();
-    Ok((body, reachable))
+    Ok((step, reachable))
 }
 
 fn build_textual_chain(
@@ -738,25 +831,15 @@ fn build_textual_chain(
     overrides: &BTreeMap<String, String>,
     fixtures: &TestFixtures,
     context: &ProjectContext,
-) -> Result<(HashMap<String, String>, HashSet<String>), String> {
-    let mut resolved_chain: HashMap<String, String> = HashMap::new();
-    let mut reachable: HashSet<String> = HashSet::new();
-    for model_name in ordered_names {
-        let Some(model) = context.models.get(model_name) else {
-            continue;
-        };
-        let query_sql = overrides.get(model_name).unwrap_or(&model.query_sql);
-        let (resolved_sql, reached) = resolve_textual_sql(TextualResolutionRequest {
-            query_sql,
-            fixtures,
-            resolved_chain: &resolved_chain,
-            functions: &context.functions,
-            patterns: &context.patterns,
-        })?;
-        reachable.extend(reached);
-        resolved_chain.insert(model_name.clone(), format!("({resolved_sql})"));
-    }
-    Ok((resolved_chain, reachable))
+) -> Result<(TextualChain, HashSet<String>), String> {
+    let mut chain: TextualChain = TextualChain::default();
+    let reachable: HashSet<String> = chain.extend(&TextualChainInputs {
+        ordered_names,
+        overrides,
+        fixtures,
+        context,
+    })?;
+    Ok((chain, reachable))
 }
 
 fn resolve_assertion_textual_sql(
@@ -767,8 +850,7 @@ fn resolve_assertion_textual_sql(
             "SQL test assertion fallback cannot safely flatten an assertion beginning with WITH",
         ));
     }
-    let mut assertion_chain: HashMap<String, String> = HashMap::new();
-    let mut cte_parts: Vec<String> = Vec::new();
+    let mut referenced: Vec<String> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     for name in marker_names(
         &request.patterns.reference,
@@ -778,26 +860,27 @@ fn resolve_assertion_textual_sql(
         if !seen.insert(name.clone()) {
             continue;
         }
-        let Some(resolved_sql) = request.resolved_chain.get(&name) else {
+        let Some(body) = request.chain.bodies.get(&name) else {
             continue;
         };
-        let mut body = resolved_sql.trim();
-        if body.starts_with('(') && body.ends_with(')') {
-            body = body[1..body.len() - 1].trim();
-        }
         if request.requires_flat_ctes && leading_with_prefix_end(body).is_some() {
             return Err(planner_error(
                 "SQL test assertion fallback cannot safely flatten a referenced model beginning with WITH",
             ));
         }
-        let cte_name = format!("{REF_PREFIX}{name}");
-        assertion_chain.insert(name, cte_name.clone());
-        cte_parts.push(cte_definition_sql(&cte_name, body));
+        referenced.push(name);
     }
+    let cte_parts: Vec<String> = request
+        .chain
+        .closure_ctes(&referenced, true)
+        .iter()
+        .map(|(name, body)| cte_definition_sql(name, body))
+        .collect();
     let (resolved_sql, reached) = resolve_textual_sql(TextualResolutionRequest {
         query_sql: request.assertion_sql,
         fixtures: request.fixtures,
-        resolved_chain: &assertion_chain,
+        resolved_chain: &request.chain.cte_names,
+        chain_references: None,
         functions: request.functions,
         patterns: request.patterns,
     })?;
@@ -1055,12 +1138,18 @@ fn resolve_textual_sql(
 ) -> Result<(String, HashSet<String>), String> {
     let helper_with = helper_with_clause(&request.fixtures.helpers);
     let mut reached: HashSet<String> = HashSet::new();
+    let mut chain_references = request.chain_references;
     let mut result = replace_named_markers(
         request.query_sql,
         &request.patterns.reference,
         &request.patterns.protected,
         |name| {
             if let Some(sql) = request.resolved_chain.get(name) {
+                if let Some(references) = chain_references.as_deref_mut()
+                    && !references.iter().any(|existing| existing == name)
+                {
+                    references.push(name.to_string());
+                }
                 return Some(sql.clone());
             }
             request.fixtures.mock_refs.get(name).map(|sql| {
