@@ -17,11 +17,16 @@ from sqlbuild.executor.scenario.constants import (
     SCENARIO_LOCAL_SNAPSHOT_MISSING,
     SCENARIO_LOCAL_SNAPSHOT_STALE,
 )
-from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotStateResult
+from sqlbuild.executor.scenario.models import (
+    ScenarioCaptureSettings,
+    ScenarioRunResult,
+    ScenarioSnapshotStateResult,
+)
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.observability import EventDispatcher, LifecycleEvent, dispatcher_scope
 from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import (
+    ScenarioConnectionLifecycleTestCase,
     ScenarioFailureHelpTestCase,
     ScenarioLocalPipelineTestCase,
     ScenarioPlanningLifecycleTestCase,
@@ -119,19 +124,108 @@ def test_given_selected_scenarios_when_running_scenario_test_pipeline_then_orche
     assert tuple(adapter.events) == test_case.expected_connection_events
     assert results[-1].error_message is not None
     assert test_case.expected_error_fragment in results[-1].error_message
+    resource_events: list[LifecycleEvent] = lifecycle_events[2:]
     assert tuple(event.event_type for event in lifecycle_events) == (
+        "operation_started",
+        "operation_completed",
         "resource_attempt_started",
         "resource_attempt_completed",
         "resource_attempt_started",
         "resource_attempt_failed",
     )
-    assert tuple(event.resource_id for event in lifecycle_events) == (
+    assert tuple(event.resource_id for event in resource_events) == (
         "sql_scenario:passing_scenario",
         "sql_scenario:passing_scenario",
         "sql_scenario:planning_failure",
         "sql_scenario:planning_failure",
     )
-    assert tuple(event.run_id for event in lifecycle_events) == ("scenario-test-run",) * 4
+    assert tuple(event.run_id for event in resource_events) == ("scenario-test-run",) * 4
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ScenarioConnectionLifecycleTestCase(
+            description="warehouse test pipeline observes the target connection",
+            expected_event_types=("operation_started", "operation_completed"),
+            expected_operation_names=("scenario_target_connection",) * 2,
+            expected_connection_events=("connect:pipeline.duckdb", "close"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_warehouse_test_pipeline_when_connecting_then_publishes_connection_operation(
+    test_case: ScenarioConnectionLifecycleTestCase,
+) -> None:
+    pipeline_result: CompilePipelineResult = build_scenario_pipeline_result(scenario_names=())
+    adapter: ScenarioPipelineTestAdapter = ScenarioPipelineTestAdapter()
+    lifecycle_events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=lifecycle_events.append, accepts_opaque=False)
+
+    with dispatcher_scope(dispatcher):
+        _ = scenario_pipeline.run_scenario_test_pipeline(
+            pipeline_result=pipeline_result,
+            scenarios=(),
+            connection_config={"database": "pipeline.duckdb"},
+            adapter=adapter,
+            project_name="waffle_shop",
+            retain=False,
+        )
+
+    assert tuple(event.event_type for event in lifecycle_events) == test_case.expected_event_types
+    assert (
+        tuple(event.payload.get("operation_name") for event in lifecycle_events)
+        == test_case.expected_operation_names
+    )
+    assert tuple(adapter.events) == test_case.expected_connection_events
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ScenarioConnectionLifecycleTestCase(
+            description="capture pipeline observes the target connection",
+            expected_event_types=("operation_started", "operation_completed"),
+            expected_operation_names=("scenario_target_connection",) * 2,
+            expected_connection_events=("connect:pipeline.duckdb", "close"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_capture_pipeline_when_connecting_then_publishes_connection_operation(
+    tmp_path: Path,
+    test_case: ScenarioConnectionLifecycleTestCase,
+) -> None:
+    pipeline_result: CompilePipelineResult = build_scenario_pipeline_result(scenario_names=())
+    adapter: ScenarioPipelineTestAdapter = ScenarioPipelineTestAdapter()
+    lifecycle_events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=lifecycle_events.append, accepts_opaque=False)
+
+    with dispatcher_scope(dispatcher):
+        _ = scenario_pipeline.run_scenario_capture_pipeline(
+            project_dir=tmp_path,
+            pipeline_result=pipeline_result,
+            scenarios=(),
+            connection_config={"database": "pipeline.duckdb"},
+            adapter=adapter,
+            project_name="waffle_shop",
+            settings=ScenarioCaptureSettings(
+                captured_at="2026-01-01T00:00:00Z",
+                capture_adapter="duckdb",
+                capture_dialect="duckdb",
+                sqlbuild_version="0.0.0",
+                retain=False,
+            ),
+        )
+
+    assert tuple(event.event_type for event in lifecycle_events) == test_case.expected_event_types
+    assert (
+        tuple(event.payload.get("operation_name") for event in lifecycle_events)
+        == test_case.expected_operation_names
+    )
+    assert tuple(adapter.events) == test_case.expected_connection_events
 
 
 @pytest.mark.parametrize(
