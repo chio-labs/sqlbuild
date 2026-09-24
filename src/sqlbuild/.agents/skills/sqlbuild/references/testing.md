@@ -48,9 +48,14 @@ SELECT 1
 | `__seed__<name>` | Mock `__seed("<name>")` |
 | `__table_fn__<name>` | Mock a table function invocation |
 | `__macro__<name>` | Replace every `@<name>(...)` call |
-| `__expected__<model>` | Expected output of the model's real SQL (exact rows, compared both ways) |
+| `__expected__<model>` | Expected rows of the model's real SQL, compared both ways on the listed columns only |
 | `__assert__<name>` | Passes when the query returns zero rows |
 | anything else | Helper CTE visible to mocks and model SQL |
+
+An `__expected__<model>` CTE compares only the columns it lists, matched by name, so column order
+does not matter and unlisted model columns are ignored. Row counts are always compared. Listing a
+column the model does not output is a clear test error. When the expected CTE's columns are not
+explicit (for example `SELECT *` from another CTE), SQLBuild compares every column by position.
 
 Macros work inside tests, so reusable mock generators such as `@mock_orders(count=5)` are normal.
 Tests can also target a macro, UDF or table function directly; see

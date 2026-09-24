@@ -831,3 +831,133 @@ pub(crate) fn long_chain_plan_output_stays_linear() -> bool {
     }
     true
 }
+
+fn render_single(request: Value) -> String {
+    let response: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_rendering::render_json(
+            &json!({"requests": [request]}).to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+    response[0]["sql"]
+        .as_str()
+        .expect("test assumption must hold")
+        .to_string()
+}
+
+fn partial_expected_step() -> Value {
+    json!({
+        "modelName": "orders",
+        "resolvedSql": "SELECT 1 AS order_id, 'paid' AS status, 10 AS amount",
+        "expectedCteSql": "SELECT 'paid' AS status, 1 AS order_id",
+        "expectedColumns": ["status", "order_id"]
+    })
+}
+
+pub(crate) fn partial_expected_columns_project_both_sides() -> bool {
+    let sql = render_single(json!({
+        "chain": [partial_expected_step()],
+        "sqlAnalysisEnabled": false,
+        "sqlAnalysisDialect": "duckdb"
+    }));
+    assert!(sql.contains("(SELECT COUNT(*) FROM __actual__orders) AS actual_count"));
+    assert!(sql.contains(
+        "(SELECT status, order_id FROM __actual__orders EXCEPT SELECT status, order_id FROM __expected__orders) AS __sqlbuild_mismatch"
+    ), "{sql}");
+    assert!(sql.contains(
+        "(SELECT status, order_id FROM __expected__orders EXCEPT SELECT status, order_id FROM __actual__orders) AS __sqlbuild_missing"
+    ), "{sql}");
+    assert!(!sql.contains("SELECT * FROM __actual__orders"));
+    true
+}
+
+pub(crate) fn actual_probe_selects_zero_rows_from_step() -> bool {
+    let sql = render_single(json!({
+        "chain": [partial_expected_step()],
+        "sqlAnalysisEnabled": false,
+        "sqlAnalysisDialect": "duckdb",
+        "probeStepIndex": 0
+    }));
+    assert!(sql.starts_with("WITH __actual__orders AS ("), "{sql}");
+    assert!(
+        sql.ends_with("\nSELECT * FROM __actual__orders WHERE 1 = 0"),
+        "{sql}"
+    );
+    assert!(!sql.contains("UNION ALL"));
+    true
+}
+
+pub(crate) fn sqlserver_difference_sample_projects_bracketed_columns() -> bool {
+    let response: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_difference_sampling::render_difference_sample_json(
+            &json!({
+                "step": {
+                    "modelName": "orders",
+                    "resolvedSql": "SELECT 1 AS [Order Id], 10 AS amount, 'paid' AS status",
+                    "expectedCteSql": "SELECT 1 AS [Order Id], 10 AS amount",
+                    "expectedColumns": ["[Order Id]", "amount"]
+                },
+                "sqlAnalysisEnabled": true,
+                "setDifferenceOperator": "EXCEPT",
+                "sqlAnalysisDialect": "tsql",
+                "direction": "unexpected",
+                "sampleLimit": 3,
+                "useTopClause": true
+            })
+            .to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+    let sql = response["sql"].as_str().expect("test assumption must hold");
+    assert!(sql.contains(
+        "SELECT TOP 3 * FROM (SELECT [Order Id], amount FROM __actual EXCEPT SELECT [Order Id], amount FROM __expected) AS __sqlbuild_difference"
+    ), "{sql}");
+    true
+}
+
+pub(crate) fn snowflake_plan_keeps_quoted_expected_columns() -> bool {
+    let response: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+            &json!({
+                "models": [{
+                    "name": "orders",
+                    "querySql": "SELECT order_id AS \"Order Id\", status, amount FROM __source(\"raw_orders\")",
+                    "modelDependencies": []
+                }],
+                "tests": [{
+                    "name": "orders_case",
+                    "fileLabel": "tests/orders.sql",
+                    "payload": {
+                        "kind": "model",
+                        "authoredCtes": [{
+                            "name": "__source__raw_orders",
+                            "sqlBody": "SELECT 1 AS order_id, 'paid' AS status, 10 AS amount"
+                        }],
+                        "expectedCtes": [{
+                            "name": "__expected__orders",
+                            "sqlBody": "SELECT 'paid' AS status, 1 AS \"Order Id\""
+                        }],
+                        "expectedModelNames": ["orders"]
+                    }
+                }],
+                "sqlAnalysisEnabled": false,
+                "sqlAnalysisDialect": "snowflake"
+            })
+            .to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+    let artifact = &response["artifacts"][0];
+    assert_eq!(
+        artifact["chain"][0]["expectedColumns"],
+        json!(["status", "\"Order Id\""])
+    );
+    let sql = artifact["sql"].as_str().expect("test assumption must hold");
+    assert!(sql.contains(
+        "SELECT status, \"Order Id\" FROM __actual__orders EXCEPT SELECT status, \"Order Id\" FROM __expected__orders"
+    ), "{sql}");
+    true
+}

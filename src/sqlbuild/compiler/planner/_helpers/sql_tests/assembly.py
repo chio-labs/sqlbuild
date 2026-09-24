@@ -26,6 +26,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.planner._helpers.fixtures.completion import build_relation_fixture_context
 from sqlbuild.compiler.planner._helpers.sql_tests.fixture_validation import (
     build_validated_test_fixtures,
+    fixture_location,
 )
 from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
     plan_sql_tests_natively,
@@ -37,6 +38,9 @@ from sqlbuild.compiler.planner.models import (
     RelationFixturePlanningContext,
     SqlTestPlanEntry,
     SqlTestPlanResult,
+)
+from sqlbuild.executor.testing.main.missing_expected_columns import (
+    describe_missing_expected_columns,
 )
 
 _FUNCTION_RESOURCE_TYPES: frozenset[CompiledResourceType] = frozenset(
@@ -57,12 +61,16 @@ def plan_sql_tests(
 
     planned_tests: tuple[CompiledSqlTest, ...] = tests
     diagnostics_by_index: dict[int, tuple[str, ...]] = {}
+    validation_context: RelationFixturePlanningContext | None = None
     if sql_analysis_enabled and validate_fixtures:
+        validation_context = fixture_planning_context or build_relation_fixture_context(
+            project=project
+        )
         planned_tests, diagnostics_by_index = _validate_fixtures(
             tests=tests,
             project=project,
             adapter=adapter,
-            fixture_planning_context=fixture_planning_context,
+            fixture_planning_context=validation_context,
         )
     plannable_indexes: tuple[int, ...] = tuple(
         index for index in range(len(tests)) if index not in diagnostics_by_index
@@ -84,6 +92,14 @@ def plan_sql_tests(
                 SqlTestPlanResult(entry=None, fixture_diagnostics=diagnostics_by_index[index])
             )
             continue
+        expected_column_diagnostics: tuple[str, ...] = _expected_column_diagnostics(
+            test=test, plan=plan, fixture_planning_context=validation_context
+        )
+        if expected_column_diagnostics:
+            results.append(
+                SqlTestPlanResult(entry=None, fixture_diagnostics=expected_column_diagnostics)
+            )
+            continue
         results.append(
             SqlTestPlanResult(
                 entry=_plan_entry(
@@ -99,12 +115,45 @@ def plan_sql_tests(
     return tuple(results)
 
 
+def _expected_column_diagnostics(
+    *,
+    test: CompiledSqlTest,
+    plan: NativeSqlTestPlan,
+    fixture_planning_context: RelationFixturePlanningContext | None,
+) -> tuple[str, ...]:
+    """Report expected columns that authoritative model output metadata proves absent."""
+
+    if fixture_planning_context is None:
+        return ()
+    diagnostics: list[str] = []
+    for step in plan.chain:
+        available_columns: frozenset[str] | None = (
+            fixture_planning_context.authoritative_columns.get(
+                (CompiledResourceType.MODEL, step.model_name)
+            )
+        )
+        if step.expected_columns is None or available_columns is None:
+            continue
+        message: str | None = describe_missing_expected_columns(
+            model_name=step.model_name,
+            expected_columns=step.expected_columns,
+            available_columns=available_columns,
+        )
+        if message is None:
+            continue
+        location: str = fixture_location(
+            test=test, resource_type=CompiledResourceType.SQL_TEST, name=step.model_name
+        )
+        diagnostics.append(f"SQL test '{test.name}': {location}: {message}")
+    return tuple(diagnostics)
+
+
 def _validate_fixtures(
     *,
     tests: tuple[CompiledSqlTest, ...],
     project: CompiledProject,
     adapter: BaseAdapter,
-    fixture_planning_context: RelationFixturePlanningContext | None,
+    fixture_planning_context: RelationFixturePlanningContext,
 ) -> tuple[tuple[CompiledSqlTest, ...], dict[int, tuple[str, ...]]]:
     """Return tests with validated fixture completions plus diagnostics by test index."""
 
@@ -120,9 +169,7 @@ def _validate_fixtures(
         tests=tuple(tests[index] for index in model_indexes),
     )
     chains_by_index: dict[int, tuple[str, ...]] = dict(zip(model_indexes, chains, strict=True))
-    context: RelationFixturePlanningContext = (
-        fixture_planning_context or build_relation_fixture_context(project=project)
-    )
+    context: RelationFixturePlanningContext = fixture_planning_context
     validated_tests: list[CompiledSqlTest] = []
     diagnostics_by_index: dict[int, tuple[str, ...]] = {}
     for index, test in enumerate(tests):

@@ -10,6 +10,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::compiler::_helpers::sql_tests::expected_columns::expected_columns;
 use crate::compiler::_helpers::sql_tests::rendering::{
     AssertionStep, ChainStep, RenderRequest, render_comparison_sql, render_dialect,
     rendered_chain_steps,
@@ -689,11 +690,13 @@ fn plan_direct_test(
             expected_cte_sql: Some(wrap_direct_sql(&plan.expected_cte.sql_body, &helper_with)),
             lifted_ctes: Vec::new(),
             comparison_body_sql: None,
+            expected_columns: None,
         }],
         assertions: Vec::new(),
         sql_analysis_enabled: context.sql_analysis_enabled,
         set_difference_operator: context.set_difference_operator.clone(),
         sql_analysis_dialect: Some(context.dialect.clone()),
+        probe_step_index: None,
     };
     Ok(PlannedResponse {
         request,
@@ -786,10 +789,14 @@ fn plan_model_test(
             patterns: &context.patterns,
             reported: &mut reported_missing_mocks,
         }));
+        let expected_cte_sql = fixtures.expected.get(model_name).cloned();
         chain.push(ChainStep {
             model_name: model_name.clone(),
             resolved_sql,
-            expected_cte_sql: fixtures.expected.get(model_name).cloned(),
+            expected_columns: expected_cte_sql
+                .as_deref()
+                .and_then(|sql| expected_columns(sql, &context.render_dialect)),
+            expected_cte_sql,
             lifted_ctes,
             comparison_body_sql,
         });
@@ -881,6 +888,7 @@ fn plan_model_test(
         sql_analysis_enabled: context.sql_analysis_enabled,
         set_difference_operator: context.set_difference_operator.clone(),
         sql_analysis_dialect: Some(context.dialect.clone()),
+        probe_step_index: None,
     };
     Ok(PlannedResponse {
         request,
@@ -905,6 +913,7 @@ fn omit_unrendered_step_sql(chain: Vec<ChainStep>, assertions: &[AssertionStep])
                     expected_cte_sql: step.expected_cte_sql,
                     lifted_ctes: Vec::new(),
                     comparison_body_sql: None,
+                    expected_columns: step.expected_columns,
                 }
             }
         })

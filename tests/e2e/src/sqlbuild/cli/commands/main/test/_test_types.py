@@ -133,3 +133,16 @@ class SharedGraphMissingMockE2ETestCase:
     layers: int
     expected_error: str
     expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExpectedColumnSubsetE2ETestCase:
+    """Test case for SQL tests that compare only the expected CTE's listed columns."""
+
+    description: str
+    sql_analysis_enabled: bool
+    command: tuple[str, ...]
+    expected_tests: dict[str, str]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+    unexpected_output_fragments: tuple[str, ...] = ()

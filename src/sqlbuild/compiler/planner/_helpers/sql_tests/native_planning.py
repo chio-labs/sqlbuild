@@ -215,6 +215,9 @@ def _chain_step(*, value: object) -> ChainStep:
         comparison_body_sql=_optional_string(
             value=payload.get("comparisonBodySql"), context="chain step comparison SQL"
         ),
+        expected_columns=_optional_string_tuple(
+            value=payload.get("expectedColumns"), context="chain step expected columns"
+        ),
     )
 
 
@@ -265,6 +268,10 @@ def _string(*, value: object, context: str) -> str:
 
 def _optional_string(*, value: object, context: str) -> str | None:
     return None if value is None else _string(value=value, context=context)
+
+
+def _optional_string_tuple(*, value: object, context: str) -> tuple[str, ...] | None:
+    return None if value is None else _string_tuple(value=value, context=context)
 
 
 def _string_tuple(*, value: object, context: str) -> tuple[str, ...]:

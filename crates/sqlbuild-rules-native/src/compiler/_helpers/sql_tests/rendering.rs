@@ -56,6 +56,8 @@ pub(crate) struct RenderRequest {
     pub(crate) set_difference_operator: String,
     #[serde(default)]
     pub(crate) sql_analysis_dialect: Option<String>,
+    #[serde(default)]
+    pub(crate) probe_step_index: Option<usize>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -69,6 +71,8 @@ pub(crate) struct ChainStep {
     pub(crate) lifted_ctes: Vec<(String, String)>,
     #[serde(default)]
     pub(crate) comparison_body_sql: Option<String>,
+    #[serde(default)]
+    pub(crate) expected_columns: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -265,11 +269,19 @@ fn render_difference_sample_sql(request: &DifferenceSampleRequest, dialect: &Dia
             format!(" LIMIT {}", request.sample_limit),
         )
     };
+    let projection = compared_projection(step);
     format!(
-        "WITH {}\n{bounded_select} FROM (SELECT * FROM {left} {} SELECT * FROM {right}) AS __sqlbuild_difference{limit_clause}",
+        "WITH {}\n{bounded_select} FROM (SELECT {projection} FROM {left} {} SELECT {projection} FROM {right}) AS __sqlbuild_difference{limit_clause}",
         cte_parts.join(",\n"),
         request.set_difference_operator,
     )
+}
+
+/// Columns compared for an expected-output step: the listed expected columns, else every column.
+fn compared_projection(step: &ChainStep) -> String {
+    step.expected_columns
+        .as_ref()
+        .map_or_else(|| "*".to_string(), |columns| columns.join(", "))
 }
 
 pub(crate) fn render_comparison_sql(request: &RenderRequest, dialect: &Dialect) -> String {
@@ -280,6 +292,7 @@ pub(crate) fn render_comparison_sql(request: &RenderRequest, dialect: &Dialect) 
     let mut comparison_ctes: Vec<String> = Vec::new();
     let mut select_parts: Vec<String> = Vec::new();
     let rendered_steps = rendered_chain_steps(&request.chain, &request.assertions);
+    let mut probe_actual_cte: Option<String> = None;
 
     for (step_index, step) in request.chain.iter().enumerate() {
         let suffix = cte_state.unique_suffix(&step.model_name);
@@ -290,17 +303,21 @@ pub(crate) fn render_comparison_sql(request: &RenderRequest, dialect: &Dialect) 
         }
         let actual_sql = cte_state.actual_step_sql(step, request.sql_analysis_enabled);
         comparison_ctes.push(cte_definition_sql(&actual_cte, &actual_sql));
+        if request.probe_step_index == Some(step_index) {
+            probe_actual_cte = Some(actual_cte.clone());
+        }
         let Some(expected_input) = step.expected_cte_sql.as_deref() else {
             continue;
         };
         let expected_sql = cte_state.lift(expected_input, request.sql_analysis_enabled);
         comparison_ctes.push(cte_definition_sql(&expected_cte, &expected_sql));
+        let projection = compared_projection(step);
         select_parts.push(format!(
             "SELECT {step_index} AS step_index, '{}' AS model_name, \
              (SELECT COUNT(*) FROM {actual_cte}) AS actual_count, \
              (SELECT COUNT(*) FROM {expected_cte}) AS expected_count, \
-             (SELECT COUNT(*) FROM (SELECT * FROM {actual_cte} {} SELECT * FROM {expected_cte}) AS __sqlbuild_mismatch) AS unexpected_count, \
-             (SELECT COUNT(*) FROM (SELECT * FROM {expected_cte} {} SELECT * FROM {actual_cte}) AS __sqlbuild_missing) AS missing_count",
+             (SELECT COUNT(*) FROM (SELECT {projection} FROM {actual_cte} {} SELECT {projection} FROM {expected_cte}) AS __sqlbuild_mismatch) AS unexpected_count, \
+             (SELECT COUNT(*) FROM (SELECT {projection} FROM {expected_cte} {} SELECT {projection} FROM {actual_cte}) AS __sqlbuild_missing) AS missing_count",
             escape_sql_string(&step.model_name),
             request.set_difference_operator,
             request.set_difference_operator,
@@ -347,6 +364,14 @@ pub(crate) fn render_comparison_sql(request: &RenderRequest, dialect: &Dialect) 
         .map(|(name, sql)| cte_definition_sql(name, sql))
         .collect();
     cte_parts.extend(comparison_ctes);
+    if request.probe_step_index.is_some() {
+        return probe_actual_cte.map_or_else(String::new, |actual_cte| {
+            format!(
+                "WITH {}\nSELECT * FROM {actual_cte} WHERE 1 = 0",
+                cte_parts.join(",\n")
+            )
+        });
+    }
     format!(
         "WITH {}\n{}",
         cte_parts.join(",\n"),

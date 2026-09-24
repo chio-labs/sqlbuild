@@ -1168,6 +1168,7 @@ class ChainStep:
     expected_cte_sql: str | None = None
     lifted_ctes: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     comparison_body_sql: str | None = None
+    expected_columns: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)

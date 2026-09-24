@@ -9,6 +9,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
     ComplexValuesFixtureE2ETestCase,
+    ExpectedColumnSubsetE2ETestCase,
     FixtureCompatibilityE2ETestCase,
     ParameterCaseSelectionE2ETestCase,
     PartialFixtureE2ETestCase,
@@ -34,6 +35,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     build_diamond_chain_test_project_files,
     build_dynamic_pivot_test_project_files,
     build_empty_partial_fixture_project_files,
+    build_expected_column_subset_project_files,
     build_explicit_typed_null_fixture_project_files,
     build_incompatible_fixture_type_project_files,
     build_invalid_partial_fixture_project_files,
@@ -76,6 +78,37 @@ _DIAMOND_STDOUT_FRAGMENTS: tuple[str, ...] = (
     "PASS=1  FAIL=1  TOTAL=2",
     "expect  assertion no_negative_large_orders",
     "differing column large_count: actual=0, expected=3",
+)
+
+
+_ORDER_ROWS_BY_COLUMN_SUBSET: dict[str, str] = {
+    "partial_match": (
+        "SELECT 1 AS order_id, 'paid' AS status UNION ALL SELECT 2 AS order_id, 'open' AS status"
+    ),
+    "partial_wrong": (
+        "SELECT 1 AS order_id, 'paid' AS status UNION ALL SELECT 2 AS order_id, 'closed' AS status"
+    ),
+    "reordered": (
+        "SELECT 10 AS amount, 'paid' AS status, 100 AS customer_id, 1 AS order_id "
+        "UNION ALL SELECT 14 AS amount, 'open' AS status, 200 AS customer_id, 2 AS order_id"
+    ),
+    "full_row": (
+        "SELECT 1 AS order_id, 100 AS customer_id, 'paid' AS status, 10 AS amount "
+        "UNION ALL SELECT 2 AS order_id, 200 AS customer_id, 'open' AS status, 14 AS amount"
+    ),
+}
+_UNKNOWN_EXPECTED_COLUMN: dict[str, str] = {
+    "unknown_column": (
+        "SELECT 1 AS order_id, 'north' AS region UNION ALL SELECT 2 AS order_id, 'south' AS region"
+    ),
+}
+_SUBSET_OUTCOME_FRAGMENTS: tuple[str, ...] = (
+    "PASS=3  FAIL=1  TOTAL=4",
+    "unexpected sample 1: order_id=2, status=open; missing sample 1: order_id=2, status=closed",
+    "differing column status: actual=open, expected=closed",
+)
+_UNKNOWN_COLUMN_MESSAGE: str = (
+    "expected output 'orders' lists columns that model 'orders' does not output: region"
 )
 
 
@@ -1053,3 +1086,73 @@ def test_given_deep_shared_graph_missing_mock_when_testing_then_error_is_reporte
         assert fragment in inspect_result.stdout
     assert test_result.returncode == 1, test_result.stdout + test_result.stderr
     assert "PASS=0" in test_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ExpectedColumnSubsetE2ETestCase(
+            description="listed columns are compared by name with sql analysis",
+            sql_analysis_enabled=True,
+            command=("--no-color", "test"),
+            expected_tests=_ORDER_ROWS_BY_COLUMN_SUBSET,
+            expected_exit_code=1,
+            expected_output_fragments=_SUBSET_OUTCOME_FRAGMENTS,
+            unexpected_output_fragments=("customer_id=", "amount="),
+        ),
+        ExpectedColumnSubsetE2ETestCase(
+            description="listed columns are compared by name without sql analysis",
+            sql_analysis_enabled=False,
+            command=("--no-color", "test"),
+            expected_tests=_ORDER_ROWS_BY_COLUMN_SUBSET,
+            expected_exit_code=1,
+            expected_output_fragments=_SUBSET_OUTCOME_FRAGMENTS,
+            unexpected_output_fragments=("customer_id=", "amount="),
+        ),
+        ExpectedColumnSubsetE2ETestCase(
+            description="unknown expected column is a static error with sql analysis",
+            sql_analysis_enabled=True,
+            command=("--no-color", "test"),
+            expected_tests=_UNKNOWN_EXPECTED_COLUMN,
+            expected_exit_code=1,
+            expected_output_fragments=(
+                "SQL test 'unknown_column': tests/unit/unknown_column.sql:8:",
+                _UNKNOWN_COLUMN_MESSAGE,
+            ),
+            unexpected_output_fragments=("Connecting to", "Binder Error"),
+        ),
+        ExpectedColumnSubsetE2ETestCase(
+            description="unknown expected column is explained at run time without sql analysis",
+            sql_analysis_enabled=True,
+            command=("--no-color", "test", "--no-sql-analysis"),
+            expected_tests=_UNKNOWN_EXPECTED_COLUMN,
+            expected_exit_code=1,
+            expected_output_fragments=("[T005]", _UNKNOWN_COLUMN_MESSAGE),
+            unexpected_output_fragments=("Binder Error",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_expected_cte_column_subset_when_testing_then_only_listed_columns_are_compared(
+    test_case: ExpectedColumnSubsetE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="expected_column_subset_project",
+        repo_files=build_expected_column_subset_project_files(
+            expected_tests=test_case.expected_tests,
+            sql_analysis_enabled=test_case.sql_analysis_enabled,
+        ),
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command, project_dir=project_dir
+    )
+
+    output: str = result.stdout + result.stderr
+    assert result.returncode == test_case.expected_exit_code, output
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in output, output
+    for fragment in test_case.unexpected_output_fragments:
+        assert fragment not in output, output

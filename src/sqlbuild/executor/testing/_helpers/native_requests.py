@@ -33,6 +33,7 @@ def chain_step_request(*, step: ChainStep) -> dict[str, object]:
         "expectedCteSql": step.expected_cte_sql,
         "liftedCtes": step.lifted_ctes,
         "comparisonBodySql": step.comparison_body_sql,
+        "expectedColumns": step.expected_columns,
     }
 
 

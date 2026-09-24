@@ -1133,3 +1133,43 @@ def build_deep_shared_missing_mock_project_files(*, layers: int) -> dict[str, st
         "SELECT 1\n"
     )
     return files
+
+
+def build_expected_column_subset_project_files(
+    *, expected_tests: dict[str, str], sql_analysis_enabled: bool = True
+) -> dict[str, str]:
+    """Build an orders model whose SQL tests list a chosen subset of its output columns."""
+
+    sql_analysis_value: str = {False: "false", True: "true"}[sql_analysis_enabled]
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            'name = "expected_columns_demo"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "expected_columns_demo.duckdb"\n\n'
+            "[settings]\n"
+            f"sql_analysis = {sql_analysis_value}\n\n"
+            "[defaults]\n"
+            'materialized = "table"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+        ),
+        "models/orders.sql": (
+            "MODEL (materialized table);\n\n"
+            "SELECT id AS order_id, customer_id, status, amount * 2 AS amount\n"
+            'FROM __source("raw_orders")\n'
+        ),
+    }
+    for test_name, expected_sql in expected_tests.items():
+        files[f"tests/unit/{test_name}.sql"] = (
+            f'TEST (name "{test_name}");\n\n'
+            "WITH\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT 1 AS id, 100 AS customer_id, 'paid' AS status, 5 AS amount\n"
+            "  UNION ALL SELECT 2 AS id, 200 AS customer_id, 'open' AS status, 7 AS amount\n"
+            "),\n"
+            f"__expected__orders AS (\n  {expected_sql}\n)\n"
+            "SELECT 1\n"
+        )
+    return files

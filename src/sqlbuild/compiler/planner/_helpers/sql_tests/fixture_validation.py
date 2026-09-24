@@ -80,7 +80,7 @@ def build_validated_test_fixtures(
                 )
                 if empty_error is not None:
                     errors.append(
-                        f"{_fixture_location(test=test, resource_type=resource_type, name=name)}: "
+                        f"{fixture_location(test=test, resource_type=resource_type, name=name)}: "
                         f"expected output '{name}' {empty_error}"
                     )
                 completed_expected_outputs[name] = completed_sql
@@ -120,7 +120,7 @@ def build_validated_test_fixtures(
                     else f"mock {resource_type.value}"
                 )
                 errors.append(
-                    f"{_fixture_location(test=test, resource_type=resource_type, name=name)}: "
+                    f"{fixture_location(test=test, resource_type=resource_type, name=name)}: "
                     f"{fixture_label} '{name}' column '{column.name}' has incompatible type "
                     f"{column.type}; resource type is {expected_type}. Use an explicit CAST, "
                     "ARRAY_CONSTRUCT, or PARSE_JSON as appropriate"
@@ -151,7 +151,7 @@ def build_validated_test_fixtures(
 
 def _located_diagnostic(*, test: CompiledSqlTest, diagnostic: RelationFixtureDiagnostic) -> str:
     return (
-        f"{_fixture_location(test=test, resource_type=diagnostic.key[0], name=diagnostic.key[1])}: "
+        f"{fixture_location(test=test, resource_type=diagnostic.key[0], name=diagnostic.key[1])}: "
         f"{diagnostic.message}"
     )
 
@@ -168,9 +168,11 @@ def _completed_fixture_group(
     }
 
 
-def _fixture_location(
+def fixture_location(
     *, test: CompiledSqlTest, resource_type: CompiledResourceType, name: str
 ) -> str:
+    """Return the test file and line that defines one fixture or expected-output CTE."""
+
     prefix: str = {
         CompiledResourceType.MODEL: "__ref__",
         CompiledResourceType.SOURCE: "__source__",
