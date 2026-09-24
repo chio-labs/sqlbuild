@@ -507,8 +507,9 @@ class SeparateAgeMetadataJanitorAdapter(FakeJanitorAdapter):
         *,
         relation_infos: tuple[RelationInfo, ...],
         relation_ages: dict[str, datetime],
+        tracked_relations: tuple[tuple[str | None, str | None, str], ...] = (),
     ) -> None:
-        super().__init__(relation_infos=relation_infos)
+        super().__init__(relation_infos=relation_infos, tracked_relations=tracked_relations)
         self.relation_ages: dict[str, datetime] = relation_ages
         self.age_metadata_requests: list[tuple[str, ...]] = []
 

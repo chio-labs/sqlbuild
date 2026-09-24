@@ -10,6 +10,7 @@ from sqlbuild.executor.janitor._helpers.source_safety import (
     blocking_source_names,
     source_names_for_schema,
 )
+from sqlbuild.executor.janitor.classes.relation_age_reader import JanitorRelationAgeReader
 from sqlbuild.executor.janitor.constants import BUILT_IN_EXCLUDE_PATTERNS
 from sqlbuild.executor.janitor.models import (
     JanitorBlockedSchema,
@@ -32,7 +33,7 @@ def classify_target_schemas(
     exclude_patterns: tuple[str, ...],
     delete_tracked_only: bool,
     retention_days: int,
-    age_supported: bool,
+    age_reader: JanitorRelationAgeReader,
     now: datetime,
     direct_mode: bool,
 ) -> JanitorSchemaClassification:
@@ -61,7 +62,7 @@ def classify_target_schemas(
                     exclude_patterns=exclude_patterns,
                     delete_tracked_only=delete_tracked_only,
                     retention_days=retention_days,
-                    age_supported=age_supported,
+                    age_reader=age_reader,
                     now=now,
                     direct_mode=direct_mode,
                 )
@@ -90,7 +91,7 @@ def classify_target_schemas(
             exclude_patterns=exclude_patterns,
             delete_tracked_only=delete_tracked_only,
             retention_days=retention_days,
-            age_supported=age_supported,
+            age_reader=age_reader,
             now=now,
             direct_mode=direct_mode,
         )
@@ -112,7 +113,7 @@ def _classify_schema(
     exclude_patterns: tuple[str, ...],
     delete_tracked_only: bool,
     retention_days: int,
-    age_supported: bool,
+    age_reader: JanitorRelationAgeReader,
     now: datetime,
     direct_mode: bool,
 ) -> JanitorRelationClassification:
@@ -124,7 +125,7 @@ def _classify_schema(
         effective_exclude_patterns=BUILT_IN_EXCLUDE_PATTERNS + exclude_patterns,
         delete_tracked_only=delete_tracked_only,
         retention_days=retention_days,
-        age_supported=age_supported,
+        age_reader=age_reader,
         now=now,
         direct_mode=direct_mode,
     )

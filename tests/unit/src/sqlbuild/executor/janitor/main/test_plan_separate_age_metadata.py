@@ -7,8 +7,14 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from sqlbuild.executor.janitor.main.plan import build_janitor_plan
-from sqlbuild.executor.janitor.models import JanitorDirectModeSettings, JanitorPlan
+from sqlbuild.executor.janitor.models import (
+    JanitorDirectModeSettings,
+    JanitorPlan,
+    JanitorRelationKey,
+    JanitorRelationScope,
+)
 from tests.unit.src.sqlbuild.executor.janitor.main._test_types import (
+    JanitorAgeReadScopeTestCase,
     JanitorSeparateAgeMetadataPlanTestCase,
     relation_info,
 )
@@ -70,3 +76,82 @@ def test_given_adapter_reading_ages_separately_when_planning_janitor_then_uses_t
         == test_case.expected_skipped_relations
     )
     assert len(adapter.age_metadata_requests) == 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorAgeReadScopeTestCase(
+            description="direct mode reads ages only for unfiltered stale relations",
+            relation_infos=(
+                relation_info("orders"),
+                relation_info("old_orders"),
+                relation_info("stray_orders"),
+                relation_info("tmp_orders"),
+                relation_info("_sqlbuild_fingerprints"),
+                relation_info("Mixed_Orders"),
+            ),
+            direct_mode=True,
+            delete_tracked_only=True,
+            tracked_relations=(
+                (None, "analytics", "old_orders"),
+                (None, "analytics", "tmp_orders"),
+                (None, "analytics", "Mixed_Orders"),
+            ),
+            exclude_patterns=("tmp_*",),
+            protected_relation_keys=frozenset(),
+            expected_age_requests=(("old_orders",),),
+        ),
+        JanitorAgeReadScopeTestCase(
+            description="virtual mode reads ages only for unprotected stale relations",
+            relation_infos=(
+                relation_info("orders"),
+                relation_info("orders__v0"),
+                relation_info("orders__v1"),
+                relation_info("tmp_orders"),
+            ),
+            direct_mode=False,
+            delete_tracked_only=False,
+            tracked_relations=(),
+            exclude_patterns=("tmp_*",),
+            protected_relation_keys=frozenset(
+                (JanitorRelationKey(database=None, schema="analytics", name="orders__v1"),)
+            ),
+            expected_age_requests=(("orders__v0",),),
+        ),
+        JanitorAgeReadScopeTestCase(
+            description="no age read happens when nothing survives the filters",
+            relation_infos=(relation_info("orders"), relation_info("stray_orders")),
+            direct_mode=True,
+            delete_tracked_only=True,
+            tracked_relations=(),
+            exclude_patterns=(),
+            protected_relation_keys=frozenset(),
+            expected_age_requests=(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_filtered_relations_when_planning_janitor_then_ages_are_read_for_candidates_only(
+    test_case: JanitorAgeReadScopeTestCase,
+) -> None:
+    adapter: SeparateAgeMetadataJanitorAdapter = SeparateAgeMetadataJanitorAdapter(
+        relation_infos=test_case.relation_infos,
+        relation_ages={},
+        tracked_relations=test_case.tracked_relations,
+    )
+
+    build_janitor_plan(
+        project=build_project(),
+        adapter=adapter,
+        connection=object(),
+        retention_days=7,
+        delete_tracked_only=test_case.delete_tracked_only,
+        exclude_patterns=test_case.exclude_patterns,
+        relation_scope=JanitorRelationScope(
+            protected_relation_keys=test_case.protected_relation_keys
+        ),
+        direct_settings=JanitorDirectModeSettings(enabled=test_case.direct_mode),
+    )
+
+    assert tuple(adapter.age_metadata_requests) == test_case.expected_age_requests

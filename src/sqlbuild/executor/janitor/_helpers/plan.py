@@ -135,13 +135,10 @@ def list_target_schema_relations(
         if not concrete_schemas:
             concrete_schemas = None
         relation: RelationInfo
-        for relation in adapter.with_relation_age_metadata(
+        for relation in adapter.list_relations(
             connection=connection,
-            relations=adapter.list_relations(
-                connection=connection,
-                database=database,
-                schemas=concrete_schemas,
-            ),
+            database=database,
+            schemas=concrete_schemas,
         ):
             target_key: tuple[str | None, str | None] | None = target_by_normalized.get(
                 normalized_schema_key((relation.database, relation.schema))

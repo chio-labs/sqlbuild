@@ -16,6 +16,7 @@ from sqlbuild.executor.janitor._helpers.classification import (
 )
 from sqlbuild.executor.janitor._helpers.plan import collect_scan_schemas, collect_target_schemas
 from sqlbuild.executor.janitor._helpers.schema_planning import classify_target_schemas
+from sqlbuild.executor.janitor.classes.relation_age_reader import JanitorRelationAgeReader
 from sqlbuild.executor.janitor.models import (
     JanitorArchivePlanning,
     JanitorDirectModeSettings,
@@ -111,8 +112,12 @@ def build_janitor_plan(
             )
         )
         inspection.completed(metadata={"item_count": len(target_schemas)})
+    age_reader: JanitorRelationAgeReader = JanitorRelationAgeReader(
+        adapter=adapter, connection=connection
+    )
     age_supported: bool = adapter.supports_relation_age_metadata()
     schemas: JanitorSchemaClassification = classify_target_schemas(
+        age_reader=age_reader,
         target_schemas=target_schemas,
         managed_target_schemas=managed_target_schemas,
         facts=facts,
@@ -120,7 +125,6 @@ def build_janitor_plan(
         exclude_patterns=exclude_patterns,
         delete_tracked_only=delete_tracked_only,
         retention_days=retention_days,
-        age_supported=age_supported,
         now=now,
         direct_mode=direct.enabled,
     )
@@ -153,7 +157,7 @@ def build_janitor_plan(
         virtual_state_prune_candidates=state.virtual_state_prune_candidates,
         direct_state_prune_candidates=direct_state_prune_candidates,
         skipped_relations=(
-            *tuple(
+            *(
                 skipped
                 for skipped in schemas.skipped_relations
                 if not QueryDiffArtifactLifecycle.is_artifact_name(skipped.key.name)

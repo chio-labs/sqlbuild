@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 from datetime import datetime
 
+from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.lineage.types import InferredNullability
+from tests.unit.src.sqlbuild.adapters.databricks.helpers import FakeDatabricksMetadataCursor
 
 
 @dataclass(frozen=True)
@@ -136,4 +138,13 @@ class DatabricksRelationAgeMetadataTestCase:
     created: datetime | None
     last_altered: datetime | None
     expected_relation_type: str
+    expected_timestamps: tuple[str, str]
+
+
+@dataclass(frozen=True)
+class DatabricksDeltaDetailAgeTestCase:
+    description: str
+    relation: RelationInfo
+    cursors: tuple[FakeDatabricksMetadataCursor, ...]
+    expected_sql: tuple[str, ...]
     expected_timestamps: tuple[str, str]

@@ -32,6 +32,7 @@ from sqlbuild.executor.janitor._helpers.relation_addressing import (
     unaddressable_relation_reason,
 )
 from sqlbuild.executor.janitor._helpers.tracking import collect_tracked_relation_keys
+from sqlbuild.executor.janitor.classes.relation_age_reader import JanitorRelationAgeReader
 from sqlbuild.executor.janitor.models import (
     JanitorDeleteCandidate,
     JanitorDirectStatePruneCandidate,
@@ -172,7 +173,7 @@ def classify_janitor_relations(
     effective_exclude_patterns: tuple[str, ...],
     delete_tracked_only: bool,
     retention_days: int,
-    age_supported: bool,
+    age_reader: JanitorRelationAgeReader,
     now: datetime,
     direct_mode: bool = False,
 ) -> JanitorRelationClassification:
@@ -180,6 +181,7 @@ def classify_janitor_relations(
 
     candidates: list[JanitorDeleteCandidate] = []
     skipped_relations: list[JanitorSkippedRelation] = []
+    eligible_relations: list[RelationInfo] = []
     colliding_names: frozenset[str] = case_colliding_names(
         relation.name for relation in schema_relations
     )
@@ -207,7 +209,12 @@ def classify_janitor_relations(
                 JanitorSkippedRelation(key=relation_key, relation=relation, reason=skip_reason)
             )
             continue
-        age_timestamp: datetime | None = relation_age_timestamp(relation)
+        eligible_relations.append(relation)
+    age_supported: bool = age_reader.supported()
+    aged_relation: RelationInfo
+    for aged_relation in age_reader.read(tuple(eligible_relations)):
+        relation_key = build_relation_key(aged_relation)
+        age_timestamp: datetime | None = relation_age_timestamp(aged_relation)
         if retention_days > 0:
             retention_skip_reason: str | None = _retention_skip_reason(
                 age_timestamp=age_timestamp,
@@ -219,7 +226,7 @@ def classify_janitor_relations(
                 skipped_relations.append(
                     JanitorSkippedRelation(
                         key=relation_key,
-                        relation=relation,
+                        relation=aged_relation,
                         reason=retention_skip_reason,
                     )
                 )
@@ -227,7 +234,7 @@ def classify_janitor_relations(
         candidates.append(
             JanitorDeleteCandidate(
                 key=relation_key,
-                relation=relation,
+                relation=aged_relation,
                 age_timestamp=age_timestamp,
             )
         )

@@ -7,6 +7,7 @@ import csv
 import json
 import logging
 import re
+from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -1419,16 +1420,18 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             rows: list[tuple[Any, ...]] = cursor.fetchall()
         finally:
             cursor.close()
-        return tuple(
-            RelationInfo(
-                database=database,
-                schema=str(row[1]).lower(),
-                name=str(row[0]).lower(),
-                relation_type=self._normalize_relation_type(str(row[2])),
-                created_at=relation_age_timestamp_utc(row[3]),
-                last_altered_at=relation_age_timestamp_utc(row[4]),
-            )
-            for row in rows
+        return tuple(self._listed_relation(database=database, row=row) for row in rows)
+
+    def _listed_relation(self, *, database: str, row: tuple[Any, ...]) -> RelationInfo:
+        relation_type: str = self._normalize_relation_type(str(row[2]))
+        is_view: bool = relation_type == RelationType.VIEW
+        return RelationInfo(
+            database=database,
+            schema=str(row[1]).lower(),
+            name=str(row[0]).lower(),
+            relation_type=relation_type,
+            created_at=relation_age_timestamp_utc(row[3]) if is_view else None,
+            last_altered_at=relation_age_timestamp_utc(row[4]) if is_view else None,
         )
 
     def with_relation_age_metadata(
@@ -1437,7 +1440,45 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         connection: Any,
         relations: tuple[RelationInfo, ...],
     ) -> tuple[RelationInfo, ...]:
-        return relations
+        """Read data-write ages for non-view relations; information_schema tracks only DDL."""
+
+        return tuple(
+            relation
+            if relation.relation_type == RelationType.VIEW
+            else self._with_delta_detail_ages(connection=connection, relation=relation)
+            for relation in relations
+        )
+
+    def _with_delta_detail_ages(self, *, connection: Any, relation: RelationInfo) -> RelationInfo:
+        unknown_age: RelationInfo = replace(relation, created_at=None, last_altered_at=None)
+        if relation.database is None or relation.schema is None:
+            return unknown_age
+        target: str = ".".join(
+            self.render_identifier(part)
+            for part in (relation.database, relation.schema, relation.name)
+        )
+        cursor: Any = connection.cursor()
+        try:
+            cursor.execute(f"DESCRIBE DETAIL {target}")
+            row: tuple[Any, ...] | None = cursor.fetchone()
+            description: tuple[Any, ...] | None = cursor.description
+        except Exception:
+            return unknown_age
+        finally:
+            cursor.close()
+        if row is None or description is None:
+            return unknown_age
+        detail: dict[str, object] = {
+            str(column[0]).lower(): value for column, value in zip(description, row, strict=False)
+        }
+        last_modified: datetime | None = relation_age_timestamp_utc(detail.get("lastmodified"))
+        if last_modified is None:
+            return unknown_age
+        return replace(
+            relation,
+            created_at=relation_age_timestamp_utc(detail.get("createdat")),
+            last_altered_at=last_modified,
+        )
 
     def list_functions(
         self,

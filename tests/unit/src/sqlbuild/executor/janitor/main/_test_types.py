@@ -158,3 +158,15 @@ class JanitorSeparateAgeMetadataPlanTestCase:
     relation_ages: dict[str, datetime]
     expected_candidate_names: tuple[str, ...]
     expected_skipped_relations: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class JanitorAgeReadScopeTestCase:
+    description: str
+    relation_infos: tuple[RelationInfo, ...]
+    direct_mode: bool
+    delete_tracked_only: bool
+    tracked_relations: tuple[tuple[str | None, str | None, str], ...]
+    exclude_patterns: tuple[str, ...]
+    protected_relation_keys: frozenset[JanitorRelationKey]
+    expected_age_requests: tuple[tuple[str, ...], ...]
