@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.117.0](https://github.com/chio-labs/sqlbuild/compare/v0.116.0...v0.117.0) (2026-09-24)
+
+
+### Features
+
+* **janitor:** archive stale relations before deletion in direct mode ([#809](https://github.com/chio-labs/sqlbuild/issues/809)) ([693e580](https://github.com/chio-labs/sqlbuild/commit/693e58054601db59c0a2e4059a32a37dc354219d))
+
 ## [0.116.0](https://github.com/chio-labs/sqlbuild/compare/v0.115.0...v0.116.0) (2026-09-24)
 
 
