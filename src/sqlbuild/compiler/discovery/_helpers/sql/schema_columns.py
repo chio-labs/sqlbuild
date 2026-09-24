@@ -6,7 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
-from sqlbuild.compiler.auditing.main._parse_audit_instance import parse_audit_instance
+from sqlbuild.compiler.auditing.main._parse_audit_instances import parse_audit_instances
 from sqlbuild.compiler.authored_values.main._optional_named_bool import optional_named_bool
 from sqlbuild.compiler.authored_values.main._optional_named_string import optional_named_string
 from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME
@@ -80,11 +80,12 @@ def parse_schema_columns(
         column_location: SourceLocation | None = locations.get(raw_column_name)
         audits: tuple[SchemaAuditInstance, ...] = tuple(
             replace(audit, location=column_location)
-            for audit in _parse_audits(
+            for audit in parse_audit_instances(
                 raw_audits=column_metadata.get("audits"),
                 file_path=file_path,
                 label=f"{label} column '{raw_column_name}'",
                 error_class=error_class,
+                null_as_empty=True,
             )
         )
         if nullable is True and any(
@@ -124,21 +125,3 @@ def parse_schema_columns(
             )
         )
     return tuple(parsed_columns)
-
-
-def _parse_audits(
-    *, raw_audits: object | None, file_path: Path, label: str, error_class: _SchemaColumnParseError
-) -> tuple[SchemaAuditInstance, ...]:
-    if raw_audits is None:
-        return ()
-    if not isinstance(raw_audits, list):
-        raise error_class(f"{file_path} {label} audits must be a list")
-    return tuple(
-        parse_audit_instance(
-            raw_audit=raw_audit,
-            file_path=file_path,
-            label=label,
-            error_class=error_class,
-        )
-        for raw_audit in raw_audits
-    )

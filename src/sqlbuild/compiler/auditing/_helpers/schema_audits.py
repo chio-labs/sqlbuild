@@ -22,6 +22,31 @@ from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
 from sqlbuild.spec.contracts.models import SchemaAuditInstance
 
 
+def parse_audit_instances_impl(
+    *,
+    raw_audits: object | None,
+    file_path: Path,
+    label: str,
+    error_class: type[Exception],
+    null_as_empty: bool,
+) -> tuple[SchemaAuditInstance, ...]:
+    """Parse an authored audit list, treating null as empty only when requested."""
+
+    if raw_audits is None and null_as_empty:
+        return ()
+    if not isinstance(raw_audits, list):
+        raise error_class(f"{file_path} {label} audits must be a list")
+    return tuple(
+        parse_audit_instance_impl(
+            raw_audit=raw_audit,
+            file_path=file_path,
+            label=label,
+            error_class=error_class,
+        )
+        for raw_audit in raw_audits
+    )
+
+
 def parse_audit_instance_impl(
     *,
     raw_audit: object,
