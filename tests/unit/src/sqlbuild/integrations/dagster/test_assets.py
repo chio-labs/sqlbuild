@@ -32,6 +32,7 @@ from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterSourceAssetKeyTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
+    build_dagster_selection_graph_dag,
     build_dagster_test_dag,
     build_python_augmented_dagster_test_dag,
 )
@@ -209,6 +210,60 @@ def test_given_sqlbuild_selectors_when_building_asset_selection_then_resolves_da
     test_case: DagsterAssetSelectionTestCase,
 ) -> None:
     dag: Mapping[str, Any] = build_dagster_test_dag()
+
+    @sqlbuild_assets(dag=dag)
+    def assets_def() -> dg.MaterializeResult:
+        return dg.MaterializeResult()
+
+    selection: Any = build_sqlbuild_asset_selection(
+        sqlbuild_assets=[assets_def],
+        dag=dag,
+        sqlbuild_select=test_case.select,
+        sqlbuild_exclude=test_case.exclude,
+    )
+
+    assert tuple(sorted(tuple(key.path) for key in selection.resolve([assets_def]))) == tuple(
+        sorted(test_case.expected_asset_keys)
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagsterAssetSelectionTestCase(
+            description="both-direction expansion keeps only ancestors and descendants",
+            select="+orders+",
+            exclude=None,
+            expected_asset_keys=(("analytics", "orders"), ("analytics", "stg_orders")),
+        ),
+        DagsterAssetSelectionTestCase(
+            description="downstream expansion includes every child",
+            select="stg_orders+",
+            exclude=None,
+            expected_asset_keys=(
+                ("analytics", "customers"),
+                ("analytics", "orders"),
+                ("analytics", "stg_orders"),
+            ),
+        ),
+        DagsterAssetSelectionTestCase(
+            description="both-direction expansion of a middle node skips siblings",
+            select="+events_left+",
+            exclude=None,
+            expected_asset_keys=(
+                ("analytics", "events_joined"),
+                ("analytics", "events_left"),
+                ("analytics", "events_report"),
+                ("analytics", "raw_events"),
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_branching_dag_when_building_asset_selection_then_expands_from_matched_nodes(
+    test_case: DagsterAssetSelectionTestCase,
+) -> None:
+    dag: Mapping[str, Any] = build_dagster_selection_graph_dag()
 
     @sqlbuild_assets(dag=dag)
     def assets_def() -> dg.MaterializeResult:
