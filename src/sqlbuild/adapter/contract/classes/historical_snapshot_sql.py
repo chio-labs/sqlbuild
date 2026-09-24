@@ -230,7 +230,7 @@ class HistoricalSnapshotSql:
         return (
             "(__has_latest = 0 AND (__is_change = 1 OR __is_reappearance = 1)) "
             "OR (__has_latest = 1 AND __is_reappearance = 1 "
-            f"AND {self.observed_at_column} > __latest_valid_from) "
+            f"AND {self._incremental_version_start_sql()} > __latest_valid_from) "
             "OR (__has_latest = 1 AND __is_reappearance = 0 AND __is_change = 1 "
             f"AND {self._latest_change_condition_sql()})"
         )

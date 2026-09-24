@@ -207,6 +207,7 @@ _HISTORICAL_SCENARIOS: tuple[SnapshotExecutionScenario, ...] = (
             _TIMESTAMP_DELETE_AND_REAPPEAR_ROWS[:2],
             _TIMESTAMP_DELETE_AND_REAPPEAR_ROWS[:3],
             (*_TIMESTAMP_DELETE_AND_REAPPEAR_ROWS[:3], (1, "basic", 1, 4), (2, "team", 3, 4)),
+            (*_TIMESTAMP_DELETE_AND_REAPPEAR_ROWS[:3], (1, "basic", 1, 4), (2, "team", 3, 4)),
         ),
         expected_history=((1, "basic", 1, None), (2, "pro", 1, 2), (2, "team", 3, None)),
     ),
@@ -240,6 +241,21 @@ _WINDOWED_SOURCE_SCENARIOS: tuple[SnapshotExecutionScenario, ...] = (
 )
 
 _CURRENT_STATE_SCENARIOS: tuple[SnapshotExecutionScenario, ...] = (
+    SnapshotExecutionScenario(
+        description="current timestamp reappearance updated_at equals deletion time",
+        kind=CURRENT_TIMESTAMP_HARD_DELETES,
+        builds=(
+            ((1, "basic", 1), (2, "pro", 1)),
+            ((1, "basic", 1),),
+            ((1, "basic", 1), (2, "team", FIRST_CLOCK_DAY + 1)),
+            ((1, "basic", 1), (2, "team", FIRST_CLOCK_DAY + 1)),
+        ),
+        expected_history=(
+            (1, "basic", 1, None),
+            (2, "pro", 1, FIRST_CLOCK_DAY + 1),
+            (2, "team", FIRST_CLOCK_DAY + 2, None),
+        ),
+    ),
     SnapshotExecutionScenario(
         description="current timestamp without hard deletes records updated_at changes",
         kind=CURRENT_TIMESTAMP,
@@ -306,7 +322,10 @@ _RUNS: tuple[SnapshotExecutionRun, ...] = build_execution_runs(
     "test_case",
     [
         SnapshotExecutionTestCase(
-            description=f"{run.adapter.name}: {run.scenario.description} ({run.path})",
+            description=(
+                f"{run.adapter.name}: {run.scenario.description} ({run.path})"
+                f" retry_after_insert={retry_after_insert}"
+            ),
             adapter_type=run.adapter.adapter_type,
             normalize_sql=run.adapter.normalize_sql,
             source_select_sql=run.scenario.kind.source_select_sql,
@@ -315,8 +334,12 @@ _RUNS: tuple[SnapshotExecutionRun, ...] = build_execution_runs(
             history_sql=run.scenario.kind.history_sql,
             builds=run.builds,
             expected_history=run.scenario.expected_history,
+            retry_after_insert=retry_after_insert,
         )
         for run in _RUNS
+        for retry_after_insert in (
+            (False, True) if run.scenario.kind is CURRENT_TIMESTAMP_HARD_DELETES else (False,)
+        )
     ],
     ids=lambda case: case.description,
 )

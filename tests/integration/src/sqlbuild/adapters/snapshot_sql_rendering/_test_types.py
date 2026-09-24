@@ -38,6 +38,7 @@ class SnapshotExecutionTestCase:
     history_sql: str
     builds: tuple[tuple[tuple[object, ...], ...], ...]
     expected_history: tuple[tuple[object, ...], ...]
+    retry_after_insert: bool = False
 
 
 @dataclass(frozen=True)

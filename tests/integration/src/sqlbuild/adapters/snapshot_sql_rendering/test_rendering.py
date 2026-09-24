@@ -61,7 +61,7 @@ _PORTABLE_APPLY_EXCLUSIONS: tuple[str, ...] = ("QUALIFY", "UNION DISTINCT", "NOT
                 "WHERE __target.effective_to IS NULL AND NOT EXISTS",
                 "MAX(effective_to) AS __closed_at FROM target_table "
                 "GROUP BY customer_id, region) AS __history",
-                "AND __history.__closed_at <> __source.updated_at THEN",
+                "AND __history.__closed_at IS NOT NULL THEN",
             ),
             expected_historical_check_initial_hard_delete_fragments=(
                 "__next_absence_at",
@@ -99,7 +99,7 @@ _PORTABLE_APPLY_EXCLUSIONS: tuple[str, ...] = ("QUALIFY", "UNION DISTINCT", "NOT
                 "WHERE __target.effective_to IS NULL AND NOT EXISTS",
                 "MAX(effective_to) AS __closed_at FROM target_table "
                 "GROUP BY customer_id, region) AS __history",
-                "AND __history.__closed_at <> __source.updated_at THEN",
+                "AND __history.__closed_at IS NOT NULL THEN",
             ),
             expected_historical_check_initial_hard_delete_fragments=(
                 "__next_absence_at",
@@ -137,7 +137,7 @@ _PORTABLE_APPLY_EXCLUSIONS: tuple[str, ...] = ("QUALIFY", "UNION DISTINCT", "NOT
                 "WHERE __target.effective_to IS NULL AND NOT EXISTS",
                 "MAX(effective_to) AS __closed_at FROM target_table "
                 "GROUP BY customer_id, region) AS __history",
-                "AND __history.__closed_at <> __source.updated_at THEN",
+                "AND __history.__closed_at IS NOT NULL THEN",
             ),
             expected_historical_check_initial_hard_delete_fragments=(
                 "__next_absence_at",
@@ -175,7 +175,7 @@ _PORTABLE_APPLY_EXCLUSIONS: tuple[str, ...] = ("QUALIFY", "UNION DISTINCT", "NOT
                 "WHEN MATCHED THEN UPDATE SET effective_to = __source.updated_at",
                 "MAX(effective_to) AS __closed_at FROM target_table "
                 "GROUP BY customer_id, region) AS __history",
-                "AND __history.__closed_at <> __source.updated_at THEN",
+                "AND __history.__closed_at IS NOT NULL THEN",
             ),
             expected_historical_check_initial_hard_delete_fragments=(
                 "__next_absence_at",
@@ -213,7 +213,7 @@ _PORTABLE_APPLY_EXCLUSIONS: tuple[str, ...] = ("QUALIFY", "UNION DISTINCT", "NOT
                 "WHERE __target.effective_to IS NULL AND NOT EXISTS",
                 "MAX(effective_to) AS __closed_at FROM target_table "
                 "GROUP BY customer_id, region) AS __history",
-                "AND __history.__closed_at <> __source.updated_at THEN",
+                "AND __history.__closed_at IS NOT NULL THEN",
             ),
             expected_historical_check_initial_hard_delete_fragments=(
                 "__next_absence_at",

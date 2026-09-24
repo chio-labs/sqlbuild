@@ -347,6 +347,7 @@ def run_snapshot_builds(
             rows=rows,
             render=test_case.render_apply,
             day=FIRST_CLOCK_DAY + build_index,
+            retry_after_insert=test_case.retry_after_insert,
         )
     history: tuple[tuple[object, ...], ...] = tuple(
         tuple(row) for row in connection.execute(test_case.history_sql).fetchall()
@@ -373,12 +374,16 @@ def _run_build(
     rows: tuple[tuple[object, ...], ...],
     render: Callable[[BaseAdapter], tuple[str, ...]],
     day: int,
+    retry_after_insert: bool = False,
 ) -> None:
     source_sql: str = " UNION ALL ".join(test_case.source_select_sql(row) for row in rows)
     connection.execute(f"CREATE OR REPLACE TABLE {_SOURCE} AS {source_sql}")
     adapter: BaseAdapter = _pinned_clock_adapter(test_case.adapter_type, day)
+    statements: tuple[str, ...] = render(adapter)
+    if retry_after_insert:
+        connection.execute(test_case.normalize_sql(statements[0]))
     statement: str
-    for statement in render(adapter):
+    for statement in statements:
         connection.execute(test_case.normalize_sql(statement))
 
 

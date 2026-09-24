@@ -81,7 +81,7 @@ class SnapshotSql:
         invalidate_hard_deletes: bool,
         current_timestamp: str,
     ) -> tuple[str, ...]:
-        """Render the incremental statements for a current-state timestamp snapshot."""
+        """Render changes, inserting before closing when hard deletes need active-row evidence."""
 
         initial_valid_from_expr: str = self.initial_valid_from_expr(
             snapshot_strategy="timestamp",
@@ -102,6 +102,7 @@ class SnapshotSql:
             f"ELSE __source.{updated_at_column} END"
         )
         history_join_sql: str = ""
+        insert_guard_sql: str | None = None
         if invalidate_hard_deletes:
             key_sql: str = ", ".join(target.unique_key)
             history_condition: str = self.key_condition(
@@ -109,7 +110,6 @@ class SnapshotSql:
             )
             version_valid_from_expr = (
                 f"CASE WHEN __active.{first_key} IS NULL AND __history.__closed_at IS NOT NULL "
-                f"AND __history.__closed_at <> __source.{updated_at_column} "
                 f"THEN {current_timestamp} "
                 f"WHEN __active.{first_key} IS NULL THEN {initial_valid_from_expr} "
                 f"ELSE __source.{updated_at_column} END"
@@ -119,14 +119,26 @@ class SnapshotSql:
                 f"FROM {target.destination} GROUP BY {key_sql}) AS __history "
                 f"ON {history_condition} "
             )
+            inserted_key_condition: str = self.key_condition(
+                left_alias="__inserted", right_alias="__source", unique_key=target.unique_key
+            )
+            insert_guard_sql = (
+                f"NOT EXISTS (SELECT 1 FROM {target.destination} AS __inserted "
+                f"WHERE {inserted_key_condition} "
+                f"AND __inserted.{target.valid_to_column} IS NULL "
+                f"AND __inserted.{updated_at_column} = __source.{updated_at_column})"
+            )
         insert_sql: str = self._insert_sql(
             target=target,
             valid_from_sql=version_valid_from_expr,
             joins_sql=history_join_sql,
             changed_sql=f"__source.{updated_at_column} > __active.{updated_at_column}",
+            insert_guard_sql=insert_guard_sql,
         )
         return self._with_hard_delete_close(
-            statements=(close_sql, insert_sql),
+            statements=(insert_sql, close_sql)
+            if invalidate_hard_deletes
+            else (close_sql, insert_sql),
             target=target,
             invalidate_hard_deletes=invalidate_hard_deletes,
             current_timestamp=current_timestamp,
@@ -214,7 +226,13 @@ class SnapshotSql:
         )
 
     def _insert_sql(
-        self, *, target: SnapshotChangeTarget, valid_from_sql: str, joins_sql: str, changed_sql: str
+        self,
+        *,
+        target: SnapshotChangeTarget,
+        valid_from_sql: str,
+        joins_sql: str,
+        changed_sql: str,
+        insert_guard_sql: str | None = None,
     ) -> str:
         insert_column_sql: str = ", ".join(
             (*target.output_columns, target.valid_from_column, target.valid_to_column)
@@ -223,6 +241,9 @@ class SnapshotSql:
         active_join_condition: str = self.key_condition(
             left_alias="__active", right_alias="__source", unique_key=target.unique_key
         )
+        insert_condition: str = f"__active.{target.unique_key[0]} IS NULL OR {changed_sql}"
+        if insert_guard_sql is not None:
+            insert_condition = f"({insert_condition}) AND {insert_guard_sql}"
         return (
             f"INSERT INTO {target.destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, {valid_from_sql}, "
@@ -231,7 +252,7 @@ class SnapshotSql:
             f"LEFT JOIN {target.destination} AS __active "
             f"ON {active_join_condition} AND __active.{target.valid_to_column} IS NULL "
             f"{joins_sql}"
-            f"WHERE __active.{target.unique_key[0]} IS NULL OR {changed_sql}"
+            f"WHERE {insert_condition}"
         )
 
     def _with_hard_delete_close(
