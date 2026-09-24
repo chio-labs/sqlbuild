@@ -14,6 +14,7 @@ from sqlbuild.virtual.state._helpers.state_storage.datetime import (
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.constants import (
     FUNCTION_VERSION_TABLE,
+    LOCK_TABLE,
     MODEL_VERSION_TABLE,
     PHYSICAL_RELATION_ANCESTRY_TABLE,
     PHYSICAL_RELATION_TABLE,
@@ -36,6 +37,7 @@ from sqlbuild.virtual.state.models import (
     PythonNodeVersionRecord,
     SeedVersionRecord,
     SourceFreshnessRecord,
+    StateLockRecord,
     StateOperationRecord,
     VirtualEnvironmentCheckpointFunctionRefRecord,
     VirtualEnvironmentCheckpointModelRefRecord,
@@ -46,6 +48,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentNodeRefRecord,
     VirtualEnvironmentPythonNodeRefRecord,
     VirtualEnvironmentRecord,
+    VirtualEnvironmentRetentionRecord,
     VirtualEnvironmentSeedRefRecord,
 )
 from sqlbuild.virtual.state.types import (
@@ -248,6 +251,66 @@ class SqlStateBackend(StateBackend):
                 "baseline_virtual_environment_name": record.baseline_virtual_environment_name,
                 "finalized_at": record.finalized_at,
             },
+        )
+
+    def list_virtual_environments(
+        self, *, connection: Any, schema: str
+    ) -> tuple[VirtualEnvironmentRetentionRecord, ...]:
+        rows: list[tuple[Any, ...]] = self._fetch_all(
+            connection=connection,
+            sql="SELECT virtual_environment_name, status, updated_at "
+            f"FROM {self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_TABLE)} "
+            "ORDER BY updated_at DESC, virtual_environment_name DESC",
+        )
+        return tuple(
+            VirtualEnvironmentRetentionRecord(
+                virtual_environment_name=row[0],
+                status=VirtualEnvironmentStatus(row[1]),
+                updated_at=row[2],
+            )
+            for row in rows
+        )
+
+    def renew_lock(
+        self,
+        *,
+        connection: Any,
+        schema: str,
+        lock_key: str,
+        owner_id: str,
+        expires_at: datetime,
+    ) -> bool:
+        p: str = self._placeholder
+        row: tuple[Any, ...] | None = self._fetch_one(
+            connection=connection,
+            sql=f"UPDATE {self._qualified_name(schema=schema, table=LOCK_TABLE)} "
+            f"SET expires_at = {p}, updated_at = CURRENT_TIMESTAMP "
+            f"WHERE lock_key = {p} AND owner_id = {p} AND expires_at > CURRENT_TIMESTAMP "
+            "RETURNING lock_key",
+            params=[expires_at, lock_key, owner_id],
+        )
+        return row is not None
+
+    def list_active_locks(self, *, connection: Any, schema: str) -> tuple[StateLockRecord, ...]:
+        rows: list[tuple[Any, ...]] = self._fetch_all(
+            connection=connection,
+            sql="SELECT lock_key, owner_id, expires_at FROM "
+            f"{self._qualified_name(schema=schema, table=LOCK_TABLE)} "
+            "WHERE expires_at > CURRENT_TIMESTAMP ORDER BY lock_key",
+        )
+        return tuple(
+            StateLockRecord(lock_key=row[0], owner_id=row[1], expires_at=row[2]) for row in rows
+        )
+
+    def list_expired_locks(self, *, connection: Any, schema: str) -> tuple[StateLockRecord, ...]:
+        rows: list[tuple[Any, ...]] = self._fetch_all(
+            connection=connection,
+            sql="SELECT lock_key, owner_id, expires_at FROM "
+            f"{self._qualified_name(schema=schema, table=LOCK_TABLE)} "
+            "WHERE expires_at <= CURRENT_TIMESTAMP ORDER BY lock_key",
+        )
+        return tuple(
+            StateLockRecord(lock_key=row[0], owner_id=row[1], expires_at=row[2]) for row in rows
         )
 
     def _replace_row_preserving_created_at(
