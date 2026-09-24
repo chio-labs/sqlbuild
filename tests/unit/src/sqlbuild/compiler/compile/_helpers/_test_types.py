@@ -899,3 +899,14 @@ class CteScannerMessageTestCase:
     description: str
     sql: str
     expected_message: str
+
+
+@dataclass(frozen=True)
+class ExpectedProjectionScanTestCase:
+    description: str
+    sql: str
+    expected_branches: tuple[str, ...]
+    expected_select_list_end: int
+    expected_commas: tuple[str, ...]
+    expected_alias: str | None
+    expected_contains_select_star: bool
