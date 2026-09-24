@@ -884,3 +884,11 @@ class CachedLineageRoundTripTestCase:
     transform_kind: ColumnTransformKind
     confidence: ColumnLineageConfidence
     expected_compact: bool
+
+
+@dataclass(frozen=True)
+class ClassifyDirectLogicSqlTestCtesErrorTestCase:
+    description: str
+    mode: SqlTestMode
+    ctes: tuple[tuple[str, str], ...]
+    expected_message: str
