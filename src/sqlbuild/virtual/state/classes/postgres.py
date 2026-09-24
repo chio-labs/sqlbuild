@@ -67,7 +67,6 @@ from sqlbuild.virtual.state.models import (
     SourceFreshnessRecord,
     StateBackupRecord,
     StateLockLease,
-    StateLockRecord,
     StateOperationEventRecord,
     StateSchemaValidationResult,
     VirtualEnvironmentCheckpointFunctionRefRecord,
@@ -79,14 +78,12 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentNodeRefRecord,
     VirtualEnvironmentPythonNodeRefRecord,
     VirtualEnvironmentRecord,
-    VirtualEnvironmentRetentionRecord,
     VirtualEnvironmentSeedRefRecord,
 )
 from sqlbuild.virtual.state.types import (
     StateColumnType,
     StateMigrationAction,
     StateMigrationStatus,
-    VirtualEnvironmentStatus,
 )
 
 
@@ -514,25 +511,6 @@ class PostgresStateBackend(SqlStateBackend):
             )
             rows: list[tuple[Any, ...]] = cursor.fetchall()
         return MicrobatchEventCodec.from_rows(tuple(row) for row in rows)
-
-    def list_virtual_environments(
-        self, *, connection: Any, schema: str
-    ) -> tuple[VirtualEnvironmentRetentionRecord, ...]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT virtual_environment_name, status, updated_at "
-                f"FROM {self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_TABLE)} "
-                "ORDER BY updated_at DESC, virtual_environment_name DESC"
-            )
-            rows: list[tuple[Any, ...]] = cursor.fetchall()
-        return tuple(
-            VirtualEnvironmentRetentionRecord(
-                virtual_environment_name=row[0],
-                status=VirtualEnvironmentStatus(row[1]),
-                updated_at=row[2],
-            )
-            for row in rows
-        )
 
     def delete_virtual_environment(
         self, *, connection: Any, schema: str, virtual_environment_name: str
@@ -1113,49 +1091,6 @@ class PostgresStateBackend(SqlStateBackend):
             except BaseException:
                 cursor.execute("ROLLBACK")
                 raise
-
-    def renew_lock(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        lock_key: str,
-        owner_id: str,
-        expires_at: datetime,
-    ) -> bool:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                f"UPDATE {self._qualified_name(schema=schema, table=LOCK_TABLE)} "
-                "SET expires_at = %s, updated_at = CURRENT_TIMESTAMP "
-                "WHERE lock_key = %s AND owner_id = %s AND expires_at > CURRENT_TIMESTAMP "
-                "RETURNING lock_key",
-                [expires_at, lock_key, owner_id],
-            )
-            return cursor.fetchone() is not None
-
-    def list_active_locks(self, *, connection: Any, schema: str) -> tuple[StateLockRecord, ...]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT lock_key, owner_id, expires_at FROM "
-                f"{self._qualified_name(schema=schema, table=LOCK_TABLE)} "
-                "WHERE expires_at > CURRENT_TIMESTAMP ORDER BY lock_key"
-            )
-            rows: list[tuple[Any, ...]] = cursor.fetchall()
-        return tuple(
-            StateLockRecord(lock_key=row[0], owner_id=row[1], expires_at=row[2]) for row in rows
-        )
-
-    def list_expired_locks(self, *, connection: Any, schema: str) -> tuple[StateLockRecord, ...]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT lock_key, owner_id, expires_at FROM "
-                f"{self._qualified_name(schema=schema, table=LOCK_TABLE)} "
-                "WHERE expires_at <= CURRENT_TIMESTAMP ORDER BY lock_key"
-            )
-            rows: list[tuple[Any, ...]] = cursor.fetchall()
-        return tuple(
-            StateLockRecord(lock_key=row[0], owner_id=row[1], expires_at=row[2]) for row in rows
-        )
 
     def delete_lock(self, *, connection: Any, schema: str, lock_key: str) -> None:
         with connection.cursor() as cursor:
