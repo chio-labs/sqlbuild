@@ -1,6 +1,7 @@
 use crate::compiler::tests::helpers::{
-    concurrent_requests_initialize_shared_template_once, model_test_batch_returns_ordered_artifact,
-    shared_textual_chain_renders_each_model_once,
+    chain_resolution_orders_unmocked_models, concurrent_requests_initialize_shared_template_once,
+    deep_shared_graph_reports_missing_mock_once, model_test_batch_returns_ordered_artifact,
+    plan_without_rendering_returns_executable_steps, shared_textual_chain_renders_each_model_once,
     unicode_cte_after_leading_with_preserves_identifier,
     unresolved_reference_fast_rejection_preserves_warning,
 };
@@ -32,6 +33,21 @@ fn given_sql_test_planning_cases_when_exercising_native_planner_then_expected_be
         SqlTestPlanningTestCase {
             description: "fast rejection preserves unresolved reference warnings",
             run: unresolved_reference_fast_rejection_preserves_warning,
+            expected_success: true,
+        },
+        SqlTestPlanningTestCase {
+            description: "deep shared graph reports one missing mock once",
+            run: deep_shared_graph_reports_missing_mock_once,
+            expected_success: true,
+        },
+        SqlTestPlanningTestCase {
+            description: "planning without rendering returns executable steps",
+            run: plan_without_rendering_returns_executable_steps,
+            expected_success: true,
+        },
+        SqlTestPlanningTestCase {
+            description: "chain resolution orders unmocked models",
+            run: chain_resolution_orders_unmocked_models,
             expected_success: true,
         },
     ];

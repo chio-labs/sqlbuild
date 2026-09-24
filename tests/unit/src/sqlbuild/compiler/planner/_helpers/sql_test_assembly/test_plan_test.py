@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import Mock
 
 import pytest
 
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
@@ -20,11 +21,10 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
-from sqlbuild.compiler.planner._helpers.sql_tests import assembly as sql_test_assembly
-from sqlbuild.compiler.planner._helpers.sql_tests.assembly import plan_test
 from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
     plan_and_render_sql_test_artifacts,
 )
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.commands._relations import resolve_static_relation_context
 from sqlbuild.compiler.planner.main.commands._scope import resolve_static_command_scope
 from sqlbuild.compiler.planner.main.commands.sql_test import build_test_command_plan
@@ -34,10 +34,10 @@ from sqlbuild.compiler.planner.models import (
     PlannerSelection,
     PlanOutput,
     PlanWarning,
-    SqlAnalysisResolvedTestSql,
     SqlTestPlanEntry,
 )
 from sqlbuild.compiler.planner.types import WarningSeverity
+from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     AssertionChainCteErrorTestCase,
     NativePlanningDifferentialTestCase,
@@ -47,9 +47,11 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_t
     SqlAnalysisDialectTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers import (
-    assert_native_artifact_matches_python_plan,
+    assert_native_artifact_matches_runtime_plan,
     build_test_and_project,
+    plan_single_test,
 )
+from tests.unit.src.sqlbuild.executor.testing.main.helpers import build_comparison_test_adapter
 
 
 @pytest.mark.parametrize(
@@ -578,7 +580,7 @@ def test_given_test_and_project_when_planning_then_produces_expected_chain(
 
     entry: SqlTestPlanEntry
     warnings: tuple[PlanWarning, ...]
-    entry, warnings = plan_test(test=compiled_test, project=project, adapter=DuckDbAdapter())
+    entry, warnings = plan_single_test(test=compiled_test, project=project, adapter=DuckDbAdapter())
 
     assert len(entry.chain) == test_case.expected_chain_length
 
@@ -680,7 +682,7 @@ def test_given_test_and_project_when_planning_then_produces_expected_chain(
     ),
     ids=lambda case: case.description,
 )
-def test_given_model_chain_when_native_planning_then_matches_python_artifact_and_warnings(
+def test_given_model_chain_when_native_planning_then_artifact_matches_runtime_sql_and_warnings(
     test_case: NativePlanningDifferentialTestCase,
 ) -> None:
     compiled_test: CompiledSqlTest
@@ -702,14 +704,14 @@ def test_given_model_chain_when_native_planning_then_matches_python_artifact_and
     )
     project = replace(project, sql_tests=(compiled_test,))
     adapter: DuckDbAdapter = DuckDbAdapter()
-    entry, warnings = plan_test(
+    entry, warnings = plan_single_test(
         test=compiled_test,
         project=project,
         adapter=adapter,
         sql_analysis_enabled=test_case.sql_analysis_enabled,
     )
     assert (
-        assert_native_artifact_matches_python_plan(
+        assert_native_artifact_matches_runtime_plan(
             project=project,
             sql_test=compiled_test,
             entry=entry,
@@ -763,7 +765,7 @@ def test_given_refs_in_comments_and_literals_when_planning_then_preserves_sql_an
     project: CompiledProject
     compiled_test, project = build_test_and_project(test_case)
 
-    entry, warnings = plan_test(test=compiled_test, project=project, adapter=DuckDbAdapter())
+    entry, warnings = plan_single_test(test=compiled_test, project=project, adapter=DuckDbAdapter())
 
     assert not warnings
     assert tuple(step.model_name for step in entry.chain) == test_case.expected_model_names
@@ -802,7 +804,7 @@ def test_given_repeated_query_with_different_fixture_rows_when_planning_then_kee
         compiled_test: CompiledSqlTest
         project: CompiledProject
         compiled_test, project = build_test_and_project(fixture_case)
-        entry, warnings = plan_test(
+        entry, warnings = plan_single_test(
             test=compiled_test,
             project=project,
             adapter=DuckDbAdapter(),
@@ -842,7 +844,7 @@ def test_given_unresolved_marker_in_mock_when_planning_with_analysis_then_report
     project: CompiledProject
     compiled_test, project = build_test_and_project(test_case)
 
-    _, warnings = plan_test(
+    _, warnings = plan_single_test(
         test=compiled_test,
         project=project,
         adapter=DuckDbAdapter(),
@@ -913,7 +915,7 @@ def test_given_macro_sql_test_when_planning_then_compares_actual_to_expected_dir
         ),
     )
 
-    entry, warnings = plan_test(
+    entry, warnings = plan_single_test(
         test=sql_test,
         adapter=DuckDbAdapter(),
         project=CompiledProject(
@@ -1026,7 +1028,7 @@ def test_given_udf_sql_test_when_planning_then_compares_resolved_actual_to_expec
         ),
         sql_tests=(sql_test,),
     )
-    entry, warnings = plan_test(
+    entry, warnings = plan_single_test(
         test=sql_test,
         adapter=DuckDbAdapter(),
         project=project,
@@ -1041,7 +1043,7 @@ def test_given_udf_sql_test_when_planning_then_compares_resolved_actual_to_expec
     assert entry.function_deps == (
         CompiledObjectKey(resource_type=CompiledResourceType.UDF, name="format_cents"),
     )
-    assert_native_artifact_matches_python_plan(
+    assert_native_artifact_matches_runtime_plan(
         project=project,
         sql_test=sql_test,
         entry=entry,
@@ -1157,7 +1159,7 @@ def test_given_table_function_sql_test_when_planning_then_compares_resolved_actu
         ),
         sql_tests=(sql_test,),
     )
-    entry, warnings = plan_test(
+    entry, warnings = plan_single_test(
         test=sql_test,
         adapter=DuckDbAdapter(),
         project=project,
@@ -1175,7 +1177,7 @@ def test_given_table_function_sql_test_when_planning_then_compares_resolved_actu
             name="customer_orders",
         ),
     )
-    assert_native_artifact_matches_python_plan(
+    assert_native_artifact_matches_runtime_plan(
         project=project,
         sql_test=sql_test,
         entry=entry,
@@ -1235,7 +1237,7 @@ def test_given_sql_analysis_enabled_when_planning_test_then_it_uses_top_level_ge
 
     entry: SqlTestPlanEntry
     warnings: tuple[PlanWarning, ...]
-    entry, warnings = plan_test(
+    entry, warnings = plan_single_test(
         test=compiled_test,
         project=project,
         adapter=DuckDbAdapter(),
@@ -1287,7 +1289,7 @@ def test_given_sql_analysis_enabled_when_generated_cte_name_conflicts_then_it_ra
     compiled_test, project = build_test_and_project(test_case)
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragments[0]):
-        plan_test(
+        plan_single_test(
             test=compiled_test,
             project=project,
             adapter=DuckDbAdapter(),
@@ -1332,7 +1334,7 @@ def test_given_sql_analysis_assertion_when_planning_then_uses_shared_chain_ctes(
 
     entry: SqlTestPlanEntry
     warnings: tuple[PlanWarning, ...]
-    entry, warnings = plan_test(
+    entry, warnings = plan_single_test(
         test=compiled_test,
         project=project,
         adapter=DuckDbAdapter(),
@@ -1351,79 +1353,12 @@ def test_given_sql_analysis_assertion_when_planning_then_uses_shared_chain_ctes(
 @pytest.mark.parametrize(
     "test_case",
     [
-        PlanTestChainTestCase(
-            description="assertion analysis failure uses the independent textual chain",
-            model_queries={"stg_orders": 'SELECT id AS order_id FROM __source("raw")'},
-            mock_ref_ctes={},
-            mock_source_ctes={"raw": "SELECT 1 AS id"},
-            helper_ctes={},
-            expected_model_names=("stg_orders",),
-            expected_chain_length=1,
-            expected_cte_bodies={"stg_orders": "SELECT 1 AS order_id"},
-            assertion_ctes={
-                "order_ids_are_not_null": (
-                    'SELECT * FROM __ref("stg_orders") AS stg_orders WHERE order_id IS NULL'
-                )
-            },
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_assertion_analysis_failure_when_planning_then_textual_chain_stays_valid(
-    test_case: PlanTestChainTestCase,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    compiled_test: CompiledSqlTest
-    project: CompiledProject
-    compiled_test, project = build_test_and_project(test_case)
-    model_analysis_result: SqlAnalysisResolvedTestSql | None = (
-        sql_test_assembly.try_resolve_test_model_sql_with_sql_analysis(
-            query_sql=test_case.model_queries["stg_orders"],
-            mock_refs={},
-            mock_sources=test_case.mock_source_ctes,
-            mock_seeds={},
-            mock_dbt_refs={},
-            function_context=sql_test_assembly.build_test_function_analysis_context(
-                function_locations={}
-            ),
-            helper_ctes=(),
-            resolved_chain={},
-            file_label="tests/unit/test_chain.sql",
-            sql_analysis_dialect="duckdb",
-        )
-    )
-    assert model_analysis_result is not None
-    monkeypatch.setattr(
-        sql_test_assembly,
-        "try_resolve_test_model_sql_with_sql_analysis",
-        Mock(side_effect=(model_analysis_result, None)),
-    )
-
-    entry: SqlTestPlanEntry
-    warnings: tuple[PlanWarning, ...]
-    entry, warnings = plan_test(
-        test=compiled_test,
-        project=project,
-        adapter=DuckDbAdapter(),
-        sql_analysis_enabled=True,
-    )
-
-    assert not warnings
-    assert len(entry.chain) == test_case.expected_chain_length
-    assert len(entry.assertions) == 1
-    resolved_assertion_sql: str = entry.assertions[0].resolved_sql
-    assert "WITH __ref__stg_orders AS" in resolved_assertion_sql
-    assert "SELECT 1 AS id" in resolved_assertion_sql
-    assert "__REF(" not in resolved_assertion_sql.upper()
-    assert "FROM (WITH" not in resolved_assertion_sql.upper()
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
         SqlAnalysisDialectTestCase(
             description="Snowflake STARTSWITH spelling is preserved",
-            query_sql="SELECT STARTSWITH(name, 'A') AS matches FROM __ref(\"items\")",
+            query_sql=(
+                "WITH picked AS (SELECT STARTSWITH(name, 'A') AS matches "
+                'FROM __ref("items")) SELECT matches FROM picked'
+            ),
             dialect="snowflake",
             expected_sql_fragment="STARTSWITH(name, 'A')",
             expected_absent_sql_fragment="STARTS_WITH",
@@ -1434,26 +1369,44 @@ def test_given_assertion_analysis_failure_when_planning_then_textual_chain_stays
 def test_given_adapter_function_when_resolving_with_analysis_then_emits_supported_spelling(
     test_case: SqlAnalysisDialectTestCase,
 ) -> None:
-    result: SqlAnalysisResolvedTestSql | None = (
-        sql_test_assembly.try_resolve_test_model_sql_with_sql_analysis(
-            query_sql=test_case.query_sql,
-            mock_refs={"items": "SELECT 'Alice' AS name"},
-            mock_sources={},
-            mock_seeds={},
-            mock_dbt_refs={},
-            function_context=sql_test_assembly.build_test_function_analysis_context(
-                function_locations={}
-            ),
-            helper_ctes=(),
-            resolved_chain={},
-            file_label="tests/unit/test_dialect.sql",
-            sql_analysis_dialect=test_case.dialect,
+    compiled_test: CompiledSqlTest
+    project: CompiledProject
+    compiled_test, project = build_test_and_project(
+        PlanTestChainTestCase(
+            description=test_case.description,
+            model_queries={"matches": test_case.query_sql},
+            mock_ref_ctes={"items": "SELECT 'Alice' AS name"},
+            mock_source_ctes={},
+            helper_ctes={},
+            expected_model_names=("matches",),
+            expected_chain_length=1,
+            expected_cte_bodies={"matches": "SELECT TRUE AS matches"},
         )
     )
+    assert isinstance(compiled_test.payload, CompiledModelSqlTestPayload)
+    compiled_test = replace(
+        compiled_test,
+        payload=replace(
+            compiled_test.payload,
+            expected_ctes=(
+                CompileSqlTestCte(name="__expected__matches", sql_body="SELECT TRUE AS matches"),
+            ),
+        ),
+    )
+    adapter: BaseAdapter = build_comparison_test_adapter(test_case.dialect)
 
-    assert result is not None
-    assert test_case.expected_sql_fragment in result.resolved_sql
-    assert test_case.expected_absent_sql_fragment not in result.resolved_sql
+    entry, _ = plan_single_test(
+        test=compiled_test, project=project, adapter=adapter, sql_analysis_enabled=True
+    )
+    comparison_sql: str = build_sql_test_comparison_sql(
+        test_entry=entry,
+        set_difference_operator=adapter.render_set_difference_operator(),
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
+    )
+
+    assert test_case.expected_sql_fragment in entry.chain[0].resolved_sql
+    assert test_case.expected_sql_fragment in comparison_sql
+    assert test_case.expected_absent_sql_fragment not in comparison_sql
 
 
 @pytest.mark.parametrize(
@@ -1462,8 +1415,8 @@ def test_given_adapter_function_when_resolving_with_analysis_then_emits_supporte
         AssertionChainCteErrorTestCase(
             description="rejects referenced model fallback beginning with with",
             assertion_sql='SELECT * FROM __ref("stg_orders")',
-            resolved_chain={
-                "stg_orders": "(WITH model_rows AS (SELECT 1 AS id) SELECT * FROM model_rows)"
+            model_queries={
+                "stg_orders": "WITH model_rows AS (SELECT 1 AS id) SELECT * FROM model_rows"
             },
             expected_error_fragment="referenced model beginning with WITH",
         ),
@@ -1473,7 +1426,7 @@ def test_given_adapter_function_when_resolving_with_analysis_then_emits_supporte
                 'WITH invalid_orders AS (SELECT * FROM __ref("stg_orders")) '
                 "SELECT * FROM invalid_orders"
             ),
-            resolved_chain={"stg_orders": "(SELECT 1 AS id)"},
+            model_queries={"stg_orders": "SELECT 1 AS id"},
             expected_error_fragment="assertion beginning with WITH",
         ),
     ],
@@ -1482,9 +1435,19 @@ def test_given_adapter_function_when_resolving_with_analysis_then_emits_supporte
 def test_given_unflattened_with_when_building_assertion_ctes_then_raises_clear_error(
     test_case: AssertionChainCteErrorTestCase,
 ) -> None:
-    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
-        sql_test_assembly._build_assertion_chain_ctes(
-            assertion_sql=test_case.assertion_sql,
-            resolved_chain=test_case.resolved_chain,
-            requires_flat_ctes=True,
+    compiled_test, project = build_test_and_project(
+        PlanTestChainTestCase(
+            description=test_case.description,
+            model_queries=test_case.model_queries,
+            mock_ref_ctes={},
+            mock_source_ctes={},
+            helper_ctes={},
+            expected_model_names=(),
+            expected_chain_length=1,
+            expected_cte_bodies={},
+            assertion_ctes={"flattened": test_case.assertion_sql},
         )
+    )
+
+    with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):
+        plan_single_test(test=compiled_test, project=project, adapter=SqlServerAdapter())

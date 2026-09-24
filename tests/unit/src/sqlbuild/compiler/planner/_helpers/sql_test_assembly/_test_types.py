@@ -48,7 +48,7 @@ class PlanMacroTestCase:
 class AssertionChainCteErrorTestCase:
     description: str
     assertion_sql: str
-    resolved_chain: dict[str, str]
+    model_queries: dict[str, str]
     expected_error_fragment: str
 
 

@@ -117,15 +117,6 @@ class RefResolutionTestCase:
 
 
 @dataclass(frozen=True)
-class TableFunctionFixtureResolutionTestCase:
-    description: str
-    query_sql: str
-    fixtures: dict[str, str]
-    expected_sql: str
-    expected_reached: frozenset[str]
-
-
-@dataclass(frozen=True)
 class ApplyDeferredTargetsTestCase:
     description: str
     model_target_qualified: dict[str, str | None]

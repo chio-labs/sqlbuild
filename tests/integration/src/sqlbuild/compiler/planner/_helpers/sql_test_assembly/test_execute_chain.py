@@ -18,7 +18,6 @@ from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
-from sqlbuild.compiler.planner._helpers.sql_tests.assembly import plan_test
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
 from sqlbuild.executor.testing.main._execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
@@ -30,6 +29,9 @@ from tests.integration.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.
 )
 from tests.integration.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers import (
     build_test_and_project,
+)
+from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers import (
+    plan_single_test,
 )
 
 
@@ -79,7 +81,7 @@ SELECT 1
         discovered_inputs=discover_project_inputs(project_dir=tmp_path),
         adapter=adapter,
     )
-    entry, warnings = plan_test(
+    entry, warnings = plan_single_test(
         test=project.sql_tests[0],
         adapter=adapter,
         project=project,
@@ -312,7 +314,7 @@ def test_given_chain_when_executing_resolved_sql_then_produces_expected_rows(
     compiled_test, project = build_test_and_project(test_case)
 
     entry: SqlTestPlanEntry
-    entry, _ = plan_test(test=compiled_test, project=project, adapter=DuckDbAdapter())
+    entry, _ = plan_single_test(test=compiled_test, project=project, adapter=DuckDbAdapter())
 
     assert len(entry.chain) == test_case.expected_chain_length
 
@@ -387,7 +389,7 @@ def test_given_macro_test_plan_when_executing_then_it_passes_direct_comparison(
         ),
     )
 
-    entry, warnings = plan_test(
+    entry, warnings = plan_single_test(
         test=sql_test,
         adapter=DuckDbAdapter(),
         project=CompiledProject(
@@ -481,7 +483,7 @@ def test_given_sql_analysis_enabled_when_planning_chain_then_step_sql_remains_ex
     compiled_test, project = build_test_and_project(test_case)
 
     entry: SqlTestPlanEntry
-    entry, _ = plan_test(
+    entry, _ = plan_single_test(
         test=compiled_test,
         project=project,
         adapter=DuckDbAdapter(),

@@ -12,6 +12,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
     FixtureCompatibilityE2ETestCase,
     ParameterCaseSelectionE2ETestCase,
     PartialFixtureE2ETestCase,
+    SharedGraphChainE2ETestCase,
+    SharedGraphMissingMockE2ETestCase,
     SqlAnalysisChainSqlTestE2ETestCase,
     SqlTestE2ETestCase,
     SqlTestFixtureValidationE2ETestCase,
@@ -28,6 +30,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     build_contract_empty_fixture_project_files,
     build_cte_derived_output_fixture_project_files,
     build_cte_partial_source_fixture_project_files,
+    build_deep_shared_missing_mock_project_files,
+    build_diamond_chain_test_project_files,
     build_dynamic_pivot_test_project_files,
     build_empty_partial_fixture_project_files,
     build_explicit_typed_null_fixture_project_files,
@@ -63,6 +67,17 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 
+_DIAMOND_ONCE_RENDERED_FRAGMENTS: tuple[str, ...] = (
+    "__ref__stg_orders AS (",
+    "__ref__large_orders AS (",
+    "__ref__small_orders AS (",
+)
+_DIAMOND_STDOUT_FRAGMENTS: tuple[str, ...] = (
+    "PASS=1  FAIL=1  TOTAL=2",
+    "expect  assertion no_negative_large_orders",
+    "differing column large_count: actual=0, expected=3",
+)
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -72,7 +87,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             repo_files=build_partial_source_fixture_project_files(),
             expected_stdout_fragment="PASS=1",
             expected_artifact_fragments=(
-                'CAST(NULL AS TEXT) AS "status"',
+                'CAST(NULL AS VARCHAR) AS "status"',
                 "__sqlbuild_partial_fixture",
             ),
         ),
@@ -81,7 +96,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             repo_files=build_cte_partial_source_fixture_project_files(),
             expected_stdout_fragment="PASS=1",
             expected_artifact_fragments=(
-                'CAST(NULL AS TEXT) AS "status"',
+                'CAST(NULL AS VARCHAR) AS "status"',
                 "__sqlbuild_partial_fixture",
             ),
         ),
@@ -90,7 +105,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             repo_files=build_clause_partial_source_fixture_project_files(),
             expected_stdout_fragment="PASS=1",
             expected_artifact_fragments=(
-                'CAST(NULL AS TEXT) AS "status"',
+                'CAST(NULL AS VARCHAR) AS "status"',
                 "__sqlbuild_partial_fixture",
             ),
         ),
@@ -99,7 +114,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             repo_files=build_unspecified_nullability_fixture_project_files(),
             expected_stdout_fragment="PASS=1",
             expected_artifact_fragments=(
-                'CAST(NULL AS TEXT) AS "status"',
+                'CAST(NULL AS VARCHAR) AS "status"',
                 "__sqlbuild_partial_fixture",
             ),
         ),
@@ -117,7 +132,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             repo_files=build_partial_seed_fixture_project_files(),
             expected_stdout_fragment="PASS=1",
             expected_artifact_fragments=(
-                'CAST(NULL AS TEXT) AS "country_name"',
+                'CAST(NULL AS VARCHAR) AS "country_name"',
                 "__sqlbuild_partial_fixture",
             ),
             artifact_filename="test_countries.sql",
@@ -126,7 +141,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             description="nullable column outside the closure leaves fixture unchanged",
             repo_files=build_irrelevant_omitted_column_project_files(),
             expected_stdout_fragment="PASS=1",
-            expected_artifact_fragments=("__source__raw_orders AS (SELECT\n  1 AS order_id",),
+            expected_artifact_fragments=("__source__raw_orders AS (SELECT 1 AS order_id)",),
             unexpected_artifact_fragments=("__sqlbuild_partial_fixture",),
         ),
         PartialFixtureE2ETestCase(
@@ -134,7 +149,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             repo_files=build_star_partial_fixture_project_files(),
             expected_stdout_fragment="PASS=1",
             expected_artifact_fragments=(
-                'CAST(NULL AS TEXT) AS "status"',
+                'CAST(NULL AS VARCHAR) AS "status"',
                 "__sqlbuild_partial_fixture",
             ),
         ),
@@ -144,7 +159,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_stdout_fragment="PASS=1",
             expected_artifact_fragments=(
                 "FALSE",
-                'CAST(NULL AS TEXT) AS "status"',
+                'CAST(NULL AS VARCHAR) AS "status"',
                 "__sqlbuild_partial_fixture",
             ),
         ),
@@ -170,8 +185,8 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             repo_files=build_contract_empty_fixture_project_files(),
             expected_stdout_fragment="PASS=1",
             expected_artifact_fragments=(
-                'CAST(NULL AS INT) AS "order_id"',
-                'CAST(NULL AS TEXT) AS "status"',
+                'CAST(NULL AS INTEGER) AS "order_id"',
+                'CAST(NULL AS VARCHAR) AS "status"',
                 "FALSE",
             ),
             unexpected_artifact_fragments=("__empty_fixture",),
@@ -189,7 +204,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_stdout_fragment="PASS=1",
             expected_artifact_fragments=(
                 '"__sqlbuild_partial_fixture".*',
-                'CAST(NULL AS TEXT) AS "note"',
+                'CAST(NULL AS VARCHAR) AS "note"',
             ),
             unexpected_artifact_fragments=('"__sqlbuild_partial_fixture"."Status"',),
         ),
@@ -475,8 +490,10 @@ def test_given_invalid_fixture_when_testing_then_static_diagnostics_prevent_conn
             expected_exit_code=1,
             expected_stdout_fragments=(
                 "model 'stg_orders' references __source('raw') which has no mock",
+                "Test plan inspection failed: 1 selected, 1 errors.",
+            ),
+            unexpected_stdout_fragments=(
                 "model 'fact_orders' references __source('raw') which has no mock",
-                "Test plan inspection failed: 1 selected, 2 errors.",
             ),
         ),
         SqlTestPlanInspectionE2ETestCase(
@@ -527,6 +544,8 @@ def test_given_sql_test_when_inspecting_then_fixture_boundaries_and_chain_are_sh
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
     for fragment in test_case.expected_stdout_fragments:
         assert fragment in result.stdout, result.stdout + result.stderr
+    for fragment in test_case.unexpected_stdout_fragments:
+        assert fragment not in result.stdout, result.stdout + result.stderr
     assert "Connecting to" not in result.stdout
 
 
@@ -672,14 +691,6 @@ def test_given_waffle_shop_project_when_running_test_then_all_tests_pass(
                 "'fact_orders' AS model_name",
             ),
             unexpected_artifact_fragments=("__actual_0",),
-            expected_runtime_fragments=(
-                "__actual__fact_orders AS (",
-                "FROM (",
-                "'US' AS country",
-                "' + x + ' AS literal_text",
-                "'active' AS status",
-                "'fact_orders' AS model_name",
-            ),
         ),
     ],
     ids=lambda case: case.description,
@@ -714,10 +725,7 @@ def test_given_chain_sql_test_when_running_test_then_generated_sql_is_valid(
         / "test_chain.sql"
     ).read_text(encoding="utf-8")
     expected_runtime_fragment: str
-    runtime_fragments: tuple[str, ...] = (
-        test_case.expected_runtime_fragments or test_case.expected_artifact_fragments
-    )
-    for expected_runtime_fragment in runtime_fragments:
+    for expected_runtime_fragment in test_case.expected_artifact_fragments:
         assert expected_runtime_fragment in runtime_artifact_sql
 
     compile_result: subprocess.CompletedProcess[str] = run_sqb(
@@ -952,3 +960,96 @@ def test_given_unknown_table_function_fixture_when_testing_model_then_compile_fa
     assert result.returncode == 1, result.stdout + result.stderr
     assert test_case.expected_stderr_fragment in result.stderr
     assert "Connecting to" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SharedGraphChainE2ETestCase(
+            description="shared graph chain with sql analysis",
+            sql_analysis_enabled=True,
+            expected_stdout_fragments=_DIAMOND_STDOUT_FRAGMENTS,
+            once_rendered_fragments=_DIAMOND_ONCE_RENDERED_FRAGMENTS,
+        ),
+        SharedGraphChainE2ETestCase(
+            description="shared graph chain without sql analysis",
+            sql_analysis_enabled=False,
+            expected_stdout_fragments=_DIAMOND_STDOUT_FRAGMENTS,
+            once_rendered_fragments=_DIAMOND_ONCE_RENDERED_FRAGMENTS,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_shared_upstream_graph_when_running_test_then_outcomes_and_sql_match_compile(
+    test_case: SharedGraphChainE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="diamond_chain_project",
+        repo_files=build_diamond_chain_test_project_files(
+            sql_analysis_enabled=test_case.sql_analysis_enabled
+        ),
+    )
+
+    test_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "test"), project_dir=project_dir
+    )
+    compile_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "compile"), project_dir=project_dir
+    )
+
+    assert test_result.returncode == 1, test_result.stdout + test_result.stderr
+    assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in test_result.stdout, test_result.stdout
+    runtime_sql: str = next(
+        (project_dir / "target" / "run" / "tests").rglob("customer_order_mix_matches.sql")
+    ).read_text(encoding="utf-8")
+    compiled_sql: str = next(
+        (project_dir / "target" / "compiled" / "tests").rglob("customer_order_mix_matches.sql")
+    ).read_text(encoding="utf-8")
+    assert runtime_sql == compiled_sql
+    for fragment in test_case.once_rendered_fragments:
+        assert runtime_sql.count(fragment) == 1, fragment
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SharedGraphMissingMockE2ETestCase(
+            description="deep shared graph reports its missing source mock once",
+            layers=12,
+            expected_error=(
+                "test 'deep_orders_missing_mock': model 'orders_00_left' references "
+                "__source('raw_orders') which has no mock"
+            ),
+            expected_stdout_fragments=("Test plan inspection failed: 1 selected, 1 errors.",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_deep_shared_graph_missing_mock_when_testing_then_error_is_reported_once(
+    test_case: SharedGraphMissingMockE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="deep_missing_mock_project",
+        repo_files=build_deep_shared_missing_mock_project_files(layers=test_case.layers),
+    )
+
+    inspect_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "test", "--inspect"), project_dir=project_dir
+    )
+    test_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "test"), project_dir=project_dir
+    )
+
+    assert inspect_result.returncode == 1, inspect_result.stdout + inspect_result.stderr
+    assert inspect_result.stdout.count("which has no mock") == 1, inspect_result.stdout
+    assert test_case.expected_error in inspect_result.stdout
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in inspect_result.stdout
+    assert test_result.returncode == 1, test_result.stdout + test_result.stderr
+    assert "PASS=0" in test_result.stdout

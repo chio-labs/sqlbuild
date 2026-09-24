@@ -3,27 +3,32 @@
 from __future__ import annotations
 
 import logging
-from collections import OrderedDict
 from dataclasses import replace
-from typing import Any, Final
+from typing import Any, Final, cast
 
+import orjson
+
+import sqlbuild._native as _native
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.types import TypeDialect
+from sqlbuild.compiler.planner.main.execution.sql_test_dialect import (
+    restore_sql_test_dialect_function_names,
+)
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
 from sqlbuild.diagnostics.classes.diagnostic_record_redactor import DiagnosticRecordRedactor
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
-from sqlbuild.executor.testing._helpers.comparison_sql import (
-    cte_definition_sql,
-    format_sql,
-    lift_preanalyzed_step_ctes,
-    lift_step_ctes,
-)
+from sqlbuild.executor.testing._helpers.native_requests import chain_step_request
+from sqlbuild.executor.testing.exceptions import SqlTestRenderingError
 from sqlbuild.executor.testing.models import (
     SqlTestColumnDifference,
     SqlTestDifferenceSample,
     StepResult,
 )
-from sqlbuild.executor.testing.types import SqlTestDifferenceDirection, SqlTestOutcome
+from sqlbuild.executor.testing.types import (
+    NativeSqlTestRenderingModule,
+    SqlTestDifferenceDirection,
+    SqlTestOutcome,
+)
 
 _ROW_LIMIT: Final[int] = 3
 _COLUMN_LIMIT: Final[int] = 12
@@ -121,55 +126,24 @@ def build_sql_test_difference_sample_sql(
 
     if step.expected_cte_sql is None:
         return ""
-    lifted_ctes: OrderedDict[str, str] = OrderedDict()
-    if step.lifted_ctes:
-        actual_sql, lifted_ctes = lift_preanalyzed_step_ctes(
-            sql=step.comparison_body_sql or step.resolved_sql,
-            complete_sql=step.resolved_sql,
-            preanalyzed_ctes=step.lifted_ctes,
-            lifted_ctes=lifted_ctes,
-            sql_analysis_enabled=test_entry.sql_analysis_enabled,
-            sql_analysis_dialect=sql_analysis_dialect,
-        )
-    else:
-        actual_sql, lifted_ctes = lift_step_ctes(
-            sql=step.resolved_sql,
-            lifted_ctes=lifted_ctes,
-            sql_analysis_enabled=test_entry.sql_analysis_enabled,
-            sql_analysis_dialect=sql_analysis_dialect,
-        )
-    expected_sql, lifted_ctes = lift_step_ctes(
-        sql=step.expected_cte_sql,
-        lifted_ctes=lifted_ctes,
-        sql_analysis_enabled=test_entry.sql_analysis_enabled,
-        sql_analysis_dialect=sql_analysis_dialect,
-    )
-    cte_parts: list[str] = [
-        cte_definition_sql(name=name, sql=sql) for name, sql in lifted_ctes.items()
-    ]
-    cte_parts.extend(
-        (
-            cte_definition_sql(name="__actual", sql=actual_sql),
-            cte_definition_sql(name="__expected", sql=expected_sql),
+    request: dict[str, object] = {
+        "step": chain_step_request(step=step),
+        "sqlAnalysisEnabled": test_entry.sql_analysis_enabled,
+        "setDifferenceOperator": set_difference_operator,
+        "sqlAnalysisDialect": sql_analysis_dialect,
+        "direction": direction.value,
+        "sampleLimit": sample_limit,
+        "useTopClause": sql_analysis_dialect == TypeDialect.TSQL,
+    }
+    response: object = orjson.loads(
+        cast(NativeSqlTestRenderingModule, _native).render_sql_test_difference_sample_json(
+            orjson.dumps(request, option=orjson.OPT_SORT_KEYS).decode()
         )
     )
-    is_unexpected: bool = direction == SqlTestDifferenceDirection.UNEXPECTED
-    left: str = "__actual" if is_unexpected else "__expected"
-    right: str = "__expected" if is_unexpected else "__actual"
-    bounded_select: str = (
-        f"SELECT TOP {sample_limit} *" if sql_analysis_dialect == TypeDialect.TSQL else "SELECT *"
-    )
-    limit_clause: str = "" if sql_analysis_dialect == TypeDialect.TSQL else f" LIMIT {sample_limit}"
-    sql: str = (
-        f"WITH {', '.join(cte_parts)} {bounded_select} FROM ("
-        f"SELECT * FROM {left} {set_difference_operator} SELECT * FROM {right}"
-        f") AS __sqlbuild_difference{limit_clause}"
-    )
-    return format_sql(
-        sql=sql,
-        sql_analysis_dialect=sql_analysis_dialect,
-        sql_analysis_enabled=test_entry.sql_analysis_enabled,
-    )
+    sql: object = response.get("sql") if isinstance(response, dict) else None
+    if not isinstance(sql, str):
+        raise SqlTestRenderingError("native SQL-test difference rendering returned invalid SQL")
+    return restore_sql_test_dialect_function_names(sql=sql, dialect=sql_analysis_dialect)
 
 
 def _fetch_difference_samples(

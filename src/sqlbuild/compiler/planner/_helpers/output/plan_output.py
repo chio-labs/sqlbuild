@@ -33,13 +33,9 @@ from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     scope_overlaps,
 )
 from sqlbuild.compiler.planner._helpers.resolve.resolve import resolve_function_sql
-from sqlbuild.compiler.planner._helpers.sql_tests.assembly import (
-    build_sql_test_planning_context,
-    plan_test,
-)
+from sqlbuild.compiler.planner._helpers.sql_tests.assembly import plan_sql_tests
 from sqlbuild.compiler.planner.exceptions import (
     PlannerInputError,
-    SqlTestFixtureValidationError,
 )
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
@@ -60,7 +56,7 @@ from sqlbuild.compiler.planner.models import (
     SeedPlanEntry,
     SourceLoadPlanEntry,
     SqlTestPlanEntry,
-    SqlTestPlanningContext,
+    SqlTestPlanResult,
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import PlanReason
@@ -478,36 +474,23 @@ def build_selected_test_entries(
         selected_tests.append(sql_test)
     if not selected_tests:
         return entries, warnings
-    test_planning_context: SqlTestPlanningContext = build_sql_test_planning_context(
-        project=project,
-        tests=tuple(selected_tests),
-    )
     fixture_planning_context: RelationFixturePlanningContext | None = (
-        build_relation_fixture_context(
-            project=project,
-            models_by_name=test_planning_context.models_by_name,
-        )
-        if project.settings.sql_analysis
-        else None
+        build_relation_fixture_context(project=project) if project.settings.sql_analysis else None
     )
-    for sql_test in selected_tests:
-        test_entry: SqlTestPlanEntry
-        test_warnings: tuple[PlanWarning, ...]
-        try:
-            test_entry, test_warnings = plan_test(
-                test=sql_test,
-                project=project,
-                adapter=adapter,
-                sql_analysis_enabled=project.settings.sql_analysis,
-                validate_fixtures=True,
-                fixture_planning_context=fixture_planning_context,
-                planning_context=test_planning_context,
-            )
-        except SqlTestFixtureValidationError as error:
-            fixture_diagnostics.extend(error.diagnostics)
+    result: SqlTestPlanResult
+    for result in plan_sql_tests(
+        tests=tuple(selected_tests),
+        project=project,
+        adapter=adapter,
+        sql_analysis_enabled=project.settings.sql_analysis,
+        validate_fixtures=True,
+        fixture_planning_context=fixture_planning_context,
+    ):
+        if result.entry is None:
+            fixture_diagnostics.extend(result.fixture_diagnostics)
             continue
-        entries.append(test_entry)
-        warnings.extend(test_warnings)
+        entries.append(result.entry)
+        warnings.extend(result.warnings)
     if fixture_diagnostics:
         raise PlannerInputError("Invalid SQL test fixtures:\n- " + "\n- ".join(fixture_diagnostics))
     return entries, warnings

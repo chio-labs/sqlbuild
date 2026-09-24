@@ -255,44 +255,6 @@ def resolve_table_function_references(
     return "".join(parts)
 
 
-def resolve_table_function_fixture_references(
-    *, query_sql: str, fixtures: dict[str, str]
-) -> tuple[str, frozenset[str]]:
-    """Replace complete table-function invocations with model-test fixture relations."""
-
-    if not fixtures or _TABLE_FUNCTION_PATTERN.search(query_sql) is None:
-        return query_sql, frozenset()
-    parts: list[str] = []
-    last_index: int = 0
-    reached: set[str] = set()
-    match: re.Match[str]
-    for match in _iter_executable_matches(sql=query_sql, pattern=_TABLE_FUNCTION_PATTERN):
-        if match.start() < last_index:
-            continue
-        function_name: str = match.group(1)
-        fixture_sql: str | None = fixtures.get(function_name)
-        if fixture_sql is None:
-            continue
-        call_suffix_start: int = _skip_whitespace(sql=query_sql, start=match.end())
-        if (
-            call_suffix_start >= len(query_sql)
-            or query_sql[call_suffix_start] != SQL_FUNCTION_CALL_OPEN_PAREN
-        ):
-            continue
-        call_suffix_end: int = find_matching_paren(
-            sql=query_sql,
-            open_paren_index=call_suffix_start,
-            context="SQL table function fixture call",
-        )
-        parts.append(query_sql[last_index : match.start()])
-        parts.append(fixture_sql)
-        last_index = call_suffix_end + 1
-        reached.add(function_name)
-
-    parts.append(query_sql[last_index:])
-    return "".join(parts), frozenset(reached)
-
-
 def _iter_executable_matches(*, sql: str, pattern: re.Pattern[str]) -> Iterator[re.Match[str]]:
     index: int = 0
     while index < len(sql):

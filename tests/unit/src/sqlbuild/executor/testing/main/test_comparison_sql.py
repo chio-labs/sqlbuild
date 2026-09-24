@@ -6,7 +6,6 @@ import pytest
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
-from sqlbuild.executor.testing._helpers import comparison_sql as comparison_sql_helpers
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from sqlbuild.executor.testing.main.comparison_sql_batch import (
     build_sql_test_comparison_sql_batch,
@@ -91,58 +90,76 @@ def test_given_adapter_when_building_comparison_sql_then_it_uses_expected_set_di
     "test_case",
     [
         BuildComparisonSqlTestCase(
-            description="Snowflake comparison formatting preserves STARTSWITH",
+            description="Snowflake comparison lifting preserves STARTSWITH",
             adapter_name="snowflake",
-            expected_fragments=("STARTSWITH(name, 'A')",),
+            expected_fragments=("STARTSWITH(name, 'A')", "picked AS ("),
             expected_absent_fragments=("STARTS_WITH",),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_snowflake_function_when_formatting_comparison_then_emits_supported_spelling(
+def test_given_snowflake_function_when_lifting_comparison_ctes_then_emits_supported_spelling(
     test_case: BuildComparisonSqlTestCase,
 ) -> None:
     adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
+    entry: SqlTestPlanEntry = replace(
+        build_comparison_test_entry(),
+        chain=(
+            ChainStep(
+                model_name="orders",
+                resolved_sql=(
+                    "WITH picked AS (SELECT STARTSWITH(name, 'A') AS matches FROM items) "
+                    "SELECT matches FROM picked"
+                ),
+                expected_cte_sql="SELECT TRUE AS matches",
+            ),
+        ),
+    )
 
-    formatted_sql: str = comparison_sql_helpers.format_sql(
-        sql="SELECT STARTSWITH(name, 'A') AS matches FROM items",
+    comparison_sql: str = build_sql_test_comparison_sql(
+        test_entry=entry,
+        set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
     )
 
     for expected_fragment in test_case.expected_fragments:
-        assert expected_fragment in formatted_sql
+        assert expected_fragment in comparison_sql
     for expected_absent_fragment in test_case.expected_absent_fragments:
-        assert expected_absent_fragment not in formatted_sql
+        assert expected_absent_fragment not in comparison_sql
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
         BuildComparisonSqlTestCase(
-            description="disabled SQL analysis avoids parser formatting",
+            description="disabled SQL analysis keeps step SQL verbatim",
             adapter_name="duckdb",
             expected_fragments=(
-                "SELECT 1 AS order_id",
-                "SELECT 2 AS order_id",
+                "__actual__orders AS (with Picked as (select 1 as order_id) select * from Picked)",
+                "__expected__orders AS (SELECT 2 AS order_id)",
             ),
             sql_analysis_enabled=False,
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_formatting_disabled_when_building_comparison_sql_then_it_does_not_import_polyglot(
+def test_given_sql_analysis_disabled_when_building_comparison_sql_then_step_sql_is_not_regenerated(
     test_case: BuildComparisonSqlTestCase,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
-    monkeypatch.setattr(
-        comparison_sql_helpers,
-        "import_polyglot_sql",
-        lambda: pytest.fail("polyglot should not be imported when disabled"),
+    entry: SqlTestPlanEntry = replace(
+        build_comparison_test_entry(sql_analysis_enabled=test_case.sql_analysis_enabled),
+        chain=(
+            ChainStep(
+                model_name="orders",
+                resolved_sql="with Picked as (select 1 as order_id) select * from Picked",
+                expected_cte_sql="SELECT 2 AS order_id",
+            ),
+        ),
     )
 
     comparison_sql: str = build_sql_test_comparison_sql(
-        test_entry=build_comparison_test_entry(sql_analysis_enabled=test_case.sql_analysis_enabled),
+        test_entry=entry,
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
     )
@@ -340,10 +357,10 @@ def test_given_preanalyzed_step_with_authored_cte_when_building_comparison_then_
 
 @pytest.mark.parametrize(
     "test_case",
-    [ExpectedBooleanTestCase(description="native batch matches reference", expected_result=True)],
+    [ExpectedBooleanTestCase(description="batch matches single renders", expected_result=True)],
     ids=lambda case: case.description,
 )
-def test_given_representative_plans_when_rendering_native_batch_then_matches_reference_sql(
+def test_given_representative_plans_when_rendering_batch_then_matches_single_renders(
     test_case: ExpectedBooleanTestCase,
 ) -> None:
     entries: tuple[SqlTestPlanEntry, ...] = (
@@ -370,7 +387,7 @@ def test_given_representative_plans_when_rendering_native_batch_then_matches_ref
     [ExpectedBooleanTestCase(description="quoted table function matches", expected_result=True)],
     ids=lambda case: case.description,
 )
-def test_given_quoted_table_function_when_rendering_native_batch_then_matches_reference_sql(
+def test_given_quoted_table_function_when_rendering_batch_then_matches_single_render(
     test_case: ExpectedBooleanTestCase,
 ) -> None:
     entry: SqlTestPlanEntry = build_table_function_test_entry(

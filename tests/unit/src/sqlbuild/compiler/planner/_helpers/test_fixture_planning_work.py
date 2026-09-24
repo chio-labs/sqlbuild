@@ -100,8 +100,8 @@ def test_given_many_tests_when_building_entries_then_project_fixture_metadata_is
         "analyze_resolved_column_reads",
         fallback_analyzer,
     )
-    topology_builder: Mock = Mock(wraps=sql_test_assembly._topo_sort_model_chain)
-    monkeypatch.setattr(sql_test_assembly, "_topo_sort_model_chain", topology_builder)
+    topology_builder: Mock = Mock(wraps=sql_test_assembly.resolve_sql_test_model_chains)
+    monkeypatch.setattr(sql_test_assembly, "resolve_sql_test_model_chains", topology_builder)
 
     entries: list[SqlTestPlanEntry]
     warnings: list[PlanWarning]

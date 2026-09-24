@@ -8,6 +8,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.render.macros import expand_sql_macros
 from sqlbuild.compiler.compile.constants import (
@@ -37,11 +38,12 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
+from sqlbuild.compiler.planner._helpers.sql_tests.assembly import plan_sql_tests
 from sqlbuild.compiler.planner._helpers.sql_tests.comments import uncommented_pattern_matches
 from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
     plan_and_render_sql_test_artifacts,
 )
-from sqlbuild.compiler.planner.models import PlanWarning, SqlTestPlanEntry
+from sqlbuild.compiler.planner.models import PlanWarning, SqlTestPlanEntry, SqlTestPlanResult
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
@@ -69,7 +71,27 @@ _MACRO_CONTEXT: MacroContext = MacroContext(
 )
 
 
-def assert_native_artifact_matches_python_plan(
+def plan_single_test(
+    *,
+    test: CompiledSqlTest,
+    project: CompiledProject,
+    adapter: BaseAdapter,
+    sql_analysis_enabled: bool = False,
+) -> tuple[SqlTestPlanEntry, tuple[PlanWarning, ...]]:
+    """Plan one SQL test through the batch planner and return its entry and warnings."""
+
+    result: SqlTestPlanResult
+    (result,) = plan_sql_tests(
+        tests=(test,),
+        project=project,
+        adapter=adapter,
+        sql_analysis_enabled=sql_analysis_enabled,
+    )
+    assert result.entry is not None
+    return result.entry, result.warnings
+
+
+def assert_native_artifact_matches_runtime_plan(
     *,
     project: CompiledProject,
     sql_test: CompiledSqlTest,
@@ -77,7 +99,7 @@ def assert_native_artifact_matches_python_plan(
     warnings: tuple[PlanWarning, ...],
     sql_analysis_enabled: bool,
 ) -> bool:
-    """Assert native artifact output remains equivalent to the Python reference path."""
+    """Assert the compiled artifact matches the runtime comparison SQL for the same plan."""
 
     adapter: DuckDbAdapter = DuckDbAdapter()
     expected_sql: str = build_sql_test_comparison_sql(

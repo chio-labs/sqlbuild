@@ -24,7 +24,6 @@ class SqlAnalysisChainSqlTestE2ETestCase:
     sql_analysis_enabled: bool
     expected_artifact_fragments: tuple[str, ...]
     unexpected_artifact_fragments: tuple[str, ...]
-    expected_runtime_fragments: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -46,6 +45,7 @@ class SqlTestPlanInspectionE2ETestCase:
     repo_files: dict[str, str]
     expected_stdout_fragments: tuple[str, ...]
     expected_exit_code: int = 0
+    unexpected_stdout_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -113,3 +113,23 @@ class UnknownTableFunctionFixtureE2ETestCase:
 
     description: str
     expected_stderr_fragment: str
+
+
+@dataclass(frozen=True)
+class SharedGraphChainE2ETestCase:
+    """Test case for chained SQL tests over a shared (diamond) upstream graph."""
+
+    description: str
+    sql_analysis_enabled: bool
+    expected_stdout_fragments: tuple[str, ...]
+    once_rendered_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SharedGraphMissingMockE2ETestCase:
+    """Test case for one missing mock reached on every path of a deep shared graph."""
+
+    description: str
+    layers: int
+    expected_error: str
+    expected_stdout_fragments: tuple[str, ...]

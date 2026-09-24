@@ -13,6 +13,10 @@ class NativeSqlTestRenderingModule(Protocol):
 
     def plan_and_render_sql_tests_json(self, request_json: str) -> str: ...
 
+    def resolve_sql_test_chains_json(self, request_json: str) -> str: ...
+
+    def render_sql_test_difference_sample_json(self, request_json: str) -> str: ...
+
 
 class SqlTestOutcome(StrEnum):
     PASS = "pass"

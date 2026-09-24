@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::compiler::_helpers::sql_tests::rendering::{
-    AssertionStep, ChainStep, RenderRequest, render_comparison_sql,
+    AssertionStep, ChainStep, RenderRequest, render_comparison_sql, render_dialect,
 };
 use crate::constants::{TABLE_FUNCTION_TEST_MODE, UDF_TEST_MODE};
 
@@ -49,6 +49,21 @@ struct PlanBatchRequest {
     requires_derived_table_aliases: bool,
     #[serde(default = "default_workers")]
     workers: usize,
+    #[serde(default = "default_true")]
+    render_sql: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ChainBatchRequest {
+    models: Vec<ModelInput>,
+    tests: Vec<TestInput>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChainBatchResponse {
+    chains: Vec<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -117,10 +132,13 @@ struct CteInput {
     sql_body: String,
 }
 
+/// One planned SQL test: the executable chain and assertion steps plus optional rendered SQL.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PlanResponse {
-    sql: String,
+    sql: Option<String>,
+    chain: Vec<ChainStep>,
+    assertions: Vec<AssertionStep>,
     model_names: Vec<String>,
     warnings: Vec<PlanWarning>,
 }
@@ -157,6 +175,7 @@ struct ProjectContext {
     requires_derived_table_aliases: bool,
     analysis_templates: Arc<AnalysisTemplateCache>,
     patterns: SqlTestPatterns,
+    render_dialect: Arc<Dialect>,
 }
 
 #[derive(Clone)]
@@ -470,9 +489,65 @@ impl GeneratedCteState {
     }
 }
 
+/// Return each test's topologically ordered unmocked model chain without planning SQL.
+pub(crate) fn resolve_chains_json(request_json: &str) -> Result<String, String> {
+    let request: ChainBatchRequest =
+        serde_json::from_str(request_json).map_err(|error| error.to_string())?;
+    let patterns = SqlTestPatterns::new()?;
+    let models: HashMap<String, ModelInputOwned> = request
+        .models
+        .into_iter()
+        .map(|model| {
+            (
+                model.name,
+                ModelInputOwned {
+                    query_sql: model.query_sql,
+                    model_dependencies: model.model_dependencies,
+                },
+            )
+        })
+        .collect();
+    let chains: Vec<Vec<String>> = request
+        .tests
+        .into_iter()
+        .map(|test| match test.payload {
+            TestPayload::Direct { .. } => Vec::new(),
+            TestPayload::Model {
+                authored_ctes,
+                model_query_overrides,
+                expected_model_names,
+                assertion_ctes,
+                ..
+            } => {
+                let fixtures = classify_fixtures(authored_ctes, Vec::new(), assertion_ctes);
+                let expected_names = chain_root_names(expected_model_names, &fixtures, &patterns);
+                topo_sort_model_chain(TopoSortRequest {
+                    expected_names: &expected_names,
+                    models: &models,
+                    overrides: &model_query_overrides,
+                    mock_refs: &fixtures.mock_refs,
+                    patterns: &patterns,
+                })
+            }
+        })
+        .collect();
+    serde_json::to_string(&ChainBatchResponse { chains }).map_err(|error| error.to_string())
+}
+
+fn chain_root_names(
+    mut expected_names: Vec<String>,
+    fixtures: &TestFixtures,
+    patterns: &SqlTestPatterns,
+) -> Vec<String> {
+    expected_names.extend(assertion_ref_targets(&fixtures.assertions, patterns));
+    dedupe(expected_names)
+}
+
 pub(crate) fn plan_and_render_json(request_json: &str) -> Result<String, String> {
     let request: PlanBatchRequest =
         serde_json::from_str(request_json).map_err(|error| error.to_string())?;
+    let render_sql = request.render_sql;
+    let render_dialect = Arc::new(render_dialect(request.sql_analysis_dialect.as_deref()));
     let context = ProjectContext {
         models: request
             .models
@@ -500,6 +575,7 @@ pub(crate) fn plan_and_render_json(request_json: &str) -> Result<String, String>
         requires_derived_table_aliases: request.requires_derived_table_aliases,
         analysis_templates: Arc::new(Mutex::new(HashMap::new())),
         patterns: SqlTestPatterns::new()?,
+        render_dialect,
     };
     let workers = request.workers.clamp(1, MAX_WORKERS);
     let pool = rayon::ThreadPoolBuilder::new()
@@ -517,8 +593,12 @@ pub(crate) fn plan_and_render_json(request_json: &str) -> Result<String, String>
                 let planned = plan_test(test, &context)?;
                 let planning_ns = planning_start.elapsed().as_nanos();
                 let rendering_start = Instant::now();
+                let sql = render_sql
+                    .then(|| render_comparison_sql(&planned.request, &context.render_dialect));
                 let response = PlanResponse {
-                    sql: render_comparison_sql(planned.request),
+                    sql,
+                    chain: planned.request.chain,
+                    assertions: planned.request.assertions,
                     model_names: planned.model_names,
                     warnings: planned.warnings,
                 };
@@ -612,7 +692,7 @@ fn plan_direct_test(
         assertions: Vec::new(),
         sql_analysis_enabled: context.sql_analysis_enabled,
         set_difference_operator: context.set_difference_operator.clone(),
-        _sql_analysis_dialect: Some(context.dialect.clone()),
+        sql_analysis_dialect: Some(context.dialect.clone()),
     };
     Ok(PlannedResponse {
         request,
@@ -626,12 +706,7 @@ fn plan_model_test(
     context: &ProjectContext,
 ) -> Result<PlannedResponse, String> {
     let fixtures = classify_fixtures(plan.authored_ctes, plan.expected_ctes, plan.assertion_ctes);
-    let mut expected_names = plan.expected_model_names;
-    expected_names.extend(assertion_ref_targets(
-        &fixtures.assertions,
-        &context.patterns,
-    ));
-    let expected_names = dedupe(expected_names);
+    let expected_names = chain_root_names(plan.expected_model_names, &fixtures, &context.patterns);
     let ordered_names = topo_sort_model_chain(TopoSortRequest {
         expected_names: &expected_names,
         models: &context.models,
@@ -640,6 +715,7 @@ fn plan_model_test(
         patterns: &context.patterns,
     });
     let mut warnings: Vec<PlanWarning> = Vec::new();
+    let mut reported_missing_mocks: HashSet<(&'static str, String)> = HashSet::new();
     let mut reachable_mocks: HashSet<String> = HashSet::new();
     let mut analysis_resolved: HashMap<String, AnalysisResolvedSql> = HashMap::new();
     let mut textual_chain: TextualChain = TextualChain::default();
@@ -702,12 +778,13 @@ fn plan_model_test(
             reachable_mocks.extend(reached);
             (step.resolved_sql, step.lifted_ctes, Some(step.body_sql))
         };
-        warnings.extend(unresolved_reference_warnings(
-            &resolved_sql,
-            &plan.test_name,
+        warnings.extend(unresolved_reference_warnings(UnresolvedReferenceRequest {
+            sql: &resolved_sql,
+            test_name: &plan.test_name,
             model_name,
-            &context.patterns,
-        ));
+            patterns: &context.patterns,
+            reported: &mut reported_missing_mocks,
+        }));
         chain.push(ChainStep {
             model_name: model_name.clone(),
             resolved_sql,
@@ -776,7 +853,11 @@ fn plan_model_test(
                         patterns: &context.patterns,
                     })?;
                 reachable_mocks.extend(reached);
-                (resolved, Vec::new(), None)
+                (
+                    resolved.resolved_sql,
+                    resolved.lifted_ctes,
+                    Some(resolved.body_sql),
+                )
             }
         };
         assertions.push(AssertionStep {
@@ -797,7 +878,7 @@ fn plan_model_test(
         assertions,
         sql_analysis_enabled: context.sql_analysis_enabled,
         set_difference_operator: context.set_difference_operator.clone(),
-        _sql_analysis_dialect: Some(context.dialect.clone()),
+        sql_analysis_dialect: Some(context.dialect.clone()),
     };
     Ok(PlannedResponse {
         request,
@@ -844,7 +925,7 @@ fn build_textual_chain(
 
 fn resolve_assertion_textual_sql(
     request: AssertionResolutionRequest<'_>,
-) -> Result<(String, HashSet<String>), String> {
+) -> Result<(TextualStep, HashSet<String>), String> {
     if request.requires_flat_ctes && leading_with_prefix_end(request.assertion_sql).is_some() {
         return Err(planner_error(
             "SQL test assertion fallback cannot safely flatten an assertion beginning with WITH",
@@ -870,13 +951,8 @@ fn resolve_assertion_textual_sql(
         }
         referenced.push(name);
     }
-    let cte_parts: Vec<String> = request
-        .chain
-        .closure_ctes(&referenced, true)
-        .iter()
-        .map(|(name, body)| cte_definition_sql(name, body))
-        .collect();
-    let (resolved_sql, reached) = resolve_textual_sql(TextualResolutionRequest {
+    let lifted_ctes: Vec<(String, String)> = request.chain.closure_ctes(&referenced, true);
+    let (body_sql, reached) = resolve_textual_sql(TextualResolutionRequest {
         query_sql: request.assertion_sql,
         fixtures: request.fixtures,
         resolved_chain: &request.chain.cte_names,
@@ -884,14 +960,23 @@ fn resolve_assertion_textual_sql(
         functions: request.functions,
         patterns: request.patterns,
     })?;
-    if cte_parts.is_empty() {
-        Ok((resolved_sql, reached))
+    let resolved_sql = if lifted_ctes.is_empty() {
+        body_sql.clone()
     } else {
-        Ok((
-            format!("WITH {} {resolved_sql}", cte_parts.join(", ")),
-            reached,
-        ))
-    }
+        let cte_parts: Vec<String> = lifted_ctes
+            .iter()
+            .map(|(name, body)| cte_definition_sql(name, body))
+            .collect();
+        format!("WITH {} {body_sql}", cte_parts.join(", "))
+    };
+    Ok((
+        TextualStep {
+            resolved_sql,
+            lifted_ctes,
+            body_sql,
+        },
+        reached,
+    ))
 }
 
 fn classify_fixtures(
@@ -1583,7 +1668,7 @@ fn assemble_resolved_sql(cte_body_sql: &str, generated: &[(String, String)]) -> 
     }
 }
 
-fn leading_with_prefix_end(sql: &str) -> Option<usize> {
+pub(crate) fn leading_with_prefix_end(sql: &str) -> Option<usize> {
     let mut index = skip_leading_ignorable(sql, 0);
     index = keyword_end(sql, index, "WITH")?;
     index = skip_leading_ignorable(sql, index);
@@ -1629,37 +1714,51 @@ fn keyword_end(sql: &str, start: usize, keyword: &str) -> Option<usize> {
     Some(end)
 }
 
-fn unresolved_reference_warnings(
-    sql: &str,
-    test_name: &str,
-    model_name: &str,
-    patterns: &SqlTestPatterns,
-) -> Vec<PlanWarning> {
+struct UnresolvedReferenceRequest<'a> {
+    sql: &'a str,
+    test_name: &'a str,
+    model_name: &'a str,
+    patterns: &'a SqlTestPatterns,
+    reported: &'a mut HashSet<(&'static str, String)>,
+}
+
+/// Report each unmocked reference once per test, attributed to the first step reaching it.
+fn unresolved_reference_warnings(request: UnresolvedReferenceRequest<'_>) -> Vec<PlanWarning> {
+    let UnresolvedReferenceRequest {
+        sql,
+        test_name,
+        model_name,
+        patterns,
+        reported,
+    } = request;
     if !patterns.test_reference.is_match(sql) {
         return Vec::new();
     }
     let mut warnings: Vec<PlanWarning> = Vec::new();
-    for name in marker_names(&patterns.reference, &patterns.protected, sql) {
-        warnings.push(PlanWarning {
-            model_name: Some(model_name.to_string()),
-            severity: "error",
-            message: format!(
-                "test '{test_name}': model '{model_name}' references __ref('{name}') which has no mock and is not in the expected chain"
-            ),
-        });
-    }
-    for (pattern, function_name, suffix) in [
-        (&patterns.source, SOURCE_FUNCTION, " which has no mock"),
-        (&patterns.seed, SEED_FUNCTION, " which has no mock"),
-    ] {
-        for name in marker_names(pattern, &patterns.protected, sql) {
+    let mut warn = |kind: &'static str, name: String, message: String| {
+        if reported.insert((kind, name)) {
             warnings.push(PlanWarning {
                 model_name: Some(model_name.to_string()),
                 severity: "error",
-                message: format!(
-                    "test '{test_name}': model '{model_name}' references {function_name}('{name}'){suffix}"
-                ),
+                message,
             });
+        }
+    };
+    for name in marker_names(&patterns.reference, &patterns.protected, sql) {
+        let message = format!(
+            "test '{test_name}': model '{model_name}' references __ref('{name}') which has no mock and is not in the expected chain"
+        );
+        warn(REF_FUNCTION, name, message);
+    }
+    for (pattern, function_name) in [
+        (&patterns.source, SOURCE_FUNCTION),
+        (&patterns.seed, SEED_FUNCTION),
+    ] {
+        for name in marker_names(pattern, &patterns.protected, sql) {
+            let message = format!(
+                "test '{test_name}': model '{model_name}' references {function_name}('{name}') which has no mock"
+            );
+            warn(function_name, name, message);
         }
     }
     let protected = protected_ranges(&patterns.protected, sql);
@@ -1677,13 +1776,10 @@ fn unresolved_reference_warnings(
             || first.to_string(),
             |second| format!("{first}__{}", second.as_str()),
         );
-        warnings.push(PlanWarning {
-            model_name: Some(model_name.to_string()),
-            severity: "error",
-            message: format!(
-                "test '{test_name}': model '{model_name}' references __dbt_ref__{name} which has no mock"
-            ),
-        });
+        let message = format!(
+            "test '{test_name}': model '{model_name}' references __dbt_ref__{name} which has no mock"
+        );
+        warn(DBT_REF_FUNCTION, name, message);
     }
     warnings
 }

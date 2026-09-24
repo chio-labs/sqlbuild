@@ -15,7 +15,6 @@ from sqlbuild.compiler.planner._helpers.resolve.refs import (
     apply_deferred_locations,
     resolve_dbt_ref_references,
     resolve_ref_references,
-    resolve_table_function_fixture_references,
     resolve_table_function_references,
     resolve_udf_references,
 )
@@ -28,7 +27,6 @@ from sqlbuild.integrations.dbt.models import DbtManifestIndex
 from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (
     ApplyDeferredTargetsTestCase,
     RefResolutionTestCase,
-    TableFunctionFixtureResolutionTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve.helpers import (
     BracketTableFunctionCallAdapter,
@@ -336,64 +334,6 @@ def test_given_table_function_marker_when_resolving_then_returns_expected_sql(
     )
 
     assert result == test_case.expected_sql
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    (
-        TableFunctionFixtureResolutionTestCase(
-            description="replaces the complete nested argument invocation",
-            query_sql=(
-                'SELECT * FROM __table_fn("customer_orders")('
-                "COALESCE((SELECT MAX(customer_id) FROM customers), 42)) AS orders"
-            ),
-            fixtures={"customer_orders": "(SELECT 7 AS order_id)"},
-            expected_sql="SELECT * FROM (SELECT 7 AS order_id) AS orders",
-            expected_reached=frozenset({"customer_orders"}),
-        ),
-        TableFunctionFixtureResolutionTestCase(
-            description="outer fixture consumes nested table function arguments",
-            query_sql=(
-                'SELECT * FROM __table_fn("customer_orders")('
-                '(SELECT MAX(id) FROM __table_fn("customer_profiles")(1))) AS orders'
-            ),
-            fixtures={
-                "customer_orders": "(SELECT 7 AS order_id)",
-                "customer_profiles": "(SELECT 1 AS id)",
-            },
-            expected_sql="SELECT * FROM (SELECT 7 AS order_id) AS orders",
-            expected_reached=frozenset({"customer_orders"}),
-        ),
-        TableFunctionFixtureResolutionTestCase(
-            description="ignores comments literals and unmocked functions",
-            query_sql=(
-                "SELECT '__table_fn(\"customer_orders\")(42)' AS example "
-                'FROM __table_fn("other_orders")(42) '
-                '-- __table_fn("customer_orders")(42)'
-            ),
-            fixtures={"customer_orders": "(SELECT 7 AS order_id)"},
-            expected_sql=(
-                "SELECT '__table_fn(\"customer_orders\")(42)' AS example "
-                'FROM __table_fn("other_orders")(42) '
-                '-- __table_fn("customer_orders")(42)'
-            ),
-            expected_reached=frozenset(),
-        ),
-    ),
-    ids=lambda case: case.description,
-)
-def test_given_table_function_fixture_when_resolving_then_replaces_only_executable_call(
-    test_case: TableFunctionFixtureResolutionTestCase,
-) -> None:
-    result: str
-    reached: frozenset[str]
-    result, reached = resolve_table_function_fixture_references(
-        query_sql=test_case.query_sql,
-        fixtures=test_case.fixtures,
-    )
-
-    assert result == test_case.expected_sql
-    assert reached == test_case.expected_reached
 
 
 @pytest.mark.parametrize(

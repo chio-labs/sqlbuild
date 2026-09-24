@@ -485,3 +485,247 @@ fn diamond_model(layer: usize, side: &str, previous: &str, other: &str) -> Value
         "modelDependencies": [previous, other]
     })
 }
+
+fn deep_diamond_models(layers: usize) -> Vec<Value> {
+    let mut models: Vec<Value> = vec![json!({
+        "name": "orders_00",
+        "querySql": "SELECT o.order_id, o.amount FROM __source(\"raw_orders\") AS o \
+                     INNER JOIN __source(\"raw_customers\") AS c ON o.customer_id = c.customer_id",
+        "modelDependencies": []
+    })];
+    for side in ["left", "right"] {
+        models.push(diamond_model(1, side, "orders_00", "orders_00"));
+    }
+    for layer in 2..=layers {
+        let previous: String = format!("orders_{:02}_left", layer - 1);
+        let other: String = format!("orders_{:02}_right", layer - 1);
+        for side in ["left", "right"] {
+            models.push(diamond_model(layer, side, &previous, &other));
+        }
+    }
+    models
+}
+
+fn plan_deep_diamond_with_missing_mock(sql_analysis_enabled: bool) -> Value {
+    const LAYERS: usize = 12;
+    let top: String = format!("orders_{LAYERS:02}_left");
+    serde_json::from_str(
+        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+            &json!({
+                "models": deep_diamond_models(LAYERS),
+                "tests": [{
+                    "name": "orders_totals",
+                    "fileLabel": "tests/orders_totals.sql",
+                    "payload": {
+                        "kind": "model",
+                        "authoredCtes": [{
+                            "name": "__source__raw_customers",
+                            "sqlBody": "SELECT 1 AS customer_id"
+                        }],
+                        "expectedCtes": [{
+                            "name": format!("__expected__{top}"),
+                            "sqlBody": "SELECT 1 AS order_id, 1 AS amount"
+                        }],
+                        "expectedModelNames": [top],
+                    }
+                }],
+                "sqlAnalysisEnabled": sql_analysis_enabled,
+                "sqlAnalysisDialect": "duckdb",
+                "renderSql": false
+            })
+            .to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold")
+}
+
+pub(crate) fn deep_shared_graph_reports_missing_mock_once() -> bool {
+    for sql_analysis_enabled in [true, false] {
+        let response = plan_deep_diamond_with_missing_mock(sql_analysis_enabled);
+        assert_eq!(
+            response["artifacts"][0]["warnings"],
+            json!([{
+                "modelName": "orders_00",
+                "severity": "error",
+                "message": "test 'orders_totals': model 'orders_00' references __source('raw_orders') which has no mock"
+            }]),
+            "sql_analysis_enabled={sql_analysis_enabled}"
+        );
+    }
+    true
+}
+
+pub(crate) fn plan_without_rendering_returns_executable_steps() -> bool {
+    let response: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+            &json!({
+                "models": [
+                    {
+                        "name": "stg_orders",
+                        "querySql": "SELECT * FROM __source(\"raw_orders\")",
+                        "modelDependencies": []
+                    },
+                    {
+                        "name": "orders",
+                        "querySql": "SELECT * FROM __ref(\"stg_orders\")",
+                        "modelDependencies": ["stg_orders"]
+                    }
+                ],
+                "tests": [{
+                    "name": "orders_case",
+                    "fileLabel": "tests/orders.sql",
+                    "payload": {
+                        "kind": "model",
+                        "authoredCtes": [{
+                            "name": "__source__raw_orders",
+                            "sqlBody": "SELECT 1 AS order_id"
+                        }],
+                        "expectedCtes": [{
+                            "name": "__expected__orders",
+                            "sqlBody": "SELECT 1 AS order_id"
+                        }],
+                        "expectedModelNames": ["orders"],
+                        "assertionCtes": [{
+                            "name": "__assert__positive",
+                            "sqlBody": "SELECT * FROM __ref(\"orders\") WHERE order_id < 0"
+                        }]
+                    }
+                }],
+                "sqlAnalysisEnabled": false,
+                "sqlAnalysisDialect": "duckdb",
+                "renderSql": false
+            })
+            .to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+
+    let artifact = &response["artifacts"][0];
+    assert_eq!(artifact["sql"], Value::Null);
+    assert_eq!(artifact["chain"][0]["modelName"], json!("stg_orders"));
+    assert_eq!(artifact["chain"][0]["expectedCteSql"], Value::Null);
+    assert_eq!(
+        artifact["chain"][1]["liftedCtes"],
+        json!([["__ref__stg_orders", "SELECT * FROM (SELECT 1 AS order_id)"]])
+    );
+    assert_eq!(
+        artifact["chain"][1]["comparisonBodySql"],
+        json!("SELECT * FROM __ref__stg_orders")
+    );
+    assert_eq!(
+        artifact["chain"][1]["expectedCteSql"],
+        json!("SELECT 1 AS order_id")
+    );
+    assert_eq!(artifact["assertions"][0]["name"], json!("positive"));
+    assert_eq!(
+        artifact["assertions"][0]["comparisonBodySql"],
+        json!("SELECT * FROM __ref__orders WHERE order_id < 0")
+    );
+    assert_eq!(
+        artifact["assertions"][0]["liftedCtes"][1],
+        json!(["__ref__orders", "SELECT * FROM __ref__stg_orders"])
+    );
+    assert!(
+        artifact["assertions"][0]["resolvedSql"]
+            .as_str()
+            .is_some_and(|sql| sql.contains("__ref__orders AS (SELECT * FROM __ref__stg_orders)"))
+    );
+    true
+}
+
+pub(crate) fn chain_resolution_orders_unmocked_models() -> bool {
+    let response: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_chain_resolution::resolve_chains_json(
+            &json!({
+                "models": deep_diamond_models(2),
+                "tests": [
+                    {
+                        "name": "orders_totals",
+                        "fileLabel": "tests/orders_totals.sql",
+                        "payload": {
+                            "kind": "model",
+                            "authoredCtes": [{
+                                "name": "__ref__orders_01_right",
+                                "sqlBody": "SELECT 1 AS order_id, 1 AS amount"
+                            }],
+                            "expectedModelNames": ["orders_02_left"]
+                        }
+                    },
+                    {
+                        "name": "direct_case",
+                        "fileLabel": "tests/direct.sql",
+                        "payload": {
+                            "kind": "direct",
+                            "mode": "macro",
+                            "actualCte": {"name": "__macro_actual__", "sqlBody": "SELECT 1"},
+                            "expectedCte": {"name": "__macro_expected__", "sqlBody": "SELECT 1"}
+                        }
+                    }
+                ]
+            })
+            .to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+
+    assert_eq!(
+        response["chains"],
+        json!([["orders_00", "orders_01_left", "orders_02_left"], []])
+    );
+    true
+}
+
+pub(crate) fn difference_sample_lifts_generated_ctes_and_bounds_rows() -> bool {
+    let request = |use_top_clause: bool| {
+        json!({
+            "step": {
+                "modelName": "orders",
+                "resolvedSql": "WITH __ref__stg_orders AS (SELECT 1 AS order_id) SELECT * FROM __ref__stg_orders",
+                "expectedCteSql": "SELECT 2 AS order_id",
+                "liftedCtes": [["__ref__stg_orders", "SELECT 1 AS order_id"]],
+                "comparisonBodySql": "SELECT * FROM __ref__stg_orders"
+            },
+            "sqlAnalysisEnabled": false,
+            "setDifferenceOperator": "EXCEPT",
+            "sqlAnalysisDialect": "duckdb",
+            "direction": "missing",
+            "sampleLimit": 3,
+            "useTopClause": use_top_clause
+        })
+        .to_string()
+    };
+    let limited: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_difference_sampling::render_difference_sample_json(
+            &request(false),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+    let top: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_difference_sampling::render_difference_sample_json(
+            &request(true),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+
+    assert_eq!(
+        limited["sql"],
+        json!(
+            "WITH __ref__stg_orders AS (SELECT 1 AS order_id),\n\
+             __actual AS (SELECT * FROM __ref__stg_orders),\n\
+             __expected AS (SELECT 2 AS order_id)\n\
+             SELECT * FROM (SELECT * FROM __expected EXCEPT SELECT * FROM __actual) \
+             AS __sqlbuild_difference LIMIT 3"
+        )
+    );
+    assert!(
+        top["sql"]
+            .as_str()
+            .is_some_and(|sql| sql.contains("SELECT TOP 3 * FROM (") && !sql.contains("LIMIT"))
+    );
+    true
+}
