@@ -16,8 +16,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _build_schemas_filter,
     _encode_typed_json,
     _historical_snapshot_combined_close_sql,
-    _historical_timestamp_changes_select_sql,
-    _historical_timestamp_snapshot_select_sql,
     _quote_sql_string,
     _render_ansi_typed_scalar,
     _render_typed_value_list,
@@ -31,6 +29,9 @@ from sqlbuild.adapter.contract.classes.historical_check_snapshot_sql import (
 from sqlbuild.adapter.contract.classes.historical_snapshot_sql import (
     HistoricalSnapshotSql,
     historical_insert_validity_sql,
+)
+from sqlbuild.adapter.contract.classes.historical_timestamp_snapshot_sql import (
+    HistoricalTimestampSnapshotSql,
 )
 from sqlbuild.adapter.contract.classes.microbatch import MicrobatchMixin
 from sqlbuild.adapter.contract.classes.snapshot_sql import SnapshotSql
@@ -1305,7 +1306,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
-        historical_sql: str = _historical_timestamp_snapshot_select_sql(
+        historical_sql: str = HistoricalTimestampSnapshotSql.initial_select_sql(
             origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
@@ -1329,7 +1330,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str,
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
-        historical_sql: str = _historical_timestamp_changes_select_sql(
+        historical_sql: str = HistoricalTimestampSnapshotSql.changes_initial_select_sql(
             origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
