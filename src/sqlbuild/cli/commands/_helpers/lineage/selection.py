@@ -126,9 +126,17 @@ def _expand(
     anchors: tuple[CompiledObjectKey, ...] = tuple(keys)
     expanded: set[CompiledObjectKey] = set()
     if direction in {UPSTREAM_DIRECTION, BOTH_DIRECTIONS}:
-        expanded.update(_walk_bounded(anchors=anchors, deps=graph.upstream_deps, max_depth=depth))
+        expanded.update(
+            transitive_closure_many(
+                starts=anchors, edges=graph.upstream_deps, include_starts=False, max_depth=depth
+            )
+        )
     if direction in {DOWNSTREAM_DIRECTION, BOTH_DIRECTIONS}:
-        expanded.update(_walk_bounded(anchors=anchors, deps=graph.downstream_deps, max_depth=depth))
+        expanded.update(
+            transitive_closure_many(
+                starts=anchors, edges=graph.downstream_deps, include_starts=False, max_depth=depth
+            )
+        )
     return frozenset(expanded)
 
 
@@ -235,7 +243,7 @@ def _column_lineage_candidate_selection(
     deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
         graph.downstream_deps if direction == DOWNSTREAM_DIRECTION else graph.upstream_deps
     )
-    selected.update(_walk_bounded(anchors=(key,), deps=deps, max_depth=depth))
+    selected.update(transitive_closure(start=key, edges=deps, max_depth=depth))
     model_names: frozenset[str] = frozenset(
         selected_key.name
         for selected_key in selected
@@ -244,7 +252,7 @@ def _column_lineage_candidate_selection(
     if depth is None:
         return _ColumnLineageCandidateSelection(model_names=model_names, truncated=False)
     extended: set[CompiledObjectKey] = {key}
-    extended.update(_walk_bounded(anchors=(key,), deps=deps, max_depth=depth + 1))
+    extended.update(transitive_closure(start=key, edges=deps, max_depth=depth + 1))
     return _ColumnLineageCandidateSelection(
         model_names=model_names,
         truncated=extended != selected,
@@ -468,36 +476,19 @@ def _trim_selected_keys(
     retained.update(anchors.upstream)
     retained.update(anchors.downstream)
     retained.update(
-        _walk_bounded(anchors=anchors.upstream, deps=upstream_deps, max_depth=max_depth)
+        transitive_closure_many(
+            starts=anchors.upstream, edges=upstream_deps, include_starts=False, max_depth=max_depth
+        )
     )
     retained.update(
-        _walk_bounded(anchors=anchors.downstream, deps=downstream_deps, max_depth=max_depth)
+        transitive_closure_many(
+            starts=anchors.downstream,
+            edges=downstream_deps,
+            include_starts=False,
+            max_depth=max_depth,
+        )
     )
     return frozenset(selected_keys & retained)
-
-
-def _walk_bounded(
-    *,
-    anchors: Iterable[CompiledObjectKey],
-    deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    max_depth: int | None,
-) -> frozenset[CompiledObjectKey]:
-    if max_depth is None:
-        return transitive_closure_many(starts=anchors, edges=deps, include_starts=False)
-    if max_depth == 0:
-        return frozenset()
-    visited: set[CompiledObjectKey] = set()
-    queue: list[tuple[CompiledObjectKey, int]] = [(anchor, 0) for anchor in anchors]
-    while queue:
-        current, current_depth = queue.pop(0)
-        if current_depth >= max_depth:
-            continue
-        for neighbor in deps.get(current, ()):
-            if neighbor in visited:
-                continue
-            visited.add(neighbor)
-            queue.append((neighbor, current_depth + 1))
-    return frozenset(visited)
 
 
 def _lookup_name(*, name: str, all_keys: dict[str, CompiledObjectKey]) -> CompiledObjectKey:

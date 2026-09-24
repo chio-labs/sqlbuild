@@ -24,6 +24,7 @@ class TransitiveClosureManyTestCase:
     starts: tuple[str, ...]
     include_starts: bool
     expected_nodes: frozenset[str]
+    max_depth: int | None = None
 
 
 @dataclass(frozen=True)

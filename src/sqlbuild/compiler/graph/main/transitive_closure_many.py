@@ -8,8 +8,14 @@ from sqlbuild.compiler.graph._helpers.algorithms import transitive_closure_many_
 
 
 def transitive_closure_many[K](
-    *, starts: Iterable[K], edges: Mapping[K, Iterable[K]], include_starts: bool
+    *,
+    starts: Iterable[K],
+    edges: Mapping[K, Iterable[K]],
+    include_starts: bool,
+    max_depth: int | None = None,
 ) -> frozenset[K]:
-    """Return keys reachable from any start, plus the starts when requested."""
+    """Return keys within max_depth edges of any start, plus the starts when requested."""
 
-    return transitive_closure_many_impl(starts=starts, edges=edges, include_starts=include_starts)
+    return transitive_closure_many_impl(
+        starts=starts, edges=edges, include_starts=include_starts, max_depth=max_depth
+    )
