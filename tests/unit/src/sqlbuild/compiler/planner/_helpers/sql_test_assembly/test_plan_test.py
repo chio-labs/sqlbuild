@@ -23,6 +23,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
 from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
     plan_and_render_sql_test_artifacts,
+    sql_test_plan_error_messages,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.commands._relations import resolve_static_relation_context
@@ -30,11 +31,13 @@ from sqlbuild.compiler.planner.main.commands._scope import resolve_static_comman
 from sqlbuild.compiler.planner.main.commands.sql_test import build_test_command_plan
 from sqlbuild.compiler.planner.models import (
     ChainStep,
+    NativeSqlTestPlan,
     PlannerScope,
     PlannerSelection,
     PlanOutput,
     PlanWarning,
     SqlTestPlanEntry,
+    SqlTestPlanResult,
 )
 from sqlbuild.compiler.planner.types import WarningSeverity
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
@@ -50,6 +53,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly.helpers
     assert_native_artifact_matches_runtime_plan,
     build_test_and_project,
     plan_single_test,
+    plan_single_test_allowing_errors,
 )
 from tests.unit.src.sqlbuild.executor.testing.main.helpers import build_comparison_test_adapter
 
@@ -114,23 +118,6 @@ from tests.unit.src.sqlbuild.executor.testing.main.helpers import build_comparis
             },
             expected_cte_bodies={
                 "payments": "SELECT 1 AS payment_id",
-            },
-        ),
-        PlanTestChainTestCase(
-            description="single model with unmocked dbt ref reports missing mock error",
-            model_queries={
-                "payments": 'SELECT payment_id FROM __dbt_ref("stripe", "payments")',
-            },
-            mock_ref_ctes={},
-            mock_source_ctes={},
-            helper_ctes={},
-            expected_model_names=("payments",),
-            expected_chain_length=1,
-            expected_warning_count=1,
-            expected_warning_severity=WarningSeverity.ERROR,
-            expected_error_fragments=("__dbt_ref__stripe__payments which has no mock",),
-            expected_cte_bodies={
-                "payments": 'SELECT payment_id FROM __dbt_ref("stripe", "payments")',
             },
         ),
         PlanTestChainTestCase(
@@ -444,22 +431,6 @@ from tests.unit.src.sqlbuild.executor.testing.main.helpers import build_comparis
             },
         ),
         PlanTestChainTestCase(
-            description="missing expected model produces error warning",
-            model_queries={},
-            mock_ref_ctes={
-                "raw": "SELECT 1 AS id",
-            },
-            mock_source_ctes={},
-            helper_ctes={},
-            expected_model_names=("nonexistent",),
-            expected_chain_length=0,
-            expected_warning_count=2,
-            expected_warning_severity=None,
-            expected_cte_bodies={
-                "nonexistent": "SELECT 1",
-            },
-        ),
-        PlanTestChainTestCase(
             description="diamond dependency A to B and C both to D",
             model_queries={
                 "B": 'SELECT id FROM __source("raw")',
@@ -480,6 +451,95 @@ from tests.unit.src.sqlbuild.executor.testing.main.helpers import build_comparis
                 "B": "SELECT 1 AS id",
                 "C": "SELECT 1 AS id",
                 "D": "SELECT 1 AS id",
+            },
+        ),
+        PlanTestChainTestCase(
+            description=("model with both mock ref and chain ref resolves both"),
+            model_queries={
+                "stg": 'SELECT id FROM __source("raw")',
+                "final": ('SELECT a.id FROM __ref("stg") a JOIN __ref("lookup") b ON a.id = b.id'),
+            },
+            mock_ref_ctes={
+                "lookup": "SELECT 1 AS id, 'US' AS country",
+            },
+            mock_source_ctes={
+                "raw": "SELECT 1 AS id",
+            },
+            helper_ctes={},
+            expected_model_names=("stg", "final"),
+            expected_chain_length=2,
+            expected_sql_fragments={
+                "final": "SELECT 1 AS id",
+            },
+            expected_warning_count=0,
+            expected_cte_bodies={
+                "stg": "SELECT 1 AS id",
+                "final": "SELECT 1 AS id",
+            },
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_test_and_project_when_planning_then_produces_expected_chain(
+    test_case: PlanTestChainTestCase,
+) -> None:
+    compiled_test: CompiledSqlTest
+    project: CompiledProject
+    compiled_test, project = build_test_and_project(test_case)
+
+    entry: SqlTestPlanEntry
+    warnings: tuple[PlanWarning, ...]
+    entry, warnings = plan_single_test(test=compiled_test, project=project, adapter=DuckDbAdapter())
+
+    assert len(entry.chain) == test_case.expected_chain_length
+
+    model_name: str
+    expected_fragment: str
+    chain_by_model_name: dict[str, ChainStep] = {step.model_name: step for step in entry.chain}
+    assert len(chain_by_model_name) == len(entry.chain)
+    for model_name, expected_fragment in test_case.expected_sql_fragments.items():
+        assert expected_fragment in chain_by_model_name[model_name].resolved_sql
+    for model_name, unexpected_fragments in test_case.unexpected_sql_fragments.items():
+        for unexpected_fragment in unexpected_fragments:
+            assert unexpected_fragment not in chain_by_model_name[model_name].resolved_sql
+    assertions_by_name: dict[str, str] = {
+        assertion.name: assertion.resolved_sql for assertion in entry.assertions
+    }
+    for assertion_name, expected_fragment in test_case.expected_assertion_fragments.items():
+        assert expected_fragment in assertions_by_name[assertion_name]
+
+    assert entry.mock_table_function_names == test_case.expected_mock_table_function_names
+    assert tuple(dependency.name for dependency in entry.function_deps) == (
+        test_case.expected_function_deps
+    )
+
+    assert len(warnings) == test_case.expected_warning_count
+    expected_sev: WarningSeverity | None = test_case.expected_warning_severity
+    actual_sevs: tuple[WarningSeverity, ...] = tuple(w.severity for w in warnings)
+    assert (expected_sev is None) or all(s == expected_sev for s in actual_sevs)
+    expected_error_fragment: str
+    for expected_error_fragment in test_case.expected_error_fragments:
+        assert any(expected_error_fragment in w.message for w in warnings)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PlanTestChainTestCase(
+            description="single model with unmocked dbt ref reports missing mock error",
+            model_queries={
+                "payments": 'SELECT payment_id FROM __dbt_ref("stripe", "payments")',
+            },
+            mock_ref_ctes={},
+            mock_source_ctes={},
+            helper_ctes={},
+            expected_model_names=("payments",),
+            expected_chain_length=1,
+            expected_warning_count=1,
+            expected_warning_severity=WarningSeverity.ERROR,
+            expected_error_fragments=("__dbt_ref__stripe__payments which has no mock",),
+            expected_cte_bodies={
+                "payments": 'SELECT payment_id FROM __dbt_ref("stripe", "payments")',
             },
         ),
         PlanTestChainTestCase(
@@ -531,30 +591,6 @@ from tests.unit.src.sqlbuild.executor.testing.main.helpers import build_comparis
             },
         ),
         PlanTestChainTestCase(
-            description=("model with both mock ref and chain ref resolves both"),
-            model_queries={
-                "stg": 'SELECT id FROM __source("raw")',
-                "final": ('SELECT a.id FROM __ref("stg") a JOIN __ref("lookup") b ON a.id = b.id'),
-            },
-            mock_ref_ctes={
-                "lookup": "SELECT 1 AS id, 'US' AS country",
-            },
-            mock_source_ctes={
-                "raw": "SELECT 1 AS id",
-            },
-            helper_ctes={},
-            expected_model_names=("stg", "final"),
-            expected_chain_length=2,
-            expected_sql_fragments={
-                "final": "SELECT 1 AS id",
-            },
-            expected_warning_count=0,
-            expected_cte_bodies={
-                "stg": "SELECT 1 AS id",
-                "final": "SELECT 1 AS id",
-            },
-        ),
-        PlanTestChainTestCase(
             description=("multiple unresolved refs produce multiple errors"),
             model_queries={
                 "orders": ('SELECT a.id FROM __ref("x") a JOIN __source("y") b ON a.id = b.id'),
@@ -570,49 +606,51 @@ from tests.unit.src.sqlbuild.executor.testing.main.helpers import build_comparis
                 "orders": "SELECT 1",
             },
         ),
+        PlanTestChainTestCase(
+            description="missing expected model produces error warning",
+            model_queries={},
+            mock_ref_ctes={
+                "raw": "SELECT 1 AS id",
+            },
+            mock_source_ctes={},
+            helper_ctes={},
+            expected_model_names=("nonexistent",),
+            expected_chain_length=0,
+            expected_warning_count=2,
+            expected_warning_severity=None,
+            expected_cte_bodies={
+                "nonexistent": "SELECT 1",
+            },
+        ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_test_and_project_when_planning_then_produces_expected_chain(
+def test_given_unresolved_chain_input_when_planning_then_test_is_blocked_with_error_diagnostics(
     test_case: PlanTestChainTestCase,
 ) -> None:
     compiled_test: CompiledSqlTest
     project: CompiledProject
     compiled_test, project = build_test_and_project(test_case)
 
-    entry: SqlTestPlanEntry
-    warnings: tuple[PlanWarning, ...]
-    entry, warnings = plan_single_test(test=compiled_test, project=project, adapter=DuckDbAdapter())
-
-    assert len(entry.chain) == test_case.expected_chain_length
-
-    model_name: str
-    expected_fragment: str
-    chain_by_model_name: dict[str, ChainStep] = {step.model_name: step for step in entry.chain}
-    assert len(chain_by_model_name) == len(entry.chain)
-    for model_name, expected_fragment in test_case.expected_sql_fragments.items():
-        assert expected_fragment in chain_by_model_name[model_name].resolved_sql
-    for model_name, unexpected_fragments in test_case.unexpected_sql_fragments.items():
-        for unexpected_fragment in unexpected_fragments:
-            assert unexpected_fragment not in chain_by_model_name[model_name].resolved_sql
-    assertions_by_name: dict[str, str] = {
-        assertion.name: assertion.resolved_sql for assertion in entry.assertions
-    }
-    for assertion_name, expected_fragment in test_case.expected_assertion_fragments.items():
-        assert expected_fragment in assertions_by_name[assertion_name]
-
-    assert entry.mock_table_function_names == test_case.expected_mock_table_function_names
-    assert tuple(dependency.name for dependency in entry.function_deps) == (
-        test_case.expected_function_deps
+    result: SqlTestPlanResult
+    plan: NativeSqlTestPlan
+    result, plan = plan_single_test_allowing_errors(
+        test=compiled_test, project=project, adapter=DuckDbAdapter()
     )
 
-    assert len(warnings) == test_case.expected_warning_count
-    expected_sev: WarningSeverity | None = test_case.expected_warning_severity
-    actual_sevs: tuple[WarningSeverity, ...] = tuple(w.severity for w in warnings)
-    assert (expected_sev is None) or all(s == expected_sev for s in actual_sevs)
+    assert result.entry is None
+    assert result.fixture_diagnostics == sql_test_plan_error_messages(warnings=plan.warnings)
+    assert result.fixture_diagnostics
+    assert len(plan.chain) == test_case.expected_chain_length
+    chain_by_model_name: dict[str, ChainStep] = {step.model_name: step for step in plan.chain}
+    model_name: str
+    expected_fragment: str
+    for model_name, expected_fragment in test_case.expected_sql_fragments.items():
+        assert expected_fragment in chain_by_model_name[model_name].resolved_sql
+    assert len(plan.warnings) == test_case.expected_warning_count
     expected_error_fragment: str
     for expected_error_fragment in test_case.expected_error_fragments:
-        assert any(expected_error_fragment in w.message for w in warnings)
+        assert any(expected_error_fragment in message for message in result.fixture_diagnostics)
 
 
 @pytest.mark.parametrize(
@@ -846,13 +884,18 @@ def test_given_unresolved_marker_in_mock_when_planning_with_analysis_then_report
     project: CompiledProject
     compiled_test, project = build_test_and_project(test_case)
 
-    _, warnings = plan_single_test(
+    result: SqlTestPlanResult
+    plan: NativeSqlTestPlan
+    result, plan = plan_single_test_allowing_errors(
         test=compiled_test,
         project=project,
         adapter=DuckDbAdapter(),
         sql_analysis_enabled=True,
     )
+    warnings: tuple[PlanWarning, ...] = plan.warnings
 
+    assert result.entry is None
+    assert result.fixture_diagnostics == (warnings[0].message,)
     assert len(warnings) == test_case.expected_warning_count
     assert warnings[0].severity is test_case.expected_warning_severity
     assert test_case.expected_error_fragments[0] in warnings[0].message

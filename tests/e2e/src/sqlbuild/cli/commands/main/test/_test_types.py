@@ -146,3 +146,13 @@ class ExpectedColumnSubsetE2ETestCase:
     expected_exit_code: int
     expected_output_fragments: tuple[str, ...]
     unexpected_output_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class MissingMockCliE2ETestCase:
+    """Test case for planning errors reported by plain test and compile commands."""
+
+    description: str
+    expected_error: str
+    compile_error_line: str
+    compile_summary_fragment: str

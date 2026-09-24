@@ -88,11 +88,11 @@ from sqlbuild.sql_values.models import SqlValue
 
 @dataclass(frozen=True)
 class NativeSqlTestArtifact:
-    """One native-planned SQL-test artifact and its compact diagnostics."""
+    """One native-planned SQL-test artifact and its distinct planning error messages."""
 
     sql: str
     model_names: tuple[str, ...]
-    warnings: tuple[dict[str, object], ...]
+    error_messages: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

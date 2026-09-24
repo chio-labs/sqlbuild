@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -11,6 +13,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
     ComplexValuesFixtureE2ETestCase,
     ExpectedColumnSubsetE2ETestCase,
     FixtureCompatibilityE2ETestCase,
+    MissingMockCliE2ETestCase,
     ParameterCaseSelectionE2ETestCase,
     PartialFixtureE2ETestCase,
     SharedGraphChainE2ETestCase,
@@ -24,6 +27,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
     UnknownTableFunctionFixtureE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
+    MOCKED_UNSATISFIED_LEAF_TEST_SQL,
     build_assertion_test_project_files,
     build_chain_test_project_files,
     build_clause_partial_source_fixture_project_files,
@@ -515,18 +519,6 @@ def test_given_invalid_fixture_when_testing_then_static_diagnostics_prevent_conn
                 "real models: stg_orders, fact_orders",
                 "expected models: stg_orders, fact_orders",
                 "Test plan inspection complete: 1 selected, 0 errors.",
-            ),
-        ),
-        SqlTestPlanInspectionE2ETestCase(
-            description="missing leaf mock is reported before execution",
-            repo_files=build_unsatisfied_leaf_test_project_files(),
-            expected_exit_code=1,
-            expected_stdout_fragments=(
-                "model 'stg_orders' references __source('raw') which has no mock",
-                "Test plan inspection failed: 1 selected, 1 errors.",
-            ),
-            unexpected_stdout_fragments=(
-                "model 'fact_orders' references __source('raw') which has no mock",
             ),
         ),
         SqlTestPlanInspectionE2ETestCase(
@@ -1057,7 +1049,7 @@ def test_given_shared_upstream_graph_when_running_test_then_outcomes_and_sql_mat
                 "test 'deep_orders_missing_mock': model 'orders_00_left' references "
                 "__source('raw_orders') which has no mock"
             ),
-            expected_stdout_fragments=("Test plan inspection failed: 1 selected, 1 errors.",),
+            expected_stdout_fragments=(),
         ),
     ),
     ids=lambda case: case.description,
@@ -1079,13 +1071,14 @@ def test_given_deep_shared_graph_missing_mock_when_testing_then_error_is_reporte
         command=("--no-color", "test"), project_dir=project_dir
     )
 
-    assert inspect_result.returncode == 1, inspect_result.stdout + inspect_result.stderr
-    assert inspect_result.stdout.count("which has no mock") == 1, inspect_result.stdout
-    assert test_case.expected_error in inspect_result.stdout
-    for fragment in test_case.expected_stdout_fragments:
-        assert fragment in inspect_result.stdout
-    assert test_result.returncode == 1, test_result.stdout + test_result.stderr
-    assert "PASS=0" in test_result.stdout
+    for result in (inspect_result, test_result):
+        output: str = result.stdout + result.stderr
+        assert result.returncode == 1, output
+        assert output.count("which has no mock") == 1, output
+        assert test_case.expected_error in result.stderr, output
+        assert "Connecting to" not in result.stdout, output
+        for fragment in test_case.expected_stdout_fragments:
+            assert fragment in result.stdout, output
 
 
 @pytest.mark.parametrize(
@@ -1156,3 +1149,78 @@ def test_given_expected_cte_column_subset_when_testing_then_only_listed_columns_
         assert fragment in output, output
     for fragment in test_case.unexpected_output_fragments:
         assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        MissingMockCliE2ETestCase(
+            description="missing source mock fails test and compile until mocked",
+            expected_error=(
+                "test 'test_chain': model 'stg_orders' references __source('raw') which has no mock"
+            ),
+            compile_error_line=(
+                "error[S000]: test 'test_chain': model 'stg_orders' references __source('raw') "
+                "which has no mock"
+            ),
+            compile_summary_fragment="1 error, 0 warnings",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_missing_mock_when_testing_and_compiling_then_error_is_reported_until_mocked(
+    test_case: MissingMockCliE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="missing_mock_cli_project",
+        repo_files=build_unsatisfied_leaf_test_project_files(),
+    )
+
+    test_results: tuple[subprocess.CompletedProcess[str], ...] = tuple(
+        run_sqb(command=command, project_dir=project_dir)
+        for command in (("--no-color", "test"), ("--no-color", "test", "--inspect"))
+    )
+    compile_results: tuple[subprocess.CompletedProcess[str], ...] = tuple(
+        run_sqb(command=("--no-color", "compile"), project_dir=project_dir) for _ in range(2)
+    )
+    json_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "compile", "--json"), project_dir=project_dir
+    )
+    (project_dir / "tests" / "unit" / "test_chain.sql").write_text(
+        MOCKED_UNSATISFIED_LEAF_TEST_SQL, encoding="utf-8"
+    )
+    fixed_compile: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "compile"), project_dir=project_dir
+    )
+    fixed_test: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "test"), project_dir=project_dir
+    )
+
+    for test_result in test_results:
+        test_output: str = test_result.stdout + test_result.stderr
+        assert test_result.returncode == 1, test_output
+        assert test_output.count(test_case.expected_error) == 1, test_output
+        assert "Connecting to" not in test_result.stdout, test_output
+    for compile_result in compile_results:
+        compile_output: str = compile_result.stdout + compile_result.stderr
+        assert compile_result.returncode == 1, compile_output
+        assert compile_result.stdout.count(test_case.compile_error_line) == 1, compile_output
+        summary_line: str = compile_result.stdout.strip().splitlines()[-2]
+        assert test_case.compile_summary_fragment in summary_line, compile_output
+    assert json_result.returncode == 1, json_result.stdout + json_result.stderr
+    payload: dict[str, Any] = json.loads(json_result.stdout)
+    assert payload["has_errors"] is True
+    assert payload["summary"]["errors"] == 1
+    assert [
+        (diagnostic["phase"], diagnostic["code"], diagnostic["message"])
+        for diagnostic in payload["diagnostics"]
+    ] == [("test", "S000", test_case.expected_error)]
+    fixed_compile_output: str = fixed_compile.stdout + fixed_compile.stderr
+    assert fixed_compile.returncode == 0, fixed_compile_output
+    assert "which has no mock" not in fixed_compile_output
+    assert "0 errors" in fixed_compile.stdout, fixed_compile_output
+    fixed_test_output: str = fixed_test.stdout + fixed_test.stderr
+    assert fixed_test.returncode == 0, fixed_test_output
+    assert "PASS=1  FAIL=0  TOTAL=1" in fixed_test.stdout, fixed_test_output

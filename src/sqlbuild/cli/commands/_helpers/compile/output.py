@@ -484,7 +484,9 @@ def _models_with_error_diagnostics(
     return frozenset(
         diagnostic.resource_name
         for diagnostic in diagnostics
-        if diagnostic.is_error and diagnostic.resource_name is not None
+        if diagnostic.is_error
+        and diagnostic.resource_name is not None
+        and diagnostic.resource_type != CompiledResourceType.SQL_TEST
     )
 
 

@@ -18,15 +18,18 @@ from sqlbuild.cli.output.models import (
     WrittenTarget,
 )
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompiledSqlTest
+from sqlbuild.compiler.compile.types import CompiledResourceType, DiagnosticPhase
 from sqlbuild.compiler.planner.models import ChainStep, PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     ExpectedMessageTestCase,
     TargetWriterCacheTestCase,
+    TargetWriterPlanningErrorTestCase,
     TargetWriterTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
     build_cached_target_writer_project,
+    build_missing_mock_target_writer_project,
     build_static_target_writer_project,
     build_target_writer_plan_output,
     read_target_files,
@@ -340,6 +343,49 @@ def test_given_unchanged_test_artifact_when_writing_again_then_skips_test_plan_r
 
     assert artifact_path.stat().st_mtime_ns == original_mtime_ns
     assert planner_spy.call_count == test_case.expected_builder_calls
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        TargetWriterPlanningErrorTestCase(
+            description="missing mock is reported on every write",
+            expected_builder_calls=1,
+            expected_message=("model 'orders' references __source('raw_orders') which has no mock"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_test_with_planning_error_when_writing_twice_then_error_is_not_cached(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    test_case: TargetWriterPlanningErrorTestCase,
+) -> None:
+    target_dir: Path = tmp_path / "target"
+    project: CompiledProject = build_missing_mock_target_writer_project(target_dir=target_dir)
+    first: WrittenTarget = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+    planner_spy: Mock = Mock(wraps=target_writer_module.plan_and_render_sql_test_artifacts)
+    monkeypatch.setattr(target_writer_module, "plan_and_render_sql_test_artifacts", planner_spy)
+
+    second: WrittenTarget = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+
+    assert planner_spy.call_count == test_case.expected_builder_calls
+    assert first.diagnostics == second.diagnostics
+    (diagnostic,) = second.diagnostics
+    assert diagnostic.is_error
+    assert diagnostic.phase is DiagnosticPhase.TEST
+    assert diagnostic.code == "S000"
+    assert diagnostic.resource_type is CompiledResourceType.SQL_TEST
+    assert diagnostic.resource_name == project.sql_tests[0].name
+    assert test_case.expected_message in diagnostic.message
 
 
 @pytest.mark.parametrize(

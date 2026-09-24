@@ -42,8 +42,15 @@ from sqlbuild.compiler.planner._helpers.sql_tests.assembly import plan_sql_tests
 from sqlbuild.compiler.planner._helpers.sql_tests.comments import uncommented_pattern_matches
 from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
     plan_and_render_sql_test_artifacts,
+    plan_sql_tests_natively,
+    sql_test_plan_error_messages,
 )
-from sqlbuild.compiler.planner.models import PlanWarning, SqlTestPlanEntry, SqlTestPlanResult
+from sqlbuild.compiler.planner.models import (
+    NativeSqlTestPlan,
+    PlanWarning,
+    SqlTestPlanEntry,
+    SqlTestPlanResult,
+)
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
@@ -91,6 +98,33 @@ def plan_single_test(
     return result.entry, result.warnings
 
 
+def plan_single_test_allowing_errors(
+    *,
+    test: CompiledSqlTest,
+    project: CompiledProject,
+    adapter: BaseAdapter,
+    sql_analysis_enabled: bool = False,
+) -> tuple[SqlTestPlanResult, NativeSqlTestPlan]:
+    """Plan one SQL test through the batch planner and return its raw native plan too."""
+
+    result: SqlTestPlanResult
+    (result,) = plan_sql_tests(
+        tests=(test,),
+        project=project,
+        adapter=adapter,
+        sql_analysis_enabled=sql_analysis_enabled,
+    )
+    plan: NativeSqlTestPlan
+    (plan,) = plan_sql_tests_natively(
+        project=project,
+        tests=(test,),
+        adapter=adapter,
+        sql_analysis_enabled=sql_analysis_enabled,
+        render_sql=False,
+    )
+    return result, plan
+
+
 def assert_native_artifact_matches_runtime_plan(
     *,
     project: CompiledProject,
@@ -125,14 +159,7 @@ def assert_native_artifact_matches_runtime_plan(
         dialect=adapter.sql_analysis_dialect()
     )
     assert artifact.model_names == tuple(step.model_name for step in entry.chain)
-    assert artifact.warnings == tuple(
-        {
-            "modelName": warning.model_name,
-            "severity": warning.severity.value,
-            "message": warning.message,
-        }
-        for warning in warnings
-    )
+    assert artifact.error_messages == sql_test_plan_error_messages(warnings=warnings)
     return True
 
 

@@ -61,18 +61,20 @@ def plan_and_render_sql_test_artifacts(
             NativeSqlTestArtifact(
                 sql=plan.sql,
                 model_names=plan.model_names,
-                warnings=tuple(_warning_payload(warning=warning) for warning in plan.warnings),
+                error_messages=sql_test_plan_error_messages(warnings=plan.warnings),
             )
         )
     return tuple(artifacts)
 
 
-def _warning_payload(*, warning: PlanWarning) -> dict[str, object]:
-    return {
-        "modelName": warning.model_name,
-        "severity": warning.severity.value,
-        "message": warning.message,
-    }
+def sql_test_plan_error_messages(*, warnings: tuple[PlanWarning, ...]) -> tuple[str, ...]:
+    """Return each distinct ERROR-severity planning message for one SQL test, in order."""
+
+    return tuple(
+        dict.fromkeys(
+            warning.message for warning in warnings if warning.severity is WarningSeverity.ERROR
+        )
+    )
 
 
 def plan_sql_tests_natively(

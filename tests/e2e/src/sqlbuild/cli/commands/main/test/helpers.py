@@ -225,6 +225,18 @@ def build_mock_boundary_test_project_files() -> dict[str, str]:
     }
 
 
+MOCKED_UNSATISFIED_LEAF_TEST_SQL: str = (
+    "TEST();\n\n"
+    "WITH\n"
+    "__source__raw AS (SELECT 1 AS id),\n"
+    "__expected__fact_orders AS (\n"
+    "  SELECT 1 AS id, 1 AS adjusted, 'CA' AS country, "
+    "'real' AS literal_text, 'active' AS status\n"
+    ")\n"
+    "SELECT 1\n"
+)
+
+
 def build_unsatisfied_leaf_test_project_files() -> dict[str, str]:
     """Build a test that omits the source mock required by its real model chain."""
 
