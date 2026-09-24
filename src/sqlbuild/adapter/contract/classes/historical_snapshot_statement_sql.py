@@ -146,17 +146,11 @@ class HistoricalSnapshotStatementSql:
             f"SELECT {candidate_key_sql}, __close_at FROM __hard_deletes "
             "WHERE __close_at IS NOT NULL"
         )
-        if self.dialect.historical_close == HistoricalSnapshotCloseStyle.UPDATE_FROM:
+        if self.dialect.historical_close in {
+            HistoricalSnapshotCloseStyle.UPDATE_FROM,
+            HistoricalSnapshotCloseStyle.MERGE_HARD_DELETES,
+        }:
             return self._grouped_close_sql(
-                destination=destination,
-                new_changes_sql=new_changes_sql,
-                unique_key=unique_key,
-                valid_from_column=valid_from_column,
-                valid_to_column=valid_to_column,
-                close_candidates_sql=close_candidates_sql,
-            )
-        if self.dialect.historical_close == HistoricalSnapshotCloseStyle.MERGE_HARD_DELETES:
-            return self._merge_close_sql(
                 destination=destination,
                 new_changes_sql=new_changes_sql,
                 unique_key=unique_key,
@@ -214,59 +208,34 @@ class HistoricalSnapshotStatementSql:
         valid_to_column: str,
         close_candidates_sql: str,
     ) -> str:
-        close_candidate_condition: str = SnapshotSql.key_condition(
-            left_alias="__close_candidates", right_alias="__target", unique_key=unique_key
+        candidate_key_sql: str = ", ".join(unique_key)
+        close_candidates_query: str = (
+            f"WITH {new_changes_sql}, __close_candidates AS ({close_candidates_sql}) "
+            f"SELECT {candidate_key_sql}, MIN(__close_at) AS __close_at "
+            f"FROM __close_candidates GROUP BY {candidate_key_sql}"
         )
-        close_candidates_query: str = self._earliest_close_candidates_sql(
-            new_changes_sql=new_changes_sql,
-            unique_key=unique_key,
-            close_candidates_sql=close_candidates_sql,
+        close_condition: str = (
+            f"__target.{valid_to_column} IS NULL "
+            f"AND __target.{valid_from_column} < __close_candidates.__close_at"
+        )
+        if self.dialect.historical_close == HistoricalSnapshotCloseStyle.MERGE_HARD_DELETES:
+            merge_key_condition: str = SnapshotSql.key_condition(
+                left_alias="__target", right_alias="__close_candidates", unique_key=unique_key
+            )
+            return (
+                f"MERGE INTO {destination} AS __target "
+                f"USING ({close_candidates_query}) AS __close_candidates "
+                f"ON {merge_key_condition} AND {close_condition} "
+                f"WHEN MATCHED THEN UPDATE SET {valid_to_column} = __close_candidates.__close_at"
+            )
+        update_key_condition: str = SnapshotSql.key_condition(
+            left_alias="__close_candidates", right_alias="__target", unique_key=unique_key
         )
         return (
             f"UPDATE {destination} AS __target "
             f"SET {valid_to_column} = __close_candidates.__close_at "
             f"FROM ({close_candidates_query}) AS __close_candidates "
-            f"WHERE __target.{valid_to_column} IS NULL "
-            f"AND __target.{valid_from_column} < __close_candidates.__close_at "
-            f"AND {close_candidate_condition}"
-        )
-
-    def _merge_close_sql(
-        self,
-        *,
-        destination: str,
-        new_changes_sql: str,
-        unique_key: tuple[str, ...],
-        valid_from_column: str,
-        valid_to_column: str,
-        close_candidates_sql: str,
-    ) -> str:
-        close_candidate_condition: str = SnapshotSql.key_condition(
-            left_alias="__target", right_alias="__close_candidates", unique_key=unique_key
-        )
-        close_candidates_query: str = self._earliest_close_candidates_sql(
-            new_changes_sql=new_changes_sql,
-            unique_key=unique_key,
-            close_candidates_sql=close_candidates_sql,
-        )
-        return (
-            f"MERGE INTO {destination} AS __target "
-            f"USING ({close_candidates_query}) AS __close_candidates "
-            f"ON {close_candidate_condition} "
-            f"AND __target.{valid_to_column} IS NULL "
-            f"AND __target.{valid_from_column} < __close_candidates.__close_at "
-            f"WHEN MATCHED THEN UPDATE SET {valid_to_column} = __close_candidates.__close_at"
-        )
-
-    @staticmethod
-    def _earliest_close_candidates_sql(
-        *, new_changes_sql: str, unique_key: tuple[str, ...], close_candidates_sql: str
-    ) -> str:
-        candidate_key_sql: str = ", ".join(unique_key)
-        return (
-            f"WITH {new_changes_sql}, __close_candidates AS ({close_candidates_sql}) "
-            f"SELECT {candidate_key_sql}, MIN(__close_at) AS __close_at "
-            f"FROM __close_candidates GROUP BY {candidate_key_sql}"
+            f"WHERE {close_condition} AND {update_key_condition}"
         )
 
     def _insert_sql(
