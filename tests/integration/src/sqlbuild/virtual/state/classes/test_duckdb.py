@@ -97,6 +97,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes._test_types import (
     DuckDbStateBackendTransactionRollbackTestCase,
     DuckDbStateBackendValidationTestCase,
     MicrobatchStateRoundTripTestCase,
+    StateReadContractTestCase,
 )
 from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     ACTIVE_CHECKPOINT_PAYLOAD,
@@ -114,7 +115,12 @@ from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     REF_ENVIRONMENT_PAYLOAD,
     REF_NODE_TYPE_PAYLOAD,
     SEED_EXTRA_PAYLOAD,
+    STATE_READ_CONTRACT_FUNCTION,
+    STATE_READ_CONTRACT_RELATION_V1,
+    STATE_READ_CONTRACT_RELATION_V2,
     VALID_PAYLOAD,
+    StateReadContractObservation,
+    exercise_state_read_contract,
     fetch_all,
     open_duckdb_state_backend,
 )
@@ -2802,3 +2808,53 @@ def test_given_duckdb_state_backend_when_two_connections_acquire_same_lock_then_
     finally:
         backend.close(first_connection)
         second_backend.close(second_connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StateReadContractTestCase(
+            description="round trips function versions relations environments and locks",
+            schema="sqlbuild_state",
+            sqlbuild_version="0.0.test",
+            expected_environments=(
+                ("prod", VirtualEnvironmentStatus.FINALIZED),
+                ("dev", VirtualEnvironmentStatus.ACTIVE),
+            ),
+            expected_active_lock_keys=("lock_active",),
+            expected_expired_lock_keys=("lock_expired",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_duckdb_state_backend_when_reading_state_then_matches_read_contract(
+    test_case: StateReadContractTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    try:
+        backend.initialize(
+            connection=connection,
+            schema=test_case.schema,
+            sqlbuild_version=test_case.sqlbuild_version,
+        )
+        observation: StateReadContractObservation = exercise_state_read_contract(
+            backend=backend, connection=connection, schema=test_case.schema
+        )
+    finally:
+        backend.close(connection)
+
+    assert observation.function_before_upsert is None
+    assert observation.function_after_upsert == STATE_READ_CONTRACT_FUNCTION
+    assert observation.function_after_second_upsert == replace(
+        STATE_READ_CONTRACT_FUNCTION, status=ModelVersionStatus.FAILED
+    )
+    assert observation.relation_v1 == STATE_READ_CONTRACT_RELATION_V1
+    assert observation.relation_missing is None
+    assert observation.relations == (
+        STATE_READ_CONTRACT_RELATION_V2,
+        STATE_READ_CONTRACT_RELATION_V1,
+    )
+    assert observation.environments == test_case.expected_environments
+    assert observation.active_lock_keys == test_case.expected_active_lock_keys
+    assert observation.expired_lock_keys == test_case.expected_expired_lock_keys
