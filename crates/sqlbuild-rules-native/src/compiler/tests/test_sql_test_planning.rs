@@ -4,9 +4,26 @@ use crate::compiler::tests::helpers::{
     model_test_batch_returns_ordered_artifact, plan_without_rendering_returns_executable_steps,
     shared_textual_chain_renders_each_model_once,
     unicode_cte_after_leading_with_preserves_identifier,
-    unresolved_reference_fast_rejection_preserves_warning,
+    unresolved_reference_fast_rejection_preserves_warning, upstream_fallback_resolves,
 };
 use crate::compiler::tests::test_types::SqlTestPlanningTestCase;
+
+#[test]
+fn given_sql_test_upstream_fallback_when_planning_then_descendants_and_assertions_resolve() {
+    let test_cases = [SqlTestPlanningTestCase {
+        description: "textual upstream steps remain available to descendants and assertions",
+        run: upstream_fallback_resolves,
+        expected_success: true,
+    }];
+    for test_case in test_cases {
+        assert_eq!(
+            (test_case.run)(),
+            test_case.expected_success,
+            "{}",
+            test_case.description
+        );
+    }
+}
 
 #[test]
 fn given_sql_test_planning_cases_when_exercising_native_planner_then_expected_behavior_holds() {

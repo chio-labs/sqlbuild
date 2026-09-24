@@ -651,7 +651,7 @@ def _run_profiled_compile_benchmark(
             ]
         )
         elapsed_seconds: float = time.perf_counter() - start
-    assert exit_code == 0
+    assert exit_code == 0, output.getvalue()
     payload: dict[str, object] = json.loads(output.getvalue())
     timings: object = payload["compile_timings"]
     summary: object = payload["summary"]
@@ -1079,6 +1079,7 @@ def write_layered_production_compile_project(
         model_count=model_count,
         test_count=test_count,
         source_count=source_count,
+        seed_count=seed_count,
     )
 
 
@@ -1122,6 +1123,7 @@ def write_semantic_compile_project(
         test_count=test_count,
         source_count=source_count,
         semantic_fixture_scale=True,
+        seed_count=seed_count,
     )
 
 
@@ -1665,6 +1667,7 @@ def _layered_write_tests(
     model_count: int,
     test_count: int,
     source_count: int,
+    seed_count: int,
     semantic_fixture_scale: bool = False,
 ) -> None:
     tests_dir: Path = project_dir / "tests" / "unit"
@@ -1680,6 +1683,7 @@ def _layered_write_tests(
                 model_count=model_count,
                 source_count=source_count,
                 repeated_target_count=repeated_target_count,
+                seed_count=seed_count,
                 semantic_fixture_scale=semantic_fixture_scale,
             )
             for test_index in range(
@@ -1696,6 +1700,7 @@ def _layered_test_block(
     model_count: int,
     source_count: int,
     repeated_target_count: int,
+    seed_count: int,
     semantic_fixture_scale: bool = False,
 ) -> str:
     group_count: int = (model_count - _SPINE_DEPTH) // _TEST_CHAIN_DEPTH
@@ -1711,12 +1716,23 @@ def _layered_test_block(
         True: 5 + (test_index % 5) * 5,
         False: 40 + (test_index % 5) * 40,
     }[semantic_fixture_scale]
+    first_seed_index: int = max(
+        _SEED_REFERENCE_START_INDEX, base_index + int(not semantic_fixture_scale)
+    )
+    first_seed_index = ((first_seed_index + _SEED_INTERVAL - 1) // _SEED_INTERVAL) * _SEED_INTERVAL
+    seed_indexes: set[int] = {
+        index % seed_count for index in range(first_seed_index, target_index + 1, _SEED_INTERVAL)
+    }
+    seed_fixtures: str = "".join(
+        f"__seed__seed_{index:05d} AS (SELECT 1 AS id),\n" for index in sorted(seed_indexes)
+    )
     return _layered_test_sql(
         test_index=test_index,
         source_index=source_index,
         target_index=target_index,
         fixture_row_count=fixture_row_count,
         include_assertion=test_index % 7 == 0,
+        seed_fixtures=seed_fixtures,
     )
 
 
@@ -1727,6 +1743,7 @@ def _layered_test_sql(
     target_index: int,
     fixture_row_count: int,
     include_assertion: bool,
+    seed_fixtures: str,
 ) -> str:
     fixture_rows: str = " UNION ALL\n".join(
         f"  SELECT {row} AS id, CAST({row} AS DOUBLE) AS amount, 'source' AS status"
@@ -1740,7 +1757,7 @@ __assert__non_negative_{target_index:05d} AS (
     return f"""TEST (name "layered_production_case_{test_index:05d}");
 
 WITH
-__source__source_{source_index:05d} AS (
+{seed_fixtures}__source__source_{source_index:05d} AS (
 {fixture_rows}
 ),
 __expected__model_{target_index:05d} AS (

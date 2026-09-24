@@ -748,7 +748,7 @@ fn plan_model_test(
             &context.patterns,
         )?;
         reachable_mocks.extend(reached_table_functions);
-        let analyzed = if context.sql_analysis_enabled {
+        let analyzed = if context.sql_analysis_enabled && analysis_resolved.len() == model_index {
             analyze_and_resolve_sql(AnalysisResolutionRequest {
                 query_sql: &fixture_resolved_sql,
                 fixtures: &fixtures,
@@ -812,20 +812,21 @@ fn plan_model_test(
             &context.patterns,
         )?;
         reachable_mocks.extend(reached_table_functions);
-        let analyzed = if context.sql_analysis_enabled {
-            analyze_and_resolve_sql(AnalysisResolutionRequest {
-                query_sql: &fixture_resolved_sql,
-                fixtures: &fixtures,
-                resolved_chain: &analysis_resolved,
-                functions: &context.functions,
-                file_label: &plan.file_label,
-                dialect_name: &context.dialect,
-                templates: &context.analysis_templates,
-                patterns: &context.patterns,
-            })?
-        } else {
-            None
-        };
+        let analyzed =
+            if context.sql_analysis_enabled && analysis_resolved.len() == ordered_names.len() {
+                analyze_and_resolve_sql(AnalysisResolutionRequest {
+                    query_sql: &fixture_resolved_sql,
+                    fixtures: &fixtures,
+                    resolved_chain: &analysis_resolved,
+                    functions: &context.functions,
+                    file_label: &plan.file_label,
+                    dialect_name: &context.dialect,
+                    templates: &context.analysis_templates,
+                    patterns: &context.patterns,
+                })?
+            } else {
+                None
+            };
         let (resolved_sql, lifted_ctes, comparison_body_sql) = match analyzed {
             Some(value)
                 if !has_unresolved_test_reference(&value.resolved_sql, &context.patterns) =>

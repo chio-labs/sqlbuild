@@ -635,6 +635,39 @@ pub(crate) fn plan_without_rendering_returns_executable_steps() -> bool {
     true
 }
 
+pub(crate) fn upstream_fallback_resolves() -> bool {
+    let request = json!({
+        "models": [
+            {"name": "stg_orders", "querySql": "SELECT __udf(\"identity_value\")(order_id) AS order_id FROM __source(\"raw_orders\")"},
+            {"name": "orders", "querySql": "SELECT * FROM __ref(\"stg_orders\")", "modelDependencies": ["stg_orders"]}
+        ],
+        "functions": [{"name": "identity_value", "udfPrefix": "identity_value(", "udfSuffix": ")"}],
+        "tests": [{
+            "name": "orders_case", "fileLabel": "tests/orders.sql",
+            "payload": {
+                "kind": "model",
+                "authoredCtes": [{"name": "__source__raw_orders", "sqlBody": "SELECT 1 AS order_id"}],
+                "expectedCtes": [{"name": "__expected__orders", "sqlBody": "SELECT 1 AS order_id"}],
+                "expectedModelNames": ["orders"],
+                "assertionCtes": [{"name": "__assert__positive", "sqlBody": "SELECT * FROM __ref(\"orders\") WHERE order_id < 0"}]
+            }
+        }],
+        "sqlAnalysisEnabled": true, "sqlAnalysisDialect": "duckdb"
+    });
+    let response: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_planning::plan_and_render_json(&request.to_string())
+            .expect("planning succeeds"),
+    )
+    .expect("valid JSON");
+    let artifact = &response["artifacts"][0];
+    assert_eq!(artifact["warnings"], json!([]));
+    let sql = artifact["sql"].as_str().expect("rendered SQL");
+    assert!(!sql.contains("__ref(\""));
+    assert!(sql.contains("identity_value((order_id))"), "{sql}");
+    assert!(sql.contains("__ref__stg_orders"));
+    true
+}
+
 pub(crate) fn chain_resolution_orders_unmocked_models() -> bool {
     let response: Value = serde_json::from_str(
         &crate::compiler::main::sql_test_chain_resolution::resolve_chains_json(
