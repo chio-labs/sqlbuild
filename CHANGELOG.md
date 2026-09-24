@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.114.2](https://github.com/chio-labs/sqlbuild/compare/v0.114.1...v0.114.2) (2026-09-24)
+
+
+### Bug Fixes
+
+* preserve full-replay history and improve SQL test planning ([#801](https://github.com/chio-labs/sqlbuild/issues/801)) ([d616759](https://github.com/chio-labs/sqlbuild/commit/d616759e95b40d75418f17f3f1614ca29752db12))
+
 ## [0.114.1](https://github.com/chio-labs/sqlbuild/compare/v0.114.0...v0.114.1) (2026-09-23)
 
 
