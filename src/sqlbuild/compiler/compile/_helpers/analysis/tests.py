@@ -25,7 +25,7 @@ _POLYGLOT_VALUES_SET_ALIAS: str = "_values"
 
 
 def extract_expected_branch_column_names_with_sql_analysis(
-    *, sql: str, file_label: str
+    *, sql: str, file_label: str, label: str = "__expected__<model>"
 ) -> tuple[tuple[str, ...], ...] | None:
     """Return expected SELECT branch names using required Polyglot analysis."""
 
@@ -40,32 +40,34 @@ def extract_expected_branch_column_names_with_sql_analysis(
                 _extract_branch_names(
                     expression=polyglot_module.parse_one(branch_sql, dialect="generic"),
                     file_label=file_label,
+                    label=label,
                 )[0]
                 for branch_sql in branches
             )
         return None
-    return _extract_branch_names(expression=parsed_expression, file_label=file_label)
+    return _extract_branch_names(expression=parsed_expression, file_label=file_label, label=label)
 
 
-def _extract_branch_names(*, expression: Any, file_label: str) -> tuple[tuple[str, ...], ...]:
+def _extract_branch_names(
+    *, expression: Any, file_label: str, label: str
+) -> tuple[tuple[str, ...], ...]:
     expression = _unwrap_expression(expression=expression)
     if expression.__class__.__name__ == POLYGLOT_UNION_EXPRESSION_NAME:
         left_expression: Any = expression.args["left"]
         right_expression: Any = expression.args["right"]
         return (
-            *_extract_branch_names(expression=left_expression, file_label=file_label),
-            *_extract_branch_names(expression=right_expression, file_label=file_label),
+            *_extract_branch_names(expression=left_expression, file_label=file_label, label=label),
+            *_extract_branch_names(expression=right_expression, file_label=file_label, label=label),
         )
     if expression.__class__.__name__ == POLYGLOT_SELECT_EXPRESSION_NAME:
         if _is_synthetic_values_set_branch(expression):
             raise CompileInputError(
-                f"SQL test '{file_label}' must define each __expected__<model> set-operation "
+                f"SQL test '{file_label}' must define each {label} set-operation "
                 "branch as a SELECT query"
             )
-        return (_extract_select_names(expression=expression, file_label=file_label),)
+        return (_extract_select_names(expression=expression, file_label=file_label, label=label),)
     raise CompileInputError(
-        f"SQL test '{file_label}' must define each __expected__<model> set-operation "
-        "branch as a SELECT query"
+        f"SQL test '{file_label}' must define each {label} set-operation branch as a SELECT query"
     )
 
 
@@ -88,13 +90,13 @@ def _unwrap_expression(*, expression: Any) -> Any:
     return expression
 
 
-def _extract_select_names(*, expression: Any, file_label: str) -> tuple[str, ...]:
+def _extract_select_names(*, expression: Any, file_label: str, label: str) -> tuple[str, ...]:
     names: list[str] = []
     projection: Any
     for projection in expression.expressions:
         if projection.is_star:
             raise CompileInputError(
-                f"SQL test '{file_label}' must not use SELECT * in __expected__<model> CTEs"
+                f"SQL test '{file_label}' must not use SELECT * in {label} CTEs"
             )
         alias_name: str = str(projection.alias or "")
         if alias_name:
@@ -104,11 +106,11 @@ def _extract_select_names(*, expression: Any, file_label: str) -> tuple[str, ...
             names.append(str(projection.name))
             continue
         raise CompileInputError(
-            f"SQL test '{file_label}' must alias every non-trivial __expected__<model> projection"
+            f"SQL test '{file_label}' must alias every non-trivial {label} projection"
         )
     if not names:
         raise CompileInputError(
-            f"SQL test '{file_label}' must project at least one column in __expected__<model>"
+            f"SQL test '{file_label}' must project at least one column in {label}"
         )
     return tuple(names)
 

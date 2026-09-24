@@ -677,29 +677,32 @@ def _validate_expected_cte_query(
     branch_column_names: tuple[tuple[str, ...], ...] = _extract_expected_branch_column_names(
         sql=cte.sql_body,
         file_label=file_label,
+        label=label,
     )
     first_branch_column_names: tuple[str, ...] = branch_column_names[0]
     branch_index: int
     for branch_index, column_names in enumerate(branch_column_names[1:], start=2):
         if column_names != first_branch_column_names:
             raise CompileInputError(
-                f"SQL test '{file_label}' must use the same __expected__<model> "
+                f"SQL test '{file_label}' must use the same {label} "
                 f"projection names and order in every set-operation branch; branch {branch_index} "
                 "does not match branch 1"
             )
 
 
 def _extract_expected_branch_column_names(
-    *, sql: str, file_label: str
+    *, sql: str, file_label: str, label: str
 ) -> tuple[tuple[str, ...], ...]:
     sql_analysis_column_names: tuple[tuple[str, ...], ...] | None = (
-        extract_expected_branch_column_names_with_sql_analysis(sql=sql, file_label=file_label)
+        extract_expected_branch_column_names_with_sql_analysis(
+            sql=sql, file_label=file_label, label=label
+        )
     )
     if sql_analysis_column_names is not None:
         return sql_analysis_column_names
     branches: tuple[str, ...] = _split_set_operation_branches(sql)
     return tuple(
-        _extract_expected_select_column_names(branch_sql=branch, file_label=file_label)
+        _extract_expected_select_column_names(branch_sql=branch, file_label=file_label, label=label)
         for branch in branches
     )
 
@@ -733,12 +736,14 @@ def _split_set_operation_branches(sql: str) -> tuple[str, ...]:
     return tuple(branches)
 
 
-def _extract_expected_select_column_names(*, branch_sql: str, file_label: str) -> tuple[str, ...]:
+def _extract_expected_select_column_names(
+    *, branch_sql: str, file_label: str, label: str
+) -> tuple[str, ...]:
     index: int = _skip_ignorable(sql=branch_sql, start=0)
     select_end: int | None = _try_consume_keyword(sql=branch_sql, start=index, keyword="SELECT")
     if select_end is None:
         raise CompileInputError(
-            f"SQL test '{file_label}' must define each __expected__<model> set-operation "
+            f"SQL test '{file_label}' must define each {label} set-operation "
             "branch as a SELECT query"
         )
     select_list_end: int = _find_select_list_end(sql=branch_sql, start=select_end)
@@ -746,10 +751,10 @@ def _extract_expected_select_column_names(*, branch_sql: str, file_label: str) -
     expressions: tuple[str, ...] = _split_top_level_commas(raw_select_list)
     if not expressions:
         raise CompileInputError(
-            f"SQL test '{file_label}' must project at least one column in __expected__<model>"
+            f"SQL test '{file_label}' must project at least one column in {label}"
         )
     return tuple(
-        _extract_expected_projection_name(expression=expression, file_label=file_label)
+        _extract_expected_projection_name(expression=expression, file_label=file_label, label=label)
         for expression in expressions
     )
 
@@ -784,7 +789,7 @@ def _split_top_level_commas(raw_value: str) -> tuple[str, ...]:
     return tuple(values)
 
 
-def _extract_expected_projection_name(*, expression: str, file_label: str) -> str:
+def _extract_expected_projection_name(*, expression: str, file_label: str, label: str) -> str:
     alias_name: str | None = _extract_as_alias(expression)
     if alias_name is not None:
         return alias_name
@@ -792,7 +797,7 @@ def _extract_expected_projection_name(*, expression: str, file_label: str) -> st
     if _is_simple_identifier(stripped_expression):
         return stripped_expression
     raise CompileInputError(
-        f"SQL test '{file_label}' must alias every non-trivial __expected__<model> projection"
+        f"SQL test '{file_label}' must alias every non-trivial {label} projection"
     )
 
 

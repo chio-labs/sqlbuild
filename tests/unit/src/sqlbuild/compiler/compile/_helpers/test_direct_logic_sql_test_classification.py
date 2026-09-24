@@ -102,6 +102,29 @@ _FILE: str = "tests/unit/orders.sql"
             ),
         ),
         ClassifyDirectLogicSqlTestCtesErrorTestCase(
+            description="macro expected unaliased projection names the expected cte",
+            mode=SqlTestMode.MACRO,
+            ctes=(
+                ("__macro_actual__", "SELECT 1 AS status"),
+                ("__macro_expected__", "SELECT 1 + 1"),
+            ),
+            expected_message=(
+                f"SQL test '{_FILE}' must alias every non-trivial __macro_expected__ projection"
+            ),
+        ),
+        ClassifyDirectLogicSqlTestCtesErrorTestCase(
+            description="table_fn expected branch mismatch names the expected cte",
+            mode=SqlTestMode.TABLE_FN,
+            ctes=(
+                ("__table_fn_actual__", "SELECT 1 AS value"),
+                ("__table_fn_expected__", "SELECT 1 AS value UNION ALL SELECT 2 AS other"),
+            ),
+            expected_message=(
+                f"SQL test '{_FILE}' must use the same __table_fn_expected__ projection names "
+                "and order in every set-operation branch; branch 2 does not match branch 1"
+            ),
+        ),
+        ClassifyDirectLogicSqlTestCtesErrorTestCase(
             description="udf duplicate actual",
             mode=SqlTestMode.UDF,
             ctes=(("__udf_actual__", "SELECT 1"), ("__udf_actual__", "SELECT 2")),

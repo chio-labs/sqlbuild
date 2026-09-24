@@ -200,6 +200,28 @@ pub(crate) fn empty_model_fixture_marker_preserves_direct_mode_validation() -> b
     true
 }
 
+pub(crate) fn expected_projection_errors_name_the_expected_cte() -> bool {
+    let cases = [
+        (
+            r#"{"tests":[{"sql":"WITH __macro_actual__ AS (SELECT @status() AS status), __macro_expected__ AS (SELECT 1 + 1) SELECT 1","fileLabel":"tests/status.sql","mode":"macro"}]}"#,
+            "SQL test 'tests/status.sql' must alias every non-trivial __macro_expected__ projection",
+        ),
+        (
+            r#"{"tests":[{"sql":"WITH __udf_actual__ AS (SELECT 1 AS value), __udf_expected__ AS (SELECT 1 AS value UNION ALL SELECT 2 AS other) SELECT 1","fileLabel":"tests/function.sql","mode":"udf"}]}"#,
+            "SQL test 'tests/function.sql' must use the same __udf_expected__ projection names and order in every set-operation branch; branch 2 does not match branch 1",
+        ),
+        (
+            r#"{"tests":[{"sql":"WITH __source__raw_orders AS (SELECT 1 AS id), __expected__orders AS (SELECT 1 + 1) SELECT 1","fileLabel":"tests/orders.sql","mode":"model"}]}"#,
+            "SQL test 'tests/orders.sql' must alias every non-trivial __expected__<model> projection",
+        ),
+    ];
+    for (request, expected_error) in cases {
+        let error = extract_batch_json(request).expect_err("expected projection is rejected");
+        assert_eq!(error, expected_error);
+    }
+    true
+}
+
 pub(crate) fn concurrent_requests_initialize_shared_template_once() -> bool {
     let templates = Arc::new(Mutex::new(HashMap::new()));
     let starts = Arc::new(Barrier::new(4));
