@@ -6,7 +6,7 @@ use crate::models::{Declaration, EvaluateRequest, Fault, Model, RuleMetadata, Ru
 use crate::rules::_helpers::domain_layout::folder_layer_details;
 use crate::rules::_helpers::{
     contract_name_types, dynamic_contracts, explicit_output_types, model_layers, numeric_decisions,
-    typed_contract_columns,
+    sql_test_rules, typed_contract_columns,
 };
 use crate::rules::models::{
     FaultCollector, ModelEvaluationRequest, ProjectEvaluationRequest, ResolvedThresholdOverride,
@@ -240,7 +240,10 @@ fn requires_parsed_model(selected: &BTreeMap<String, &RuleMetadata>) -> bool {
     })
 }
 
-fn parse_rule_statements(sql: &str, dialect_name: &str) -> Result<Vec<Statement>, ParserError> {
+pub(super) fn parse_rule_statements(
+    sql: &str,
+    dialect_name: &str,
+) -> Result<Vec<Statement>, ParserError> {
     let dialect = rules_dialect(dialect_name);
     match parse_with_dialect(sql, dialect.as_ref()) {
         Ok(statements) => Ok(statements),
@@ -700,7 +703,7 @@ pub(super) fn top_ctes(query: &Query) -> &[sqlparser::ast::Cte] {
         .map_or(&[], |with| with.cte_tables.as_slice())
 }
 
-fn group_by_empty(group: &GroupByExpr) -> bool {
+pub(super) fn group_by_empty(group: &GroupByExpr) -> bool {
     matches!(group, GroupByExpr::Expressions(values, _) if values.is_empty())
 }
 
@@ -749,7 +752,7 @@ pub(super) fn plain_select(select: &Select, allow_star: bool) -> bool {
         .all(|item| direct_projection(item, false))
 }
 
-fn dependency_name(factor: &TableFactor) -> Option<String> {
+pub(super) fn dependency_name(factor: &TableFactor) -> Option<String> {
     let TableFactor::Table {
         name,
         args: Some(_),
@@ -1409,18 +1412,15 @@ fn evaluate_test_rules(evaluation: TestRuleEvaluation<'_>) {
     }
     if let Some(rule) = evaluation.selected.get("SQBRTEST202") {
         let minimum = effective_threshold(&evaluation, "min_tests_per_model", 1);
-        if evaluation.parsed.model.targeting_test_count < minimum {
+        if let Some(message) =
+            sql_test_rules::minimum_tests_shortfall(evaluation.parsed.model, minimum)
+        {
             evaluation.faults.push(custom_fault!(
                 evaluation.parsed.model,
                 rule,
                 None,
-                format!(
-                    "model {:?} has {} tests; {} required",
-                    evaluation.parsed.model.name,
-                    evaluation.parsed.model.targeting_test_count,
-                    minimum
-                ),
-                None,
+                message,
+                None
             ));
         }
     }
@@ -1950,7 +1950,7 @@ fn direct_string_literal(expression: &Expr) -> Option<String> {
     .then(|| expression.to_string())
 }
 
-fn unwrap_nested(mut expression: &Expr) -> &Expr {
+pub(super) fn unwrap_nested(mut expression: &Expr) -> &Expr {
     while let Expr::Nested(value) = expression {
         expression = value;
     }

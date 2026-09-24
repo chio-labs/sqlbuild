@@ -205,3 +205,25 @@ class RuleGatedTestDiagnosticsTestCase:
     extra_args: tuple[str, ...]
     expected_diagnostics: tuple[tuple[str, str, str], ...]
     expected_text_lines: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class EmptyInputTestRuleCompileTestCase:
+    description: str
+    select: tuple[str, ...]
+    expected_diagnostics: frozenset[tuple[str, str, str]]
+
+
+@dataclass(frozen=True)
+class EmptyInputTestRuleOptionErrorTestCase:
+    description: str
+    allowed_tests_toml: str
+    expected_error: str
+
+
+@dataclass(frozen=True)
+class EmptyInputTestRuleCacheTestCase:
+    description: str
+    replacement_mock: str
+    expected_first_codes: tuple[str, ...]
+    expected_second_codes: tuple[str, ...]

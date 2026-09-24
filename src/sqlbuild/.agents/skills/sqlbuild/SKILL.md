@@ -118,7 +118,9 @@ window into batches, each with its own audits. Always `sqb plan` an incremental 
 `__expected__<model>` (only the listed columns are compared, matched by name; unlisted columns are
 ignored), adds zero-row checks with `__assert__<name>`, and ends with `SELECT 1`.
 One test can span many models: mock the sources, assert on the final model, and every intermediate
-model runs from its real SQL. Read [references/testing.md](references/testing.md) for fixtures,
+model runs from its real SQL. Never write a test that only proves empty inputs produce no rows; it
+cannot fail, Rules reject it, and it does not count toward `min_tests_per_model`. Mock real rows
+and assert concrete output. Read [references/testing.md](references/testing.md) for fixtures,
 parameterised cases, scenarios, audits and Rules.
 
 **Audits** validate built data and block bad data: `error` audits run on staging data before the

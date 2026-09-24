@@ -35,6 +35,13 @@ pub(crate) const SOURCE_PREFIX: &str = "__source__";
 pub(crate) const SEED_PREFIX: &str = "__seed__";
 pub(crate) const DBT_REF_PREFIX: &str = "__dbt_ref__";
 const TABLE_FUNCTION_PREFIX: &str = "__table_fn__";
+pub(crate) const MOCK_CTE_PREFIXES: [&str; 5] = [
+    REF_PREFIX,
+    SOURCE_PREFIX,
+    SEED_PREFIX,
+    DBT_REF_PREFIX,
+    TABLE_FUNCTION_PREFIX,
+];
 const EXPECTED_PREFIX: &str = "__expected__";
 const ASSERT_PREFIX: &str = "__assert__";
 const REF_FUNCTION: &str = "__ref";

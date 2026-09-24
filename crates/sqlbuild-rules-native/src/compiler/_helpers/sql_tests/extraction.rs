@@ -445,7 +445,7 @@ fn validate_expected(
     Ok(())
 }
 
-fn empty_fixture_marker_matches(sql: &str) -> Result<bool, String> {
+pub(crate) fn empty_fixture_marker_matches(sql: &str) -> Result<bool, String> {
     let mut index = skip_ignorable(sql, 0)?;
     let Some(select_end) = consume_keyword(sql, index, "SELECT") else {
         return Ok(false);

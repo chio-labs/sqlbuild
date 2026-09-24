@@ -176,6 +176,33 @@ impl Default for RulesConfig {
     }
 }
 
+impl RulesConfig {
+    fn rule_option(&self, code: &str, option: &str) -> Option<&Value> {
+        self.rule_options
+            .get(code)
+            .and_then(|options| options.get(option))
+    }
+
+    pub(crate) fn rule_option_enabled(&self, code: &str, option: &str) -> bool {
+        self.rule_option(code, option)
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    }
+
+    pub(crate) fn rule_option_strings(&self, code: &str, option: &str) -> Vec<String> {
+        self.rule_option(code, option)
+            .and_then(Value::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct Reference {
@@ -530,6 +557,8 @@ pub(crate) struct Model {
     pub constant_declarations: Vec<Declaration>,
     pub declared_audit_count: u32,
     pub targeting_test_count: u32,
+    #[serde(skip_deserializing)]
+    pub empty_input_only_test_count: u32,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -600,6 +629,25 @@ pub(crate) struct SqlTestFact {
     pub assertion_target_model_names: Vec<String>,
     pub target_model_names: Vec<String>,
     pub tested_resources: Vec<TestedResource>,
+    #[serde(default)]
+    pub authored_ctes: Vec<SqlTestCteFact>,
+    #[serde(default)]
+    pub expected_ctes: Vec<SqlTestCteFact>,
+    #[serde(default)]
+    pub assertion_ctes: Vec<SqlTestCteFact>,
+    #[serde(default)]
+    pub has_macro_mocks: bool,
+    #[serde(default)]
+    pub has_model_query_overrides: bool,
+    #[serde(default, skip_deserializing)]
+    pub empty_input_only: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SqlTestCteFact {
+    pub name: String,
+    pub sql: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

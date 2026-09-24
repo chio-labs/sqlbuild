@@ -10,6 +10,7 @@
 ## Contents
 
 - Writing a unit test
+- Empty-input tests
 - Cursor windows in tests
 - Multi-model tests
 - Fixtures that fail early
@@ -64,6 +65,35 @@ shared expected rows can live in one helper that both an `__expected__` CTE and 
 Macros work inside tests, so reusable mock generators such as `@mock_orders(count=5)` are normal.
 Tests can also target a macro, UDF or table function directly; see
 [docs/concepts/testing.md](docs/concepts/testing.md) for those modes.
+
+## Empty-input tests
+
+Do not write a test whose mocks are all empty (`WHERE FALSE`, `WHERE 1 = 0`, `LIMIT 0` or
+`__EMPTY_FIXTURE()`) and whose only checks are an empty `__expected__` or a bare
+`SELECT ... FROM __ref("<model>")` assertion. It cannot fail for a model whose rows come from its
+inputs. Rule `SQBRTEST203` rejects it, and `SQBRTEST202` does not count it toward
+`min_tests_per_model`, so it never satisfies the minimum. Mock representative rows and assert
+concrete output instead.
+
+An empty-input test is legitimate only when it asserts concrete output, for example a global
+aggregate that must return one zero-valued summary row:
+
+```sql
+TEST (name "order_summary__empty_inputs_return_zero_row");
+
+WITH
+__source__raw__orders AS (
+  SELECT CAST(NULL AS INTEGER) AS id, CAST(NULL AS INTEGER) AS amount WHERE FALSE
+),
+__expected__order_summary AS (
+  SELECT 0 AS order_count, 0 AS total_amount
+)
+SELECT 1
+```
+
+Reviewed exceptions go in `sqlbuild_project.toml` under `[rules.rule_options.SQBRTEST203]` as
+`allowed_tests = ["<test name>"]`; they count toward the minimum, and stale entries are reported.
+Do not add entries to get past the rule.
 
 ## Cursor windows in tests
 

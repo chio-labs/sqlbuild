@@ -63,6 +63,7 @@ RULES_BUILT_IN_CODES: tuple[str, ...] = (
     "SQBRTEST105",
     "SQBRTEST201",
     "SQBRTEST202",
+    "SQBRTEST203",
     "SQBRTEST301",
 )
 SQL_CODES: tuple[str, ...] = tuple(f"SQBRSQL{number:03d}" for number in range(1, 40))
@@ -81,6 +82,7 @@ SQL_TEST_CODES: tuple[str, ...] = (
     "SQBRTEST105",
     "SQBRTEST201",
     "SQBRTEST202",
+    "SQBRTEST203",
     "SQBRTEST301",
 )
 NON_STRUCTURE_CODES: tuple[str, ...] = tuple(

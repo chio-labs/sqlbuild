@@ -1834,3 +1834,78 @@ def build_rule_gated_test_project_files(*, filler_model_count: int) -> dict[str,
             f"MODEL (materialized view);\n\nSELECT {index} AS filler_id\n"
         )
     return files
+
+
+def build_empty_input_test_project_files(
+    *, select: tuple[str, ...], allowed_tests_toml: str
+) -> dict[str, str]:
+    """Build an orders project mixing empty-input-only filler with real SQL tests."""
+
+    selected: str = ", ".join(f'"{code}"' for code in select)
+    empty_orders: str = (
+        "__source__raw_orders AS (\n"
+        "  SELECT CAST(NULL AS INTEGER) AS order_id, CAST(NULL AS INTEGER) AS amount\n"
+        "  WHERE FALSE\n"
+        ")"
+    )
+    return {
+        "sqlbuild_project.toml": (
+            'name = "empty_input_orders"\nadapter = "duckdb"\n\n'
+            f"[rules]\nselect = [{selected}]\n\n"
+            "[rules.thresholds]\nmin_tests_per_model = 1\n\n"
+            f"[rules.rule_options.SQBRTEST203]\nallowed_tests = {allowed_tests_toml}\n"
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+        ),
+        "models/orders.sql": (
+            "MODEL (materialized view);\n\n"
+            "SELECT order_id, amount * 2 AS doubled_amount\n"
+            'FROM __source("raw_orders")\nWHERE amount > 0\n'
+        ),
+        "models/large_orders.sql": (
+            "MODEL (materialized view);\n\n"
+            'SELECT order_id FROM __source("raw_orders") WHERE amount > 100\n'
+        ),
+        "models/customers.sql": (
+            "MODEL (materialized view);\n\n"
+            'SELECT order_id AS customer_id FROM __source("raw_orders") WHERE amount > 10\n'
+        ),
+        "models/order_summary.sql": (
+            "MODEL (materialized view);\n\n"
+            "SELECT COUNT(*) AS order_count, COALESCE(SUM(amount), 0) AS total_amount\n"
+            'FROM __source("raw_orders")\n'
+        ),
+        "tests/unit/test_orders__empty_inputs_produce_no_rows.sql": (
+            'TEST (name "orders__empty_inputs_produce_no_rows");\n\n'
+            f"WITH {empty_orders}, __assert__empty_inputs_produce_no_rows AS (\n"
+            '  SELECT 1 AS unexpected_row FROM __ref("orders")\n'
+            ")\nSELECT 1\n"
+        ),
+        "tests/unit/test_large_orders__empty_inputs_produce_no_rows.sql": (
+            'TEST (name "large_orders__empty_inputs_produce_no_rows");\n\n'
+            f"WITH {empty_orders}, __expected__large_orders AS (\n"
+            "  SELECT * FROM __EMPTY_FIXTURE()\n"
+            ")\nSELECT 1\n"
+        ),
+        "tests/unit/test_large_orders__keeps_orders_over_threshold.sql": (
+            'TEST (name "large_orders__keeps_orders_over_threshold");\n\n'
+            "WITH __source__raw_orders AS (\n"
+            "  SELECT 1 AS order_id, 150 AS amount UNION ALL SELECT 2 AS order_id, 20 AS amount\n"
+            "), __expected__large_orders AS (\n"
+            "  SELECT 1 AS order_id\n"
+            ")\nSELECT 1\n"
+        ),
+        "tests/unit/test_customers__reviewed_empty_input.sql": (
+            'TEST (name "customers__reviewed_empty_input");\n\n'
+            f"WITH {empty_orders}, __assert__no_customers AS (\n"
+            '  SELECT customer_id FROM __ref("customers")\n'
+            ")\nSELECT 1\n"
+        ),
+        "tests/unit/test_order_summary__empty_inputs_return_zero_row.sql": (
+            'TEST (name "order_summary__empty_inputs_return_zero_row");\n\n'
+            f"WITH {empty_orders}, __expected__order_summary AS (\n"
+            "  SELECT 0 AS order_count, 0 AS total_amount\n"
+            ")\nSELECT 1\n"
+        ),
+    }

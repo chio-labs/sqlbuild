@@ -11,9 +11,9 @@ pub(crate) fn finding(column: &Column, config: &RulesConfig) -> Option<(&'static
         || column.name.starts_with("has_")
         || column.name.starts_with("can_")
     {
-        let allowed_numeric =
-            rule_option_enabled(config, BOOLEAN_COLUMN_RULE, "allow_numeric_indicators")
-                && numeric_type(&data_type);
+        let allowed_numeric = config
+            .rule_option_enabled(BOOLEAN_COLUMN_RULE, "allow_numeric_indicators")
+            && numeric_type(&data_type);
         return (data_type != BOOLEAN_TYPE && !allowed_numeric).then(|| {
             (
                 BOOLEAN_COLUMN_RULE,
@@ -30,11 +30,11 @@ pub(crate) fn finding(column: &Column, config: &RulesConfig) -> Option<(&'static
     {
         let allowed_date = column.name.ends_with("_at")
             && data_type == DATE_TYPE
-            && rule_option_enabled(config, TIMESTAMP_COLUMN_RULE, "allow_date_for_at");
+            && config.rule_option_enabled(TIMESTAMP_COLUMN_RULE, "allow_date_for_at");
         let allowed_epoch = numeric_type(&data_type)
-            && rule_option_enabled(config, TIMESTAMP_COLUMN_RULE, "allow_numeric_epoch");
+            && config.rule_option_enabled(TIMESTAMP_COLUMN_RULE, "allow_numeric_epoch");
         let allowed_encoded = encoded_temporal_type(&data_type)
-            && rule_option_enabled(config, TIMESTAMP_COLUMN_RULE, "allow_encoded_values");
+            && config.rule_option_enabled(TIMESTAMP_COLUMN_RULE, "allow_encoded_values");
         return (!data_type.contains(TIMESTAMP_TYPE)
             && !allowed_date
             && !allowed_epoch
@@ -51,9 +51,9 @@ pub(crate) fn finding(column: &Column, config: &RulesConfig) -> Option<(&'static
     }
     if column.name.ends_with("_date") {
         let allowed_timestamp = data_type.contains(TIMESTAMP_TYPE)
-            && rule_option_enabled(config, DATE_COLUMN_RULE, "allow_timestamps");
+            && config.rule_option_enabled(DATE_COLUMN_RULE, "allow_timestamps");
         let allowed_encoded = encoded_temporal_type(&data_type)
-            && rule_option_enabled(config, DATE_COLUMN_RULE, "allow_encoded_values");
+            && config.rule_option_enabled(DATE_COLUMN_RULE, "allow_encoded_values");
         return (data_type != DATE_TYPE && !allowed_timestamp && !allowed_encoded).then(|| {
             (
                 DATE_COLUMN_RULE,
@@ -65,15 +65,6 @@ pub(crate) fn finding(column: &Column, config: &RulesConfig) -> Option<(&'static
         });
     }
     None
-}
-
-fn rule_option_enabled(config: &RulesConfig, code: &str, option: &str) -> bool {
-    config
-        .rule_options
-        .get(code)
-        .and_then(|options| options.get(option))
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false)
 }
 
 fn numeric_type(data_type: &str) -> bool {

@@ -285,3 +285,96 @@ pub(crate) fn cached_sql_test_rules_request(project_dir: &TempDir, name: Option<
     })
     .to_string()
 }
+
+pub(crate) fn empty_input_test_fact(
+    name: &str,
+    mocks: &[(&str, &str)],
+    expected: &[(&str, &str)],
+    assertions: &[(&str, &str)],
+) -> Value {
+    let ctes = |items: &[(&str, &str)]| -> Value {
+        Value::Array(
+            items
+                .iter()
+                .map(|(cte_name, sql)| json!({"name": cte_name, "sql": sql}))
+                .collect(),
+        )
+    };
+    let mut fact = sql_test_fact(
+        &format!("tests/unit/test_{name}.sql"),
+        Some(name),
+        json!(["orders"]),
+    );
+    fact["authored_ctes"] = ctes(mocks);
+    fact["expected_ctes"] = ctes(expected);
+    fact["assertion_ctes"] = ctes(assertions);
+    fact
+}
+
+pub(crate) fn empty_input_rule_evaluation(
+    project_dir: &TempDir,
+    select: Value,
+    tests: Value,
+    allowed_tests: Value,
+    cache_enabled: bool,
+) -> Result<Vec<String>, String> {
+    let request = json!({
+        "version": 1,
+        "project_dir": project_dir.path(),
+        "dialect": "duckdb",
+        "config": {
+            "select": select,
+            "thresholds": {"min_tests_per_model": 1},
+            "rule_options": {"SQBRTEST203": {"allowed_tests": allowed_tests}},
+            "cache": {"enabled": cache_enabled}
+        },
+        "models": [{
+            "name": "orders",
+            "relative_path": "models/orders.sql",
+            "query_sql": "SELECT order_id, amount * 2 AS doubled_amount FROM raw_orders",
+            "authored_sql": "SELECT order_id, amount * 2 AS doubled_amount FROM raw_orders",
+            "targeting_test_count": tests.as_array().map_or(0, Vec::len)
+        }],
+        "sql_tests": tests,
+        "sql_scenarios": [],
+        "scope_index": scope_index()
+    });
+    let result: Value = serde_json::from_str(&evaluate_json(&request.to_string())?)
+        .map_err(|error| error.to_string())?;
+    Ok(result["faults"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|fault| {
+            format!(
+                "{} {}: {}",
+                fault["code"].as_str().unwrap_or_default(),
+                fault["path"].as_str().unwrap_or_default(),
+                fault["message"].as_str().unwrap_or_default()
+            )
+        })
+        .collect())
+}
+
+pub(crate) fn filler_test() -> Value {
+    empty_input_test_fact(
+        "orders__empty_inputs_produce_no_rows",
+        &[
+            (
+                "__source__raw_orders",
+                "SELECT NULL AS order_id, NULL AS amount WHERE FALSE",
+            ),
+            ("__ref__customers", "SELECT NULL AS customer_id WHERE 1 = 0"),
+        ],
+        &[],
+        &[(
+            "__assert__empty_inputs_produce_no_rows",
+            "SELECT 1 AS unexpected_row FROM __ref(\"orders\")",
+        )],
+    )
+}
+
+pub(crate) fn with_field(mut fact: Value, field: &str, value: Value) -> Value {
+    fact[field] = value;
+    fact
+}

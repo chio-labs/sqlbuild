@@ -20,6 +20,7 @@ from sqlbuild.rule_engine.constants import (
     CONTRACT_BOOLEAN_NAME_CODE,
     CONTRACT_DATE_NAME_CODE,
     CONTRACT_TIMESTAMP_NAME_CODE,
+    EMPTY_INPUT_TEST_CODE,
     INIT_MODULE_NAME,
     RULE_DECORATOR_TOKEN,
 )
@@ -136,6 +137,20 @@ def _builtin_options(code: str) -> tuple[RuleOption[object], ...]:
                     name="allow_encoded_values",
                     default=False,
                     description="Accept string or variant encoded date values.",
+                ),
+            ),
+        )
+    if code == EMPTY_INPUT_TEST_CODE:
+        return (
+            cast(
+                RuleOption[object],
+                RuleOption.string_list(
+                    name="allowed_tests",
+                    default=(),
+                    description=(
+                        "Reviewed SQL test names that may assert only that empty inputs produce "
+                        "no rows; listed tests count toward min_tests_per_model."
+                    ),
                 ),
             ),
         )
