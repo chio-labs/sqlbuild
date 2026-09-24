@@ -64,6 +64,11 @@
 ## [0.113.5](https://github.com/chio-labs/sqlbuild/compare/v0.113.4...v0.113.5) (2026-09-23)
 
 
+### Bug Fixes
+
+* upgrade Polyglot to 0.12.3 for PIVOT and UNPIVOT star lineage ([#784](https://github.com/chio-labs/sqlbuild/issues/784)) ([f8d4481](https://github.com/chio-labs/sqlbuild/commit/f8d448145002137651609f1b32d602a66287cf06))
+
+
 ### Performance Improvements
 
 * scale declaration scope resolution with many scoped macros ([#782](https://github.com/chio-labs/sqlbuild/issues/782)) ([eb21a7a](https://github.com/chio-labs/sqlbuild/commit/eb21a7a29b553d3ac75ccaeffb9c13a12ea8789f))
