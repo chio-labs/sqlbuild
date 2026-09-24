@@ -10,10 +10,10 @@ pub(crate) struct AuthoredDecision<'a> {
     pub(crate) equality: bool,
     pub(crate) output_name: Option<&'a str>,
     pub(crate) literal: &'a str,
+    pub(crate) quote_policy: QuotePolicy,
 }
 
-pub(crate) fn compact_sql(sql: &str) -> String {
-    let policy = QuotePolicy::RULES;
+pub(crate) fn compact_sql(sql: &str, policy: QuotePolicy) -> String {
     let bytes = sql.as_bytes();
     let mut compact = Vec::with_capacity(bytes.len());
     let mut index = 0;
@@ -50,7 +50,7 @@ pub(crate) fn is_authored_decision(decision: AuthoredDecision<'_>) -> bool {
     !CANONICAL_NUMERIC_DECISIONS.contains(&decision.literal)
         && decision
             .authored_compact_sql
-            .contains(&compact_sql(decision.comparison_sql))
+            .contains(&compact_sql(decision.comparison_sql, decision.quote_policy))
         && !decision.output_name.is_some_and(|name| {
             decision.equality && name.ends_with(&format!("_{}", decision.literal))
         })

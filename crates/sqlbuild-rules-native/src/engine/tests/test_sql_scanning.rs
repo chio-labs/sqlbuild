@@ -1,6 +1,6 @@
 use crate::compiler::_helpers::sql_references::extraction::extract;
 use crate::engine::tests::test_types::SqlScannerTestCase;
-use crate::rules::_helpers::evaluation::normalize_rules_sql;
+use crate::rules::_helpers::evaluation::{normalize_rules_sql, rules_quote_policy};
 use crate::rules::_helpers::numeric_decisions::compact_sql;
 use crate::sql_lint::_helpers::preparation::prepare;
 use crate::sql_scan::main::matching_paren::matching_paren;
@@ -20,6 +20,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_snowflake_exclude: "SELECT *               , a FROM t",
             expected_snowflake_comma: "SELECT a a  FROM t",
             expected_compact: "a=aandb",
+            expected_snowflake_compact: "a=aandb",
             expected_lint_site: Some("@m(a x)"),
             expected_reference_fast_path: true,
         },
@@ -32,6 +33,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_snowflake_exclude: "SELECT *                   , a FROM t",
             expected_snowflake_comma: "SELECT 'a(b' a  FROM t",
             expected_compact: "a='a(b'andb",
+            expected_snowflake_compact: "a='a(b'andb",
             expected_lint_site: Some("@m('a(b' x)"),
             expected_reference_fast_path: true,
         },
@@ -44,6 +46,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_snowflake_exclude: "SELECT *                   , a FROM t",
             expected_snowflake_comma: "SELECT 'a)b' a  FROM t",
             expected_compact: "a='a)b'andb",
+            expected_snowflake_compact: "a='a)b'andb",
             expected_lint_site: Some("@m('a)b' x)"),
             expected_reference_fast_path: true,
         },
@@ -56,6 +59,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_snowflake_exclude: "SELECT *                       , a FROM t",
             expected_snowflake_comma: "SELECT 'it''s )' a  FROM t",
             expected_compact: "a='it''s )'andb",
+            expected_snowflake_compact: "a='it''s )'andb",
             expected_lint_site: Some("@m('it''s )' x)"),
             expected_reference_fast_path: true,
         },
@@ -65,9 +69,10 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_compiler_paren: Ok(5),
             expected_table_function: "SELECT * FROM __table_fn(\"o\", 'a\\')' x)(1)",
             expected_table_function_token: "SELECT 'a\\')' __table_fn(\"o\")(1)",
-            expected_snowflake_exclude: "SELECT *               ' x) , a FROM t",
-            expected_snowflake_comma: "SELECT 'a\\')' a, FROM t",
+            expected_snowflake_exclude: "SELECT *                    , a FROM t",
+            expected_snowflake_comma: "SELECT 'a\\')' a  FROM t",
             expected_compact: "a='a\\')' and  b",
+            expected_snowflake_compact: "a='a\\')'andb",
             expected_lint_site: Some("@m('a\\')' x)"),
             expected_reference_fast_path: false,
         },
@@ -77,9 +82,10 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_compiler_paren: Err(Unclosed::Quote),
             expected_table_function: "SELECT * FROM __table_fn(\"o\", 'a\\'(' x)(1)",
             expected_table_function_token: "SELECT 'a\\'(' __table_fn(\"o\")(1)",
-            expected_snowflake_exclude: "SELECT * EXCLUDE ('a\\'(' x) , a FROM t",
-            expected_snowflake_comma: "SELECT 'a\\'(' a, FROM t",
+            expected_snowflake_exclude: "SELECT *                    , a FROM t",
+            expected_snowflake_comma: "SELECT 'a\\'(' a  FROM t",
             expected_compact: "a='a\\'(' and  b",
+            expected_snowflake_compact: "a='a\\'('andb",
             expected_lint_site: Some("@m('a\\'(' x)"),
             expected_reference_fast_path: false,
         },
@@ -92,6 +98,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_snowflake_exclude: "SELECT *                   , a FROM t",
             expected_snowflake_comma: "SELECT \"a)b\" a  FROM t",
             expected_compact: "a=\"a)b\"andb",
+            expected_snowflake_compact: "a=\"a)b\"andb",
             expected_lint_site: Some("@m(\"a)b\" x)"),
             expected_reference_fast_path: true,
         },
@@ -99,11 +106,12 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             description: "backtick containing close paren",
             fragment: "`a)b`",
             expected_compiler_paren: Ok(8),
-            expected_table_function: "SELECT * FROM __table_fn(\"o\", `a)b` x)(1)",
+            expected_table_function: "SELECT * FROM __table_fn(\"o\", `a)b` x, 1)",
             expected_table_function_token: "SELECT `a)b` __table_fn(\"o\", 1)",
-            expected_snowflake_exclude: "SELECT *             b` x) , a FROM t",
+            expected_snowflake_exclude: "SELECT *                   , a FROM t",
             expected_snowflake_comma: "SELECT `a)b` a  FROM t",
             expected_compact: "a=`a)b`andb",
+            expected_snowflake_compact: "a=`a)b`andb",
             expected_lint_site: Some("@m(`a)"),
             expected_reference_fast_path: true,
         },
@@ -111,11 +119,12 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             description: "doubled backtick",
             fragment: "`a``)b`",
             expected_compiler_paren: Ok(10),
-            expected_table_function: "SELECT * FROM __table_fn(\"o\", `a``)b` x)(1)",
+            expected_table_function: "SELECT * FROM __table_fn(\"o\", `a``)b` x, 1)",
             expected_table_function_token: "SELECT `a``)b` __table_fn(\"o\", 1)",
-            expected_snowflake_exclude: "SELECT *               b` x) , a FROM t",
+            expected_snowflake_exclude: "SELECT *                     , a FROM t",
             expected_snowflake_comma: "SELECT `a``)b` a  FROM t",
             expected_compact: "a=`a``)b`andb",
+            expected_snowflake_compact: "a=`a``)b`andb",
             expected_lint_site: Some("@m(`a``)"),
             expected_reference_fast_path: true,
         },
@@ -128,6 +137,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_snowflake_exclude: "SELECT *              \n    , a FROM t",
             expected_snowflake_comma: "SELECT -- )\n a  FROM t",
             expected_compact: "a=andb",
+            expected_snowflake_compact: "a=andb",
             expected_lint_site: Some("@m(-- )\n x)"),
             expected_reference_fast_path: true,
         },
@@ -140,6 +150,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_snowflake_exclude: "SELECT *                     , a FROM t",
             expected_snowflake_comma: "SELECT /* ) */ a  FROM t",
             expected_compact: "a=andb",
+            expected_snowflake_compact: "a=andb",
             expected_lint_site: Some("@m(/* ) */ x)"),
             expected_reference_fast_path: true,
         },
@@ -152,6 +163,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_snowflake_exclude: "SELECT *                       */ x) , a FROM t",
             expected_snowflake_comma: "SELECT /* /* ) */ ) */ a  FROM t",
             expected_compact: "a=)*/andb",
+            expected_snowflake_compact: "a=)*/andb",
             expected_lint_site: Some("@m(/* /* ) */ )"),
             expected_reference_fast_path: true,
         },
@@ -164,6 +176,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_snowflake_exclude: "SELECT *               $$ x) , a FROM t",
             expected_snowflake_comma: "SELECT $$ ) $$ a  FROM t",
             expected_compact: "a=$$)$$andb",
+            expected_snowflake_compact: "a=$$)$$andb",
             expected_lint_site: Some("@m($$ )"),
             expected_reference_fast_path: true,
         },
@@ -176,6 +189,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_snowflake_exclude: "SELECT * EXCLUDE ('abc x) , a FROM t",
             expected_snowflake_comma: "SELECT 'abc a, FROM t",
             expected_compact: "a='abc and  b",
+            expected_snowflake_compact: "a='abc and  b",
             expected_lint_site: Some(""),
             expected_reference_fast_path: false,
         },
@@ -188,6 +202,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_snowflake_exclude: "SELECT * EXCLUDE (/* abc x) , a FROM t",
             expected_snowflake_comma: "SELECT /* abc a, FROM t",
             expected_compact: "a=",
+            expected_snowflake_compact: "a=",
             expected_lint_site: Some(""),
             expected_reference_fast_path: false,
         },
@@ -200,6 +215,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_snowflake_exclude: "SELECT *                        , a FROM t",
             expected_snowflake_comma: "SELECT 'é)ü' ñ a  FROM t",
             expected_compact: "a='é)ü'ñandb",
+            expected_snowflake_compact: "a='é)ü'ñandb",
             expected_lint_site: None,
             expected_reference_fast_path: true,
         },
@@ -248,9 +264,21 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             test_case.description
         );
         assert_eq!(
-            compact_sql(&format!("A = {fragment} AND  B")),
+            compact_sql(
+                &format!("A = {fragment} AND  B"),
+                rules_quote_policy("duckdb")
+            ),
             test_case.expected_compact,
             "rules numeric decision compaction: {}",
+            test_case.description
+        );
+        assert_eq!(
+            compact_sql(
+                &format!("A = {fragment} AND  B"),
+                rules_quote_policy("snowflake")
+            ),
+            test_case.expected_snowflake_compact,
+            "rules Snowflake numeric decision compaction: {}",
             test_case.description
         );
         let lint_sql = format!("SELECT @m({fragment} x) AS y");

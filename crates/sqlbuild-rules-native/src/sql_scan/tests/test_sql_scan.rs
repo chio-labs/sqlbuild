@@ -4,6 +4,12 @@ use crate::sql_scan::models::QuotePolicy;
 use crate::sql_scan::models::Unclosed;
 use crate::sql_scan::tests::test_types::{MatchingParenPolicyTestCase, NonCodeEndTestCase};
 
+const QUOTES_ONLY: QuotePolicy = QuotePolicy {
+    backtick_identifiers: false,
+    single_quote_backslash_escapes: false,
+    double_quote_backslash_escapes: false,
+};
+
 const BACKSLASH_ONLY: QuotePolicy = QuotePolicy {
     backtick_identifiers: false,
     single_quote_backslash_escapes: true,
@@ -20,9 +26,9 @@ fn given_quote_policies_when_matching_parentheses_then_policy_decides_quote_boun
             expected_close: Ok(8),
         },
         MatchingParenPolicyTestCase {
-            description: "rules policy treats backticks as code",
+            description: "quotes-only policy treats backticks as code",
             sql: "(`a)b` x) y",
-            policy: QuotePolicy::RULES,
+            policy: QUOTES_ONLY,
             expected_close: Ok(3),
         },
         MatchingParenPolicyTestCase {
@@ -46,7 +52,7 @@ fn given_quote_policies_when_matching_parentheses_then_policy_decides_quote_boun
         MatchingParenPolicyTestCase {
             description: "doubled quotes are escapes under every policy",
             sql: "('it''s )' x) y",
-            policy: QuotePolicy::RULES,
+            policy: QUOTES_ONLY,
             expected_close: Ok(12),
         },
         MatchingParenPolicyTestCase {
@@ -76,7 +82,7 @@ fn given_quote_policies_when_matching_parentheses_then_policy_decides_quote_boun
         MatchingParenPolicyTestCase {
             description: "unterminated block comment reports the comment",
             sql: "(/* abc x) y",
-            policy: QuotePolicy::RULES,
+            policy: QUOTES_ONLY,
             expected_close: Err(Unclosed::BlockComment),
         },
         MatchingParenPolicyTestCase {
@@ -115,7 +121,7 @@ fn given_comment_or_quote_starts_when_finding_non_code_end_then_returns_end_offs
         NonCodeEndTestCase {
             description: "block comment ends after its terminator",
             sql: "/* a */ b",
-            policy: QuotePolicy::RULES,
+            policy: QUOTES_ONLY,
             expected_end: Ok(Some(7)),
         },
         NonCodeEndTestCase {

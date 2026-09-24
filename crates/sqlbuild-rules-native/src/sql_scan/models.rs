@@ -34,13 +34,6 @@ impl QuotePolicy {
         double_quote_backslash_escapes: true,
     };
 
-    /// Rules policy: single and double quotes only, with backslashes treated as literal text.
-    pub(crate) const RULES: Self = Self {
-        backtick_identifiers: false,
-        single_quote_backslash_escapes: false,
-        double_quote_backslash_escapes: false,
-    };
-
     /// Return whether `byte` opens quoted text under this policy.
     pub(crate) fn is_quote(self, byte: u8) -> bool {
         match byte {
