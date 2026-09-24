@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -15,14 +17,23 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProvider,
     DiscoveredTaskFunction,
 )
-from sqlbuild.compiler.python_nodes._helpers.inventory import build_python_node_graph
-from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
+from sqlbuild.compiler.discovery.types import LoaderConnectionMode
+from sqlbuild.compiler.python_nodes._helpers.inventory import (
+    build_python_node_graph,
+    build_python_nodes,
+)
+from sqlbuild.compiler.python_nodes.models import (
+    DiscoveredPythonNode,
+    PythonNodeGraph,
+    PythonNodeIdentity,
+)
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.python_nodes.models import RetryPolicy
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceColumnEntry
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers._test_types import (
     PythonNodeGraphInventoryTestCase,
+    PythonNodeIdentityConfigTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers.helpers import (
     SlackProvider,
@@ -217,3 +228,113 @@ def test_given_discovered_python_functions_when_building_graph_then_indexes_node
     for edge in graph.dependency_edges:
         edges_by_downstream[edge.downstream_name].append((edge.upstream_name, edge.downstream_name))
     assert tuple(edges_by_downstream["notify_orders"]) == ()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonNodeIdentityConfigTestCase(
+            description="identity decorator config keeps each kind's authored field set",
+            expected_decorator_config_keys_by_selector={
+                "loader:load_events": (
+                    "contract",
+                    "cursor_column",
+                    "destination",
+                    "unique_key",
+                    "write_strategy",
+                ),
+                "task:prepare_orders": ("description", "group", "meta", "tags"),
+                "asset:export_orders": (
+                    "column_lineage",
+                    "columns",
+                    "description",
+                    "group",
+                    "meta",
+                    "tags",
+                ),
+                "check:check_orders_export": (
+                    "description",
+                    "group",
+                    "meta",
+                    "severity",
+                    "tags",
+                ),
+            },
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_fully_configured_python_nodes_when_building_then_identity_config_is_per_kind(
+    test_case: PythonNodeIdentityConfigTestCase,
+) -> None:
+    retry: RetryPolicy = RetryPolicy(max_attempts=2, retry_on=RuntimeError, jitter=False)
+    columns: tuple[SourceColumnEntry, ...] = (SourceColumnEntry(name="order_id", type="INTEGER"),)
+
+    nodes: tuple[DiscoveredPythonNode, ...] = build_python_nodes(
+        loader_functions=(
+            DiscoveredLoaderFunction(
+                file_path=Path("/project/loaders/events.py"),
+                relative_path=Path("loaders/events.py"),
+                name="load_events",
+                function=load_events,
+                destination="raw.events",
+                cursor_column="updated_at",
+                unique_key=("event_id",),
+                columns=columns,
+                contract="enforced",
+                connection_mode=LoaderConnectionMode.EXTERNAL,
+            ),
+        ),
+        task_functions=(
+            DiscoveredTaskFunction(
+                file_path=Path("/project/tasks/orders.py"),
+                relative_path=Path("tasks/orders.py"),
+                name="prepare_orders",
+                function=prepare_orders,
+                tags=("orders",),
+                group="ingestion",
+                description="Prepare order export inputs.",
+                meta={"owner": "data-eng"},
+                retry=retry,
+            ),
+        ),
+        asset_functions=(
+            DiscoveredAssetFunction(
+                file_path=Path("/project/assets/orders.py"),
+                relative_path=Path("assets/orders.py"),
+                name="export_orders",
+                function=export_orders,
+                tags=("orders",),
+                group="exports",
+                description="Export orders.",
+                meta={"owner": "data-eng"},
+                columns=columns,
+                retry=retry,
+            ),
+        ),
+        check_functions=(
+            DiscoveredCheckFunction(
+                file_path=Path("/project/checks/orders.py"),
+                relative_path=Path("checks/orders.py"),
+                name="check_orders_export",
+                function=check_orders_export,
+                depends_on=(export_orders,),
+                severity=PythonCheckSeverity.WARN,
+                tags=("orders",),
+                group="exports",
+                description="Check exported orders.",
+                meta={"owner": "data-eng"},
+            ),
+        ),
+    )
+
+    assert {
+        f"{node.kind.value}:{node.name}": tuple(
+            sorted(
+                json.loads(cast(PythonNodeIdentity, node.identity).definition_json)[
+                    "decorator_config"
+                ]
+            )
+        )
+        for node in nodes
+    } == test_case.expected_decorator_config_keys_by_selector
