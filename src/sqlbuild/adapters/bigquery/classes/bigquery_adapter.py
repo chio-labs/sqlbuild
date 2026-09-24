@@ -18,11 +18,18 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _typed_collection_items,
     _typed_scalar_payload,
 )
+from sqlbuild.adapter.contract.classes.historical_check_snapshot_sql import (
+    HistoricalCheckSnapshotSql,
+)
 from sqlbuild.adapter.contract.classes.historical_snapshot_sql import (
     HistoricalSnapshotSql,
     historical_insert_validity_sql,
 )
+from sqlbuild.adapter.contract.classes.historical_snapshot_statement_sql import (
+    HistoricalSnapshotStatementSql,
+)
 from sqlbuild.adapter.contract.classes.microbatch import MicrobatchMixin
+from sqlbuild.adapter.contract.classes.snapshot_sql import SnapshotSql
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.classes.unkeyed_diff import UnkeyedDiffMixin
 from sqlbuild.adapter.contract.constants import (
@@ -1039,7 +1046,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             source_alias="__source",
             current_timestamp=current_timestamp,
         )
-        key_condition: str = self._snapshot_key_condition(
+        key_condition: str = SnapshotSql.key_condition(
             left_alias="__target", right_alias="__source", unique_key=unique_key
         )
         close_sql: str = (
@@ -1052,7 +1059,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
         insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
         output_select_sql: str = ", ".join(f"__source.{column}" for column in output_columns)
-        active_join_condition: str = self._snapshot_key_condition(
+        active_join_condition: str = SnapshotSql.key_condition(
             left_alias="__active", right_alias="__source", unique_key=unique_key
         )
         first_key: str = unique_key[0]
@@ -1173,7 +1180,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
         if invalidate_hard_deletes:
-            close_sql: str = self._historical_snapshot_combined_close_sql(
+            close_sql: str = HistoricalSnapshotStatementSql.grouped_combined_close_sql(
                 destination=destination,
                 new_changes_sql=new_changes_sql,
                 unique_key=unique_key,
@@ -1182,7 +1189,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 change_time_column=SNAPSHOT_VERSION_START_COLUMN,
             )
         else:
-            close_sql = self._historical_snapshot_close_sql(
+            close_sql = HistoricalSnapshotStatementSql.grouped_close_sql(
                 destination=destination,
                 new_changes_sql=new_changes_sql,
                 unique_key=unique_key,
@@ -1202,7 +1209,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
         if invalidate_hard_deletes:
             version_columns_sql = historical_insert_validity_sql()
-        insert_sql: str = self._historical_snapshot_insert_sql(
+        insert_sql: str = HistoricalSnapshotStatementSql.insert_with_cte_sql(
             destination=destination,
             insert_column_sql=insert_column_sql,
             new_changes_sql=new_changes_sql,
@@ -1228,7 +1235,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             updated_at_column=updated_at_column,
             valid_to_column=valid_to_column,
         )
-        close_sql: str = self._historical_snapshot_close_sql(
+        close_sql: str = HistoricalSnapshotStatementSql.grouped_close_sql(
             destination=destination,
             new_changes_sql=new_changes_sql,
             unique_key=unique_key,
@@ -1242,7 +1249,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
         output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
-        insert_sql: str = self._historical_snapshot_insert_sql(
+        insert_sql: str = HistoricalSnapshotStatementSql.insert_with_cte_sql(
             destination=destination,
             insert_column_sql=insert_column_sql,
             new_changes_sql=new_changes_sql,
@@ -1280,7 +1287,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             source_alias="__source",
             current_timestamp=current_timestamp,
         )
-        key_condition: str = self._snapshot_key_condition(
+        key_condition: str = SnapshotSql.key_condition(
             left_alias="__target", right_alias="__source", unique_key=unique_key
         )
         change_condition: str = " OR ".join(
@@ -1296,7 +1303,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
         insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
         output_select_sql: str = ", ".join(f"__source.{column}" for column in output_columns)
-        active_join_condition: str = self._snapshot_key_condition(
+        active_join_condition: str = SnapshotSql.key_condition(
             left_alias="__active", right_alias="__source", unique_key=unique_key
         )
         active_change_condition: str = " OR ".join(
@@ -1343,7 +1350,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
-        historical_sql: str = self._historical_check_snapshot_select_sql(
+        historical_sql: str = HistoricalCheckSnapshotSql.initial_select_sql(
             origin=origin,
             unique_key=unique_key,
             check_columns=check_columns,
@@ -1368,7 +1375,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
-        new_changes_sql: str = self._historical_check_new_changes_cte_sql(
+        new_changes_sql: str = HistoricalCheckSnapshotSql.new_changes_ctes_sql(
             destination=destination,
             origin=origin,
             unique_key=unique_key,
@@ -1379,7 +1386,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
         if invalidate_hard_deletes:
-            close_sql: str = self._historical_snapshot_combined_close_sql(
+            close_sql: str = HistoricalSnapshotStatementSql.grouped_combined_close_sql(
                 destination=destination,
                 new_changes_sql=new_changes_sql,
                 unique_key=unique_key,
@@ -1388,7 +1395,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 change_time_column=SNAPSHOT_VERSION_START_COLUMN,
             )
         else:
-            close_sql = self._historical_snapshot_close_sql(
+            close_sql = HistoricalSnapshotStatementSql.grouped_close_sql(
                 destination=destination,
                 new_changes_sql=new_changes_sql,
                 unique_key=unique_key,
@@ -1408,7 +1415,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
         if invalidate_hard_deletes:
             version_columns_sql = historical_insert_validity_sql()
-        insert_sql: str = self._historical_snapshot_insert_sql(
+        insert_sql: str = HistoricalSnapshotStatementSql.insert_with_cte_sql(
             destination=destination,
             insert_column_sql=insert_column_sql,
             new_changes_sql=new_changes_sql,
@@ -2955,7 +2962,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str,
         current_timestamp: str,
     ) -> str:
-        missing_key_condition: str = cls._snapshot_key_condition(
+        missing_key_condition: str = SnapshotSql.key_condition(
             left_alias="__source", right_alias="__target", unique_key=unique_key
         )
         first_key: str = unique_key[0]
@@ -2967,55 +2974,6 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"SELECT 1 FROM {origin} AS __source "
             f"WHERE {missing_key_condition} AND __source.{first_key} IS NOT NULL"
             f")"
-        )
-
-    @classmethod
-    def _historical_check_snapshot_select_sql(
-        cls,
-        *,
-        origin: str,
-        unique_key: tuple[str, ...],
-        check_columns: tuple[str, ...],
-        observed_at_column: str,
-        valid_from_column: str,
-        valid_to_column: str,
-        output_columns: tuple[str, ...],
-        invalidate_hard_deletes: bool,
-    ) -> str:
-        if invalidate_hard_deletes:
-            return HistoricalSnapshotSql(
-                origin=origin,
-                unique_key=unique_key,
-                observed_at_column=observed_at_column,
-                valid_from_column=valid_from_column,
-                valid_to_column=valid_to_column,
-                check_columns=check_columns,
-            ).initial_select_sql(output_columns=output_columns)
-
-        partition_sql: str = ", ".join(unique_key)
-        previous_columns_sql: str = ", ".join(
-            f"LAG({column}) OVER (PARTITION BY {partition_sql} ORDER BY {observed_at_column}) "
-            f"AS __prev_{column}"
-            for column in check_columns
-        )
-        if previous_columns_sql:
-            previous_columns_sql = f", {previous_columns_sql}"
-        change_condition: str = " OR ".join(
-            f"{column} IS DISTINCT FROM __prev_{column}" for column in check_columns
-        )
-        output_select_sql: str = ", ".join(column for column in output_columns)
-        return (
-            "WITH __ordered AS ("
-            f"SELECT *, LAG({observed_at_column}) OVER ("
-            f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
-            "), __changes AS ("
-            f"SELECT * FROM __ordered WHERE __prev_observed_at IS NULL OR ({change_condition})"
-            ") "
-            f"SELECT {output_select_sql}, {observed_at_column} AS {valid_from_column}, "
-            f"LEAD({observed_at_column}) OVER (PARTITION BY {partition_sql} "
-            f"ORDER BY {observed_at_column}) AS {valid_to_column} "
-            "FROM __changes"
         )
 
     @classmethod
@@ -3082,7 +3040,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             ).new_changes_ctes_sql(destination=destination)
 
         partition_sql: str = ", ".join(unique_key)
-        latest_join_condition: str = cls._snapshot_key_condition(
+        latest_join_condition: str = SnapshotSql.key_condition(
             left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
         )
         first_key: str = unique_key[0]
@@ -3136,7 +3094,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         updated_at_column: str,
         valid_to_column: str,
     ) -> str:
-        latest_join_condition: str = cls._snapshot_key_condition(
+        latest_join_condition: str = SnapshotSql.key_condition(
             left_alias="__source", right_alias="__latest", unique_key=unique_key
         )
         partition_sql: str = ", ".join(unique_key)
@@ -3152,144 +3110,4 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"WHERE __latest.{first_key} IS NULL "
             f"OR __source.{updated_at_column} > __latest.{updated_at_column}"
             ")"
-        )
-
-    @classmethod
-    def _historical_check_new_changes_cte_sql(
-        cls,
-        *,
-        destination: str,
-        origin: str,
-        unique_key: tuple[str, ...],
-        check_columns: tuple[str, ...],
-        observed_at_column: str,
-        valid_from_column: str,
-        valid_to_column: str,
-        invalidate_hard_deletes: bool,
-    ) -> str:
-        if invalidate_hard_deletes:
-            return HistoricalSnapshotSql(
-                origin=origin,
-                unique_key=unique_key,
-                observed_at_column=observed_at_column,
-                valid_from_column=valid_from_column,
-                valid_to_column=valid_to_column,
-                check_columns=check_columns,
-            ).new_changes_ctes_sql(destination=destination)
-
-        partition_sql: str = ", ".join(unique_key)
-        previous_columns_sql: str = ", ".join(
-            f"LAG({column}) OVER (PARTITION BY {partition_sql} ORDER BY {observed_at_column}) "
-            f"AS __prev_{column}"
-            for column in check_columns
-        )
-        if previous_columns_sql:
-            previous_columns_sql = f", {previous_columns_sql}"
-        delta_change_condition: str = " OR ".join(
-            f"{column} IS DISTINCT FROM __prev_{column}" for column in check_columns
-        )
-        latest_join_condition: str = cls._snapshot_key_condition(
-            left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
-        )
-        latest_change_condition: str = " OR ".join(
-            f"__delta_changes.{column} IS DISTINCT FROM __latest.{column}"
-            for column in check_columns
-        )
-        first_key: str = unique_key[0]
-        changed_or_first_sql: str = (
-            "SELECT * FROM __ordered WHERE __prev_observed_at IS NULL "
-            f"OR ({delta_change_condition})"
-        )
-        return (
-            "__ordered AS ("
-            f"SELECT *, LAG({observed_at_column}) OVER ("
-            f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
-            "), __delta_changes AS ("
-            f"{changed_or_first_sql}"
-            "), __latest AS ("
-            f"SELECT * FROM {destination} QUALIFY ROW_NUMBER() OVER ("
-            f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
-            ") = 1"
-            "), __new_changes AS ("
-            "SELECT __delta_changes.* FROM __delta_changes "
-            f"LEFT JOIN __latest ON {latest_join_condition} "
-            f"WHERE __latest.{first_key} IS NULL OR ("
-            f"__delta_changes.{observed_at_column} > __latest.{valid_from_column} "
-            f"AND ({latest_change_condition})"
-            ")"
-            ")"
-        )
-
-    @staticmethod
-    def _snapshot_key_condition(
-        *, left_alias: str, right_alias: str, unique_key: tuple[str, ...]
-    ) -> str:
-        return " AND ".join(
-            f"{left_alias}.{column} = {right_alias}.{column}" for column in unique_key
-        )
-
-    @classmethod
-    def _historical_snapshot_combined_close_sql(
-        cls,
-        *,
-        destination: str,
-        new_changes_sql: str,
-        unique_key: tuple[str, ...],
-        valid_from_column: str,
-        valid_to_column: str,
-        change_time_column: str,
-    ) -> str:
-        candidate_key_sql: str = ", ".join(unique_key)
-        return cls._historical_snapshot_close_sql(
-            destination=destination,
-            new_changes_sql=new_changes_sql,
-            unique_key=unique_key,
-            valid_from_column=valid_from_column,
-            valid_to_column=valid_to_column,
-            close_candidates_sql=(
-                f"SELECT {candidate_key_sql}, {change_time_column} AS __close_at "
-                "FROM __new_changes "
-                "UNION ALL "
-                f"SELECT {candidate_key_sql}, __close_at FROM __hard_deletes "
-                "WHERE __close_at IS NOT NULL"
-            ),
-        )
-
-    @classmethod
-    def _historical_snapshot_close_sql(
-        cls,
-        *,
-        destination: str,
-        new_changes_sql: str,
-        unique_key: tuple[str, ...],
-        valid_from_column: str,
-        valid_to_column: str,
-        close_candidates_sql: str,
-    ) -> str:
-        close_candidate_condition: str = cls._snapshot_key_condition(
-            left_alias="__close_candidates", right_alias="__target", unique_key=unique_key
-        )
-        candidate_key_sql: str = ", ".join(unique_key)
-        close_candidates_query: str = (
-            f"WITH {new_changes_sql}, __close_candidates AS ({close_candidates_sql}) "
-            f"SELECT {candidate_key_sql}, MIN(__close_at) AS __close_at "
-            "FROM __close_candidates GROUP BY "
-            f"{candidate_key_sql}"
-        )
-        return (
-            f"UPDATE {destination} AS __target "
-            f"SET {valid_to_column} = __close_candidates.__close_at "
-            f"FROM ({close_candidates_query}) AS __close_candidates "
-            f"WHERE __target.{valid_to_column} IS NULL "
-            f"AND __target.{valid_from_column} < __close_candidates.__close_at "
-            f"AND {close_candidate_condition}"
-        )
-
-    @staticmethod
-    def _historical_snapshot_insert_sql(
-        *, destination: str, insert_column_sql: str, new_changes_sql: str, select_sql: str
-    ) -> str:
-        return (
-            f"INSERT INTO {destination} ({insert_column_sql}) WITH {new_changes_sql} {select_sql}"
         )

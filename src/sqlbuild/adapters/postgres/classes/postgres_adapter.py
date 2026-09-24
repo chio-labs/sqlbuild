@@ -15,7 +15,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _build_names_filter,
     _build_schemas_filter,
     _encode_typed_json,
-    _historical_check_snapshot_select_sql,
     _historical_snapshot_combined_close_sql,
     _historical_timestamp_changes_select_sql,
     _historical_timestamp_snapshot_select_sql,
@@ -24,14 +23,17 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _render_typed_value_list,
     _snapshot_hard_delete_close_sql,
     _snapshot_initial_valid_from_expr,
-    _snapshot_key_condition,
     _validate_rectangular_typed_array,
+)
+from sqlbuild.adapter.contract.classes.historical_check_snapshot_sql import (
+    HistoricalCheckSnapshotSql,
 )
 from sqlbuild.adapter.contract.classes.historical_snapshot_sql import (
     HistoricalSnapshotSql,
     historical_insert_validity_sql,
 )
 from sqlbuild.adapter.contract.classes.microbatch import MicrobatchMixin
+from sqlbuild.adapter.contract.classes.snapshot_sql import SnapshotSql
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.classes.unkeyed_diff import UnkeyedDiffMixin
 from sqlbuild.adapter.contract.constants import (
@@ -1153,7 +1155,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             source_alias="__source",
             current_timestamp=current_timestamp,
         )
-        key_condition: str = _snapshot_key_condition(
+        key_condition: str = SnapshotSql.key_condition(
             left_alias="__target", right_alias="__source", unique_key=unique_key
         )
         close_sql: str = (
@@ -1166,7 +1168,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
         insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
         output_select_sql: str = ", ".join(f"__source.{column}" for column in output_columns)
-        active_join_condition: str = _snapshot_key_condition(
+        active_join_condition: str = SnapshotSql.key_condition(
             left_alias="__active", right_alias="__source", unique_key=unique_key
         )
         first_key: str = unique_key[0]
@@ -1240,7 +1242,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             source_alias="__source",
             current_timestamp=current_timestamp,
         )
-        key_condition: str = _snapshot_key_condition(
+        key_condition: str = SnapshotSql.key_condition(
             left_alias="__target", right_alias="__source", unique_key=unique_key
         )
         change_condition: str = " OR ".join(
@@ -1256,7 +1258,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
         insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
         output_select_sql: str = ", ".join(f"__source.{column}" for column in output_columns)
-        active_join_condition: str = _snapshot_key_condition(
+        active_join_condition: str = SnapshotSql.key_condition(
             left_alias="__active", right_alias="__source", unique_key=unique_key
         )
         active_change_condition: str = " OR ".join(
@@ -1351,7 +1353,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
-        historical_sql: str = _historical_check_snapshot_select_sql(
+        historical_sql: str = HistoricalCheckSnapshotSql.initial_select_sql(
             origin=origin,
             unique_key=unique_key,
             check_columns=check_columns,
@@ -2422,7 +2424,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             valid_to_column=valid_to_column,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        key_condition: str = _snapshot_key_condition(
+        key_condition: str = SnapshotSql.key_condition(
             left_alias="__target", right_alias="__new_changes", unique_key=unique_key
         )
         if invalidate_hard_deletes:
@@ -2484,7 +2486,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             updated_at_column=updated_at_column,
             valid_to_column=valid_to_column,
         )
-        key_condition: str = _snapshot_key_condition(
+        key_condition: str = SnapshotSql.key_condition(
             left_alias="__target", right_alias="__new_changes", unique_key=unique_key
         )
         close_sql: str = (
@@ -2538,7 +2540,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             valid_to_column=valid_to_column,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        key_condition: str = _snapshot_key_condition(
+        key_condition: str = SnapshotSql.key_condition(
             left_alias="__target", right_alias="__new_changes", unique_key=unique_key
         )
         if invalidate_hard_deletes:
@@ -2612,7 +2614,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
             f") AS __rn FROM {destination}) AS __q WHERE __rn = 1)"
         )
-        latest_join_condition: str = _snapshot_key_condition(
+        latest_join_condition: str = SnapshotSql.key_condition(
             left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
         )
         return (
@@ -2641,7 +2643,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str,
     ) -> str:
         del valid_to_column
-        latest_join_condition: str = _snapshot_key_condition(
+        latest_join_condition: str = SnapshotSql.key_condition(
             left_alias="__source", right_alias="__latest", unique_key=unique_key
         )
         partition_sql: str = ", ".join(unique_key)
@@ -2692,7 +2694,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         delta_change_condition: str = " OR ".join(
             f"{column} IS DISTINCT FROM __prev_{column}" for column in check_columns
         )
-        latest_join_condition: str = _snapshot_key_condition(
+        latest_join_condition: str = SnapshotSql.key_condition(
             left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
         )
         latest_change_condition: str = " OR ".join(
