@@ -100,7 +100,6 @@ from sqlbuild.adapters.snowflake.constants import (
     VIEW_RELATION_TYPE_TOKEN,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.planner.types import InitialValidFrom, SnapshotStrategy
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.cost.main.collection import collect_snowflake_cost
 from sqlbuild.cost.models import RunCostSummary
@@ -1261,7 +1260,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         initial_valid_from: str | None,
     ) -> tuple[str, ...]:
         current_timestamp: str = self.render_current_timestamp()
-        valid_from_expr: str = self._snapshot_initial_valid_from_expr(
+        valid_from_expr: str = SnapshotSql.initial_valid_from_expr(
             snapshot_strategy=snapshot_strategy,
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
@@ -1293,7 +1292,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         current_timestamp: str = self.render_current_timestamp()
-        initial_valid_from_expr: str = self._snapshot_initial_valid_from_expr(
+        initial_valid_from_expr: str = SnapshotSql.initial_valid_from_expr(
             snapshot_strategy="timestamp",
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
@@ -1353,7 +1352,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         if invalidate_hard_deletes:
             statements = (
                 *statements,
-                self._snapshot_hard_delete_close_sql(
+                SnapshotSql.hard_delete_close_sql(
                     destination=destination,
                     origin=origin,
                     unique_key=unique_key,
@@ -1538,7 +1537,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str = target.valid_to_column
         output_columns: tuple[str, ...] = target.output_columns
         current_timestamp: str = self.render_current_timestamp()
-        initial_valid_from_expr: str = self._snapshot_initial_valid_from_expr(
+        initial_valid_from_expr: str = SnapshotSql.initial_valid_from_expr(
             snapshot_strategy="check",
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
@@ -1585,7 +1584,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         if invalidate_hard_deletes:
             statements = (
                 *statements,
-                self._snapshot_hard_delete_close_sql(
+                SnapshotSql.hard_delete_close_sql(
                     destination=destination,
                     origin=origin,
                     unique_key=unique_key,
@@ -3281,48 +3280,3 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             return cursor.fetchone() is not None
         finally:
             cursor.close()
-
-    @staticmethod
-    def _snapshot_initial_valid_from_expr(
-        *,
-        snapshot_strategy: str | None,
-        updated_at_column: str | None,
-        observed_at_column: str | None,
-        initial_valid_from: str | None,
-        source_alias: str | None,
-        current_timestamp: str,
-    ) -> str:
-        prefix: str = f"{source_alias}." if source_alias is not None else ""
-        if initial_valid_from == InitialValidFrom.EXECUTION_TIME:
-            return current_timestamp
-        if initial_valid_from == InitialValidFrom.OBSERVED_AT and observed_at_column is not None:
-            return f"{prefix}{observed_at_column}"
-        if initial_valid_from == InitialValidFrom.UPDATED_AT and updated_at_column is not None:
-            return f"{prefix}{updated_at_column}"
-        if snapshot_strategy == SnapshotStrategy.TIMESTAMP and updated_at_column is not None:
-            return f"{prefix}{updated_at_column}"
-        return current_timestamp
-
-    @classmethod
-    def _snapshot_hard_delete_close_sql(
-        cls,
-        *,
-        destination: str,
-        origin: str,
-        unique_key: tuple[str, ...],
-        valid_to_column: str,
-        current_timestamp: str,
-    ) -> str:
-        missing_key_condition: str = SnapshotSql.key_condition(
-            left_alias="__source", right_alias="__target", unique_key=unique_key
-        )
-        first_key: str = unique_key[0]
-        return (
-            f"UPDATE {destination} AS __target "
-            f"SET {valid_to_column} = {current_timestamp} "
-            f"WHERE __target.{valid_to_column} IS NULL "
-            f"AND NOT EXISTS ("
-            f"SELECT 1 FROM {origin} AS __source "
-            f"WHERE {missing_key_condition} AND __source.{first_key} IS NOT NULL"
-            f")"
-        )

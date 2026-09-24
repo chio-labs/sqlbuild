@@ -19,8 +19,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _quote_sql_string,
     _render_ansi_typed_scalar,
     _render_typed_value_list,
-    _snapshot_hard_delete_close_sql,
-    _snapshot_initial_valid_from_expr,
     _validate_rectangular_typed_array,
 )
 from sqlbuild.adapter.contract.classes.historical_check_snapshot_sql import (
@@ -1117,7 +1115,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str,
         initial_valid_from: str | None,
     ) -> tuple[str, ...]:
-        valid_from_expr: str = _snapshot_initial_valid_from_expr(
+        valid_from_expr: str = SnapshotSql.initial_valid_from_expr(
             snapshot_strategy=snapshot_strategy,
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
@@ -1148,7 +1146,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         current_timestamp: str = self.render_current_timestamp()
-        initial_valid_from_expr: str = _snapshot_initial_valid_from_expr(
+        initial_valid_from_expr: str = SnapshotSql.initial_valid_from_expr(
             snapshot_strategy="timestamp",
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
@@ -1208,7 +1206,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         if invalidate_hard_deletes:
             statements = (
                 *statements,
-                _snapshot_hard_delete_close_sql(
+                SnapshotSql.hard_delete_close_sql(
                     destination=destination,
                     origin=origin,
                     unique_key=unique_key,
@@ -1235,7 +1233,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str = target.valid_to_column
         output_columns: tuple[str, ...] = target.output_columns
         current_timestamp: str = self.render_current_timestamp()
-        initial_valid_from_expr: str = _snapshot_initial_valid_from_expr(
+        initial_valid_from_expr: str = SnapshotSql.initial_valid_from_expr(
             snapshot_strategy="check",
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
@@ -1282,7 +1280,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         if invalidate_hard_deletes:
             statements = (
                 *statements,
-                _snapshot_hard_delete_close_sql(
+                SnapshotSql.hard_delete_close_sql(
                     destination=destination,
                     origin=origin,
                     unique_key=unique_key,

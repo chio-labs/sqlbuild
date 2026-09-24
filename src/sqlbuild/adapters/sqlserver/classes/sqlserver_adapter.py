@@ -18,7 +18,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _quote_sql_string,
     _render_ansi_typed_scalar,
     _render_typed_value_list,
-    _snapshot_initial_valid_from_expr,
     _typed_scalar_payload,
 )
 from sqlbuild.adapter.contract.classes.historical_snapshot_sql import (
@@ -1787,7 +1786,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str = target.valid_to_column
         output_columns: tuple[str, ...] = target.output_columns
         current_timestamp: str = self.render_current_timestamp()
-        initial_valid_from_expr: str = _snapshot_initial_valid_from_expr(
+        initial_valid_from_expr: str = SnapshotSql.initial_valid_from_expr(
             snapshot_strategy="check",
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
@@ -2046,7 +2045,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
         current_timestamp: str = self.render_current_timestamp()
-        initial_valid_from_expr: str = _snapshot_initial_valid_from_expr(
+        initial_valid_from_expr: str = SnapshotSql.initial_valid_from_expr(
             snapshot_strategy="timestamp",
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
@@ -2336,7 +2335,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str,
         initial_valid_from: str | None,
     ) -> tuple[str, ...]:
-        valid_from_expr: str = _snapshot_initial_valid_from_expr(
+        valid_from_expr: str = SnapshotSql.initial_valid_from_expr(
             snapshot_strategy=snapshot_strategy,
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
