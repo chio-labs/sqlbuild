@@ -574,7 +574,6 @@ def _resolve_virtual_build(
         timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
         if timing_tracker is not None:
             timing_tracker.compile_seconds = compile_seconds
-    _reject_model_migrations(project=graph.project)
     planning_start: float = time.monotonic()
     try:
         names: VirtualEnvironmentNames = _resolve_virtual_environment_names(
@@ -902,6 +901,7 @@ def _plan_virtual_build(
     reads: _VirtualBuildStateReads,
     deferred_relations: dict[str, RelationInfo],
 ) -> _VirtualBuildPlan:
+    _reject_model_migrations(project=graph.project)
     adapter: BaseAdapter = runtime.adapter
     options: VirtualBuildOptions = runtime.options
     hooks: VirtualBuildHooks = runtime.hooks
