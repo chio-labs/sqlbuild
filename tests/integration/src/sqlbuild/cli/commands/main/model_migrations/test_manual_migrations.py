@@ -177,16 +177,16 @@ def test_given_back_and_forth_renames_when_building_each_day_then_every_move_con
     "test_case",
     [
         MigrationOutcomeTestCase(
-            description="unrecorded destination conflicts until migrate_force replaces it",
-            expected_decisions=("conflict", "forced_replace", "done"),
-            expected_events=(("stg_orders", "stg_customer_orders", "forced_replace"),),
+            description="destination without build history is replaced by a redo",
+            expected_decisions=("redo", "done"),
+            expected_events=(("stg_orders", "stg_customer_orders", "redo"),),
             expected_destination_ids=tuple(range(1, 6)),
-            expected_output_fragment="model migration conflict",
+            expected_output_fragment="Migrated main.stg_orders -> main.stg_customer_orders",
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_unrecorded_existing_destination_when_building_then_conflict_until_forced(
+def test_given_unrecorded_destination_without_history_when_building_then_redoes_the_clone(
     test_case: MigrationOutcomeTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     build_origin(project_dir=tmp_path, capsys=capsys)
@@ -197,6 +197,51 @@ def test_given_unrecorded_existing_destination_when_building_then_conflict_until
             "TIMESTAMP '2026-01-01' AS order_date, 1 AS amount_cents"
         ),
     )
+    rename_model(project_dir=tmp_path, name=DESTINATION_MODEL, migrate_from=ORIGIN_MODEL)
+
+    plan: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)
+    result: CliRun = build_ok(project_dir=tmp_path, capsys=capsys)
+    after: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)
+
+    assert migration_decisions(plan) + migration_decisions(after) == test_case.expected_decisions
+    assert test_case.expected_output_fragment in result.output
+    assert (
+        order_ids(project_dir=tmp_path, relation=f"main.{DESTINATION_MODEL}")
+        == test_case.expected_destination_ids
+    )
+    assert migration_events(project_dir=tmp_path) == test_case.expected_events
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MigrationOutcomeTestCase(
+            description="destination with its own build history conflicts until forced",
+            expected_decisions=("conflict", "forced_replace", "done"),
+            expected_events=(("stg_orders", "stg_customer_orders", "forced_replace"),),
+            expected_destination_ids=tuple(range(1, 6)),
+            expected_output_fragment="model migration conflict",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_destination_with_build_history_when_building_then_conflict_until_forced(
+    test_case: MigrationOutcomeTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_project(
+        project_dir=tmp_path,
+        models={
+            ORIGIN_MODEL: incremental_orders_sql(),
+            DESTINATION_MODEL: incremental_orders_sql(
+                select_sql=(
+                    'SELECT order_id, order_date, amount_cents FROM __source("raw_orders") '
+                    "WHERE order_id <= 2"
+                )
+            ),
+        },
+    )
+    load_raw_orders(project_dir=tmp_path, first_day=1, last_day=5)
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
     rename_model(project_dir=tmp_path, name=DESTINATION_MODEL, migrate_from=ORIGIN_MODEL)
 
     conflict_plan: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)
@@ -218,7 +263,8 @@ def test_given_unrecorded_existing_destination_when_building_then_conflict_until
     ) == test_case.expected_decisions
     assert conflict.exit_code == 1
     assert test_case.expected_output_fragment in conflict.output
-    assert preserved == (999,)
+    assert "M103" in conflict.output
+    assert preserved == (1, 2)
     assert (
         order_ids(project_dir=tmp_path, relation=f"main.{DESTINATION_MODEL}")
         == test_case.expected_destination_ids
@@ -230,15 +276,18 @@ def test_given_unrecorded_existing_destination_when_building_then_conflict_until
     "test_case",
     [
         MigrationOutcomeTestCase(
-            description="missing origin builds without history and records nothing",
+            description="missing origin without a recorded migration fails the build",
             expected_decisions=("origin_missing",),
-            expected_destination_ids=(1, 2, 3),
-            expected_output_fragment="does not exist",
+            expected_output_fragment=(
+                "'stg_customer_orders' (migrate_from main.retired_orders) and no recorded "
+                "migration into it was found; if the migration already happened elsewhere or "
+                "is no longer needed, remove migrate_from from the model header"
+            ),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_missing_origin_when_building_then_warns_and_builds_without_history(
+def test_given_missing_origin_without_event_when_building_then_fails_before_building(
     test_case: MigrationOutcomeTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     write_project(
@@ -246,6 +295,46 @@ def test_given_missing_origin_when_building_then_warns_and_builds_without_histor
         models={DESTINATION_MODEL: incremental_orders_sql(migrate_from="retired_orders")},
     )
     load_raw_orders(project_dir=tmp_path, first_day=1, last_day=3)
+
+    plan: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)
+    text: CliRun = run_sqb(project_dir=tmp_path, args=("plan",), capsys=capsys)
+    result: CliRun = build(project_dir=tmp_path, capsys=capsys)
+
+    assert migration_decisions(plan) == test_case.expected_decisions
+    assert tuple(warning["severity"] for warning in plan["warnings"]) == ("error",)
+    assert plan["warnings"][0]["message"] == (
+        "model 'stg_customer_orders': migrate_from origin main.retired_orders does not exist "
+        "and no recorded migration into it was found; if the migration already happened "
+        "elsewhere or is no longer needed, remove migrate_from from the model header"
+    )
+    assert "origin missing  main.retired_orders -> main.stg_customer_orders" in text.output
+    assert result.exit_code == 1
+    assert "M102" in result.output
+    assert test_case.expected_output_fragment in result.output
+    assert relation_names(project_dir=tmp_path, schema="main") == ["raw_orders"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MigrationOutcomeTestCase(
+            description="recorded migration keeps a leftover migrate_from harmless",
+            expected_decisions=("done",),
+            expected_events=(("stg_orders", "stg_customer_orders", "migrate"),),
+            expected_destination_ids=tuple(range(1, 8)),
+            expected_output_fragment="migrate_from can be removed from 'stg_customer_orders'",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_missing_origin_with_recorded_migration_when_building_then_reports_done(
+    test_case: MigrationOutcomeTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    build_origin(project_dir=tmp_path, capsys=capsys)
+    rename_model(project_dir=tmp_path, name=DESTINATION_MODEL, migrate_from=ORIGIN_MODEL)
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+    execute(project_dir=tmp_path, sql=f"DROP TABLE main.{ORIGIN_MODEL}")
+    load_raw_orders(project_dir=tmp_path, first_day=1, last_day=7)
 
     plan: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)
     result: CliRun = build_ok(project_dir=tmp_path, capsys=capsys)
@@ -256,7 +345,7 @@ def test_given_missing_origin_when_building_then_warns_and_builds_without_histor
         order_ids(project_dir=tmp_path, relation=f"main.{DESTINATION_MODEL}")
         == test_case.expected_destination_ids
     )
-    assert "_sqlbuild_migrations" not in relation_names(project_dir=tmp_path, schema="main")
+    assert migration_events(project_dir=tmp_path) == test_case.expected_events
 
 
 @pytest.mark.parametrize(
@@ -484,12 +573,12 @@ def test_given_origin_schema_when_migrating_then_normal_incremental_rules_decide
             expected_final_decisions=("migrate",),
         ),
         MigrationInterruptionTestCase(
-            description="crash before recording leaves an unrecorded destination",
+            description="crash before recording redoes the clone on a plain re-run",
             install_failure=fail_record,
-            rerun_with_force=True,
+            rerun_with_force=False,
             expected_first_exit_code=1,
-            expected_decision_after_failure="conflict",
-            expected_final_decisions=("forced_replace",),
+            expected_decision_after_failure="redo",
+            expected_final_decisions=("redo",),
         ),
         MigrationInterruptionTestCase(
             description="crash after recording continues from the migrated history",

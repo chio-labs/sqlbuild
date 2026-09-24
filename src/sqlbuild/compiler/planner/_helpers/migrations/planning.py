@@ -381,6 +381,8 @@ def _decide(
         decision = MigrationDecision.MIGRATE
     elif newest is not None and newest.origin.matches(migration_relation_for_location(destination)):
         decision = MigrationDecision.SUPERSEDED_REPLACE
+    elif newest is None and model.name not in snapshot.fingerprints.models:
+        decision = MigrationDecision.REDO
     elif request.force:
         decision = MigrationDecision.FORCED_REPLACE
     else:
@@ -575,10 +577,11 @@ def _entry_warning(entry: ModelMigrationPlanEntry) -> PlanWarning | None:
     if entry.decision == MigrationDecision.ORIGIN_MISSING:
         return PlanWarning(
             model_name=entry.model_name,
-            severity=WarningSeverity.WARNING,
+            severity=WarningSeverity.ERROR,
             message=(
-                f"migration origin {origin} does not exist; '{entry.model_name}' is built "
-                "without migrating history"
+                f"model '{entry.model_name}': migrate_from origin {origin} does not exist and "
+                "no recorded migration into it was found; if the migration already happened "
+                "elsewhere or is no longer needed, remove migrate_from from the model header"
             ),
             code="M102",
         )
@@ -587,9 +590,10 @@ def _entry_warning(entry: ModelMigrationPlanEntry) -> PlanWarning | None:
             model_name=entry.model_name,
             severity=WarningSeverity.ERROR,
             message=(
-                f"migration conflict: {destination} already exists and has no recorded "
-                f"migration from {origin}; set migrate_force true to replace it (the replaced "
-                "table remains recoverable through warehouse time travel)"
+                f"migration conflict: {destination} already exists with its own build history "
+                f"and has no recorded migration from {origin}; set migrate_force true to "
+                "replace it (the replaced table remains recoverable through warehouse time "
+                "travel)"
             ),
             code="M103",
         )

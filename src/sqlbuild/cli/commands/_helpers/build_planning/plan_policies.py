@@ -63,14 +63,30 @@ def _enforce_model_migration_policy(*, plan: PlanOutput) -> None:
     )
     if not blocked:
         return
+    missing: tuple[ModelMigrationPlanEntry, ...] = tuple(
+        entry for entry in blocked if entry.decision == MigrationDecision.ORIGIN_MISSING
+    )
+    if missing:
+        raise CliUserError(
+            "model migration origin does not exist for "
+            + ", ".join(
+                f"'{entry.model_name}' (migrate_from "
+                f"{entry.origin.qualified_name or entry.origin.name})"
+                for entry in missing
+            )
+            + " and no recorded migration into it was found; if the migration already happened "
+            "elsewhere or is no longer needed, remove migrate_from from the model header",
+            code="M102",
+            help="Run sqb plan to see every model migration decision.",
+        )
     conflicts: tuple[ModelMigrationPlanEntry, ...] = tuple(
         entry for entry in blocked if entry.decision == MigrationDecision.CONFLICT
     )
     names: str = ", ".join(f"'{entry.model_name}'" for entry in blocked)
     if conflicts:
         raise CliUserError(
-            f"model migration conflict for {names}: the destination already exists without a "
-            "recorded migration",
+            f"model migration conflict for {names}: the destination already exists with its "
+            "own build history and no recorded migration",
             code="M103",
             help=(
                 "Set migrate_force true on the model to replace the destination; the replaced "

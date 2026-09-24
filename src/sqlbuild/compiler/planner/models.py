@@ -986,7 +986,7 @@ class ModelMigrationPlanEntry:
     def blocks_build(self) -> bool:
         """Return whether this migration must stop a build before any execution."""
 
-        return self.decision == MigrationDecision.CONFLICT or (
+        return self.decision.blocks_build or (
             self.decision.moves_data and self.compatibility == MigrationCompatibility.INCOMPATIBLE
         )
 

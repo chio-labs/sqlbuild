@@ -10,6 +10,7 @@ class MigrationDecision(StrEnum):
 
     DONE = "done"
     MIGRATE = "migrate"
+    REDO = "redo"
     SUPERSEDED_REPLACE = "superseded_replace"
     FORCED_REPLACE = "forced_replace"
     CONFLICT = "conflict"
@@ -20,6 +21,12 @@ class MigrationDecision(StrEnum):
         """Return whether this decision clones the origin over the destination."""
 
         return self in _MOVING_DECISIONS
+
+    @property
+    def blocks_build(self) -> bool:
+        """Return whether this decision stops a build regardless of compatibility."""
+
+        return self in _BLOCKING_DECISIONS
 
     @property
     def checks_compatibility(self) -> bool:
@@ -37,9 +44,13 @@ class MigrationDecision(StrEnum):
 _MOVING_DECISIONS: frozenset[MigrationDecision] = frozenset(
     {
         MigrationDecision.MIGRATE,
+        MigrationDecision.REDO,
         MigrationDecision.SUPERSEDED_REPLACE,
         MigrationDecision.FORCED_REPLACE,
     }
+)
+_BLOCKING_DECISIONS: frozenset[MigrationDecision] = frozenset(
+    {MigrationDecision.CONFLICT, MigrationDecision.ORIGIN_MISSING}
 )
 
 
