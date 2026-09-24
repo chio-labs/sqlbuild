@@ -45,7 +45,16 @@ from tests.unit.scripts.dupscore.main.dupscore._test_types import (
                 }
             ),
             expected_member_keys=frozenset(
-                {"change", "end_line", "language", "name", "path", "start_line", "tokens"}
+                {
+                    "change",
+                    "end_line",
+                    "forced_override",
+                    "language",
+                    "name",
+                    "path",
+                    "start_line",
+                    "tokens",
+                }
             ),
             expected_progress_fragments=(
                 "detecting function clones",

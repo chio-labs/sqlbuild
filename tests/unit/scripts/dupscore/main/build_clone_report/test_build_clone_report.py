@@ -26,6 +26,7 @@ from tests.unit.scripts.dupscore.main.build_clone_report._test_types import (
     ContractExemptionReportTestCase,
     ContractExemptionSinceTestCase,
     ExcludedUnitTestCase,
+    ForcedMemberOrderTestCase,
     PathFilterTestCase,
     ReportedPathTestCase,
     SeededCloneTestCase,
@@ -37,6 +38,7 @@ from tests.unit.scripts.dupscore.main.build_clone_report.helpers import (
     PYTHON_NEAR_MISS_COPY,
     clone_options,
     cluster_languages,
+    cluster_member_flags,
     cluster_member_names,
     link_categories,
     member_changes,
@@ -472,3 +474,32 @@ def test_given_since_revision_with_contract_exemption_when_building_report_then_
 
     assert cluster_member_names(report) == test_case.expected_clusters
     assert member_changes_by_name(report) == test_case.expected_member_changes
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ForcedMemberOrderTestCase(
+            description="voluntary copies are listed before flagged forced overrides",
+            expected_member_flags=[
+                [("AlphaStore._render_orders_sql", False), ("BetaStore._render_orders_sql", False)],
+                [("GammaStore.delete_orders", False), ("AlphaStore.delete_orders", True)],
+                [("OrdersConnection.read_orders", False), ("BetaStore.read_orders", True)],
+            ],
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_contract_exemption_when_building_report_then_lists_forced_members_last(
+    test_case: ForcedMemberOrderTestCase,
+    tmp_path: Path,
+) -> None:
+    write_project_files(repo_root=tmp_path, files=CONTRACT_FILES)
+
+    report: CloneReport = build_clone_report(
+        repo_root=tmp_path,
+        options=clone_options(),
+        config=DupscoreConfig(contract_exemptions=(STORE_EXEMPTION,)),
+    )
+
+    assert cluster_member_flags(report) == test_case.expected_member_flags

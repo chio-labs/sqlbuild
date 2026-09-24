@@ -192,6 +192,7 @@ class CloneMember:
     end_line: int
     tokens: int
     change: str | None
+    forced_override: bool
 
 
 @dataclass(frozen=True, slots=True)

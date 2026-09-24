@@ -79,3 +79,9 @@ class ContractExemptionSinceTestCase:
     changed_files: dict[str, str]
     expected_clusters: list[list[str]]
     expected_member_changes: dict[str, str | None]
+
+
+@dataclass(frozen=True)
+class ForcedMemberOrderTestCase:
+    description: str
+    expected_member_flags: list[list[tuple[str, bool]]]

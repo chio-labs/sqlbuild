@@ -83,7 +83,9 @@ def build_clone_report(
 
     clusters: list[CloneCluster] = [
         cluster
-        for cluster in cluster_clone_pairs(units=units, pairs=pairs, change_of=change_of)
+        for cluster in cluster_clone_pairs(
+            units=units, pairs=pairs, change_of=change_of, forced=frozenset(forced)
+        )
         if _cluster_selected(cluster=cluster, options=options)
     ]
     unit_counts: Counter[str] = Counter(unit.language for unit in units)

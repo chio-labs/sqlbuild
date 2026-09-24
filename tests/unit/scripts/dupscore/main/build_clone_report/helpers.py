@@ -278,3 +278,10 @@ def cluster_member_names(report: CloneReport) -> list[list[str]]:
 
 def member_changes_by_name(report: CloneReport) -> dict[str, str | None]:
     return {member.name: member.change for member in reported_members(report)}
+
+
+def cluster_member_flags(report: CloneReport) -> list[list[tuple[str, bool]]]:
+    flags: list[list[tuple[str, bool]]] = []
+    for cluster in report.clusters:
+        flags.append([(member.name, member.forced_override) for member in cluster.members])
+    return sorted(flags)

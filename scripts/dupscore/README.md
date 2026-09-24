@@ -71,6 +71,10 @@ otherwise inherit that method from the contract, a `forbidden_owners` class, or 
 between two forced overrides are hidden and clusters left without links disappear; links from
 a forced override to any other unit (a private helper copy, or an override that could have been
 inherited instead) are still reported. The summary counts forced overrides hidden this way.
+Forced overrides that remain in a reported cluster are marked `[forced]` in text output
+(`"forced_override": true` in JSON) and listed after the other members, so a cluster's first
+lines show what to fix. They also add nothing to the duplicated-token estimate that ranks
+clusters: a forced override already serves as the copy that must stay.
 An entry whose contract file is absent from the analysed tree is inactive; a missing class in an
 existing file is a configuration error.
 

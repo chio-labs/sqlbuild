@@ -9,6 +9,7 @@ from scripts.dupscore.constants import CLONE_TEXT_MAX_MEMBERS
 from scripts.dupscore.models import CloneCluster, CloneMember, CloneReport
 
 _INDENT: str = "     "
+_FORCED_MARKER: str = " [forced]"
 
 
 def render_clone_text(*, report: CloneReport, top: int) -> str:
@@ -66,7 +67,8 @@ def _cluster_heading(cluster: CloneCluster) -> str:
 
 def _member_line(member: CloneMember) -> str:
     change: str = f" [{member.change}]" if member.change is not None else ""
+    forced: str = _FORCED_MARKER if member.forced_override else ""
     return (
         f"{member.path}:{member.start_line}-{member.end_line} {member.name} "
-        f"({member.tokens} tokens){change}"
+        f"({member.tokens} tokens){forced}{change}"
     )

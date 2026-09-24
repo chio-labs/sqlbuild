@@ -19,11 +19,12 @@ def cluster_clone_pairs(
     units: list[CloneUnit],
     pairs: list[ClonePair],
     change_of: Callable[[CloneUnit], str | None],
+    forced: frozenset[int],
 ) -> list[CloneCluster]:
     """Group pairs into connected components ordered by estimated duplicated tokens."""
 
     clusters: list[CloneCluster] = [
-        _build_cluster(units=units, pairs=component, change_of=change_of)
+        _build_cluster(units=units, pairs=component, change_of=change_of, forced=forced)
         for component in _connected_pair_groups(pairs)
     ]
     return sorted(clusters, key=_cluster_sort_key)
@@ -63,10 +64,16 @@ def _build_cluster(
     units: list[CloneUnit],
     pairs: list[ClonePair],
     change_of: Callable[[CloneUnit], str | None],
+    forced: frozenset[int],
 ) -> CloneCluster:
     unit_indexes: list[int] = sorted(
         _unit_indexes(pairs),
-        key=lambda index: (units[index].path, units[index].start_line, units[index].name),
+        key=lambda index: (
+            index in forced,
+            units[index].path,
+            units[index].start_line,
+            units[index].name,
+        ),
     )
     position: dict[int, int] = {unit_index: slot for slot, unit_index in enumerate(unit_indexes)}
     best_similarity: dict[int, float] = {}
@@ -76,6 +83,7 @@ def _build_cluster(
     weights: list[float] = [
         len(units[unit_index].normalized) * best_similarity[unit_index]
         for unit_index in unit_indexes
+        if unit_index not in forced
     ]
     links: list[ClonePairLink] = sorted(
         (
@@ -102,6 +110,7 @@ def _build_cluster(
             end_line=units[unit_index].end_line,
             tokens=len(units[unit_index].normalized),
             change=change_of(units[unit_index]),
+            forced_override=unit_index in forced,
         )
         for unit_index in unit_indexes
     )
@@ -109,10 +118,20 @@ def _build_cluster(
         category=category,
         similarity_min=min(similarities),
         similarity_max=max(similarities),
-        duplicated_tokens=round(sum(weights) - max(weights)),
+        duplicated_tokens=_duplicated_tokens(
+            weights=weights, has_forced=len(weights) < len(members)
+        ),
         members=members,
         links=tuple(links),
     )
+
+
+def _duplicated_tokens(*, weights: list[float], has_forced: bool) -> int:
+    """Estimate removable tokens: keep one copy, or a required forced override when present."""
+
+    if has_forced:
+        return round(sum(weights))
+    return round(sum(weights) - max(weights))
 
 
 def _cluster_sort_key(cluster: CloneCluster) -> tuple[int, float, str, int]:
