@@ -9,6 +9,13 @@ from datetime import datetime
 from typing import Any, ClassVar
 
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.executor.node_results.main.decode_json import decode_node_result_json
+from sqlbuild.executor.node_results.main.encode_json import encode_node_result_json
+from sqlbuild.executor.node_results.models import (
+    NodeResultEnvelope,
+    NodeResultQuery,
+    NodeResultRecord,
+)
 from sqlbuild.virtual.state._helpers.state_storage.datetime import (
     from_naive_utc_wall_clock,
 )
@@ -20,11 +27,15 @@ from sqlbuild.virtual.state.constants import (
     FUNCTION_VERSION_TABLE,
     LOCK_TABLE,
     MODEL_VERSION_TABLE,
+    NODE_RESULTS_TABLE,
     PHYSICAL_RELATION_ANCESTRY_TABLE,
     PHYSICAL_RELATION_TABLE,
     PYTHON_NODE_VERSION_TABLE,
+    RECONCILE_EVENT_TABLE,
     SEED_VERSION_TABLE,
     SOURCE_FRESHNESS_OBSERVATION_TABLE,
+    STATE_BOOLEAN_TRUE,
+    STATE_OPERATION_EVENT_TABLE,
     STATE_OPERATION_TABLE,
     VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
     VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
@@ -40,10 +51,12 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationAncestryRecord,
     PhysicalRelationRecord,
     PythonNodeVersionRecord,
+    ReconcileEventRecord,
     SeedVersionRecord,
     SourceFreshnessRecord,
     StateLockLease,
     StateLockRecord,
+    StateOperationEventRecord,
     StateOperationRecord,
     VirtualEnvironmentCheckpointFunctionRefRecord,
     VirtualEnvironmentCheckpointModelRefRecord,
@@ -678,6 +691,167 @@ class SqlStateBackend(StateBackend):
                 ),
                 params=[seed_ref.checkpoint_id, seed_ref.seed_name, seed_ref.version_hash],
             )
+
+    def insert_node_result(
+        self,
+        *,
+        connection: Any,
+        schema: str,
+        virtual_environment_name: str,
+        record: NodeResultRecord,
+    ) -> None:
+        p: str = self._placeholder
+        self._execute(
+            connection=connection,
+            sql=f"INSERT INTO {self._qualified_name(schema=schema, table=NODE_RESULTS_TABLE)} "
+            "(virtual_environment_name, node_type, node_name, target_database, target_schema, "
+            "target_name, run_id, status, payload_json_b64, metadata_json_b64, error_message, "
+            "materialized, created_at) "
+            f"VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, {p})",
+            params=[
+                virtual_environment_name,
+                record.node_type,
+                record.node_name,
+                record.target_database,
+                record.target_schema,
+                record.target_name,
+                record.run_id,
+                record.status,
+                encode_node_result_json(
+                    value=record.payload, label="payload", node_name=record.node_name
+                ),
+                encode_node_result_json(
+                    value=record.metadata, label="metadata", node_name=record.node_name
+                ),
+                record.error_message,
+                self._materialized_storage(record.materialized),
+                record.ts,
+            ],
+        )
+
+    def read_node_results(
+        self,
+        *,
+        connection: Any,
+        schema: str,
+        virtual_environment_name: str,
+        query: NodeResultQuery,
+    ) -> tuple[NodeResultEnvelope, ...]:
+        p: str = self._placeholder
+        if query.limit < 1:
+            return ()
+        predicates: list[str] = [
+            f"virtual_environment_name = {p}",
+            f"node_type = {p}",
+            f"node_name = {p}",
+            self._optional_equality_sql(
+                column="target_database", value=query.target_database, placeholder=f"{p}"
+            ),
+            self._optional_equality_sql(
+                column="target_schema", value=query.target_schema, placeholder=f"{p}"
+            ),
+            self._optional_equality_sql(
+                column="target_name", value=query.target_name, placeholder=f"{p}"
+            ),
+        ]
+        params: list[object] = [virtual_environment_name, query.node_type, query.node_name]
+        for value in (query.target_database, query.target_schema, query.target_name):
+            if value is not None:
+                params.append(value)
+        if query.statuses is not None:
+            placeholders: str = ", ".join(f"{p}" for _ in query.statuses)
+            predicates.append(f"status IN ({placeholders})")
+            params.extend(query.statuses)
+        if query.run_id is not None:
+            predicates.append(f"run_id = {p}")
+            params.append(query.run_id)
+        params.append(query.limit)
+        rows: list[tuple[Any, ...]] = self._fetch_all(
+            connection=connection,
+            sql="SELECT node_type, node_name, run_id, status, payload_json_b64, metadata_json_b64, "
+            "error_message, materialized, created_at "
+            f"FROM {self._qualified_name(schema=schema, table=NODE_RESULTS_TABLE)} "
+            f"WHERE {' AND '.join(predicates)} "
+            f"ORDER BY created_at DESC, run_id DESC LIMIT {p}",
+            params=params,
+        )
+        return tuple(self._node_result_row_to_envelope(row) for row in rows)
+
+    def create_state_operation_event(
+        self, *, connection: Any, schema: str, record: StateOperationEventRecord
+    ) -> None:
+        p: str = self._placeholder
+        self._execute(
+            connection=connection,
+            sql="INSERT INTO "
+            f"{self._qualified_name(schema=schema, table=STATE_OPERATION_EVENT_TABLE)} "
+            "(event_id, operation_id, action, status, message, created_at) "
+            f"VALUES ({p}, {p}, {p}, {p}, {p}, CURRENT_TIMESTAMP)",
+            params=[
+                record.event_id,
+                record.operation_id,
+                record.action,
+                record.status.value,
+                record.message,
+            ],
+        )
+
+    def create_reconcile_event(
+        self, *, connection: Any, schema: str, record: ReconcileEventRecord
+    ) -> None:
+        p: str = self._placeholder
+        self._execute(
+            connection=connection,
+            sql=f"INSERT INTO {self._qualified_name(schema=schema, table=RECONCILE_EVENT_TABLE)} "
+            "(event_id, action, status, message, created_at) "
+            f"VALUES ({p}, {p}, {p}, {p}, CURRENT_TIMESTAMP)",
+            params=[record.event_id, record.action.value, record.status.value, record.message],
+        )
+
+    def _node_result_row_to_envelope(self, row: tuple[Any, ...]) -> NodeResultEnvelope:
+        node_name: str = str(row[1])
+        metadata: object = decode_node_result_json(
+            value=str(row[5]), label="metadata", node_name=node_name
+        )
+        normalized_metadata: dict[str, object] = (
+            {str(key): value for key, value in metadata.items()}
+            if isinstance(metadata, dict)
+            else {}
+        )
+        return NodeResultEnvelope(
+            node_type=str(row[0]),
+            node_name=node_name,
+            run_id=str(row[2]),
+            status=str(row[3]),
+            payload=decode_node_result_json(
+                value=str(row[4]), label="payload", node_name=node_name
+            ),
+            metadata=normalized_metadata,
+            error_message=str(row[6]) if row[6] is not None else None,
+            materialized=self._parse_materialized(row[7]),
+            ts=row[8],
+        )
+
+    def _optional_equality_sql(self, *, column: str, value: object | None, placeholder: str) -> str:
+        if value is None:
+            return f"{column} IS NULL"
+        return f"{column} = {placeholder}"
+
+    def _materialized_storage(self, value: bool | None) -> str | None:
+        if value is None:
+            return None
+        return "true" if value else "false"
+
+    def _parse_materialized(self, value: object) -> bool | None:
+        if value is None:
+            return None
+        return str(value).lower() == STATE_BOOLEAN_TRUE
+
+    def _execute(
+        self, *, connection: Any, sql: str, params: Sequence[object] | None = None
+    ) -> None:
+        with self._statement_executor(connection=connection) as executor:
+            self._execute_in(executor=executor, sql=sql, params=params)
 
     def _replace_row_preserving_created_at(
         self,
