@@ -976,6 +976,7 @@ class PlanCommandRequest:
     defer_to: str | None = None
     defer_sources_to: str | None = None
     selected_target: str | None = None
+    as_target: str | None = None
     cursor_overrides: CursorOverrides | None = None
     json_output: bool = False
     full_refresh: bool = False
