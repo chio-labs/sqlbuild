@@ -5,16 +5,29 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class JanitorRelationKey:
-    """Physical identity for a warehouse relation considered by janitor."""
+    """Physical relation identity compared case-insensitively but rendered as spelled."""
 
     database: str | None
     schema: str | None
     name: str
+
+    def identity(self) -> tuple[str | None, str | None, str]:
+        """Return the case-insensitive comparison identity."""
+
+        return RelationLookup.key(database=self.database, schema=self.schema, name=self.name)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, JanitorRelationKey):
+            return NotImplemented
+        return self.identity() == other.identity()
+
+    def __hash__(self) -> int:
+        return hash(self.identity())
 
     def display_name(self) -> str:
         """Render a qualified display name."""
@@ -35,6 +48,37 @@ class JanitorDeleteCandidate:
     key: JanitorRelationKey
     relation: RelationInfo
     age_timestamp: datetime | None
+
+
+@dataclass(frozen=True)
+class JanitorParsedArchiveName:
+    """Structured parts of one strict janitor archive relation name."""
+
+    archived_at: datetime
+    logical_name: str
+
+
+@dataclass(frozen=True)
+class JanitorArchiveCandidate:
+    """One stale direct-mode relation that will be renamed to an archive name."""
+
+    key: JanitorRelationKey
+    relation: RelationInfo
+    age_timestamp: datetime | None
+    archive_key: JanitorRelationKey
+    archived_at: datetime
+    expires_at: datetime
+
+
+@dataclass(frozen=True)
+class JanitorArchivedRelation:
+    """One relation whose name strictly matches the janitor archive grammar."""
+
+    key: JanitorRelationKey
+    relation_type: str | None
+    archived_at: datetime
+    expires_at: datetime
+    original_key: JanitorRelationKey | None = None
 
 
 @dataclass(frozen=True)
@@ -156,6 +200,7 @@ class JanitorBlockedSchema:
     schema: str | None
     source_names: tuple[str, ...]
     suppressed_candidates: tuple[JanitorDeleteCandidate, ...] = field(default_factory=tuple)
+    suppressed_archive_deletions: tuple[JanitorArchivedRelation, ...] = field(default_factory=tuple)
 
     def display_name(self) -> str:
         """Render a schema display name."""
@@ -198,6 +243,17 @@ class JanitorSchemaClassification:
 
 
 @dataclass(frozen=True)
+class JanitorArchivePlanning:
+    """Direct-mode archive and archive-expiry decisions for one janitor plan."""
+
+    archive_candidates: tuple[JanitorArchiveCandidate, ...]
+    archive_deletion_candidates: tuple[JanitorArchivedRelation, ...]
+    retained_archives: tuple[JanitorArchivedRelation, ...]
+    skipped_relations: tuple[JanitorSkippedRelation, ...]
+    blocked_schemas: tuple[JanitorBlockedSchema, ...]
+
+
+@dataclass(frozen=True)
 class JanitorStateCandidates:
     """Precomputed state-side cleanup candidates for one janitor plan."""
 
@@ -228,6 +284,7 @@ class JanitorDirectModeSettings:
 
     enabled: bool = False
     state_history_versions: int = 20
+    archive_retention_days: int = 14
 
 
 @dataclass(frozen=True)
@@ -237,7 +294,11 @@ class JanitorPlan:
     target_name: str | None
     retention_days: int
     direct_mode: bool = False
+    archive_retention_days: int = 14
     candidates: tuple[JanitorDeleteCandidate, ...] = field(default_factory=tuple)
+    archive_candidates: tuple[JanitorArchiveCandidate, ...] = field(default_factory=tuple)
+    archive_deletion_candidates: tuple[JanitorArchivedRelation, ...] = field(default_factory=tuple)
+    retained_archives: tuple[JanitorArchivedRelation, ...] = field(default_factory=tuple)
     query_diff_artifact_candidates: tuple[JanitorQueryDiffArtifactCandidate, ...] = field(
         default_factory=tuple
     )
@@ -261,6 +322,7 @@ class JanitorPlan:
     blocked_schemas: tuple[JanitorBlockedSchema, ...] = field(default_factory=tuple)
     scanned_schema_count: int = 0
     age_metadata_supported: bool = False
+    planned_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -268,6 +330,8 @@ class JanitorExecutionResult:
     """Result from deleting janitor candidates."""
 
     deleted: tuple[JanitorDeleteCandidate, ...] = field(default_factory=tuple)
+    archived: tuple[JanitorArchiveCandidate, ...] = field(default_factory=tuple)
+    deleted_archives: tuple[JanitorArchivedRelation, ...] = field(default_factory=tuple)
     deleted_query_diff_artifacts: tuple[JanitorQueryDiffArtifactCandidate, ...] = field(
         default_factory=tuple
     )

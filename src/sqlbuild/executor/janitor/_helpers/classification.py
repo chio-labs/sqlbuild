@@ -17,6 +17,7 @@ from sqlbuild.compiler.planner.main.scenarios.is_scenario_artifact_physical_name
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.executor.diff.classes.query_artifact_lifecycle import QueryDiffArtifactLifecycle
 from sqlbuild.executor.diff.models import QueryDiffArtifactInspection
+from sqlbuild.executor.janitor._helpers.archive_names import is_archive_lookalike_name
 from sqlbuild.executor.janitor._helpers.plan import (
     collect_desired_keys,
     collect_source_schemas,
@@ -26,7 +27,13 @@ from sqlbuild.executor.janitor._helpers.plan import (
 from sqlbuild.executor.janitor._helpers.plan import (
     relation_key as build_relation_key,
 )
+from sqlbuild.executor.janitor._helpers.relation_addressing import (
+    case_colliding_names,
+    case_collision_reason,
+    unaddressable_relation_reason,
+)
 from sqlbuild.executor.janitor._helpers.tracking import collect_tracked_relation_keys
+from sqlbuild.executor.janitor.classes.relation_age_reader import JanitorRelationAgeReader
 from sqlbuild.executor.janitor.models import (
     JanitorDeleteCandidate,
     JanitorDirectStatePruneCandidate,
@@ -167,17 +174,24 @@ def classify_janitor_relations(
     effective_exclude_patterns: tuple[str, ...],
     delete_tracked_only: bool,
     retention_days: int,
-    age_supported: bool,
+    age_reader: JanitorRelationAgeReader,
     now: datetime,
+    direct_mode: bool = False,
 ) -> JanitorRelationClassification:
     """Split one schema's relations into delete candidates and skipped relations."""
 
     candidates: list[JanitorDeleteCandidate] = []
     skipped_relations: list[JanitorSkippedRelation] = []
+    eligible_relations: list[RelationInfo] = []
+    colliding_names: frozenset[str] = case_colliding_names(
+        relation.name for relation in schema_relations
+    )
     relation: RelationInfo
     for relation in schema_relations:
         relation_key: JanitorRelationKey = build_relation_key(relation)
         if relation_key in facts.desired_keys:
+            continue
+        if direct_mode and is_archive_lookalike_name(relation_key.name):
             continue
         skip_reason: str | None = _relation_skip_reason(
             relation_key=relation_key,
@@ -187,12 +201,26 @@ def classify_janitor_relations(
             effective_exclude_patterns=effective_exclude_patterns,
             delete_tracked_only=delete_tracked_only,
         )
+        if skip_reason is None and direct_mode:
+            skip_reason = unaddressable_relation_reason(
+                name=relation_key.name, colliding_names=colliding_names
+            )
+        elif skip_reason is None:
+            skip_reason = case_collision_reason(
+                name=relation_key.name, colliding_names=colliding_names
+            )
         if skip_reason is not None:
             skipped_relations.append(
                 JanitorSkippedRelation(key=relation_key, relation=relation, reason=skip_reason)
             )
             continue
-        age_timestamp: datetime | None = relation_age_timestamp(relation)
+        eligible_relations.append(relation)
+    age_supported: bool = age_reader.supported()
+    aged_relation: RelationInfo
+    eligible: tuple[RelationInfo, ...] = tuple(eligible_relations)
+    for aged_relation in age_reader.read(eligible) if retention_days > 0 else eligible:
+        relation_key = build_relation_key(aged_relation)
+        age_timestamp: datetime | None = relation_age_timestamp(aged_relation)
         if retention_days > 0:
             retention_skip_reason: str | None = _retention_skip_reason(
                 age_timestamp=age_timestamp,
@@ -204,7 +232,7 @@ def classify_janitor_relations(
                 skipped_relations.append(
                     JanitorSkippedRelation(
                         key=relation_key,
-                        relation=relation,
+                        relation=aged_relation,
                         reason=retention_skip_reason,
                     )
                 )
@@ -212,7 +240,7 @@ def classify_janitor_relations(
         candidates.append(
             JanitorDeleteCandidate(
                 key=relation_key,
-                relation=relation,
+                relation=aged_relation,
                 age_timestamp=age_timestamp,
             )
         )
@@ -238,7 +266,7 @@ def _relation_skip_reason(
             relation_key,
             "relation is referenced by a retained virtual checkpoint",
         )
-    exclude_pattern: str | None = _matching_exclude_pattern(
+    exclude_pattern: str | None = matching_exclude_pattern(
         key=relation_key,
         patterns=effective_exclude_patterns,
     )
@@ -269,15 +297,19 @@ def _retention_skip_reason(
     return None
 
 
-def _matching_exclude_pattern(
+def matching_exclude_pattern(
     *,
     key: JanitorRelationKey,
     patterns: tuple[str, ...],
 ) -> str | None:
-    display_name: str = key.display_name()
+    """Return the first exclude pattern matching a relation or qualified name, ignoring case."""
+
+    name: str = key.name.lower()
+    display_name: str = key.display_name().lower()
     pattern: str
     for pattern in patterns:
-        if fnmatchcase(key.name, pattern) or fnmatchcase(display_name, pattern):
+        folded_pattern: str = pattern.lower()
+        if fnmatchcase(name, folded_pattern) or fnmatchcase(display_name, folded_pattern):
             return pattern
     return None
 

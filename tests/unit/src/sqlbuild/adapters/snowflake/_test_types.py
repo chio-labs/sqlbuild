@@ -194,3 +194,13 @@ class SnowflakeBatchedRetentionErrorTestCase:
     requests: tuple[tuple[str, str], ...]
     rows: list[tuple[object, ...]]
     expected_error: str
+
+
+@dataclass(frozen=True)
+class SnowflakeRelationAgeMetadataTestCase:
+    description: str
+    relation_type: str
+    created: datetime | None
+    last_altered: datetime | None
+    expected_created_at: datetime | None
+    expected_last_altered_at: datetime | None

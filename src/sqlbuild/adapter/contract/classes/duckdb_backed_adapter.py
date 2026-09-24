@@ -97,6 +97,8 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         return False
 
     def supports_relation_age_metadata(self) -> bool:
+        """Return False because the DuckDB and MotherDuck catalogs record no relation timestamps."""
+
         return False
 
     def supports_table_freshness_metadata(self) -> bool:
@@ -1029,6 +1031,18 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         del database, schema
         return ()
 
+    def render_create_janitor_event_table_sql(self, *, database: str | None, schema: str) -> str:
+        from sqlbuild.executor.janitor_events.main.create_table_sql import (
+            build_janitor_events_create_table_sql,
+        )
+
+        return build_janitor_events_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        )
+
     def render_prune_fingerprint_history_sql(
         self,
         *,
@@ -1310,6 +1324,14 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
             )
             for row in rows
         )
+
+    def with_relation_age_metadata(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+    ) -> tuple[RelationInfo, ...]:
+        return relations
 
     def list_functions(
         self,
@@ -1625,6 +1647,10 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
     def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
         unqualified_destination: str = destination.rsplit(".", 1)[-1]
         return (f"ALTER TABLE {origin} RENAME TO {unqualified_destination}",)
+
+    def render_rename_view(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        unqualified_destination: str = destination.rsplit(".", 1)[-1]
+        return (f"ALTER VIEW {origin} RENAME TO {unqualified_destination}",)
 
     def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
         staging: str = self._with_replaced_relation_name(

@@ -57,6 +57,7 @@ from sqlbuild.adapter.contract.types import (
     RetentionScope,
     TablePromotionMode,
 )
+from sqlbuild.adapter.relations.main.relation_age_timestamp import relation_age_timestamp_utc
 from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
     render_insert_source_freshness_records_sql,
 )
@@ -458,6 +459,19 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         del database, schema
         return ()
 
+    def render_create_janitor_event_table_sql(self, *, database: str | None, schema: str) -> str:
+        from sqlbuild.executor.janitor_events.main.create_table_sql import (
+            build_janitor_events_create_table_sql,
+        )
+
+        return build_janitor_events_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+            transient=self.state_tables_transient,
+        )
+
     def render_prune_fingerprint_history_sql(
         self,
         *,
@@ -527,7 +541,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
 
     def supports_relation_age_metadata(self) -> bool:
-        return False
+        return True
 
     def supports_table_freshness_metadata(self) -> bool:
         return True
@@ -1810,12 +1824,20 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 is_transient=(
                     None if row[3] is None else str(row[3]).upper() == TRUE_METADATA_VALUE
                 ),
-                created_at=None if row[4] is None else row[4],
-                last_altered_at=None if row[5] is None else row[5],
+                created_at=relation_age_timestamp_utc(row[4]),
+                last_altered_at=relation_age_timestamp_utc(row[5]),
                 retention_days=None if row[6] is None else int(row[6]),
             )
             for row in rows
         )
+
+    def with_relation_age_metadata(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+    ) -> tuple[RelationInfo, ...]:
+        return relations
 
     def list_functions(
         self,
@@ -2339,6 +2361,9 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
 
     def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
         return (f"ALTER TABLE {origin} RENAME TO {destination}",)
+
+    def render_rename_view(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        return (f"ALTER VIEW {origin} RENAME TO {destination}",)
 
     def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
         return (f"ALTER TABLE {left} SWAP WITH {right}",)

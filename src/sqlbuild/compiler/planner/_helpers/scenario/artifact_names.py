@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-import hashlib
 import re
 
+from sqlbuild.adapter.relations.main.fit_artifact_logical_name import fit_artifact_logical_name
 from sqlbuild.compiler.planner.constants import (
     SCENARIO_ARTIFACT_KINDS,
     SCENARIO_ARTIFACT_PREFIX,
     SCENARIO_HASH_PREFIX_LENGTH,
-    SCENARIO_SHORTENED_LOGICAL_HASH_LENGTH,
 )
 from sqlbuild.compiler.planner.models import ParsedScenarioArtifactName
-from sqlbuild.errors.contracts.exceptions import SharedInputError
 
 _SCENARIO_ARTIFACT_NAME_RE: re.Pattern[str] = re.compile(
     rf"^{re.escape(SCENARIO_ARTIFACT_PREFIX)}"
@@ -62,30 +60,3 @@ def fit_scenario_artifact_logical_name(
         identifier_limit=identifier_limit,
         artifact_label="Scenario artifact",
     )
-
-
-def fit_artifact_logical_name(
-    *, logical_name: str, fixed_prefix: str, identifier_limit: int, artifact_label: str
-) -> str:
-    """Fit a readable logical component with a deterministic hash suffix."""
-
-    max_logical_length: int = identifier_limit - len(fixed_prefix)
-    if max_logical_length < 1:
-        raise SharedInputError(
-            f"{artifact_label} prefix '{fixed_prefix}' does not fit within identifier "
-            f"limit {identifier_limit}"
-        )
-    if len(logical_name) <= max_logical_length:
-        return logical_name
-
-    suffix_length: int = SCENARIO_SHORTENED_LOGICAL_HASH_LENGTH + 1
-    if max_logical_length <= suffix_length:
-        raise SharedInputError(
-            f"{artifact_label} name for '{logical_name}' cannot fit within identifier "
-            f"limit {identifier_limit}"
-        )
-    logical_hash: str = hashlib.sha256(logical_name.encode("utf-8")).hexdigest()[
-        :SCENARIO_SHORTENED_LOGICAL_HASH_LENGTH
-    ]
-    prefix_length: int = max_logical_length - suffix_length
-    return f"{logical_name[:prefix_length]}_{logical_hash}"

@@ -280,7 +280,7 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
             expected_dropped_targets=("analytics.old_orders",),
         ),
         JanitorExecuteTestCase(
-            description="direct mode reports eligible candidates without dropping",
+            description="direct mode archives eligible candidates instead of dropping them",
             relation_infos=(relation_info("old_orders", created_at=OLD_TIME),),
             expected_dropped_targets=(),
             direct_mode=True,
