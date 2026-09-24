@@ -772,6 +772,8 @@ fn bare_row_existence(sql: &str, targets: &[String], dialect: &str) -> bool {
         && reference_target(&source.relation).is_some_and(|target| targets.contains(&target))
         && !contains_function(&select.projection)
         && !contains_function(&query.order_by)
+        && query.limit_clause.is_none()
+        && query.fetch.is_none()
         && query_count(&query) == 1
 }
 

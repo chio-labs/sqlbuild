@@ -140,6 +140,20 @@ fn given_sql_test_shapes_when_evaluating_empty_input_rule_then_flags_only_filler
             expected_messages: &[],
         },
         test_types::EmptyInputTestRuleTestCase {
+            description: "all-empty mocks with an offset assertion pass",
+            test: helpers::empty_input_test_fact(
+                "orders__reports_at_most_one_summary",
+                &[EMPTY_ORDERS],
+                &[],
+                &[(
+                    "__assert__at_most_one_summary_row",
+                    "SELECT 1 AS unexpected_extra_summary FROM __ref(\"orders\") OFFSET 1",
+                )],
+            ),
+            allowed_tests: json!([]),
+            expected_messages: &[],
+        },
+        test_types::EmptyInputTestRuleTestCase {
             description: "a filtered mock ordered by an aggregate is not empty",
             test: helpers::empty_input_test_fact(
                 "orders__drops_first_order",
