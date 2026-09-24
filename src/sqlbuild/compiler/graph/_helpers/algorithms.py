@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
 
@@ -44,6 +44,25 @@ def transitive_closure_impl[K](
                 continue
             visited.add(neighbor)
             frontier.append((neighbor, depth + 1))
+    return frozenset(visited)
+
+
+def transitive_closure_many_impl[K](
+    *, starts: Iterable[K], edges: Mapping[K, Iterable[K]], include_starts: bool
+) -> frozenset[K]:
+    """Return all graph keys reachable from any starting key."""
+
+    start_keys: tuple[K, ...] = tuple(starts)
+    visited: set[K] = set(start_keys) if include_starts else set()
+    frontier: list[K] = list(start_keys)
+    while frontier:
+        current: K = frontier.pop()
+        neighbor: K
+        for neighbor in edges.get(current, ()):
+            if neighbor in visited:
+                continue
+            visited.add(neighbor)
+            frontier.append(neighbor)
     return frozenset(visited)
 
 

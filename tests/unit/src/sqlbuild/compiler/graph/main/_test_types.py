@@ -18,6 +18,15 @@ class TransitiveClosureTestCase:
 
 
 @dataclass(frozen=True)
+class TransitiveClosureManyTestCase:
+    description: str
+    edges: dict[str, tuple[str, ...]]
+    starts: tuple[str, ...]
+    include_starts: bool
+    expected_nodes: frozenset[str]
+
+
+@dataclass(frozen=True)
 class PathNodesTestCase:
     description: str
     downstream: dict[str, tuple[str, ...]]

@@ -23,6 +23,7 @@ from sqlbuild.cli.progress.classes.native_progress_projector import (
 )
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
+from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.pipeline.main.relation_targets import build_python_relation_targets
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -78,16 +79,10 @@ def check_dependency_closure(
 ) -> frozenset[str]:
     """Return transitive executable Python dependencies of selected checks."""
 
-    dependencies: set[str] = set()
-    pending: list[str] = list(check_names)
-    while pending:
-        name: str = pending.pop()
-        for upstream_name in graph.upstream_deps.get(name, ()):
-            if upstream_name in dependencies:
-                continue
-            dependencies.add(upstream_name)
-            pending.append(upstream_name)
-    return frozenset(dependencies - check_names)
+    dependencies: frozenset[str] = transitive_closure_many(
+        starts=check_names, edges=graph.upstream_deps, include_starts=False
+    )
+    return dependencies - check_names
 
 
 def _validate_check_selectors(*, select: tuple[str, ...]) -> None:

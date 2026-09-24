@@ -191,3 +191,12 @@ class BatchedRetentionReconciliationTestCase:
     expected_batch_request_ids: tuple[tuple[str, ...], ...]
     expected_single_inspections: tuple[str, ...]
     expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DownstreamBlockedKeysTestCase:
+    description: str
+    failed_name: str
+    downstream_deps: dict[str, tuple[str, ...]]
+    selected_names: frozenset[str]
+    expected_names: frozenset[str]

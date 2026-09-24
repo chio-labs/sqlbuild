@@ -34,6 +34,8 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
+from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.lineage.main.columns import build_project_column_lineage
 from sqlbuild.compiler.lineage.models import (
     ColumnLineageEdge,
@@ -481,10 +483,7 @@ def _walk_bounded(
     max_depth: int | None,
 ) -> frozenset[CompiledObjectKey]:
     if max_depth is None:
-        result: set[CompiledObjectKey] = set()
-        for anchor in anchors:
-            result.update(_walk_all(key=anchor, deps=deps))
-        return frozenset(result)
+        return transitive_closure_many(starts=anchors, edges=deps, include_starts=False)
     if max_depth == 0:
         return frozenset()
     visited: set[CompiledObjectKey] = set()
@@ -498,23 +497,6 @@ def _walk_bounded(
                 continue
             visited.add(neighbor)
             queue.append((neighbor, current_depth + 1))
-    return frozenset(visited)
-
-
-def _walk_all(
-    *,
-    key: CompiledObjectKey,
-    deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-) -> frozenset[CompiledObjectKey]:
-    visited: set[CompiledObjectKey] = set()
-    stack: list[CompiledObjectKey] = [key]
-    while stack:
-        current: CompiledObjectKey = stack.pop()
-        for neighbor in deps.get(current, ()):
-            if neighbor in visited:
-                continue
-            visited.add(neighbor)
-            stack.append(neighbor)
     return frozenset(visited)
 
 
@@ -562,13 +544,14 @@ def _resolve_selectors(
                 )
             )
     scoped: set[CompiledObjectKey] = selected - excluded
-    for key in tuple(scoped):
-        for upstream_key in _walk_all(key=key, deps=upstream):
-            if upstream_key.resource_type in {
-                CompiledResourceType.UDF,
-                CompiledResourceType.TABLE_FN,
-            }:
-                scoped.add(upstream_key)
+    for upstream_key in transitive_closure_many(
+        starts=tuple(scoped), edges=upstream, include_starts=False
+    ):
+        if upstream_key.resource_type in {
+            CompiledResourceType.UDF,
+            CompiledResourceType.TABLE_FN,
+        }:
+            scoped.add(upstream_key)
     return frozenset(scoped)
 
 
@@ -616,9 +599,9 @@ def _resolve_single(
             _find_path_keys(start=start_key, end=end_key, downstream=downstream)
         )
         if parsed.upstream:
-            result.update(_walk_all(key=start_key, deps=upstream))
+            result.update(transitive_closure(start=start_key, edges=upstream))
         if parsed.downstream:
-            result.update(_walk_all(key=end_key, deps=downstream))
+            result.update(transitive_closure(start=end_key, edges=downstream))
         return frozenset(result)
     if parsed.kind == SelectorKind.TAG:
         matched_keys: frozenset[CompiledObjectKey] = tag_index.get(parsed.value, frozenset())
@@ -648,11 +631,14 @@ def _apply_selector_expansion(
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> frozenset[CompiledObjectKey]:
     result: set[CompiledObjectKey] = set(matched_keys)
-    for key in matched_keys:
-        if parsed.upstream:
-            result.update(_walk_all(key=key, deps=upstream))
-        if parsed.downstream:
-            result.update(_walk_all(key=key, deps=downstream))
+    if parsed.upstream:
+        result.update(
+            transitive_closure_many(starts=matched_keys, edges=upstream, include_starts=False)
+        )
+    if parsed.downstream:
+        result.update(
+            transitive_closure_many(starts=matched_keys, edges=downstream, include_starts=False)
+        )
     return frozenset(result)
 
 
@@ -729,7 +715,9 @@ def _find_path_keys(
     end: CompiledObjectKey,
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> frozenset[CompiledObjectKey]:
-    reachable_from_start: frozenset[CompiledObjectKey] = _walk_all(key=start, deps=downstream)
+    reachable_from_start: frozenset[CompiledObjectKey] = transitive_closure(
+        start=start, edges=downstream
+    )
     if end not in reachable_from_start:
         raise CliUserError(
             f"'{end.resource_type}:{end.name}' is not downstream of "

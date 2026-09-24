@@ -262,3 +262,18 @@ def batched_retention_request_ids(*, adapter: Mock) -> tuple[tuple[str, ...], ..
     for batch in adapter.inspect_retentions.call_args_list:
         batches.append(tuple(request.request_id for request in batch.kwargs["requests"]))
     return tuple(batches)
+
+
+def model_key(name: str) -> CompiledObjectKey:
+    return CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name)
+
+
+def build_model_key_edges(
+    *, edges: dict[str, tuple[str, ...]]
+) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]:
+    key_edges: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {}
+    name: str
+    children: tuple[str, ...]
+    for name, children in edges.items():
+        key_edges[model_key(name)] = tuple(model_key(child) for child in children)
+    return key_edges

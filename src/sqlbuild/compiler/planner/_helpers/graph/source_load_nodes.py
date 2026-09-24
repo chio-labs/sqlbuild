@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.planner._helpers.graph.loader_dag import (
     build_intermediate_source_map,
     build_upstream_intermediate_source_map,
@@ -22,7 +23,7 @@ def build_source_load_map(
     """Return source entries available to source-load and source-read planning."""
 
     relevant_keys: frozenset[CompiledObjectKey] | None = (
-        _upstream_closure(selected_keys=selected_keys, upstream_deps=upstream_deps)
+        transitive_closure_many(starts=selected_keys, edges=upstream_deps, include_starts=True)
         if upstream_deps is not None
         else None
     )
@@ -36,24 +37,6 @@ def build_source_load_map(
         build_upstream_intermediate_source_map(project=project, selected_keys=selected_keys)
     )
     return source_map
-
-
-def _upstream_closure(
-    *,
-    selected_keys: frozenset[CompiledObjectKey],
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-) -> frozenset[CompiledObjectKey]:
-    """Return an adapter-neutral dependency closure for selected metadata reads."""
-
-    closure: set[CompiledObjectKey] = set(selected_keys)
-    pending: list[CompiledObjectKey] = list(selected_keys)
-    while pending:
-        key: CompiledObjectKey = pending.pop()
-        for upstream_key in upstream_deps.get(key, ()):
-            if upstream_key not in closure:
-                closure.add(upstream_key)
-                pending.append(upstream_key)
-    return frozenset(closure)
 
 
 def build_source_load_entries(

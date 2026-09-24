@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fnmatch import fnmatchcase
 
+from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.planner.constants import PATH_SELECTOR_EXPLICIT_ROOT_ERROR
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
@@ -83,15 +84,7 @@ def _resolve_single(*, raw: str, graph: PythonNodeGraph) -> frozenset[str]:
     if not node_names:
         raise PlannerInputError(f"unknown Python node selector '{parsed.value}'", code="S007")
 
-    result: set[str] = set(node_names)
-    node_name: str
-    if parsed.upstream:
-        for node_name in node_names:
-            result.update(_expand_upstream(name=node_name, graph=graph))
-    if parsed.downstream:
-        for node_name in node_names:
-            result.update(_expand_downstream(name=node_name, graph=graph))
-    return frozenset(result)
+    return _expand_selected(names=node_names, parsed=parsed, graph=graph)
 
 
 def _resolve_path(*, parsed: ParsedSelector, graph: PythonNodeGraph) -> frozenset[str]:
@@ -105,15 +98,7 @@ def _resolve_path(*, parsed: ParsedSelector, graph: PythonNodeGraph) -> frozense
     if not matched_names:
         raise PlannerInputError(f"no Python nodes found under path '{folder}'", code="S009")
 
-    result: set[str] = set(matched_names)
-    node_name: str
-    if parsed.upstream:
-        for node_name in matched_names:
-            result.update(_expand_upstream(name=node_name, graph=graph))
-    if parsed.downstream:
-        for node_name in matched_names:
-            result.update(_expand_downstream(name=node_name, graph=graph))
-    return frozenset(result)
+    return _expand_selected(names=matched_names, parsed=parsed, graph=graph)
 
 
 def _path_matches(*, indexed_folder: str, selector_folder: str) -> bool:
@@ -137,15 +122,7 @@ def _resolve_tag(*, parsed: ParsedSelector, graph: PythonNodeGraph) -> frozenset
     if not tagged_names:
         raise PlannerInputError(f"no Python nodes found with tag '{parsed.value}'", code="S008")
 
-    result: set[str] = set(tagged_names)
-    node_name: str
-    if parsed.upstream:
-        for node_name in tagged_names:
-            result.update(_expand_upstream(name=node_name, graph=graph))
-    if parsed.downstream:
-        for node_name in tagged_names:
-            result.update(_expand_downstream(name=node_name, graph=graph))
-    return frozenset(result)
+    return _expand_selected(names=tagged_names, parsed=parsed, graph=graph)
 
 
 def _lookup_node_names(*, parsed: ParsedSelector, graph: PythonNodeGraph) -> frozenset[str]:
@@ -180,29 +157,16 @@ def _is_name_pattern(value: str) -> bool:
     return any(character in value for character in "*?[")
 
 
-def _expand_upstream(*, name: str, graph: PythonNodeGraph) -> frozenset[str]:
-    visited: set[str] = set()
-    stack: list[str] = [name]
-    while stack:
-        current: str = stack.pop()
-        neighbor: str
-        for neighbor in graph.upstream_deps.get(current, ()):
-            if neighbor in visited:
-                continue
-            visited.add(neighbor)
-            stack.append(neighbor)
-    return frozenset(visited)
-
-
-def _expand_downstream(*, name: str, graph: PythonNodeGraph) -> frozenset[str]:
-    visited: set[str] = set()
-    stack: list[str] = [name]
-    while stack:
-        current: str = stack.pop()
-        neighbor: str
-        for neighbor in graph.downstream_deps.get(current, ()):
-            if neighbor in visited:
-                continue
-            visited.add(neighbor)
-            stack.append(neighbor)
-    return frozenset(visited)
+def _expand_selected(
+    *, names: frozenset[str], parsed: ParsedSelector, graph: PythonNodeGraph
+) -> frozenset[str]:
+    result: set[str] = set(names)
+    if parsed.upstream:
+        result.update(
+            transitive_closure_many(starts=names, edges=graph.upstream_deps, include_starts=False)
+        )
+    if parsed.downstream:
+        result.update(
+            transitive_closure_many(starts=names, edges=graph.downstream_deps, include_starts=False)
+        )
+    return frozenset(result)
