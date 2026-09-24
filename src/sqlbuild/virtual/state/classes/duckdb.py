@@ -12,7 +12,6 @@ from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope, Micro
 from sqlbuild.virtual.state._helpers.state_storage.datetime import (
     to_naive_utc_wall_clock,
 )
-from sqlbuild.virtual.state._helpers.state_storage.events import backup_id, event_id
 from sqlbuild.virtual.state._helpers.state_storage.microbatch_events import (
     append_duckdb_microbatch_event,
     append_duckdb_microbatch_events,
@@ -23,39 +22,29 @@ from sqlbuild.virtual.state._helpers.state_storage.microbatch_events import (
 from sqlbuild.virtual.state._helpers.state_storage.validation import build_validation_result
 from sqlbuild.virtual.state.classes._sql_state_backend import SqlStateBackend
 from sqlbuild.virtual.state.constants import (
-    CURRENT_STATE_SCHEMA_VERSION,
     DUCKDB_DATETIME_TYPE_TOKEN,
     DUCKDB_INTEGER_TYPE_TOKEN,
     DUCKDB_TIMESTAMP_TYPE_TOKEN,
     LOCK_TABLE,
     MICROBATCH_EVENT_TABLE,
-    NON_UNIQUE_STATE_INDEXES,
     PYTHON_NODE_VERSION_TABLE,
     SOURCE_FRESHNESS_OBSERVATION_TABLE,
-    STATE_MIGRATION_EVENTS_TABLE,
     STATE_TABLE_COLUMNS,
     STATE_TABLE_INDEXES,
-    STATE_TABLES,
-    STATE_VERSION_TABLE,
     VIRTUAL_ENVIRONMENT_NODE_REF_TABLE,
     VIRTUAL_ENVIRONMENT_TABLE,
 )
 from sqlbuild.virtual.state.exceptions import (
     StateBackendConfigError,
-    StateBackupNotFoundError,
-    StateSchemaInvalidError,
 )
 from sqlbuild.virtual.state.models import (
     SourceFreshnessRecord,
-    StateBackupRecord,
     StateLockLease,
     StateSchemaValidationResult,
     VirtualEnvironmentNodeRefRecord,
 )
 from sqlbuild.virtual.state.types import (
     StateColumnType,
-    StateMigrationAction,
-    StateMigrationStatus,
 )
 
 
@@ -125,51 +114,6 @@ class DuckDbStateBackend(SqlStateBackend):
     ) -> tuple[Any, ...] | None:
         return executor.execute(sql, params).fetchone()
 
-    def initialize(self, *, connection: Any, schema: str, sqlbuild_version: str) -> None:
-        connection.execute("BEGIN")
-        try:
-            connection.execute(f"CREATE SCHEMA IF NOT EXISTS {self._quote_identifier(schema)}")
-            connection.execute(
-                "CREATE TABLE IF NOT EXISTS "
-                f"{self._qualified_name(schema=schema, table=STATE_VERSION_TABLE)} ("
-                "schema_version INTEGER NOT NULL, "
-                "sqlbuild_version TEXT NOT NULL, "
-                "updated_at TIMESTAMP NOT NULL"
-                ")"
-            )
-            connection.execute(
-                "CREATE TABLE IF NOT EXISTS "
-                f"{self._qualified_name(schema=schema, table=STATE_MIGRATION_EVENTS_TABLE)} ("
-                "event_id TEXT NOT NULL, "
-                "action TEXT NOT NULL, "
-                "backup_id TEXT, "
-                "status TEXT NOT NULL, "
-                "message TEXT, "
-                "created_at TIMESTAMP NOT NULL"
-                ")"
-            )
-            self._create_additional_state_tables(connection=connection, schema=schema)
-            connection.execute(
-                f"DELETE FROM {self._qualified_name(schema=schema, table=STATE_VERSION_TABLE)}"
-            )
-            connection.execute(
-                f"INSERT INTO {self._qualified_name(schema=schema, table=STATE_VERSION_TABLE)} "
-                "(schema_version, sqlbuild_version, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
-                [CURRENT_STATE_SCHEMA_VERSION, sqlbuild_version],
-            )
-            self._record_event(
-                connection=connection,
-                schema=schema,
-                action=StateMigrationAction.INIT,
-                backup_id_value=None,
-                status=StateMigrationStatus.SUCCESS,
-                message=None,
-            )
-            connection.execute("COMMIT")
-        except BaseException:
-            connection.execute("ROLLBACK")
-            raise
-
     def inspect_schema(self, *, connection: Any, schema: str) -> StateSchemaValidationResult:
         tables: set[str] = {
             row[0]
@@ -199,91 +143,6 @@ class DuckDbStateBackend(SqlStateBackend):
             expected_indexes=STATE_TABLE_INDEXES,
             existing_indexes_by_table=indexes_by_table,
         )
-
-    def create_backup(self, *, connection: Any, schema: str) -> str:
-        validation: StateSchemaValidationResult = self.inspect_schema(
-            connection=connection, schema=schema
-        )
-        if not validation.valid:
-            raise StateSchemaInvalidError("Cannot backup invalid state schema")
-        backup_id_value: str = backup_id()
-        backup_schema: str = self._backup_schema_name(
-            schema=schema,
-            backup_id_value=backup_id_value,
-        )
-        connection.execute("BEGIN")
-        try:
-            connection.execute(f"CREATE SCHEMA {self._quote_identifier(backup_schema)}")
-            table_name: str
-            for table_name in STATE_TABLES:
-                connection.execute(
-                    f"CREATE TABLE {self._qualified_name(schema=backup_schema, table=table_name)} "
-                    "AS "
-                    f"SELECT * FROM {self._qualified_name(schema=schema, table=table_name)}"
-                )
-            self._record_event(
-                connection=connection,
-                schema=schema,
-                action=StateMigrationAction.BACKUP,
-                backup_id_value=backup_id_value,
-                status=StateMigrationStatus.SUCCESS,
-                message=None,
-            )
-            connection.execute("COMMIT")
-        except BaseException:
-            connection.execute("ROLLBACK")
-            raise
-        return backup_id_value
-
-    def rollback(self, *, connection: Any, schema: str, backup_id: str | None = None) -> str:
-        backup_id_value: str = backup_id or self._latest_backup_id(
-            connection=connection, schema=schema
-        )
-        backup_schema: str = self._backup_schema_name(
-            schema=schema,
-            backup_id_value=backup_id_value,
-        )
-        if not self._schema_exists(connection=connection, schema=backup_schema):
-            raise StateBackupNotFoundError(f"State backup schema '{backup_schema}' does not exist")
-        connection.execute("BEGIN")
-        try:
-            table_name: str
-            for table_name in STATE_TABLES:
-                connection.execute(
-                    f"DROP TABLE IF EXISTS {self._qualified_name(schema=schema, table=table_name)}"
-                )
-            connection.execute(f"CREATE SCHEMA IF NOT EXISTS {self._quote_identifier(schema)}")
-            for table_name in STATE_TABLES:
-                connection.execute(
-                    f"CREATE TABLE {self._qualified_name(schema=schema, table=table_name)} AS "
-                    f"SELECT * FROM {self._qualified_name(schema=backup_schema, table=table_name)}"
-                )
-            self._create_state_indexes(connection=connection, schema=schema)
-            self._record_event(
-                connection=connection,
-                schema=schema,
-                action=StateMigrationAction.ROLLBACK,
-                backup_id_value=backup_id_value,
-                status=StateMigrationStatus.SUCCESS,
-                message=None,
-            )
-            connection.execute("COMMIT")
-        except BaseException:
-            connection.execute("ROLLBACK")
-            raise
-        return backup_id_value
-
-    def reset(self, *, connection: Any, schema: str) -> None:
-        connection.execute("BEGIN")
-        try:
-            for table_name in STATE_TABLES:
-                connection.execute(
-                    f"DROP TABLE IF EXISTS {self._qualified_name(schema=schema, table=table_name)}"
-                )
-            connection.execute("COMMIT")
-        except BaseException:
-            connection.execute("ROLLBACK")
-            raise
 
     def append_microbatch_event(
         self, *, connection: Any, schema: str, event: MicrobatchEvent
@@ -547,115 +406,9 @@ class DuckDbStateBackend(SqlStateBackend):
             [lock_key],
         )
 
-    def list_state_backups(self, *, connection: Any, schema: str) -> tuple[StateBackupRecord, ...]:
-        prefix: str = f"{schema}__backup_%"
-        rows: list[tuple[Any, ...]] = connection.execute(
-            "SELECT s.schema_name, e.backup_id, MAX(e.created_at) "
-            "FROM information_schema.schemata s "
-            "LEFT JOIN "
-            f"{self._qualified_name(schema=schema, table=STATE_MIGRATION_EVENTS_TABLE)} e "
-            "ON s.schema_name = ? || e.backup_id "
-            "WHERE s.schema_name LIKE ? "
-            "GROUP BY s.schema_name, e.backup_id ORDER BY s.schema_name DESC",
-            [f"{schema}__backup_", prefix],
-        ).fetchall()
-        return tuple(
-            StateBackupRecord(
-                backup_id=row[1] or str(row[0]).removeprefix(f"{schema}__backup_"),
-                schema_name=row[0],
-                created_at=row[2],
-            )
-            for row in rows
-        )
-
     def delete_state_backup(self, *, connection: Any, schema: str, backup_id: str) -> None:
         backup_schema: str = self._backup_schema_name(schema=schema, backup_id_value=backup_id)
         connection.execute(f"DROP SCHEMA IF EXISTS {self._quote_identifier(backup_schema)} CASCADE")
-
-    def _latest_backup_id(self, *, connection: Any, schema: str) -> str:
-        prefix: str = f"{schema}__backup_%"
-        rows: list[tuple[str]] = connection.execute(
-            "SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE ? "
-            "ORDER BY schema_name DESC LIMIT 1",
-            [prefix],
-        ).fetchall()
-        if not rows:
-            raise StateBackupNotFoundError("No state backup is available for rollback")
-        return rows[0][0].removeprefix(f"{schema}__backup_")
-
-    def _schema_exists(self, *, connection: Any, schema: str) -> bool:
-        rows: list[tuple[str]] = connection.execute(
-            "SELECT schema_name FROM information_schema.schemata WHERE schema_name = ?",
-            [schema],
-        ).fetchall()
-        return bool(rows)
-
-    def _record_event(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        action: StateMigrationAction,
-        backup_id_value: str | None,
-        status: StateMigrationStatus,
-        message: str | None,
-    ) -> None:
-        connection.execute(
-            "INSERT INTO "
-            f"{self._qualified_name(schema=schema, table=STATE_MIGRATION_EVENTS_TABLE)} "
-            "(event_id, action, backup_id, status, message, created_at) "
-            "VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
-            [event_id(), action.value, backup_id_value, status.value, message],
-        )
-
-    def _create_additional_state_tables(self, *, connection: Any, schema: str) -> None:
-        table_name: str
-        columns: dict[str, StateColumnType]
-        for table_name, columns in STATE_TABLE_COLUMNS.items():
-            if table_name in {STATE_VERSION_TABLE, STATE_MIGRATION_EVENTS_TABLE}:
-                continue
-            column_sql: str = ", ".join(
-                f"{self._quote_identifier(column_name)} {self._state_column_sql_type(column_type)}"
-                for column_name, column_type in columns.items()
-            )
-            connection.execute(
-                "CREATE TABLE IF NOT EXISTS "
-                f"{self._qualified_name(schema=schema, table=table_name)} "
-                f"({column_sql})"
-            )
-            column_name: str
-            column_type: StateColumnType
-            for column_name, column_type in columns.items():
-                connection.execute(
-                    f"ALTER TABLE {self._qualified_name(schema=schema, table=table_name)} "
-                    f"ADD COLUMN IF NOT EXISTS {self._quote_identifier(column_name)} "
-                    f"{self._state_column_sql_type(column_type)}"
-                )
-        self._create_state_indexes(connection=connection, schema=schema)
-
-    def _create_state_indexes(self, *, connection: Any, schema: str) -> None:
-        table_name: str
-        indexes: dict[str, tuple[str, ...]]
-        for table_name, indexes in STATE_TABLE_INDEXES.items():
-            index_name: str
-            columns: tuple[str, ...]
-            for index_name, columns in indexes.items():
-                column_sql: str = ", ".join(self._quote_identifier(column) for column in columns)
-                unique_sql: str = "" if index_name in NON_UNIQUE_STATE_INDEXES else "UNIQUE "
-                connection.execute(
-                    f"CREATE {unique_sql}INDEX IF NOT EXISTS {self._quote_identifier(index_name)} "
-                    f"ON {self._qualified_name(schema=schema, table=table_name)} ({column_sql})"
-                )
-
-    def _state_column_sql_type(self, column_type: StateColumnType) -> str:
-        match column_type:
-            case StateColumnType.INTEGER:
-                return "INTEGER"
-            case StateColumnType.TEXT:
-                return "TEXT"
-            case StateColumnType.TIMESTAMP:
-                return "TIMESTAMP"
-        raise StateBackendConfigError(f"Unsupported state column type: {column_type}")
 
     def _validate_source_freshness_records(
         self,
@@ -737,9 +490,6 @@ class DuckDbStateBackend(SqlStateBackend):
                 "DO UPDATE SET version_hash = excluded.version_hash, updated_at = now()"
             )
             executor.execute(f"DROP TABLE IF EXISTS {temp_table_name}")
-
-    def _backup_schema_name(self, *, schema: str, backup_id_value: str) -> str:
-        return f"{schema}__backup_{backup_id_value}"
 
     def _state_type_matches(self, *, actual_type: str, expected_type: StateColumnType) -> bool:
         actual: str = actual_type.lower()

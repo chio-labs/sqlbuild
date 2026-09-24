@@ -19,15 +19,18 @@ from sqlbuild.executor.node_results.models import (
 from sqlbuild.virtual.state._helpers.state_storage.datetime import (
     from_naive_utc_wall_clock,
 )
+from sqlbuild.virtual.state._helpers.state_storage.events import backup_id, event_id
 from sqlbuild.virtual.state._helpers.state_storage.validation import (
     validate_conditional_virtual_environment_publication,
 )
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.constants import (
+    CURRENT_STATE_SCHEMA_VERSION,
     FUNCTION_VERSION_TABLE,
     LOCK_TABLE,
     MODEL_VERSION_TABLE,
     NODE_RESULTS_TABLE,
+    NON_UNIQUE_STATE_INDEXES,
     PHYSICAL_RELATION_ANCESTRY_TABLE,
     PHYSICAL_RELATION_TABLE,
     PYTHON_NODE_VERSION_TABLE,
@@ -35,8 +38,13 @@ from sqlbuild.virtual.state.constants import (
     SEED_VERSION_TABLE,
     SOURCE_FRESHNESS_OBSERVATION_TABLE,
     STATE_BOOLEAN_TRUE,
+    STATE_MIGRATION_EVENTS_TABLE,
     STATE_OPERATION_EVENT_TABLE,
     STATE_OPERATION_TABLE,
+    STATE_TABLE_COLUMNS,
+    STATE_TABLE_INDEXES,
+    STATE_TABLES,
+    STATE_VERSION_TABLE,
     VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
     VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
     VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
@@ -44,7 +52,11 @@ from sqlbuild.virtual.state.constants import (
     VIRTUAL_ENVIRONMENT_NODE_REF_TABLE,
     VIRTUAL_ENVIRONMENT_TABLE,
 )
-from sqlbuild.virtual.state.exceptions import StateBackendConfigError
+from sqlbuild.virtual.state.exceptions import (
+    StateBackendConfigError,
+    StateBackupNotFoundError,
+    StateSchemaInvalidError,
+)
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,
@@ -54,10 +66,12 @@ from sqlbuild.virtual.state.models import (
     ReconcileEventRecord,
     SeedVersionRecord,
     SourceFreshnessRecord,
+    StateBackupRecord,
     StateLockLease,
     StateLockRecord,
     StateOperationEventRecord,
     StateOperationRecord,
+    StateSchemaValidationResult,
     VirtualEnvironmentCheckpointFunctionRefRecord,
     VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
@@ -73,6 +87,9 @@ from sqlbuild.virtual.state.models import (
 from sqlbuild.virtual.state.types import (
     ModelVersionStatus,
     PhysicalArtifactType,
+    StateColumnType,
+    StateMigrationAction,
+    StateMigrationStatus,
     StateOperationStatus,
     StateOperationType,
     VirtualEnvironmentStatus,
@@ -852,6 +869,258 @@ class SqlStateBackend(StateBackend):
     ) -> None:
         with self._statement_executor(connection=connection) as executor:
             self._execute_in(executor=executor, sql=sql, params=params)
+
+    def initialize(self, *, connection: Any, schema: str, sqlbuild_version: str) -> None:
+        p: str = self._placeholder
+        with self._write_transaction(connection=connection) as executor:
+            self._execute_in(
+                executor=executor,
+                sql=f"CREATE SCHEMA IF NOT EXISTS {self._quote_identifier(schema)}",
+            )
+            self._execute_in(
+                executor=executor,
+                sql="CREATE TABLE IF NOT EXISTS "
+                f"{self._qualified_name(schema=schema, table=STATE_VERSION_TABLE)} ("
+                "schema_version INTEGER NOT NULL, "
+                "sqlbuild_version TEXT NOT NULL, "
+                "updated_at TIMESTAMP NOT NULL"
+                ")",
+            )
+            self._execute_in(
+                executor=executor,
+                sql="CREATE TABLE IF NOT EXISTS "
+                f"{self._qualified_name(schema=schema, table=STATE_MIGRATION_EVENTS_TABLE)} ("
+                "event_id TEXT NOT NULL, "
+                "action TEXT NOT NULL, "
+                "backup_id TEXT, "
+                "status TEXT NOT NULL, "
+                "message TEXT, "
+                "created_at TIMESTAMP NOT NULL"
+                ")",
+            )
+            self._create_additional_state_tables(executor=executor, schema=schema)
+            self._execute_in(
+                executor=executor,
+                sql=f"DELETE FROM {self._qualified_name(schema=schema, table=STATE_VERSION_TABLE)}",
+            )
+            self._execute_in(
+                executor=executor,
+                sql=f"INSERT INTO {self._qualified_name(schema=schema, table=STATE_VERSION_TABLE)} "
+                "(schema_version, sqlbuild_version, updated_at) "
+                f"VALUES ({p}, {p}, CURRENT_TIMESTAMP)",
+                params=[CURRENT_STATE_SCHEMA_VERSION, sqlbuild_version],
+            )
+            self._record_event(
+                executor=executor,
+                schema=schema,
+                action=StateMigrationAction.INIT,
+                backup_id_value=None,
+                status=StateMigrationStatus.SUCCESS,
+                message=None,
+            )
+
+    def create_backup(self, *, connection: Any, schema: str) -> str:
+        validation: StateSchemaValidationResult = self.inspect_schema(
+            connection=connection, schema=schema
+        )
+        if not validation.valid:
+            raise StateSchemaInvalidError("Cannot backup invalid state schema")
+        backup_id_value: str = backup_id()
+        backup_schema: str = self._backup_schema_name(
+            schema=schema,
+            backup_id_value=backup_id_value,
+        )
+        with self._write_transaction(connection=connection) as executor:
+            self._execute_in(
+                executor=executor, sql=f"CREATE SCHEMA {self._quote_identifier(backup_schema)}"
+            )
+            table_name: str
+            for table_name in STATE_TABLES:
+                self._execute_in(
+                    executor=executor,
+                    sql="CREATE TABLE "
+                    f"{self._qualified_name(schema=backup_schema, table=table_name)} "
+                    "AS "
+                    f"SELECT * FROM {self._qualified_name(schema=schema, table=table_name)}",
+                )
+            self._record_event(
+                executor=executor,
+                schema=schema,
+                action=StateMigrationAction.BACKUP,
+                backup_id_value=backup_id_value,
+                status=StateMigrationStatus.SUCCESS,
+                message=None,
+            )
+        return backup_id_value
+
+    def rollback(self, *, connection: Any, schema: str, backup_id: str | None = None) -> str:
+        backup_id_value: str = backup_id or self._latest_backup_id(
+            connection=connection, schema=schema
+        )
+        backup_schema: str = self._backup_schema_name(
+            schema=schema,
+            backup_id_value=backup_id_value,
+        )
+        if not self._schema_exists(connection=connection, schema=backup_schema):
+            raise StateBackupNotFoundError(f"State backup schema '{backup_schema}' does not exist")
+        with self._write_transaction(connection=connection) as executor:
+            table_name: str
+            for table_name in STATE_TABLES:
+                self._execute_in(
+                    executor=executor,
+                    sql="DROP TABLE IF EXISTS "
+                    f"{self._qualified_name(schema=schema, table=table_name)}",
+                )
+            self._execute_in(
+                executor=executor,
+                sql=f"CREATE SCHEMA IF NOT EXISTS {self._quote_identifier(schema)}",
+            )
+            for table_name in STATE_TABLES:
+                self._execute_in(
+                    executor=executor,
+                    sql=f"CREATE TABLE {self._qualified_name(schema=schema, table=table_name)} AS "
+                    f"SELECT * FROM {self._qualified_name(schema=backup_schema, table=table_name)}",
+                )
+            self._create_state_indexes(executor=executor, schema=schema)
+            self._record_event(
+                executor=executor,
+                schema=schema,
+                action=StateMigrationAction.ROLLBACK,
+                backup_id_value=backup_id_value,
+                status=StateMigrationStatus.SUCCESS,
+                message=None,
+            )
+        return backup_id_value
+
+    def reset(self, *, connection: Any, schema: str) -> None:
+        with self._write_transaction(connection=connection) as executor:
+            for table_name in STATE_TABLES:
+                self._execute_in(
+                    executor=executor,
+                    sql="DROP TABLE IF EXISTS "
+                    f"{self._qualified_name(schema=schema, table=table_name)}",
+                )
+
+    def _create_additional_state_tables(self, *, executor: Any, schema: str) -> None:
+        table_name: str
+        columns: dict[str, StateColumnType]
+        for table_name, columns in STATE_TABLE_COLUMNS.items():
+            if table_name in {STATE_VERSION_TABLE, STATE_MIGRATION_EVENTS_TABLE}:
+                continue
+            column_sql: str = ", ".join(
+                f"{self._quote_identifier(column_name)} {self._state_column_sql_type(column_type)}"
+                for column_name, column_type in columns.items()
+            )
+            self._execute_in(
+                executor=executor,
+                sql="CREATE TABLE IF NOT EXISTS "
+                f"{self._qualified_name(schema=schema, table=table_name)} "
+                f"({column_sql})",
+            )
+            column_name: str
+            column_type: StateColumnType
+            for column_name, column_type in columns.items():
+                self._execute_in(
+                    executor=executor,
+                    sql=f"ALTER TABLE {self._qualified_name(schema=schema, table=table_name)} "
+                    f"ADD COLUMN IF NOT EXISTS {self._quote_identifier(column_name)} "
+                    f"{self._state_column_sql_type(column_type)}",
+                )
+        self._create_state_indexes(executor=executor, schema=schema)
+
+    def _create_state_indexes(self, *, executor: Any, schema: str) -> None:
+        table_name: str
+        indexes: dict[str, tuple[str, ...]]
+        for table_name, indexes in STATE_TABLE_INDEXES.items():
+            index_name: str
+            columns: tuple[str, ...]
+            for index_name, columns in indexes.items():
+                column_sql: str = ", ".join(self._quote_identifier(column) for column in columns)
+                unique_sql: str = "" if index_name in NON_UNIQUE_STATE_INDEXES else "UNIQUE "
+                self._execute_in(
+                    executor=executor,
+                    sql=f"CREATE {unique_sql}INDEX IF NOT EXISTS "
+                    f"{self._quote_identifier(index_name)} "
+                    f"ON {self._qualified_name(schema=schema, table=table_name)} ({column_sql})",
+                )
+
+    def _record_event(
+        self,
+        *,
+        executor: Any,
+        schema: str,
+        action: StateMigrationAction,
+        backup_id_value: str | None,
+        status: StateMigrationStatus,
+        message: str | None,
+    ) -> None:
+        p: str = self._placeholder
+        self._execute_in(
+            executor=executor,
+            sql="INSERT INTO "
+            f"{self._qualified_name(schema=schema, table=STATE_MIGRATION_EVENTS_TABLE)} "
+            "(event_id, action, backup_id, status, message, created_at) "
+            f"VALUES ({p}, {p}, {p}, {p}, {p}, CURRENT_TIMESTAMP)",
+            params=[event_id(), action.value, backup_id_value, status.value, message],
+        )
+
+    def list_state_backups(self, *, connection: Any, schema: str) -> tuple[StateBackupRecord, ...]:
+        p: str = self._placeholder
+        prefix: str = f"{schema}__backup_%"
+        rows: list[tuple[Any, ...]] = self._fetch_all(
+            connection=connection,
+            sql="SELECT s.schema_name, e.backup_id, MAX(e.created_at) "
+            "FROM information_schema.schemata s "
+            "LEFT JOIN "
+            f"{self._qualified_name(schema=schema, table=STATE_MIGRATION_EVENTS_TABLE)} e "
+            f"ON s.schema_name = {p} || e.backup_id "
+            f"WHERE s.schema_name LIKE {p} "
+            "GROUP BY s.schema_name, e.backup_id ORDER BY s.schema_name DESC",
+            params=[f"{schema}__backup_", prefix],
+        )
+        return tuple(
+            StateBackupRecord(
+                backup_id=row[1] or str(row[0]).removeprefix(f"{schema}__backup_"),
+                schema_name=row[0],
+                created_at=row[2],
+            )
+            for row in rows
+        )
+
+    def _latest_backup_id(self, *, connection: Any, schema: str) -> str:
+        p: str = self._placeholder
+        prefix: str = f"{schema}__backup_%"
+        rows: list[tuple[str]] = self._fetch_all(
+            connection=connection,
+            sql=f"SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE {p} "
+            "ORDER BY schema_name DESC LIMIT 1",
+            params=[prefix],
+        )
+        if not rows:
+            raise StateBackupNotFoundError("No state backup is available for rollback")
+        return rows[0][0].removeprefix(f"{schema}__backup_")
+
+    def _schema_exists(self, *, connection: Any, schema: str) -> bool:
+        p: str = self._placeholder
+        rows: list[tuple[str]] = self._fetch_all(
+            connection=connection,
+            sql=f"SELECT schema_name FROM information_schema.schemata WHERE schema_name = {p}",
+            params=[schema],
+        )
+        return bool(rows)
+
+    def _state_column_sql_type(self, column_type: StateColumnType) -> str:
+        match column_type:
+            case StateColumnType.INTEGER:
+                return "INTEGER"
+            case StateColumnType.TEXT:
+                return "TEXT"
+            case StateColumnType.TIMESTAMP:
+                return "TIMESTAMP"
+        raise StateBackendConfigError(f"Unsupported state column type: {column_type}")
+
+    def _backup_schema_name(self, *, schema: str, backup_id_value: str) -> str:
+        return f"{schema}__backup_{backup_id_value}"
 
     def _replace_row_preserving_created_at(
         self,
