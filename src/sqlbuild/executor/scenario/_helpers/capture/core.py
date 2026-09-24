@@ -234,7 +234,10 @@ def _first_error(results: tuple[object, ...]) -> str | None:
     result: object
     for result in results:
         if getattr(result, "status", None) == ExecutionStatus.FAILED:
-            return str(getattr(result, "error_message", "scenario snapshot capture failed"))
+            error_message: object | None = getattr(result, "error_message", None)
+            if isinstance(error_message, str) and error_message:
+                return error_message
+            return "scenario snapshot capture failed"
     return None
 
 
