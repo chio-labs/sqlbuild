@@ -27,7 +27,8 @@ from sqlbuild.compiler.compile.models import (
     RelatedLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, DiagnosticSeverity
-from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
+from sqlbuild.compiler.discovery.constants import SQL_HOOK_OUTPUT_FIELDS
+from sqlbuild.compiler.discovery.main.serialize_hook_entries import serialize_hook_entries
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
@@ -280,27 +281,7 @@ def _model_resource(
 
 
 def _hook_resources(*, hooks: object) -> list[dict[str, object]]:
-    if not isinstance(hooks, (list, tuple)):
-        return []
-    resources: list[dict[str, object]] = []
-    hook: object
-    for hook in hooks:
-        if isinstance(hook, SqlHookEntry):
-            resource: dict[str, object] = {"type": "sql", "statement": hook.statement}
-            if hook.name is not None:
-                resource["name"] = hook.name
-            if hook.relative_path is not None:
-                resource["relative_path"] = hook.relative_path.as_posix()
-            if hook.definition_sql is not None:
-                resource["definition_sql"] = hook.definition_sql
-            if hook.kwargs is not None:
-                resource["kwargs"] = hook.kwargs
-            if hook.description is not None:
-                resource["description"] = hook.description
-            resources.append(resource)
-        elif isinstance(hook, PythonHookEntry):
-            resources.append({"type": "python", "name": hook.name, "kwargs": hook.kwargs})
-    return resources
+    return serialize_hook_entries(value=hooks, sql_fields=SQL_HOOK_OUTPUT_FIELDS)
 
 
 def _hook_definitions(project: CompiledProject) -> list[dict[str, object]]:

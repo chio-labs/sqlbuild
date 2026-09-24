@@ -62,3 +62,12 @@ CANONICAL_AUTHORED_ROOTS: tuple[tuple[str, ...], ...] = (
 )
 
 NOT_NULL_AUDIT_NAME: str = "not_null"
+
+SQL_HOOK_OUTPUT_FIELDS: tuple[str, ...] = (
+    "statement",
+    "name",
+    "relative_path",
+    "definition_sql",
+    "kwargs",
+    "description",
+)
