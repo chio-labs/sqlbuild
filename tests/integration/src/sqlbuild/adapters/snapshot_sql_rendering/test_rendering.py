@@ -16,20 +16,27 @@ from tests.integration.src.sqlbuild.adapters.snapshot_sql_rendering._test_types 
     SnapshotSqlRenderingAdapterTestCase,
 )
 
-_REAPPEARANCE_GROUP_SEQUENCE_FRAGMENT: str = (
+_REAPPEARANCE_INITIAL_FRAGMENTS: tuple[str, ...] = (
     "__observed_group_sequence AS (SELECT __observed_at, "
-    "LAG(__observed_at) OVER (ORDER BY __observed_at) AS __prev_group_observed_at "
-    "FROM (SELECT DISTINCT observed_at AS __observed_at FROM source_table)"
+    "LAG(__observed_at) OVER (ORDER BY __observed_at) AS __prev_group_observed_at, "
+    "LEAD(__observed_at) OVER (ORDER BY __observed_at) AS __next_group_observed_at "
+    "FROM (SELECT DISTINCT observed_at AS __observed_at FROM source_table)",
+    "(__prev_observed_at IS NOT NULL AND __prev_observed_at <> __prev_group_observed_at)",
+    "ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS __next_absence_at",
+    "WHEN __next_absence_at < __next_version_start THEN __next_absence_at",
 )
 _REAPPEARANCE_APPLY_FRAGMENTS: tuple[str, ...] = (
-    "__reappearances AS (SELECT __ordered.customer_id, "
-    "MIN(__ordered.observed_at) AS __reappeared_at",
-    "WHERE __latest.valid_to IS NOT NULL AND __ordered.observed_at > __latest.valid_to",
-    "AND __present.observed_at = __latest.valid_to",
-    "__new_changes AS (SELECT * FROM __changed_or_new UNION ALL SELECT __ordered.* "
-    "FROM __ordered JOIN __reappearances",
-    "AND __changed_or_new.observed_at = __ordered.observed_at",
+    "AS __latest_rn FROM target_table) AS __latest_ranked WHERE __latest_rn = 1",
+    "__reappearances AS (SELECT __classified.customer_id, "
+    "MIN(__classified.observed_at) AS __reappeared_at",
+    "WHERE __latest.valid_to IS NOT NULL AND __closing_group.__observed_at IS NULL",
+    "OR __classified.observed_at < __first_new_starts.__first_version_start",
+    "__new_changes AS (SELECT *, LEAD(__version_start) OVER",
+    "customer_id, __version_start AS __close_at FROM __new_changes",
+    "__new_changes.__version_start, CASE WHEN __new_changes.__next_version_start IS NULL "
+    "THEN __new_changes.__next_absence_at",
 )
+_PORTABLE_APPLY_EXCLUSIONS: tuple[str, ...] = ("QUALIFY", "UNION DISTINCT", "NOT EXISTS")
 
 
 @pytest.mark.parametrize(
@@ -50,14 +57,12 @@ _REAPPEARANCE_APPLY_FRAGMENTS: tuple[str, ...] = (
                 "WHERE __target.effective_to IS NULL AND NOT EXISTS",
             ),
             expected_historical_check_initial_hard_delete_fragments=(
-                "__hard_deleted_at",
-                "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at",
-                "NOT EXISTS",
+                "__next_absence_at",
+                "WHEN __next_absence_at < __next_version_start THEN __next_absence_at",
             ),
             expected_historical_timestamp_initial_hard_delete_fragments=(
-                "__hard_deleted_at",
-                "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at",
-                "NOT EXISTS",
+                "__next_absence_at",
+                "WHEN __next_absence_at < __next_version_start THEN __next_absence_at",
             ),
             expected_historical_timestamp_apply_hard_delete_fragments=(
                 "__hard_deletes AS (",
@@ -87,14 +92,12 @@ _REAPPEARANCE_APPLY_FRAGMENTS: tuple[str, ...] = (
                 "WHERE __target.effective_to IS NULL AND NOT EXISTS",
             ),
             expected_historical_check_initial_hard_delete_fragments=(
-                "__hard_deleted_at",
-                "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at",
-                "__hard_delete_candidates AS (",
+                "__next_absence_at",
+                "WHEN __next_absence_at < __next_version_start THEN __next_absence_at",
             ),
             expected_historical_timestamp_initial_hard_delete_fragments=(
-                "__hard_deleted_at",
-                "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at",
-                "__hard_delete_candidates AS (",
+                "__next_absence_at",
+                "WHEN __next_absence_at < __next_version_start THEN __next_absence_at",
             ),
             expected_historical_timestamp_apply_hard_delete_fragments=(
                 "__hard_deletes AS (",
@@ -124,14 +127,12 @@ _REAPPEARANCE_APPLY_FRAGMENTS: tuple[str, ...] = (
                 "WHERE __target.effective_to IS NULL AND NOT EXISTS",
             ),
             expected_historical_check_initial_hard_delete_fragments=(
-                "__hard_deleted_at",
-                "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at",
-                "__hard_delete_candidates AS (",
+                "__next_absence_at",
+                "WHEN __next_absence_at < __next_version_start THEN __next_absence_at",
             ),
             expected_historical_timestamp_initial_hard_delete_fragments=(
-                "__hard_deleted_at",
-                "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at",
-                "__hard_delete_candidates AS (",
+                "__next_absence_at",
+                "WHEN __next_absence_at < __next_version_start THEN __next_absence_at",
             ),
             expected_historical_timestamp_apply_hard_delete_fragments=(
                 "__hard_deletes AS (",
@@ -161,14 +162,12 @@ _REAPPEARANCE_APPLY_FRAGMENTS: tuple[str, ...] = (
                 "WHEN MATCHED THEN UPDATE SET effective_to = __source.updated_at",
             ),
             expected_historical_check_initial_hard_delete_fragments=(
-                "__hard_deleted_at",
-                "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at",
-                "__hard_delete_candidates AS (",
+                "__next_absence_at",
+                "WHEN __next_absence_at < __next_version_start THEN __next_absence_at",
             ),
             expected_historical_timestamp_initial_hard_delete_fragments=(
-                "__hard_deleted_at",
-                "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at",
-                "__hard_delete_candidates AS (",
+                "__next_absence_at",
+                "WHEN __next_absence_at < __next_version_start THEN __next_absence_at",
             ),
             expected_historical_timestamp_apply_hard_delete_fragments=(
                 "__hard_deletes AS (",
@@ -290,52 +289,53 @@ def test_given_builtin_adapter_when_rendering_snapshot_sql_then_covers_snapshot_
     "test_case",
     [
         SnapshotReappearanceRenderingTestCase(
-            description="duckdb reopens reappearing historical check keys",
+            description="duckdb renders portable hard-delete history SQL",
             adapter=DuckDbAdapter(),
-            expected_initial_fragments=(
-                _REAPPEARANCE_GROUP_SEQUENCE_FRAGMENT,
-                "OR __prev_observed_at IS DISTINCT FROM __prev_group_observed_at",
-            ),
+            expected_initial_fragments=_REAPPEARANCE_INITIAL_FRAGMENTS,
             expected_apply_fragments=_REAPPEARANCE_APPLY_FRAGMENTS,
-            unexpected_apply_fragments=("UNION DISTINCT",),
+            unexpected_apply_fragments=_PORTABLE_APPLY_EXCLUSIONS,
         ),
         SnapshotReappearanceRenderingTestCase(
-            description="motherduck reopens reappearing historical check keys",
+            description="motherduck renders portable hard-delete history SQL",
             adapter=MotherDuckAdapter(),
-            expected_initial_fragments=(
-                _REAPPEARANCE_GROUP_SEQUENCE_FRAGMENT,
-                "OR __prev_observed_at IS DISTINCT FROM __prev_group_observed_at",
-            ),
+            expected_initial_fragments=_REAPPEARANCE_INITIAL_FRAGMENTS,
             expected_apply_fragments=_REAPPEARANCE_APPLY_FRAGMENTS,
-            unexpected_apply_fragments=("UNION DISTINCT",),
+            unexpected_apply_fragments=_PORTABLE_APPLY_EXCLUSIONS,
         ),
         SnapshotReappearanceRenderingTestCase(
-            description="postgres reopens reappearing historical check keys without qualify",
+            description="postgres renders portable hard-delete history SQL",
             adapter=PostgresAdapter(),
-            expected_initial_fragments=(
-                _REAPPEARANCE_GROUP_SEQUENCE_FRAGMENT,
-                "OR __prev_observed_at IS DISTINCT FROM __prev_group_observed_at",
-            ),
-            expected_apply_fragments=(
-                *_REAPPEARANCE_APPLY_FRAGMENTS,
-                ") AS __rn FROM target_table) AS __q WHERE __rn = 1)",
-            ),
-            unexpected_apply_fragments=("QUALIFY", "UNION DISTINCT"),
+            expected_initial_fragments=_REAPPEARANCE_INITIAL_FRAGMENTS,
+            expected_apply_fragments=_REAPPEARANCE_APPLY_FRAGMENTS,
+            unexpected_apply_fragments=_PORTABLE_APPLY_EXCLUSIONS,
         ),
         SnapshotReappearanceRenderingTestCase(
-            description="sqlserver reopens reappearing historical check keys without qualify",
+            description="bigquery renders portable hard-delete history SQL",
+            adapter=BigQueryAdapter(),
+            expected_initial_fragments=_REAPPEARANCE_INITIAL_FRAGMENTS,
+            expected_apply_fragments=_REAPPEARANCE_APPLY_FRAGMENTS,
+            unexpected_apply_fragments=_PORTABLE_APPLY_EXCLUSIONS,
+        ),
+        SnapshotReappearanceRenderingTestCase(
+            description="snowflake renders portable hard-delete history SQL",
+            adapter=SnowflakeAdapter(),
+            expected_initial_fragments=_REAPPEARANCE_INITIAL_FRAGMENTS,
+            expected_apply_fragments=_REAPPEARANCE_APPLY_FRAGMENTS,
+            unexpected_apply_fragments=_PORTABLE_APPLY_EXCLUSIONS,
+        ),
+        SnapshotReappearanceRenderingTestCase(
+            description="databricks renders portable hard-delete history SQL",
+            adapter=DatabricksAdapter(),
+            expected_initial_fragments=_REAPPEARANCE_INITIAL_FRAGMENTS,
+            expected_apply_fragments=_REAPPEARANCE_APPLY_FRAGMENTS,
+            unexpected_apply_fragments=_PORTABLE_APPLY_EXCLUSIONS,
+        ),
+        SnapshotReappearanceRenderingTestCase(
+            description="sqlserver renders portable hard-delete history SQL",
             adapter=SqlServerAdapter(),
-            expected_initial_fragments=(
-                _REAPPEARANCE_GROUP_SEQUENCE_FRAGMENT,
-                "OR (__prev_observed_at <> __prev_group_observed_at "
-                "OR (__prev_observed_at IS NULL AND __prev_group_observed_at IS NOT NULL) "
-                "OR (__prev_observed_at IS NOT NULL AND __prev_group_observed_at IS NULL))",
-            ),
-            expected_apply_fragments=(
-                *_REAPPEARANCE_APPLY_FRAGMENTS,
-                "__latest AS (SELECT * FROM __latest_ordered WHERE __rn = 1)",
-            ),
-            unexpected_apply_fragments=("QUALIFY", "UNION DISTINCT", "IS DISTINCT FROM"),
+            expected_initial_fragments=_REAPPEARANCE_INITIAL_FRAGMENTS,
+            expected_apply_fragments=_REAPPEARANCE_APPLY_FRAGMENTS,
+            unexpected_apply_fragments=(*_PORTABLE_APPLY_EXCLUSIONS, "IS DISTINCT FROM"),
         ),
     ],
     ids=lambda case: case.description,
@@ -401,12 +401,12 @@ def test_given_hard_deletes_when_rendering_historical_check_snapshot_then_reopen
     expected_fragment: str
     for expected_fragment in test_case.expected_initial_fragments:
         assert expected_fragment in initial_sql
-    statement: str
-    for statement in apply_statements:
-        for expected_fragment in test_case.expected_apply_fragments:
-            assert expected_fragment in statement
-        unexpected_fragment: str
-        for unexpected_fragment in test_case.unexpected_apply_fragments:
-            assert unexpected_fragment not in statement
+    apply_sql: str = "\n".join(apply_statements)
+    for expected_fragment in test_case.expected_apply_fragments:
+        assert expected_fragment in apply_sql
+    unexpected_fragment: str
+    for unexpected_fragment in test_case.unexpected_apply_fragments:
+        assert unexpected_fragment not in apply_sql
     assert "__prev_group_observed_at" not in without_hard_deletes_sql
     assert "__reappearances" not in without_hard_deletes_sql
+    assert "__next_absence_at" not in without_hard_deletes_sql
