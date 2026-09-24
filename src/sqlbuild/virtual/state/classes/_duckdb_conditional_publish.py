@@ -68,7 +68,7 @@ class DuckDbConditionalPublishMixin:
                 executor=connection, schema=schema, record=record
             )
             backend._replace_virtual_environment_node_ref_groups(
-                connection=connection,
+                executor=connection,
                 schema=schema,
                 virtual_environment_name=record.virtual_environment_name,
                 refs_by_node_type=refs_by_node_type,

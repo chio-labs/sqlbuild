@@ -8,7 +8,6 @@ from datetime import datetime
 from typing import Any, ClassVar
 
 from sqlbuild.adapter.contract.classes.observed_connection import ObservedConnection
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.node_results.main.decode_json import decode_node_result_json
 from sqlbuild.executor.node_results.main.encode_json import encode_node_result_json
 from sqlbuild.executor.node_results.models import (
@@ -74,12 +73,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
     VirtualEnvironmentCheckpointSeedRefRecord,
-    VirtualEnvironmentFunctionRefRecord,
-    VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentNodeRefRecord,
-    VirtualEnvironmentPythonNodeRefRecord,
-    VirtualEnvironmentRecord,
-    VirtualEnvironmentSeedRefRecord,
 )
 from sqlbuild.virtual.state.types import (
     StateColumnType,
@@ -448,67 +442,6 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, SqlStateBackend):
             connection.execute("ROLLBACK")
             raise
 
-    def replace_virtual_environment_node_refs(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        virtual_environment_name: str,
-        node_type: str,
-        refs: tuple[VirtualEnvironmentNodeRefRecord, ...],
-    ) -> None:
-        self.replace_virtual_environment_node_ref_groups(
-            connection=connection,
-            schema=schema,
-            virtual_environment_name=virtual_environment_name,
-            refs_by_node_type={node_type: refs},
-        )
-
-    def replace_virtual_environment_node_ref_groups(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        virtual_environment_name: str,
-        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
-    ) -> None:
-        connection.execute("BEGIN")
-        try:
-            self._replace_virtual_environment_node_ref_groups(
-                connection=connection,
-                schema=schema,
-                virtual_environment_name=virtual_environment_name,
-                refs_by_node_type=refs_by_node_type,
-            )
-            connection.execute("COMMIT")
-        except BaseException:
-            connection.execute("ROLLBACK")
-            raise
-
-    def upsert_virtual_environment_and_replace_node_ref_groups(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        record: VirtualEnvironmentRecord,
-        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
-    ) -> None:
-        connection.execute("BEGIN")
-        try:
-            self._upsert_virtual_environment_record(
-                executor=connection, schema=schema, record=record
-            )
-            self._replace_virtual_environment_node_ref_groups(
-                connection=connection,
-                schema=schema,
-                virtual_environment_name=record.virtual_environment_name,
-                refs_by_node_type=refs_by_node_type,
-            )
-            connection.execute("COMMIT")
-        except BaseException:
-            connection.execute("ROLLBACK")
-            raise
-
     def upsert_virtual_environment_node_ref(
         self,
         *,
@@ -524,108 +457,6 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, SqlStateBackend):
             "ON CONFLICT (virtual_environment_name, node_type, node_name) "
             "DO UPDATE SET version_hash = excluded.version_hash, updated_at = now()",
             [ref.virtual_environment_name, ref.node_type, ref.node_name, ref.version_hash],
-        )
-
-    def replace_virtual_environment_model_refs(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        virtual_environment_name: str,
-        refs: tuple[VirtualEnvironmentModelRefRecord, ...],
-    ) -> None:
-        self.replace_virtual_environment_node_refs(
-            connection=connection,
-            schema=schema,
-            virtual_environment_name=virtual_environment_name,
-            node_type="model",
-            refs=tuple(
-                VirtualEnvironmentNodeRefRecord(
-                    virtual_environment_name=ref.virtual_environment_name,
-                    node_type="model",
-                    node_name=ref.model_name,
-                    version_hash=ref.version_hash,
-                )
-                for ref in refs
-            ),
-        )
-
-    def replace_virtual_environment_function_refs(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        virtual_environment_name: str,
-        refs: tuple[VirtualEnvironmentFunctionRefRecord, ...],
-    ) -> None:
-        ref: VirtualEnvironmentFunctionRefRecord
-        for ref in refs:
-            if ref.node_type not in {
-                CompiledResourceType.UDF,
-                CompiledResourceType.TABLE_FN,
-            }:
-                raise StateBackendConfigError("Function ref node_type must be 'udf' or 'table_fn'")
-        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]] = {}
-        for node_type in ("udf", "table_fn"):
-            node_refs: list[VirtualEnvironmentNodeRefRecord] = []
-            for ref in refs:
-                if ref.node_type == node_type:
-                    node_refs.append(
-                        VirtualEnvironmentNodeRefRecord(
-                            virtual_environment_name=ref.virtual_environment_name,
-                            node_type=ref.node_type,
-                            node_name=ref.function_name,
-                            version_hash=ref.version_hash,
-                        )
-                    )
-            refs_by_node_type[node_type] = tuple(node_refs)
-        self.replace_virtual_environment_node_ref_groups(
-            connection=connection,
-            schema=schema,
-            virtual_environment_name=virtual_environment_name,
-            refs_by_node_type=refs_by_node_type,
-        )
-
-    def replace_virtual_environment_seed_refs(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        virtual_environment_name: str,
-        refs: tuple[VirtualEnvironmentSeedRefRecord, ...],
-    ) -> None:
-        self.replace_virtual_environment_node_refs(
-            connection=connection,
-            schema=schema,
-            virtual_environment_name=virtual_environment_name,
-            node_type="seed",
-            refs=tuple(
-                VirtualEnvironmentNodeRefRecord(
-                    virtual_environment_name=ref.virtual_environment_name,
-                    node_type="seed",
-                    node_name=ref.seed_name,
-                    version_hash=ref.version_hash,
-                )
-                for ref in refs
-            ),
-        )
-
-    def upsert_virtual_environment_python_node_ref(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        ref: VirtualEnvironmentPythonNodeRefRecord,
-    ) -> None:
-        self.upsert_virtual_environment_node_ref(
-            connection=connection,
-            schema=schema,
-            ref=VirtualEnvironmentNodeRefRecord(
-                virtual_environment_name=ref.virtual_environment_name,
-                node_type=ref.node_type,
-                node_name=ref.node_name,
-                version_hash=ref.version_hash,
-            ),
         )
 
     def count_unreferenced_python_node_versions(self, *, connection: Any, schema: str) -> int:
@@ -1062,33 +893,10 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, SqlStateBackend):
                 )
             seen_source_names.add(record.source_name)
 
-    def _validate_node_ref_replacement(
-        self,
-        *,
-        virtual_environment_name: str,
-        node_type: str,
-        refs: tuple[VirtualEnvironmentNodeRefRecord, ...],
-    ) -> None:
-        seen_node_names: set[str] = set()
-        ref: VirtualEnvironmentNodeRefRecord
-        for ref in refs:
-            if ref.virtual_environment_name != virtual_environment_name:
-                raise StateBackendConfigError(
-                    "Node ref virtual_environment_name must match replacement "
-                    "virtual_environment_name"
-                )
-            if ref.node_type != node_type:
-                raise StateBackendConfigError("Node ref node_type must match replacement node_type")
-            if ref.node_name in seen_node_names:
-                raise StateBackendConfigError(
-                    f"Duplicate node ref for node type '{node_type}' and name '{ref.node_name}'"
-                )
-            seen_node_names.add(ref.node_name)
-
     def _replace_virtual_environment_node_ref_groups(
         self,
         *,
-        connection: Any,
+        executor: Any,
         schema: str,
         virtual_environment_name: str,
         refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
@@ -1102,8 +910,8 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, SqlStateBackend):
                 node_type=node_type,
                 refs=refs,
             )
-            connection.execute(f"DROP TABLE IF EXISTS {temp_table_name}")
-            connection.execute(
+            executor.execute(f"DROP TABLE IF EXISTS {temp_table_name}")
+            executor.execute(
                 f"CREATE TEMP TABLE {temp_table_name} ("
                 "virtual_environment_name TEXT NOT NULL, "
                 "node_type TEXT NOT NULL, "
@@ -1113,7 +921,7 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, SqlStateBackend):
             )
             ref: VirtualEnvironmentNodeRefRecord
             for ref in refs:
-                connection.execute(
+                executor.execute(
                     f"INSERT INTO {temp_table_name} "
                     "(virtual_environment_name, node_type, node_name, version_hash) "
                     "VALUES (?, ?, ?, ?)",
@@ -1124,7 +932,7 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, SqlStateBackend):
                         ref.version_hash,
                     ],
                 )
-            connection.execute(
+            executor.execute(
                 "DELETE FROM "
                 f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
                 "WHERE virtual_environment_name = ? AND node_type = ? "
@@ -1135,7 +943,7 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, SqlStateBackend):
                 ".node_name)",
                 [virtual_environment_name, node_type],
             )
-            connection.execute(
+            executor.execute(
                 "INSERT INTO "
                 f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
                 "(virtual_environment_name, node_type, node_name, version_hash, updated_at) "
@@ -1144,7 +952,7 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, SqlStateBackend):
                 "ON CONFLICT (virtual_environment_name, node_type, node_name) "
                 "DO UPDATE SET version_hash = excluded.version_hash, updated_at = now()"
             )
-            connection.execute(f"DROP TABLE IF EXISTS {temp_table_name}")
+            executor.execute(f"DROP TABLE IF EXISTS {temp_table_name}")
 
     def _backup_schema_name(self, *, schema: str, backup_id_value: str) -> str:
         return f"{schema}__backup_{backup_id_value}"

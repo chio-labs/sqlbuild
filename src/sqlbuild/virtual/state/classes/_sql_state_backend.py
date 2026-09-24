@@ -8,6 +8,7 @@ from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import Any, ClassVar
 
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.virtual.state._helpers.state_storage.datetime import (
     from_naive_utc_wall_clock,
 )
@@ -29,6 +30,7 @@ from sqlbuild.virtual.state.constants import (
     VIRTUAL_ENVIRONMENT_NODE_REF_TABLE,
     VIRTUAL_ENVIRONMENT_TABLE,
 )
+from sqlbuild.virtual.state.exceptions import StateBackendConfigError
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,
@@ -312,6 +314,192 @@ class SqlStateBackend(StateBackend):
         return tuple(
             StateLockRecord(lock_key=row[0], owner_id=row[1], expires_at=row[2]) for row in rows
         )
+
+    @abstractmethod
+    def _replace_virtual_environment_node_ref_groups(
+        self,
+        *,
+        executor: Any,
+        schema: str,
+        virtual_environment_name: str,
+        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
+    ) -> None:
+        """Replace node refs per node type inside an open write transaction."""
+        ...
+
+    def replace_virtual_environment_node_refs(
+        self,
+        *,
+        connection: Any,
+        schema: str,
+        virtual_environment_name: str,
+        node_type: str,
+        refs: tuple[VirtualEnvironmentNodeRefRecord, ...],
+    ) -> None:
+        self.replace_virtual_environment_node_ref_groups(
+            connection=connection,
+            schema=schema,
+            virtual_environment_name=virtual_environment_name,
+            refs_by_node_type={node_type: refs},
+        )
+
+    def replace_virtual_environment_node_ref_groups(
+        self,
+        *,
+        connection: Any,
+        schema: str,
+        virtual_environment_name: str,
+        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
+    ) -> None:
+        with self._write_transaction(connection=connection) as executor:
+            self._replace_virtual_environment_node_ref_groups(
+                executor=executor,
+                schema=schema,
+                virtual_environment_name=virtual_environment_name,
+                refs_by_node_type=refs_by_node_type,
+            )
+
+    def upsert_virtual_environment_and_replace_node_ref_groups(
+        self,
+        *,
+        connection: Any,
+        schema: str,
+        record: VirtualEnvironmentRecord,
+        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]],
+    ) -> None:
+        with self._write_transaction(connection=connection) as executor:
+            self._upsert_virtual_environment_record(executor=executor, schema=schema, record=record)
+            self._replace_virtual_environment_node_ref_groups(
+                executor=executor,
+                schema=schema,
+                virtual_environment_name=record.virtual_environment_name,
+                refs_by_node_type=refs_by_node_type,
+            )
+
+    def replace_virtual_environment_model_refs(
+        self,
+        *,
+        connection: Any,
+        schema: str,
+        virtual_environment_name: str,
+        refs: tuple[VirtualEnvironmentModelRefRecord, ...],
+    ) -> None:
+        self.replace_virtual_environment_node_refs(
+            connection=connection,
+            schema=schema,
+            virtual_environment_name=virtual_environment_name,
+            node_type="model",
+            refs=tuple(
+                VirtualEnvironmentNodeRefRecord(
+                    virtual_environment_name=ref.virtual_environment_name,
+                    node_type="model",
+                    node_name=ref.model_name,
+                    version_hash=ref.version_hash,
+                )
+                for ref in refs
+            ),
+        )
+
+    def replace_virtual_environment_function_refs(
+        self,
+        *,
+        connection: Any,
+        schema: str,
+        virtual_environment_name: str,
+        refs: tuple[VirtualEnvironmentFunctionRefRecord, ...],
+    ) -> None:
+        ref: VirtualEnvironmentFunctionRefRecord
+        for ref in refs:
+            if ref.node_type not in {
+                CompiledResourceType.UDF,
+                CompiledResourceType.TABLE_FN,
+            }:
+                raise StateBackendConfigError("Function ref node_type must be 'udf' or 'table_fn'")
+        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]] = {}
+        for node_type in ("udf", "table_fn"):
+            node_refs: list[VirtualEnvironmentNodeRefRecord] = []
+            for ref in refs:
+                if ref.node_type == node_type:
+                    node_refs.append(
+                        VirtualEnvironmentNodeRefRecord(
+                            virtual_environment_name=ref.virtual_environment_name,
+                            node_type=ref.node_type,
+                            node_name=ref.function_name,
+                            version_hash=ref.version_hash,
+                        )
+                    )
+            refs_by_node_type[node_type] = tuple(node_refs)
+        self.replace_virtual_environment_node_ref_groups(
+            connection=connection,
+            schema=schema,
+            virtual_environment_name=virtual_environment_name,
+            refs_by_node_type=refs_by_node_type,
+        )
+
+    def replace_virtual_environment_seed_refs(
+        self,
+        *,
+        connection: Any,
+        schema: str,
+        virtual_environment_name: str,
+        refs: tuple[VirtualEnvironmentSeedRefRecord, ...],
+    ) -> None:
+        self.replace_virtual_environment_node_refs(
+            connection=connection,
+            schema=schema,
+            virtual_environment_name=virtual_environment_name,
+            node_type="seed",
+            refs=tuple(
+                VirtualEnvironmentNodeRefRecord(
+                    virtual_environment_name=ref.virtual_environment_name,
+                    node_type="seed",
+                    node_name=ref.seed_name,
+                    version_hash=ref.version_hash,
+                )
+                for ref in refs
+            ),
+        )
+
+    def upsert_virtual_environment_python_node_ref(
+        self,
+        *,
+        connection: Any,
+        schema: str,
+        ref: VirtualEnvironmentPythonNodeRefRecord,
+    ) -> None:
+        self.upsert_virtual_environment_node_ref(
+            connection=connection,
+            schema=schema,
+            ref=VirtualEnvironmentNodeRefRecord(
+                virtual_environment_name=ref.virtual_environment_name,
+                node_type=ref.node_type,
+                node_name=ref.node_name,
+                version_hash=ref.version_hash,
+            ),
+        )
+
+    def _validate_node_ref_replacement(
+        self,
+        *,
+        virtual_environment_name: str,
+        node_type: str,
+        refs: tuple[VirtualEnvironmentNodeRefRecord, ...],
+    ) -> None:
+        seen_node_names: set[str] = set()
+        ref: VirtualEnvironmentNodeRefRecord
+        for ref in refs:
+            if ref.virtual_environment_name != virtual_environment_name:
+                raise StateBackendConfigError(
+                    "Node ref virtual_environment_name must match replacement "
+                    "virtual_environment_name"
+                )
+            if ref.node_type != node_type:
+                raise StateBackendConfigError("Node ref node_type must match replacement node_type")
+            if ref.node_name in seen_node_names:
+                raise StateBackendConfigError(
+                    f"Duplicate node ref for node type '{node_type}' and name '{ref.node_name}'"
+                )
+            seen_node_names.add(ref.node_name)
 
     def _replace_row_preserving_created_at(
         self,
