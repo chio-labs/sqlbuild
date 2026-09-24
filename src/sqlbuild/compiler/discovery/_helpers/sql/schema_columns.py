@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild.compiler.auditing.main._parse_audit_instance import parse_audit_instance
+from sqlbuild.compiler.authored_values.main._optional_named_bool import optional_named_bool
+from sqlbuild.compiler.authored_values.main._optional_named_string import optional_named_string
 from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
@@ -67,12 +69,13 @@ def parse_schema_columns(
                 f"{file_path} {label} column '{raw_column_name}' has unknown metadata keys: "
                 f"{', '.join(sorted(unknown_keys))}"
             )
-        nullable: bool | None = _optional_bool(
+        nullable: bool | None = optional_named_bool(
             raw_value=column_metadata.get("nullable"),
             file_path=file_path,
             label=f"{label} column '{raw_column_name}'",
             key="nullable",
             error_class=error_class,
+            default=None,
         )
         column_location: SourceLocation | None = locations.get(raw_column_name)
         audits: tuple[SchemaAuditInstance, ...] = tuple(
@@ -101,7 +104,7 @@ def parse_schema_columns(
         parsed_columns.append(
             SchemaColumn(
                 name=raw_column_name,
-                type=_optional_string(
+                type=optional_named_string(
                     raw_value=column_metadata.get("type"),
                     file_path=file_path,
                     label=f"{label} column '{raw_column_name}'",
@@ -109,7 +112,7 @@ def parse_schema_columns(
                     error_class=error_class,
                 ),
                 nullable=nullable,
-                description=_optional_string(
+                description=optional_named_string(
                     raw_value=column_metadata.get("description"),
                     file_path=file_path,
                     label=f"{label} column '{raw_column_name}'",
@@ -139,33 +142,3 @@ def _parse_audits(
         )
         for raw_audit in raw_audits
     )
-
-
-def _optional_string(
-    *,
-    raw_value: object | None,
-    file_path: Path,
-    label: str,
-    key: str,
-    error_class: _SchemaColumnParseError,
-) -> str | None:
-    if raw_value is None:
-        return None
-    if not isinstance(raw_value, str) or not raw_value.strip():
-        raise error_class(f"{file_path} {label} '{key}' must be a non-empty string")
-    return raw_value
-
-
-def _optional_bool(
-    *,
-    raw_value: object | None,
-    file_path: Path,
-    label: str,
-    key: str,
-    error_class: _SchemaColumnParseError,
-) -> bool | None:
-    if raw_value is None:
-        return None
-    if not isinstance(raw_value, bool):
-        raise error_class(f"{file_path} {label} '{key}' must be a boolean")
-    return raw_value

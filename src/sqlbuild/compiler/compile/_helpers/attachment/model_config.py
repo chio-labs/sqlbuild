@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import cast
 
 from sqlbuild.compiler.auditing.main._parse_audit_instance import parse_audit_instance
+from sqlbuild.compiler.authored_values.main._optional_named_string import optional_named_string
 from sqlbuild.compiler.compile._helpers.audit_factories.core import (
     merge_validated_model_audits,
     parse_model_header_audit_factories,
@@ -265,11 +266,12 @@ def build_model_header_schema_entry(
     ):
         return None
 
-    model_description: str | None = _optional_model_header_string(
+    model_description: str | None = optional_named_string(
         raw_value=raw_description,
         file_path=file_path,
         label="model",
         key="description",
+        error_class=CompileInputError,
     )
     description: str | None = model_description or model_schema_description
     local_columns: tuple[SchemaColumn, ...] = _parse_model_header_columns(
@@ -512,16 +514,6 @@ def _parse_model_header_audits(
         )
         for raw_audit in raw_audits
     )
-
-
-def _optional_model_header_string(
-    *, raw_value: object | None, file_path: Path, label: str, key: str
-) -> str | None:
-    if raw_value is None:
-        return None
-    if not isinstance(raw_value, str) or not raw_value.strip():
-        raise CompileInputError(f"{file_path} {label} '{key}' must be a non-empty string")
-    return raw_value
 
 
 def _resolve_model_schema(

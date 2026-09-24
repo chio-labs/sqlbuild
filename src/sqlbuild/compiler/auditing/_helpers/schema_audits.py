@@ -14,6 +14,8 @@ from sqlbuild.compiler.auditing.constants import (
 from sqlbuild.compiler.auditing.exceptions import MeasurementAuditError
 from sqlbuild.compiler.auditing.models import MeasurementThresholdBound, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditSeverity, ThresholdOperator
+from sqlbuild.compiler.authored_values.main._optional_named_bool import optional_named_bool
+from sqlbuild.compiler.authored_values.main._optional_named_string import optional_named_string
 from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
     validate_resource_identity,
 )
@@ -62,7 +64,7 @@ def parse_audit_instance_impl(
 
     argument_mapping: dict[str, object] = cast(dict[str, object], raw_arguments)
     option_label: str = f"{label} audit '{definition_name}'"
-    name: str | None = _optional_named_string(
+    name: str | None = optional_named_string(
         raw_value=argument_mapping.get("name"),
         file_path=file_path,
         label=option_label,
@@ -75,14 +77,14 @@ def parse_audit_instance_impl(
             kind=f"{label} audit instance",
             path=file_path,
         )
-    description: str | None = _optional_named_string(
+    description: str | None = optional_named_string(
         raw_value=argument_mapping.get("description"),
         file_path=file_path,
         label=option_label,
         key="description",
         error_class=error_class,
     )
-    raw_severity: str | None = _optional_named_string(
+    raw_severity: str | None = optional_named_string(
         raw_value=argument_mapping.get("severity"),
         file_path=file_path,
         label=option_label,
@@ -98,19 +100,20 @@ def parse_audit_instance_impl(
             raise error_class(
                 f"{file_path} {option_label} 'severity' must be one of: {allowed}"
             ) from error
-    run_scope: str | None = _optional_named_string(
+    run_scope: str | None = optional_named_string(
         raw_value=argument_mapping.get("run_scope"),
         file_path=file_path,
         label=option_label,
         key="run_scope",
         error_class=error_class,
     )
-    always_run: bool = _optional_named_bool(
+    always_run: bool = optional_named_bool(
         raw_value=argument_mapping.get("always_run"),
         file_path=file_path,
         label=option_label,
         key="always_run",
         error_class=error_class,
+        default=False,
     )
     thresholds: MeasurementThresholds | None = parse_measurement_thresholds(
         raw_value=argument_mapping.get("thresholds"),
@@ -244,33 +247,3 @@ def _parse_threshold_bound(raw_value: object | None) -> MeasurementThresholdBoun
     if isinstance(raw_limit, bool) or not isinstance(raw_limit, (int, float)):
         raise MeasurementAuditError(f"{operator.value} threshold requires one numeric value")
     return MeasurementThresholdBound(operator=operator, limit=float(raw_limit))
-
-
-def _optional_named_string(
-    *,
-    raw_value: object | None,
-    file_path: Path,
-    label: str,
-    key: str,
-    error_class: type[Exception],
-) -> str | None:
-    if raw_value is None:
-        return None
-    if not isinstance(raw_value, str) or not raw_value.strip():
-        raise error_class(f"{file_path} {label} '{key}' must be a non-empty string")
-    return raw_value
-
-
-def _optional_named_bool(
-    *,
-    raw_value: object | None,
-    file_path: Path,
-    label: str,
-    key: str,
-    error_class: type[Exception],
-) -> bool:
-    if raw_value is None:
-        return False
-    if not isinstance(raw_value, bool):
-        raise error_class(f"{file_path} {label} '{key}' must be a boolean")
-    return raw_value
