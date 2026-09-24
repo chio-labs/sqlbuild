@@ -8,6 +8,8 @@ mod evaluation;
 mod helpers;
 #[path = "tests/test_scope_facts.rs"]
 mod scope_facts;
+#[path = "tests/test_sql_scanning.rs"]
+mod sql_scanning;
 #[path = "tests/test_sql_test_rules.rs"]
 mod sql_test_rules;
 #[path = "tests/test_types.rs"]
