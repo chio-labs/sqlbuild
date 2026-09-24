@@ -90,6 +90,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes._test_types import (
     DuckDbStateBackendNodeResultTestCase,
     DuckDbStateBackendOperationEventTestCase,
     DuckDbStateBackendPythonNodeIdentityTestCase,
+    DuckDbStateBackendRefContractTestCase,
     DuckDbStateBackendRollbackTestCase,
     DuckDbStateBackendSeedRefTestCase,
     DuckDbStateBackendSourceFreshnessTestCase,
@@ -106,6 +107,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     CHECKPOINT_ENVIRONMENT_PAYLOAD,
     CHECKPOINT_ID_PAYLOAD,
     DETACHED_CHECKPOINT_PAYLOAD,
+    EXPECTED_STATE_REF_CONTRACT_OBSERVATION,
     FAILED_CHECKPOINT_PAYLOAD,
     FINALIZING_CHECKPOINT_PAYLOAD,
     FUNCTION_OMISSION_PAYLOAD,
@@ -120,7 +122,9 @@ from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     STATE_READ_CONTRACT_RELATION_V2,
     VALID_PAYLOAD,
     StateReadContractObservation,
+    StateRefContractObservation,
     exercise_state_read_contract,
+    exercise_state_ref_contract,
     fetch_all,
     open_duckdb_state_backend,
 )
@@ -2858,3 +2862,35 @@ def test_given_duckdb_state_backend_when_reading_state_then_matches_read_contrac
     assert observation.environments == test_case.expected_environments
     assert observation.active_lock_keys == test_case.expected_active_lock_keys
     assert observation.expired_lock_keys == test_case.expected_expired_lock_keys
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DuckDbStateBackendRefContractTestCase(
+            description="replaces node function and grouped refs per environment and type",
+            expected_observation=EXPECTED_STATE_REF_CONTRACT_OBSERVATION,
+            schema="sqlbuild_state",
+            sqlbuild_version="0.0.test",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_duckdb_state_backend_when_replacing_refs_then_matches_ref_contract(
+    test_case: DuckDbStateBackendRefContractTestCase,
+    tmp_path: Path,
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    try:
+        backend.initialize(
+            connection=connection,
+            schema=test_case.schema,
+            sqlbuild_version=test_case.sqlbuild_version,
+        )
+        observation: StateRefContractObservation = exercise_state_ref_contract(
+            backend=backend, connection=connection, schema=test_case.schema
+        )
+    finally:
+        backend.close(connection)
+
+    assert observation == test_case.expected_observation
