@@ -154,6 +154,7 @@ _DEFAULT_VALUES: dict[str, object] = {
     "format_check": False,
     "format_diff": False,
     "format_fixtures_only": False,
+    "format_paths": [],
     "scope_target": None,
     "scope_at": None,
     "scope_as_path": None,
@@ -328,6 +329,7 @@ class CliNamespace:
     format_check: bool
     format_diff: bool
     format_fixtures_only: bool
+    format_paths: list[str]
     scope_target: str | None
     scope_at: str | None
     scope_as_path: str | None

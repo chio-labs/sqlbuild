@@ -26,6 +26,7 @@ from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
 
+_PATH_SEPARATOR: str = "/"
 _GRAPH_SELECTOR_MARKERS: tuple[str, ...] = ("+", ":", "~", "/", "\\", ",")
 
 
@@ -190,6 +191,7 @@ def _partition_lint_selectors(
     model_tokens: list[str] = []
     for raw_selector in raw_selectors:
         for token in raw_selector.split():
+            _reject_unknown_lint_root(token)
             prefixes: tuple[str, ...] | None = _lint_path_prefixes(raw_selectors=(token,))
             if prefixes is not None:
                 path_tokens.extend(prefixes)
@@ -258,7 +260,7 @@ def _lint_path_prefixes(*, raw_selectors: tuple[str, ...]) -> tuple[str, ...] | 
             return None
         for token in raw_selector.split():
             normalized: str = token.replace("\\", "/")
-            if not normalized.startswith("path:"):
+            if not normalized.startswith("path:") and not _is_bare_lint_path(normalized):
                 return None
             prefix: str = normalized.removeprefix("path:").strip("/")
             if any(marker in prefix for marker in ("+", "~", ",")):
@@ -268,6 +270,27 @@ def _lint_path_prefixes(*, raw_selectors: tuple[str, ...]) -> tuple[str, ...] | 
                 return None
             prefixes.append("/".join(parts))
     return tuple(prefixes)
+
+
+def _is_bare_lint_path(token: str) -> bool:
+    """Treat `models/orders.sql`-style tokens as formatter paths without a `path:` prefix."""
+
+    first_segment: str = token.split(_PATH_SEPARATOR, 1)[0]
+    return _PATH_SEPARATOR in token and first_segment in LINT_DIRECTORY_NAMES
+
+
+def _reject_unknown_lint_root(token: str) -> None:
+    normalized: str = token.replace("\\", "/")
+    if not normalized.startswith("path:"):
+        return
+    root: str = normalized.removeprefix("path:").strip(_PATH_SEPARATOR).split(_PATH_SEPARATOR, 1)[0]
+    if root in LINT_DIRECTORY_NAMES:
+        return
+    raise PlannerInputError(
+        "format path selectors must start with one of: "
+        + ", ".join(f"'{name}/'" for name in LINT_DIRECTORY_NAMES),
+        code="S012",
+    )
 
 
 def _matches_path_prefix(*, relative_path: str, prefixes: tuple[str, ...]) -> bool:

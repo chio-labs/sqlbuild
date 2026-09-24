@@ -315,6 +315,13 @@ def _add_quality_parsers(
         action="store_true",
         help="only remove redundant typed-null SQL test fixture columns",
     )
+    format_parser.add_argument(
+        "format_paths",
+        nargs="*",
+        default=[],
+        metavar="PATH",
+        help="SQL files or folders to format, relative to the current directory",
+    )
     _ = add_select_args(format_parser)
 
 

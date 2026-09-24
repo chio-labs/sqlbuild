@@ -13,6 +13,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     CanonicalFixtureFormatIntegrationTestCase,
     DescriptionFormatIntegrationTestCase,
     FormatCompileIntegrationTestCase,
+    FormatPathArgumentsIntegrationTestCase,
     FormatSafetyIntegrationTestCase,
     FormatScopeIntegrationTestCase,
     FormatterDeclineIntegrationTestCase,
@@ -25,6 +26,8 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
     write_from_values_format_project,
     write_snowflake_format_test,
 )
+
+_UNFORMATTED_ORDERS_SQL: str = "MODEL (materialized table);\nselect   1 as order_id\n"
 
 
 @pytest.mark.parametrize(
@@ -793,3 +796,85 @@ def test_given_missing_description_when_formatting_then_warning_does_not_fail(
     assert isinstance(violations, list)
     assert violations[0]["code"] == test_case.expected_code
     assert violations[0]["severity"] == test_case.expected_severity
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FormatPathArgumentsIntegrationTestCase(
+            description="positional file formats only that file",
+            arguments=("models/marts/orders.sql",),
+            expected_exit_code=0,
+            expected_formatted=("models/marts/orders.sql",),
+            expected_unchanged=("models/staging/stg_orders.sql",),
+            expected_output_fragment="1 files",
+        ),
+        FormatPathArgumentsIntegrationTestCase(
+            description="bare file path in select formats only that file",
+            arguments=("--select", "models/staging/stg_orders.sql"),
+            expected_exit_code=0,
+            expected_formatted=("models/staging/stg_orders.sql",),
+            expected_unchanged=("models/marts/orders.sql",),
+            expected_output_fragment="1 files",
+        ),
+        FormatPathArgumentsIntegrationTestCase(
+            description="positional folder formats every file below it",
+            arguments=("models",),
+            expected_exit_code=0,
+            expected_formatted=("models/marts/orders.sql", "models/staging/stg_orders.sql"),
+            expected_unchanged=(),
+            expected_output_fragment="2 files",
+        ),
+        FormatPathArgumentsIntegrationTestCase(
+            description="missing positional path is a clear error",
+            arguments=("models/marts/missing.sql",),
+            expected_exit_code=1,
+            expected_formatted=(),
+            expected_unchanged=("models/marts/orders.sql", "models/staging/stg_orders.sql"),
+            expected_output_fragment="format path 'models/marts/missing.sql' does not exist",
+        ),
+        FormatPathArgumentsIntegrationTestCase(
+            description="path outside formatted folders lists the valid roots",
+            arguments=("sqlbuild_project.toml",),
+            expected_exit_code=1,
+            expected_formatted=(),
+            expected_unchanged=("models/marts/orders.sql", "models/staging/stg_orders.sql"),
+            expected_output_fragment="use a path under models/, tests/",
+        ),
+        FormatPathArgumentsIntegrationTestCase(
+            description="unknown path selector root lists the formatter roots",
+            arguments=("--select", "path:macros"),
+            expected_exit_code=1,
+            expected_formatted=(),
+            expected_unchanged=("models/marts/orders.sql", "models/staging/stg_orders.sql"),
+            expected_output_fragment="'functions/'",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_file_paths_when_formatting_then_only_named_files_change(
+    test_case: FormatPathArgumentsIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    for relative_path in ("models/marts/orders.sql", "models/staging/stg_orders.sql"):
+        (tmp_path / relative_path).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / relative_path).write_text(_UNFORMATTED_ORDERS_SQL, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    exit_code: int = main(["--no-color", "format", *test_case.arguments])
+    captured: CaptureResult[str] = capsys.readouterr()
+
+    assert exit_code == test_case.expected_exit_code
+    assert test_case.expected_output_fragment in captured.out + captured.err
+    assert {
+        path: (tmp_path / path).read_text(encoding="utf-8") != _UNFORMATTED_ORDERS_SQL
+        for path in (*test_case.expected_formatted, *test_case.expected_unchanged)
+    } == {
+        **dict.fromkeys(test_case.expected_formatted, True),
+        **dict.fromkeys(test_case.expected_unchanged, False),
+    }

@@ -601,3 +601,15 @@ class BuildTestPlanningTestCase:
     build_flags: tuple[str, ...]
     expected_exit_code: int
     expected_fragment: str
+
+
+@dataclass(frozen=True)
+class FormatPathArgumentsIntegrationTestCase:
+    """One `sqb format` invocation that names files directly."""
+
+    description: str
+    arguments: tuple[str, ...]
+    expected_exit_code: int
+    expected_formatted: tuple[str, ...]
+    expected_unchanged: tuple[str, ...]
+    expected_output_fragment: str
