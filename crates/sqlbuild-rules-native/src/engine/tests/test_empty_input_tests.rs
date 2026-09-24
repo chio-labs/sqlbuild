@@ -126,6 +126,34 @@ fn given_sql_test_shapes_when_evaluating_empty_input_rule_then_flags_only_filler
             expected_messages: &[],
         },
         test_types::EmptyInputTestRuleTestCase {
+            description: "all-empty mocks with an aggregate-projection assertion pass",
+            test: helpers::empty_input_test_fact(
+                "orders__reports_one_zero_summary",
+                &[EMPTY_ORDERS],
+                &[],
+                &[(
+                    "__assert__one_zero_summary_row",
+                    "SELECT UNNEST(CASE WHEN COUNT(*) = 1 AND MIN(order_count) = 0 THEN [] ELSE [1] END) AS failure FROM __ref(\"orders\")",
+                )],
+            ),
+            allowed_tests: json!([]),
+            expected_messages: &[],
+        },
+        test_types::EmptyInputTestRuleTestCase {
+            description: "a filtered mock ordered by an aggregate is not empty",
+            test: helpers::empty_input_test_fact(
+                "orders__drops_first_order",
+                &[(
+                    "__source__raw_orders",
+                    "SELECT 1 AS order_id, 5 AS amount WHERE FALSE ORDER BY COUNT(*)",
+                )],
+                &[],
+                &[NO_ROWS_ASSERTION],
+            ),
+            allowed_tests: json!([]),
+            expected_messages: &[],
+        },
+        test_types::EmptyInputTestRuleTestCase {
             description: "an allowlisted filler test passes",
             test: helpers::filler_test(),
             allowed_tests: json!(["orders__empty_inputs_produce_no_rows"]),

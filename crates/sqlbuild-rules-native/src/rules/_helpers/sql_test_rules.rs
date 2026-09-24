@@ -687,7 +687,9 @@ fn empty_relation(cte: &SqlTestCteFact, dialect: &str) -> bool {
     let SetExpr::Select(select) = query.body.as_ref() else {
         return false;
     };
-    query.with.is_none() && (limited_to_zero_rows(&query) || filtered_to_zero_rows(select))
+    query.with.is_none()
+        && (limited_to_zero_rows(&query)
+            || (filtered_to_zero_rows(select) && !contains_function(&query.order_by)))
 }
 
 fn parse_fixture_query(sql: &str, dialect: &str) -> Option<Query> {
@@ -713,7 +715,7 @@ fn limited_to_zero_rows(query: &Query) -> bool {
 }
 
 fn filtered_to_zero_rows(select: &Select) -> bool {
-    let global_aggregate_possible = select.projection.iter().any(contains_function);
+    let global_aggregate_possible = contains_function(select);
     select.having.is_none()
         && group_by_empty(&select.group_by)
         && !global_aggregate_possible
@@ -768,6 +770,8 @@ fn bare_row_existence(sql: &str, targets: &[String], dialect: &str) -> bool {
         && unfiltered
         && source.joins.is_empty()
         && reference_target(&source.relation).is_some_and(|target| targets.contains(&target))
+        && !contains_function(&select.projection)
+        && !contains_function(&query.order_by)
         && query_count(&query) == 1
 }
 
