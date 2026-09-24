@@ -13,6 +13,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _COLLECTION_SQL_VALUE_KINDS,
     BaseAdapter,
     _encode_typed_json,
+    _historical_reappearing_new_changes_ctes_sql,
     _render_ansi_typed_scalar,
     _render_typed_value_list,
     _typed_collection_items,
@@ -3285,12 +3286,6 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             latest_join_condition: str = cls._snapshot_key_condition(
                 left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
             )
-            latest_ordered_join_condition: str = cls._snapshot_key_condition(
-                left_alias="__ordered", right_alias="__latest", unique_key=unique_key
-            )
-            reappearing_partition_sql: str = ", ".join(
-                f"__ordered.{column}" for column in unique_key
-            )
             latest_change_condition: str = " OR ".join(
                 f"__delta_changes.{column} IS DISTINCT FROM __latest.{column}"
                 for column in check_columns
@@ -3298,6 +3293,18 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             hard_deletes_sql: str = cls._historical_hard_deletes_select_sql(
                 destination=destination,
                 origin=origin,
+                unique_key=unique_key,
+                observed_at_column=observed_at_column,
+                valid_to_column=valid_to_column,
+            )
+            reappearing_new_changes_sql: str = _historical_reappearing_new_changes_ctes_sql(
+                changed_or_new_sql=(
+                    "SELECT __delta_changes.* FROM __delta_changes "
+                    f"LEFT JOIN __latest ON {latest_join_condition} "
+                    f"WHERE __latest.{first_key} IS NULL "
+                    f"OR (__delta_changes.{observed_at_column} > __latest.{valid_from_column} "
+                    f"AND ({latest_change_condition}))"
+                ),
                 unique_key=unique_key,
                 observed_at_column=observed_at_column,
                 valid_to_column=valid_to_column,
@@ -3313,22 +3320,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 f"SELECT * FROM {destination} QUALIFY ROW_NUMBER() OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
                 ") = 1"
-                "), __new_changes AS ("
-                "SELECT __delta_changes.* FROM __delta_changes "
-                f"LEFT JOIN __latest ON {latest_join_condition} "
-                f"WHERE __latest.{first_key} IS NULL "
-                f"OR (__delta_changes.{observed_at_column} > __latest.{valid_from_column} "
-                f"AND ({latest_change_condition}))"
-                " UNION DISTINCT "
-                "SELECT __ordered.* FROM __ordered "
-                f"JOIN __latest ON {latest_ordered_join_condition} "
-                f"WHERE __latest.{valid_to_column} IS NOT NULL "
-                f"AND __ordered.{observed_at_column} > __latest.{valid_to_column} "
-                "QUALIFY ROW_NUMBER() OVER ("
-                f"PARTITION BY {reappearing_partition_sql} "
-                f"ORDER BY __ordered.{observed_at_column}"
-                ") = 1"
-                "), __hard_deletes AS ("
+                f"), {reappearing_new_changes_sql}, __hard_deletes AS ("
                 f"{hard_deletes_sql}"
                 ")"
             )

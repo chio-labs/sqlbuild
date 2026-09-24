@@ -116,6 +116,15 @@ _HISTORICAL_SCENARIOS: tuple[SnapshotExecutionScenario, ...] = (
         ),
         expected_history=((1, "basic", 1, 2), (1, "pro", 2, None)),
     ),
+    SnapshotExecutionScenario(
+        description="check change followed by an unchanged repeat in one build",
+        kind=HISTORICAL_CHECK_HARD_DELETES,
+        builds=(
+            ((1, "active", 1),),
+            ((1, "active", 1), (1, "paused", 2), (1, "paused", 3)),
+        ),
+        expected_history=((1, "active", 1, 2), (1, "paused", 2, None)),
+    ),
 )
 
 _CURRENT_STATE_SCENARIOS: tuple[SnapshotExecutionScenario, ...] = (
