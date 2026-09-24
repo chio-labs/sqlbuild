@@ -23,6 +23,7 @@ from tests.unit.scripts.dupscore._helpers.contracts.forced_overrides.helpers imp
     CONTRACT_FILES,
     CONTRACT_PATH,
     GAMMA_PATH,
+    GENERIC_BASE_PATH,
     OUTSIDE_PATH,
     QUALIFIED_PATH,
     REEXPORT_PATH,
@@ -128,6 +129,13 @@ _ADAPTERS: str = "src/sqlbuild/adapters"
             language="python",
             path=QUALIFIED_PATH,
             name="ZetaStore.write_orders",
+            expected_forced=False,
+        ),
+        ForcedOverrideTestCase(
+            description="same-file generic mixin that supplies the method keeps it voluntary",
+            language="python",
+            path=GENERIC_BASE_PATH,
+            name="ThetaStore.write_orders",
             expected_forced=False,
         ),
         ForcedOverrideTestCase(

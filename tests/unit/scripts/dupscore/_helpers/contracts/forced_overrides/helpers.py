@@ -14,6 +14,7 @@ DELTA_PATH: str = "src/sqlbuild/demo/stores/delta/classes/delta_store.py"
 REEXPORT_PATH: str = "src/sqlbuild/demo/stores/epsilon/classes/epsilon_store.py"
 QUALIFIED_PATH: str = "src/sqlbuild/demo/stores/zeta/classes/zeta_store.py"
 STDLIB_BASE_PATH: str = "src/sqlbuild/demo/stores/eta/classes/eta_store.py"
+GENERIC_BASE_PATH: str = "src/sqlbuild/demo/stores/theta/classes/theta_store.py"
 
 _MIXIN_SOURCE: str = """\
 from abc import abstractmethod
@@ -159,6 +160,15 @@ ANCESTRY_FILES: dict[str, str] = {
         "import sqlbuild.demo.shared.writer\n"
         + _BASE_IMPORT
         + "class ZetaStore(sqlbuild.demo.shared.writer.WriterMixin, BaseStore):\n"
+        + WRITE_ORDERS
+    ),
+    GENERIC_BASE_PATH: (
+        "from typing import Generic, TypeVar\n"
+        + _BASE_IMPORT
+        + 'RowT = TypeVar("RowT")\n\n\n'
+        + "class WriterMixin(Generic[RowT]):\n"
+        + WRITE_ORDERS
+        + "\n\nclass ThetaStore(WriterMixin[int], BaseStore):\n"
         + WRITE_ORDERS
     ),
     STDLIB_BASE_PATH: (

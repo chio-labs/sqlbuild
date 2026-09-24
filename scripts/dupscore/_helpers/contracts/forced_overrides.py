@@ -189,6 +189,8 @@ class _ClassResolver:
             root = root.value
         if not isinstance(root, ast.Name):
             return True
+        if _find_class(tree=tree, name=root.id) is not None:
+            return True
         for statement in tree.body:
             if isinstance(statement, ast.ImportFrom):
                 for alias in statement.names:
@@ -210,6 +212,8 @@ class _ClassResolver:
         return False
 
     def _resolve_base(self, *, tree: ast.Module, importer: str, base: ast.expr) -> _ClassKey | None:
+        if isinstance(base, ast.Subscript):
+            base = base.value
         if not isinstance(base, ast.Name):
             return None
         if _find_class(tree=tree, name=base.id) is not None:
