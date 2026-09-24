@@ -1140,3 +1140,59 @@ pub(crate) fn difference_sample_lifts_expected_helper_ctes() -> bool {
     );
     true
 }
+
+pub(crate) fn mock_read_through_helper_brings_its_mock_dependencies_into_scope() -> bool {
+    for sql_analysis_enabled in [true, false] {
+        let response: Value = serde_json::from_str(
+            &crate::compiler::main::sql_test_planning::plan_and_render_json(
+                &json!({
+                    "models": [
+                        {"name": "raw_orders", "querySql": "SELECT 1 AS order_id", "modelDependencies": []},
+                        {"name": "stg_orders", "querySql": "SELECT order_id FROM __ref(\"raw_orders\")", "modelDependencies": ["raw_orders"]},
+                        {"name": "orders", "querySql": "SELECT order_id FROM __ref(\"stg_orders\")", "modelDependencies": ["stg_orders"]}
+                    ],
+                    "tests": [{
+                        "name": "orders_case",
+                        "fileLabel": "tests/orders.sql",
+                        "payload": {
+                            "kind": "model",
+                            "authoredCtes": [
+                                {"name": "__ref__raw_orders", "sqlBody": "SELECT 1 AS order_id"},
+                                {"name": "base_rows", "sqlBody": "SELECT order_id FROM __ref__raw_orders"},
+                                {"name": "__ref__stg_orders", "sqlBody": "SELECT order_id FROM base_rows"},
+                                {"name": "expected_rows", "sqlBody": "SELECT order_id FROM __ref__stg_orders"}
+                            ],
+                            "expectedCtes": [{
+                                "name": "__expected__orders",
+                                "sqlBody": "SELECT order_id FROM expected_rows"
+                            }],
+                            "expectedModelNames": ["orders"],
+                            "assertionCtes": [{
+                                "name": "__assert__rows_match",
+                                "sqlBody": "SELECT order_id FROM expected_rows EXCEPT SELECT order_id FROM __ref(\"orders\")"
+                            }]
+                        }
+                    }],
+                    "sqlAnalysisEnabled": sql_analysis_enabled,
+                    "sqlAnalysisDialect": "duckdb",
+                    "setDifferenceOperator": "EXCEPT"
+                })
+                .to_string(),
+            )
+            .expect("test assumption must hold"),
+        )
+        .expect("test assumption must hold");
+        let sql = response["artifacts"][0]["sql"]
+            .as_str()
+            .expect("test assumption must hold");
+        let raw_mock = top_level_cte_position(sql, "__ref__raw_orders");
+        let stg_mock = top_level_cte_position(sql, "__ref__stg_orders");
+        let expected_rows = top_level_cte_position(sql, "expected_rows");
+        let actual = top_level_cte_position(sql, "__actual__orders");
+        let assertion = top_level_cte_position(sql, "__assert__rows_match");
+        assert!(raw_mock < stg_mock && stg_mock < expected_rows, "{sql}");
+        assert!(raw_mock < actual && expected_rows < assertion, "{sql}");
+        assert_eq!(response["artifacts"][0]["warnings"], json!([]), "{sql}");
+    }
+    true
+}

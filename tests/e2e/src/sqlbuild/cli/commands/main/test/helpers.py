@@ -1217,6 +1217,17 @@ _HELPER_SCOPE_TESTS: dict[str, str] = {
         "expected_rows AS (SELECT 1 AS order_id, 20 AS amount UNION ALL SELECT 2, 41),\n"
         "__expected__orders AS (SELECT order_id, amount FROM expected_rows)\n"
     ),
+    "mock_reads_helper_reading_mock": (
+        "__source__raw_orders AS (SELECT 1 AS id, 10 AS amount UNION ALL SELECT 2, 20),\n"
+        "base_rows AS (SELECT id AS order_id, amount FROM __source__raw_orders),\n"
+        "__ref__stg_orders AS (SELECT order_id, amount FROM base_rows),\n"
+        "expected_rows AS (SELECT order_id, amount * 2 AS amount FROM __ref__stg_orders),\n"
+        "__expected__orders AS (SELECT order_id, amount FROM expected_rows),\n"
+        "__assert__every_order_built AS (\n"
+        "  SELECT order_id, amount FROM expected_rows\n"
+        '  EXCEPT SELECT order_id, amount FROM __ref("orders")\n'
+        ")\n"
+    ),
     "helper_reads_mock_and_helper": (
         "__ref__stg_orders AS (SELECT 1 AS order_id, 10 AS amount UNION ALL SELECT 2, 20),\n"
         "doubled AS (SELECT order_id, amount * 2 AS amount FROM __ref__stg_orders),\n"

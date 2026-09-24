@@ -12,7 +12,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import build_helper_s
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
 _OUTCOME_FRAGMENTS: tuple[str, ...] = (
-    "PASS=3  FAIL=2  TOTAL=5",
+    "PASS=4  FAIL=2  TOTAL=6",
     "unexpected sample 1: order_id=2, amount=40; missing sample 1: order_id=2, amount=41",
     "expect  assertion all_expected_rows_built",
 )
@@ -56,6 +56,7 @@ def test_given_helper_ctes_when_expected_and_assertions_use_them_then_tests_comp
     for fragment in test_case.expected_output_fragments:
         assert fragment in output, output
     assert "Catalog Error" not in output, output
+    assert "unreachable" not in output, output
     assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
     compiled_sql: str = next(
         (project_dir / "target" / "compiled" / "tests").rglob("helper_reads_mock_and_helper.sql")

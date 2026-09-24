@@ -2,6 +2,7 @@ use crate::compiler::tests::helpers::{
     chain_resolution_orders_unmocked_models, concurrent_requests_initialize_shared_template_once,
     deep_shared_graph_reports_missing_mock_once,
     helper_ctes_are_in_scope_for_assertions_and_expected_rows, long_chain_plan_output_stays_linear,
+    mock_read_through_helper_brings_its_mock_dependencies_into_scope,
     model_test_batch_returns_ordered_artifact, plan_without_rendering_returns_executable_steps,
     scoped_helper_named_like_generated_cte_is_rejected,
     shared_textual_chain_renders_each_model_once,
@@ -78,6 +79,11 @@ fn given_sql_test_planning_cases_when_exercising_native_planner_then_expected_be
         SqlTestPlanningTestCase {
             description: "helper CTEs are in scope for assertions and expected rows",
             run: helper_ctes_are_in_scope_for_assertions_and_expected_rows,
+            expected_success: true,
+        },
+        SqlTestPlanningTestCase {
+            description: "mock read through a helper brings its mock dependencies into scope",
+            run: mock_read_through_helper_brings_its_mock_dependencies_into_scope,
             expected_success: true,
         },
         SqlTestPlanningTestCase {
