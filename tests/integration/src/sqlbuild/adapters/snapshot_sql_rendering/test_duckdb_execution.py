@@ -322,10 +322,7 @@ _RUNS: tuple[SnapshotExecutionRun, ...] = build_execution_runs(
     "test_case",
     [
         SnapshotExecutionTestCase(
-            description=(
-                f"{run.adapter.name}: {run.scenario.description} ({run.path})"
-                f" retry_after_insert={retry_after_insert}"
-            ),
+            description=f"{run.adapter.name}: {run.scenario.description} ({run.path})",
             adapter_type=run.adapter.adapter_type,
             normalize_sql=run.adapter.normalize_sql,
             source_select_sql=run.scenario.kind.source_select_sql,
@@ -334,12 +331,8 @@ _RUNS: tuple[SnapshotExecutionRun, ...] = build_execution_runs(
             history_sql=run.scenario.kind.history_sql,
             builds=run.builds,
             expected_history=run.scenario.expected_history,
-            retry_after_insert=retry_after_insert,
         )
         for run in _RUNS
-        for retry_after_insert in (
-            (False, True) if run.scenario.kind is CURRENT_TIMESTAMP_HARD_DELETES else (False,)
-        )
     ],
     ids=lambda case: case.description,
 )
@@ -348,6 +341,35 @@ def test_given_snapshot_scenario_when_executing_adapter_sql_on_duckdb_then_histo
 ) -> None:
     history: tuple[tuple[object, ...], ...]
     violations: tuple[object, ...] | None
+    history, violations = run_snapshot_builds(test_case)
+
+    assert history == test_case.expected_history
+    assert violations == (0, 0, 0)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnapshotExecutionTestCase(
+            description=f"{run.adapter.name}: {run.scenario.description} interrupted",
+            adapter_type=run.adapter.adapter_type,
+            normalize_sql=run.adapter.normalize_sql,
+            source_select_sql=run.scenario.kind.source_select_sql,
+            render_initial=run.scenario.kind.render_initial,
+            render_apply=run.scenario.kind.render_apply,
+            history_sql=run.scenario.kind.history_sql,
+            builds=run.builds,
+            expected_history=run.scenario.expected_history,
+            retry_after_insert=True,
+        )
+        for run in _RUNS
+        if run.scenario.kind is CURRENT_TIMESTAMP_HARD_DELETES
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_interrupted_timestamp_insert_when_retrying_then_history_is_idempotent(
+    test_case: SnapshotExecutionTestCase,
+) -> None:
     history, violations = run_snapshot_builds(test_case)
 
     assert history == test_case.expected_history

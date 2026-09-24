@@ -380,10 +380,8 @@ def _run_build(
     connection.execute(f"CREATE OR REPLACE TABLE {_SOURCE} AS {source_sql}")
     adapter: BaseAdapter = _pinned_clock_adapter(test_case.adapter_type, day)
     statements: tuple[str, ...] = render(adapter)
-    if retry_after_insert:
-        connection.execute(test_case.normalize_sql(statements[0]))
     statement: str
-    for statement in statements:
+    for statement in (*statements[: int(retry_after_insert)], *statements):
         connection.execute(test_case.normalize_sql(statement))
 
 
