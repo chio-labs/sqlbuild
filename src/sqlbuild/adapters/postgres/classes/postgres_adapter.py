@@ -15,7 +15,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _build_names_filter,
     _build_schemas_filter,
     _encode_typed_json,
-    _historical_snapshot_combined_close_sql,
     _quote_sql_string,
     _render_ansi_typed_scalar,
     _render_typed_value_list,
@@ -25,8 +24,6 @@ from sqlbuild.adapter.contract.classes.historical_check_snapshot_sql import (
     HistoricalCheckSnapshotSql,
 )
 from sqlbuild.adapter.contract.classes.historical_snapshot_sql import (
-    HistoricalSnapshotSql,
-    historical_insert_validity_sql,
     render_is_distinct_from,
 )
 from sqlbuild.adapter.contract.classes.historical_timestamp_snapshot_sql import (
@@ -40,7 +37,6 @@ from sqlbuild.adapter.contract.constants import (
     DIFF_LEFT_SIDE,
     DIFF_RIGHT_SIDE,
     QUALIFIED_NAME_SEPARATOR,
-    SNAPSHOT_VERSION_START_COLUMN,
 )
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
@@ -1318,7 +1314,9 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
-        historical_sql: str = HistoricalTimestampSnapshotSql.initial_select_sql(
+        historical_sql: str = HistoricalTimestampSnapshotSql(
+            dialect=self._snapshot_sql_dialect
+        ).initial_select_sql(
             origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
@@ -2429,7 +2427,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
-        new_changes_sql: str = self._pg_historical_timestamp_new_changes_cte_sql(
+        return HistoricalTimestampSnapshotSql(dialect=self._snapshot_sql_dialect).apply_sql(
             destination=destination,
             origin=origin,
             unique_key=unique_key,
@@ -2437,51 +2435,9 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             observed_at_column=observed_at_column,
             valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
+            output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        key_condition: str = SnapshotSql.key_condition(
-            left_alias="__target", right_alias="__new_changes", unique_key=unique_key
-        )
-        if invalidate_hard_deletes:
-            close_sql: str = _historical_snapshot_combined_close_sql(
-                destination=destination,
-                new_changes_sql=new_changes_sql,
-                unique_key=unique_key,
-                valid_from_column=valid_from_column,
-                valid_to_column=valid_to_column,
-                change_time_column=SNAPSHOT_VERSION_START_COLUMN,
-            )
-        else:
-            close_sql = (
-                f"WITH {new_changes_sql} "
-                f"UPDATE {destination} AS __target "
-                f"SET {valid_to_column} = ("
-                f"SELECT MIN(__new_changes.{updated_at_column}) "
-                f"FROM __new_changes WHERE {key_condition}"
-                f") "
-                f"WHERE __target.{valid_to_column} IS NULL "
-                f"AND __target.{valid_from_column} < ("
-                f"SELECT MIN(__new_changes.{updated_at_column}) "
-                f"FROM __new_changes WHERE {key_condition}"
-                f") "
-                f"AND EXISTS (SELECT 1 FROM __new_changes WHERE {key_condition})"
-            )
-        insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
-        output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
-        partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
-        version_columns_sql: str = (
-            f"__new_changes.{updated_at_column}, LEAD(__new_changes.{updated_at_column}) OVER ("
-            f"PARTITION BY {partition_sql} ORDER BY __new_changes.{updated_at_column})"
-        )
-        if invalidate_hard_deletes:
-            version_columns_sql = historical_insert_validity_sql()
-        insert_sql: str = (
-            f"WITH {new_changes_sql} "
-            f"INSERT INTO {destination} ({insert_column_sql}) "
-            f"SELECT {output_select_sql}, {version_columns_sql} "
-            f"FROM __new_changes"
-        )
-        return (close_sql, insert_sql)
 
     def render_apply_historical_timestamp_changes(
         self,
@@ -2494,43 +2450,15 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str,
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
-        new_changes_sql: str = self._pg_historical_timestamp_changes_new_records_cte_sql(
+        return HistoricalTimestampSnapshotSql(dialect=self._snapshot_sql_dialect).changes_apply_sql(
             destination=destination,
             origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
+            valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
+            output_columns=output_columns,
         )
-        key_condition: str = SnapshotSql.key_condition(
-            left_alias="__target", right_alias="__new_changes", unique_key=unique_key
-        )
-        close_sql: str = (
-            f"WITH {new_changes_sql} "
-            f"UPDATE {destination} AS __target "
-            f"SET {valid_to_column} = ("
-            f"SELECT MIN(__new_changes.{updated_at_column}) "
-            f"FROM __new_changes WHERE {key_condition}"
-            f") "
-            f"WHERE __target.{valid_to_column} IS NULL "
-            f"AND __target.{valid_from_column} < ("
-            f"SELECT MIN(__new_changes.{updated_at_column}) "
-            f"FROM __new_changes WHERE {key_condition}"
-            f") "
-            f"AND EXISTS (SELECT 1 FROM __new_changes WHERE {key_condition})"
-        )
-        insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
-        output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
-        partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
-        insert_sql: str = (
-            f"WITH {new_changes_sql} "
-            f"INSERT INTO {destination} ({insert_column_sql}) "
-            f"SELECT {output_select_sql}, __new_changes.{updated_at_column}, "
-            f"LEAD(__new_changes.{updated_at_column}) OVER ("
-            f"PARTITION BY {partition_sql} ORDER BY __new_changes.{updated_at_column}"
-            f") "
-            f"FROM __new_changes"
-        )
-        return (close_sql, insert_sql)
 
     def render_apply_historical_check_snapshot_changes(
         self,
@@ -2555,81 +2483,4 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             valid_to_column=valid_to_column,
             output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
-        )
-
-    @staticmethod
-    def _pg_historical_timestamp_new_changes_cte_sql(
-        *,
-        destination: str,
-        origin: str,
-        unique_key: tuple[str, ...],
-        updated_at_column: str,
-        observed_at_column: str,
-        valid_from_column: str,
-        valid_to_column: str,
-        invalidate_hard_deletes: bool,
-    ) -> str:
-        if invalidate_hard_deletes:
-            return HistoricalSnapshotSql(
-                origin=origin,
-                unique_key=unique_key,
-                observed_at_column=observed_at_column,
-                valid_from_column=valid_from_column,
-                valid_to_column=valid_to_column,
-                updated_at_column=updated_at_column,
-            ).new_changes_ctes_sql(destination=destination)
-
-        partition_sql: str = ", ".join(unique_key)
-        first_key: str = unique_key[0]
-        latest_sql: str = (
-            "__latest AS (SELECT * FROM ("
-            f"SELECT *, ROW_NUMBER() OVER ("
-            f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
-            f") AS __rn FROM {destination}) AS __q WHERE __rn = 1)"
-        )
-        latest_join_condition: str = SnapshotSql.key_condition(
-            left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
-        )
-        return (
-            "__ordered AS ("
-            f"SELECT *, LAG({updated_at_column}) OVER ("
-            f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_updated_at FROM {origin}"
-            "), __delta_changes AS ("
-            f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL "
-            f"OR {updated_at_column} IS DISTINCT FROM __prev_updated_at"
-            f"), {latest_sql}, __new_changes AS ("
-            "SELECT __delta_changes.* FROM __delta_changes "
-            f"LEFT JOIN __latest ON {latest_join_condition} "
-            f"WHERE __latest.{first_key} IS NULL "
-            f"OR __delta_changes.{updated_at_column} > __latest.{valid_from_column}"
-            ")"
-        )
-
-    @staticmethod
-    def _pg_historical_timestamp_changes_new_records_cte_sql(
-        *,
-        destination: str,
-        origin: str,
-        unique_key: tuple[str, ...],
-        updated_at_column: str,
-        valid_to_column: str,
-    ) -> str:
-        del valid_to_column
-        latest_join_condition: str = SnapshotSql.key_condition(
-            left_alias="__source", right_alias="__latest", unique_key=unique_key
-        )
-        partition_sql: str = ", ".join(unique_key)
-        first_key: str = unique_key[0]
-        return (
-            "__latest AS (SELECT * FROM ("
-            f"SELECT *, ROW_NUMBER() OVER ("
-            f"PARTITION BY {partition_sql} ORDER BY {updated_at_column} DESC"
-            f") AS __rn FROM {destination}) AS __q WHERE __rn = 1"
-            "), __new_changes AS ("
-            f"SELECT __source.* FROM {origin} AS __source "
-            f"LEFT JOIN __latest ON {latest_join_condition} "
-            f"WHERE __latest.{first_key} IS NULL "
-            f"OR __source.{updated_at_column} > __latest.{updated_at_column}"
-            ")"
         )

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -25,7 +26,6 @@ from sqlbuild.adapter.contract.classes.historical_check_snapshot_sql import (
 )
 from sqlbuild.adapter.contract.classes.historical_snapshot_sql import (
     HistoricalSnapshotSql,
-    historical_insert_validity_sql,
 )
 from sqlbuild.adapter.contract.classes.historical_timestamp_snapshot_sql import (
     HistoricalTimestampSnapshotSql,
@@ -37,7 +37,6 @@ from sqlbuild.adapter.contract.classes.unkeyed_diff import UnkeyedDiffMixin
 from sqlbuild.adapter.contract.constants import (
     DIFF_LEFT_SIDE,
     DIFF_RIGHT_SIDE,
-    SNAPSHOT_VERSION_START_COLUMN,
 )
 from sqlbuild.adapter.contract.exceptions import (
     AdapterUserError,
@@ -171,43 +170,6 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"ORDER BY {observed_at_column}) AS __prev_{column}"
         )
 
-    def _historical_snapshot_combined_close_sql(
-        self,
-        *,
-        destination: str,
-        new_changes_sql: str,
-        unique_key: tuple[str, ...],
-        valid_from_column: str,
-        valid_to_column: str,
-        change_time_column: str,
-    ) -> str:
-        close_candidate_condition: str = SnapshotSql.key_condition(
-            left_alias="__close_candidates", right_alias="__target", unique_key=unique_key
-        )
-        candidate_key_sql: str = ", ".join(unique_key)
-        hard_delete_select_sql: str = (
-            f"SELECT {candidate_key_sql}, __close_at FROM __hard_deletes "
-            "WHERE __close_at IS NOT NULL"
-        )
-        return (
-            f";WITH {new_changes_sql}, __close_candidates AS ("
-            f"SELECT {candidate_key_sql}, {change_time_column} AS __close_at FROM __new_changes "
-            "UNION ALL "
-            f"{hard_delete_select_sql}"
-            ") "
-            f"UPDATE __target SET {valid_to_column} = ("
-            "SELECT MIN(__close_candidates.__close_at) FROM __close_candidates "
-            f"WHERE {close_candidate_condition}"
-            ") "
-            f"FROM {destination} AS __target "
-            f"WHERE __target.{valid_to_column} IS NULL "
-            f"AND __target.{valid_from_column} < ("
-            "SELECT MIN(__close_candidates.__close_at) FROM __close_candidates "
-            f"WHERE {close_candidate_condition}"
-            ") "
-            f"AND EXISTS (SELECT 1 FROM __close_candidates WHERE {close_candidate_condition})"
-        )
-
     def _snapshot_hard_delete_close_sql(
         self,
         *,
@@ -228,56 +190,6 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             "AND NOT EXISTS ("
             f"SELECT 1 FROM {origin} AS __source "
             f"WHERE {missing_key_condition} AND __source.{first_key} IS NOT NULL"
-            ")"
-        )
-
-    def _historical_timestamp_new_changes_cte_sql(
-        self,
-        *,
-        destination: str,
-        origin: str,
-        unique_key: tuple[str, ...],
-        updated_at_column: str,
-        observed_at_column: str,
-        valid_from_column: str,
-        valid_to_column: str,
-        invalidate_hard_deletes: bool,
-    ) -> str:
-        if invalidate_hard_deletes:
-            return HistoricalSnapshotSql(
-                origin=origin,
-                unique_key=unique_key,
-                observed_at_column=observed_at_column,
-                valid_from_column=valid_from_column,
-                valid_to_column=valid_to_column,
-                updated_at_column=updated_at_column,
-                distinct_condition=self._distinct_condition,
-            ).new_changes_ctes_sql(destination=destination)
-        partition_sql: str = ", ".join(unique_key)
-        first_key: str = unique_key[0]
-        latest_join_condition: str = SnapshotSql.key_condition(
-            left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
-        )
-        updated_changed: str = self._distinct_condition(
-            left=f"{updated_at_column}", right="__prev_updated_at"
-        )
-        return (
-            "__ordered AS ("
-            f"SELECT *, LAG({updated_at_column}) OVER ("
-            f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_updated_at FROM {origin}"
-            "), __delta_changes AS ("
-            f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL OR {updated_changed}"
-            "), __latest_ordered AS ("
-            f"SELECT *, ROW_NUMBER() OVER (PARTITION BY {partition_sql} "
-            f"ORDER BY {valid_from_column} DESC) AS __rn FROM {destination}"
-            "), __latest AS ("
-            "SELECT * FROM __latest_ordered WHERE __rn = 1"
-            "), __new_changes AS ("
-            "SELECT __delta_changes.* FROM __delta_changes "
-            f"LEFT JOIN __latest ON {latest_join_condition} "
-            f"WHERE __latest.{first_key} IS NULL "
-            f"OR __delta_changes.{updated_at_column} > __latest.{valid_from_column}"
             ")"
         )
 
@@ -1829,44 +1741,19 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str,
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
-        new_changes_sql: str = HistoricalTimestampSnapshotSql.changes_new_records_ctes_sql(
+        return HistoricalTimestampSnapshotSql(
+            dialect=replace(
+                self._snapshot_sql_dialect, latest_version=SnapshotLatestVersionStyle.QUALIFY
+            )
+        ).changes_apply_sql(
             destination=destination,
             origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
+            valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
+            output_columns=output_columns,
         )
-        key_condition: str = SnapshotSql.key_condition(
-            left_alias="__target", right_alias="__new_changes", unique_key=unique_key
-        )
-        close_sql: str = (
-            f";WITH {new_changes_sql} "
-            f"UPDATE __target "
-            f"SET {valid_to_column} = ("
-            f"SELECT MIN(__new_changes.{updated_at_column}) "
-            f"FROM __new_changes WHERE {key_condition}"
-            f") "
-            f"FROM {destination} AS __target "
-            f"WHERE __target.{valid_to_column} IS NULL "
-            f"AND __target.{valid_from_column} < ("
-            f"SELECT MIN(__new_changes.{updated_at_column}) "
-            f"FROM __new_changes WHERE {key_condition}"
-            f") "
-            f"AND EXISTS (SELECT 1 FROM __new_changes WHERE {key_condition})"
-        )
-        insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
-        output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
-        partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
-        insert_sql: str = (
-            f";WITH {new_changes_sql} "
-            f"INSERT INTO {destination} ({insert_column_sql}) "
-            f"SELECT {output_select_sql}, __new_changes.{updated_at_column}, "
-            f"LEAD(__new_changes.{updated_at_column}) OVER ("
-            f"PARTITION BY {partition_sql} ORDER BY __new_changes.{updated_at_column}"
-            f") "
-            f"FROM __new_changes"
-        )
-        return (close_sql, insert_sql)
 
     def render_apply_historical_timestamp_snapshot_changes(
         self,
@@ -1881,60 +1768,17 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
-        new_changes_sql: str = self._historical_timestamp_new_changes_cte_sql(
+        return HistoricalTimestampSnapshotSql(dialect=self._snapshot_sql_dialect).apply_sql(
             destination=destination,
             origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
-            valid_to_column=valid_to_column,
             valid_from_column=valid_from_column,
+            valid_to_column=valid_to_column,
+            output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        key_condition: str = SnapshotSql.key_condition(
-            left_alias="__target", right_alias="__new_changes", unique_key=unique_key
-        )
-        if invalidate_hard_deletes:
-            close_sql: str = self._historical_snapshot_combined_close_sql(
-                destination=destination,
-                new_changes_sql=new_changes_sql,
-                unique_key=unique_key,
-                valid_from_column=valid_from_column,
-                valid_to_column=valid_to_column,
-                change_time_column=SNAPSHOT_VERSION_START_COLUMN,
-            )
-        else:
-            close_sql = (
-                f";WITH {new_changes_sql} "
-                f"UPDATE __target "
-                f"SET {valid_to_column} = ("
-                f"SELECT MIN(__new_changes.{updated_at_column}) "
-                f"FROM __new_changes WHERE {key_condition}"
-                f") "
-                f"FROM {destination} AS __target "
-                f"WHERE __target.{valid_to_column} IS NULL "
-                f"AND __target.{valid_from_column} < ("
-                f"SELECT MIN(__new_changes.{updated_at_column}) "
-                f"FROM __new_changes WHERE {key_condition}"
-                f") "
-                f"AND EXISTS (SELECT 1 FROM __new_changes WHERE {key_condition})"
-            )
-        insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
-        output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
-        partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
-        version_columns_sql: str = (
-            f"__new_changes.{updated_at_column}, LEAD(__new_changes.{updated_at_column}) OVER ("
-            f"PARTITION BY {partition_sql} ORDER BY __new_changes.{updated_at_column})"
-        )
-        if invalidate_hard_deletes:
-            version_columns_sql = historical_insert_validity_sql()
-        insert_sql: str = (
-            f";WITH {new_changes_sql} "
-            f"INSERT INTO {destination} ({insert_column_sql}) "
-            f"SELECT {output_select_sql}, {version_columns_sql} "
-            f"FROM __new_changes"
-        )
-        return (close_sql, insert_sql)
 
     def render_apply_timestamp_snapshot_changes(
         self,
