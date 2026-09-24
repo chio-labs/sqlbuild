@@ -30,9 +30,7 @@ from sqlbuild.compiler.compile.constants import (
     SOURCE_TEST_CTE_PREFIX,
     SQL_ARGUMENT_SEPARATOR_TOKEN,
     SQL_CEREMONIAL_SELECT_VALUE,
-    SQL_CLOSE_PAREN_TOKEN,
     SQL_OPEN_PAREN_TOKEN,
-    SQL_QUOTE_TOKENS,
     SQL_SINGLE_QUOTE_TOKEN,
     SQL_STATEMENT_TERMINATOR_TOKEN,
     SQL_WILDCARD_TOKEN,
@@ -59,6 +57,7 @@ from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
     is_identifier_character,
 )
 from sqlbuild.compiler.sql_analysis.main._is_identifier_start import is_identifier_start
+from sqlbuild.compiler.sql_analysis.main._iter_code_positions import iter_code_positions
 from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
 from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import (
@@ -708,38 +707,23 @@ def _extract_expected_branch_column_names(
 def _split_set_operation_branches(sql: str) -> tuple[str, ...]:
     branches: list[str] = []
     branch_start: int = 0
-    index: int = 0
-    depth: int = 0
-    while index < len(sql):
-        if sql.startswith("--", index):
-            index = skip_line_comment(sql=sql, start=index)
-            continue
-        if sql.startswith("/*", index):
-            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
-            continue
-        if sql[index] in SQL_QUOTE_TOKENS:
-            index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
-            continue
-        if sql[index] == SQL_OPEN_PAREN_TOKEN:
-            depth += 1
-            index += 1
-            continue
-        if sql[index] == SQL_CLOSE_PAREN_TOKEN:
-            depth -= 1
-            index += 1
+    resume: int = 0
+    index: int
+    depth: int
+    for index, depth in iter_code_positions(sql=sql, context=_CONTEXT):
+        if index < resume or depth != 0:
             continue
         union_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="UNION")
-        if depth == 0 and union_end is not None:
-            branch_sql: str = sql[branch_start:index].strip()
-            if branch_sql:
-                branches.append(branch_sql)
-            index = _skip_ignorable(sql=sql, start=union_end)
-            all_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="ALL")
-            if all_end is not None:
-                index = _skip_ignorable(sql=sql, start=all_end)
-            branch_start = index
+        if union_end is None:
             continue
-        index += 1
+        branch_sql: str = sql[branch_start:index].strip()
+        if branch_sql:
+            branches.append(branch_sql)
+        resume = _skip_ignorable(sql=sql, start=union_end)
+        all_end: int | None = _try_consume_keyword(sql=sql, start=resume, keyword="ALL")
+        if all_end is not None:
+            resume = _skip_ignorable(sql=sql, start=all_end)
+        branch_start = resume
 
     final_branch_sql: str = sql[branch_start:].strip()
     if final_branch_sql:
@@ -769,57 +753,28 @@ def _extract_expected_select_column_names(*, branch_sql: str, file_label: str) -
 
 
 def _find_select_list_end(*, sql: str, start: int) -> int:
-    index: int = start
-    depth: int = 0
-    while index < len(sql):
-        if sql.startswith("--", index):
-            index = skip_line_comment(sql=sql, start=index)
-            continue
-        if sql.startswith("/*", index):
-            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
-            continue
-        if sql[index] in SQL_QUOTE_TOKENS:
-            index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
-            continue
-        if sql[index] == SQL_OPEN_PAREN_TOKEN:
-            depth += 1
-            index += 1
-            continue
-        if sql[index] == SQL_CLOSE_PAREN_TOKEN:
-            depth -= 1
-            index += 1
-            continue
-        if depth == 0 and _try_consume_keyword(sql=sql, start=index, keyword="FROM") is not None:
-            return index
-        index += 1
+    index: int
+    depth: int
+    for index, depth in iter_code_positions(sql=sql[start:], context=_CONTEXT):
+        if (
+            depth == 0
+            and _try_consume_keyword(sql=sql, start=start + index, keyword="FROM") is not None
+        ):
+            return start + index
     return len(sql)
 
 
 def _split_top_level_commas(raw_value: str) -> tuple[str, ...]:
     values: list[str] = []
     value_start: int = 0
-    index: int = 0
-    depth: int = 0
-    while index < len(raw_value):
-        if raw_value.startswith("--", index):
-            index = skip_line_comment(sql=raw_value, start=index)
-            continue
-        if raw_value.startswith("/*", index):
-            index = skip_block_comment(sql=raw_value, start=index, context=_CONTEXT)
-            continue
-        if raw_value[index] in SQL_QUOTE_TOKENS:
-            index = skip_quoted_text(sql=raw_value, start=index, context=_CONTEXT)
-            continue
-        if raw_value[index] == SQL_OPEN_PAREN_TOKEN:
-            depth += 1
-        elif raw_value[index] == SQL_CLOSE_PAREN_TOKEN:
-            depth -= 1
-        elif raw_value[index] == SQL_ARGUMENT_SEPARATOR_TOKEN and depth == 0:
+    index: int
+    depth: int
+    for index, depth in iter_code_positions(sql=raw_value, context=_CONTEXT):
+        if depth == 0 and raw_value[index] == SQL_ARGUMENT_SEPARATOR_TOKEN:
             item: str = raw_value[value_start:index].strip()
             if item:
                 values.append(item)
             value_start = index + 1
-        index += 1
 
     final_item: str = raw_value[value_start:].strip()
     if final_item:
@@ -840,41 +795,24 @@ def _extract_expected_projection_name(*, expression: str, file_label: str) -> st
 
 
 def _extract_as_alias(expression: str) -> str | None:
-    index: int = 0
-    depth: int = 0
     last_alias_name: str | None = None
-    while index < len(expression):
-        if expression.startswith("--", index):
-            index = skip_line_comment(sql=expression, start=index)
-            continue
-        if expression.startswith("/*", index):
-            index = skip_block_comment(sql=expression, start=index, context=_CONTEXT)
-            continue
-        if expression[index] in SQL_QUOTE_TOKENS:
-            index = skip_quoted_text(sql=expression, start=index, context=_CONTEXT)
-            continue
-        if expression[index] == SQL_OPEN_PAREN_TOKEN:
-            depth += 1
-            index += 1
-            continue
-        if expression[index] == SQL_CLOSE_PAREN_TOKEN:
-            depth -= 1
-            index += 1
+    index: int
+    depth: int
+    for index, depth in iter_code_positions(sql=expression, context=_CONTEXT):
+        if depth != 0:
             continue
         as_end: int | None = _try_consume_keyword(sql=expression, start=index, keyword="AS")
-        if depth == 0 and as_end is not None:
-            alias_index: int = _skip_ignorable(sql=expression, start=as_end)
-            if alias_index < len(expression) and is_identifier_start(expression[alias_index]):
-                alias_name, alias_end = _read_identifier(
-                    sql=expression,
-                    start=alias_index,
-                    file_label="projection",
-                )
-                if not expression[alias_end:].strip():
-                    last_alias_name = alias_name
-            index = as_end
+        if as_end is None:
             continue
-        index += 1
+        alias_index: int = _skip_ignorable(sql=expression, start=as_end)
+        if alias_index < len(expression) and is_identifier_start(expression[alias_index]):
+            alias_name, alias_end = _read_identifier(
+                sql=expression,
+                start=alias_index,
+                file_label="projection",
+            )
+            if not expression[alias_end:].strip():
+                last_alias_name = alias_name
     return last_alias_name
 
 
@@ -885,25 +823,14 @@ def _is_simple_identifier(value: str) -> bool:
 
 
 def _contains_select_star(sql: str) -> bool:
-    index: int = 0
-    while index < len(sql):
-        if sql.startswith("--", index):
-            index = skip_line_comment(sql=sql, start=index)
-            continue
-        if sql.startswith("/*", index):
-            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
-            continue
-        if sql[index] in SQL_QUOTE_TOKENS:
-            index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
-            continue
+    index: int
+    for index, _depth in iter_code_positions(sql=sql, context=_CONTEXT):
         select_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="SELECT")
-        if select_end is not None:
-            value_index: int = _skip_ignorable(sql=sql, start=select_end)
-            if value_index < len(sql) and sql[value_index] == SQL_WILDCARD_TOKEN:
-                return True
-            index = select_end
+        if select_end is None:
             continue
-        index += 1
+        value_index: int = _skip_ignorable(sql=sql, start=select_end)
+        if value_index < len(sql) and sql[value_index] == SQL_WILDCARD_TOKEN:
+            return True
     return False
 
 

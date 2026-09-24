@@ -20,3 +20,12 @@ class SkipQuotedTextErrorTestCase:
     sql: str
     context: str
     expected_error: str
+
+
+@dataclass(frozen=True)
+class IterCodePositionsTestCase:
+    """Code-position scan case."""
+
+    description: str
+    sql: str
+    expected_positions: tuple[tuple[int, int], ...]
