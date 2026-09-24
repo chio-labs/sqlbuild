@@ -58,7 +58,7 @@ class MigrationInterruptionTestCase:
 @dataclass(frozen=True)
 class AutomaticMigrationTestCase:
     description: str
-    expected_migrations: tuple[tuple[str, str, str, str], ...] = ()
+    expected_migrations: tuple[tuple[str | None, str, str, str], ...] = ()
     expected_events: tuple[tuple[str, str, str], ...] = ()
     expected_reason: str = ""
     expected_warning: str = ""
@@ -71,3 +71,10 @@ class PlanAsTargetTestCase:
     expected_exit_code: int
     expected_decisions: tuple[str, ...] = ()
     expected_fragment: str = ""
+
+
+@dataclass(frozen=True)
+class VirtualModeMigrationTestCase:
+    description: str
+    expected_exit_code: int
+    expected_fragment: str

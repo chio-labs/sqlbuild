@@ -1,4 +1,4 @@
-"""Fingerprint-based discovery of renamed or relocated models."""
+"""Fingerprint-based discovery of renamed models within the project's schemas."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import json
 from collections import defaultdict
 from typing import Any
 
-from sqlbuild.adapter.contract.constants import QUALIFIED_NAME_SEPARATOR
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -32,6 +31,7 @@ from sqlbuild.compiler.planner.main.identity.version_identity_model_metadata imp
     build_model_version_identity_metadata_json,
 )
 from sqlbuild.compiler.planner.models import (
+    ModelMigrationDeclaration,
     ModelMigrationDiscovery,
     ModelMigrationRequest,
     PlannerRuntime,
@@ -56,78 +56,214 @@ def discover_model_migrations(
     scope: PlannerScope,
     snapshot: WarehouseSnapshot,
     manual_requests: tuple[ModelMigrationRequest, ...],
+    declarations: tuple[ModelMigrationDeclaration, ...],
     state: MigrationStateInspection,
     project_schemas: set[str],
 ) -> ModelMigrationDiscovery:
     """Add unique one-to-one fingerprint matches to the explicit migration requests."""
 
     models: tuple[CompiledModel, ...] = _topological_models(runtime=runtime)
-    new_names: frozenset[str] = _new_model_names(models=models, scope=scope, snapshot=snapshot)
-    manual_renames: dict[str, str] = {
-        request.model.name: request.raw_origin
-        for request in manual_requests
-        if request.raw_origin is not None and QUALIFIED_NAME_SEPARATOR not in request.raw_origin
-    }
-    discoverable: frozenset[str] = new_names - frozenset(manual_renames)
-    if not discoverable and not manual_requests:
+    declared: frozenset[str] = frozenset(item.model_name for item in declarations)
+    triggered: bool = bool(
+        _new_model_names(models=models, scope=scope, snapshot=snapshot) - declared
+    )
+    if not triggered and not manual_requests:
         return ModelMigrationDiscovery()
     metadata_jsons: dict[str, str] = _metadata_jsons(runtime=runtime, models=models)
     dialect: str | None = runtime.adapter.sql_analysis_dialect()
-    if not discoverable:
+    if not triggered:
         return ModelMigrationDiscovery(
             requests=manual_requests,
             destination_fingerprints=_destination_fingerprints(
                 requests=manual_requests,
-                renames=manual_renames,
+                renames=_declared_renames(declarations=declarations, state=state),
                 metadata_jsons=metadata_jsons,
                 dialect=dialect,
             ),
         )
     state.inspect_schemas(schemas=project_schemas)
+    unbuilt: frozenset[str] = frozenset(
+        model.name
+        for model in models
+        if model.name not in declared and state.named_fingerprint(model_name=model.name) is None
+    )
+    resumed: dict[str, MigrationEvent] = _resumed_events(
+        runtime=runtime, models=models, unbuilt=unbuilt, state=state
+    )
+    seed_renames: dict[str, str] = _declared_renames(declarations=declarations, state=state)
+    seed_renames.update(
+        {name: event.origin_model for name, event in resumed.items() if event.origin_model}
+    )
     candidates: tuple[Fingerprint, ...] = _origin_candidates(
-        runtime=runtime, state=state, models=models
+        runtime=runtime,
+        state=state,
+        models=models,
+        excluded=_claimed_origins(declarations=declarations, resumed=resumed),
     )
     renames: dict[str, str]
     matches: dict[str, Fingerprint]
-    ambiguous: dict[str, tuple[str, ...]]
+    ambiguous: dict[str, str]
     renames, matches, ambiguous = _match(
         models=models,
-        new_names=new_names,
-        manual_renames=manual_renames,
+        new_names=unbuilt - frozenset(resumed),
+        seed_renames=seed_renames,
         candidates=candidates,
         metadata_jsons=metadata_jsons,
         dialect=dialect,
     )
-    automatic: tuple[ModelMigrationRequest, ...] = tuple(
-        ModelMigrationRequest(
-            model=model,
-            discovery=MigrationDiscovery.AUTOMATIC,
-            origin_location=_fingerprint_location(runtime=runtime, fingerprint=matches[model.name]),
-            origin_model=matches[model.name].node_name,
-        )
-        for model in models
-        if model.name in matches
-        and model.key in scope.selected_keys
-        and _moves_history(model=model, origin=matches[model.name])
+    requests: tuple[ModelMigrationRequest, ...] = (
+        *manual_requests,
+        *_automatic_requests(
+            runtime=runtime, scope=scope, models=models, matches=matches, resumed=resumed
+        ),
     )
-    requests: tuple[ModelMigrationRequest, ...] = (*manual_requests, *automatic)
     return ModelMigrationDiscovery(
         requests=requests,
-        warnings=tuple(
-            PlanWarning(
-                model_name=model_name,
-                severity=WarningSeverity.WARNING,
-                message=(
-                    f"'{model_name}' matches several earlier models ({', '.join(origins)}); "
-                    "no automatic migration was inferred. Add migrate_from to choose one."
-                ),
-                code="M107",
-            )
-            for model_name, origins in sorted(ambiguous.items())
-        ),
+        warnings=_ambiguity_warnings(models=models, scope=scope, ambiguous=ambiguous),
         destination_fingerprints=_destination_fingerprints(
             requests=requests, renames=renames, metadata_jsons=metadata_jsons, dialect=dialect
         ),
+    )
+
+
+def _declared_renames(
+    *, declarations: tuple[ModelMigrationDeclaration, ...], state: MigrationStateInspection
+) -> dict[str, str]:
+    """Map each explicitly migrated model to the model name its origin was built as."""
+
+    renames: dict[str, str] = {}
+    declaration: ModelMigrationDeclaration
+    for declaration in declarations:
+        origin_fingerprint: Fingerprint | None = state.model_fingerprint(
+            location=declaration.origin_location, model_name=declaration.origin_model
+        )
+        origin_model: str | None = declaration.origin_model or (
+            origin_fingerprint.node_name if origin_fingerprint is not None else None
+        )
+        if origin_model is not None:
+            renames[declaration.model_name] = origin_model
+    return renames
+
+
+def _resumed_events(
+    *,
+    runtime: PlannerRuntime,
+    models: tuple[CompiledModel, ...],
+    unbuilt: frozenset[str],
+    state: MigrationStateInspection,
+) -> dict[str, MigrationEvent]:
+    """Return recorded moves into models that have not been built since the move."""
+
+    target_name: str | None = runtime.project.effective_target_name
+    resumed: dict[str, MigrationEvent] = {}
+    model: CompiledModel
+    for model in models:
+        if model.name not in unbuilt or not _stores_history(model):
+            continue
+        destination: MigrationRelation = migration_relation_for_location(model.destination)
+        newest: MigrationEvent | None = newest_migration_event_mentioning(
+            events=state.events, relation=destination
+        )
+        if (
+            newest is not None
+            and newest.destination.matches(destination)
+            and newest.target_name in (None, target_name)
+        ):
+            resumed[model.name] = newest
+    return resumed
+
+
+def _claimed_origins(
+    *,
+    declarations: tuple[ModelMigrationDeclaration, ...],
+    resumed: dict[str, MigrationEvent],
+) -> frozenset[tuple[str, str]]:
+    """Return relation keys already claimed by explicit or recorded migrations."""
+
+    declared: set[tuple[str, str]] = {
+        _relation_key(schema=item.origin_location.schema, name=item.origin_location.name)
+        for item in declarations
+    }
+    recorded: set[tuple[str, str]] = {
+        _relation_key(schema=event.origin.schema, name=event.origin.name)
+        for event in resumed.values()
+    }
+    return frozenset(declared | recorded)
+
+
+def _relation_key(*, schema: str | None, name: str) -> tuple[str, str]:
+    return ((schema or "").lower(), name.lower())
+
+
+def _automatic_requests(
+    *,
+    runtime: PlannerRuntime,
+    scope: PlannerScope,
+    models: tuple[CompiledModel, ...],
+    matches: dict[str, Fingerprint],
+    resumed: dict[str, MigrationEvent],
+) -> tuple[ModelMigrationRequest, ...]:
+    """Return automatic requests for selected destinations only."""
+
+    requests: list[ModelMigrationRequest] = []
+    model: CompiledModel
+    for model in models:
+        if model.key not in scope.selected_keys:
+            continue
+        event: MigrationEvent | None = resumed.get(model.name)
+        match: Fingerprint | None = matches.get(model.name)
+        if event is not None:
+            requests.append(
+                ModelMigrationRequest(
+                    model=model,
+                    discovery=MigrationDiscovery.AUTOMATIC,
+                    origin_location=_event_origin_location(runtime=runtime, event=event),
+                    origin_model=event.origin_model,
+                )
+            )
+        elif match is not None and _moves_history(model=model, origin=match):
+            requests.append(
+                ModelMigrationRequest(
+                    model=model,
+                    discovery=MigrationDiscovery.AUTOMATIC,
+                    origin_location=_fingerprint_location(runtime=runtime, fingerprint=match),
+                    origin_model=match.node_name,
+                )
+            )
+    return tuple(requests)
+
+
+def _event_origin_location(
+    *, runtime: PlannerRuntime, event: MigrationEvent
+) -> CompiledRelationLocation:
+    return CompiledRelationLocation(
+        database=event.origin.database,
+        schema=event.origin.schema,
+        name=event.origin.name,
+        qualified_name=runtime.adapter.render_qualified_name(
+            database=event.origin.database, schema=event.origin.schema, name=event.origin.name
+        ),
+    )
+
+
+def _ambiguity_warnings(
+    *, models: tuple[CompiledModel, ...], scope: PlannerScope, ambiguous: dict[str, str]
+) -> tuple[PlanWarning, ...]:
+    selected: frozenset[str] = frozenset(
+        model.name for model in models if model.key in scope.selected_keys
+    )
+    return tuple(
+        PlanWarning(
+            model_name=model_name,
+            severity=WarningSeverity.WARNING,
+            message=(
+                f"'{model_name}' matches {detail}; no automatic migration was inferred. "
+                "Add migrate_from to choose one."
+            ),
+            code="M107",
+        )
+        for model_name, detail in sorted(ambiguous.items())
+        if model_name in selected
     )
 
 
@@ -199,6 +335,7 @@ def _origin_candidates(
     runtime: PlannerRuntime,
     state: MigrationStateInspection,
     models: tuple[CompiledModel, ...],
+    excluded: frozenset[tuple[str, str]],
 ) -> tuple[Fingerprint, ...]:
     project_model_names: frozenset[str] = frozenset(model.name for model in models)
     orphans: tuple[Fingerprint, ...] = tuple(
@@ -215,6 +352,7 @@ def _origin_candidates(
         fingerprint
         for fingerprint, location in zip(orphans, locations, strict=True)
         if state.relation(location) is not None
+        and _relation_key(schema=location.schema, name=location.name) not in excluded
         and not _superseded(events=state.events, location=location)
     )
 
@@ -231,25 +369,24 @@ def _match(
     *,
     models: tuple[CompiledModel, ...],
     new_names: frozenset[str],
-    manual_renames: dict[str, str],
+    seed_renames: dict[str, str],
     candidates: tuple[Fingerprint, ...],
     metadata_jsons: dict[str, str],
     dialect: str | None,
-) -> tuple[dict[str, str], dict[str, Fingerprint], dict[str, tuple[str, ...]]]:
+) -> tuple[dict[str, str], dict[str, Fingerprint], dict[str, str]]:
     by_fingerprint: dict[str, list[Fingerprint]] = defaultdict(list)
     candidate: Fingerprint
     for candidate in candidates:
         by_fingerprint[stored_migration_fingerprint(candidate) or ""].append(candidate)
-    claimed_by_manual: frozenset[str] = frozenset(manual_renames.values())
     blocked: set[str] = set()
-    ambiguous: dict[str, tuple[str, ...]] = {}
+    ambiguous: dict[str, str] = {}
     for _ in range(len(candidates) + 1):
-        renames: dict[str, str] = dict(manual_renames)
+        renames: dict[str, str] = dict(seed_renames)
         matches: dict[str, Fingerprint] = {}
         claims: dict[str, list[str]] = defaultdict(list)
         model: CompiledModel
         for model in models:
-            if model.name not in new_names or model.name in manual_renames:
+            if model.name not in new_names:
                 continue
             fingerprint: str | None = build_migration_fingerprint(
                 query_sql=model.query_sql,
@@ -260,10 +397,13 @@ def _match(
             options: list[Fingerprint] = [
                 option
                 for option in by_fingerprint.get(fingerprint or "", [])
-                if option.node_name not in blocked and option.node_name not in claimed_by_manual
+                if option.node_name not in blocked
             ]
             if len(options) > 1:
-                ambiguous[model.name] = tuple(sorted(option.node_name for option in options))
+                ambiguous[model.name] = (
+                    "several earlier models "
+                    f"({', '.join(sorted(option.node_name for option in options))})"
+                )
                 continue
             if len(options) == 1:
                 renames[model.name] = options[0].node_name
@@ -274,14 +414,23 @@ def _match(
         }
         if not contested:
             return renames, matches, ambiguous
-        origin: str
-        names: list[str]
-        for origin, names in contested.items():
-            blocked.add(origin)
-            name: str
-            for name in names:
-                ambiguous[name] = (*ambiguous.get(name, ()), origin)
-    return dict(manual_renames), {}, ambiguous
+        blocked.update(contested)
+        ambiguous.update(_contested_details(contested))
+    return dict(seed_renames), {}, ambiguous
+
+
+def _contested_details(contested: dict[str, list[str]]) -> dict[str, str]:
+    """Describe each model that shares its only matching earlier model with others."""
+
+    details: dict[str, str] = {}
+    origin: str
+    names: list[str]
+    for origin, names in contested.items():
+        name: str
+        for name in names:
+            others: list[str] = [f"'{other}'" for other in sorted(names) if other != name]
+            details[name] = f"earlier model '{origin}', which also matches {', '.join(others)}"
+    return details
 
 
 def _destination_fingerprints(
@@ -309,10 +458,13 @@ def _destination_fingerprints(
 
 
 def _moves_history(*, model: CompiledModel, origin: Fingerprint) -> bool:
+    return _stores_history(model) and _stored_materialization(origin) in _HISTORY_MATERIALIZATIONS
+
+
+def _stores_history(model: CompiledModel) -> bool:
     return (
         get_config_str(values=model.config.values, key=_MATERIALIZED_KEY)
         in _HISTORY_MATERIALIZATIONS
-        and _stored_materialization(origin) in _HISTORY_MATERIALIZATIONS
     )
 
 

@@ -12,10 +12,12 @@ from tests.integration.src.sqlbuild.cli.commands.main.model_migrations._test_typ
 )
 from tests.integration.src.sqlbuild.cli.commands.main.model_migrations.helpers import (
     CliRun,
+    build,
     build_ok,
     build_original_order_models,
     daily_totals_sql,
     execute,
+    fail_clone_into,
     incremental_orders_sql,
     load_raw_orders,
     migration_events,
@@ -24,8 +26,10 @@ from tests.integration.src.sqlbuild.cli.commands.main.model_migrations.helpers i
     original_order_models,
     plan_json,
     planned_migrations,
+    relation_names,
     renamed_order_models,
     row_count,
+    run_sqb,
     warning_messages,
     write_project,
 )
@@ -244,6 +248,136 @@ def test_given_explicit_migrate_from_when_fingerprint_matches_another_then_manua
 
     assert planned_migrations(plan) == test_case.expected_migrations
     assert migration_events(project_dir=tmp_path) == test_case.expected_events
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AutomaticMigrationTestCase(
+            description="qualified migrate_from removes its origin and destination from matching",
+            expected_migrations=((None, "stg_customer_orders", "manual", "migrate"),),
+            expected_events=(("legacy_orders", "stg_customer_orders", "migrate"),),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_qualified_migrate_from_when_another_orphan_matches_then_only_declared_moves(
+    test_case: AutomaticMigrationTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_project(
+        project_dir=tmp_path,
+        models={
+            "stg_orders": incremental_orders_sql(),
+            "legacy_orders": incremental_orders_sql(
+                select_sql=(
+                    'SELECT order_id, order_date, amount_cents FROM __source("raw_orders") '
+                    "WHERE order_id <= 2"
+                )
+            ),
+        },
+    )
+    load_raw_orders(project_dir=tmp_path, first_day=1, last_day=4)
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+    write_project(
+        project_dir=tmp_path,
+        models={"stg_customer_orders": incremental_orders_sql(migrate_from="main.legacy_orders")},
+    )
+
+    plan: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+
+    assert planned_migrations(plan) == test_case.expected_migrations
+    assert migration_events(project_dir=tmp_path) == test_case.expected_events
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AutomaticMigrationTestCase(
+            description="recorded upstream move resolves the downstream rename on retry",
+            expected_migrations=(
+                ("daily_order_totals", "customer_daily_order_totals", "automatic", "migrate"),
+                ("stg_orders", "stg_customer_orders", "automatic", "done"),
+            ),
+            expected_events=(
+                ("daily_order_totals", "customer_daily_order_totals", "migrate"),
+                ("stg_orders", "stg_customer_orders", "migrate"),
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_interrupted_coordinated_renames_when_rerunning_then_downstream_resumes(
+    test_case: AutomaticMigrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    build_original_order_models(project_dir=tmp_path, capsys=capsys)
+    load_raw_orders(project_dir=tmp_path, first_day=3, last_day=8)
+    write_project(project_dir=tmp_path, models=renamed_order_models())
+
+    with monkeypatch.context() as patch:
+        fail_clone_into(monkeypatch=patch, destination="main.customer_daily_order_totals")
+        interrupted: CliRun = build(project_dir=tmp_path, capsys=capsys)
+    events_after_crash: tuple[tuple[str, str, str], ...] = migration_events(project_dir=tmp_path)
+    retry_plan: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+
+    assert interrupted.exit_code == 1, interrupted.output
+    assert events_after_crash == (("stg_orders", "stg_customer_orders", "migrate"),)
+    assert planned_migrations(retry_plan) == test_case.expected_migrations
+    assert model_entry(plan=retry_plan, name="stg_customer_orders")["reason"] != _FIRST_RUN
+    assert order_ids(project_dir=tmp_path, relation="main.stg_customer_orders") == tuple(
+        range(1, 9)
+    )
+    assert row_count(project_dir=tmp_path, relation="main.customer_daily_order_totals") == 8
+    assert tuple(sorted(migration_events(project_dir=tmp_path))) == test_case.expected_events
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AutomaticMigrationTestCase(
+            description="selecting one of two new models still sees the whole-project ambiguity",
+            expected_reason="first_run",
+            expected_warning=(
+                "'stg_customer_orders' matches earlier model 'stg_orders', which also matches "
+                "'stg_web_orders'; no automatic migration was inferred. "
+                "Add migrate_from to choose one."
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_one_orphan_matching_two_new_models_when_selecting_one_then_warns_ambiguous(
+    test_case: AutomaticMigrationTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_project(project_dir=tmp_path, models={"stg_orders": incremental_orders_sql()})
+    load_raw_orders(project_dir=tmp_path, first_day=1, last_day=3)
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+    write_project(
+        project_dir=tmp_path,
+        models={
+            "stg_customer_orders": incremental_orders_sql(),
+            "stg_web_orders": incremental_orders_sql(),
+        },
+    )
+
+    plan: dict[str, Any] = plan_json(
+        project_dir=tmp_path, capsys=capsys, args=("--select", "stg_customer_orders")
+    )
+    built: CliRun = run_sqb(
+        project_dir=tmp_path, args=("build", "--select", "stg_customer_orders"), capsys=capsys
+    )
+
+    assert planned_migrations(plan) == test_case.expected_migrations
+    assert warning_messages(plan) == (test_case.expected_warning,)
+    assert model_entry(plan=plan, name="stg_customer_orders")["reason"] == (
+        test_case.expected_reason
+    )
+    assert built.exit_code == 0, built.output
+    assert "_sqlbuild_migrations" not in relation_names(project_dir=tmp_path, schema="main")
 
 
 if __name__ == "__main__":

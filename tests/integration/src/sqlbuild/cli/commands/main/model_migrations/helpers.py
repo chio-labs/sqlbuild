@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import dedent
@@ -39,6 +40,29 @@ TARGETS_PROJECT_TOML: str = dedent(
 
     [targets.prod]
     schema = "prod"
+    """
+).lstrip()
+VIRTUAL_PROJECT_TOML: str = dedent(
+    f"""
+    name = "orders_project"
+    adapter = "duckdb"
+    default_target = "dev"
+
+    [settings]
+    virtual_environments = true
+
+    [connection]
+    database = "{DATABASE_FILE}"
+
+    [targets.dev]
+    schema = "dev"
+
+    [targets.dev.state]
+    backend = "duckdb"
+    schema = "sqlbuild_state"
+
+    [targets.dev.state.connection]
+    database = "state.duckdb"
     """
 ).lstrip()
 RAW_SOURCES_YML: str = dedent(
@@ -267,7 +291,7 @@ def migration_decisions(plan: dict[str, Any]) -> tuple[str, ...]:
     return tuple(migration["decision"] for migration in plan["migrations"])
 
 
-def planned_migrations(plan: dict[str, Any]) -> tuple[tuple[str, str, str, str], ...]:
+def planned_migrations(plan: dict[str, Any]) -> tuple[tuple[str | None, str, str, str], ...]:
     """Return sorted (origin, destination, discovery, decision) for every planned migration."""
 
     return tuple(
@@ -341,6 +365,26 @@ def fail_clone(monkeypatch: pytest.MonkeyPatch) -> None:
         "render_replace_with_clone",
         lambda self, *, origin, destination, origin_is_transient=False: (
             "SELECT * FROM main.simulated_missing_relation"
+        ),
+    )
+
+
+def fail_clone_into(*, monkeypatch: pytest.MonkeyPatch, destination: str) -> None:
+    """Make only the clone into one destination fail; every other clone runs normally."""
+
+    original: Callable[..., str] = DuckDbAdapter.render_replace_with_clone
+    failing: dict[str, str] = {destination: "SELECT * FROM main.simulated_missing_relation"}
+    monkeypatch.setattr(
+        DuckDbAdapter,
+        "render_replace_with_clone",
+        lambda self, *, origin, destination, origin_is_transient=False: failing.get(
+            destination,
+            original(
+                self,
+                origin=origin,
+                destination=destination,
+                origin_is_transient=origin_is_transient,
+            ),
         ),
     )
 

@@ -46,6 +46,7 @@ from sqlbuild.compiler.planner.models import (
     CursorSnapshotScope,
     DeferralInputs,
     ModelCursorSnapshot,
+    ModelMigrationDeclaration,
     ModelMigrationDiscovery,
     ModelMigrationPlanEntry,
     ModelMigrationPlanning,
@@ -73,20 +74,44 @@ def manual_migration_requests(*, scope: PlannerScope) -> tuple[ModelMigrationReq
         ):
             continue
         model: CompiledModel | None = scope.models_by_name.get(getattr(key, "name", ""))
-        if model is None:
+        request: ModelMigrationRequest | None = None if model is None else _declared_request(model)
+        if request is not None:
+            requests.append(request)
+    return tuple(requests)
+
+
+def _declared_request(model: CompiledModel) -> ModelMigrationRequest | None:
+    raw_origin: object | None = model.config.values.get(MIGRATE_FROM_CONFIG_KEY)
+    if not isinstance(raw_origin, str):
+        return None
+    return ModelMigrationRequest(
+        model=model,
+        discovery=MigrationDiscovery.MANUAL,
+        raw_origin=raw_origin.strip(),
+        force=model.config.values.get(MIGRATE_FORCE_CONFIG_KEY) is True,
+    )
+
+
+def _project_declarations(
+    *, runtime: PlannerRuntime, state: MigrationStateInspection
+) -> tuple[ModelMigrationDeclaration, ...]:
+    """Resolve every project model's migrate_from, selected or not."""
+
+    declarations: list[ModelMigrationDeclaration] = []
+    model: CompiledModel
+    for model in runtime.project.models:
+        request: ModelMigrationRequest | None = _declared_request(model)
+        if request is None:
             continue
-        raw_origin: object | None = model.config.values.get(MIGRATE_FROM_CONFIG_KEY)
-        if not isinstance(raw_origin, str):
-            continue
-        requests.append(
-            ModelMigrationRequest(
-                model=model,
-                discovery=MigrationDiscovery.MANUAL,
-                raw_origin=raw_origin.strip(),
-                force=model.config.values.get(MIGRATE_FORCE_CONFIG_KEY) is True,
+        origin: CompiledRelationLocation
+        origin_model: str | None
+        origin, origin_model = _resolve_origin(request=request, runtime=runtime, state=state)
+        declarations.append(
+            ModelMigrationDeclaration(
+                model_name=model.name, origin_location=origin, origin_model=origin_model
             )
         )
-    return tuple(requests)
+    return tuple(declarations)
 
 
 def plan_model_migrations(
@@ -106,13 +131,17 @@ def plan_model_migrations(
         connection=runtime.connection,
         database=planning_database(runtime=runtime),
     )
-    if manual:
+    declares_migrations: bool = any(
+        _declared_request(model) is not None for model in runtime.project.models
+    )
+    if declares_migrations:
         state.inspect_schemas(schemas=schemas)
     discovery: ModelMigrationDiscovery = discover_model_migrations(
         runtime=runtime,
         scope=scope,
         snapshot=snapshot,
         manual_requests=manual,
+        declarations=_project_declarations(runtime=runtime, state=state),
         state=state,
         project_schemas=schemas,
     )

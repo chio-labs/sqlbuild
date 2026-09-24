@@ -1503,6 +1503,15 @@ class ModelMigrationRequest:
 
 
 @dataclass(frozen=True)
+class ModelMigrationDeclaration:
+    """One project model's explicit migrate_from, resolved to a relation."""
+
+    model_name: str
+    origin_location: CompiledRelationLocation
+    origin_model: str | None
+
+
+@dataclass(frozen=True)
 class ModelMigrationDiscovery:
     """Manual and automatically discovered migration requests for one plan."""
 
