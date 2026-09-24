@@ -67,6 +67,7 @@ from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import (
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 
 _CONTEXT: str = "SQL test"
+_SQL_TEST_WITH_REQUIREMENT: str = "mock CTEs and one __expected__<model> CTE"
 _DIRECT_DEPENDENCY_PATH_LENGTH: int = 2
 _SQL_IDENTIFIER_QUOTE_TOKENS: frozenset[str] = frozenset({'"', "`"})
 
@@ -138,6 +139,7 @@ def extract_unclassified_sql_test_ctes(
             sql=sql,
             file_label=file_label,
             context_label=_CONTEXT,
+            with_requirement=_SQL_TEST_WITH_REQUIREMENT,
             cte_type=CompileSqlTestCte,
         )
     except CompileInputError as scanner_error:
@@ -174,6 +176,7 @@ def extract_sql_test_expected_model_names(
         sql=sql,
         file_label=file_label,
         context_label=_CONTEXT,
+        with_requirement=_SQL_TEST_WITH_REQUIREMENT,
         cte_type=CompileSqlTestCte,
     )
     return tuple(
@@ -203,13 +206,23 @@ def extract_assertion_target_model_names(*, assertion_sql: tuple[str, ...]) -> t
 
 @lru_cache(maxsize=4096)
 def extract_top_level_ctes_with_scanner[CteT](
-    *, sql: str, file_label: str, context_label: str, cte_type: Callable[..., CteT]
+    *,
+    sql: str,
+    file_label: str,
+    context_label: str,
+    with_requirement: str,
+    cte_type: Callable[..., CteT],
 ) -> tuple[CteT, ...]:
     """Scan top-level `WITH` CTEs followed by the ceremonial `SELECT 1` of a test file."""
 
-    index: int = _skip_ignorable(sql=sql, start=0)
-    index = _consume_keyword(sql=sql, start=index, keyword="WITH", file_label=file_label)
-    index = _skip_ignorable(sql=sql, start=index)
+    with_end: int | None = _try_consume_keyword(
+        sql=sql, start=_skip_ignorable(sql=sql, start=0), keyword=SQL_WITH_KEYWORD
+    )
+    if with_end is None:
+        raise CompileInputError(
+            f"{context_label} '{file_label}' must declare {with_requirement} before `SELECT 1`"
+        )
+    index: int = _skip_ignorable(sql=sql, start=with_end)
     recursive_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="RECURSIVE")
     if recursive_end is not None:
         index = _skip_ignorable(sql=sql, start=recursive_end)
@@ -217,7 +230,9 @@ def extract_top_level_ctes_with_scanner[CteT](
     ctes: list[CteT] = []
     seen_cte_names: set[str] = set()
     while True:
-        cte_name, index = _read_identifier(sql=sql, start=index, file_label=file_label)
+        cte_name, index = _read_identifier(
+            sql=sql, start=index, file_label=file_label, context_label=context_label
+        )
         if cte_name in seen_cte_names:
             raise CompileInputError(
                 f"{context_label} '{file_label}' defines duplicate CTE '{cte_name}'"
@@ -228,7 +243,13 @@ def extract_top_level_ctes_with_scanner[CteT](
         if index < len(sql) and sql[index] == SQL_OPEN_PAREN_TOKEN:
             index = find_matching_paren(sql=sql, open_paren_index=index, context=context_label) + 1
             index = _skip_ignorable(sql=sql, start=index)
-        index = _consume_keyword(sql=sql, start=index, keyword="AS", file_label=file_label)
+        index = _consume_keyword(
+            sql=sql,
+            start=index,
+            keyword="AS",
+            file_label=file_label,
+            context_label=context_label,
+        )
         index = _skip_ignorable(sql=sql, start=index)
         if index >= len(sql) or sql[index] != SQL_OPEN_PAREN_TOKEN:
             raise CompileInputError(
@@ -249,6 +270,7 @@ def extract_top_level_ctes_with_scanner[CteT](
         sql=sql,
         start=index,
         file_label=file_label,
+        context_label=context_label,
     )
     return tuple(ctes)
 
@@ -885,11 +907,13 @@ def _contains_select_star(sql: str) -> bool:
     return False
 
 
-def _require_prefixed_name(*, cte_name: str, prefix: str, label: str, file_label: str) -> str:
+def _require_prefixed_name(
+    *, cte_name: str, prefix: str, label: str, file_label: str, context_label: str = _CONTEXT
+) -> str:
     extracted_name: str = cte_name.removeprefix(prefix)
     if extracted_name:
         return extracted_name
-    raise CompileInputError(f"SQL test '{file_label}' must use {label} to identify a target")
+    raise CompileInputError(f"{context_label} '{file_label}' must use {label} to identify a target")
 
 
 def _validate_ceremonial_select(
@@ -897,10 +921,14 @@ def _validate_ceremonial_select(
     sql: str,
     start: int,
     file_label: str,
+    context_label: str = _CONTEXT,
 ) -> None:
     if _is_ceremonial_select_statement(sql=sql, start=start):
         return
-    raise CompileInputError(_ceremonial_select_error(file_label))
+    raise CompileInputError(
+        f"{context_label} '{file_label}' must end with a ceremonial top-level `SELECT 1` "
+        "after its CTEs"
+    )
 
 
 def _is_ceremonial_select_statement(*, sql: str, start: int) -> bool:
@@ -920,10 +948,6 @@ def _is_statement_end(*, sql: str, start: int) -> bool:
     if index < len(sql) and sql[index] == SQL_STATEMENT_TERMINATOR_TOKEN:
         index = _skip_ignorable(sql=sql, start=index + 1)
     return index == len(sql)
-
-
-def _ceremonial_select_error(file_label: str) -> str:
-    return f"SQL test '{file_label}' must end with a ceremonial top-level `SELECT 1` after its CTEs"
 
 
 def validate_independent_expected_and_assertion_ctes(
@@ -1108,16 +1132,13 @@ def _dependency_path(
     return None
 
 
-def _consume_keyword(*, sql: str, start: int, keyword: str, file_label: str) -> int:
+def _consume_keyword(
+    *, sql: str, start: int, keyword: str, file_label: str, context_label: str = _CONTEXT
+) -> int:
     keyword_end: int | None = _try_consume_keyword(sql=sql, start=start, keyword=keyword)
     if keyword_end is not None:
         return keyword_end
-    if keyword == SQL_WITH_KEYWORD:
-        raise CompileInputError(
-            f"SQL test '{file_label}' must declare mock CTEs and one __expected__<model> "
-            "CTE before `SELECT 1`"
-        )
-    raise CompileInputError(f"SQL test '{file_label}' expected keyword {keyword}")
+    raise CompileInputError(f"{context_label} '{file_label}' expected keyword {keyword}")
 
 
 def _try_consume_keyword(*, sql: str, start: int, keyword: str) -> int | None:
@@ -1131,9 +1152,11 @@ def _try_consume_keyword(*, sql: str, start: int, keyword: str) -> int | None:
     return keyword_end
 
 
-def _read_identifier(*, sql: str, start: int, file_label: str) -> tuple[str, int]:
+def _read_identifier(
+    *, sql: str, start: int, file_label: str, context_label: str = _CONTEXT
+) -> tuple[str, int]:
     if start >= len(sql) or not is_identifier_start(sql[start]):
-        raise CompileInputError(f"SQL test '{file_label}' expected a CTE name")
+        raise CompileInputError(f"{context_label} '{file_label}' expected a CTE name")
     index: int = start + 1
     while index < len(sql) and is_identifier_character(sql[index]):
         index += 1

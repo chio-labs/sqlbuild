@@ -5,7 +5,11 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile._helpers.attachment.sql_tests import build_scenario_inputs
-from sqlbuild.compiler.compile._helpers.scenarios.core import extract_sql_scenario_ctes
+from sqlbuild.compiler.compile._helpers.scenarios.core import (
+    extract_sql_scenario_ctes,
+    extract_sql_scenario_expected_model_names,
+)
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompileSqlScenarioCtes,
     CompileSqlScenarioInput,
@@ -20,6 +24,7 @@ from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceEnt
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     BuildScenarioInputsErrorTestCase,
     BuildScenarioInputsTestCase,
+    CteScannerMessageTestCase,
     ExtractSqlScenarioCtesErrorTestCase,
     ExtractSqlScenarioCtesTestCase,
 )
@@ -439,3 +444,87 @@ def test_given_invalid_scenario_source_refs_when_building_inputs_then_it_raises_
             loaded_macros={},
             declaration_expansion=DUCKDB_DECLARATION_EXPANSION_CONTEXT,
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CteScannerMessageTestCase(
+            description="scenario without a with clause uses scenario wording",
+            sql="SELECT * FROM orders",
+            expected_message=(
+                "SQL scenario 'tests/scenarios/orders.sql' must declare fixture CTEs and at least "
+                "one __expected__<model> or __assert__<assertion> CTE before `SELECT 1`"
+            ),
+        ),
+        CteScannerMessageTestCase(
+            description="scenario with an invalid cte name uses scenario wording",
+            sql="WITH 1orders AS (SELECT 1) SELECT 1",
+            expected_message="SQL scenario 'tests/scenarios/orders.sql' expected a CTE name",
+        ),
+        CteScannerMessageTestCase(
+            description="scenario without a ceremonial select uses scenario wording",
+            sql=(
+                "WITH __source__raw_orders AS (SELECT 1 AS order_id), "
+                "__expected__orders AS (SELECT 1 AS order_id), "
+                "result AS (SELECT 1) SELECT * FROM result"
+            ),
+            expected_message=(
+                "SQL scenario 'tests/scenarios/orders.sql' must end with a ceremonial top-level "
+                "`SELECT 1` after its CTEs"
+            ),
+        ),
+        CteScannerMessageTestCase(
+            description="scenario fixture without a target uses scenario wording",
+            sql=(
+                "WITH __source__ AS (SELECT 1 AS order_id), "
+                "__expected__orders AS (SELECT 1 AS order_id) SELECT 1"
+            ),
+            expected_message=(
+                "SQL scenario 'tests/scenarios/orders.sql' must use __source__<source> to "
+                "identify a target"
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_malformed_scenario_ctes_when_extracting_then_messages_name_the_scenario(
+    test_case: CteScannerMessageTestCase,
+) -> None:
+    with pytest.raises(CompileInputError) as error_info:
+        _ = extract_sql_scenario_ctes(sql=test_case.sql, file_label="tests/scenarios/orders.sql")
+
+    assert str(error_info.value) == test_case.expected_message
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CteScannerMessageTestCase(
+            description="expected model scan without AS uses scenario wording",
+            sql="WITH __source__raw_orders (SELECT 1 AS order_id) SELECT 1",
+            expected_message="SQL scenario 'tests/scenarios/orders.sql' expected keyword AS",
+        ),
+        CteScannerMessageTestCase(
+            description="expected model scan without a target uses scenario wording",
+            sql=(
+                "WITH __source__raw_orders AS (SELECT 1 AS order_id), "
+                "__expected__ AS (SELECT 1 AS order_id) SELECT 1"
+            ),
+            expected_message=(
+                "SQL scenario 'tests/scenarios/orders.sql' must use __expected__<model> to "
+                "identify a target"
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_malformed_scenario_ctes_when_scanning_expected_models_then_names_the_scenario(
+    test_case: CteScannerMessageTestCase,
+) -> None:
+    with pytest.raises(CompileInputError) as error_info:
+        _ = extract_sql_scenario_expected_model_names(
+            sql=test_case.sql, file_label="tests/scenarios/orders.sql"
+        )
+
+    assert str(error_info.value) == test_case.expected_message

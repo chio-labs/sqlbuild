@@ -29,6 +29,9 @@ from sqlbuild.compiler.compile.models import (
 )
 
 _CONTEXT: str = "SQL scenario"
+_WITH_REQUIREMENT: str = (
+    "fixture CTEs and at least one __expected__<model> or __assert__<assertion> CTE"
+)
 
 
 def extract_sql_scenario_ctes(*, sql: str, file_label: str) -> CompileSqlScenarioCtes:
@@ -39,6 +42,7 @@ def extract_sql_scenario_ctes(*, sql: str, file_label: str) -> CompileSqlScenari
             sql=sql,
             file_label=file_label,
             context_label=_CONTEXT,
+            with_requirement=_WITH_REQUIREMENT,
             cte_type=CompileSqlScenarioCte,
         )
     except CompileInputError as scanner_error:
@@ -63,6 +67,7 @@ def extract_sql_scenario_expected_model_names(*, sql: str, file_label: str) -> t
         sql=sql,
         file_label=file_label,
         context_label=_CONTEXT,
+        with_requirement=_WITH_REQUIREMENT,
         cte_type=CompileSqlScenarioCte,
     )
     return tuple(
@@ -71,6 +76,7 @@ def extract_sql_scenario_expected_model_names(*, sql: str, file_label: str) -> t
             prefix=EXPECTED_TEST_CTE_PREFIX,
             label="__expected__<model>",
             file_label=file_label,
+            context_label=_CONTEXT,
         )
         for cte in ctes
         if cte.name.startswith(EXPECTED_TEST_CTE_PREFIX)
@@ -106,6 +112,7 @@ def _classify_sql_scenario_ctes(
                     prefix=SOURCE_TEST_CTE_PREFIX,
                     label="__source__<source>",
                     file_label=file_label,
+                    context_label=_CONTEXT,
                 )
             )
             authored_ctes.append(cte)
@@ -117,6 +124,7 @@ def _classify_sql_scenario_ctes(
                     prefix=REF_TEST_CTE_PREFIX,
                     label="__ref__<model>",
                     file_label=file_label,
+                    context_label=_CONTEXT,
                 )
             )
             authored_ctes.append(cte)
@@ -128,6 +136,7 @@ def _classify_sql_scenario_ctes(
                     prefix=SEED_TEST_CTE_PREFIX,
                     label="__seed__<seed>",
                     file_label=file_label,
+                    context_label=_CONTEXT,
                 )
             )
             authored_ctes.append(cte)
@@ -139,6 +148,7 @@ def _classify_sql_scenario_ctes(
                     prefix=DBT_REF_TEST_CTE_PREFIX,
                     label="__dbt_ref__<model> or __dbt_ref__<package>__<model>",
                     file_label=file_label,
+                    context_label=_CONTEXT,
                 )
             )
             authored_ctes.append(cte)
@@ -150,6 +160,7 @@ def _classify_sql_scenario_ctes(
                     prefix=EXPECTED_TEST_CTE_PREFIX,
                     label="__expected__<model>",
                     file_label=file_label,
+                    context_label=_CONTEXT,
                 )
             )
             expected_ctes.append(cte)
@@ -161,6 +172,7 @@ def _classify_sql_scenario_ctes(
                     prefix=ASSERT_SCENARIO_CTE_PREFIX,
                     label="__assert__<assertion>",
                     file_label=file_label,
+                    context_label=_CONTEXT,
                 )
             )
             assertion_ctes.append(cte)

@@ -892,3 +892,10 @@ class ClassifyDirectLogicSqlTestCtesErrorTestCase:
     mode: SqlTestMode
     ctes: tuple[tuple[str, str], ...]
     expected_message: str
+
+
+@dataclass(frozen=True)
+class CteScannerMessageTestCase:
+    description: str
+    sql: str
+    expected_message: str
