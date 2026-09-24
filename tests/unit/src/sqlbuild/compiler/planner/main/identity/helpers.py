@@ -14,6 +14,9 @@ from sqlbuild.compiler.planner._helpers.graph.core import build_downstream_deps
 from sqlbuild.compiler.planner._helpers.identity.direct import (
     build_direct_model_version_identities,
 )
+from sqlbuild.compiler.planner.main.identity.version_identity_model_metadata import (
+    build_model_version_identity_metadata_json,
+)
 from sqlbuild.compiler.planner.models import DirectModelVersionIdentities, PlannerScope
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import build_compiled_function
 
@@ -87,4 +90,19 @@ def _build_model(
             name=key.name,
             qualified_name=key.name,
         ),
+    )
+
+
+def build_hooked_model_identity_json(*, hook_config: dict[str, object]) -> str:
+    model: CompiledModel = replace(
+        _build_model(
+            key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
+            query_sql="SELECT 1 AS order_id",
+            deps=(),
+        ),
+        config=CompileModelConfig(values=hook_config),
+    )
+    return build_model_version_identity_metadata_json(
+        model=model,
+        hook_version_hashes={"notify_orders": "notify-hash-v1"},
     )

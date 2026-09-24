@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlbuild.compiler.compile.models import CompiledModel
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.constants import SQL_HOOK_OUTPUT_FIELDS
+from sqlbuild.compiler.discovery.constants import SQL_HOOK_IDENTITY_FIELDS
 from sqlbuild.compiler.discovery.main.serialize_hook_entries import serialize_hook_entries
 from sqlbuild.compiler.planner._helpers.identity.model_metadata import contract_output_signature
 from sqlbuild.compiler.planner.constants import (
@@ -80,7 +80,7 @@ def _hook_execution_signature(
 ) -> list[dict[str, object]]:
     return serialize_hook_entries(
         value=value,
-        sql_fields=SQL_HOOK_OUTPUT_FIELDS,
+        sql_fields=SQL_HOOK_IDENTITY_FIELDS,
         python_hook_fields={
             hook_name: {"version_hash": version_hash}
             for hook_name, version_hash in hook_version_hashes.items()

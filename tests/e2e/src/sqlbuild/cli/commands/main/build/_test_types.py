@@ -1085,3 +1085,14 @@ class WindowLimitedReplayE2ETestCase:
     changed_rows_sql: str
     expected_changed_rows: int
     expected_total_rows: int
+
+
+@dataclass(frozen=True)
+class SqlHookIdentityBuildE2ETestCase:
+    """Test case for model version identity after a SQL hook resource edit."""
+
+    description: str
+    removed_hook_path: str
+    added_hook_path: str
+    added_hook_contents: str
+    expected_reason: str
