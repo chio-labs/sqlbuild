@@ -71,3 +71,4 @@ SQL_HOOK_OUTPUT_FIELDS: tuple[str, ...] = (
     "kwargs",
     "description",
 )
+SQL_HOOK_IDENTITY_FIELDS: tuple[str, ...] = ("statement", "name", "definition_sql", "kwargs")
