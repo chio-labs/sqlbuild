@@ -38,3 +38,13 @@ class SnapshotExecutionTestCase:
     history_sql: str
     builds: tuple[tuple[tuple[object, ...], ...], ...]
     expected_history: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SqlServerSnapshotRenderingTestCase:
+    """SQL Server snapshot renders that must stay valid T-SQL."""
+
+    description: str
+    unexpected_fragments: tuple[str, ...]
+    expected_changes_apply_prefix: str
+    expected_changes_apply_fragments: tuple[str, ...]

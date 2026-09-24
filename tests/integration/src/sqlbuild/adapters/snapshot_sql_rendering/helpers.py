@@ -380,3 +380,194 @@ def _run_build(
     statement: str
     for statement in render(adapter):
         connection.execute(test_case.normalize_sql(statement))
+
+
+def render_snapshot_sql_matrix(adapter: BaseAdapter) -> dict[str, str]:
+    """Render every snapshot contract method over keys, strategies, hard deletes and paths."""
+
+    statements_by_label: dict[str, str] = {}
+    unique_key: tuple[str, ...]
+    for unique_key in (("customer_id",), ("customer_id", "region")):
+        description: str
+        statements: tuple[str, ...]
+        for description, statements in (
+            *_current_state_renders(adapter=adapter, unique_key=unique_key),
+            *_historical_renders(adapter=adapter, unique_key=unique_key),
+        ):
+            index: int
+            statement: str
+            for index, statement in enumerate(statements):
+                statements_by_label[f"{description} key {unique_key} #{index}"] = statement
+    return statements_by_label
+
+
+def _matrix_output_columns(unique_key: tuple[str, ...]) -> tuple[str, ...]:
+    return (*unique_key, "plan", "status", "updated_at", "observed_at")
+
+
+def _current_state_renders(
+    *, adapter: BaseAdapter, unique_key: tuple[str, ...]
+) -> list[tuple[str, tuple[str, ...]]]:
+    renders: list[tuple[str, tuple[str, ...]]] = []
+    target: SnapshotChangeTarget = SnapshotChangeTarget(
+        destination="target_table",
+        origin="source_table",
+        unique_key=unique_key,
+        valid_from_column="valid_from",
+        valid_to_column="valid_to",
+        output_columns=_matrix_output_columns(unique_key),
+    )
+    strategy: str
+    for strategy in ("timestamp", "check"):
+        renders.append(
+            (
+                f"current-state {strategy} initial",
+                adapter.render_create_initial_snapshot_destination(
+                    table_type=TableType.PERMANENT,
+                    destination="target_table",
+                    origin="source_table",
+                    snapshot_strategy=strategy,
+                    updated_at_column="updated_at",
+                    observed_at_column="observed_at",
+                    valid_from_column="valid_from",
+                    valid_to_column="valid_to",
+                    initial_valid_from=None,
+                ),
+            )
+        )
+    hard_deletes: bool
+    for hard_deletes in (False, True):
+        renders.append(
+            (
+                f"current-state timestamp apply (hard deletes {hard_deletes})",
+                adapter.render_apply_timestamp_snapshot_changes(
+                    destination="target_table",
+                    origin="source_table",
+                    unique_key=unique_key,
+                    updated_at_column="updated_at",
+                    observed_at_column="observed_at",
+                    valid_from_column="valid_from",
+                    valid_to_column="valid_to",
+                    initial_valid_from=None,
+                    output_columns=target.output_columns,
+                    invalidate_hard_deletes=hard_deletes,
+                ),
+            )
+        )
+        renders.append(
+            (
+                f"current-state check apply (hard deletes {hard_deletes})",
+                adapter.render_apply_check_snapshot_changes(
+                    target=target,
+                    check_columns=("plan", "status"),
+                    updated_at_column="updated_at",
+                    observed_at_column="observed_at",
+                    initial_valid_from=None,
+                    invalidate_hard_deletes=hard_deletes,
+                ),
+            )
+        )
+    return renders
+
+
+def _historical_renders(
+    *, adapter: BaseAdapter, unique_key: tuple[str, ...]
+) -> list[tuple[str, tuple[str, ...]]]:
+    output_columns: tuple[str, ...] = _matrix_output_columns(unique_key)
+    renders: list[tuple[str, tuple[str, ...]]] = [
+        (
+            "historical changes initial",
+            adapter.render_create_initial_historical_timestamp_changes_destination(
+                table_type=TableType.PERMANENT,
+                destination="target_table",
+                origin="source_table",
+                unique_key=unique_key,
+                updated_at_column="updated_at",
+                valid_from_column="valid_from",
+                valid_to_column="valid_to",
+                output_columns=output_columns,
+            ),
+        ),
+        (
+            "historical changes apply",
+            adapter.render_apply_historical_timestamp_changes(
+                destination="target_table",
+                origin="source_table",
+                unique_key=unique_key,
+                updated_at_column="updated_at",
+                valid_from_column="valid_from",
+                valid_to_column="valid_to",
+                output_columns=output_columns,
+            ),
+        ),
+    ]
+    hard_deletes: bool
+    for hard_deletes in (False, True):
+        suffix: str = f"(hard deletes {hard_deletes})"
+        renders.append(
+            (
+                f"historical timestamp initial {suffix}",
+                adapter.render_create_initial_historical_timestamp_snapshot_destination(
+                    table_type=TableType.PERMANENT,
+                    destination="target_table",
+                    origin="source_table",
+                    unique_key=unique_key,
+                    updated_at_column="updated_at",
+                    observed_at_column="observed_at",
+                    valid_from_column="valid_from",
+                    valid_to_column="valid_to",
+                    output_columns=output_columns,
+                    invalidate_hard_deletes=hard_deletes,
+                ),
+            )
+        )
+        renders.append(
+            (
+                f"historical timestamp apply {suffix}",
+                adapter.render_apply_historical_timestamp_snapshot_changes(
+                    destination="target_table",
+                    origin="source_table",
+                    unique_key=unique_key,
+                    updated_at_column="updated_at",
+                    observed_at_column="observed_at",
+                    valid_from_column="valid_from",
+                    valid_to_column="valid_to",
+                    output_columns=output_columns,
+                    invalidate_hard_deletes=hard_deletes,
+                ),
+            )
+        )
+        renders.append(
+            (
+                f"historical check initial {suffix}",
+                adapter.render_create_initial_historical_check_snapshot_destination(
+                    table_type=TableType.PERMANENT,
+                    destination="target_table",
+                    origin="source_table",
+                    unique_key=unique_key,
+                    check_columns=("plan", "status"),
+                    observed_at_column="observed_at",
+                    valid_from_column="valid_from",
+                    valid_to_column="valid_to",
+                    output_columns=output_columns,
+                    invalidate_hard_deletes=hard_deletes,
+                ),
+            )
+        )
+        renders.append(
+            (
+                f"historical check apply {suffix}",
+                adapter.render_apply_historical_check_snapshot_changes(
+                    destination="target_table",
+                    origin="source_table",
+                    unique_key=unique_key,
+                    check_columns=("plan", "status"),
+                    observed_at_column="observed_at",
+                    valid_from_column="valid_from",
+                    valid_to_column="valid_to",
+                    output_columns=output_columns,
+                    invalidate_hard_deletes=hard_deletes,
+                ),
+            )
+        )
+    return renders

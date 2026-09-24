@@ -14,6 +14,10 @@ from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapt
 from tests.integration.src.sqlbuild.adapters.snapshot_sql_rendering._test_types import (
     SnapshotReappearanceRenderingTestCase,
     SnapshotSqlRenderingAdapterTestCase,
+    SqlServerSnapshotRenderingTestCase,
+)
+from tests.integration.src.sqlbuild.adapters.snapshot_sql_rendering.helpers import (
+    render_snapshot_sql_matrix,
 )
 
 _REAPPEARANCE_INITIAL_FRAGMENTS: tuple[str, ...] = (
@@ -462,3 +466,54 @@ def test_given_hard_deletes_when_rendering_historical_check_snapshot_then_reopen
     assert "__prev_group_observed_at" not in without_hard_deletes_sql
     assert "__reappearances" not in without_hard_deletes_sql
     assert "__next_absence_at" not in without_hard_deletes_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerSnapshotRenderingTestCase(
+            description="sqlserver renders every snapshot statement without QUALIFY",
+            unexpected_fragments=("QUALIFY",),
+            expected_changes_apply_prefix=(
+                ";WITH __latest_ordered AS (SELECT *, ROW_NUMBER() OVER ("
+                "PARTITION BY customer_id ORDER BY updated_at DESC) AS __rn FROM target_table), "
+                "__latest AS (SELECT * FROM __latest_ordered WHERE __rn = 1), __new_changes AS ("
+            ),
+            expected_changes_apply_fragments=(
+                "UPDATE __target SET valid_to = (",
+                "FROM target_table AS __target WHERE __target.valid_to IS NULL",
+                "INSERT INTO target_table (",
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_sqlserver_when_rendering_snapshot_matrix_then_sql_is_tsql_compatible(
+    test_case: SqlServerSnapshotRenderingTestCase,
+) -> None:
+    statements_by_label: dict[str, str] = render_snapshot_sql_matrix(SqlServerAdapter())
+    changes_apply_statements: tuple[str, ...] = (
+        SqlServerAdapter().render_apply_historical_timestamp_changes(
+            destination="target_table",
+            origin="source_table",
+            unique_key=("customer_id",),
+            updated_at_column="updated_at",
+            valid_from_column="valid_from",
+            valid_to_column="valid_to",
+            output_columns=("customer_id", "plan", "updated_at"),
+        )
+    )
+
+    fragment: str
+    for fragment in test_case.unexpected_fragments:
+        assert {
+            label: fragment in statement for label, statement in statements_by_label.items()
+        } == dict.fromkeys(statements_by_label, False)
+    assert len(changes_apply_statements) == 2
+    statement: str
+    for statement in changes_apply_statements:
+        assert statement.startswith(test_case.expected_changes_apply_prefix)
+    changes_apply_sql: str = "\n".join(changes_apply_statements)
+    expected_fragment: str
+    for expected_fragment in test_case.expected_changes_apply_fragments:
+        assert expected_fragment in changes_apply_sql
