@@ -74,6 +74,7 @@ struct ParsedModel<'a> {
     model: &'a Model,
     classification: ModelClassification,
     authored_compact_sql: String,
+    quote_policy: QuotePolicy,
 }
 
 struct ModelClassification {
@@ -149,12 +150,14 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
         ));
     };
     let query = *query;
+    let quote_policy = rules_quote_policy(&request.dialect);
     let classification = classify_model(&query, model, &request.dialect)?;
     let parsed = ParsedModel {
         query,
         model,
         classification,
-        authored_compact_sql: numeric_decisions::compact_sql(&model.authored_sql),
+        authored_compact_sql: numeric_decisions::compact_sql(&model.authored_sql, quote_policy),
+        quote_policy,
     };
     if let Some(rule) = metadata("SQBRMODEL101") {
         import_ctes(&parsed, rule, &faults);
@@ -264,7 +267,7 @@ pub(super) fn parse_rule_statements(
 }
 
 fn normalize_generic_fallback(sql: &str) -> String {
-    let policy = QuotePolicy::RULES;
+    let policy = rules_quote_policy("generic");
     let mut bytes = sql.as_bytes().to_vec();
     let mut index = 0;
     while index < bytes.len() {
@@ -301,6 +304,17 @@ fn parse_with_dialect(sql: &str, dialect: &dyn Dialect) -> Result<Vec<Statement>
     parser.parse_statements()
 }
 
+pub(crate) fn rules_quote_policy(dialect_name: &str) -> QuotePolicy {
+    let dialect = rules_dialect(dialect_name);
+    let backslash_escapes = dialect.supports_string_literal_backslash_escape();
+    QuotePolicy {
+        backtick_identifiers: dialect.is_delimited_identifier_start('`'),
+        single_quote_backslash_escapes: backslash_escapes,
+        double_quote_backslash_escapes: backslash_escapes
+            && !dialect.is_delimited_identifier_start('"'),
+    }
+}
+
 fn rules_dialect(name: &str) -> Box<dyn Dialect> {
     match name.to_ascii_lowercase().as_str() {
         "bigquery" => Box::new(BigQueryDialect {}),
@@ -315,7 +329,7 @@ fn rules_dialect(name: &str) -> Box<dyn Dialect> {
 }
 
 pub(crate) fn normalize_rules_sql(dialect: &str, sql: &str) -> String {
-    let policy = QuotePolicy::RULES;
+    let policy = rules_quote_policy(dialect);
     let sql = normalize_table_function_calls(sql, policy);
     if !dialect.eq_ignore_ascii_case("snowflake") {
         return sql;
@@ -1242,6 +1256,7 @@ fn evaluate_literal_rules(
                     equality: comparison.equality,
                     output_name: comparison.output_name.as_deref(),
                     literal,
+                    quote_policy: parsed.quote_policy,
                 })
             });
             if magic {
