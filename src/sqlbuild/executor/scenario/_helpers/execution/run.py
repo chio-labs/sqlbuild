@@ -13,6 +13,7 @@ from sqlbuild.executor.scenario._helpers.lifecycle.expectations import (
     execute_scenario_assertion_expectations,
     execute_scenario_expected_expectations,
 )
+from sqlbuild.executor.scenario._helpers.lifecycle.failures import first_failure_details
 from sqlbuild.executor.scenario._helpers.lifecycle.fixtures import (
     execute_scenario_fixtures,
     execute_scenario_seed_entries,
@@ -30,6 +31,8 @@ from sqlbuild.executor.scenario.models import (
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
+
+_STEP_FAILED_MESSAGE: str = "scenario step failed"
 
 
 def execute_scenario_run_steps(
@@ -91,10 +94,8 @@ def _execute_scenario_run_steps(
             retain=retain,
             prepare_cleanup_result=prepare_result,
             results=ScenarioStepResults(fixture_results=fixture_results),
-            failure=ScenarioFailureDetails(
-                error_code=_first_error_code(fixture_results),
-                error_help=_first_error_help(fixture_results),
-                error_message=_first_error(fixture_results),
+            failure=first_failure_details(
+                results=fixture_results, fallback_message=_STEP_FAILED_MESSAGE
             ),
         )
 
@@ -116,10 +117,8 @@ def _execute_scenario_run_steps(
                 fixture_results=fixture_results,
                 seed_results=seed_results,
             ),
-            failure=ScenarioFailureDetails(
-                error_code=_first_error_code(seed_results),
-                error_help=_first_error_help(seed_results),
-                error_message=_first_error(seed_results),
+            failure=first_failure_details(
+                results=seed_results, fallback_message=_STEP_FAILED_MESSAGE
             ),
         )
 
@@ -141,10 +140,8 @@ def _execute_scenario_run_steps(
                 seed_results=seed_results,
                 model_results=model_results,
             ),
-            failure=ScenarioFailureDetails(
-                error_code=_first_error_code(model_results),
-                error_help=_first_error_help(model_results),
-                error_message=_first_error(model_results),
+            failure=first_failure_details(
+                results=model_results, fallback_message=_STEP_FAILED_MESSAGE
             ),
         )
 
@@ -160,9 +157,6 @@ def _execute_scenario_run_steps(
         adapter=adapter,
         connection=connection,
     )
-    failed_check_message: str | None = _first_error((*expected_results, *assertion_results))
-    failed_check_code: str | None = _first_error_code((*expected_results, *assertion_results))
-    failed_check_help: str | None = _first_error_help((*expected_results, *assertion_results))
     return _finish_scenario(
         scenario_plan=scenario_plan,
         adapter=adapter,
@@ -176,10 +170,9 @@ def _execute_scenario_run_steps(
             expected_results=expected_results,
             assertion_results=assertion_results,
         ),
-        failure=ScenarioFailureDetails(
-            error_code=failed_check_code,
-            error_help=failed_check_help,
-            error_message=failed_check_message,
+        failure=first_failure_details(
+            results=(*expected_results, *assertion_results),
+            fallback_message=_STEP_FAILED_MESSAGE,
         ),
     )
 
@@ -265,34 +258,3 @@ def _scenario_failure(
 
 def _has_failed(results: tuple[object, ...]) -> bool:
     return any(getattr(result, "status", None) == ExecutionStatus.FAILED for result in results)
-
-
-def _first_error(results: tuple[object, ...]) -> str | None:
-    result: object
-    for result in results:
-        if getattr(result, "status", None) == ExecutionStatus.FAILED:
-            error_message: object | None = getattr(result, "error_message", None)
-            if isinstance(error_message, str) and error_message:
-                return error_message
-            return "scenario step failed"
-    return None
-
-
-def _first_error_code(results: tuple[object, ...]) -> str | None:
-    result: object
-    for result in results:
-        if getattr(result, "status", None) == ExecutionStatus.FAILED:
-            error_code: object | None = getattr(result, "error_code", None)
-            if isinstance(error_code, str) and error_code:
-                return error_code
-    return None
-
-
-def _first_error_help(results: tuple[object, ...]) -> str | None:
-    result: object
-    for result in results:
-        if getattr(result, "status", None) == ExecutionStatus.FAILED:
-            error_help: object | None = getattr(result, "error_help", None)
-            if isinstance(error_help, str) and error_help:
-                return error_help
-    return None

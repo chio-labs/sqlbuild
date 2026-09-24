@@ -8,6 +8,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan
 from sqlbuild.executor.build.models import SeedExecutionResult
+from sqlbuild.executor.scenario._helpers.lifecycle.failures import first_failure_details
 from sqlbuild.executor.scenario._helpers.lifecycle.fixtures import (
     execute_scenario_fixtures,
     execute_scenario_seed_entries,
@@ -32,6 +33,8 @@ from sqlbuild.executor.scenario.models import (
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.runtime.observability.main.run_scope import run_scope
+
+_CAPTURE_FAILED_MESSAGE: str = "scenario snapshot capture failed"
 
 
 def execute_scenario_snapshot_capture_steps(
@@ -97,8 +100,10 @@ def _execute_scenario_snapshot_capture_steps(
         adapter=adapter,
         connection=connection,
     )
-    fixture_error: str | None = _first_error(fixture_results)
-    if fixture_error is not None:
+    fixture_failure: ScenarioFailureDetails = first_failure_details(
+        results=fixture_results, fallback_message=_CAPTURE_FAILED_MESSAGE
+    )
+    if fixture_failure.error_message is not None:
         return _finish_capture_run(
             scenario_plan=scenario_plan,
             adapter=adapter,
@@ -106,11 +111,7 @@ def _execute_scenario_snapshot_capture_steps(
             retain=settings.retain,
             prepare_cleanup_result=prepare_result,
             fixture_results=fixture_results,
-            failure=ScenarioFailureDetails(
-                error_code=_first_error_code(fixture_results),
-                error_help=_first_error_help(fixture_results),
-                error_message=fixture_error,
-            ),
+            failure=fixture_failure,
         )
 
     seed_results: tuple[SeedExecutionResult, ...] = execute_scenario_seed_entries(
@@ -120,8 +121,10 @@ def _execute_scenario_snapshot_capture_steps(
         connection=connection,
         run_id=run_id,
     )
-    seed_error: str | None = _first_error(seed_results)
-    if seed_error is not None:
+    seed_failure: ScenarioFailureDetails = first_failure_details(
+        results=seed_results, fallback_message=_CAPTURE_FAILED_MESSAGE
+    )
+    if seed_failure.error_message is not None:
         return _finish_capture_run(
             scenario_plan=scenario_plan,
             adapter=adapter,
@@ -130,11 +133,7 @@ def _execute_scenario_snapshot_capture_steps(
             prepare_cleanup_result=prepare_result,
             fixture_results=fixture_results,
             seed_results=seed_results,
-            failure=ScenarioFailureDetails(
-                error_code=_first_error_code(seed_results),
-                error_help=_first_error_help(seed_results),
-                error_message=seed_error,
-            ),
+            failure=seed_failure,
         )
 
     capture_plan: ScenarioSnapshotCapturePlan = build_scenario_snapshot_capture_plan(
@@ -228,34 +227,3 @@ def _finish_capture_run(
         error_help=error_help,
         error_message=error_message,
     )
-
-
-def _first_error(results: tuple[object, ...]) -> str | None:
-    result: object
-    for result in results:
-        if getattr(result, "status", None) == ExecutionStatus.FAILED:
-            error_message: object | None = getattr(result, "error_message", None)
-            if isinstance(error_message, str) and error_message:
-                return error_message
-            return "scenario snapshot capture failed"
-    return None
-
-
-def _first_error_code(results: tuple[object, ...]) -> str | None:
-    result: object
-    for result in results:
-        if getattr(result, "status", None) == ExecutionStatus.FAILED:
-            error_code: object | None = getattr(result, "error_code", None)
-            if isinstance(error_code, str) and error_code:
-                return error_code
-    return None
-
-
-def _first_error_help(results: tuple[object, ...]) -> str | None:
-    result: object
-    for result in results:
-        if getattr(result, "status", None) == ExecutionStatus.FAILED:
-            error_help: object | None = getattr(result, "error_help", None)
-            if isinstance(error_help, str) and error_help:
-                return error_help
-    return None
