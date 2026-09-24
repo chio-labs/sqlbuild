@@ -1120,6 +1120,15 @@ def test_given_dlt_sources_yaml_when_parsing_then_expands_managed_sources(
             expected_error_fragment="source audits must be a list",
         ),
         ParseSourcesYamlErrorTestCase(
+            description="raises when source audits is null",
+            contents="""
+        sources:
+          - name: raw_orders
+            audits:
+        """,
+            expected_error_fragment="source audits must be a list",
+        ),
+        ParseSourcesYamlErrorTestCase(
             description="raises when source columns is not a list",
             contents="""
         sources:

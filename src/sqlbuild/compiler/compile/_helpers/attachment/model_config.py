@@ -6,7 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
-from sqlbuild.compiler.auditing.main._parse_audit_instance import parse_audit_instance
+from sqlbuild.compiler.auditing.main._parse_audit_instances import parse_audit_instances
 from sqlbuild.compiler.authored_values.main._optional_named_string import optional_named_string
 from sqlbuild.compiler.compile._helpers.audit_factories.core import (
     merge_validated_model_audits,
@@ -291,10 +291,12 @@ def build_model_header_schema_entry(
         model_name=model_name,
         file_path=file_path,
     )
-    audits: tuple[SchemaAuditInstance, ...] = _parse_model_header_audits(
+    audits: tuple[SchemaAuditInstance, ...] = parse_audit_instances(
         raw_audits=raw_audits,
         file_path=file_path,
         label="model",
+        error_class=CompileInputError,
+        null_as_empty=True,
     )
     generated_audits: tuple[SchemaAuditInstance, ...] = parse_model_header_audit_factories(
         raw_audit_factories=raw_audit_factories,
@@ -496,24 +498,6 @@ def _validate_model_schema_audit_augmentation(
             f"'{local_column.name}' from {named_origin} without audits; only audit augmentation "
             "is supported"
         )
-
-
-def _parse_model_header_audits(
-    *, raw_audits: object | None, file_path: Path, label: str
-) -> tuple[SchemaAuditInstance, ...]:
-    if raw_audits is None:
-        return ()
-    if not isinstance(raw_audits, list):
-        raise CompileInputError(f"{file_path} {label} audits must be a list")
-    return tuple(
-        parse_audit_instance(
-            raw_audit=raw_audit,
-            file_path=file_path,
-            label=label,
-            error_class=CompileInputError,
-        )
-        for raw_audit in raw_audits
-    )
 
 
 def _resolve_model_schema(
