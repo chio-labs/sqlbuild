@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections.abc import Sequence
 from contextlib import AbstractContextManager
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.node_results.main.decode_json import decode_node_result_json
@@ -1121,6 +1121,73 @@ class SqlStateBackend(StateBackend):
 
     def _backup_schema_name(self, *, schema: str, backup_id_value: str) -> str:
         return f"{schema}__backup_{backup_id_value}"
+
+    def close(self, connection: Any) -> None:
+        connection.close()
+
+    def delete_virtual_environment(
+        self, *, connection: Any, schema: str, virtual_environment_name: str
+    ) -> None:
+        p: str = self._placeholder
+        table_names: tuple[str, ...] = (
+            VIRTUAL_ENVIRONMENT_NODE_REF_TABLE,
+            SOURCE_FRESHNESS_OBSERVATION_TABLE,
+            VIRTUAL_ENVIRONMENT_TABLE,
+        )
+        with self._write_transaction(connection=connection) as executor:
+            table_name: str
+            for table_name in table_names:
+                self._execute_in(
+                    executor=executor,
+                    sql=(
+                        f"DELETE FROM {self._qualified_name(schema=schema, table=table_name)} "
+                        f"WHERE virtual_environment_name = {p}"
+                    ),
+                    params=[virtual_environment_name],
+                )
+
+    def count_unreferenced_python_node_versions(self, *, connection: Any, schema: str) -> int:
+        version_table: str = self._qualified_name(schema=schema, table=PYTHON_NODE_VERSION_TABLE)
+        ref_table: str = self._qualified_name(
+            schema=schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE
+        )
+        row: tuple[Any, ...] = cast(
+            tuple[Any, ...],
+            self._fetch_one(
+                connection=connection,
+                sql=(
+                    "SELECT COUNT(*) "
+                    f"FROM {version_table} versions "
+                    "WHERE NOT EXISTS ("
+                    "SELECT 1 "
+                    f"FROM {ref_table} refs "
+                    "WHERE refs.node_type = versions.node_type "
+                    "AND refs.node_name = versions.node_name "
+                    "AND refs.version_hash = versions.version_hash)"
+                ),
+            ),
+        )
+        return int(row[0])
+
+    def _validate_source_freshness_records(
+        self,
+        *,
+        virtual_environment_name: str,
+        records: tuple[SourceFreshnessRecord, ...],
+    ) -> None:
+        seen_source_names: set[str] = set()
+        record: SourceFreshnessRecord
+        for record in records:
+            if record.virtual_environment_name != virtual_environment_name:
+                raise StateBackendConfigError(
+                    "Source freshness record virtual_environment_name must match replacement "
+                    "virtual_environment_name"
+                )
+            if record.source_name in seen_source_names:
+                raise StateBackendConfigError(
+                    f"Duplicate source freshness record for source '{record.source_name}'"
+                )
+            seen_source_names.add(record.source_name)
 
     def _replace_row_preserving_created_at(
         self,

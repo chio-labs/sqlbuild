@@ -32,7 +32,6 @@ from sqlbuild.virtual.state.constants import (
     STATE_TABLE_COLUMNS,
     STATE_TABLE_INDEXES,
     VIRTUAL_ENVIRONMENT_NODE_REF_TABLE,
-    VIRTUAL_ENVIRONMENT_TABLE,
 )
 from sqlbuild.virtual.state.exceptions import (
     StateBackendConfigError,
@@ -60,9 +59,6 @@ class DuckDbStateBackend(SqlStateBackend):
         if not isinstance(database, str) or not database:
             raise StateBackendConfigError("DuckDB state backend requires state.connection.database")
         return ObservedConnection(raw_connection=duckdb.connect(database), adapter="duckdb")
-
-    def close(self, connection: Any) -> None:
-        connection.close()
 
     def _fetch_one(
         self, *, connection: Any, sql: str, params: Sequence[object] | None = None
@@ -188,34 +184,6 @@ class DuckDbStateBackend(SqlStateBackend):
             scope=scope,
         )
 
-    def delete_virtual_environment(
-        self, *, connection: Any, schema: str, virtual_environment_name: str
-    ) -> None:
-        connection.execute("BEGIN")
-        try:
-            connection.execute(
-                "DELETE FROM "
-                f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
-                "WHERE virtual_environment_name = ?",
-                [virtual_environment_name],
-            )
-            connection.execute(
-                "DELETE FROM "
-                f"{self._qualified_name(schema=schema, table=SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
-                "WHERE virtual_environment_name = ?",
-                [virtual_environment_name],
-            )
-            connection.execute(
-                "DELETE FROM "
-                f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_TABLE)} "
-                "WHERE virtual_environment_name = ?",
-                [virtual_environment_name],
-            )
-            connection.execute("COMMIT")
-        except BaseException:
-            connection.execute("ROLLBACK")
-            raise
-
     def upsert_virtual_environment_node_ref(
         self,
         *,
@@ -232,21 +200,6 @@ class DuckDbStateBackend(SqlStateBackend):
             "DO UPDATE SET version_hash = excluded.version_hash, updated_at = now()",
             [ref.virtual_environment_name, ref.node_type, ref.node_name, ref.version_hash],
         )
-
-    def count_unreferenced_python_node_versions(self, *, connection: Any, schema: str) -> int:
-        row: tuple[Any, ...] = connection.execute(
-            "SELECT COUNT(*) "
-            f"FROM {self._qualified_name(schema=schema, table=PYTHON_NODE_VERSION_TABLE)} versions "
-            "WHERE NOT EXISTS ("
-            "SELECT 1 "
-            "FROM "
-            f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
-            "refs "
-            "WHERE refs.node_type = versions.node_type "
-            "AND refs.node_name = versions.node_name "
-            "AND refs.version_hash = versions.version_hash)"
-        ).fetchone()
-        return int(row[0])
 
     def prune_unreferenced_python_node_versions(self, *, connection: Any, schema: str) -> int:
         before_count: int = self.count_unreferenced_python_node_versions(
@@ -409,26 +362,6 @@ class DuckDbStateBackend(SqlStateBackend):
     def delete_state_backup(self, *, connection: Any, schema: str, backup_id: str) -> None:
         backup_schema: str = self._backup_schema_name(schema=schema, backup_id_value=backup_id)
         connection.execute(f"DROP SCHEMA IF EXISTS {self._quote_identifier(backup_schema)} CASCADE")
-
-    def _validate_source_freshness_records(
-        self,
-        *,
-        virtual_environment_name: str,
-        records: tuple[SourceFreshnessRecord, ...],
-    ) -> None:
-        seen_source_names: set[str] = set()
-        record: SourceFreshnessRecord
-        for record in records:
-            if record.virtual_environment_name != virtual_environment_name:
-                raise StateBackendConfigError(
-                    "Source freshness record virtual_environment_name must match replacement "
-                    "virtual_environment_name"
-                )
-            if record.source_name in seen_source_names:
-                raise StateBackendConfigError(
-                    f"Duplicate source freshness record for source '{record.source_name}'"
-                )
-            seen_source_names.add(record.source_name)
 
     def _replace_virtual_environment_node_ref_groups(
         self,
