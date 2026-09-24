@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import patch
@@ -36,6 +36,7 @@ from tests.unit.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakePruneSqlTestCase,
     SnowflakeQualifiedColumnInspectionTestCase,
     SnowflakeQueryColumnNamesTestCase,
+    SnowflakeRelationAgeMetadataTestCase,
     SnowflakeRenderCloneTestCase,
     SnowflakeRenderCursorBoundLiteralTestCase,
     SnowflakeRenderIdentifierTestCase,
@@ -1200,3 +1201,66 @@ def test_given_default_seed_csv_settings_when_loading_seed_then_uses_python_csv_
     )
 
     assert cursor.executemany_rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeRelationAgeMetadataTestCase(
+            description="local-offset table timestamps are normalized to UTC",
+            relation_type="BASE TABLE",
+            created=datetime(2026, 8, 1, 3, 0, tzinfo=timezone(timedelta(hours=-7))),
+            last_altered=datetime(2026, 8, 2, 12, 30, tzinfo=timezone(timedelta(hours=2))),
+            expected_created_at=datetime(2026, 8, 1, 10, 0, tzinfo=UTC),
+            expected_last_altered_at=datetime(2026, 8, 2, 10, 30, tzinfo=UTC),
+        ),
+        SnowflakeRelationAgeMetadataTestCase(
+            description="view timestamps are read and naive values are treated as UTC",
+            relation_type="VIEW",
+            created=datetime(2026, 8, 1, 3, 0),
+            last_altered=datetime(2026, 8, 3, 4, 0),
+            expected_created_at=datetime(2026, 8, 1, 3, 0, tzinfo=UTC),
+            expected_last_altered_at=datetime(2026, 8, 3, 4, 0, tzinfo=UTC),
+        ),
+        SnowflakeRelationAgeMetadataTestCase(
+            description="missing timestamps stay unknown",
+            relation_type="VIEW",
+            created=None,
+            last_altered=None,
+            expected_created_at=None,
+            expected_last_altered_at=None,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_snowflake_relation_timestamps_when_listing_then_exposes_utc_age_metadata(
+    test_case: SnowflakeRelationAgeMetadataTestCase,
+) -> None:
+    cursor: FakeSnowflakeMetadataCursor = FakeSnowflakeMetadataCursor(
+        rows=[
+            (
+                "OLD_ORDERS",
+                "DEV_ORDERS",
+                test_case.relation_type,
+                "NO",
+                test_case.created,
+                test_case.last_altered,
+                None,
+            )
+        ]
+    )
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+
+    relations: tuple[Any, ...] = adapter.list_relations(
+        connection=cast(Any, FakeSnowflakeMetadataConnection(cursor)),
+        database="ANALYTICS",
+        schemas=("DEV_ORDERS",),
+    )
+
+    assert adapter.supports_relation_age_metadata() is True
+    assert relations[0].created_at == test_case.expected_created_at
+    assert relations[0].last_altered_at == test_case.expected_last_altered_at
+    assert (str(relations[0].created_at), str(relations[0].last_altered_at)) == (
+        str(test_case.expected_created_at),
+        str(test_case.expected_last_altered_at),
+    )

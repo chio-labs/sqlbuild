@@ -6,7 +6,7 @@ import csv
 import json
 import logging
 from dataclasses import replace
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar
@@ -540,7 +540,15 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
 
     def supports_relation_age_metadata(self) -> bool:
-        return False
+        return True
+
+    @staticmethod
+    def _utc_timestamp(*, value: object) -> datetime | None:
+        if not isinstance(value, datetime):
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
 
     def supports_table_freshness_metadata(self) -> bool:
         return True
@@ -1823,8 +1831,8 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 is_transient=(
                     None if row[3] is None else str(row[3]).upper() == TRUE_METADATA_VALUE
                 ),
-                created_at=None if row[4] is None else row[4],
-                last_altered_at=None if row[5] is None else row[5],
+                created_at=self._utc_timestamp(value=row[4]),
+                last_altered_at=self._utc_timestamp(value=row[5]),
                 retention_days=None if row[6] is None else int(row[6]),
             )
             for row in rows
