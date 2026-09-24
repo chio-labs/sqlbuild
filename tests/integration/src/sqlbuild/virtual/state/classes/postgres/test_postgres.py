@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -75,7 +76,12 @@ from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     REF_ENVIRONMENT_PAYLOAD,
     REF_NODE_TYPE_PAYLOAD,
     SEED_EXTRA_PAYLOAD,
+    STATE_READ_CONTRACT_FUNCTION,
+    STATE_READ_CONTRACT_RELATION_V1,
+    STATE_READ_CONTRACT_RELATION_V2,
     VALID_PAYLOAD,
+    StateReadContractObservation,
+    exercise_state_read_contract,
 )
 from tests.integration.src.sqlbuild.virtual.state.classes.postgres._test_types import (
     PostgresAtomicFinalizedVirtualPublishTestCase,
@@ -99,6 +105,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes.postgres._test_types i
     PostgresStateBackendTableCreationTestCase,
     PostgresStateBackendTransactionRollbackTestCase,
     PostgresStateBackendValidationTestCase,
+    PostgresStateReadContractTestCase,
 )
 from tests.integration.src.sqlbuild.virtual.state.classes.postgres.helpers import (
     fetch_all,
@@ -2499,3 +2506,52 @@ def test_given_checkpoint_failure_when_conditionally_publishing_postgres_then_al
         )
         == checkpoint_refs
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresStateReadContractTestCase(
+            description="round trips function versions relations environments and locks",
+            sqlbuild_version="0.0.test",
+            expected_environments=(
+                ("prod", VirtualEnvironmentStatus.FINALIZED),
+                ("dev", VirtualEnvironmentStatus.ACTIVE),
+            ),
+            expected_active_lock_keys=("lock_active",),
+            expected_expired_lock_keys=("lock_expired",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_postgres_state_backend_when_reading_state_then_matches_read_contract(
+    test_case: PostgresStateReadContractTestCase,
+    postgres_state_backend: PostgresStateBackend,
+    postgres_state_connection: Any,
+    postgres_state_schema: str,
+) -> None:
+    postgres_state_backend.initialize(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        sqlbuild_version=test_case.sqlbuild_version,
+    )
+    observation: StateReadContractObservation = exercise_state_read_contract(
+        backend=postgres_state_backend,
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+    )
+
+    assert observation.function_before_upsert is None
+    assert observation.function_after_upsert == STATE_READ_CONTRACT_FUNCTION
+    assert observation.function_after_second_upsert == replace(
+        STATE_READ_CONTRACT_FUNCTION, status=ModelVersionStatus.FAILED
+    )
+    assert observation.relation_v1 == STATE_READ_CONTRACT_RELATION_V1
+    assert observation.relation_missing is None
+    assert observation.relations == (
+        STATE_READ_CONTRACT_RELATION_V2,
+        STATE_READ_CONTRACT_RELATION_V1,
+    )
+    assert observation.environments == test_case.expected_environments
+    assert observation.active_lock_keys == test_case.expected_active_lock_keys
+    assert observation.expired_lock_keys == test_case.expected_expired_lock_keys

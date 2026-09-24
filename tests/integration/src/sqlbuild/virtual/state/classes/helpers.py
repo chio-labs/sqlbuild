@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, NamedTuple
 
 from sqlbuild.virtual.state.classes.duckdb import DuckDbStateBackend
+from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.models import (
+    FunctionVersionRecord,
+    PhysicalRelationRecord,
     VirtualEnvironmentCheckpointFunctionRefRecord,
     VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
@@ -13,7 +17,11 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentNodeRefRecord,
     VirtualEnvironmentRecord,
 )
-from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
+from sqlbuild.virtual.state.types import (
+    ModelVersionStatus,
+    PhysicalArtifactType,
+    VirtualEnvironmentStatus,
+)
 
 _ENVIRONMENT: str = "dev"
 _CHECKPOINT_ID: str = "checkpoint-1"
@@ -135,3 +143,147 @@ def open_duckdb_state_backend(*, db_path: Path) -> tuple[DuckDbStateBackend, Any
 
 def fetch_all(connection: Any, sql: str) -> list[tuple[Any, ...]]:
     return connection.execute(sql).fetchall()
+
+
+STATE_READ_CONTRACT_FUNCTION: FunctionVersionRecord = FunctionVersionRecord(
+    function_name="is_large_order",
+    version_hash="function-v1",
+    language="sql",
+    returns="BOOLEAN",
+    arguments_json_b64="W3sibmFtZSI6ImFtb3VudCIsInR5cGUiOiJJTlRFR0VSIn1d",
+    return_columns_json_b64="W10=",
+    packages_json_b64="W10=",
+    runtime_version=None,
+    entry_point=None,
+    body_sql_b64="YW1vdW50ID4gOQ==",
+    definition_text_b64="YW1vdW50ID4gOQ==",
+    status=ModelVersionStatus.READY,
+)
+STATE_READ_CONTRACT_RELATION_V1: PhysicalRelationRecord = PhysicalRelationRecord(
+    artifact_type=PhysicalArtifactType.MODEL,
+    artifact_name="orders",
+    version_hash="orders-v1",
+    database_name=None,
+    schema_name="sqb_orders",
+    relation_name="orders__v1",
+    relation_type="table",
+)
+STATE_READ_CONTRACT_RELATION_V2: PhysicalRelationRecord = replace(
+    STATE_READ_CONTRACT_RELATION_V1, version_hash="orders-v2", relation_name="orders__v2"
+)
+
+
+class StateReadContractObservation(NamedTuple):
+    """Values read back after writing the shared state read contract fixture."""
+
+    function_before_upsert: FunctionVersionRecord | None
+    function_after_upsert: FunctionVersionRecord | None
+    function_after_second_upsert: FunctionVersionRecord | None
+    relation_v1: PhysicalRelationRecord | None
+    relation_missing: PhysicalRelationRecord | None
+    relations: tuple[PhysicalRelationRecord, ...]
+    environments: tuple[tuple[str, VirtualEnvironmentStatus], ...]
+    active_lock_keys: tuple[str, ...]
+    expired_lock_keys: tuple[str, ...]
+
+
+def exercise_state_read_contract(
+    *, backend: StateBackend, connection: Any, schema: str
+) -> StateReadContractObservation:
+    function_before_upsert: FunctionVersionRecord | None = backend.get_function_version(
+        connection=connection,
+        schema=schema,
+        function_name=STATE_READ_CONTRACT_FUNCTION.function_name,
+        version_hash=STATE_READ_CONTRACT_FUNCTION.version_hash,
+    )
+    backend.upsert_function_version(
+        connection=connection, schema=schema, record=STATE_READ_CONTRACT_FUNCTION
+    )
+    function_after_upsert: FunctionVersionRecord | None = backend.get_function_version(
+        connection=connection,
+        schema=schema,
+        function_name=STATE_READ_CONTRACT_FUNCTION.function_name,
+        version_hash=STATE_READ_CONTRACT_FUNCTION.version_hash,
+    )
+    backend.upsert_function_version(
+        connection=connection,
+        schema=schema,
+        record=replace(STATE_READ_CONTRACT_FUNCTION, status=ModelVersionStatus.FAILED),
+    )
+    function_after_second_upsert: FunctionVersionRecord | None = backend.get_function_version(
+        connection=connection,
+        schema=schema,
+        function_name=STATE_READ_CONTRACT_FUNCTION.function_name,
+        version_hash=STATE_READ_CONTRACT_FUNCTION.version_hash,
+    )
+    backend.upsert_physical_relation(
+        connection=connection, schema=schema, record=STATE_READ_CONTRACT_RELATION_V1
+    )
+    backend.upsert_physical_relation(
+        connection=connection, schema=schema, record=STATE_READ_CONTRACT_RELATION_V2
+    )
+    relation_v1: PhysicalRelationRecord | None = backend.get_physical_relation_for_artifact(
+        connection=connection,
+        schema=schema,
+        artifact_type=PhysicalArtifactType.MODEL,
+        artifact_name="orders",
+        version_hash="orders-v1",
+    )
+    relation_missing: PhysicalRelationRecord | None = backend.get_physical_relation_for_artifact(
+        connection=connection,
+        schema=schema,
+        artifact_type=PhysicalArtifactType.MODEL,
+        artifact_name="orders",
+        version_hash="orders-v3",
+    )
+    relations: tuple[PhysicalRelationRecord, ...] = backend.list_physical_relations_for_artifact(
+        connection=connection,
+        schema=schema,
+        artifact_type=PhysicalArtifactType.MODEL,
+        artifact_name="orders",
+    )
+    backend.upsert_virtual_environment(
+        connection=connection,
+        schema=schema,
+        record=VirtualEnvironmentRecord("dev", VirtualEnvironmentStatus.ACTIVE),
+    )
+    backend.upsert_virtual_environment(
+        connection=connection,
+        schema=schema,
+        record=VirtualEnvironmentRecord("prod", VirtualEnvironmentStatus.FINALIZED),
+    )
+    environments: tuple[tuple[str, VirtualEnvironmentStatus], ...] = tuple(
+        (record.virtual_environment_name, record.status)
+        for record in backend.list_virtual_environments(connection=connection, schema=schema)
+    )
+    backend.acquire_lock(
+        connection=connection,
+        schema=schema,
+        lock_key="lock_expired",
+        owner_id="run-1",
+        expires_at=datetime.now() - timedelta(days=2),
+    )
+    backend.acquire_lock(
+        connection=connection,
+        schema=schema,
+        lock_key="lock_active",
+        owner_id="run-1",
+        expires_at=datetime.now() + timedelta(days=2),
+    )
+    active_lock_keys: tuple[str, ...] = tuple(
+        lock.lock_key for lock in backend.list_active_locks(connection=connection, schema=schema)
+    )
+    expired_lock_keys: tuple[str, ...] = tuple(
+        lock.lock_key for lock in backend.list_expired_locks(connection=connection, schema=schema)
+    )
+    return StateReadContractObservation(
+        function_before_upsert=function_before_upsert,
+        function_after_upsert=function_after_upsert,
+        function_after_second_upsert=function_after_second_upsert,
+        relation_v1=relation_v1,
+        relation_missing=relation_missing,
+        relations=relations,
+        environments=environments,
+        active_lock_keys=active_lock_keys,
+        expired_lock_keys=expired_lock_keys,
+    )
