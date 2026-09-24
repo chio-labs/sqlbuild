@@ -22,7 +22,7 @@ from sqlbuild.adapter.contract.classes.historical_check_snapshot_sql import (
     HistoricalCheckSnapshotSql,
 )
 from sqlbuild.adapter.contract.classes.historical_snapshot_sql import (
-    historical_insert_validity_sql,
+    render_is_distinct_from,
 )
 from sqlbuild.adapter.contract.classes.historical_snapshot_statement_sql import (
     HistoricalSnapshotStatementSql,
@@ -37,7 +37,6 @@ from sqlbuild.adapter.contract.classes.unkeyed_diff import UnkeyedDiffMixin
 from sqlbuild.adapter.contract.constants import (
     DIFF_LEFT_SIDE,
     DIFF_RIGHT_SIDE,
-    SNAPSHOT_VERSION_START_COLUMN,
 )
 from sqlbuild.adapter.contract.exceptions import (
     AdapterUserError,
@@ -65,6 +64,7 @@ from sqlbuild.adapter.contract.models import (
     RowDiffTolerances,
     SchemaDiffResult,
     SnapshotChangeTarget,
+    SnapshotSqlDialect,
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
@@ -72,10 +72,14 @@ from sqlbuild.adapter.contract.types import (
     BuiltinAdapter,
     CursorKind,
     FrameworkType,
+    HistoricalSnapshotCloseStyle,
+    HistoricalSnapshotInsertStyle,
     LoaderLogicalType,
     PromotionStrategy,
     RetentionChangePhase,
     RetentionScope,
+    SnapshotLatestVersionStyle,
+    SnapshotUpdateStyle,
     TablePromotionMode,
 )
 from sqlbuild.adapter.relations.main.get_columns_for_relations import (
@@ -135,6 +139,14 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     adapter_name: ClassVar[str] = BuiltinAdapter.BIGQUERY.value
     sql_analysis_dialect_name: ClassVar[str | None] = "bigquery"
     max_identifier_length: ClassVar[int] = 1024
+    _snapshot_sql_dialect: ClassVar[SnapshotSqlDialect] = SnapshotSqlDialect(
+        timestamp_type="TIMESTAMP",
+        distinct_condition=render_is_distinct_from,
+        update_style=SnapshotUpdateStyle.UPDATE_FROM,
+        latest_version=SnapshotLatestVersionStyle.QUALIFY,
+        historical_close=HistoricalSnapshotCloseStyle.UPDATE_FROM,
+        historical_insert=HistoricalSnapshotInsertStyle.INSERT_WITH,
+    )
 
     def inspect_retention(
         self, *, connection: _BigQueryConnection, request: RetentionRequest
@@ -1180,43 +1192,16 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             valid_to_column=valid_to_column,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        if invalidate_hard_deletes:
-            close_sql: str = HistoricalSnapshotStatementSql.grouped_combined_close_sql(
-                destination=destination,
-                new_changes_sql=new_changes_sql,
-                unique_key=unique_key,
-                valid_from_column=valid_from_column,
-                valid_to_column=valid_to_column,
-                change_time_column=SNAPSHOT_VERSION_START_COLUMN,
-            )
-        else:
-            close_sql = HistoricalSnapshotStatementSql.grouped_close_sql(
-                destination=destination,
-                new_changes_sql=new_changes_sql,
-                unique_key=unique_key,
-                valid_from_column=valid_from_column,
-                valid_to_column=valid_to_column,
-                close_candidates_sql=(
-                    f"SELECT {', '.join(unique_key)}, {updated_at_column} AS __close_at "
-                    "FROM __new_changes"
-                ),
-            )
-        insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
-        output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
-        partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
-        version_columns_sql: str = (
-            f"__new_changes.{updated_at_column}, LEAD(__new_changes.{updated_at_column}) OVER ("
-            f"PARTITION BY {partition_sql} ORDER BY __new_changes.{updated_at_column})"
-        )
-        if invalidate_hard_deletes:
-            version_columns_sql = historical_insert_validity_sql()
-        insert_sql: str = HistoricalSnapshotStatementSql.insert_with_cte_sql(
+        return HistoricalSnapshotStatementSql(dialect=self._snapshot_sql_dialect).apply_sql(
             destination=destination,
-            insert_column_sql=insert_column_sql,
             new_changes_sql=new_changes_sql,
-            select_sql=(f"SELECT {output_select_sql}, {version_columns_sql} FROM __new_changes"),
+            unique_key=unique_key,
+            change_time_column=updated_at_column,
+            valid_from_column=valid_from_column,
+            valid_to_column=valid_to_column,
+            output_columns=output_columns,
+            invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        return (close_sql, insert_sql)
 
     def render_apply_historical_timestamp_changes(
         self,
@@ -1236,32 +1221,16 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             updated_at_column=updated_at_column,
             valid_to_column=valid_to_column,
         )
-        close_sql: str = HistoricalSnapshotStatementSql.grouped_close_sql(
+        return HistoricalSnapshotStatementSql(dialect=self._snapshot_sql_dialect).apply_sql(
             destination=destination,
             new_changes_sql=new_changes_sql,
             unique_key=unique_key,
+            change_time_column=updated_at_column,
             valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
-            close_candidates_sql=(
-                f"SELECT {', '.join(unique_key)}, {updated_at_column} AS __close_at "
-                "FROM __new_changes"
-            ),
+            output_columns=output_columns,
+            invalidate_hard_deletes=False,
         )
-        insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
-        output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
-        partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
-        insert_sql: str = HistoricalSnapshotStatementSql.insert_with_cte_sql(
-            destination=destination,
-            insert_column_sql=insert_column_sql,
-            new_changes_sql=new_changes_sql,
-            select_sql=(
-                f"SELECT {output_select_sql}, __new_changes.{updated_at_column}, "
-                f"LEAD(__new_changes.{updated_at_column}) OVER ("
-                f"PARTITION BY {partition_sql} ORDER BY __new_changes.{updated_at_column}"
-                f") FROM __new_changes"
-            ),
-        )
-        return (close_sql, insert_sql)
 
     def render_apply_check_snapshot_changes(
         self,
@@ -1351,7 +1320,9 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
-        historical_sql: str = HistoricalCheckSnapshotSql.initial_select_sql(
+        historical_sql: str = HistoricalCheckSnapshotSql(
+            dialect=self._snapshot_sql_dialect
+        ).initial_select_sql(
             origin=origin,
             unique_key=unique_key,
             check_columns=check_columns,
@@ -1376,7 +1347,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
-        new_changes_sql: str = HistoricalCheckSnapshotSql.new_changes_ctes_sql(
+        return HistoricalCheckSnapshotSql(dialect=self._snapshot_sql_dialect).apply_sql(
             destination=destination,
             origin=origin,
             unique_key=unique_key,
@@ -1384,45 +1355,9 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             observed_at_column=observed_at_column,
             valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
+            output_columns=output_columns,
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
-        if invalidate_hard_deletes:
-            close_sql: str = HistoricalSnapshotStatementSql.grouped_combined_close_sql(
-                destination=destination,
-                new_changes_sql=new_changes_sql,
-                unique_key=unique_key,
-                valid_from_column=valid_from_column,
-                valid_to_column=valid_to_column,
-                change_time_column=SNAPSHOT_VERSION_START_COLUMN,
-            )
-        else:
-            close_sql = HistoricalSnapshotStatementSql.grouped_close_sql(
-                destination=destination,
-                new_changes_sql=new_changes_sql,
-                unique_key=unique_key,
-                valid_from_column=valid_from_column,
-                valid_to_column=valid_to_column,
-                close_candidates_sql=(
-                    f"SELECT {', '.join(unique_key)}, {observed_at_column} AS __close_at "
-                    "FROM __new_changes"
-                ),
-            )
-        insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
-        output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
-        partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
-        version_columns_sql: str = (
-            f"__new_changes.{observed_at_column}, LEAD(__new_changes.{observed_at_column}) OVER ("
-            f"PARTITION BY {partition_sql} ORDER BY __new_changes.{observed_at_column})"
-        )
-        if invalidate_hard_deletes:
-            version_columns_sql = historical_insert_validity_sql()
-        insert_sql: str = HistoricalSnapshotStatementSql.insert_with_cte_sql(
-            destination=destination,
-            insert_column_sql=insert_column_sql,
-            new_changes_sql=new_changes_sql,
-            select_sql=(f"SELECT {output_select_sql}, {version_columns_sql} FROM __new_changes"),
-        )
-        return (close_sql, insert_sql)
 
     def __init__(self) -> None:
         self._location: str | None = None
