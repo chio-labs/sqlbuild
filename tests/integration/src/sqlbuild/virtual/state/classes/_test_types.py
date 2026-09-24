@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     ConditionalPublicationPayload,
+    StateRefContractObservation,
 )
 
 
@@ -263,3 +264,11 @@ class StateReadContractTestCase:
     expected_environments: tuple[tuple[str, VirtualEnvironmentStatus], ...]
     expected_active_lock_keys: tuple[str, ...]
     expected_expired_lock_keys: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DuckDbStateBackendRefContractTestCase:
+    description: str
+    expected_observation: StateRefContractObservation
+    schema: str
+    sqlbuild_version: str

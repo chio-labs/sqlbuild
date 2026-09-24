@@ -14,6 +14,7 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
     VirtualEnvironmentCheckpointSeedRefRecord,
+    VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentNodeRefRecord,
     VirtualEnvironmentRecord,
 )
@@ -287,3 +288,139 @@ def exercise_state_read_contract(
         active_lock_keys=active_lock_keys,
         expired_lock_keys=expired_lock_keys,
     )
+
+
+class StateRefContractObservation(NamedTuple):
+    """Values read back after writing the shared state ref contract fixture."""
+
+    node_refs_after_first_replace: tuple[VirtualEnvironmentNodeRefRecord, ...]
+    node_refs_after_second_replace: tuple[VirtualEnvironmentNodeRefRecord, ...]
+    untouched_seed_refs: tuple[VirtualEnvironmentNodeRefRecord, ...]
+    function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...]
+    grouped_model_refs: tuple[VirtualEnvironmentNodeRefRecord, ...]
+    grouped_seed_refs: tuple[VirtualEnvironmentNodeRefRecord, ...]
+    published_environment: VirtualEnvironmentRecord | None
+    published_model_refs: tuple[VirtualEnvironmentNodeRefRecord, ...]
+
+
+def exercise_state_ref_contract(
+    *, backend: StateBackend, connection: Any, schema: str
+) -> StateRefContractObservation:
+    backend.replace_virtual_environment_node_refs(
+        connection=connection,
+        schema=schema,
+        virtual_environment_name="dev",
+        node_type="seed",
+        refs=(VirtualEnvironmentNodeRefRecord("dev", "seed", "countries", "seed-v1"),),
+    )
+    backend.replace_virtual_environment_node_refs(
+        connection=connection,
+        schema=schema,
+        virtual_environment_name="dev",
+        node_type="model",
+        refs=(
+            VirtualEnvironmentNodeRefRecord("dev", "model", "orders", "orders-v1"),
+            VirtualEnvironmentNodeRefRecord("dev", "model", "customers", "customers-v1"),
+        ),
+    )
+    node_refs_after_first_replace: tuple[VirtualEnvironmentNodeRefRecord, ...] = (
+        backend.get_virtual_environment_node_refs(
+            connection=connection, schema=schema, virtual_environment_name="dev", node_type="model"
+        )
+    )
+    backend.replace_virtual_environment_node_refs(
+        connection=connection,
+        schema=schema,
+        virtual_environment_name="dev",
+        node_type="model",
+        refs=(VirtualEnvironmentNodeRefRecord("dev", "model", "orders", "orders-v2"),),
+    )
+    node_refs_after_second_replace: tuple[VirtualEnvironmentNodeRefRecord, ...] = (
+        backend.get_virtual_environment_node_refs(
+            connection=connection, schema=schema, virtual_environment_name="dev", node_type="model"
+        )
+    )
+    untouched_seed_refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = (
+        backend.get_virtual_environment_node_refs(
+            connection=connection, schema=schema, virtual_environment_name="dev", node_type="seed"
+        )
+    )
+    backend.replace_virtual_environment_function_refs(
+        connection=connection,
+        schema=schema,
+        virtual_environment_name="dev",
+        refs=(
+            VirtualEnvironmentFunctionRefRecord("dev", "table_fn", "customer_orders", "fn-v1"),
+            VirtualEnvironmentFunctionRefRecord("dev", "udf", "normalize_email", "fn-v2"),
+        ),
+    )
+    function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = (
+        backend.get_virtual_environment_function_refs(
+            connection=connection, schema=schema, virtual_environment_name="dev"
+        )
+    )
+    backend.replace_virtual_environment_node_ref_groups(
+        connection=connection,
+        schema=schema,
+        virtual_environment_name="qa",
+        refs_by_node_type={
+            "model": (VirtualEnvironmentNodeRefRecord("qa", "model", "orders", "orders-v3"),),
+            "seed": (VirtualEnvironmentNodeRefRecord("qa", "seed", "countries", "seed-v2"),),
+        },
+    )
+    grouped_model_refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = (
+        backend.get_virtual_environment_node_refs(
+            connection=connection, schema=schema, virtual_environment_name="qa", node_type="model"
+        )
+    )
+    grouped_seed_refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = (
+        backend.get_virtual_environment_node_refs(
+            connection=connection, schema=schema, virtual_environment_name="qa", node_type="seed"
+        )
+    )
+    backend.upsert_virtual_environment_and_replace_node_ref_groups(
+        connection=connection,
+        schema=schema,
+        record=VirtualEnvironmentRecord("prod", VirtualEnvironmentStatus.ACTIVE),
+        refs_by_node_type={
+            "model": (VirtualEnvironmentNodeRefRecord("prod", "model", "orders", "orders-v1"),)
+        },
+    )
+    published_environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
+        connection=connection, schema=schema, virtual_environment_name="prod"
+    )
+    published_model_refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = (
+        backend.get_virtual_environment_node_refs(
+            connection=connection, schema=schema, virtual_environment_name="prod", node_type="model"
+        )
+    )
+    return StateRefContractObservation(
+        node_refs_after_first_replace=node_refs_after_first_replace,
+        node_refs_after_second_replace=node_refs_after_second_replace,
+        untouched_seed_refs=untouched_seed_refs,
+        function_refs=function_refs,
+        grouped_model_refs=grouped_model_refs,
+        grouped_seed_refs=grouped_seed_refs,
+        published_environment=published_environment,
+        published_model_refs=published_model_refs,
+    )
+
+
+EXPECTED_STATE_REF_CONTRACT_OBSERVATION: StateRefContractObservation = StateRefContractObservation(
+    node_refs_after_first_replace=(
+        VirtualEnvironmentNodeRefRecord("dev", "model", "customers", "customers-v1"),
+        VirtualEnvironmentNodeRefRecord("dev", "model", "orders", "orders-v1"),
+    ),
+    node_refs_after_second_replace=(
+        VirtualEnvironmentNodeRefRecord("dev", "model", "orders", "orders-v2"),
+    ),
+    untouched_seed_refs=(VirtualEnvironmentNodeRefRecord("dev", "seed", "countries", "seed-v1"),),
+    function_refs=(
+        VirtualEnvironmentFunctionRefRecord("dev", "table_fn", "customer_orders", "fn-v1"),
+        VirtualEnvironmentFunctionRefRecord("dev", "udf", "normalize_email", "fn-v2"),
+    ),
+    grouped_model_refs=(VirtualEnvironmentNodeRefRecord("qa", "model", "orders", "orders-v3"),),
+    grouped_seed_refs=(VirtualEnvironmentNodeRefRecord("qa", "seed", "countries", "seed-v2"),),
+    published_environment=VirtualEnvironmentRecord("prod", VirtualEnvironmentStatus.ACTIVE),
+    published_model_refs=(VirtualEnvironmentNodeRefRecord("prod", "model", "orders", "orders-v1"),),
+)

@@ -67,6 +67,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     CHECKPOINT_ENVIRONMENT_PAYLOAD,
     CHECKPOINT_ID_PAYLOAD,
     DETACHED_CHECKPOINT_PAYLOAD,
+    EXPECTED_STATE_REF_CONTRACT_OBSERVATION,
     FAILED_CHECKPOINT_PAYLOAD,
     FINALIZING_CHECKPOINT_PAYLOAD,
     FUNCTION_OMISSION_PAYLOAD,
@@ -81,7 +82,9 @@ from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     STATE_READ_CONTRACT_RELATION_V2,
     VALID_PAYLOAD,
     StateReadContractObservation,
+    StateRefContractObservation,
     exercise_state_read_contract,
+    exercise_state_ref_contract,
 )
 from tests.integration.src.sqlbuild.virtual.state.classes.postgres._test_types import (
     PostgresAtomicFinalizedVirtualPublishTestCase,
@@ -100,6 +103,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes.postgres._test_types i
     PostgresStateBackendNodeResultTestCase,
     PostgresStateBackendOperationEventTestCase,
     PostgresStateBackendPythonNodeIdentityTestCase,
+    PostgresStateBackendRefContractTestCase,
     PostgresStateBackendSeedRefTestCase,
     PostgresStateBackendSourceFreshnessTestCase,
     PostgresStateBackendTableCreationTestCase,
@@ -2555,3 +2559,34 @@ def test_given_postgres_state_backend_when_reading_state_then_matches_read_contr
     assert observation.environments == test_case.expected_environments
     assert observation.active_lock_keys == test_case.expected_active_lock_keys
     assert observation.expired_lock_keys == test_case.expected_expired_lock_keys
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresStateBackendRefContractTestCase(
+            description="replaces node function and grouped refs per environment and type",
+            expected_observation=EXPECTED_STATE_REF_CONTRACT_OBSERVATION,
+            sqlbuild_version="0.0.test",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_postgres_state_backend_when_replacing_refs_then_matches_ref_contract(
+    test_case: PostgresStateBackendRefContractTestCase,
+    postgres_state_backend: PostgresStateBackend,
+    postgres_state_connection: Any,
+    postgres_state_schema: str,
+) -> None:
+    postgres_state_backend.initialize(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        sqlbuild_version=test_case.sqlbuild_version,
+    )
+    observation: StateRefContractObservation = exercise_state_ref_contract(
+        backend=postgres_state_backend,
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+    )
+
+    assert observation == test_case.expected_observation

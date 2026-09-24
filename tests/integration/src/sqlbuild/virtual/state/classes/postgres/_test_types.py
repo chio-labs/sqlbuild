@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     ConditionalPublicationPayload,
+    StateRefContractObservation,
 )
 
 
@@ -219,3 +220,10 @@ class PostgresStateReadContractTestCase:
     expected_environments: tuple[tuple[str, VirtualEnvironmentStatus], ...]
     expected_active_lock_keys: tuple[str, ...]
     expected_expired_lock_keys: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PostgresStateBackendRefContractTestCase:
+    description: str
+    expected_observation: StateRefContractObservation
+    sqlbuild_version: str
