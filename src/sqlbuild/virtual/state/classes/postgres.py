@@ -32,7 +32,6 @@ from sqlbuild.virtual.state.constants import (
     STATE_TABLE_COLUMNS,
     STATE_TABLE_INDEXES,
     VIRTUAL_ENVIRONMENT_NODE_REF_TABLE,
-    VIRTUAL_ENVIRONMENT_TABLE,
 )
 from sqlbuild.virtual.state.exceptions import (
     StateBackendConfigError,
@@ -76,9 +75,6 @@ class PostgresStateBackend(SqlStateBackend):
             )
         except Exception as error:
             raise StateBackendConfigError("Could not connect to Postgres state backend") from error
-
-    def close(self, connection: Any) -> None:
-        connection.close()
 
     def _fetch_one(
         self, *, connection: Any, sql: str, params: Sequence[object] | None = None
@@ -267,43 +263,6 @@ class PostgresStateBackend(SqlStateBackend):
             rows: list[tuple[Any, ...]] = cursor.fetchall()
         return MicrobatchEventCodec.from_rows(tuple(row) for row in rows)
 
-    def delete_virtual_environment(
-        self, *, connection: Any, schema: str, virtual_environment_name: str
-    ) -> None:
-        with connection.cursor() as cursor:
-            cursor.execute("BEGIN")
-            try:
-                cursor.execute(
-                    "DELETE FROM "
-                    + self._qualified_name(
-                        schema=schema,
-                        table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE,
-                    )
-                    + " "
-                    "WHERE virtual_environment_name = %s",
-                    [virtual_environment_name],
-                )
-                cursor.execute(
-                    "DELETE FROM "
-                    + self._qualified_name(
-                        schema=schema,
-                        table=SOURCE_FRESHNESS_OBSERVATION_TABLE,
-                    )
-                    + " "
-                    "WHERE virtual_environment_name = %s",
-                    [virtual_environment_name],
-                )
-                cursor.execute(
-                    "DELETE FROM "
-                    f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_TABLE)} "
-                    "WHERE virtual_environment_name = %s",
-                    [virtual_environment_name],
-                )
-                cursor.execute("COMMIT")
-            except BaseException:
-                cursor.execute("ROLLBACK")
-                raise
-
     def upsert_virtual_environment_node_ref(
         self,
         *,
@@ -322,24 +281,6 @@ class PostgresStateBackend(SqlStateBackend):
                 "updated_at = CURRENT_TIMESTAMP",
                 [ref.virtual_environment_name, ref.node_type, ref.node_name, ref.version_hash],
             )
-
-    def count_unreferenced_python_node_versions(self, *, connection: Any, schema: str) -> int:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT COUNT(*) "
-                "FROM "
-                f"{self._qualified_name(schema=schema, table=PYTHON_NODE_VERSION_TABLE)} versions "
-                "WHERE NOT EXISTS ("
-                "SELECT 1 "
-                "FROM "
-                f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
-                "refs "
-                "WHERE refs.node_type = versions.node_type "
-                "AND refs.node_name = versions.node_name "
-                "AND refs.version_hash = versions.version_hash)"
-            )
-            row: tuple[Any, ...] = cursor.fetchone()
-        return int(row[0])
 
     def prune_unreferenced_python_node_versions(self, *, connection: Any, schema: str) -> int:
         before_count: int = self.count_unreferenced_python_node_versions(
@@ -486,26 +427,6 @@ class PostgresStateBackend(SqlStateBackend):
         with connection.cursor() as cursor:
             cursor.execute(f"DROP SCHEMA IF EXISTS {self._quote_identifier(backup_schema)} CASCADE")
         connection.commit()
-
-    def _validate_source_freshness_records(
-        self,
-        *,
-        virtual_environment_name: str,
-        records: tuple[SourceFreshnessRecord, ...],
-    ) -> None:
-        seen_source_names: set[str] = set()
-        record: SourceFreshnessRecord
-        for record in records:
-            if record.virtual_environment_name != virtual_environment_name:
-                raise StateBackendConfigError(
-                    "Source freshness record virtual_environment_name must match replacement "
-                    "virtual_environment_name"
-                )
-            if record.source_name in seen_source_names:
-                raise StateBackendConfigError(
-                    f"Duplicate source freshness record for source '{record.source_name}'"
-                )
-            seen_source_names.add(record.source_name)
 
     def _replace_virtual_environment_node_ref_groups(
         self,
