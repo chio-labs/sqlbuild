@@ -448,8 +448,8 @@ check-fensu:
 	uv run fensu check
 
 
-dupscore:
-	uv run dupscore clones
+dupes:
+	uv run fensu dupes
 
 
 check:

@@ -271,3 +271,9 @@ remediation = "consume SQLBuild-owned SQL fact rows instead of raw parser types"
 crate_names = [
     "sqlbuild-rules-native",
 ]
+
+[[dupes.contract_exemptions]]
+contract = "src/sqlbuild/adapter/contract/classes/strict_adapter.py:StrictAdapter"
+forbidden_owners = ["src/sqlbuild/adapter/contract/classes/base_adapter.py:BaseAdapter"]
+paths = ["src/sqlbuild/adapter/contract/classes/*", "src/sqlbuild/adapters/*/classes/*"]
+reason = "tests/unit/src/sqlbuild/adapter/contract/classes/strict_adapter/test_strict_adapter.py requires every first-class adapter to define each StrictAdapter method itself instead of inheriting it from BaseAdapter."

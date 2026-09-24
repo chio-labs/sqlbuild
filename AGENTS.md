@@ -114,6 +114,13 @@
 - Keep fixes within the requested scope. Do not expand supported behavior, permissions, operational cost, or system ownership without a short product decision from the user.
 - Do not add safeguards solely for impossible or unsupported states. Record residual risks when a concern is real but outside the current contract.
 
+## Duplicated Code
+
+- Run `uv run fensu dupes --since origin/main` before review, and `uv run fensu dupes --path '<area glob>'` before adding helpers or logic to an area that may already implement them. The report is advisory: unlike `fensu check`, it never gates and never needs to reach zero.
+- Treat a genuine duplicate as evidence of possible wider drift, not only a cleanup task: a missing shared owner, parallel implementations of one concept, logic on the wrong side of a boundary, or copies that have already diverged (use `--diff`; a fix present in only one copy may be a bug in the others). Diagnose and record that wider smell before consolidating, because removing the copies erases the only deterministic signal of it.
+- Consolidate genuine duplication the change introduces or touches. Report unrelated findings as follow-ups instead of refactoring them opportunistically.
+- Members marked `[forced]` are adapter contract overrides required by `test_strict_adapter.py`. Record other intentional mirrors in `[dupes]` in `fensu.toml` with a reason.
+
 ## Bounded Review Process
 
 Orchestrating agents must run reviews as a single bounded cycle, not an open-ended loop:

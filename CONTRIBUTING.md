@@ -43,10 +43,11 @@ pytest tests/unit/src/sqlbuild/compiler/compile/test_main.py
 To check whether a branch introduces copied or drifting code in Python or Rust, run:
 
 ```bash
-uv run dupscore clones --since origin/main
+uv run fensu dupes --since origin/main
 ```
 
-`make dupscore` reports the whole repository. See `scripts/dupscore/README.md` for options.
+`make dupes` reports the whole repository. The report is advisory and never needs to reach zero;
+`[dupes]` in `fensu.toml` configures exclusions and contract exemptions. See `fensu dupes --help`.
 
 ## Tests
 
