@@ -13,3 +13,12 @@ class SnapshotSqlRenderingAdapterTestCase:
     expected_historical_timestamp_initial_hard_delete_fragments: tuple[str, ...]
     expected_historical_timestamp_apply_hard_delete_fragments: tuple[str, ...]
     expected_historical_check_apply_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnapshotReappearanceRenderingTestCase:
+    description: str
+    adapter: BaseAdapter
+    expected_initial_fragments: tuple[str, ...]
+    expected_apply_fragments: tuple[str, ...]
+    unexpected_apply_fragments: tuple[str, ...]

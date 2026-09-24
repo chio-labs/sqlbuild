@@ -17,6 +17,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _encode_typed_json,
     _historical_check_snapshot_select_sql,
     _historical_hard_deleted_at_sql,
+    _historical_reappearing_new_changes_ctes_sql,
     _historical_snapshot_combined_close_sql,
     _historical_timestamp_changes_select_sql,
     _historical_timestamp_snapshot_select_sql,
@@ -2698,6 +2699,18 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 observed_at_column=observed_at_column,
                 row_alias="__target",
             )
+            reappearing_new_changes_sql: str = _historical_reappearing_new_changes_ctes_sql(
+                changed_or_new_sql=(
+                    "SELECT __delta_changes.* FROM __delta_changes "
+                    f"LEFT JOIN __latest ON {latest_join_condition} "
+                    f"WHERE __latest.{first_key} IS NULL "
+                    f"OR (__delta_changes.{observed_at_column} > __latest.{valid_from_column} "
+                    f"AND ({latest_change_condition}))"
+                ),
+                unique_key=unique_key,
+                observed_at_column=observed_at_column,
+                valid_to_column=valid_to_column,
+            )
             return (
                 "__ordered AS ("
                 f"SELECT *, LAG({observed_at_column}) OVER ("
@@ -2705,13 +2718,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
                 "), __delta_changes AS ("
                 f"{changed_or_first_sql}"
-                f"), {latest_sql}, __new_changes AS ("
-                "SELECT __delta_changes.* FROM __delta_changes "
-                f"LEFT JOIN __latest ON {latest_join_condition} "
-                f"WHERE __latest.{first_key} IS NULL "
-                f"OR (__delta_changes.{observed_at_column} > __latest.{valid_from_column} "
-                f"AND ({latest_change_condition}))"
-                "), __hard_deletes AS ("
+                f"), {latest_sql}, {reappearing_new_changes_sql}, __hard_deletes AS ("
                 f"SELECT {', '.join(f'__target.{column}' for column in unique_key)}, "
                 f"{hard_deleted_at_sql} AS __close_at FROM {destination} AS __target "
                 f"WHERE __target.{valid_to_column} IS NULL"

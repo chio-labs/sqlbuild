@@ -2624,13 +2624,21 @@ def _historical_check_snapshot_select_sql(
             observed_at_column=observed_at_column,
             row_alias="__changes",
         )
+        group_sequence_sql: str = _historical_observed_group_sequence_cte_sql(
+            origin=origin, observed_at_column=observed_at_column
+        )
+        grouped_origin_sql: str = _historical_observed_group_sequence_from_sql(
+            origin=origin, observed_at_column=observed_at_column
+        )
         return (
-            "WITH __ordered AS ("
-            f"SELECT *, LAG({observed_at_column}) OVER ("
+            f"WITH {group_sequence_sql}, __ordered AS ("
+            "SELECT __source.*, __observed_group_sequence.__prev_group_observed_at, "
+            f"LAG({observed_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-            f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
+            f") AS __prev_observed_at{previous_columns_sql} {grouped_origin_sql}"
             "), __changes AS ("
-            f"SELECT * FROM __ordered WHERE __prev_observed_at IS NULL OR ({change_condition})"
+            f"SELECT * FROM __ordered WHERE __prev_observed_at IS NULL OR ({change_condition}) "
+            "OR __prev_observed_at IS DISTINCT FROM __prev_group_observed_at"
             "), __versions AS ("
             f"SELECT __changes.*, LEAD({observed_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
@@ -2873,6 +2881,18 @@ def _historical_check_new_changes_cte_sql(
             observed_at_column=observed_at_column,
             row_alias="__target",
         )
+        reappearing_new_changes_sql: str = _historical_reappearing_new_changes_ctes_sql(
+            changed_or_new_sql=(
+                "SELECT __delta_changes.* FROM __delta_changes "
+                f"LEFT JOIN __latest ON {latest_join_condition} "
+                f"WHERE __latest.{first_key} IS NULL "
+                f"OR (__delta_changes.{observed_at_column} > __latest.{valid_from_column} "
+                f"AND ({latest_change_condition}))"
+            ),
+            unique_key=unique_key,
+            observed_at_column=observed_at_column,
+            valid_to_column=valid_to_column,
+        )
         return (
             "__ordered AS ("
             f"SELECT *, LAG({observed_at_column}) OVER ("
@@ -2884,13 +2904,7 @@ def _historical_check_new_changes_cte_sql(
             f"SELECT * FROM {destination} QUALIFY ROW_NUMBER() OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
             ") = 1"
-            "), __new_changes AS ("
-            "SELECT __delta_changes.* FROM __delta_changes "
-            f"LEFT JOIN __latest ON {latest_join_condition} "
-            f"WHERE __latest.{first_key} IS NULL "
-            f"OR (__delta_changes.{observed_at_column} > __latest.{valid_from_column} "
-            f"AND ({latest_change_condition}))"
-            "), __hard_deletes AS ("
+            f"), {reappearing_new_changes_sql}, __hard_deletes AS ("
             f"SELECT {', '.join(f'__target.{column}' for column in unique_key)}, "
             f"{hard_deleted_at_sql} AS __close_at FROM {destination} AS __target "
             f"WHERE __target.{valid_to_column} IS NULL"
@@ -2939,6 +2953,70 @@ def _historical_hard_deleted_at_sql(
         f"SELECT 1 FROM {origin} AS __present "
         f"WHERE __present.{observed_at_column} = __observed_groups.__observed_at "
         f"AND {present_condition}"
+        "))"
+    )
+
+
+def _historical_observed_group_sequence_cte_sql(*, origin: str, observed_at_column: str) -> str:
+    return (
+        "__observed_group_sequence AS ("
+        "SELECT __observed_at, LAG(__observed_at) OVER (ORDER BY __observed_at) "
+        "AS __prev_group_observed_at "
+        f"FROM (SELECT DISTINCT {observed_at_column} AS __observed_at FROM {origin}) "
+        "AS __observed_group_values"
+        ")"
+    )
+
+
+def _historical_observed_group_sequence_from_sql(*, origin: str, observed_at_column: str) -> str:
+    return (
+        f"FROM {origin} AS __source LEFT JOIN __observed_group_sequence "
+        f"ON __observed_group_sequence.__observed_at = __source.{observed_at_column}"
+    )
+
+
+def _historical_reappearing_new_changes_ctes_sql(
+    *,
+    changed_or_new_sql: str,
+    unique_key: tuple[str, ...],
+    observed_at_column: str,
+    valid_to_column: str,
+) -> str:
+    """Render ``__new_changes`` plus the first observation after a hard-deleted latest version."""
+
+    ordered_key_sql: str = ", ".join(f"__ordered.{column}" for column in unique_key)
+    latest_condition: str = _snapshot_key_condition(
+        left_alias="__ordered", right_alias="__latest", unique_key=unique_key
+    )
+    present_at_close_condition: str = _snapshot_key_condition(
+        left_alias="__present", right_alias="__latest", unique_key=unique_key
+    )
+    reappearance_condition: str = _snapshot_key_condition(
+        left_alias="__ordered", right_alias="__reappearances", unique_key=unique_key
+    )
+    already_changed_condition: str = _snapshot_key_condition(
+        left_alias="__changed_or_new", right_alias="__ordered", unique_key=unique_key
+    )
+    return (
+        f"__changed_or_new AS ({changed_or_new_sql}), __reappearances AS ("
+        f"SELECT {ordered_key_sql}, MIN(__ordered.{observed_at_column}) AS __reappeared_at "
+        f"FROM __ordered JOIN __latest ON {latest_condition} "
+        f"WHERE __latest.{valid_to_column} IS NOT NULL "
+        f"AND __ordered.{observed_at_column} > __latest.{valid_to_column} "
+        "AND NOT EXISTS ("
+        f"SELECT 1 FROM __ordered AS __present WHERE {present_at_close_condition} "
+        f"AND __present.{observed_at_column} = __latest.{valid_to_column}"
+        ") "
+        f"GROUP BY {ordered_key_sql}"
+        "), __new_changes AS ("
+        "SELECT * FROM __changed_or_new "
+        "UNION ALL "
+        "SELECT __ordered.* FROM __ordered "
+        f"JOIN __reappearances ON {reappearance_condition} "
+        f"AND __ordered.{observed_at_column} = __reappearances.__reappeared_at "
+        "WHERE NOT EXISTS ("
+        f"SELECT 1 FROM __changed_or_new WHERE {already_changed_condition} "
+        f"AND __changed_or_new.{observed_at_column} = __ordered.{observed_at_column}"
         "))"
     )
 
