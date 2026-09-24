@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, ClassVar
 
@@ -37,22 +38,16 @@ from sqlbuild.virtual.state.constants import (
     DUCKDB_DATETIME_TYPE_TOKEN,
     DUCKDB_INTEGER_TYPE_TOKEN,
     DUCKDB_TIMESTAMP_TYPE_TOKEN,
-    FUNCTION_VERSION_TABLE,
     LOCK_TABLE,
     MICROBATCH_EVENT_TABLE,
-    MODEL_VERSION_TABLE,
     NODE_RESULTS_TABLE,
     NON_UNIQUE_STATE_INDEXES,
-    PHYSICAL_RELATION_ANCESTRY_TABLE,
-    PHYSICAL_RELATION_TABLE,
     PYTHON_NODE_VERSION_TABLE,
     RECONCILE_EVENT_TABLE,
-    SEED_VERSION_TABLE,
     SOURCE_FRESHNESS_OBSERVATION_TABLE,
     STATE_BOOLEAN_TRUE,
     STATE_MIGRATION_EVENTS_TABLE,
     STATE_OPERATION_EVENT_TABLE,
-    STATE_OPERATION_TABLE,
     STATE_TABLE_COLUMNS,
     STATE_TABLE_INDEXES,
     STATE_TABLES,
@@ -70,18 +65,11 @@ from sqlbuild.virtual.state.exceptions import (
     StateSchemaInvalidError,
 )
 from sqlbuild.virtual.state.models import (
-    FunctionVersionRecord,
-    ModelVersionRecord,
-    PhysicalRelationAncestryRecord,
-    PhysicalRelationRecord,
-    PythonNodeVersionRecord,
     ReconcileEventRecord,
-    SeedVersionRecord,
     SourceFreshnessRecord,
     StateBackupRecord,
     StateLockRecord,
     StateOperationEventRecord,
-    StateOperationRecord,
     StateSchemaValidationResult,
     VirtualEnvironmentCheckpointFunctionRefRecord,
     VirtualEnvironmentCheckpointModelRefRecord,
@@ -132,6 +120,24 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, SqlStateBackend):
         if params is None:
             return connection.execute(sql).fetchall()
         return connection.execute(sql, params).fetchall()
+
+    @contextmanager
+    def _write_transaction(self, *, connection: Any) -> Iterator[Any]:
+        connection.execute("BEGIN")
+        try:
+            yield connection
+            connection.execute("COMMIT")
+        except BaseException:
+            connection.execute("ROLLBACK")
+            raise
+
+    def _execute_in(self, *, executor: Any, sql: str, params: Sequence[object]) -> None:
+        executor.execute(sql, params)
+
+    def _fetch_one_in(
+        self, *, executor: Any, sql: str, params: Sequence[object]
+    ) -> tuple[Any, ...] | None:
+        return executor.execute(sql, params).fetchone()
 
     def initialize(self, *, connection: Any, schema: str, sqlbuild_version: str) -> None:
         connection.execute("BEGIN")
@@ -293,172 +299,6 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, SqlStateBackend):
             connection.execute("ROLLBACK")
             raise
 
-    def upsert_model_version(
-        self, *, connection: Any, schema: str, record: ModelVersionRecord
-    ) -> None:
-        connection.execute("BEGIN")
-        try:
-            existing_created_at: datetime | None = self._created_at_for_key(
-                connection=connection,
-                schema=schema,
-                table_name=MODEL_VERSION_TABLE,
-                where_sql="model_name = ? AND version_hash = ?",
-                params=[record.model_name, record.version_hash],
-            )
-            connection.execute(
-                f"DELETE FROM {self._qualified_name(schema=schema, table=MODEL_VERSION_TABLE)} "
-                "WHERE model_name = ? AND version_hash = ?",
-                [record.model_name, record.version_hash],
-            )
-            connection.execute(
-                f"INSERT INTO {self._qualified_name(schema=schema, table=MODEL_VERSION_TABLE)} "
-                "(model_name, version_hash, definition_identity_hash, "
-                "identity_metadata_hash, definition_text_b64, identity_metadata_json_b64, "
-                "compiled_sql_b64, status, "
-                "created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, "
-                "COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
-                [
-                    record.model_name,
-                    record.version_hash,
-                    record.definition_identity_hash,
-                    record.identity_metadata_hash,
-                    record.definition_text_b64,
-                    record.identity_metadata_json_b64,
-                    record.compiled_sql_b64,
-                    record.status.value,
-                    existing_created_at,
-                ],
-            )
-            connection.execute("COMMIT")
-        except BaseException:
-            connection.execute("ROLLBACK")
-            raise
-
-    def upsert_function_version(
-        self, *, connection: Any, schema: str, record: FunctionVersionRecord
-    ) -> None:
-        connection.execute("BEGIN")
-        try:
-            existing_created_at: datetime | None = self._created_at_for_key(
-                connection=connection,
-                schema=schema,
-                table_name=FUNCTION_VERSION_TABLE,
-                where_sql="function_name = ? AND version_hash = ?",
-                params=[record.function_name, record.version_hash],
-            )
-            connection.execute(
-                f"DELETE FROM {self._qualified_name(schema=schema, table=FUNCTION_VERSION_TABLE)} "
-                "WHERE function_name = ? AND version_hash = ?",
-                [record.function_name, record.version_hash],
-            )
-            connection.execute(
-                f"INSERT INTO {self._qualified_name(schema=schema, table=FUNCTION_VERSION_TABLE)} "
-                "(function_name, version_hash, language, returns, arguments_json_b64, "
-                "return_columns_json_b64, packages_json_b64, runtime_version, entry_point, "
-                "body_sql_b64, definition_text_b64, status, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                "COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
-                [
-                    record.function_name,
-                    record.version_hash,
-                    record.language,
-                    record.returns,
-                    record.arguments_json_b64,
-                    record.return_columns_json_b64,
-                    record.packages_json_b64,
-                    record.runtime_version,
-                    record.entry_point,
-                    record.body_sql_b64,
-                    record.definition_text_b64,
-                    record.status.value,
-                    existing_created_at,
-                ],
-            )
-            connection.execute("COMMIT")
-        except BaseException:
-            connection.execute("ROLLBACK")
-            raise
-
-    def upsert_seed_version(
-        self, *, connection: Any, schema: str, record: SeedVersionRecord
-    ) -> None:
-        connection.execute("BEGIN")
-        try:
-            existing_created_at: datetime | None = self._created_at_for_key(
-                connection=connection,
-                schema=schema,
-                table_name=SEED_VERSION_TABLE,
-                where_sql="seed_name = ? AND version_hash = ?",
-                params=[record.seed_name, record.version_hash],
-            )
-            connection.execute(
-                f"DELETE FROM {self._qualified_name(schema=schema, table=SEED_VERSION_TABLE)} "
-                "WHERE seed_name = ? AND version_hash = ?",
-                [record.seed_name, record.version_hash],
-            )
-            connection.execute(
-                f"INSERT INTO {self._qualified_name(schema=schema, table=SEED_VERSION_TABLE)} "
-                "(seed_name, version_hash, identity_metadata_hash, "
-                "identity_metadata_json_b64, status, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
-                [
-                    record.seed_name,
-                    record.version_hash,
-                    record.identity_metadata_hash,
-                    record.identity_metadata_json_b64,
-                    record.status.value,
-                    existing_created_at,
-                ],
-            )
-            connection.execute("COMMIT")
-        except BaseException:
-            connection.execute("ROLLBACK")
-            raise
-
-    def upsert_python_node_version(
-        self, *, connection: Any, schema: str, record: PythonNodeVersionRecord
-    ) -> None:
-        connection.execute("BEGIN")
-        try:
-            existing_created_at: datetime | None = self._created_at_for_key(
-                connection=connection,
-                schema=schema,
-                table_name=PYTHON_NODE_VERSION_TABLE,
-                where_sql="node_type = ? AND node_name = ? AND version_hash = ?",
-                params=[record.node_type, record.node_name, record.version_hash],
-            )
-            connection.execute(
-                "DELETE FROM "
-                f"{self._qualified_name(schema=schema, table=PYTHON_NODE_VERSION_TABLE)} "
-                "WHERE node_type = ? AND node_name = ? AND version_hash = ?",
-                [record.node_type, record.node_name, record.version_hash],
-            )
-            connection.execute(
-                "INSERT INTO "
-                f"{self._qualified_name(schema=schema, table=PYTHON_NODE_VERSION_TABLE)} "
-                "(node_type, node_name, version_hash, definition_hash, "
-                "identity_metadata_hash, definition_json_b64, identity_metadata_json_b64, "
-                "status, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), "
-                "CURRENT_TIMESTAMP)",
-                [
-                    record.node_type,
-                    record.node_name,
-                    record.version_hash,
-                    record.definition_hash,
-                    record.identity_metadata_hash,
-                    record.definition_json_b64,
-                    record.identity_metadata_json_b64,
-                    record.status.value,
-                    existing_created_at,
-                ],
-            )
-            connection.execute("COMMIT")
-        except BaseException:
-            connection.execute("ROLLBACK")
-            raise
-
     def insert_node_result(
         self,
         *,
@@ -583,95 +423,6 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, SqlStateBackend):
             scope=scope,
         )
 
-    def upsert_physical_relation(
-        self, *, connection: Any, schema: str, record: PhysicalRelationRecord
-    ) -> None:
-        connection.execute("BEGIN")
-        try:
-            existing_created_at: datetime | None = self._created_at_for_key(
-                connection=connection,
-                schema=schema,
-                table_name=PHYSICAL_RELATION_TABLE,
-                where_sql="artifact_type = ? AND artifact_name = ? AND version_hash = ?",
-                params=[record.artifact_type.value, record.artifact_name, record.version_hash],
-            )
-            connection.execute(
-                f"DELETE FROM {self._qualified_name(schema=schema, table=PHYSICAL_RELATION_TABLE)} "
-                "WHERE artifact_type = ? AND artifact_name = ? AND version_hash = ?",
-                [record.artifact_type.value, record.artifact_name, record.version_hash],
-            )
-            connection.execute(
-                f"INSERT INTO {self._qualified_name(schema=schema, table=PHYSICAL_RELATION_TABLE)} "
-                "(artifact_type, artifact_name, version_hash, database_name, schema_name, "
-                "relation_name, relation_type, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
-                [
-                    record.artifact_type.value,
-                    record.artifact_name,
-                    record.version_hash,
-                    record.database_name,
-                    record.schema_name,
-                    record.relation_name,
-                    record.relation_type,
-                    existing_created_at,
-                ],
-            )
-            connection.execute("COMMIT")
-        except BaseException:
-            connection.execute("ROLLBACK")
-            raise
-
-    def upsert_physical_relation_ancestry(
-        self, *, connection: Any, schema: str, record: PhysicalRelationAncestryRecord
-    ) -> None:
-        connection.execute("BEGIN")
-        try:
-            existing_created_at: datetime | None = self._created_at_for_key(
-                connection=connection,
-                schema=schema,
-                table_name=PHYSICAL_RELATION_ANCESTRY_TABLE,
-                where_sql="model_name = ? AND version_hash = ?",
-                params=[record.model_name, record.version_hash],
-            )
-            connection.execute(
-                "DELETE FROM "
-                f"{self._qualified_name(schema=schema, table=PHYSICAL_RELATION_ANCESTRY_TABLE)} "
-                "WHERE model_name = ? AND version_hash = ?",
-                [record.model_name, record.version_hash],
-            )
-            connection.execute(
-                "INSERT INTO "
-                f"{self._qualified_name(schema=schema, table=PHYSICAL_RELATION_ANCESTRY_TABLE)} "
-                "(model_name, version_hash, parent_model_name, parent_version_hash, "
-                "seed_strategy, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
-                [
-                    record.model_name,
-                    record.version_hash,
-                    record.parent_model_name,
-                    record.parent_version_hash,
-                    record.seed_strategy,
-                    existing_created_at,
-                ],
-            )
-            connection.execute("COMMIT")
-        except BaseException:
-            connection.execute("ROLLBACK")
-            raise
-
-    def upsert_virtual_environment(
-        self, *, connection: Any, schema: str, record: VirtualEnvironmentRecord
-    ) -> None:
-        connection.execute("BEGIN")
-        try:
-            self._upsert_virtual_environment_record(
-                connection=connection, schema=schema, record=record
-            )
-            connection.execute("COMMIT")
-        except BaseException:
-            connection.execute("ROLLBACK")
-            raise
-
     def list_virtual_environments(
         self, *, connection: Any, schema: str
     ) -> tuple[VirtualEnvironmentRetentionRecord, ...]:
@@ -765,7 +516,7 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, SqlStateBackend):
         connection.execute("BEGIN")
         try:
             self._upsert_virtual_environment_record(
-                connection=connection, schema=schema, record=record
+                executor=connection, schema=schema, record=record
             )
             self._replace_virtual_environment_node_ref_groups(
                 connection=connection,
@@ -1069,41 +820,6 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, SqlStateBackend):
             connection.execute("ROLLBACK")
             raise
 
-    def upsert_state_operation(
-        self, *, connection: Any, schema: str, record: StateOperationRecord
-    ) -> None:
-        connection.execute("BEGIN")
-        try:
-            existing_created_at: datetime | None = self._created_at_for_key(
-                connection=connection,
-                schema=schema,
-                table_name=STATE_OPERATION_TABLE,
-                where_sql="operation_id = ?",
-                params=[record.operation_id],
-            )
-            connection.execute(
-                f"DELETE FROM {self._qualified_name(schema=schema, table=STATE_OPERATION_TABLE)} "
-                "WHERE operation_id = ?",
-                [record.operation_id],
-            )
-            connection.execute(
-                f"INSERT INTO {self._qualified_name(schema=schema, table=STATE_OPERATION_TABLE)} "
-                "(operation_id, operation_type, status, virtual_environment_name, "
-                "created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP)",
-                [
-                    record.operation_id,
-                    record.operation_type.value,
-                    record.status.value,
-                    record.virtual_environment_name,
-                    existing_created_at,
-                ],
-            )
-            connection.execute("COMMIT")
-        except BaseException:
-            connection.execute("ROLLBACK")
-            raise
-
     def create_state_operation_event(
         self, *, connection: Any, schema: str, record: StateOperationEventRecord
     ) -> None:
@@ -1296,24 +1012,6 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, SqlStateBackend):
             [event_id(), action.value, backup_id_value, status.value, message],
         )
 
-    def _created_at_for_key(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        table_name: str,
-        where_sql: str,
-        params: list[object],
-    ) -> datetime | None:
-        row: tuple[Any, ...] | None = connection.execute(
-            f"SELECT created_at FROM {self._qualified_name(schema=schema, table=table_name)} "
-            f"WHERE {where_sql}",
-            params,
-        ).fetchone()
-        if row is None:
-            return None
-        return row[0]
-
     def _create_additional_state_tables(self, *, connection: Any, schema: str) -> None:
         table_name: str
         columns: dict[str, StateColumnType]
@@ -1444,35 +1142,6 @@ class DuckDbStateBackend(DuckDbConditionalPublishMixin, SqlStateBackend):
                     f"Duplicate node ref for node type '{node_type}' and name '{ref.node_name}'"
                 )
             seen_node_names.add(ref.node_name)
-
-    def _upsert_virtual_environment_record(
-        self, *, connection: Any, schema: str, record: VirtualEnvironmentRecord
-    ) -> None:
-        existing_created_at: datetime | None = self._created_at_for_key(
-            connection=connection,
-            schema=schema,
-            table_name=VIRTUAL_ENVIRONMENT_TABLE,
-            where_sql="virtual_environment_name = ?",
-            params=[record.virtual_environment_name],
-        )
-        connection.execute(
-            f"DELETE FROM {self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_TABLE)} "
-            "WHERE virtual_environment_name = ?",
-            [record.virtual_environment_name],
-        )
-        connection.execute(
-            f"INSERT INTO {self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_TABLE)} "
-            "(virtual_environment_name, status, baseline_virtual_environment_name, "
-            "created_at, updated_at, finalized_at) "
-            "VALUES (?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP, ?)",
-            [
-                record.virtual_environment_name,
-                record.status.value,
-                record.baseline_virtual_environment_name,
-                existing_created_at,
-                record.finalized_at,
-            ],
-        )
 
     def _replace_virtual_environment_node_ref_groups(
         self,

@@ -65,7 +65,7 @@ class DuckDbConditionalPublishMixin:
                     connection.execute("ROLLBACK")
                     return False
             backend._upsert_virtual_environment_record(
-                connection=connection, schema=schema, record=record
+                executor=connection, schema=schema, record=record
             )
             backend._replace_virtual_environment_node_ref_groups(
                 connection=connection,

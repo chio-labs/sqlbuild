@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Sequence
+from contextlib import AbstractContextManager
+from datetime import datetime
 from typing import Any, ClassVar
 
 from sqlbuild.virtual.state._helpers.state_storage.datetime import (
@@ -73,6 +75,236 @@ class SqlStateBackend(StateBackend):
     ) -> list[tuple[Any, ...]]:
         """Run one read statement and return all rows."""
         ...
+
+    @abstractmethod
+    def _write_transaction(self, *, connection: Any) -> AbstractContextManager[Any]:
+        """Open a write transaction and yield the executor that runs its statements."""
+        ...
+
+    @abstractmethod
+    def _execute_in(self, *, executor: Any, sql: str, params: Sequence[object]) -> None:
+        """Run one statement on a transaction executor."""
+        ...
+
+    @abstractmethod
+    def _fetch_one_in(
+        self, *, executor: Any, sql: str, params: Sequence[object]
+    ) -> tuple[Any, ...] | None:
+        """Run one read statement on a transaction executor and return its first row."""
+        ...
+
+    def upsert_model_version(
+        self, *, connection: Any, schema: str, record: ModelVersionRecord
+    ) -> None:
+        with self._write_transaction(connection=connection) as executor:
+            self._replace_row_preserving_created_at(
+                executor=executor,
+                schema=schema,
+                table_name=MODEL_VERSION_TABLE,
+                key_values={"model_name": record.model_name, "version_hash": record.version_hash},
+                row_values={
+                    "definition_identity_hash": record.definition_identity_hash,
+                    "identity_metadata_hash": record.identity_metadata_hash,
+                    "definition_text_b64": record.definition_text_b64,
+                    "identity_metadata_json_b64": record.identity_metadata_json_b64,
+                    "compiled_sql_b64": record.compiled_sql_b64,
+                    "status": record.status.value,
+                },
+            )
+
+    def upsert_function_version(
+        self, *, connection: Any, schema: str, record: FunctionVersionRecord
+    ) -> None:
+        with self._write_transaction(connection=connection) as executor:
+            self._replace_row_preserving_created_at(
+                executor=executor,
+                schema=schema,
+                table_name=FUNCTION_VERSION_TABLE,
+                key_values={
+                    "function_name": record.function_name,
+                    "version_hash": record.version_hash,
+                },
+                row_values={
+                    "language": record.language,
+                    "returns": record.returns,
+                    "arguments_json_b64": record.arguments_json_b64,
+                    "return_columns_json_b64": record.return_columns_json_b64,
+                    "packages_json_b64": record.packages_json_b64,
+                    "runtime_version": record.runtime_version,
+                    "entry_point": record.entry_point,
+                    "body_sql_b64": record.body_sql_b64,
+                    "definition_text_b64": record.definition_text_b64,
+                    "status": record.status.value,
+                },
+            )
+
+    def upsert_seed_version(
+        self, *, connection: Any, schema: str, record: SeedVersionRecord
+    ) -> None:
+        with self._write_transaction(connection=connection) as executor:
+            self._replace_row_preserving_created_at(
+                executor=executor,
+                schema=schema,
+                table_name=SEED_VERSION_TABLE,
+                key_values={"seed_name": record.seed_name, "version_hash": record.version_hash},
+                row_values={
+                    "identity_metadata_hash": record.identity_metadata_hash,
+                    "identity_metadata_json_b64": record.identity_metadata_json_b64,
+                    "status": record.status.value,
+                },
+            )
+
+    def upsert_python_node_version(
+        self, *, connection: Any, schema: str, record: PythonNodeVersionRecord
+    ) -> None:
+        with self._write_transaction(connection=connection) as executor:
+            self._replace_row_preserving_created_at(
+                executor=executor,
+                schema=schema,
+                table_name=PYTHON_NODE_VERSION_TABLE,
+                key_values={
+                    "node_type": record.node_type,
+                    "node_name": record.node_name,
+                    "version_hash": record.version_hash,
+                },
+                row_values={
+                    "definition_hash": record.definition_hash,
+                    "identity_metadata_hash": record.identity_metadata_hash,
+                    "definition_json_b64": record.definition_json_b64,
+                    "identity_metadata_json_b64": record.identity_metadata_json_b64,
+                    "status": record.status.value,
+                },
+            )
+
+    def upsert_physical_relation(
+        self, *, connection: Any, schema: str, record: PhysicalRelationRecord
+    ) -> None:
+        with self._write_transaction(connection=connection) as executor:
+            self._replace_row_preserving_created_at(
+                executor=executor,
+                schema=schema,
+                table_name=PHYSICAL_RELATION_TABLE,
+                key_values={
+                    "artifact_type": record.artifact_type.value,
+                    "artifact_name": record.artifact_name,
+                    "version_hash": record.version_hash,
+                },
+                row_values={
+                    "database_name": record.database_name,
+                    "schema_name": record.schema_name,
+                    "relation_name": record.relation_name,
+                    "relation_type": record.relation_type,
+                },
+            )
+
+    def upsert_physical_relation_ancestry(
+        self, *, connection: Any, schema: str, record: PhysicalRelationAncestryRecord
+    ) -> None:
+        with self._write_transaction(connection=connection) as executor:
+            self._replace_row_preserving_created_at(
+                executor=executor,
+                schema=schema,
+                table_name=PHYSICAL_RELATION_ANCESTRY_TABLE,
+                key_values={"model_name": record.model_name, "version_hash": record.version_hash},
+                row_values={
+                    "parent_model_name": record.parent_model_name,
+                    "parent_version_hash": record.parent_version_hash,
+                    "seed_strategy": record.seed_strategy,
+                },
+            )
+
+    def upsert_virtual_environment(
+        self, *, connection: Any, schema: str, record: VirtualEnvironmentRecord
+    ) -> None:
+        with self._write_transaction(connection=connection) as executor:
+            self._upsert_virtual_environment_record(executor=executor, schema=schema, record=record)
+
+    def upsert_state_operation(
+        self, *, connection: Any, schema: str, record: StateOperationRecord
+    ) -> None:
+        with self._write_transaction(connection=connection) as executor:
+            self._replace_row_preserving_created_at(
+                executor=executor,
+                schema=schema,
+                table_name=STATE_OPERATION_TABLE,
+                key_values={"operation_id": record.operation_id},
+                row_values={
+                    "operation_type": record.operation_type.value,
+                    "status": record.status.value,
+                    "virtual_environment_name": record.virtual_environment_name,
+                },
+            )
+
+    def _upsert_virtual_environment_record(
+        self, *, executor: Any, schema: str, record: VirtualEnvironmentRecord
+    ) -> None:
+        self._replace_row_preserving_created_at(
+            executor=executor,
+            schema=schema,
+            table_name=VIRTUAL_ENVIRONMENT_TABLE,
+            key_values={"virtual_environment_name": record.virtual_environment_name},
+            row_values={
+                "status": record.status.value,
+                "baseline_virtual_environment_name": record.baseline_virtual_environment_name,
+                "finalized_at": record.finalized_at,
+            },
+        )
+
+    def _replace_row_preserving_created_at(
+        self,
+        *,
+        executor: Any,
+        schema: str,
+        table_name: str,
+        key_values: dict[str, object],
+        row_values: dict[str, object],
+    ) -> None:
+        p: str = self._placeholder
+        table: str = self._qualified_name(schema=schema, table=table_name)
+        where_sql: str = " AND ".join(f"{column} = {p}" for column in key_values)
+        key_params: list[object] = list(key_values.values())
+        existing_created_at: datetime | None = self._created_at_for_key(
+            executor=executor,
+            schema=schema,
+            table_name=table_name,
+            where_sql=where_sql,
+            params=key_params,
+        )
+        self._execute_in(
+            executor=executor, sql=f"DELETE FROM {table} WHERE {where_sql}", params=key_params
+        )
+        columns: tuple[str, ...] = (*key_values, *row_values)
+        value_placeholders: str = ", ".join(p for _ in columns)
+        self._execute_in(
+            executor=executor,
+            sql=(
+                f"INSERT INTO {table} ({', '.join(columns)}, created_at, updated_at) "
+                f"VALUES ({value_placeholders}, COALESCE({p}, CURRENT_TIMESTAMP), "
+                "CURRENT_TIMESTAMP)"
+            ),
+            params=[*key_params, *row_values.values(), existing_created_at],
+        )
+
+    def _created_at_for_key(
+        self,
+        *,
+        executor: Any,
+        schema: str,
+        table_name: str,
+        where_sql: str,
+        params: list[object],
+    ) -> datetime | None:
+        row: tuple[Any, ...] | None = self._fetch_one_in(
+            executor=executor,
+            sql=(
+                f"SELECT created_at FROM {self._qualified_name(schema=schema, table=table_name)} "
+                f"WHERE {where_sql}"
+            ),
+            params=params,
+        )
+        if row is None:
+            return None
+        return row[0]
 
     def _quote_identifier(self, identifier: str) -> str:
         return '"' + identifier.replace('"', '""') + '"'
