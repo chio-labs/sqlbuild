@@ -8,6 +8,10 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledSqlTest
+from sqlbuild.compiler.planner._helpers.resolve.cursor_intrinsics import (
+    render_cursor_intrinsic_bounds,
+)
+from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
 from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
 from sqlbuild.cursor_algebra.main.compare import compare
@@ -58,16 +62,12 @@ def render_test_cursor_intrinsics(
         return sql
     cursor: _ModelCursor = _model_cursor(model=model)
     start, end = _test_window(cursor=cursor, test=test)
-    rendered, _ = resolve_cursor_intrinsics(
+    return render_cursor_intrinsic_bounds(
         sql=sql,
-        start_sql=adapter.render_cursor_bound_literal(
-            value=render(value=start), cursor_type=cursor.cursor_type
-        ),
-        end_sql=adapter.render_cursor_bound_literal(
-            value=render(value=end), cursor_type=cursor.cursor_type
-        ),
+        bounds=CursorBounds(start=start, end=end),
+        cursor_type=cursor.cursor_type,
+        adapter=adapter,
     )
-    return rendered
 
 
 def declared_window_cursor_models(

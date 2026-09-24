@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use crate::compiler::_helpers::sql_tests::markers::{in_protected_range, protected_ranges};
 use crate::compiler::_helpers::sql_tests::planning::{
     DBT_REF_PREFIX, REF_PREFIX, SEED_PREFIX, SOURCE_PREFIX, SqlTestPatterns, TestFixtures,
-    compile_error, mock_cte_sql,
+    compile_error, with_helper_ctes,
 };
 use crate::constants::{
     QUOTED_IDENTIFIER_DELIMITER_BYTES, SQL_TEST_ACTUAL_CTE, SQL_TEST_ACTUAL_CTE_PREFIX,
@@ -39,6 +39,7 @@ pub(crate) struct ScopeGraph {
     helper_indexes: HashMap<String, usize>,
     mocks: Vec<ScopeMock>,
     mock_indexes: HashMap<String, usize>,
+    mocks_by_generated_name: HashMap<String, usize>,
 }
 
 /// Graph nodes in dependency-first order, built by depth-first traversal.
@@ -82,7 +83,7 @@ impl ScopeGraph {
                 mocks.push(ScopeMock {
                     generated_name: format!("{prefix}{name}"),
                     mock_name: name.clone(),
-                    sql: mock_cte_sql(body, &fixtures.helpers),
+                    sql: with_helper_ctes(body, &fixtures.helpers),
                     tokens: identifier_tokens(body, patterns),
                 });
             }
@@ -103,6 +104,11 @@ impl ScopeGraph {
                 .iter()
                 .enumerate()
                 .map(|(index, mock)| (mock.generated_name.to_ascii_lowercase(), index))
+                .collect(),
+            mocks_by_generated_name: mocks
+                .iter()
+                .enumerate()
+                .map(|(index, mock)| (mock.generated_name.clone(), index))
                 .collect(),
             mocks,
         }
@@ -136,13 +142,21 @@ impl ScopeGraph {
         order.ordered
     }
 
+    /// The generated CTE body of one mock, with every helper CTE in scope.
+    pub(crate) fn mock_sql(&self, generated_name: &str) -> Option<&str> {
+        self.mocks_by_generated_name
+            .get(generated_name)
+            .map(|index| self.mocks[*index].sql.as_str())
+    }
+
+    /// The parenthesized body of one mock inlined in place of its relation marker.
+    pub(crate) fn inlined_mock_sql(&self, generated_name: &str) -> Option<String> {
+        self.mock_sql(generated_name).map(|sql| format!("({sql})"))
+    }
+
     /// Mocks that one mock's body reads through helpers or by name, dependencies first.
     pub(crate) fn mock_dependencies(&self, generated_name: &str) -> Vec<&ScopeMock> {
-        let Some(root) = self
-            .mock_indexes
-            .get(&generated_name.to_ascii_lowercase())
-            .copied()
-        else {
+        let Some(root) = self.mocks_by_generated_name.get(generated_name).copied() else {
             return Vec::new();
         };
         self.closure(&self.mocks[root].tokens)

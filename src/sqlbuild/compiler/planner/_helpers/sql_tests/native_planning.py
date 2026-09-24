@@ -23,7 +23,6 @@ from sqlbuild.compiler.planner._helpers.sql_tests.cursor_window import (
     declared_window_cursor_models,
     declares_cursor_window,
     render_test_cursor_intrinsics,
-    uses_cursor_intrinsics,
 )
 from sqlbuild.compiler.planner.exceptions import NativeSqlTestPlanningError, PlannerInputError
 from sqlbuild.compiler.planner.main.execution.sql_test_dialect import (
@@ -436,11 +435,13 @@ def _model_requests(
         for dependency in model.deps:
             if dependency.resource_type == CompiledResourceType.MODEL:
                 dependencies.append(dependency.name)
-        query_sql: str = model.query_sql
-        if adapter is not None and uses_cursor_intrinsics(sql=query_sql):
-            query_sql = render_test_cursor_intrinsics(
-                sql=query_sql, model=model, adapter=adapter, test=None
+        query_sql: str = (
+            model.query_sql
+            if adapter is None
+            else render_test_cursor_intrinsics(
+                sql=model.query_sql, model=model, adapter=adapter, test=None
             )
+        )
         requests.append(
             {
                 "name": model.name,

@@ -375,10 +375,7 @@ def static_sql_test_planning_diagnostics(
     )
     diagnostics: list[CompilerDiagnostic] = []
     for test, artifact in zip(tests, artifacts, strict=True):
-        diagnostics.extend(
-            _sql_test_error_diagnostic(test=test, message=message)
-            for message in artifact.error_messages
-        )
+        diagnostics.extend(_sql_test_artifact_diagnostics(test=test, artifact=artifact))
     return tuple(diagnostics)
 
 
@@ -477,11 +474,11 @@ def _write_static_tests(
         )
         _write_sql(path=test_path, sql=artifact.sql, check_existing=check_existing)
         managed_paths.add(test_path)
-        if artifact.error_messages:
-            diagnostics.extend(
-                _sql_test_error_diagnostic(test=test, message=message)
-                for message in artifact.error_messages
-            )
+        artifact_diagnostics: tuple[CompilerDiagnostic, ...] = _sql_test_artifact_diagnostics(
+            test=test, artifact=artifact
+        )
+        if artifact_diagnostics:
+            diagnostics.extend(artifact_diagnostics)
             continue
         if record_key is not None and artifact_identity is not None:
             record: SqlTestArtifactCacheRecord | None = build_sql_test_artifact_cache_record(
@@ -499,15 +496,20 @@ def _write_static_tests(
     return managed_paths, tuple(diagnostics)
 
 
-def _sql_test_error_diagnostic(*, test: CompiledSqlTest, message: str) -> CompilerDiagnostic:
-    return CompilerDiagnostic(
-        phase=DiagnosticPhase.TEST,
-        severity=DiagnosticSeverity.ERROR,
-        code=_SQL_TEST_PLANNING_ERROR_CODE,
-        message=message,
-        resource_type=CompiledResourceType.SQL_TEST,
-        resource_name=test.name,
-        path=test.source_path,
+def _sql_test_artifact_diagnostics(
+    *, test: CompiledSqlTest, artifact: NativeSqlTestArtifact
+) -> tuple[CompilerDiagnostic, ...]:
+    return tuple(
+        CompilerDiagnostic(
+            phase=DiagnosticPhase.TEST,
+            severity=DiagnosticSeverity.ERROR,
+            code=_SQL_TEST_PLANNING_ERROR_CODE,
+            message=message,
+            resource_type=CompiledResourceType.SQL_TEST,
+            resource_name=test.name,
+            path=test.source_path,
+        )
+        for message in artifact.error_messages
     )
 
 

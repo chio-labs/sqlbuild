@@ -10,6 +10,9 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::compiler::_helpers::sql_tests::cte_sql::{
+    cte_definition_sql, leading_with_prefix_end, with_leading_ctes, with_unique_ctes,
+};
 use crate::compiler::_helpers::sql_tests::expected_columns::expected_columns;
 use crate::compiler::_helpers::sql_tests::helper_scope::{
     ScopeGraph, helper_scope_ctes, merged_scoped_ctes,
@@ -362,18 +365,15 @@ impl TextualChain {
                 stack.extend(dependencies.iter().cloned());
             }
         }
-        let mut ctes: Vec<(String, String)> = Vec::new();
-        for (name, sql) in self
-            .order
-            .iter()
-            .filter(|name| needed.contains(*name) || roots.contains(name))
-            .filter_map(|name| self.mock_ctes.get(name))
-            .flatten()
-        {
-            if !ctes.iter().any(|(existing, _)| existing == name) {
-                ctes.push((name.clone(), sql.clone()));
-            }
-        }
+        let mut ctes: Vec<(String, String)> = with_unique_ctes(
+            Vec::new(),
+            self.order
+                .iter()
+                .filter(|name| needed.contains(*name) || roots.contains(name))
+                .filter_map(|name| self.mock_ctes.get(name))
+                .flatten()
+                .cloned(),
+        );
         ctes.extend(
             self.order
                 .iter()
@@ -392,26 +392,10 @@ impl TextualChain {
         let body_sql = self.bodies.get(model_name)?.clone();
         let lifted_ctes = self.closure_ctes(&[model_name.to_string()], false);
         Some(TextualStep {
-            resolved_sql: with_generated_ctes(&lifted_ctes, &body_sql),
+            resolved_sql: with_leading_ctes(&lifted_ctes, &body_sql),
             lifted_ctes,
             body_sql,
         })
-    }
-}
-
-/// Prefix generated CTEs to a query, merging into its own leading WITH clause when present.
-fn with_generated_ctes(ctes: &[(String, String)], body: &str) -> String {
-    if ctes.is_empty() {
-        return body.to_string();
-    }
-    let definitions: String = ctes
-        .iter()
-        .map(|(name, sql)| cte_definition_sql(name, sql))
-        .collect::<Vec<_>>()
-        .join(", ");
-    match leading_with_prefix_end(body) {
-        Some(end) => format!("{}{definitions}, {}", &body[..end], &body[end..]),
-        None => format!("WITH {definitions} {body}"),
     }
 }
 
@@ -490,9 +474,9 @@ impl GeneratedCteState {
     }
 
     fn mock_target(&mut self, request: MockTargetRequest<'_>) -> Result<Option<String>, String> {
-        let Some(mock_body) = request.mocks.get(request.referenced_name) else {
+        if !request.mocks.contains_key(request.referenced_name) {
             return Ok(None);
-        };
+        }
         self.reachable.insert(request.referenced_name.to_string());
         let generated_name = format!("{}{}", request.prefix, request.referenced_name);
         if self.names.contains(&generated_name)
@@ -515,7 +499,12 @@ impl GeneratedCteState {
                 request.file_label,
             )?;
         }
-        let sql = mock_cte_sql(mock_body, &request.fixtures.helpers);
+        let sql = request
+            .fixtures
+            .scope
+            .mock_sql(&generated_name)
+            .ok_or_else(|| planner_error("SQL-test mock scope is incomplete"))?
+            .to_string();
         self.insert(&generated_name, &sql, request.file_label)?;
         Ok(Some(generated_name))
     }
@@ -708,7 +697,6 @@ fn plan_direct_test(
     plan: DirectTestPlan,
     context: &ProjectContext,
 ) -> Result<PlannedResponse, String> {
-    let helper_with = helper_with_clause(&plan.helpers);
     let mut actual_sql = plan.actual_cte.sql_body;
     if plan.mode == UDF_TEST_MODE {
         actual_sql =
@@ -721,8 +709,8 @@ fn plan_direct_test(
     let request = RenderRequest {
         chain: vec![ChainStep {
             model_name: model_name.clone(),
-            resolved_sql: wrap_direct_sql(&actual_sql, &helper_with),
-            expected_cte_sql: Some(wrap_direct_sql(&plan.expected_cte.sql_body, &helper_with)),
+            resolved_sql: with_helper_ctes(&actual_sql, &plan.helpers),
+            expected_cte_sql: Some(with_helper_ctes(&plan.expected_cte.sql_body, &plan.helpers)),
             expected_lifted_ctes: Vec::new(),
             lifted_ctes: Vec::new(),
             comparison_body_sql: None,
@@ -925,7 +913,7 @@ fn plan_model_test(
         if !scope.ctes.is_empty() {
             reachable_mocks.extend(scope.reached_mocks);
             lifted_ctes = merged_scoped_ctes(lifted_ctes, scope.ctes, &plan.file_label)?;
-            resolved_sql = with_generated_ctes(
+            resolved_sql = with_leading_ctes(
                 &lifted_ctes,
                 comparison_body_sql.as_deref().unwrap_or(&resolved_sql),
             );
@@ -1055,12 +1043,10 @@ fn resolve_assertion_textual_sql(
         functions: request.functions,
         patterns: request.patterns,
     })?;
-    let mut lifted_ctes: Vec<(String, String)> = resolution.mock_ctes;
-    for (name, sql) in request.chain.closure_ctes(&referenced, true) {
-        if !lifted_ctes.iter().any(|(existing, _)| *existing == name) {
-            lifted_ctes.push((name, sql));
-        }
-    }
+    let lifted_ctes: Vec<(String, String)> = with_unique_ctes(
+        resolution.mock_ctes,
+        request.chain.closure_ctes(&referenced, true),
+    );
     let body_sql = resolution.sql;
     let reached = resolution.reached;
     let resolved_sql = if lifted_ctes.is_empty() {
@@ -1267,7 +1253,7 @@ fn analyze_and_resolve_sql(
         }
     }
     let cte_body_sql = replace_relation_markers(request.query_sql, &replacements, request.patterns);
-    let resolved_sql = assemble_resolved_sql(&cte_body_sql, &generated_state.generated);
+    let resolved_sql = with_leading_ctes(&generated_state.generated, &cte_body_sql);
     Ok(Some(AnalysisResolvedSql {
         resolved_sql,
         cte_body_sql,
@@ -1330,7 +1316,6 @@ struct TextualResolution {
 }
 
 fn resolve_textual_sql(request: TextualResolutionRequest<'_>) -> Result<TextualResolution, String> {
-    let helper_with = helper_with_clause(&request.fixtures.helpers);
     let mut reached: HashSet<String> = HashSet::new();
     let mut inlined: Vec<String> = Vec::new();
     let mut chain_references = request.chain_references;
@@ -1347,11 +1332,12 @@ fn resolve_textual_sql(request: TextualResolutionRequest<'_>) -> Result<TextualR
                 }
                 return Some(sql.clone());
             }
-            request.fixtures.mock_refs.get(name).map(|sql| {
-                reached.insert(name.to_string());
-                inlined.push(format!("{REF_PREFIX}{name}"));
-                wrap_mock(sql, &helper_with)
-            })
+            request.fixtures.mock_refs.get(name)?;
+            let generated_name = format!("{REF_PREFIX}{name}");
+            let sql = request.fixtures.scope.inlined_mock_sql(&generated_name)?;
+            reached.insert(name.to_string());
+            inlined.push(generated_name);
+            Some(sql)
         },
     );
     result = replace_named_markers(
@@ -1359,11 +1345,12 @@ fn resolve_textual_sql(request: TextualResolutionRequest<'_>) -> Result<TextualR
         &request.patterns.source,
         &request.patterns.protected,
         |name| {
-            request.fixtures.mock_sources.get(name).map(|sql| {
-                reached.insert(name.to_string());
-                inlined.push(format!("{SOURCE_PREFIX}{name}"));
-                wrap_mock(sql, &helper_with)
-            })
+            request.fixtures.mock_sources.get(name)?;
+            let generated_name = format!("{SOURCE_PREFIX}{name}");
+            let sql = request.fixtures.scope.inlined_mock_sql(&generated_name)?;
+            reached.insert(name.to_string());
+            inlined.push(generated_name);
+            Some(sql)
         },
     );
     result = replace_named_markers(
@@ -1371,11 +1358,12 @@ fn resolve_textual_sql(request: TextualResolutionRequest<'_>) -> Result<TextualR
         &request.patterns.seed,
         &request.patterns.protected,
         |name| {
-            request.fixtures.mock_seeds.get(name).map(|sql| {
-                reached.insert(name.to_string());
-                inlined.push(format!("{SEED_PREFIX}{name}"));
-                wrap_mock(sql, &helper_with)
-            })
+            request.fixtures.mock_seeds.get(name)?;
+            let generated_name = format!("{SEED_PREFIX}{name}");
+            let sql = request.fixtures.scope.inlined_mock_sql(&generated_name)?;
+            reached.insert(name.to_string());
+            inlined.push(generated_name);
+            Some(sql)
         },
     );
     result = replace_dbt_ref_markers(
@@ -1383,11 +1371,12 @@ fn resolve_textual_sql(request: TextualResolutionRequest<'_>) -> Result<TextualR
         &request.patterns.dbt_reference,
         &request.patterns.protected,
         |name| {
-            request.fixtures.mock_dbt_refs.get(name).map(|sql| {
-                reached.insert(name.to_string());
-                inlined.push(format!("{DBT_REF_PREFIX}{name}"));
-                wrap_mock(sql, &helper_with)
-            })
+            request.fixtures.mock_dbt_refs.get(name)?;
+            let generated_name = format!("{DBT_REF_PREFIX}{name}");
+            let sql = request.fixtures.scope.inlined_mock_sql(&generated_name)?;
+            reached.insert(name.to_string());
+            inlined.push(generated_name);
+            Some(sql)
         },
     );
     let (table_resolved, table_reached) = resolve_table_function_fixtures(
@@ -1401,15 +1390,14 @@ fn resolve_textual_sql(request: TextualResolutionRequest<'_>) -> Result<TextualR
     result = resolve_function_calls(&result, request.functions, true, request.patterns)?;
     let mut mock_ctes: Vec<(String, String)> = Vec::new();
     for generated_name in inlined {
-        for dependency in request.fixtures.scope.mock_dependencies(&generated_name) {
-            reached.insert(dependency.mock_name.clone());
-            if !mock_ctes
-                .iter()
-                .any(|(name, _)| *name == dependency.generated_name)
-            {
-                mock_ctes.push((dependency.generated_name.clone(), dependency.sql.clone()));
-            }
-        }
+        let dependencies = request.fixtures.scope.mock_dependencies(&generated_name);
+        reached.extend(dependencies.iter().map(|mock| mock.mock_name.clone()));
+        mock_ctes = with_unique_ctes(
+            mock_ctes,
+            dependencies
+                .into_iter()
+                .map(|mock| (mock.generated_name.clone(), mock.sql.clone())),
+        );
     }
     Ok(TextualResolution {
         sql: result,
@@ -1427,7 +1415,6 @@ fn resolve_table_function_fixtures(
     if fixtures.is_empty() {
         return Ok((sql.to_string(), HashSet::new()));
     }
-    let helper_with = helper_with_clause(helpers);
     replace_callable_markers(
         sql,
         &patterns.table_function,
@@ -1435,7 +1422,7 @@ fn resolve_table_function_fixtures(
         |name, _call_suffix| {
             fixtures
                 .get(name)
-                .map(|body| (wrap_mock(body, &helper_with), true))
+                .map(|body| (format!("({})", with_helper_ctes(body, helpers)), true))
         },
     )
 }
@@ -1574,72 +1561,6 @@ fn replace_relation_markers(
                 .cloned()
         },
     )
-}
-
-fn assemble_resolved_sql(cte_body_sql: &str, generated: &[(String, String)]) -> String {
-    if generated.is_empty() {
-        return cte_body_sql.to_string();
-    }
-    let generated_sql = generated
-        .iter()
-        .map(|(name, sql)| cte_definition_sql(name, sql))
-        .collect::<Vec<_>>()
-        .join(", ");
-    if let Some(with_end) = leading_with_prefix_end(cte_body_sql) {
-        format!(
-            "{}{generated_sql}, {}",
-            &cte_body_sql[..with_end],
-            &cte_body_sql[with_end..]
-        )
-    } else {
-        format!("WITH {generated_sql} {cte_body_sql}")
-    }
-}
-
-pub(crate) fn leading_with_prefix_end(sql: &str) -> Option<usize> {
-    let mut index = skip_leading_ignorable(sql, 0);
-    index = keyword_end(sql, index, "WITH")?;
-    index = skip_leading_ignorable(sql, index);
-    if let Some(recursive_end) = keyword_end(sql, index, "RECURSIVE") {
-        index = skip_leading_ignorable(sql, recursive_end);
-    }
-    Some(index)
-}
-
-fn skip_leading_ignorable(sql: &str, mut index: usize) -> usize {
-    while index < sql.len() {
-        let byte = sql.as_bytes()[index];
-        if byte.is_ascii_whitespace() {
-            index += 1;
-        } else if sql[index..].starts_with("--") {
-            index = sql[index..]
-                .find('\n')
-                .map_or(sql.len(), |offset| index + offset + 1);
-        } else if sql[index..].starts_with("/*") {
-            let Some(offset) = sql[index + 2..].find("*/") else {
-                return index;
-            };
-            index += offset + 4;
-        } else {
-            break;
-        }
-    }
-    index
-}
-
-fn keyword_end(sql: &str, start: usize, keyword: &str) -> Option<usize> {
-    let end = start + keyword.len();
-    if !sql.get(start..end)?.eq_ignore_ascii_case(keyword) {
-        return None;
-    }
-    if sql
-        .as_bytes()
-        .get(end)
-        .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
-    {
-        return None;
-    }
-    Some(end)
 }
 
 struct UnresolvedReferenceRequest<'a> {
@@ -1781,35 +1702,12 @@ fn helper_with_clause(helpers: &[CteInput]) -> String {
     )
 }
 
-/// Generated mock CTE body: the authored mock with every helper CTE in scope.
-pub(crate) fn mock_cte_sql(mock_body: &str, helpers: &[CteInput]) -> String {
+/// Prefix every helper CTE to a query; mock and direct-test bodies all see helpers this way.
+pub(crate) fn with_helper_ctes(sql: &str, helpers: &[CteInput]) -> String {
     if helpers.is_empty() {
-        mock_body.to_string()
-    } else {
-        format!("{} {mock_body}", helper_with_clause(helpers))
-    }
-}
-
-fn cte_definition_sql(name: &str, sql: &str) -> String {
-    let body = sql.trim_end();
-    let final_line = body.rsplit_once('\n').map_or(body, |(_, line)| line);
-    let terminator = if final_line.contains("--") { "\n" } else { "" };
-    format!("{name} AS ({body}{terminator})")
-}
-
-fn wrap_mock(sql: &str, helper_with: &str) -> String {
-    if helper_with.is_empty() {
-        format!("({sql})")
-    } else {
-        format!("({helper_with} {sql})")
-    }
-}
-
-fn wrap_direct_sql(sql: &str, helper_with: &str) -> String {
-    if helper_with.is_empty() {
         sql.to_string()
     } else {
-        format!("{helper_with} {sql}")
+        format!("{} {sql}", helper_with_clause(helpers))
     }
 }
 

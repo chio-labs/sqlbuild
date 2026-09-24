@@ -4,7 +4,9 @@ use std::collections::HashMap;
 
 use polyglot_sql::{Dialect, DialectType, Expression};
 
-use crate::compiler::_helpers::sql_tests::planning::leading_with_prefix_end;
+use crate::compiler::_helpers::sql_tests::cte_sql::{
+    cte_definition_sql, leading_with_prefix_end, with_leading_ctes,
+};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
@@ -498,26 +500,6 @@ fn sanitize_cte_suffix(model_name: &str) -> String {
     } else {
         suffix.to_string()
     }
-}
-
-/// Prefix CTEs to a query, merging into its own leading WITH clause when present.
-fn with_leading_ctes(ctes: &[(String, String)], body: &str) -> String {
-    let definitions: String = ctes
-        .iter()
-        .map(|(name, sql)| cte_definition_sql(name, sql))
-        .collect::<Vec<_>>()
-        .join(", ");
-    match leading_with_prefix_end(body) {
-        Some(end) => format!("{}{definitions}, {}", &body[..end], &body[end..]),
-        None => format!("WITH {definitions} {body}"),
-    }
-}
-
-fn cte_definition_sql(name: &str, sql: &str) -> String {
-    let body = sql.trim_end();
-    let final_line = body.rsplit_once('\n').map_or(body, |(_, line)| line);
-    let terminator = if final_line.contains("--") { "\n" } else { "" };
-    format!("{name} AS ({body}{terminator})")
 }
 
 fn assertions_use_actual(assertions: &[AssertionStep], actual_cte: &str) -> bool {
