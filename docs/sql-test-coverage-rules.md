@@ -26,14 +26,16 @@ When a model's rows come only from its inputs, this test passes for almost any m
 adds no coverage. `SQBRTEST203` flags a model-mode test when all of the following hold:
 
 - Every mock (`__ref__`, `__source__`, `__seed__`, `__dbt_ref__`, `__table_fn__`) is a single
-  `SELECT` without a set operator that is filtered by `WHERE FALSE` or `WHERE 1 = 0`, limited by
-  `LIMIT 0`, or is `SELECT * FROM __EMPTY_FIXTURE()`. A `UNION` whose last branch is filtered is
-  not empty.
+  `SELECT` without a set operator that is limited by `LIMIT 0`, is `SELECT * FROM __EMPTY_FIXTURE()`,
+  or is filtered by `WHERE FALSE` or `WHERE 1 = 0` without calling any function (an aggregate such
+  as `ORDER BY COUNT(*)` can still return a row). A `UNION` whose last branch is filtered is not
+  empty.
 - Every `__expected__<model>` CTE is empty in the same way, or there is none.
-- Every `__assert__` CTE is a bare row-existence check, `SELECT <anything> FROM __ref("<model>")`
-  on a tested model, with no `WHERE`, `JOIN`, `GROUP BY`, `HAVING`, `QUALIFY`, set operator,
-  `EXISTS`, or subquery.
-- The test has no `__macro__` mocks.
+- Every `__assert__` CTE is a bare row-existence check, `SELECT <columns or constants> FROM
+  __ref("<model>")` on a tested model, with no `WHERE`, `JOIN`, `GROUP BY`, `HAVING`, `QUALIFY`,
+  set operator, `EXISTS`, subquery, `LIMIT`, `OFFSET` or `FETCH`, and no function call in its
+  select list or `ORDER BY`.
+- The test has no `__macro__` mocks and no model query overrides.
 
 Macro, UDF, and table-function tests are never flagged, and SQL that the rules parser cannot read
 is never flagged.

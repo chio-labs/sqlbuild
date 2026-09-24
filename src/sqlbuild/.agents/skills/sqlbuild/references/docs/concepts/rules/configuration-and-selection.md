@@ -42,12 +42,20 @@ sqb rules show SQBRSQL004
 
 ## Rule options
 
-Custom Rules can declare typed options. Configure them by exact code:
+Built-in and Custom Rules can declare typed options. Configure them by exact code:
 
 ```toml
 [rules.rule_options.XSQBRNAME001]
 required_prefix = "order"
+
+[rules.rule_options.SQBRTEST203]
+allowed_tests = ["customers__reviewed_empty_input"]
 ```
+
+`SQBRTEST203` (`empty-input-only-test`) accepts `allowed_tests`, a list of SQL test names that are
+reviewed exceptions. Listed tests are not flagged and still count toward `SQBRTEST202`'s
+`min_tests_per_model`. Entries that name no existing test are reported as stale. See
+[Empty-input tests](../testing.md#empty-input-tests).
 
 Unknown Rule codes, option names, and invalid option values fail configuration.
 

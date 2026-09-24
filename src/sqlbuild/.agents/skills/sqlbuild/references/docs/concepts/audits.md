@@ -108,7 +108,8 @@ contract as directly authored instances.
 Native warehouse adapters best-effort append confirmed audit outcomes to
 `_sqlbuild_audit_results`. Rows are immutable and use deterministic IDs, so retrying the same result
 is idempotent. Projection failure is reported separately and does not change the audit outcome or
-command exit code. Lifecycle sinks can also consume the corresponding `audit_completed` fact.
+command exit code. Lifecycle sinks can also consume the corresponding `audit_completed` fact, which
+is published as each audit finishes.
 
 ## Built-in audits
 

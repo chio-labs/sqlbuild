@@ -73,6 +73,16 @@ event_kinds = ["resource", "statement"]
 min_severity = "warning"
 ```
 
+`shutdown_timeout` sets how long a command waits at exit for lifecycle sinks to drain queued
+events. It is a fixed duration from `"0s"` to `"10m"`, defaults to `"2s"`, and is accepted only
+under `[sinks.lifecycle]`, not per named sink. `"0s"` drops anything still queued at exit. The
+setting does not change the one-second timeout for each sink call.
+
+```toml
+[sinks.lifecycle]
+shutdown_timeout = "30s"
+```
+
 SQLBuild owns envelope validation, local queueing, filtering, and bounded dispatch. The project owns
 destination credentials, serialization, routes/topics, acknowledgements, retries, retention, and
 durability. SQLBuild core does not provide a Kafka or ClickHouse implementation.
@@ -82,6 +92,12 @@ durability. SQLBuild core does not provide a Kafka or ClickHouse implementation.
 - Lifecycle dispatch prioritizes failures and terminal facts, remaining FIFO within equal priority.
 - Queue overflow can displace or drop lower-priority records and is reflected in sink accounting.
 - A failing or timed-out sink is isolated from command correctness.
+- `audit_completed` facts are published as each audit finishes (model audits in `sqb build` when
+  their model finishes), not in one burst at the end of the run.
+- When lifecycle events are dropped or fail, the command prints one warning to stderr with the
+  counts and affected sinks, for example
+  `Warning: command completed successfully, but lifecycle event export was incomplete: 140 of 248 events dropped, 0 failed (sink 'orders_events'). Increase sinks.lifecycle.shutdown_timeout or check sink health.`
+  The exit code and stdout, including `--json` output, are unchanged.
 - Provider setup and declaration errors fail before execution because the project configuration is
   invalid.
 - Providers shared by multiple sinks are set up and torn down once per command.

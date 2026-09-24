@@ -17,6 +17,8 @@ Online: https://docs.sqlbuild.com/concepts/testing
 - Macro-powered mocks
 - Macro mocking
 - Assertions
+- Cursor windows in tests
+- Empty-input tests
 - Test modes
 - Multiple tests per file
 - Repeating test logic
@@ -90,11 +92,45 @@ The trailing `SELECT 1` is required as a ceremonial closing statement.
 | `__ref__<name>` | Mock a model. Replaces `__ref("<name>")` in the model SQL. |
 | `__seed__<name>` | Mock a seed. Replaces `__seed("<name>")` in the model SQL. |
 | `__table_fn__<name>` | Mock a table function in model mode. Replaces the complete `__table_fn("<name>")(...)` invocation with the fixture relation. |
-| `__expected__<name>` | Define expected output for a model. SQLBuild resolves the model's real SQL and compares against this. |
+| `__expected__<name>` | Define expected output for a model. SQLBuild resolves the model's real SQL and compares both ways on the listed columns. |
 | `__assert__<name>` | Zero-row assertion. Passes if the query returns no rows; fails with the returned rows as diagnostics. |
 | `__macro__<name>` | Mock a macro. Replaces every `@<name>(...)` call with the mock value. |
 
-Any CTE without one of these prefixes is treated as a helper CTE, available to all mock and model SQL in the test.
+Any CTE without one of these prefixes is treated as a helper CTE, available to mock, model,
+`__expected__`, and `__assert__` SQL in the test.
+
+An `__expected__<model>` CTE compares only the columns it lists, matched by name, so column order
+does not matter and unlisted model columns are ignored. Row counts are always compared. Listing a
+column the model does not output is a test error. When the expected CTE's columns are not explicit
+(for example `SELECT *` from another CTE), SQLBuild compares every column by position.
+
+Helper CTEs can read other helpers and mocks by CTE name, such as `__ref__stg_orders`. Shared
+expected rows can therefore live in one helper that both an `__expected__` CTE and an assertion
+read:
+
+```sql
+TEST();
+
+WITH
+__source__raw__orders AS (
+  SELECT 1 AS id, 3 AS quantity UNION ALL SELECT 2 AS id, 5 AS quantity
+),
+expected_orders AS (
+  SELECT 1 AS order_id, 3 AS quantity UNION ALL SELECT 2 AS order_id, 5 AS quantity
+),
+__expected__stg_orders AS (
+  SELECT order_id, quantity FROM expected_orders
+),
+__assert__no_unexpected_order_ids AS (
+  SELECT order_id FROM __ref("stg_orders")
+  EXCEPT
+  SELECT order_id FROM expected_orders
+)
+SELECT 1
+```
+
+SQLBuild emits each helper and mock a query needs once, in dependency order, including mocks that
+a helper reaches through another mock.
 
 ## Multi-model tests
 
@@ -336,6 +372,55 @@ SELECT 1
 Assertions can be mixed with `__expected__` CTEs in the same test, or used on their own. They are useful when the natural check is "no rows should violate this rule" rather than "the output should exactly equal these rows" - for example, duplicate checks, negative-value constraints, or conditional business rules.
 
 During `sqb test` and `sqb build`, assertion results appear as nested check rows alongside expected comparisons.
+
+## Cursor windows in tests
+
+Models that call `__cursor_start()` and `__cursor_end()` run in a test over one wide window, never
+the model's configured `cursor_start` and `cursor_end`: `1900-01-01 00:00:00` to
+`2999-12-31 00:00:00` for timestamp cursors, and `-1000000000000000` to `1000000000000000` for
+integer cursors. The bounds render as the same typed literals as a real run, so date arithmetic
+such as `DATEADD('day', -7, __cursor_start()::DATE)` keeps working and mocked rows are not filtered
+out. Microbatch models run once over the whole window, not once per batch.
+
+To test windowing itself, declare the window in the header. Either key is optional. As in model
+configuration, `cursor_start` is inclusive and `cursor_end` is exclusive:
+
+```sql
+TEST (name "daily_orders_skips_rows_outside_window", cursor_start "2026-02-01", cursor_end "2026-02-03");
+```
+
+The window applies to every model the test evaluates that uses the intrinsics. Values are checked
+against each model's `cursor_type` and `cursor_grain` at compile time. Invalid, misaligned, or
+inverted bounds, and a window on a test whose models do not use the intrinsics, are compile errors.
+The compiled test SQL shows the rendered window.
+
+## Empty-input tests
+
+Do not write a test whose mocks are all empty (`WHERE FALSE`, `WHERE 1 = 0`, `LIMIT 0`, or
+`__EMPTY_FIXTURE()`) and whose only checks are an empty `__expected__` CTE or a bare
+`SELECT ... FROM __ref("<model>")` assertion. It cannot fail for a model whose rows come from its
+inputs. Rule `SQBRTEST203` rejects it, and `SQBRTEST202` does not count it toward
+`min_tests_per_model`. Mock representative rows and assert concrete output instead.
+
+An empty-input test is legitimate when it asserts concrete output, for example a global aggregate
+that must return one zero-valued summary row:
+
+```sql
+TEST (name "order_summary__empty_inputs_return_zero_row");
+
+WITH
+__source__raw__orders AS (
+  SELECT CAST(NULL AS INTEGER) AS id, CAST(NULL AS INTEGER) AS amount WHERE FALSE
+),
+__expected__order_summary AS (
+  SELECT 0 AS order_count, 0 AS total_amount
+)
+SELECT 1
+```
+
+Assertions that filter for invalid rows, compare against expected rows, aggregate, or limit their
+result are not treated as bare existence checks. Reviewed exceptions are listed by test name in the
+project file; see [Rule options](rules/configuration-and-selection.md#rule-options).
 
 ## Test modes
 
