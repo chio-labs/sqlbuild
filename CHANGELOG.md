@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.115.0](https://github.com/chio-labs/sqlbuild/compare/v0.114.2...v0.115.0) (2026-09-24)
+
+
+### Features
+
+* reject empty-input-only SQL tests and fix SQL test helper scope ([#803](https://github.com/chio-labs/sqlbuild/issues/803)) ([b1410f6](https://github.com/chio-labs/sqlbuild/commit/b1410f6aa7cfbf8cc5dc14132e8b912e54194d45))
+
 ## [0.114.2](https://github.com/chio-labs/sqlbuild/compare/v0.114.1...v0.114.2) (2026-09-24)
 
 
