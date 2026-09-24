@@ -1856,10 +1856,9 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def render_replace_with_clone(
         self, *, origin: str, destination: str, origin_is_transient: bool = False
     ) -> str:
-        del origin_is_transient
-        return (
-            f"CREATE OR REPLACE TABLE {self._quote_identifier_path(destination)} "
-            f"CLONE {self._quote_identifier_path(origin)}"
+        del origin, destination, origin_is_transient
+        raise AdapterUserError(
+            message=f"adapter '{self.adapter_name}' does not support model migrations"
         )
 
     def render_query_with_cursor_bounds(
