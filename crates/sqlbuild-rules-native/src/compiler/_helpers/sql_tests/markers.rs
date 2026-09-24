@@ -66,54 +66,43 @@ pub(crate) fn replace_named_markers<F>(
     sql: &str,
     pattern: &Regex,
     protected_pattern: &Regex,
-    replacement: F,
+    mut replacement: F,
 ) -> String
 where
     F: FnMut(&str) -> Option<String>,
 {
-    replace_marker_captures(
-        sql,
-        pattern,
-        protected_pattern,
-        |captures| captures.get(1).map(|value| value.as_str().to_string()),
-        replacement,
-    )
+    replace_marker_captures(sql, pattern, protected_pattern, |captures| {
+        replacement(captures.get(1)?.as_str())
+    })
 }
 
 pub(crate) fn replace_dbt_ref_markers<F>(
     sql: &str,
     pattern: &Regex,
     protected_pattern: &Regex,
-    replacement: F,
+    mut replacement: F,
 ) -> String
 where
     F: FnMut(&str) -> Option<String>,
 {
-    replace_marker_captures(
-        sql,
-        pattern,
-        protected_pattern,
-        |captures| {
-            let first = captures.get(1)?.as_str();
-            Some(captures.get(2).map_or_else(
-                || first.to_string(),
-                |second| format!("{first}__{}", second.as_str()),
-            ))
-        },
-        replacement,
-    )
+    replace_marker_captures(sql, pattern, protected_pattern, |captures| {
+        let first = captures.get(1)?.as_str();
+        let name = captures.get(2).map_or_else(
+            || first.to_string(),
+            |second| format!("{first}__{}", second.as_str()),
+        );
+        replacement(&name)
+    })
 }
 
-fn replace_marker_captures<N, F>(
+fn replace_marker_captures<F>(
     sql: &str,
     pattern: &Regex,
     protected_pattern: &Regex,
-    marker_name: N,
     mut replacement: F,
 ) -> String
 where
-    N: Fn(&Captures<'_>) -> Option<String>,
-    F: FnMut(&str) -> Option<String>,
+    F: FnMut(&Captures<'_>) -> Option<String>,
 {
     let protected = protected_ranges(protected_pattern, sql);
     let mut output = String::with_capacity(sql.len());
@@ -125,10 +114,7 @@ where
         if in_protected_range(full.start(), &protected) {
             continue;
         }
-        let Some(name) = marker_name(&captures) else {
-            continue;
-        };
-        let Some(value) = replacement(&name) else {
+        let Some(value) = replacement(&captures) else {
             continue;
         };
         output.push_str(&sql[cursor..full.start()]);

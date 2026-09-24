@@ -199,7 +199,7 @@ def _load_diff(*, payload: object, file_path: Path) -> DiffConfig:
         file_path=file_path,
     )
     value: str = _optional_str(payload=mapping, key=key) or "24h"
-    if _fixed_duration_seconds(value) is None:
+    if _fixed_duration_seconds(value=value) is None:
         raise ProjectConfigError(
             f"{file_path} diff.{key} must be a positive fixed duration such as '24h'"
         )
@@ -315,13 +315,13 @@ def _load_lifecycle_shutdown_timeout(
     )
     if not isinstance(value, str):
         raise ProjectConfigError(message)
-    seconds: int | None = _fixed_duration_seconds(value, allow_zero=True)
+    seconds: int | None = _fixed_duration_seconds(value=value, allow_zero=True)
     if seconds is None or seconds > _LIFECYCLE_SHUTDOWN_TIMEOUT_MAX_SECONDS:
         raise ProjectConfigError(message)
     return value, seconds
 
 
-def _fixed_duration_seconds(value: str, *, allow_zero: bool = False) -> int | None:
+def _fixed_duration_seconds(*, value: str, allow_zero: bool = False) -> int | None:
     """Return a fixed duration's seconds, or None when it is invalid or calendar-based."""
 
     if allow_zero and value == _ZERO_FIXED_DURATION:
@@ -1385,7 +1385,7 @@ def _load_execution_limits(
     max_duration: str | None = _optional_str(payload=mapping, key="max_duration")
     max_duration_seconds: int | None = None
     if max_duration is not None:
-        max_duration_seconds = _fixed_duration_seconds(max_duration)
+        max_duration_seconds = _fixed_duration_seconds(value=max_duration)
         if max_duration_seconds is None:
             raise ProjectConfigError(
                 f"{file_path} {label}.max_duration must be a positive fixed duration such as '30m'"
