@@ -6,7 +6,11 @@ from datetime import datetime
 
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.executor.janitor._helpers.classification import classify_janitor_relations
-from sqlbuild.executor.janitor._helpers.source_safety import blocking_source_names
+from sqlbuild.executor.janitor._helpers.source_safety import (
+    blocking_source_names,
+    source_names_for_schema,
+)
+from sqlbuild.executor.janitor.classes.relation_age_reader import JanitorRelationAgeReader
 from sqlbuild.executor.janitor.constants import BUILT_IN_EXCLUDE_PATTERNS
 from sqlbuild.executor.janitor.models import (
     JanitorBlockedSchema,
@@ -29,7 +33,7 @@ def classify_target_schemas(
     exclude_patterns: tuple[str, ...],
     delete_tracked_only: bool,
     retention_days: int,
-    age_supported: bool,
+    age_reader: JanitorRelationAgeReader,
     now: datetime,
     direct_mode: bool,
 ) -> JanitorSchemaClassification:
@@ -41,7 +45,9 @@ def classify_target_schemas(
     blocked_schemas: list[JanitorBlockedSchema] = []
     for schema_key in sorted(target_schemas, key=lambda key: (key[0] or "", key[1] or "")):
         schema_relations: tuple[RelationInfo, ...] = facts.relations_by_schema.get(schema_key, ())
-        source_names: set[str] | None = facts.source_schema_names.get(schema_key)
+        source_names: set[str] = source_names_for_schema(
+            schema_key=schema_key, source_schema_names=facts.source_schema_names
+        )
         blocking_sources: tuple[str, ...] = blocking_source_names(
             schema_key=schema_key,
             managed_schema_keys=managed_target_schemas,
@@ -56,8 +62,9 @@ def classify_target_schemas(
                     exclude_patterns=exclude_patterns,
                     delete_tracked_only=delete_tracked_only,
                     retention_days=retention_days,
-                    age_supported=age_supported,
+                    age_reader=age_reader,
                     now=now,
+                    direct_mode=direct_mode,
                 )
                 blocked_schemas.append(
                     JanitorBlockedSchema(
@@ -84,8 +91,9 @@ def classify_target_schemas(
             exclude_patterns=exclude_patterns,
             delete_tracked_only=delete_tracked_only,
             retention_days=retention_days,
-            age_supported=age_supported,
+            age_reader=age_reader,
             now=now,
+            direct_mode=direct_mode,
         )
         candidates.extend(classification.candidates)
         skipped_relations.extend(classification.skipped_relations)
@@ -105,8 +113,9 @@ def _classify_schema(
     exclude_patterns: tuple[str, ...],
     delete_tracked_only: bool,
     retention_days: int,
-    age_supported: bool,
+    age_reader: JanitorRelationAgeReader,
     now: datetime,
+    direct_mode: bool,
 ) -> JanitorRelationClassification:
     return classify_janitor_relations(
         schema_relations=schema_relations,
@@ -116,6 +125,7 @@ def _classify_schema(
         effective_exclude_patterns=BUILT_IN_EXCLUDE_PATTERNS + exclude_patterns,
         delete_tracked_only=delete_tracked_only,
         retention_days=retention_days,
-        age_supported=age_supported,
+        age_reader=age_reader,
         now=now,
+        direct_mode=direct_mode,
     )

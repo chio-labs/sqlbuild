@@ -18,10 +18,14 @@ from sqlbuild.executor.janitor.models import (
 )
 from tests.unit.src.sqlbuild.cli.commands.main.janitor._test_types import (
     JanitorConfirmationInterruptTestCase,
+    JanitorDirectArchiveConfirmationTestCase,
     JanitorDisabledOutputTestCase,
     JanitorPlanOutputTestCase,
 )
-from tests.unit.src.sqlbuild.cli.commands.main.janitor.helpers import build_janitor_plan
+from tests.unit.src.sqlbuild.cli.commands.main.janitor.helpers import (
+    build_direct_archive_plan,
+    build_janitor_plan,
+)
 
 
 @pytest.mark.parametrize(
@@ -84,11 +88,10 @@ def test_given_janitor_confirmation_when_keyboard_interrupt_then_returns_cancell
             use_color=False,
             expected_output="Janitor is disabled for this project.\n\n"
             "Janitor is opt-in. It previews stale warehouse objects and asks before "
-            "deleting anything.\n\n"
+            "archiving or deleting anything.\n\n"
             "Add this block to sqlbuild_project.toml:\n\n"
-            "janitor:\n"
-            "  enabled: true\n"
-            "  retention_days: 30\n\n"
+            "[janitor]\n"
+            "enabled = true\n\n"
             "After enabling, run janitor again to preview cleanup:\n"
             "  sqb janitor\n",
         )
@@ -127,7 +130,7 @@ def test_given_disabled_janitor_when_writing_with_color_then_styles_title(
     assert stream.getvalue().startswith(test_case.expected_prefix)
     assert (
         "\033[33mJanitor is opt-in. It previews stale warehouse objects and asks before "
-        "deleting anything.\033[0m"
+        "archiving or deleting anything.\033[0m"
     ) in stream.getvalue()
     assert "\033[34msqb janitor\033[0m" in stream.getvalue()
 
@@ -206,3 +209,80 @@ def test_given_janitor_plan_when_writing_with_color_then_uses_semantic_colors(
     output: str = stream.getvalue()
     for fragment in test_case.expected_output_fragments:
         assert fragment in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorDirectArchiveConfirmationTestCase(
+            description="direct archive plan requires typed archive and delete counts",
+            typed_response="archive 1 and delete 1 objects from dev",
+            expected_result=True,
+            expected_output_fragments=(
+                "Janitor will archive 1 and delete 1 objects from dev.",
+                "Retention: 14 days",
+                "Archive retention: 14 days",
+                "Type `archive 1 and delete 1 objects from dev` to continue: ",
+            ),
+        ),
+        JanitorDirectArchiveConfirmationTestCase(
+            description="direct archive plan rejects the virtual-mode phrase",
+            typed_response="delete 1 objects from dev",
+            expected_result=False,
+            expected_output_fragments=("Janitor will archive 1 and delete 1 objects from dev.",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_direct_archive_plan_when_confirming_then_requires_exact_archive_phrase(
+    test_case: JanitorDirectArchiveConfirmationTestCase,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(builtins, "input", lambda: test_case.typed_response)
+
+    result: bool = confirm_janitor_plan(
+        planning_result=JanitorPlanningResult(plan=build_direct_archive_plan())
+    )
+
+    output: str = capsys.readouterr().out
+    assert result is test_case.expected_result
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorPlanOutputTestCase(
+            description="direct preview lists exact archive names, ages, and expiry",
+            use_color=False,
+            expected_output_fragments=(
+                "  retention              14 days",
+                "  archive retention      14 days",
+                "  relations to archive   1",
+                "  archives to delete     1",
+                "  archives retained      0",
+                "Relations to archive\n  dev.old_orders  ->  "
+                "dev._sqb_archive__20260924t101500z__old_orders  "
+                "age 20d, delete after 2026-10-08 10:15:00 UTC",
+                "Archives to delete\n  dev._sqb_archive__20260101t000000z__old_products  "
+                "archived 2026-01-01 00:00:00 UTC, age 266d, expired 2026-01-15 00:00:00 UTC",
+            ),
+            unexpected_output_fragments=("eligible for deletion", "Eligible objects"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_direct_archive_plan_when_writing_preview_then_lists_archive_actions(
+    test_case: JanitorPlanOutputTestCase,
+) -> None:
+    stream: StringIO = StringIO()
+
+    write_plan(plan=build_direct_archive_plan(), stream=stream, use_color=test_case.use_color)
+
+    output: str = stream.getvalue()
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in output
+    for fragment in test_case.unexpected_output_fragments:
+        assert fragment not in output

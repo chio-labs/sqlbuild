@@ -23,3 +23,20 @@ class JanitorPlanOutputTestCase:
     use_color: bool
     expected_output_fragments: tuple[str, ...]
     unexpected_output_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class JanitorDirectArchiveConfirmationTestCase:
+    description: str
+    typed_response: str
+    expected_result: bool
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JanitorSettingsResolutionTestCase:
+    description: str
+    project_toml: str
+    cli_retention_days: int | None
+    expected_retention_days: int
+    expected_archive_retention_days: int

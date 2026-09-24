@@ -24,6 +24,16 @@ class SchemaMixin(ABC):
         ...
 
     @abstractmethod
+    def with_relation_age_metadata(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+    ) -> tuple[RelationInfo, ...]:
+        """Return listed relations with age timestamps that listing does not read inline."""
+        ...
+
+    @abstractmethod
     def list_functions(
         self,
         *,

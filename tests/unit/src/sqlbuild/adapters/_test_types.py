@@ -69,3 +69,10 @@ class RowDiffSampleSqlTestCase:
     description: str
     adapter: BaseAdapter
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AdapterRelationAgeMetadataCapabilityTestCase:
+    description: str
+    adapter: StrictAdapter
+    expected_supported: bool

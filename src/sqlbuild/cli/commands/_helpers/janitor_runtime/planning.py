@@ -191,6 +191,7 @@ def build_janitor_execution_plan(
                     not invocation.discovered_inputs.project_config.settings.virtual_environments
                 ),
                 state_history_versions=settings.direct_state_history_versions,
+                archive_retention_days=settings.archive_retention_days,
             ),
         )
         lifecycle.completed(metadata={"item_count": _janitor_candidate_count(plan)})
@@ -206,6 +207,7 @@ def _janitor_candidate_count(plan: JanitorPlan) -> int:
         len(candidates)
         for candidates in (
             plan.candidates,
+            plan.archive_deletion_candidates,
             plan.query_diff_artifact_candidates,
             plan.checkpoint_candidates,
             plan.detached_virtual_environment_candidates,
