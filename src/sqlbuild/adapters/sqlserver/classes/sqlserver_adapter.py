@@ -15,7 +15,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _build_names_filter,
     _build_schemas_filter,
     _encode_typed_json,
-    _historical_timestamp_changes_new_records_cte_sql,
     _quote_sql_string,
     _render_ansi_typed_scalar,
     _render_typed_value_list,
@@ -25,6 +24,9 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
 from sqlbuild.adapter.contract.classes.historical_snapshot_sql import (
     HistoricalSnapshotSql,
     historical_insert_validity_sql,
+)
+from sqlbuild.adapter.contract.classes.historical_timestamp_snapshot_sql import (
+    HistoricalTimestampSnapshotSql,
 )
 from sqlbuild.adapter.contract.classes.microbatch import MicrobatchMixin
 from sqlbuild.adapter.contract.classes.snapshot_sql import SnapshotSql
@@ -1922,7 +1924,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str,
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
-        new_changes_sql: str = _historical_timestamp_changes_new_records_cte_sql(
+        new_changes_sql: str = HistoricalTimestampSnapshotSql.changes_new_records_ctes_sql(
             destination=destination,
             origin=origin,
             unique_key=unique_key,
