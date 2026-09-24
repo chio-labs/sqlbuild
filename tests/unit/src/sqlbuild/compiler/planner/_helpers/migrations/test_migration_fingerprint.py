@@ -19,6 +19,44 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations.helpers import
     "test_case",
     [
         MigrationFingerprintTestCase(
+            expected_match=False,
+            description="alias rename does not rewrite the qualified column name",
+            origin_sql='SELECT a.a AS value FROM __ref("stg_orders") a',
+            destination_sql='SELECT b.b AS value FROM __ref("stg_orders") b',
+        ),
+        MigrationFingerprintTestCase(
+            expected_match=True,
+            description="cte and alias renames keep columns named like the cte",
+            origin_sql=(
+                'WITH orders AS (SELECT orders FROM __ref("stg_orders")) '
+                "SELECT orders.orders, totals.total FROM orders "
+                "JOIN (SELECT 1 AS total) AS totals ON TRUE"
+            ),
+            destination_sql=(
+                'WITH customer_orders AS (SELECT orders FROM __ref("stg_orders")) '
+                "SELECT customer_orders.orders, sums.total FROM customer_orders "
+                "JOIN (SELECT 1 AS total) AS sums ON TRUE"
+            ),
+        ),
+        MigrationFingerprintTestCase(
+            expected_match=False,
+            description="column named like the renamed cte is still a column",
+            origin_sql=(
+                'WITH orders AS (SELECT orders FROM __ref("stg_orders")) '
+                "SELECT orders.orders FROM orders"
+            ),
+            destination_sql=(
+                'WITH customer_orders AS (SELECT customer_orders FROM __ref("stg_orders")) '
+                "SELECT customer_orders.customer_orders FROM customer_orders"
+            ),
+        ),
+        MigrationFingerprintTestCase(
+            expected_match=True,
+            description="qualified star follows the alias rename",
+            origin_sql='SELECT o.* FROM __ref("stg_orders") AS o',
+            destination_sql='SELECT customer_order.* FROM __ref("stg_orders") AS customer_order',
+        ),
+        MigrationFingerprintTestCase(
             expected_match=True,
             description="table_alias_renamed",
             origin_sql=ORDERS_SQL,

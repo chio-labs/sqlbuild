@@ -31,7 +31,10 @@ _SPAN_KEY: str = "span"
 _COMMENTS_SUFFIX: str = "comments"
 _CONFIG_KEY: str = "config"
 _GENERIC_DIALECT: str = "generic"
-_ALIASED_RELATION_KEYS: frozenset[str] = frozenset({"table", "subquery"})
+_TABLE_KEY: str = "table"
+_ALIASED_RELATION_KEYS: frozenset[str] = frozenset({_TABLE_KEY, "subquery"})
+_QUALIFIED_REFERENCE_KEYS: frozenset[str] = frozenset({"column", "star"})
+_RELATION_QUALIFIER_KEYS: tuple[str, ...] = ("schema", "catalog")
 
 
 def build_migration_fingerprint(
@@ -106,11 +109,14 @@ def _normalized_query_sql(
     except polyglot.PolyglotError:
         return None
     stripped: Any = _strip_formatting(parsed)
+    definitions: list[tuple[str, bool]] = _local_names(stripped)
+    ordered_names: list[str] = list(dict.fromkeys(name for name, _ in definitions))
     local_names: dict[str, str] = {
         name: f"{MIGRATION_LOCAL_NAME_PREFIX}{index}"
-        for index, name in enumerate(dict.fromkeys(_local_names(stripped)), start=1)
+        for index, name in enumerate(ordered_names, start=1)
     }
-    canonical: Any = _rename_identifiers(node=stripped, names=local_names)
+    cte_names: dict[str, str] = {name: local_names[name] for name, is_cte in definitions if is_cte}
+    canonical: Any = _canonical_local_names(node=stripped, names=local_names, cte_names=cte_names)
     generated: list[str] = polyglot.generate(canonical, dialect=effective_dialect)
     return "\n".join(generated)
 
@@ -132,10 +138,10 @@ def _strip_formatting(node: Any) -> Any:
     return node
 
 
-def _local_names(node: Any) -> list[str]:
-    """Return CTE and relation alias names in first-seen order."""
+def _local_names(node: Any) -> list[tuple[str, bool]]:
+    """Return (name, is_cte) for CTE and relation alias definitions in first-seen order."""
 
-    found: list[str] = []
+    found: list[tuple[str, bool]] = []
     if isinstance(node, list):
         item: Any
         for item in node:
@@ -145,20 +151,15 @@ def _local_names(node: Any) -> list[str]:
         return found
     with_clause: Any = node.get(_WITH_KEY)
     if isinstance(with_clause, dict):
-        found.extend(
-            _identifier_names(
-                [
-                    cte.get(_ALIAS_KEY)
-                    for cte in with_clause.get(_CTES_KEY) or ()
-                    if isinstance(cte, dict)
-                ]
-            )
-        )
+        cte_aliases: list[Any] = [
+            cte.get(_ALIAS_KEY) for cte in with_clause.get(_CTES_KEY) or () if isinstance(cte, dict)
+        ]
+        found.extend((name, True) for name in _identifier_names(cte_aliases))
     key: str
     value: Any
     for key, value in node.items():
-        if key in _ALIASED_RELATION_KEYS and isinstance(value, dict):
-            found.extend(_identifier_names([value.get(_ALIAS_KEY)]))
+        if key in _ALIASED_RELATION_KEYS and _is_relation(value):
+            found.extend((name, False) for name in _identifier_names([value.get(_ALIAS_KEY)]))
         found.extend(_local_names(value))
     return found
 
@@ -171,17 +172,67 @@ def _identifier_names(identifiers: list[Any]) -> list[str]:
     ]
 
 
-def _rename_identifiers(*, node: Any, names: Mapping[str, str]) -> Any:
+def _canonical_local_names(
+    *, node: Any, names: Mapping[str, str], cte_names: Mapping[str, str]
+) -> Any:
+    """Rename CTE and alias names only where they define or qualify a relation."""
+
     if isinstance(node, list):
-        return [_rename_identifiers(node=value, names=names) for value in node]
+        return [
+            _canonical_local_names(node=value, names=names, cte_names=cte_names) for value in node
+        ]
     if not isinstance(node, dict):
         return node
-    if _is_identifier(node):
-        canonical: str | None = names.get(str(node[_IDENTIFIER_NAME_KEY]).lower())
-        if canonical is not None:
-            return {**node, _IDENTIFIER_NAME_KEY: canonical, _IDENTIFIER_QUOTED_KEY: False}
-        return node
-    return {key: _rename_identifiers(node=value, names=names) for key, value in node.items()}
+    rewritten: dict[str, Any] = {
+        key: _canonical_local_names(node=value, names=names, cte_names=cte_names)
+        for key, value in node.items()
+    }
+    key: str
+    value: Any
+    for key, value in node.items():
+        if key in _QUALIFIED_REFERENCE_KEYS and isinstance(value, dict):
+            rewritten[key] = {
+                **rewritten[key],
+                _TABLE_KEY: _renamed(identifier=value.get(_TABLE_KEY), names=names),
+            }
+        elif key in _ALIASED_RELATION_KEYS and _is_relation(value):
+            rewritten[key] = {
+                **rewritten[key],
+                _ALIAS_KEY: _renamed(identifier=value.get(_ALIAS_KEY), names=names),
+                **_cte_reference(relation=value, cte_names=cte_names),
+            }
+        elif key == _WITH_KEY and isinstance(value, dict):
+            rewritten[key] = {
+                **rewritten[key],
+                _CTES_KEY: [
+                    {**cte, _ALIAS_KEY: _renamed(identifier=cte.get(_ALIAS_KEY), names=names)}
+                    for cte in rewritten[key].get(_CTES_KEY) or ()
+                ],
+            }
+    return rewritten
+
+
+def _cte_reference(*, relation: dict[str, Any], cte_names: Mapping[str, str]) -> dict[str, Any]:
+    """Rename an unqualified relation name that refers to a CTE."""
+
+    qualifiers: tuple[Any, ...] = tuple(relation.get(key) for key in _RELATION_QUALIFIER_KEYS)
+    name: Any = relation.get(_IDENTIFIER_NAME_KEY)
+    if any(qualifier is not None for qualifier in qualifiers) or not _is_identifier(name):
+        return {}
+    return {_IDENTIFIER_NAME_KEY: _renamed(identifier=name, names=cte_names)}
+
+
+def _renamed(*, identifier: Any, names: Mapping[str, str]) -> Any:
+    if not _is_identifier(identifier):
+        return identifier
+    canonical: str | None = names.get(str(identifier[_IDENTIFIER_NAME_KEY]).lower())
+    if canonical is None:
+        return identifier
+    return {**identifier, _IDENTIFIER_NAME_KEY: canonical, _IDENTIFIER_QUOTED_KEY: False}
+
+
+def _is_relation(node: Any) -> bool:
+    return isinstance(node, dict) and not _is_identifier(node)
 
 
 def _is_identifier(node: Any) -> bool:
