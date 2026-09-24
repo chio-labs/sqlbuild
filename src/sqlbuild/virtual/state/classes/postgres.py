@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlbuild.adapter.contract.classes.observed_connection import ObservedConnection
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -22,7 +23,6 @@ from sqlbuild.microbatches.constants import (
 )
 from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope, MicrobatchWriteResult
 from sqlbuild.virtual.state._helpers.state_storage.datetime import (
-    from_naive_utc_wall_clock,
     to_naive_utc_wall_clock,
 )
 from sqlbuild.virtual.state._helpers.state_storage.events import backup_id, event_id
@@ -30,7 +30,7 @@ from sqlbuild.virtual.state._helpers.state_storage.validation import (
     build_validation_result,
     validate_conditional_virtual_environment_publication,
 )
-from sqlbuild.virtual.state.classes.state_backend import StateBackend
+from sqlbuild.virtual.state.classes._sql_state_backend import SqlStateBackend
 from sqlbuild.virtual.state.constants import (
     CURRENT_STATE_SCHEMA_VERSION,
     FUNCTION_VERSION_TABLE,
@@ -95,19 +95,17 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentSeedRefRecord,
 )
 from sqlbuild.virtual.state.types import (
-    ModelVersionStatus,
-    PhysicalArtifactType,
     StateColumnType,
     StateMigrationAction,
     StateMigrationStatus,
-    StateOperationStatus,
-    StateOperationType,
     VirtualEnvironmentStatus,
 )
 
 
-class PostgresStateBackend(StateBackend):
+class PostgresStateBackend(SqlStateBackend):
     """Postgres implementation for virtual state."""
+
+    _placeholder: ClassVar[str] = "%s"
 
     def connect(self, config: dict[str, object]) -> Any:
         try:
@@ -135,6 +133,26 @@ class PostgresStateBackend(StateBackend):
 
     def close(self, connection: Any) -> None:
         connection.close()
+
+    def _fetch_one(
+        self, *, connection: Any, sql: str, params: Sequence[object] | None = None
+    ) -> tuple[Any, ...] | None:
+        with connection.cursor() as cursor:
+            if params is None:
+                cursor.execute(sql)
+            else:
+                cursor.execute(sql, params)
+            return cursor.fetchone()
+
+    def _fetch_all(
+        self, *, connection: Any, sql: str, params: Sequence[object] | None = None
+    ) -> list[tuple[Any, ...]]:
+        with connection.cursor() as cursor:
+            if params is None:
+                cursor.execute(sql)
+            else:
+                cursor.execute(sql, params)
+            return cursor.fetchall()
 
     def initialize(self, *, connection: Any, schema: str, sqlbuild_version: str) -> None:
         with connection.cursor() as cursor:
@@ -350,32 +368,6 @@ class PostgresStateBackend(StateBackend):
                 cursor.execute("ROLLBACK")
                 raise
 
-    def get_model_version(
-        self, *, connection: Any, schema: str, model_name: str, version_hash: str
-    ) -> ModelVersionRecord | None:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT model_name, version_hash, definition_identity_hash, "
-                "identity_metadata_hash, definition_text_b64, identity_metadata_json_b64, "
-                "compiled_sql_b64, status "
-                f"FROM {self._qualified_name(schema=schema, table=MODEL_VERSION_TABLE)} "
-                "WHERE model_name = %s AND version_hash = %s",
-                [model_name, version_hash],
-            )
-            row: tuple[Any, ...] | None = cursor.fetchone()
-        if row is None:
-            return None
-        return ModelVersionRecord(
-            model_name=row[0],
-            version_hash=row[1],
-            definition_identity_hash=row[2],
-            identity_metadata_hash=row[3],
-            definition_text_b64=row[4],
-            identity_metadata_json_b64=row[5],
-            compiled_sql_b64=row[6],
-            status=ModelVersionStatus(row[7]),
-        )
-
     def upsert_function_version(
         self, *, connection: Any, schema: str, record: FunctionVersionRecord
     ) -> None:
@@ -424,36 +416,6 @@ class PostgresStateBackend(StateBackend):
                 cursor.execute("ROLLBACK")
                 raise
 
-    def get_function_version(
-        self, *, connection: Any, schema: str, function_name: str, version_hash: str
-    ) -> FunctionVersionRecord | None:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT function_name, version_hash, language, returns, arguments_json_b64, "
-                "return_columns_json_b64, packages_json_b64, runtime_version, entry_point, "
-                "body_sql_b64, definition_text_b64, status "
-                f"FROM {self._qualified_name(schema=schema, table=FUNCTION_VERSION_TABLE)} "
-                "WHERE function_name = %s AND version_hash = %s",
-                [function_name, version_hash],
-            )
-            row: tuple[Any, ...] | None = cursor.fetchone()
-        if row is None:
-            return None
-        return FunctionVersionRecord(
-            function_name=row[0],
-            version_hash=row[1],
-            language=row[2],
-            returns=row[3],
-            arguments_json_b64=row[4],
-            return_columns_json_b64=row[5],
-            packages_json_b64=row[6],
-            runtime_version=row[7],
-            entry_point=row[8],
-            body_sql_b64=row[9],
-            definition_text_b64=row[10],
-            status=ModelVersionStatus(row[11]),
-        )
-
     def upsert_seed_version(
         self, *, connection: Any, schema: str, record: SeedVersionRecord
     ) -> None:
@@ -491,28 +453,6 @@ class PostgresStateBackend(StateBackend):
             except BaseException:
                 cursor.execute("ROLLBACK")
                 raise
-
-    def get_seed_version(
-        self, *, connection: Any, schema: str, seed_name: str, version_hash: str
-    ) -> SeedVersionRecord | None:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT seed_name, version_hash, identity_metadata_hash, "
-                "identity_metadata_json_b64, status "
-                f"FROM {self._qualified_name(schema=schema, table=SEED_VERSION_TABLE)} "
-                "WHERE seed_name = %s AND version_hash = %s",
-                [seed_name, version_hash],
-            )
-            row: tuple[Any, ...] | None = cursor.fetchone()
-        if row is None:
-            return None
-        return SeedVersionRecord(
-            seed_name=row[0],
-            version_hash=row[1],
-            identity_metadata_hash=row[2],
-            identity_metadata_json_b64=row[3],
-            status=ModelVersionStatus(row[4]),
-        )
 
     def upsert_python_node_version(
         self, *, connection: Any, schema: str, record: PythonNodeVersionRecord
@@ -557,37 +497,6 @@ class PostgresStateBackend(StateBackend):
             except BaseException:
                 cursor.execute("ROLLBACK")
                 raise
-
-    def get_python_node_version(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        node_type: str,
-        node_name: str,
-        version_hash: str,
-    ) -> PythonNodeVersionRecord | None:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT node_type, node_name, version_hash, definition_hash, "
-                "identity_metadata_hash, definition_json_b64, identity_metadata_json_b64, status "
-                f"FROM {self._qualified_name(schema=schema, table=PYTHON_NODE_VERSION_TABLE)} "
-                "WHERE node_type = %s AND node_name = %s AND version_hash = %s",
-                [node_type, node_name, version_hash],
-            )
-            row: tuple[Any, ...] | None = cursor.fetchone()
-        if row is None:
-            return None
-        return PythonNodeVersionRecord(
-            node_type=row[0],
-            node_name=row[1],
-            version_hash=row[2],
-            definition_hash=row[3],
-            identity_metadata_hash=row[4],
-            definition_json_b64=row[5],
-            identity_metadata_json_b64=row[6],
-            status=ModelVersionStatus(row[7]),
-        )
 
     def insert_node_result(
         self,
@@ -813,67 +722,6 @@ class PostgresStateBackend(StateBackend):
                 cursor.execute("ROLLBACK")
                 raise
 
-    def get_physical_relation_for_artifact(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        artifact_type: PhysicalArtifactType,
-        artifact_name: str,
-        version_hash: str,
-    ) -> PhysicalRelationRecord | None:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT artifact_type, artifact_name, version_hash, database_name, schema_name, "
-                "relation_name, relation_type "
-                f"FROM {self._qualified_name(schema=schema, table=PHYSICAL_RELATION_TABLE)} "
-                "WHERE artifact_type = %s AND artifact_name = %s AND version_hash = %s",
-                [artifact_type.value, artifact_name, version_hash],
-            )
-            row: tuple[Any, ...] | None = cursor.fetchone()
-        if row is None:
-            return None
-        return PhysicalRelationRecord(
-            artifact_type=PhysicalArtifactType(row[0]),
-            artifact_name=row[1],
-            version_hash=row[2],
-            database_name=row[3],
-            schema_name=row[4],
-            relation_name=row[5],
-            relation_type=row[6],
-        )
-
-    def list_physical_relations_for_artifact(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        artifact_type: PhysicalArtifactType,
-        artifact_name: str,
-    ) -> tuple[PhysicalRelationRecord, ...]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT artifact_type, artifact_name, version_hash, database_name, schema_name, "
-                "relation_name, relation_type "
-                f"FROM {self._qualified_name(schema=schema, table=PHYSICAL_RELATION_TABLE)} "
-                "WHERE artifact_type = %s AND artifact_name = %s "
-                "ORDER BY updated_at DESC, version_hash DESC",
-                [artifact_type.value, artifact_name],
-            )
-            rows: list[tuple[Any, ...]] = cursor.fetchall()
-        return tuple(
-            PhysicalRelationRecord(
-                artifact_type=PhysicalArtifactType(row[0]),
-                artifact_name=row[1],
-                version_hash=row[2],
-                database_name=row[3],
-                schema_name=row[4],
-                relation_name=row[5],
-                relation_type=row[6],
-            )
-            for row in rows
-        )
-
     def upsert_physical_relation_ancestry(
         self, *, connection: Any, schema: str, record: PhysicalRelationAncestryRecord
     ) -> None:
@@ -916,29 +764,6 @@ class PostgresStateBackend(StateBackend):
                 cursor.execute("ROLLBACK")
                 raise
 
-    def get_physical_relation_ancestry(
-        self, *, connection: Any, schema: str, model_name: str, version_hash: str
-    ) -> PhysicalRelationAncestryRecord | None:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT model_name, version_hash, parent_model_name, parent_version_hash, "
-                "seed_strategy "
-                "FROM "
-                f"{self._qualified_name(schema=schema, table=PHYSICAL_RELATION_ANCESTRY_TABLE)} "
-                "WHERE model_name = %s AND version_hash = %s",
-                [model_name, version_hash],
-            )
-            row: tuple[Any, ...] | None = cursor.fetchone()
-        if row is None:
-            return None
-        return PhysicalRelationAncestryRecord(
-            model_name=row[0],
-            version_hash=row[1],
-            parent_model_name=row[2],
-            parent_version_hash=row[3],
-            seed_strategy=row[4],
-        )
-
     def upsert_virtual_environment(
         self, *, connection: Any, schema: str, record: VirtualEnvironmentRecord
     ) -> None:
@@ -950,27 +775,6 @@ class PostgresStateBackend(StateBackend):
             except BaseException:
                 cursor.execute("ROLLBACK")
                 raise
-
-    def get_virtual_environment(
-        self, *, connection: Any, schema: str, virtual_environment_name: str
-    ) -> VirtualEnvironmentRecord | None:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT virtual_environment_name, status, baseline_virtual_environment_name, "
-                "finalized_at "
-                f"FROM {self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_TABLE)} "
-                "WHERE virtual_environment_name = %s",
-                [virtual_environment_name],
-            )
-            row: tuple[Any, ...] | None = cursor.fetchone()
-        if row is None:
-            return None
-        return VirtualEnvironmentRecord(
-            virtual_environment_name=row[0],
-            status=VirtualEnvironmentStatus(row[1]),
-            baseline_virtual_environment_name=row[2],
-            finalized_at=row[3],
-        )
 
     def list_virtual_environments(
         self, *, connection: Any, schema: str
@@ -1147,33 +951,6 @@ class PostgresStateBackend(StateBackend):
                 cursor.execute("ROLLBACK")
                 raise
 
-    def get_virtual_environment_node_refs(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        virtual_environment_name: str,
-        node_type: str,
-    ) -> tuple[VirtualEnvironmentNodeRefRecord, ...]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT virtual_environment_name, node_type, node_name, version_hash "
-                "FROM "
-                f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
-                "WHERE virtual_environment_name = %s AND node_type = %s ORDER BY node_name",
-                [virtual_environment_name, node_type],
-            )
-            rows: list[tuple[Any, ...]] = cursor.fetchall()
-        return tuple(
-            VirtualEnvironmentNodeRefRecord(
-                virtual_environment_name=row[0],
-                node_type=row[1],
-                node_name=row[2],
-                version_hash=row[3],
-            )
-            for row in rows
-        )
-
     def upsert_virtual_environment_node_ref(
         self,
         *,
@@ -1217,24 +994,6 @@ class PostgresStateBackend(StateBackend):
             ),
         )
 
-    def get_virtual_environment_model_refs(
-        self, *, connection: Any, schema: str, virtual_environment_name: str
-    ) -> tuple[VirtualEnvironmentModelRefRecord, ...]:
-        refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = self.get_virtual_environment_node_refs(
-            connection=connection,
-            schema=schema,
-            virtual_environment_name=virtual_environment_name,
-            node_type="model",
-        )
-        return tuple(
-            VirtualEnvironmentModelRefRecord(
-                virtual_environment_name=ref.virtual_environment_name,
-                model_name=ref.node_name,
-                version_hash=ref.version_hash,
-            )
-            for ref in refs
-        )
-
     def replace_virtual_environment_function_refs(
         self,
         *,
@@ -1271,33 +1030,6 @@ class PostgresStateBackend(StateBackend):
             refs_by_node_type=refs_by_node_type,
         )
 
-    def get_virtual_environment_function_refs(
-        self, *, connection: Any, schema: str, virtual_environment_name: str
-    ) -> tuple[VirtualEnvironmentFunctionRefRecord, ...]:
-        refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = (
-            *self.get_virtual_environment_node_refs(
-                connection=connection,
-                schema=schema,
-                virtual_environment_name=virtual_environment_name,
-                node_type="udf",
-            ),
-            *self.get_virtual_environment_node_refs(
-                connection=connection,
-                schema=schema,
-                virtual_environment_name=virtual_environment_name,
-                node_type="table_fn",
-            ),
-        )
-        return tuple(
-            VirtualEnvironmentFunctionRefRecord(
-                virtual_environment_name=ref.virtual_environment_name,
-                node_type=ref.node_type,
-                function_name=ref.node_name,
-                version_hash=ref.version_hash,
-            )
-            for ref in sorted(refs, key=lambda item: (item.node_type, item.node_name))
-        )
-
     def replace_virtual_environment_seed_refs(
         self,
         *,
@@ -1322,24 +1054,6 @@ class PostgresStateBackend(StateBackend):
             ),
         )
 
-    def get_virtual_environment_seed_refs(
-        self, *, connection: Any, schema: str, virtual_environment_name: str
-    ) -> tuple[VirtualEnvironmentSeedRefRecord, ...]:
-        refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = self.get_virtual_environment_node_refs(
-            connection=connection,
-            schema=schema,
-            virtual_environment_name=virtual_environment_name,
-            node_type="seed",
-        )
-        return tuple(
-            VirtualEnvironmentSeedRefRecord(
-                virtual_environment_name=ref.virtual_environment_name,
-                seed_name=ref.node_name,
-                version_hash=ref.version_hash,
-            )
-            for ref in refs
-        )
-
     def upsert_virtual_environment_python_node_ref(
         self,
         *,
@@ -1356,30 +1070,6 @@ class PostgresStateBackend(StateBackend):
                 node_name=ref.node_name,
                 version_hash=ref.version_hash,
             ),
-        )
-
-    def get_virtual_environment_python_node_refs(
-        self, *, connection: Any, schema: str, virtual_environment_name: str
-    ) -> tuple[VirtualEnvironmentPythonNodeRefRecord, ...]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT virtual_environment_name, node_type, node_name, version_hash "
-                "FROM "
-                f"{self._qualified_name(schema=schema, table=VIRTUAL_ENVIRONMENT_NODE_REF_TABLE)} "
-                "WHERE virtual_environment_name = %s "
-                "AND node_type IN ('task', 'loader', 'asset', 'check', 'hook') "
-                "ORDER BY node_type, node_name",
-                [virtual_environment_name],
-            )
-            rows: list[tuple[Any, ...]] = cursor.fetchall()
-        return tuple(
-            VirtualEnvironmentPythonNodeRefRecord(
-                virtual_environment_name=row[0],
-                node_type=row[1],
-                node_name=row[2],
-                version_hash=row[3],
-            )
-            for row in rows
         )
 
     def count_unreferenced_python_node_versions(self, *, connection: Any, schema: str) -> int:
@@ -1472,32 +1162,6 @@ class PostgresStateBackend(StateBackend):
                 cursor.execute("ROLLBACK")
                 raise
 
-    def get_virtual_environment_source_freshness(
-        self, *, connection: Any, schema: str, virtual_environment_name: str
-    ) -> tuple[SourceFreshnessRecord, ...]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT virtual_environment_name, source_name, strategy, value_kind, "
-                "data_version, data_version_hash, observed_at "
-                "FROM "
-                f"{self._qualified_name(schema=schema, table=SOURCE_FRESHNESS_OBSERVATION_TABLE)} "
-                "WHERE virtual_environment_name = %s ORDER BY source_name",
-                [virtual_environment_name],
-            )
-            rows: list[tuple[Any, ...]] = cursor.fetchall()
-        return tuple(
-            SourceFreshnessRecord(
-                virtual_environment_name=row[0],
-                source_name=row[1],
-                strategy=row[2],
-                value_kind=row[3],
-                data_version=row[4],
-                data_version_hash=row[5],
-                observed_at=from_naive_utc_wall_clock(row[6]),
-            )
-            for row in rows
-        )
-
     def create_virtual_environment_checkpoint(
         self,
         *,
@@ -1573,103 +1237,6 @@ class PostgresStateBackend(StateBackend):
                 "(checkpoint_id, seed_name, version_hash) VALUES (%s, %s, %s)",
                 [seed_ref.checkpoint_id, seed_ref.seed_name, seed_ref.version_hash],
             )
-
-    def list_virtual_environment_checkpoints(
-        self, *, connection: Any, schema: str, virtual_environment_name: str
-    ) -> tuple[VirtualEnvironmentCheckpointRecord, ...]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT checkpoint_id, virtual_environment_name, created_at "
-                "FROM "
-                + self._qualified_name(
-                    schema=schema,
-                    table=VIRTUAL_ENVIRONMENT_CHECKPOINT_TABLE,
-                )
-                + " "
-                "WHERE virtual_environment_name = %s ORDER BY created_at DESC, checkpoint_id DESC",
-                [virtual_environment_name],
-            )
-            rows: list[tuple[Any, ...]] = cursor.fetchall()
-        return tuple(
-            VirtualEnvironmentCheckpointRecord(
-                checkpoint_id=row[0],
-                virtual_environment_name=row[1],
-                created_at=row[2],
-            )
-            for row in rows
-        )
-
-    def get_virtual_environment_checkpoint_model_refs(
-        self, *, connection: Any, schema: str, checkpoint_id: str
-    ) -> tuple[VirtualEnvironmentCheckpointModelRefRecord, ...]:
-        with connection.cursor() as cursor:
-            checkpoint_model_ref_table: str = self._qualified_name(
-                schema=schema,
-                table=VIRTUAL_ENVIRONMENT_CHECKPOINT_MODEL_REF_TABLE,
-            )
-            cursor.execute(
-                f"SELECT checkpoint_id, model_name, version_hash "
-                f"FROM {checkpoint_model_ref_table} "
-                "WHERE checkpoint_id = %s ORDER BY model_name",
-                [checkpoint_id],
-            )
-            rows: list[tuple[Any, ...]] = cursor.fetchall()
-        return tuple(
-            VirtualEnvironmentCheckpointModelRefRecord(
-                checkpoint_id=row[0],
-                model_name=row[1],
-                version_hash=row[2],
-            )
-            for row in rows
-        )
-
-    def get_virtual_environment_checkpoint_function_refs(
-        self, *, connection: Any, schema: str, checkpoint_id: str
-    ) -> tuple[VirtualEnvironmentCheckpointFunctionRefRecord, ...]:
-        with connection.cursor() as cursor:
-            checkpoint_function_ref_table: str = self._qualified_name(
-                schema=schema,
-                table=VIRTUAL_ENVIRONMENT_CHECKPOINT_FUNCTION_REF_TABLE,
-            )
-            cursor.execute(
-                f"SELECT checkpoint_id, function_name, version_hash "
-                f"FROM {checkpoint_function_ref_table} "
-                "WHERE checkpoint_id = %s ORDER BY function_name",
-                [checkpoint_id],
-            )
-            rows: list[tuple[Any, ...]] = cursor.fetchall()
-        return tuple(
-            VirtualEnvironmentCheckpointFunctionRefRecord(
-                checkpoint_id=row[0],
-                function_name=row[1],
-                version_hash=row[2],
-            )
-            for row in rows
-        )
-
-    def get_virtual_environment_checkpoint_seed_refs(
-        self, *, connection: Any, schema: str, checkpoint_id: str
-    ) -> tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...]:
-        with connection.cursor() as cursor:
-            checkpoint_seed_ref_table: str = self._qualified_name(
-                schema=schema,
-                table=VIRTUAL_ENVIRONMENT_CHECKPOINT_SEED_REF_TABLE,
-            )
-            cursor.execute(
-                f"SELECT checkpoint_id, seed_name, version_hash "
-                f"FROM {checkpoint_seed_ref_table} "
-                "WHERE checkpoint_id = %s ORDER BY seed_name",
-                [checkpoint_id],
-            )
-            rows: list[tuple[Any, ...]] = cursor.fetchall()
-        return tuple(
-            VirtualEnvironmentCheckpointSeedRefRecord(
-                checkpoint_id=row[0],
-                seed_name=row[1],
-                version_hash=row[2],
-            )
-            for row in rows
-        )
 
     def delete_virtual_environment_checkpoint(
         self, *, connection: Any, schema: str, checkpoint_id: str
@@ -1753,26 +1320,6 @@ class PostgresStateBackend(StateBackend):
             except BaseException:
                 cursor.execute("ROLLBACK")
                 raise
-
-    def get_state_operation(
-        self, *, connection: Any, schema: str, operation_id: str
-    ) -> StateOperationRecord | None:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT operation_id, operation_type, status, virtual_environment_name "
-                f"FROM {self._qualified_name(schema=schema, table=STATE_OPERATION_TABLE)} "
-                "WHERE operation_id = %s",
-                [operation_id],
-            )
-            row: tuple[Any, ...] | None = cursor.fetchone()
-        if row is None:
-            return None
-        return StateOperationRecord(
-            operation_id=row[0],
-            operation_type=StateOperationType(row[1]),
-            status=StateOperationStatus(row[2]),
-            virtual_environment_name=row[3],
-        )
 
     def create_state_operation_event(
         self, *, connection: Any, schema: str, record: StateOperationEventRecord
@@ -2089,12 +1636,6 @@ class PostgresStateBackend(StateBackend):
         if value is None:
             return None
         return str(value).lower() == STATE_BOOLEAN_TRUE
-
-    def _quote_identifier(self, identifier: str) -> str:
-        return '"' + identifier.replace('"', '""') + '"'
-
-    def _qualified_name(self, *, schema: str, table: str) -> str:
-        return f"{self._quote_identifier(schema)}.{self._quote_identifier(table)}"
 
     def _validate_source_freshness_records(
         self,
