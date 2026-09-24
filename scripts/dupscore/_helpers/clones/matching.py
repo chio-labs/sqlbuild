@@ -13,6 +13,8 @@ from scripts.dupscore.constants import (
     CLONE_CANDIDATE_MIN_JACCARD,
     CLONE_MAX_FINGERPRINT_UNITS,
     CLONE_MIN_FINGERPRINTS,
+    CLONE_SMALL_NEAR_MISS_MIN_SIMILARITY,
+    CLONE_SMALL_NEAR_MISS_TOKENS,
 )
 from scripts.dupscore.models import ClonePair, CloneUnit
 
@@ -63,12 +65,16 @@ def find_clone_pairs(
             continue
         if shared / (left_size + right_size - shared) < CLONE_CANDIDATE_MIN_JACCARD:
             continue
+        required: float = _required_similarity(
+            smaller=min(len(units[left].normalized), len(units[right].normalized)),
+            min_similarity=min_similarity,
+        )
         similarity: float = _stream_similarity(
             left=units[left].normalized,
             right=units[right].normalized,
-            min_similarity=min_similarity,
+            min_similarity=required,
         )
-        if similarity >= min_similarity:
+        if similarity >= required:
             pairs[(left, right)] = ClonePair(
                 left=left,
                 right=right,
@@ -76,6 +82,14 @@ def find_clone_pairs(
                 category=CATEGORY_NEAR_MISS,
             )
     return [pairs[key] for key in sorted(pairs)]
+
+
+def _required_similarity(*, smaller: int, min_similarity: float) -> float:
+    """Demand closer matches from short units, whose shared skeletons are mostly idioms."""
+
+    if smaller < CLONE_SMALL_NEAR_MISS_TOKENS:
+        return max(min_similarity, CLONE_SMALL_NEAR_MISS_MIN_SIMILARITY)
+    return min_similarity
 
 
 def _stream_similarity(

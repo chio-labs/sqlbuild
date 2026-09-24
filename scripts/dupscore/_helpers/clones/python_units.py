@@ -74,7 +74,12 @@ def extract_python_units(*, relative_path: str, source: str) -> tuple[CloneUnit,
     except (SyntaxError, tokenize.TokenError):
         return ()
     starts: list[_Position] = [item.start for item in tokens]
-    normalized: list[str | None] = [_normalize(item) for item in tokens]
+    call_targets: frozenset[_Position] = _call_target_positions(
+        tree=tree, lines=io.StringIO(source).readlines()
+    )
+    normalized: list[str | None] = [
+        _normalize(item=item, call_target=item.start in call_targets) for item in tokens
+    ]
     for span in _ignored_spans(tree.body):
         end: int = bisect_left(starts, span.end)
         if span.statement and end < len(tokens) and tokens[end].type == tokenize.NEWLINE:
@@ -107,9 +112,11 @@ def extract_python_units(*, relative_path: str, source: str) -> tuple[CloneUnit,
     return tuple(units)
 
 
-def _normalize(item: tokenize.TokenInfo) -> str | None:
+def _normalize(*, item: tokenize.TokenInfo, call_target: bool) -> str | None:
     if item.type == tokenize.NAME:
-        return item.string if item.string in _KEYWORDS else PLACEHOLDER_IDENTIFIER
+        if call_target or item.string in _KEYWORDS:
+            return item.string
+        return PLACEHOLDER_IDENTIFIER
     if item.type == tokenize.OP:
         return None if item.string == _RETURN_ARROW else item.string
     if item.type in _FSTRING_BODY_TYPES:
@@ -120,6 +127,39 @@ def _normalize(item: tokenize.TokenInfo) -> str | None:
     if marker is not None:
         return marker
     return _LITERAL_PLACEHOLDERS.get(item.type, item.string)
+
+
+def _call_target_positions(*, tree: ast.Module, lines: list[str]) -> frozenset[_Position]:
+    """Locate the name tokens of called functions (``f(...)``) and methods (``x.f(...)``)."""
+
+    positions: set[_Position] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        function: ast.expr = node.func
+        if isinstance(function, ast.Name):
+            positions.add(
+                _token_position(lines=lines, line=function.lineno, byte_column=function.col_offset)
+            )
+        elif (
+            isinstance(function, ast.Attribute)
+            and function.end_lineno is not None
+            and function.end_col_offset is not None
+        ):
+            end: _Position = _token_position(
+                lines=lines, line=function.end_lineno, byte_column=function.end_col_offset
+            )
+            positions.add((end[0], end[1] - len(function.attr)))
+    return frozenset(positions)
+
+
+def _token_position(*, lines: list[str], line: int, byte_column: int) -> _Position:
+    """Convert an ``ast`` UTF-8 byte column into the character column ``tokenize`` reports."""
+
+    text: str = lines[line - 1] if 0 < line <= len(lines) else ""
+    if text.isascii():
+        return (line, byte_column)
+    return (line, len(text.encode("utf-8")[:byte_column].decode("utf-8", errors="replace")))
 
 
 def _collect_unit_nodes(*, body: list[ast.stmt], prefix: str) -> list[_UnitNode]:

@@ -47,3 +47,17 @@ reason = "Adapter backends intentionally conform to the shared adapter contract.
 # [[clone_allowlist]]
 # paths = ["src/sqlbuild/example/backends/*"]
 # reason = "Backends intentionally mirror one protocol."
+
+# Clone mode: a method is a forced override when it is named after an abstract method of
+# `contract` (own or inherited, parsed statically from the analysed source), is defined in a
+# class under `paths` that derives from `contract`, and would otherwise be inherited from
+# `contract`, a `forbidden_owners` class, or nowhere. Links between two forced overrides are
+# hidden; links to any other unit are still reported. Every entry needs a non-empty reason.
+[[contract_exemption]]
+contract = "src/sqlbuild/adapter/contract/classes/strict_adapter.py:StrictAdapter"
+paths = ["src/sqlbuild/adapter/contract/classes/*", "src/sqlbuild/adapters/*/classes/*"]
+forbidden_owners = ["src/sqlbuild/adapter/contract/classes/base_adapter.py:BaseAdapter"]
+reason = """\
+tests/unit/src/sqlbuild/adapter/contract/classes/strict_adapter/test_strict_adapter.py requires \
+every first-class adapter to define each StrictAdapter abstract method itself instead of \
+inheriting it from BaseAdapter or StrictAdapter, so identical overrides are intentional."""

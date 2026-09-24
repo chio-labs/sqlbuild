@@ -6,9 +6,10 @@ import pytest
 
 from scripts.dupscore._helpers.inputs.config import load_config
 from scripts.dupscore.exceptions import DupscoreConfigError
-from scripts.dupscore.models import CloneAllowlistEntry, DupscoreConfig
+from scripts.dupscore.models import CloneAllowlistEntry, ContractExemptionEntry, DupscoreConfig
 from tests.unit.scripts.dupscore._helpers.inputs.config._test_types import (
     CloneAllowlistTestCase,
+    ContractExemptionConfigTestCase,
     InvalidConfigTestCase,
     LoadConfigTestCase,
     MissingConfigTestCase,
@@ -113,6 +114,102 @@ def test_given_missing_config_file_when_loading_then_returns_empty_config(
             toml_text='clone_allowlist = ["src/*"]\n',
             expected_error_fragment="clone_allowlist entry 1 must be a table",
         ),
+        InvalidConfigTestCase(
+            description="rejects contract exemptions without a reason",
+            toml_text=(
+                "[[contract_exemption]]\n"
+                'contract = "src/demo/contract.py:StrictStore"\n'
+                'paths = ["src/demo/*"]\n'
+            ),
+            expected_error_fragment="contract_exemption entry 1 needs a non-empty reason",
+        ),
+        InvalidConfigTestCase(
+            description="rejects contract specs without a class name",
+            toml_text=(
+                "[[contract_exemption]]\n"
+                'contract = "src/demo/contract.py"\n'
+                'paths = ["src/demo/*"]\n'
+                'reason = "forced"\n'
+            ),
+            expected_error_fragment="contract_exemption entry 1 contract must be",
+        ),
+        InvalidConfigTestCase(
+            description="rejects contract specs that are not python files",
+            toml_text=(
+                "[[contract_exemption]]\n"
+                'contract = "src/demo/contract.rs:StrictStore"\n'
+                'paths = ["src/demo/*"]\n'
+                'reason = "forced"\n'
+            ),
+            expected_error_fragment="contract_exemption entry 1 contract must be",
+        ),
+        InvalidConfigTestCase(
+            description="rejects absolute contract paths",
+            toml_text=(
+                "[[contract_exemption]]\n"
+                'contract = "/src/demo/contract.py:StrictStore"\n'
+                'paths = ["src/demo/*"]\n'
+                'reason = "forced"\n'
+            ),
+            expected_error_fragment="contract_exemption entry 1 contract must be",
+        ),
+        InvalidConfigTestCase(
+            description="rejects contract class names that are not identifiers",
+            toml_text=(
+                "[[contract_exemption]]\n"
+                'contract = "src/demo/contract.py:Strict.Store"\n'
+                'paths = ["src/demo/*"]\n'
+                'reason = "forced"\n'
+            ),
+            expected_error_fragment="contract_exemption entry 1 contract must be",
+        ),
+        InvalidConfigTestCase(
+            description="rejects contract exemptions without a contract",
+            toml_text='[[contract_exemption]]\npaths = ["src/demo/*"]\nreason = "forced"\n',
+            expected_error_fragment="contract_exemption entry 1 contract must be",
+        ),
+        InvalidConfigTestCase(
+            description="rejects contract exemptions without paths",
+            toml_text=(
+                "[[contract_exemption]]\n"
+                'contract = "src/demo/contract.py:StrictStore"\n'
+                'reason = "forced"\n'
+            ),
+            expected_error_fragment="contract_exemption entry 1 needs a non-empty paths list",
+        ),
+        InvalidConfigTestCase(
+            description="rejects malformed forbidden owners",
+            toml_text=(
+                "[[contract_exemption]]\n"
+                'contract = "src/demo/contract.py:StrictStore"\n'
+                'forbidden_owners = ["BaseStore"]\n'
+                'paths = ["src/demo/*"]\n'
+                'reason = "forced"\n'
+            ),
+            expected_error_fragment="contract_exemption entry 1 forbidden_owners must be",
+        ),
+        InvalidConfigTestCase(
+            description="rejects a non-list forbidden owners value",
+            toml_text=(
+                "[[contract_exemption]]\n"
+                'contract = "src/demo/contract.py:StrictStore"\n'
+                'forbidden_owners = "src/demo/base.py:BaseStore"\n'
+                'paths = ["src/demo/*"]\n'
+                'reason = "forced"\n'
+            ),
+            expected_error_fragment="contract_exemption entry 1 forbidden_owners must be a list",
+        ),
+        InvalidConfigTestCase(
+            description="rejects contract exemptions with unknown keys",
+            toml_text=(
+                "[[contract_exemption]]\n"
+                'contract = "src/demo/contract.py:StrictStore"\n'
+                'paths = ["src/demo/*"]\n'
+                'reason = "forced"\n'
+                'methods = ["write_orders"]\n'
+            ),
+            expected_error_fragment="contract_exemption entry 1 has unknown keys: methods",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -173,6 +270,7 @@ def test_given_clone_allowlist_when_loading_then_returns_entries(
             relative_path="scripts/dupscore/dupscore.toml",
             expected_pair_allowlist_size=9,
             expected_clone_allowlist_size=0,
+            expected_contract_exemption_size=1,
         )
     ],
     ids=lambda case: case.description,
@@ -186,3 +284,63 @@ def test_given_shipped_config_when_loading_then_it_is_valid(
 
     assert len(config.allowlisted_pairs) == test_case.expected_pair_allowlist_size
     assert len(config.clone_allowlist) == test_case.expected_clone_allowlist_size
+    assert len(config.contract_exemptions) == test_case.expected_contract_exemption_size
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ContractExemptionConfigTestCase(
+            description="loads contract, forbidden owners, globs, and the stripped reason",
+            toml_text=(
+                "[[contract_exemption]]\n"
+                'contract = "src/demo/contract.py:StrictStore"\n'
+                'forbidden_owners = ["src/demo/base.py:BaseStore"]\n'
+                'paths = ["src/demo/stores/*"]\n'
+                'reason = " Stores must define every contract method. "\n'
+            ),
+            expected_entries=(
+                ContractExemptionEntry(
+                    contract_path="src/demo/contract.py",
+                    contract_class="StrictStore",
+                    paths=("src/demo/stores/*",),
+                    reason="Stores must define every contract method.",
+                    forbidden_owners=(("src/demo/base.py", "BaseStore"),),
+                ),
+            ),
+        ),
+        ContractExemptionConfigTestCase(
+            description="forbidden owners are optional",
+            toml_text=(
+                "[[contract_exemption]]\n"
+                'contract = "src/demo/contract.py:StrictStore"\n'
+                'paths = ["src/demo/stores/*"]\n'
+                'reason = "forced"\n'
+            ),
+            expected_entries=(
+                ContractExemptionEntry(
+                    contract_path="src/demo/contract.py",
+                    contract_class="StrictStore",
+                    paths=("src/demo/stores/*",),
+                    reason="forced",
+                ),
+            ),
+        ),
+        ContractExemptionConfigTestCase(
+            description="missing contract exemptions are empty",
+            toml_text="",
+            expected_entries=(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_contract_exemption_when_loading_then_returns_entries(
+    test_case: ContractExemptionConfigTestCase,
+    tmp_path: Path,
+) -> None:
+    config_path: Path = tmp_path / "dupscore.toml"
+    config_path.write_text(test_case.toml_text, encoding="utf-8")
+
+    config: DupscoreConfig = load_config(config_path)
+
+    assert config.contract_exemptions == test_case.expected_entries

@@ -13,10 +13,20 @@ from scripts.dupscore.constants import (
 )
 from scripts.dupscore.main.build_clone_report import build_clone_report
 from scripts.dupscore.models import CloneAllowlistEntry, CloneReport, DupscoreConfig
+from tests.unit.scripts.dupscore._helpers.contracts.forced_overrides.helpers import (
+    CONTRACT_FILES,
+    DELTA_PATH,
+    RENDER_ORDERS_SQL,
+    STORE_EXEMPTION,
+    WRITE_ORDERS,
+)
 from tests.unit.scripts.dupscore.main.build_clone_report._test_types import (
     AllowlistTestCase,
     ClusterShapeTestCase,
+    ContractExemptionReportTestCase,
+    ContractExemptionSinceTestCase,
     ExcludedUnitTestCase,
+    ForcedMemberOrderTestCase,
     PathFilterTestCase,
     ReportedPathTestCase,
     SeededCloneTestCase,
@@ -28,8 +38,11 @@ from tests.unit.scripts.dupscore.main.build_clone_report.helpers import (
     PYTHON_NEAR_MISS_COPY,
     clone_options,
     cluster_languages,
+    cluster_member_flags,
+    cluster_member_names,
     link_categories,
     member_changes,
+    member_changes_by_name,
     reported_members,
     seed_repository,
 )
@@ -38,6 +51,15 @@ from tests.unit.scripts.dupscore.main.build_report.helpers import (
     initialize_repo,
     write_project_files,
 )
+
+_DELTA_HEADER: str = (
+    "from sqlbuild.demo.contract.base_store import BaseStore\n\n\nclass DeltaStore(BaseStore):\n"
+)
+_VOLUNTARY_CLUSTERS: list[list[str]] = [
+    ["AlphaStore._render_orders_sql", "BetaStore._render_orders_sql"],
+    ["AlphaStore.delete_orders", "GammaStore.delete_orders"],
+    ["BetaStore.read_orders", "OrdersConnection.read_orders"],
+]
 
 
 @pytest.mark.parametrize(
@@ -366,3 +388,118 @@ def test_given_since_revision_when_building_report_then_marks_touched_members(
     assert {path: changes[path] for path in test_case.expected_changes} == (
         test_case.expected_changes
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ContractExemptionReportTestCase(
+            description="links between forced overrides are hidden, voluntary copies stay",
+            entries=(STORE_EXEMPTION,),
+            expected_clusters=_VOLUNTARY_CLUSTERS,
+            expected_contract_exempt_members=3,
+        ),
+        ContractExemptionReportTestCase(
+            description="without an exemption every override cluster is reported",
+            entries=(),
+            expected_clusters=sorted(
+                [
+                    *_VOLUNTARY_CLUSTERS,
+                    ["AlphaStore.write_orders", "BaseStore.write_orders", "BetaStore.write_orders"],
+                ]
+            ),
+            expected_contract_exempt_members=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_contract_exemption_when_building_report_then_hides_forced_overrides(
+    test_case: ContractExemptionReportTestCase,
+    tmp_path: Path,
+) -> None:
+    write_project_files(repo_root=tmp_path, files=CONTRACT_FILES)
+
+    report: CloneReport = build_clone_report(
+        repo_root=tmp_path,
+        options=clone_options(),
+        config=DupscoreConfig(contract_exemptions=test_case.entries),
+    )
+
+    assert cluster_member_names(report) == test_case.expected_clusters
+    assert report.contract_exempt_members == test_case.expected_contract_exempt_members
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ContractExemptionSinceTestCase(
+            description="new private helper copy is reported beside a hidden forced override",
+            changed_files={DELTA_PATH: _DELTA_HEADER + WRITE_ORDERS + RENDER_ORDERS_SQL},
+            expected_clusters=[
+                [
+                    "AlphaStore._render_orders_sql",
+                    "BetaStore._render_orders_sql",
+                    "DeltaStore._render_orders_sql",
+                ]
+            ],
+            expected_member_changes={
+                "AlphaStore._render_orders_sql": None,
+                "BetaStore._render_orders_sql": None,
+                "DeltaStore._render_orders_sql": CHANGE_NEW,
+            },
+        ),
+        ContractExemptionSinceTestCase(
+            description="new forced override alone reports nothing",
+            changed_files={DELTA_PATH: _DELTA_HEADER + WRITE_ORDERS},
+            expected_clusters=[],
+            expected_member_changes={},
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_since_revision_with_contract_exemption_when_building_report_then_hides_forced(
+    test_case: ContractExemptionSinceTestCase,
+    tmp_path: Path,
+) -> None:
+    write_project_files(repo_root=tmp_path, files=CONTRACT_FILES)
+    initialize_repo(tmp_path)
+    base_revision: str = commit_all(repo_root=tmp_path, message="seed stores")
+    write_project_files(repo_root=tmp_path, files=test_case.changed_files)
+
+    report: CloneReport = build_clone_report(
+        repo_root=tmp_path,
+        options=clone_options(since=base_revision),
+        config=DupscoreConfig(contract_exemptions=(STORE_EXEMPTION,)),
+    )
+
+    assert cluster_member_names(report) == test_case.expected_clusters
+    assert member_changes_by_name(report) == test_case.expected_member_changes
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ForcedMemberOrderTestCase(
+            description="voluntary copies are listed before flagged forced overrides",
+            expected_member_flags=[
+                [("AlphaStore._render_orders_sql", False), ("BetaStore._render_orders_sql", False)],
+                [("GammaStore.delete_orders", False), ("AlphaStore.delete_orders", True)],
+                [("OrdersConnection.read_orders", False), ("BetaStore.read_orders", True)],
+            ],
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_contract_exemption_when_building_report_then_lists_forced_members_last(
+    test_case: ForcedMemberOrderTestCase,
+    tmp_path: Path,
+) -> None:
+    write_project_files(repo_root=tmp_path, files=CONTRACT_FILES)
+
+    report: CloneReport = build_clone_report(
+        repo_root=tmp_path,
+        options=clone_options(),
+        config=DupscoreConfig(contract_exemptions=(STORE_EXEMPTION,)),
+    )
+
+    assert cluster_member_flags(report) == test_case.expected_member_flags
