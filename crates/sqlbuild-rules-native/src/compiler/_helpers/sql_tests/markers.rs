@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use regex::Regex;
+use regex::{Captures, Regex};
 
 use crate::compiler::_helpers::sql_tests::planning::compile_error;
 use crate::compiler::_helpers::sql_tests::sql_scan::{Unclosed, matching_paren, skip_whitespace};
@@ -66,42 +66,53 @@ pub(crate) fn replace_named_markers<F>(
     sql: &str,
     pattern: &Regex,
     protected_pattern: &Regex,
-    mut replacement: F,
+    replacement: F,
 ) -> String
 where
     F: FnMut(&str) -> Option<String>,
 {
-    let protected = protected_ranges(protected_pattern, sql);
-    let mut output = String::with_capacity(sql.len());
-    let mut cursor = 0;
-    for captures in pattern.captures_iter(sql) {
-        let Some(full) = captures.get(0) else {
-            continue;
-        };
-        if in_protected_range(full.start(), &protected) {
-            continue;
-        }
-        let Some(name) = captures.get(1).map(|value| value.as_str()) else {
-            continue;
-        };
-        let Some(value) = replacement(name) else {
-            continue;
-        };
-        output.push_str(&sql[cursor..full.start()]);
-        output.push_str(&value);
-        cursor = full.end();
-    }
-    output.push_str(&sql[cursor..]);
-    output
+    replace_marker_captures(
+        sql,
+        pattern,
+        protected_pattern,
+        |captures| captures.get(1).map(|value| value.as_str().to_string()),
+        replacement,
+    )
 }
 
 pub(crate) fn replace_dbt_ref_markers<F>(
     sql: &str,
     pattern: &Regex,
     protected_pattern: &Regex,
+    replacement: F,
+) -> String
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    replace_marker_captures(
+        sql,
+        pattern,
+        protected_pattern,
+        |captures| {
+            let first = captures.get(1)?.as_str();
+            Some(captures.get(2).map_or_else(
+                || first.to_string(),
+                |second| format!("{first}__{}", second.as_str()),
+            ))
+        },
+        replacement,
+    )
+}
+
+fn replace_marker_captures<N, F>(
+    sql: &str,
+    pattern: &Regex,
+    protected_pattern: &Regex,
+    marker_name: N,
     mut replacement: F,
 ) -> String
 where
+    N: Fn(&Captures<'_>) -> Option<String>,
     F: FnMut(&str) -> Option<String>,
 {
     let protected = protected_ranges(protected_pattern, sql);
@@ -114,13 +125,9 @@ where
         if in_protected_range(full.start(), &protected) {
             continue;
         }
-        let Some(first) = captures.get(1).map(|value| value.as_str()) else {
+        let Some(name) = marker_name(&captures) else {
             continue;
         };
-        let name = captures.get(2).map_or_else(
-            || first.to_string(),
-            |second| format!("{first}__{}", second.as_str()),
-        );
         let Some(value) = replacement(&name) else {
             continue;
         };
