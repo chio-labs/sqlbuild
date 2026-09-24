@@ -168,3 +168,10 @@ class ScenarioCaptureRunIdentityTestCase:
     expected_run_id: str
     expected_seed_resource_ids: tuple[str, ...]
     expected_operation_name: str
+
+
+@dataclass(frozen=True)
+class ScenarioCaptureMissingFixtureMessageTestCase:
+    description: str
+    fixture_error_message: str | None
+    expected_error_message: str
