@@ -1,6 +1,9 @@
 //! Conservative native fast path for logical SQL reference extraction.
 
 use crate::constants::{DBT_REFERENCE_KIND, TABLE_FUNCTION_REFERENCE_KIND};
+use crate::sql_scan::main::non_code_end::non_code_end;
+use crate::sql_scan::main::quote_end::quote_end;
+use crate::sql_scan::models::QuotePolicy;
 
 const PREFIXES: [(&str, &str); 6] = [
     ("__dbt_ref(", "dbt_ref"),
@@ -18,20 +21,13 @@ pub(crate) fn extract(sql: &str) -> Option<Vec<StaticReference>> {
     let mut references: Vec<StaticReference> = Vec::new();
     let mut index = 0;
     while index < bytes.len() {
-        if bytes[index..].starts_with(b"--") {
-            index = sql[index + 2..]
-                .find('\n')
-                .map_or(bytes.len(), |offset| index + offset + 3);
-            continue;
-        }
-        if bytes[index..].starts_with(b"/*") {
-            let offset = sql[index + 2..].find("*/")?;
-            index += offset + 4;
-            continue;
-        }
-        if matches!(bytes[index], b'\'' | b'"' | b'`') {
-            index = quoted_end(bytes, index)?;
-            continue;
+        match non_code_end(bytes, index, QuotePolicy::COMPILER) {
+            Ok(Some(end)) => {
+                index = end;
+                continue;
+            }
+            Ok(None) => {}
+            Err(_) => return None,
         }
         let Some((prefix, kind)) = PREFIXES
             .iter()
@@ -70,7 +66,9 @@ fn reference_name(sql: &str, start: usize) -> Option<(String, usize)> {
     let start = ascii_whitespace_end(bytes, start);
     let first = bytes.get(start).copied()?;
     if matches!(first, b'\'' | b'"') {
-        let end = quoted_end(bytes, start)?;
+        let Ok(end) = quote_end(bytes, start, QuotePolicy::COMPILER) else {
+            return None;
+        };
         return Some((sql[start + 1..end - 1].to_owned(), end));
     }
     if !is_identifier_start(first) {
@@ -84,23 +82,6 @@ fn reference_name(sql: &str, start: usize) -> Option<(String, usize)> {
         return None;
     }
     Some((sql[start..end].to_owned(), end))
-}
-
-fn quoted_end(bytes: &[u8], start: usize) -> Option<usize> {
-    let quote = bytes[start];
-    let mut index = start + 1;
-    while index < bytes.len() {
-        if bytes[index] != quote {
-            index += 1;
-            continue;
-        }
-        if matches!(quote, b'\'' | b'"') && bytes.get(index + 1).copied() == Some(quote) {
-            index += 2;
-            continue;
-        }
-        return Some(index + 1);
-    }
-    None
 }
 
 fn ascii_whitespace_end(bytes: &[u8], start: usize) -> usize {

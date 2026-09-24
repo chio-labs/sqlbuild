@@ -4,12 +4,16 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
-use crate::compiler::_helpers::sql_tests::sql_scan::{
-    self, Unclosed, comment_end, quoted_end, skip_whitespace,
-};
 use crate::constants::{
     DIRECT_DEPENDENCY_PATH_LENGTH, MACRO_TEST_MODE, TABLE_FUNCTION_TEST_MODE, UDF_TEST_MODE,
 };
+use crate::sql_scan::main::comment_end::comment_end;
+use crate::sql_scan::main::matching_paren::matching_paren as scan_matching_paren;
+use crate::sql_scan::main::non_code_end::non_code_end;
+use crate::sql_scan::main::quote_end::quote_end;
+use crate::sql_scan::main::skip_whitespace::skip_whitespace;
+use crate::sql_scan::models::QuotePolicy;
+use crate::sql_scan::models::Unclosed;
 
 const MODEL_PREFIXES: [&str; 8] = [
     "__macro__",
@@ -1060,7 +1064,9 @@ fn char_len(sql: &str, index: usize) -> usize {
 fn skip_ignorable(sql: &str, mut index: usize) -> Result<usize, String> {
     loop {
         index = skip_whitespace(sql, index);
-        match comment_end(sql, index).map_err(|error| scan_error_message(error, "SQL test"))? {
+        match comment_end(sql.as_bytes(), index)
+            .map_err(|error| scan_error_message(error, "SQL test"))?
+        {
             Some(end) => index = end,
             None => return Ok(index),
         }
@@ -1068,26 +1074,21 @@ fn skip_ignorable(sql: &str, mut index: usize) -> Result<usize, String> {
 }
 
 fn skip_non_code(sql: &str, index: usize) -> Result<usize, String> {
-    if let Some(end) =
-        comment_end(sql, index).map_err(|error| scan_error_message(error, "SQL test"))?
-    {
-        return Ok(end);
-    }
-    if matches!(byte_at(sql, index), Some(b'\'') | Some(b'"') | Some(b'`')) {
-        return skip_quote(sql, index, "SQL test");
-    }
-    Ok(index)
+    Ok(non_code_end(sql.as_bytes(), index, QuotePolicy::COMPILER)
+        .map_err(|error| scan_error_message(error, "SQL test"))?
+        .unwrap_or(index))
 }
 
 fn skip_quote(sql: &str, start: usize, context: &str) -> Result<usize, String> {
     if byte_at(sql, start).is_none() {
         return Err(format!("{context} expected a quote"));
     }
-    quoted_end(sql, start).map_err(|error| scan_error_message(error, context))
+    quote_end(sql.as_bytes(), start, QuotePolicy::COMPILER)
+        .map_err(|error| scan_error_message(error, context))
 }
 
 fn matching_paren(sql: &str, open: usize, context: &str) -> Result<usize, String> {
-    sql_scan::matching_paren(sql, open).map_err(|error| match error {
+    scan_matching_paren(sql.as_bytes(), open, QuotePolicy::COMPILER).map_err(|error| match error {
         Unclosed::Parenthesis => scan_error_message(error, context),
         _ => scan_error_message(error, "SQL test"),
     })
