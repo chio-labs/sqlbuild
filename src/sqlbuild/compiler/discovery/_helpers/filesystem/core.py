@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib.util
 import inspect
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from importlib.machinery import ModuleSpec
 from pathlib import Path
@@ -57,7 +57,6 @@ from sqlbuild.compiler.discovery.exceptions import (
     SchemaParseError,
 )
 from sqlbuild.compiler.discovery.models import (
-    ConstantDeclaration,
     DiscoveredAdapterFile,
     DiscoveredAssetFunction,
     DiscoveredAuditFactory,
@@ -87,7 +86,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
     DiscoveredTaskFunction,
     DiscoveryFileFault,
-    EnumDeclaration,
 )
 from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
     validate_resource_identity,
@@ -127,7 +125,7 @@ from sqlbuild.runtime.event_exporting.main.get_lifecycle_event_sink_definition i
 )
 from sqlbuild.runtime.event_exporting.models import LifecycleEventSinkDefinition
 from sqlbuild.runtime.observability.models import LifecycleEvent
-from sqlbuild.spec.contracts.models import SchemaModelEntry, SchemaSeedEntry, SourceEntry
+from sqlbuild.spec.contracts.models import SchemaModelEntry, SchemaSeedEntry
 
 _PYTHON_NODE_KIND_FOLDERS: tuple[str, ...] = ("loaders", "tasks", "assets", "checks")
 _PYTHON_NODE_FACTORY_FOLDERS: tuple[str, ...] = (*_PYTHON_NODE_KIND_FOLDERS, "factories")
@@ -465,39 +463,14 @@ def discover_enum_files(
 ) -> tuple[DiscoveredEnumFile, ...]:
     """Discover global and scoped enum declaration files."""
 
-    discovered_files: list[DiscoveredEnumFile] = []
-    facts: _DeclarationFileFacts
-    for facts in _discover_declaration_file_facts(
+    return _discover_declaration_kind_files(
         project_dir=project_dir,
-        declaration_kind=DeclarationKind.ENUM if isolate_declaration_kind else None,
-    ):
-        if facts.declaration_kind is not DeclarationKind.ENUM:
-            continue
-        try:
-            contents: str = facts.file_path.read_text(encoding="utf-8")
-            declarations: tuple[EnumDeclaration, ...] = parse_enum_declaration_file(
-                contents=contents,
-                file_path=facts.file_path,
-                relative_path=facts.relative_path,
-            )
-        except (OSError, UnicodeError, ValueError, SyntaxError) as error:
-            if on_fault is None:
-                raise
-            on_fault(_discovery_fault(project_dir=project_dir, path=facts.file_path, error=error))
-            continue
-        discovered_files.append(
-            DiscoveredEnumFile(
-                file_path=facts.file_path,
-                relative_path=facts.relative_path,
-                contents=contents,
-                declarations=declarations,
-                scope_kind=facts.scope_kind,
-                ownership_root=facts.ownership_root,
-                owning_path=facts.owning_path,
-                declaration_root=facts.declaration_root,
-            )
-        )
-    return tuple(discovered_files)
+        declaration_kind=DeclarationKind.ENUM,
+        isolate_declaration_kind=isolate_declaration_kind,
+        parse_declarations=parse_enum_declaration_file,
+        discovered_file_type=DiscoveredEnumFile,
+        on_fault=on_fault,
+    )
 
 
 def discover_constant_files(
@@ -508,39 +481,102 @@ def discover_constant_files(
 ) -> tuple[DiscoveredConstantFile, ...]:
     """Discover global and scoped constant declaration files."""
 
-    discovered_files: list[DiscoveredConstantFile] = []
-    facts: _DeclarationFileFacts
-    for facts in _discover_declaration_file_facts(
+    return _discover_declaration_kind_files(
         project_dir=project_dir,
-        declaration_kind=DeclarationKind.CONSTANT if isolate_declaration_kind else None,
-    ):
-        if facts.declaration_kind is not DeclarationKind.CONSTANT:
-            continue
-        try:
-            contents: str = facts.file_path.read_text(encoding="utf-8")
-            declarations: tuple[ConstantDeclaration, ...] = parse_constant_declaration_file(
-                contents=contents,
-                file_path=facts.file_path,
-                relative_path=facts.relative_path,
+        declaration_kind=DeclarationKind.CONSTANT,
+        isolate_declaration_kind=isolate_declaration_kind,
+        parse_declarations=parse_constant_declaration_file,
+        discovered_file_type=DiscoveredConstantFile,
+        on_fault=on_fault,
+    )
+
+
+def _discover_declaration_kind_files[DeclarationT, DiscoveredT](
+    *,
+    project_dir: Path,
+    declaration_kind: DeclarationKind,
+    isolate_declaration_kind: bool,
+    parse_declarations: Callable[..., tuple[DeclarationT, ...]],
+    discovered_file_type: Callable[..., DiscoveredT],
+    on_fault: Callable[[DiscoveryFileFault], None] | None,
+) -> tuple[DiscoveredT, ...]:
+    def parse(facts: _DeclarationFileFacts) -> DiscoveredT:
+        contents: str = facts.file_path.read_text(encoding="utf-8")
+        declarations: tuple[DeclarationT, ...] = parse_declarations(
+            contents=contents,
+            file_path=facts.file_path,
+            relative_path=facts.relative_path,
+        )
+        return discovered_file_type(
+            file_path=facts.file_path,
+            relative_path=facts.relative_path,
+            contents=contents,
+            declarations=declarations,
+            scope_kind=facts.scope_kind,
+            ownership_root=facts.ownership_root,
+            owning_path=facts.owning_path,
+            declaration_root=facts.declaration_root,
+        )
+
+    return _parse_discovered_files(
+        project_dir=project_dir,
+        items=(
+            facts
+            for facts in _discover_declaration_file_facts(
+                project_dir=project_dir,
+                declaration_kind=declaration_kind if isolate_declaration_kind else None,
             )
+            if facts.declaration_kind is declaration_kind
+        ),
+        item_path=lambda facts: facts.file_path,
+        parse=parse,
+        on_fault=on_fault,
+    )
+
+
+def _parse_discovered_files[ItemT, DiscoveredT](
+    *,
+    project_dir: Path,
+    items: Iterable[ItemT],
+    item_path: Callable[[ItemT], Path],
+    parse: Callable[[ItemT], DiscoveredT],
+    on_fault: Callable[[DiscoveryFileFault], None] | None,
+) -> tuple[DiscoveredT, ...]:
+    """Parse each discovered file, isolating per-file read and parse faults when requested."""
+
+    discovered: list[DiscoveredT] = []
+    item: ItemT
+    for item in items:
+        try:
+            discovered.append(parse(item))
         except (OSError, UnicodeError, ValueError, SyntaxError) as error:
             if on_fault is None:
                 raise
-            on_fault(_discovery_fault(project_dir=project_dir, path=facts.file_path, error=error))
-            continue
-        discovered_files.append(
-            DiscoveredConstantFile(
-                file_path=facts.file_path,
-                relative_path=facts.relative_path,
-                contents=contents,
-                declarations=declarations,
-                scope_kind=facts.scope_kind,
-                ownership_root=facts.ownership_root,
-                owning_path=facts.owning_path,
-                declaration_root=facts.declaration_root,
-            )
-        )
-    return tuple(discovered_files)
+            on_fault(_discovery_fault(project_dir=project_dir, path=item_path(item), error=error))
+    return tuple(discovered)
+
+
+def _parse_discovered_paths[DiscoveredT](
+    *,
+    project_dir: Path,
+    file_paths: Iterable[Path],
+    parse: Callable[[Path], DiscoveredT],
+    on_fault: Callable[[DiscoveryFileFault], None] | None,
+) -> tuple[DiscoveredT, ...]:
+    return _parse_discovered_files(
+        project_dir=project_dir,
+        items=file_paths,
+        item_path=lambda file_path: file_path,
+        parse=parse,
+        on_fault=on_fault,
+    )
+
+
+def _unscoped_files(*, root: Path, pattern: str, project_dir: Path) -> Iterator[Path]:
+    file_path: Path
+    for file_path in sorted(root.rglob(pattern)):
+        if not _is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir):
+            yield file_path
 
 
 def discover_model_schema_files(*, project_dir: Path) -> tuple[DiscoveredModelSchemaFile, ...]:
@@ -578,31 +614,25 @@ def discover_sql_function_files(
     if not function_root.is_dir():
         return ()
 
-    discovered_function_files: list[DiscoveredSqlFunctionFile] = []
-    file_path: Path
-    for file_path in sorted(function_root.rglob("*.sql")):
-        if _is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir):
-            continue
-        try:
-            contents: str = file_path.read_text(encoding="utf-8")
-            header_values: dict[str, object]
-            body_sql: str
-            header_values, body_sql = parse_function_sql(contents=contents, file_path=file_path)
-        except (OSError, UnicodeError, ValueError, SyntaxError) as error:
-            if on_fault is None:
-                raise
-            on_fault(_discovery_fault(project_dir=project_dir, path=file_path, error=error))
-            continue
-        discovered_function_files.append(
-            DiscoveredSqlFunctionFile(
-                file_path=file_path,
-                relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
-                contents=contents,
-                header_values=header_values,
-                body_sql=body_sql,
-            )
+    def parse(file_path: Path) -> DiscoveredSqlFunctionFile:
+        contents: str = file_path.read_text(encoding="utf-8")
+        header_values: dict[str, object]
+        body_sql: str
+        header_values, body_sql = parse_function_sql(contents=contents, file_path=file_path)
+        return DiscoveredSqlFunctionFile(
+            file_path=file_path,
+            relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
+            contents=contents,
+            header_values=header_values,
+            body_sql=body_sql,
         )
-    return tuple(discovered_function_files)
+
+    return _parse_discovered_paths(
+        project_dir=project_dir,
+        file_paths=_unscoped_files(root=function_root, pattern="*.sql", project_dir=project_dir),
+        parse=parse,
+        on_fault=on_fault,
+    )
 
 
 def discover_python_function_files(
@@ -691,28 +721,19 @@ def discover_source_files(
     yaml_paths: tuple[Path, ...] = tuple(
         sorted(path for path in sources_root.iterdir() if path.suffix in YAML_FILE_SUFFIXES)
     )
-    discovered_source_files: list[DiscoveredSourceFile] = []
-    file_path: Path
-    for file_path in yaml_paths:
-        try:
-            contents: str = file_path.read_text(encoding="utf-8")
-            source_entries: tuple[SourceEntry, ...] = parse_sources_yml(
-                contents=contents, file_path=file_path
-            )
-        except (OSError, UnicodeError, ValueError, SyntaxError) as error:
-            if on_fault is None:
-                raise
-            on_fault(_discovery_fault(project_dir=project_dir, path=file_path, error=error))
-            continue
-        discovered_source_files.append(
-            DiscoveredSourceFile(
-                file_path=file_path,
-                relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
-                contents=contents,
-                source_entries=source_entries,
-            )
+
+    def parse(file_path: Path) -> DiscoveredSourceFile:
+        contents: str = file_path.read_text(encoding="utf-8")
+        return DiscoveredSourceFile(
+            file_path=file_path,
+            relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
+            contents=contents,
+            source_entries=parse_sources_yml(contents=contents, file_path=file_path),
         )
-    return tuple(discovered_source_files)
+
+    return _parse_discovered_paths(
+        project_dir=project_dir, file_paths=yaml_paths, parse=parse, on_fault=on_fault
+    )
 
 
 def discover_seed_files(*, project_dir: Path) -> tuple[DiscoveredSeedFile, ...]:
@@ -766,25 +787,19 @@ def discover_scenario_files(
     if not scenarios_root.is_dir():
         return ()
 
-    discovered_scenario_files: list[DiscoveredSqlScenarioFile] = []
-    file_path: Path
-    for file_path in sorted(scenarios_root.rglob("*.sql")):
-        if _is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir):
-            continue
-        try:
-            contents: str = file_path.read_text(encoding="utf-8")
-            scenario: DiscoveredSqlScenarioFile = parse_sql_scenario_file(
-                contents=contents,
-                file_path=file_path,
-                relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
-            )
-        except (OSError, UnicodeError, ValueError, SyntaxError) as error:
-            if on_fault is None:
-                raise
-            on_fault(_discovery_fault(project_dir=project_dir, path=file_path, error=error))
-            continue
-        discovered_scenario_files.append(scenario)
-    return tuple(discovered_scenario_files)
+    def parse(file_path: Path) -> DiscoveredSqlScenarioFile:
+        return parse_sql_scenario_file(
+            contents=file_path.read_text(encoding="utf-8"),
+            file_path=file_path,
+            relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
+        )
+
+    return _parse_discovered_paths(
+        project_dir=project_dir,
+        file_paths=_unscoped_files(root=scenarios_root, pattern="*.sql", project_dir=project_dir),
+        parse=parse,
+        on_fault=on_fault,
+    )
 
 
 def discover_audit_files(
@@ -796,27 +811,21 @@ def discover_audit_files(
     if not audits_root.is_dir():
         return ()
 
-    discovered_audit_files: list[DiscoveredAuditFile] = []
-    file_path: Path
-    for file_path in sorted(audits_root.rglob("*.sql")):
-        if _is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir):
-            continue
-        try:
-            contents: str = file_path.read_text(encoding="utf-8")
-            discovered_audit_files.append(
-                DiscoveredAuditFile(
-                    file_path=file_path,
-                    relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
-                    contents=contents,
-                    blocks=parse_sql_audit_file(contents=contents, file_path=file_path),
-                )
-            )
-        except (OSError, UnicodeError, ValueError, SyntaxError) as error:
-            if on_fault is None:
-                raise
-            on_fault(_discovery_fault(project_dir=project_dir, path=file_path, error=error))
-            continue
-    return tuple(discovered_audit_files)
+    def parse(file_path: Path) -> DiscoveredAuditFile:
+        contents: str = file_path.read_text(encoding="utf-8")
+        return DiscoveredAuditFile(
+            file_path=file_path,
+            relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
+            contents=contents,
+            blocks=parse_sql_audit_file(contents=contents, file_path=file_path),
+        )
+
+    return _parse_discovered_paths(
+        project_dir=project_dir,
+        file_paths=_unscoped_files(root=audits_root, pattern="*.sql", project_dir=project_dir),
+        parse=parse,
+        on_fault=on_fault,
+    )
 
 
 def discover_macro_files(
@@ -1003,29 +1012,26 @@ def discover_sql_hook_files(
     if not hooks_root.is_dir():
         return ()
 
-    discovered_hooks: list[DiscoveredSqlHookFile] = []
-    file_path: Path
-    for file_path in sorted(hooks_root.rglob("*.sql")):
-        if file_path.name.startswith("_") or _is_in_scoped_declaration_tree(
-            file_path=file_path, project_dir=project_dir
-        ):
-            continue
-        try:
-            relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
-            contents: str = file_path.read_text(encoding="utf-8")
-            discovered_hooks.append(
-                parse_sql_hook_file(
-                    contents=contents,
-                    file_path=file_path,
-                    relative_path=relative_path,
-                )
+    def parse(file_path: Path) -> DiscoveredSqlHookFile:
+        relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
+        return parse_sql_hook_file(
+            contents=file_path.read_text(encoding="utf-8"),
+            file_path=file_path,
+            relative_path=relative_path,
+        )
+
+    return _parse_discovered_paths(
+        project_dir=project_dir,
+        file_paths=(
+            file_path
+            for file_path in _unscoped_files(
+                root=hooks_root, pattern="*.sql", project_dir=project_dir
             )
-        except (OSError, UnicodeError, ValueError, SyntaxError) as error:
-            if on_fault is None:
-                raise
-            on_fault(_discovery_fault(project_dir=project_dir, path=file_path, error=error))
-            continue
-    return tuple(discovered_hooks)
+            if not file_path.name.startswith("_")
+        ),
+        parse=parse,
+        on_fault=on_fault,
+    )
 
 
 def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider, ...]:
@@ -1804,82 +1810,56 @@ def _normalize_factory_result(
 
 
 def _load_loader_module(*, file_path: Path, project_dir: Path) -> ModuleType:
-    module_name: str = "sqlbuild_project_loader_" + "_".join(
-        _project_relative_path(path=file_path, project_dir=project_dir).with_suffix("").parts
+    return _exec_project_module(
+        module_name="sqlbuild_project_loader_"
+        + "_".join(
+            _project_relative_path(path=file_path, project_dir=project_dir).with_suffix("").parts
+        ),
+        file_path=file_path,
+        project_dir=project_dir,
+        file_label="source loader",
+        error_type=LoaderDiscoveryError,
     )
-    spec: ModuleSpec | None = importlib.util.spec_from_file_location(module_name, file_path)
-    if spec is None or spec.loader is None:
-        raise LoaderDiscoveryError(f"Could not load source loader file {file_path}")
-    module: ModuleType = importlib.util.module_from_spec(spec)
-    old_path: list[str] = list(sys.path)
-    sys.path.insert(0, str(project_dir))
-    try:
-        sys.modules[module_name] = module
-        spec.loader.exec_module(module)
-    except Exception as error:
-        raise LoaderDiscoveryError(
-            f"Failed to import source loader file {file_path.relative_to(project_dir)}: {error}"
-        ) from error
-    finally:
-        sys.path = old_path
-    return module
 
 
 def _load_python_node_module(*, file_path: Path, project_dir: Path, node_folder: str) -> ModuleType:
-    module_name: str = "sqlbuild_project_python_node_" + "_".join(
-        _project_relative_path(path=file_path, project_dir=project_dir).with_suffix("").parts
+    return _exec_project_module(
+        module_name="sqlbuild_project_python_node_"
+        + "_".join(
+            _project_relative_path(path=file_path, project_dir=project_dir).with_suffix("").parts
+        ),
+        file_path=file_path,
+        project_dir=project_dir,
+        file_label="Python node",
+        error_type=PythonNodeDiscoveryError,
     )
-    spec: ModuleSpec | None = importlib.util.spec_from_file_location(module_name, file_path)
-    if spec is None or spec.loader is None:
-        raise PythonNodeDiscoveryError(f"Could not load Python node file {file_path}")
-    module: ModuleType = importlib.util.module_from_spec(spec)
-    old_path: list[str] = list(sys.path)
-    sys.path.insert(0, str(project_dir))
-    try:
-        sys.modules[module_name] = module
-        spec.loader.exec_module(module)
-    except Exception as error:
-        raise PythonNodeDiscoveryError(
-            f"Failed to import Python node file {file_path.relative_to(project_dir)}: {error}"
-        ) from error
-    finally:
-        sys.path = old_path
-    return module
 
 
 def _load_provider_module(*, file_path: Path, project_dir: Path) -> ModuleType:
-    module_name: str = ".".join(
-        _project_relative_path(path=file_path, project_dir=project_dir).with_suffix("").parts
-    )
-    _evict_stale_project_package_modules(
-        root_module=module_name.split(".", maxsplit=1)[0],
+    return _load_project_package_module(
+        file_path=file_path,
         project_dir=project_dir,
+        file_label="provider",
+        error_type=ProviderDiscoveryError,
     )
-    existing_module: ModuleType | None = sys.modules.get(module_name)
-    if existing_module is not None:
-        existing_file: object = getattr(existing_module, "__file__", None)
-        if isinstance(existing_file, str) and Path(existing_file).resolve() == file_path.resolve():
-            return existing_module
-        sys.modules.pop(module_name, None)
-    spec: ModuleSpec | None = importlib.util.spec_from_file_location(module_name, file_path)
-    if spec is None or spec.loader is None:
-        raise ProviderDiscoveryError(f"Could not load provider file {file_path}")
-    module: ModuleType = importlib.util.module_from_spec(spec)
-    old_path: list[str] = list(sys.path)
-    sys.path.insert(0, str(project_dir))
-    try:
-        sys.modules[module_name] = module
-        spec.loader.exec_module(module)
-    except Exception as error:
-        raise ProviderDiscoveryError(
-            f"Failed to import provider file {file_path.relative_to(project_dir)}: {error}"
-        ) from error
-    finally:
-        sys.path = old_path
-    return module
 
 
 def _load_sink_module(*, file_path: Path, project_dir: Path) -> ModuleType:
+    return _load_project_package_module(
+        file_path=file_path,
+        project_dir=project_dir,
+        file_label="sink",
+        error_type=EventExporterDiscoveryError,
+    )
+
+
+def _load_project_package_module(
+    *,
+    file_path: Path,
+    project_dir: Path,
+    file_label: str,
+    error_type: type[Exception],
+) -> ModuleType:
     module_name: str = ".".join(
         _project_relative_path(path=file_path, project_dir=project_dir).with_suffix("").parts
     )
@@ -1893,9 +1873,26 @@ def _load_sink_module(*, file_path: Path, project_dir: Path) -> ModuleType:
         if isinstance(existing_file, str) and Path(existing_file).resolve() == file_path.resolve():
             return existing_module
         sys.modules.pop(module_name, None)
+    return _exec_project_module(
+        module_name=module_name,
+        file_path=file_path,
+        project_dir=project_dir,
+        file_label=file_label,
+        error_type=error_type,
+    )
+
+
+def _exec_project_module(
+    *,
+    module_name: str,
+    file_path: Path,
+    project_dir: Path,
+    file_label: str,
+    error_type: type[Exception],
+) -> ModuleType:
     spec: ModuleSpec | None = importlib.util.spec_from_file_location(module_name, file_path)
     if spec is None or spec.loader is None:
-        raise EventExporterDiscoveryError(f"Could not load sink file {file_path}")
+        raise error_type(f"Could not load {file_label} file {file_path}")
     module: ModuleType = importlib.util.module_from_spec(spec)
     old_path: list[str] = list(sys.path)
     sys.path.insert(0, str(project_dir))
@@ -1903,8 +1900,8 @@ def _load_sink_module(*, file_path: Path, project_dir: Path) -> ModuleType:
         sys.modules[module_name] = module
         spec.loader.exec_module(module)
     except Exception as error:
-        raise EventExporterDiscoveryError(
-            f"Failed to import sink file {file_path.relative_to(project_dir)}: {error}"
+        raise error_type(
+            f"Failed to import {file_label} file {file_path.relative_to(project_dir)}: {error}"
         ) from error
     finally:
         sys.path = old_path
@@ -1936,25 +1933,15 @@ def _evict_stale_project_package_modules(*, root_module: str, project_dir: Path)
 
 
 def _load_materialization_module(*, file_path: Path, project_dir: Path) -> ModuleType:
-    module_name: str = ".".join(
-        _project_relative_path(path=file_path, project_dir=project_dir).with_suffix("").parts
+    return _exec_project_module(
+        module_name=".".join(
+            _project_relative_path(path=file_path, project_dir=project_dir).with_suffix("").parts
+        ),
+        file_path=file_path,
+        project_dir=project_dir,
+        file_label="materialization",
+        error_type=PythonNodeDiscoveryError,
     )
-    spec: ModuleSpec | None = importlib.util.spec_from_file_location(module_name, file_path)
-    if spec is None or spec.loader is None:
-        raise PythonNodeDiscoveryError(f"Could not load materialization file {file_path}")
-    module: ModuleType = importlib.util.module_from_spec(spec)
-    old_path: list[str] = list(sys.path)
-    sys.path.insert(0, str(project_dir))
-    try:
-        sys.modules[module_name] = module
-        spec.loader.exec_module(module)
-    except Exception as error:
-        raise PythonNodeDiscoveryError(
-            f"Failed to import materialization file {file_path.relative_to(project_dir)}: {error}"
-        ) from error
-    finally:
-        sys.path = old_path
-    return module
 
 
 def discover_adapter_file(*, project_dir: Path) -> DiscoveredAdapterFile | None:
