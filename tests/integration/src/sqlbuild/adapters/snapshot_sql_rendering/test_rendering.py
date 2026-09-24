@@ -182,6 +182,43 @@ _PORTABLE_APPLY_EXCLUSIONS: tuple[str, ...] = ("QUALIFY", "UNION DISTINCT", "NOT
                 "UNION ALL",
             ),
         ),
+        SnapshotSqlRenderingAdapterTestCase(
+            description="sqlserver renders complete snapshot SQL matrix",
+            adapter=SqlServerAdapter(),
+            expected_create_initial_fragments=(
+                "SELECT * INTO target_table FROM (SELECT *",
+                "updated_at AS valid_from",
+                "CAST(NULL AS DATETIME2) AS valid_to",
+            ),
+            expected_timestamp_hard_delete_fragments=(
+                "UPDATE __target SET effective_to = __source.updated_at",
+                "__target.customer_id = __source.customer_id",
+                "__target.region = __source.region",
+                "WHERE __target.effective_to IS NULL AND NOT EXISTS",
+            ),
+            expected_historical_check_initial_hard_delete_fragments=(
+                "__next_absence_at",
+                "WHEN __next_absence_at < __next_version_start THEN __next_absence_at",
+                "AS valid_to INTO target_table FROM __versions",
+            ),
+            expected_historical_timestamp_initial_hard_delete_fragments=(
+                "__next_absence_at",
+                "WHEN __next_absence_at < __next_version_start THEN __next_absence_at",
+                "AS valid_to INTO target_table FROM __versions",
+            ),
+            expected_historical_timestamp_apply_hard_delete_fragments=(
+                "__hard_deletes AS (",
+                "AS __close_at FROM target_table AS __target",
+                "UNION ALL",
+            ),
+            expected_historical_check_apply_fragments=(
+                "LAG(plan) OVER (PARTITION BY customer_id ORDER BY observed_at)",
+                "__hard_deletes AS (",
+                "INSERT INTO target_table (customer_id, plan, observed_at, valid_from, valid_to)",
+                "UPDATE __target SET valid_to = (SELECT MIN(__close_candidates.__close_at)",
+                "UNION ALL",
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )

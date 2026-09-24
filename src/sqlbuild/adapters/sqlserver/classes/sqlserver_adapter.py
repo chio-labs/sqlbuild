@@ -2269,7 +2269,22 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
-        del invalidate_hard_deletes
+        if invalidate_hard_deletes:
+            historical: HistoricalSnapshotSql = HistoricalSnapshotSql(
+                origin=origin,
+                unique_key=unique_key,
+                observed_at_column=observed_at_column,
+                valid_from_column=valid_from_column,
+                valid_to_column=valid_to_column,
+                updated_at_column=updated_at_column,
+                distinct_condition=self._distinct_condition,
+            )
+            return (
+                f"DROP TABLE IF EXISTS {destination}",
+                f";WITH {historical.initial_ctes_sql()} "
+                f"SELECT {historical.initial_select_list_sql(output_columns=output_columns)} "
+                f"INTO {destination} FROM __versions",
+            )
         partition_sql: str = ", ".join(unique_key)
         changed_condition: str = self._distinct_condition(
             left=updated_at_column, right="__prev_updated_at"
