@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
@@ -30,12 +31,27 @@ def transitive_closure_impl[K](
 ) -> frozenset[K]:
     """Return all graph keys reachable from a starting key."""
 
-    visited: set[K] = set()
-    frontier: list[tuple[K, int]] = [(start, 0)]
+    return transitive_closure_many_impl(
+        starts=(start,), edges=edges, include_starts=False, max_depth=max_depth
+    )
+
+
+def transitive_closure_many_impl[K](
+    *,
+    starts: Iterable[K],
+    edges: Mapping[K, Iterable[K]],
+    include_starts: bool,
+    max_depth: int | None = None,
+) -> frozenset[K]:
+    """Return graph keys within an optional edge distance of any starting key."""
+
+    start_keys: tuple[K, ...] = tuple(starts)
+    visited: set[K] = set(start_keys) if include_starts else set()
+    frontier: deque[tuple[K, int]] = deque((start_key, 0) for start_key in start_keys)
     while frontier:
         current: K
         depth: int
-        current, depth = frontier.pop()
+        current, depth = frontier.popleft()
         if max_depth is not None and depth >= max_depth:
             continue
         neighbor: K
@@ -44,25 +60,6 @@ def transitive_closure_impl[K](
                 continue
             visited.add(neighbor)
             frontier.append((neighbor, depth + 1))
-    return frozenset(visited)
-
-
-def transitive_closure_many_impl[K](
-    *, starts: Iterable[K], edges: Mapping[K, Iterable[K]], include_starts: bool
-) -> frozenset[K]:
-    """Return all graph keys reachable from any starting key."""
-
-    start_keys: tuple[K, ...] = tuple(starts)
-    visited: set[K] = set(start_keys) if include_starts else set()
-    frontier: list[K] = list(start_keys)
-    while frontier:
-        current: K = frontier.pop()
-        neighbor: K
-        for neighbor in edges.get(current, ()):
-            if neighbor in visited:
-                continue
-            visited.add(neighbor)
-            frontier.append(neighbor)
     return frozenset(visited)
 
 

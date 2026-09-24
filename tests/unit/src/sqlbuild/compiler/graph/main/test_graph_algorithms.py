@@ -22,6 +22,15 @@ _DIAMOND_UPSTREAM: dict[str, tuple[str, ...]] = {
     "stg_inventory": (),
 }
 
+_SHORTCUT_DOWNSTREAM: dict[str, tuple[str, ...]] = {
+    "orders": ("orders_left", "orders_right"),
+    "orders_right": ("orders_mid",),
+    "orders_mid": ("orders_joined",),
+    "orders_left": ("orders_joined",),
+    "orders_joined": ("orders_report",),
+    "orders_report": (),
+}
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -61,6 +70,15 @@ def test_given_edges_when_inverting_then_returns_expected_edges(
             start="c",
             max_depth=1,
             expected_nodes=frozenset({"b"}),
+        ),
+        TransitiveClosureTestCase(
+            description="bounds depth by the shortest route",
+            edges=_SHORTCUT_DOWNSTREAM,
+            start="orders",
+            max_depth=3,
+            expected_nodes=frozenset(
+                {"orders_left", "orders_right", "orders_mid", "orders_joined", "orders_report"}
+            ),
         ),
     ],
     ids=lambda case: case.description,
@@ -131,6 +149,40 @@ def test_given_edges_when_finding_transitive_closure_then_returns_expected_nodes
             include_starts=False,
             expected_nodes=frozenset({"orders", "customers"}),
         ),
+        TransitiveClosureManyTestCase(
+            description="returns nothing at zero depth without starts",
+            edges=_DIAMOND_UPSTREAM,
+            starts=("orders_report",),
+            include_starts=False,
+            max_depth=0,
+            expected_nodes=frozenset(),
+        ),
+        TransitiveClosureManyTestCase(
+            description="returns only starts at zero depth with starts",
+            edges=_DIAMOND_UPSTREAM,
+            starts=("orders_report",),
+            include_starts=True,
+            max_depth=0,
+            expected_nodes=frozenset({"orders_report"}),
+        ),
+        TransitiveClosureManyTestCase(
+            description="bounds depth from every start",
+            edges=_DIAMOND_UPSTREAM,
+            starts=("orders_report", "inventory_report"),
+            include_starts=False,
+            max_depth=1,
+            expected_nodes=frozenset({"orders_left", "orders_right", "stg_inventory"}),
+        ),
+        TransitiveClosureManyTestCase(
+            description="bounds multi-start depth by the shortest route",
+            edges=_SHORTCUT_DOWNSTREAM,
+            starts=("orders", "orders_right"),
+            include_starts=False,
+            max_depth=3,
+            expected_nodes=frozenset(
+                {"orders_left", "orders_right", "orders_mid", "orders_joined", "orders_report"}
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -141,6 +193,7 @@ def test_given_edges_when_finding_multi_start_closure_then_returns_expected_node
         starts=test_case.starts,
         edges=test_case.edges,
         include_starts=test_case.include_starts,
+        max_depth=test_case.max_depth,
     )
 
     assert result == test_case.expected_nodes
