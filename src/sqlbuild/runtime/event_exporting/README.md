@@ -11,7 +11,8 @@ the invocation timeout; after a timeout that exporter is not invoked again and i
 are dropped. This bounds concurrently hung threads to the number of exporters, but Python cannot
 terminate those daemon threads or undo destination side effects if they eventually return.
 
-Shutdown stops acceptance, drains only until the shared deadline, accounts queued and unattempted
+Shutdown stops acceptance, drains only until the shared deadline (CLI commands use
+`sinks.lifecycle.shutdown_timeout`, default two seconds), accounts queued and unattempted
 deliveries as dropped, terminates the event dispatcher, and returns without waiting for timed-out
 invocation threads. Concurrent shutdown callers receive the same cached final accounting snapshot.
 The shared provider session is retained while any invocation remains live. Teardown runs exactly

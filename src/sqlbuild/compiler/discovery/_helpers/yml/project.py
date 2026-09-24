@@ -100,7 +100,12 @@ _DEFAULT_WILDCARD_CHECK_SNAPSHOT_SCHEMA_CHANGE: str = "require_confirmation"
 _BATCH_CONCURRENCY_CONFIG_KEY: str = "batch_concurrency"
 _MAX_BATCHES_CONFIG_KEY: str = "max_batches"
 _EVENT_EXPORTER_FILTER_KEYS: frozenset[str] = frozenset({"event_kinds", "min_severity"})
-_EVENT_EXPORTER_KEYS: frozenset[str] = _EVENT_EXPORTER_FILTER_KEYS | frozenset({"named"})
+_LIFECYCLE_SHUTDOWN_TIMEOUT_CONFIG_KEY: str = "shutdown_timeout"
+_LIFECYCLE_SHUTDOWN_TIMEOUT_ZERO: str = "0s"
+_LIFECYCLE_SHUTDOWN_TIMEOUT_MAX_SECONDS: int = 600
+_EVENT_EXPORTER_KEYS: frozenset[str] = _EVENT_EXPORTER_FILTER_KEYS | frozenset(
+    {"named", _LIFECYCLE_SHUTDOWN_TIMEOUT_CONFIG_KEY}
+)
 _LEGACY_EVENT_EXPORTERS_CONFIG_KEY: str = "event_exporters"
 
 
@@ -288,10 +293,39 @@ def _load_lifecycle_sinks(*, payload: object, file_path: Path) -> LifecycleEvent
     defaults_mapping: dict[str, object] = {
         key: value for key, value in config_mapping.items() if key in _EVENT_EXPORTER_FILTER_KEYS
     }
+    shutdown_timeout, shutdown_timeout_seconds = _load_lifecycle_shutdown_timeout(
+        value=config_mapping.get(_LIFECYCLE_SHUTDOWN_TIMEOUT_CONFIG_KEY),
+        file_path=file_path,
+    )
     return LifecycleEventSinksConfig(
         defaults=load_filter(value=defaults_mapping, label="sinks.lifecycle"),
         named=named,
+        shutdown_timeout=shutdown_timeout,
+        shutdown_timeout_seconds=shutdown_timeout_seconds,
     )
+
+
+def _load_lifecycle_shutdown_timeout(
+    *, value: object, file_path: Path
+) -> tuple[str | None, int | None]:
+    if value is None:
+        return None, None
+    message: str = (
+        f"{file_path} sinks.lifecycle.{_LIFECYCLE_SHUTDOWN_TIMEOUT_CONFIG_KEY} must be a fixed "
+        f"duration from '0s' to '10m' such as '30s'"
+    )
+    if not isinstance(value, str):
+        raise ProjectConfigError(message)
+    if value == _LIFECYCLE_SHUTDOWN_TIMEOUT_ZERO:
+        return value, 0
+    duration: Duration | None = Duration.parse(value)
+    if (
+        duration is None
+        or duration.has_calendar_component
+        or duration.fixed_seconds > _LIFECYCLE_SHUTDOWN_TIMEOUT_MAX_SECONDS
+    ):
+        raise ProjectConfigError(message)
+    return value, duration.fixed_seconds
 
 
 def load_local_config(*, project_dir: Path) -> LocalConfig:

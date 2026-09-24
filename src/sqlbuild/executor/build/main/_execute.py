@@ -12,6 +12,9 @@ from sqlbuild.executor.auditing.main._project_results import (
     AuditResultProjection,
     project_audit_result_batch,
 )
+from sqlbuild.executor.auditing.main.audit_result_publication_scope import (
+    audit_result_publication_scope,
+)
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build._helpers.retention import (
     apply_retention_phase,
@@ -83,15 +86,27 @@ def execute_build_plan(
     test_results: tuple[SqlTestExecutionResult, ...]
     source_audit_results: tuple[AuditExecutionResult, ...]
     end_audit_results: tuple[AuditExecutionResult, ...]
-    (
-        model_results,
-        seed_results,
-        function_results,
-        load_results,
-        test_results,
-        source_audit_results,
-        end_audit_results,
-    ) = scheduler.run()
+    with audit_result_publication_scope(plan=plan):
+        (
+            model_results,
+            seed_results,
+            function_results,
+            load_results,
+            test_results,
+            source_audit_results,
+            end_audit_results,
+        ) = scheduler.run()
+        all_audit_results: tuple[AuditExecutionResult, ...] = _all_audit_results(
+            model_results=model_results,
+            source_audit_results=source_audit_results,
+            end_audit_results=end_audit_results,
+        )
+        projection: AuditResultProjection = project_audit_result_batch(
+            plan=plan,
+            results=all_audit_results,
+            adapter=adapter,
+            connection=scheduler_connection,
+        )
 
     result: BuildExecutionResult = aggregate_build_result(
         model_results=model_results,
@@ -101,17 +116,6 @@ def execute_build_plan(
         test_results=test_results,
         source_audit_results=source_audit_results,
         end_audit_results=end_audit_results,
-    )
-    all_audit_results: tuple[AuditExecutionResult, ...] = _all_audit_results(
-        model_results=model_results,
-        source_audit_results=source_audit_results,
-        end_audit_results=end_audit_results,
-    )
-    projection: AuditResultProjection = project_audit_result_batch(
-        plan=plan,
-        results=all_audit_results,
-        adapter=adapter,
-        connection=scheduler_connection,
     )
     result = replace(
         result,

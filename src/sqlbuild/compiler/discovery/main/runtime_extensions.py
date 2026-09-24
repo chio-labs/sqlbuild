@@ -20,6 +20,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredEventExporter,
     DiscoveredEventExporterDeclaration,
     DiscoveredProvider,
+    DiscoveredRuntimeExtensions,
 )
 from sqlbuild.runtime.event_exporting.main.stricter_severity import stricter_severity
 from sqlbuild.spec.contracts.models import (
@@ -29,14 +30,8 @@ from sqlbuild.spec.contracts.models import (
 from sqlbuild.spec.contracts.types import EventExportSeverity
 
 
-def discover_runtime_extensions(
-    *, project_dir: Path
-) -> tuple[
-    tuple[DiscoveredProvider, ...],
-    tuple[DiscoveredEventExporter, ...],
-    tuple[DiscoveredCommandOutputSink, ...],
-]:
-    """Discover providers and typed sinks at command startup."""
+def discover_runtime_extensions(*, project_dir: Path) -> DiscoveredRuntimeExtensions:
+    """Discover providers, typed sinks, and lifecycle delivery settings at command startup."""
 
     declarations: tuple[DiscoveredEventExporterDeclaration, ...] = (
         discover_event_exporter_declarations(project_dir=project_dir)
@@ -49,7 +44,7 @@ def discover_runtime_extensions(
         and not output_declarations
         and not (project_dir / "sqlbuild_project.toml").exists()
     ):
-        return (), (), ()
+        return DiscoveredRuntimeExtensions()
     config: LifecycleEventSinksConfig = load_project_config(project_dir=project_dir).sinks.lifecycle
     declaration_names: frozenset[str] = frozenset(item.name for item in declarations)
     unknown_names: frozenset[str] = frozenset(config.named) - declaration_names
@@ -58,7 +53,7 @@ def discover_runtime_extensions(
             "sinks.lifecycle.named contains unknown sink(s): " + ", ".join(sorted(unknown_names))
         )
     if not declarations and not output_declarations:
-        return (), (), ()
+        return DiscoveredRuntimeExtensions()
     providers: tuple[DiscoveredProvider, ...] = discover_provider_classes(project_dir=project_dir)
     exporters: tuple[DiscoveredEventExporter, ...] = bind_event_exporter_declarations(
         declarations=declarations,
@@ -70,10 +65,13 @@ def discover_runtime_extensions(
         project_dir=project_dir,
         providers=providers,
     )
-    return (
-        providers,
-        tuple(_apply_runtime_filter(exporter=exporter, config=config) for exporter in exporters),
-        output_sinks,
+    return DiscoveredRuntimeExtensions(
+        providers=providers,
+        event_exporters=tuple(
+            _apply_runtime_filter(exporter=exporter, config=config) for exporter in exporters
+        ),
+        command_output_sinks=output_sinks,
+        lifecycle_shutdown_timeout_seconds=config.shutdown_timeout_seconds,
     )
 
 

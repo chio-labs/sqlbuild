@@ -379,10 +379,12 @@ class LifecycleEventSinkFilterConfig:
 
 @dataclass(frozen=True)
 class LifecycleEventSinksConfig:
-    """Global and named lifecycle-event sink runtime filters."""
+    """Global and named lifecycle-event sink runtime filters and delivery settings."""
 
     defaults: LifecycleEventSinkFilterConfig = field(default_factory=LifecycleEventSinkFilterConfig)
     named: dict[str, LifecycleEventSinkFilterConfig] = field(default_factory=dict)
+    shutdown_timeout: str | None = None
+    shutdown_timeout_seconds: int | None = None
 
 
 @dataclass(frozen=True)

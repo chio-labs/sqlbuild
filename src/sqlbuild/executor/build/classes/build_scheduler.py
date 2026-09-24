@@ -42,6 +42,9 @@ from sqlbuild.cost.models import StatementExecutionTelemetry
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.auditing.main.publish_completed_audit_results import (
+    publish_completed_audit_results,
+)
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build._helpers.blocking import downstream_blocked_keys
 from sqlbuild.executor.build._helpers.end_audits import run_end_audits
@@ -1200,6 +1203,7 @@ class BuildScheduler:
 
         elif isinstance(result, ModelExecutionResult):
             self._model_results.append(result)
+            publish_completed_audit_results(result.audit_results)
             if self._on_node_complete is not None:
                 self._on_node_complete(result)
             failed = result.status in {ExecutionStatus.FAILED, ExecutionStatus.SKIPPED}
@@ -1295,6 +1299,7 @@ class BuildScheduler:
             )
         if isinstance(result, ModelExecutionResult):
             self._model_results.append(result)
+            publish_completed_audit_results(result.audit_results)
         elif isinstance(result, SeedExecutionResult):
             self._seed_results.append(result)
         elif isinstance(result, FunctionExecutionResult):

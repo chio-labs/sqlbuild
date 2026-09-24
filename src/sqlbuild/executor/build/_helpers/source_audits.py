@@ -10,6 +10,9 @@ from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput
 from sqlbuild.executor.auditing.main._execute import execute_audit
+from sqlbuild.executor.auditing.main.publish_completed_audit_results import (
+    publish_completed_audit_results,
+)
 from sqlbuild.executor.auditing.main.resource_id import audit_resource_id
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build._helpers.blocking import downstream_blocked_keys
@@ -79,6 +82,7 @@ def run_pending_source_audits(
                 if result.outcome == AuditOutcome.ERROR:
                     lifecycle.failed()
             audit_results.append(result)
+            publish_completed_audit_results((result,))
             if result.outcome == AuditOutcome.ERROR:
                 failed_names.append(source_name)
                 newly_blocked.update(
