@@ -88,12 +88,10 @@ def test_given_janitor_confirmation_when_keyboard_interrupt_then_returns_cancell
             use_color=False,
             expected_output="Janitor is disabled for this project.\n\n"
             "Janitor is opt-in. It previews stale warehouse objects and asks before "
-            "deleting anything.\n\n"
+            "archiving or deleting anything.\n\n"
             "Add this block to sqlbuild_project.toml:\n\n"
-            "janitor:\n"
-            "  enabled: true\n"
-            "  retention_days: 14\n"
-            "  archive_retention_days: 14\n\n"
+            "[janitor]\n"
+            "enabled = true\n\n"
             "After enabling, run janitor again to preview cleanup:\n"
             "  sqb janitor\n",
         )
@@ -132,7 +130,7 @@ def test_given_disabled_janitor_when_writing_with_color_then_styles_title(
     assert stream.getvalue().startswith(test_case.expected_prefix)
     assert (
         "\033[33mJanitor is opt-in. It previews stale warehouse objects and asks before "
-        "deleting anything.\033[0m"
+        "archiving or deleting anything.\033[0m"
     ) in stream.getvalue()
     assert "\033[34msqb janitor\033[0m" in stream.getvalue()
 

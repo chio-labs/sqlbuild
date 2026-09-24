@@ -51,7 +51,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             expected_exit_code=0,
             expected_stdout_fragments=(
                 "Janitor is disabled for this project.",
-                "enabled: true",
+                "enabled = true",
             ),
         )
     ],

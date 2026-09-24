@@ -27,16 +27,15 @@ def write_disabled(*, stream: TextIO, use_color: bool = False) -> None:
 
     style: CliStyle = CliStyle(use_color=use_color)
     disabled_detail: str = (
-        "Janitor is opt-in. It previews stale warehouse objects and asks before deleting anything."
+        "Janitor is opt-in. It previews stale warehouse objects and asks before archiving or "
+        "deleting anything."
     )
     stream.write(
         f"{style.warning_strong('Janitor is disabled for this project.')}\n\n"
         f"{style.warning(disabled_detail)}\n\n"
         f"Add this block to {style.object_name('sqlbuild_project.toml')}:\n\n"
-        "janitor:\n"
-        "  enabled: true\n"
-        "  retention_days: 14\n"
-        "  archive_retention_days: 14\n\n"
+        "[janitor]\n"
+        "enabled = true\n\n"
         "After enabling, run janitor again to preview cleanup:\n"
         f"  {style.accent('sqb janitor')}\n"
     )
