@@ -8,18 +8,20 @@ from typing import cast
 import yaml
 from yaml import YAMLError
 
+from sqlbuild.compiler.authored_values.main._optional_bool import optional_bool
+from sqlbuild.compiler.authored_values.main._optional_mapping import optional_mapping
+from sqlbuild.compiler.authored_values.main._optional_non_empty_string import (
+    optional_non_empty_string,
+)
+from sqlbuild.compiler.authored_values.main._require_non_empty_string import (
+    require_non_empty_string,
+)
 from sqlbuild.compiler.discovery._helpers.integrations.loaders import (
     integration_loader_name,
     parse_dlt_sources,
     parse_source_integration_loader,
 )
-from sqlbuild.compiler.discovery._helpers.yml.primitives import (
-    optional_bool,
-    optional_mapping,
-    optional_non_empty_string,
-    parse_audit_instances,
-    require_non_empty_string,
-)
+from sqlbuild.compiler.discovery._helpers.yml.primitives import parse_audit_instances
 from sqlbuild.compiler.discovery.constants import (
     NOT_NULL_AUDIT_NAME,
     SOURCE_AGE_POLICY_CONFIG_KEY,

@@ -8,14 +8,16 @@ from typing import cast
 import yaml
 from yaml import YAMLError
 
-from sqlbuild.compiler.discovery._helpers.yml.primitives import (
-    optional_bool,
-    optional_mapping,
+from sqlbuild.compiler.authored_values.main._optional_bool import optional_bool
+from sqlbuild.compiler.authored_values.main._optional_mapping import optional_mapping
+from sqlbuild.compiler.authored_values.main._optional_non_empty_string import (
     optional_non_empty_string,
-    optional_string_tuple,
-    parse_audit_instances,
+)
+from sqlbuild.compiler.authored_values.main._optional_string_tuple import optional_string_tuple
+from sqlbuild.compiler.authored_values.main._require_non_empty_string import (
     require_non_empty_string,
 )
+from sqlbuild.compiler.discovery._helpers.yml.primitives import parse_audit_instances
 from sqlbuild.compiler.discovery.constants import NOT_NULL_AUDIT_NAME, SEEDS_DIRECTORY_NAME
 from sqlbuild.compiler.discovery.exceptions import SchemaParseError
 from sqlbuild.spec.contracts.models import (

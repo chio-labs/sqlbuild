@@ -5,8 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
-from sqlbuild.compiler.discovery._helpers.yml.primitives import (
+from sqlbuild.compiler.authored_values.main._optional_mapping import optional_mapping
+from sqlbuild.compiler.authored_values.main._optional_non_empty_string import (
     optional_non_empty_string,
+)
+from sqlbuild.compiler.authored_values.main._require_non_empty_string import (
     require_non_empty_string,
 )
 from sqlbuild.compiler.discovery.constants import (
@@ -191,8 +194,12 @@ def _parse_dlt_source_group(
     if not isinstance(raw_config, dict):
         raise SourceParseError(f"{file_path} dlt source config must be a mapping")
     group_config: dict[str, object] = cast(dict[str, object], raw_config)
-    destination_config: dict[str, object] = _optional_mapping_value(
-        entry=group, key="destination", file_path=file_path, label="dlt source"
+    destination_config: dict[str, object] = optional_mapping(
+        entry=group,
+        key="destination",
+        file_path=file_path,
+        label="dlt source",
+        error_class=SourceParseError,
     )
     _validate_dlt_destination_config(config=destination_config, file_path=file_path)
     group_schema: str | None = optional_non_empty_string(
@@ -274,8 +281,12 @@ def _parse_dlt_resource_entry(
         write_disposition=write_disposition,
         primary_key=resource.get("primary_key"),
         merge_key=resource.get("merge_key"),
-        incremental=_optional_mapping_value(
-            entry=resource, key="incremental", file_path=file_path, label=f"dlt resource '{name}'"
+        incremental=optional_mapping(
+            entry=resource,
+            key="incremental",
+            file_path=file_path,
+            label=f"dlt resource '{name}'",
+            error_class=SourceParseError,
         ),
     )
     return SourceEntry(
@@ -372,14 +383,3 @@ def _raw_dlt_resource_config(*, source_type: str, resource: dict[str, object]) -
     if source_type == DLT_SOURCE_TYPE_REST_API:
         return {"endpoint": resource["endpoint"]}
     return {key: value for key, value in resource.items() if key not in excluded}
-
-
-def _optional_mapping_value(
-    *, entry: dict[str, object], key: str, file_path: Path, label: str
-) -> dict[str, object]:
-    value: object | None = entry.get(key)
-    if value is None:
-        return {}
-    if not isinstance(value, dict):
-        raise SourceParseError(f"{file_path} {label} '{key}' must be a mapping")
-    return cast(dict[str, object], value)
