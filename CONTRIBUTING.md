@@ -40,6 +40,14 @@ For focused iteration, run the narrowest relevant pytest target, for example:
 pytest tests/unit/src/sqlbuild/compiler/compile/test_main.py
 ```
 
+To check whether a branch introduces copied or drifting code in Python or Rust, run:
+
+```bash
+uv run dupscore clones --since origin/main
+```
+
+`make dupscore` reports the whole repository. See `scripts/dupscore/README.md` for options.
+
 ## Tests
 
 - Mirror source layout under `tests/<scope>/src/sqlbuild/...`.

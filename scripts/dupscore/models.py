@@ -120,8 +120,124 @@ class ReportDelta:
 
 
 @dataclass(frozen=True, slots=True)
+class CloneAllowlistEntry:
+    """Path globs whose mutual clones are intentional, with the recorded reason."""
+
+    paths: tuple[str, ...]
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
 class DupscoreConfig:
     """User configuration loaded from dupscore.toml."""
 
     persisted_state_surfaces: tuple[str, ...] = ()
     allowlisted_pairs: dict[tuple[str, str], str] = field(default_factory=dict)
+    clone_allowlist: tuple[CloneAllowlistEntry, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class RustToken:
+    """One lexed Rust token with its kind, spelling, and 1-based line."""
+
+    kind: str
+    text: str
+    line: int
+
+
+@dataclass(frozen=True, slots=True)
+class CloneUnit:
+    """One function-level unit with its normalised token stream."""
+
+    language: str
+    path: str
+    name: str
+    start_line: int
+    end_line: int
+    normalized: tuple[str, ...]
+    concrete_key: str
+    normalized_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class ClonePair:
+    """Two units whose fingerprints overlap above the similarity threshold."""
+
+    left: int
+    right: int
+    similarity: float
+    category: str
+
+
+@dataclass(frozen=True, slots=True)
+class CloneMember:
+    """One unit participating in a reported clone cluster."""
+
+    language: str
+    path: str
+    name: str
+    start_line: int
+    end_line: int
+    tokens: int
+    change: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ClonePairLink:
+    """One similarity edge between two members of a cluster, by member index."""
+
+    left: int
+    right: int
+    similarity: float
+    category: str
+
+
+@dataclass(frozen=True, slots=True)
+class CloneCluster:
+    """A transitive group of mutually similar units."""
+
+    category: str
+    similarity_min: float
+    similarity_max: float
+    duplicated_tokens: int
+    members: tuple[CloneMember, ...]
+    links: tuple[ClonePairLink, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CloneOptions:
+    """Detection and reporting options for the clones mode."""
+
+    languages: tuple[str, ...]
+    include_tests: bool
+    min_tokens: int
+    min_similarity: float
+    path_globs: tuple[str, ...]
+    since: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class CloneReport:
+    """Every reported clone cluster for the worktree."""
+
+    since: str | None
+    unit_counts: dict[str, int]
+    allowlisted_pairs: int
+    clusters: tuple[CloneCluster, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class FileChanges:
+    """Lines of one file added or changed since a base revision."""
+
+    added_ranges: tuple[tuple[int, int], ...] = ()
+    deletion_points: tuple[int, ...] = ()
+    whole_file: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class RustFileUnits:
+    """Units found in one Rust file plus the test-only module files it declares."""
+
+    units: tuple[CloneUnit, ...]
+    test_module_prefixes: tuple[str, ...]

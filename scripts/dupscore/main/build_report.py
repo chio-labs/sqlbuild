@@ -4,14 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.dupscore._helpers.facts import extract_project_facts
-from scripts.dupscore._helpers.fusion import fuse_rankings
-from scripts.dupscore._helpers.signal_callgraph import score_callgraph_shape
-from scripts.dupscore._helpers.signal_cochange import score_cochange
-from scripts.dupscore._helpers.signal_dataclasses import score_dataclass_overlap
-from scripts.dupscore._helpers.signal_same_names import score_same_name_symbols
-from scripts.dupscore._helpers.signal_state_fanin import score_state_fanin
-from scripts.dupscore._helpers.source_provider import read_revision_sources, read_worktree_sources
+from scripts.dupscore._helpers.inputs.source_provider import (
+    read_revision_sources,
+    read_worktree_sources,
+)
+from scripts.dupscore._helpers.package_pairs.facts import extract_project_facts
+from scripts.dupscore._helpers.package_pairs.fusion import fuse_rankings
+from scripts.dupscore._helpers.package_pairs.signal_callgraph import score_callgraph_shape
+from scripts.dupscore._helpers.package_pairs.signal_cochange import score_cochange
+from scripts.dupscore._helpers.package_pairs.signal_dataclasses import score_dataclass_overlap
+from scripts.dupscore._helpers.package_pairs.signal_same_names import score_same_name_symbols
+from scripts.dupscore._helpers.package_pairs.signal_state_fanin import score_state_fanin
 from scripts.dupscore.constants import HEAD_REVISION, WORKTREE_LABEL
 from scripts.dupscore.models import DupscoreConfig, DupscoreReport, ProjectFacts, SignalRanking
 

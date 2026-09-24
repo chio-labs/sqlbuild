@@ -40,3 +40,10 @@ reason = "Adapter backends intentionally conform to the shared adapter contract.
 [[allowlist]]
 pair = ["sqlbuild.adapter.contract", "sqlbuild.adapters.sqlserver"]
 reason = "Adapter backends intentionally conform to the shared adapter contract."
+
+# Clone mode: suppress clone pairs whose two sides both match one entry's globs.
+# `*` also crosses directory separators. Every entry needs a non-empty reason.
+#
+# [[clone_allowlist]]
+# paths = ["src/sqlbuild/example/backends/*"]
+# reason = "Backends intentionally mirror one protocol."
