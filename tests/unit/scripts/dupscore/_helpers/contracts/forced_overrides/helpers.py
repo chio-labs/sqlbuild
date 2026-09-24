@@ -11,6 +11,9 @@ GAMMA_PATH: str = "src/sqlbuild/demo/stores/gamma/classes/gamma_store.py"
 CONNECTION_PATH: str = "src/sqlbuild/demo/stores/beta/classes/orders_connection.py"
 OUTSIDE_PATH: str = "src/sqlbuild/demo/elsewhere/outside_store.py"
 DELTA_PATH: str = "src/sqlbuild/demo/stores/delta/classes/delta_store.py"
+REEXPORT_PATH: str = "src/sqlbuild/demo/stores/epsilon/classes/epsilon_store.py"
+QUALIFIED_PATH: str = "src/sqlbuild/demo/stores/zeta/classes/zeta_store.py"
+STDLIB_BASE_PATH: str = "src/sqlbuild/demo/stores/eta/classes/eta_store.py"
 
 _MIXIN_SOURCE: str = """\
 from abc import abstractmethod
@@ -140,6 +143,26 @@ CONTRACT_FILES: dict[str, str] = {
         _BASE_IMPORT
         + "class OutsideStore(BaseStore):\n"
         + "    def write_orders(self, connection, rows):\n        return 0\n"
+    ),
+}
+
+ANCESTRY_FILES: dict[str, str] = {
+    "src/sqlbuild/demo/shared/__init__.py": "from .writer import WriterMixin\n",
+    "src/sqlbuild/demo/shared/writer.py": "class WriterMixin:\n" + WRITE_ORDERS,
+    REEXPORT_PATH: (
+        "from sqlbuild.demo.shared import WriterMixin\n"
+        + _BASE_IMPORT
+        + "class EpsilonStore(WriterMixin, BaseStore):\n"
+        + WRITE_ORDERS
+    ),
+    QUALIFIED_PATH: (
+        "import sqlbuild.demo.shared.writer\n"
+        + _BASE_IMPORT
+        + "class ZetaStore(sqlbuild.demo.shared.writer.WriterMixin, BaseStore):\n"
+        + WRITE_ORDERS
+    ),
+    STDLIB_BASE_PATH: (
+        "from abc import ABC\n" + _BASE_IMPORT + "class EtaStore(BaseStore, ABC):\n" + WRITE_ORDERS
     ),
 }
 

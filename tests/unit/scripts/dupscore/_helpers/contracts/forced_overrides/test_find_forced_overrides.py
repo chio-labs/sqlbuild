@@ -16,6 +16,7 @@ from tests.unit.scripts.dupscore._helpers.contracts.forced_overrides._test_types
 )
 from tests.unit.scripts.dupscore._helpers.contracts.forced_overrides.helpers import (
     ALPHA_PATH,
+    ANCESTRY_FILES,
     BASE_PATH,
     BETA_PATH,
     CONNECTION_PATH,
@@ -23,6 +24,9 @@ from tests.unit.scripts.dupscore._helpers.contracts.forced_overrides.helpers imp
     CONTRACT_PATH,
     GAMMA_PATH,
     OUTSIDE_PATH,
+    QUALIFIED_PATH,
+    REEXPORT_PATH,
+    STDLIB_BASE_PATH,
     STORE_EXEMPTION,
     method_unit,
 )
@@ -113,6 +117,27 @@ _ADAPTERS: str = "src/sqlbuild/adapters"
             expected_forced=False,
         ),
         ForcedOverrideTestCase(
+            description="re-exported mixin that could supply the method blocks the exemption",
+            language="python",
+            path=REEXPORT_PATH,
+            name="EpsilonStore.write_orders",
+            expected_forced=False,
+        ),
+        ForcedOverrideTestCase(
+            description="module-qualified repository base blocks the exemption",
+            language="python",
+            path=QUALIFIED_PATH,
+            name="ZetaStore.write_orders",
+            expected_forced=False,
+        ),
+        ForcedOverrideTestCase(
+            description="standard-library bases do not block the exemption",
+            language="python",
+            path=STDLIB_BASE_PATH,
+            name="EtaStore.write_orders",
+            expected_forced=True,
+        ),
+        ForcedOverrideTestCase(
             description="rust units are never exempt",
             language="rust",
             path=ALPHA_PATH,
@@ -126,7 +151,7 @@ def test_given_contract_exemption_when_checking_unit_then_reports_forced_overrid
     test_case: ForcedOverrideTestCase,
     tmp_path: Path,
 ) -> None:
-    write_project_files(repo_root=tmp_path, files=CONTRACT_FILES)
+    write_project_files(repo_root=tmp_path, files=CONTRACT_FILES | ANCESTRY_FILES)
 
     forced: tuple[bool, ...] = find_forced_overrides(
         repo_root=tmp_path,

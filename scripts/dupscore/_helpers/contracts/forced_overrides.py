@@ -26,6 +26,7 @@ class _ClassInfo:
     bases: tuple[_ClassKey, ...]
     concrete: frozenset[str]
     abstract: frozenset[str]
+    complete: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +80,8 @@ class _ContractExemptions:
     def _forced_in_scope(self, *, scope: _ContractScope, key: _ClassKey, method_name: str) -> bool:
         order: tuple[_ClassKey, ...] = self._resolver.method_resolution_order(key)
         if scope.contract not in order:
+            return False
+        if not all(self._resolver.info(ancestor).complete for ancestor in order):
             return False
         for ancestor in order[1:]:
             if method_name in self._resolver.info(ancestor).concrete:
@@ -159,20 +162,52 @@ class _ClassResolver:
         tree: ast.Module | None = self._parse(key[0])
         node: ast.ClassDef | None = None if tree is None else _find_class(tree=tree, name=key[1])
         if tree is None or node is None:
-            return _ClassInfo(bases=(), concrete=frozenset(), abstract=frozenset())
+            return _ClassInfo(bases=(), concrete=frozenset(), abstract=frozenset(), complete=False)
         functions: list[_FunctionNode] = [
             item for item in node.body if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
         ]
         bases: list[_ClassKey] = []
+        complete: bool = True
         for base in node.bases:
             resolved: _ClassKey | None = self._resolve_base(tree=tree, importer=key[0], base=base)
             if resolved is not None:
                 bases.append(resolved)
+            elif self._references_local_module(tree=tree, importer=key[0], base=base):
+                complete = False
         return _ClassInfo(
             bases=tuple(bases),
             concrete=frozenset(item.name for item in functions if not _is_abstract(item)),
             abstract=frozenset(item.name for item in functions if _is_abstract(item)),
+            complete=complete,
         )
+
+    def _references_local_module(self, *, tree: ast.Module, importer: str, base: ast.expr) -> bool:
+        """Report bases that name this repository but could not be resolved to a class."""
+
+        root: ast.expr = base.value if isinstance(base, ast.Subscript) else base
+        while isinstance(root, ast.Attribute):
+            root = root.value
+        if not isinstance(root, ast.Name):
+            return True
+        for statement in tree.body:
+            if isinstance(statement, ast.ImportFrom):
+                for alias in statement.names:
+                    if (alias.asname or alias.name) == root.id:
+                        return (
+                            self._module_path(
+                                importer=importer, module=statement.module, level=statement.level
+                            )
+                            is not None
+                            or statement.level > 0
+                        )
+            elif isinstance(statement, ast.Import):
+                for alias in statement.names:
+                    if (alias.asname or alias.name.split(_MODULE_SEPARATOR)[0]) == root.id:
+                        return (
+                            self._module_path(importer=importer, module=alias.name, level=0)
+                            is not None
+                        )
+        return False
 
     def _resolve_base(self, *, tree: ast.Module, importer: str, base: ast.expr) -> _ClassKey | None:
         if not isinstance(base, ast.Name):
