@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable
-from typing import get_type_hints
+from dataclasses import replace
+from pathlib import Path
+from typing import Protocol, get_type_hints
 
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
@@ -174,34 +176,45 @@ def build_python_node_path_index(*, nodes: tuple[DiscoveredPythonNode, ...]) -> 
     return {node.name: node.relative_path.parent.as_posix() for node in nodes}
 
 
+class _DiscoveredPythonFunction(Protocol):
+    @property
+    def file_path(self) -> Path: ...
+
+    @property
+    def relative_path(self) -> Path: ...
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def function(self) -> Callable[..., object]: ...
+
+    @property
+    def depends_on(self) -> tuple[Callable[..., object] | SqlResourceRef, ...]: ...
+
+
+class _DocumentedPythonFunction(_DiscoveredPythonFunction, Protocol):
+    @property
+    def tags(self) -> tuple[str, ...]: ...
+
+    @property
+    def group(self) -> str | None: ...
+
+    @property
+    def description(self) -> str | None: ...
+
+    @property
+    def meta(self) -> dict[str, object] | None: ...
+
+
 def _build_loader_node(
     *, loader: DiscoveredLoaderFunction, provider_by_name: dict[str, DiscoveredProvider]
 ) -> DiscoveredPythonNode:
-    return DiscoveredPythonNode(
-        kind=PythonNodeKind.LOADER,
-        file_path=loader.file_path,
-        relative_path=loader.relative_path,
-        name=loader.name,
-        function=loader.function,
-        depends_on=loader.depends_on,
-        sql_deps=_sql_deps(loader.depends_on),
-        provider_usages=_provider_usages(
-            function=loader.function, provider_by_name=provider_by_name
-        ),
-        loader=DiscoveredPythonLoaderMetadata(
-            destination=loader.destination,
-            write_strategy=loader.write_strategy,
-            cursor_column=loader.cursor_column,
-            unique_key=loader.unique_key,
-            columns=loader.columns,
-            contract=loader.contract,
-            connection_mode=loader.connection_mode,
-        ),
-        identity=build_python_identity(
-            node_type=PythonNodeKind.LOADER.value,
-            node_name=loader.name,
-            function=loader.function,
-            project_dir=loader.file_path.parent,
+    return replace(
+        _build_python_node(
+            kind=PythonNodeKind.LOADER,
+            discovered=loader,
+            provider_by_name=provider_by_name,
             decorator_config={
                 "contract": loader.contract,
                 "cursor_column": loader.cursor_column,
@@ -212,77 +225,46 @@ def _build_loader_node(
                 else None,
             },
         ),
+        loader=DiscoveredPythonLoaderMetadata(
+            destination=loader.destination,
+            write_strategy=loader.write_strategy,
+            cursor_column=loader.cursor_column,
+            unique_key=loader.unique_key,
+            columns=loader.columns,
+            contract=loader.contract,
+            connection_mode=loader.connection_mode,
+        ),
     )
 
 
 def _build_task_node(
     *, task: DiscoveredTaskFunction, provider_by_name: dict[str, DiscoveredProvider]
 ) -> DiscoveredPythonNode:
-    return DiscoveredPythonNode(
-        kind=PythonNodeKind.TASK,
-        file_path=task.file_path,
-        relative_path=task.relative_path,
-        name=task.name,
-        function=task.function,
-        depends_on=task.depends_on,
-        sql_deps=_sql_deps(task.depends_on),
-        tags=task.tags,
-        group=task.group,
-        description=task.description,
-        meta=task.meta,
-        provider_usages=_provider_usages(function=task.function, provider_by_name=provider_by_name),
-        task=DiscoveredPythonTaskMetadata(retry=task.retry),
-        identity=build_python_identity(
-            node_type=PythonNodeKind.TASK.value,
-            node_name=task.name,
-            function=task.function,
-            project_dir=task.file_path.parent,
-            decorator_config={
-                "description": task.description,
-                "group": task.group,
-                "meta": task.meta,
-                "tags": task.tags,
-            },
+    return replace(
+        _build_documented_python_node(
+            kind=PythonNodeKind.TASK,
+            discovered=task,
+            provider_by_name=provider_by_name,
+            decorator_config={},
         ),
+        task=DiscoveredPythonTaskMetadata(retry=task.retry),
     )
 
 
 def _build_asset_node(
     *, asset: DiscoveredAssetFunction, provider_by_name: dict[str, DiscoveredProvider]
 ) -> DiscoveredPythonNode:
-    return DiscoveredPythonNode(
-        kind=PythonNodeKind.ASSET,
-        file_path=asset.file_path,
-        relative_path=asset.relative_path,
-        name=asset.name,
-        function=asset.function,
-        depends_on=asset.depends_on,
-        sql_deps=_sql_deps(asset.depends_on),
-        tags=asset.tags,
-        group=asset.group,
-        description=asset.description,
-        meta=asset.meta,
-        provider_usages=_provider_usages(
-            function=asset.function, provider_by_name=provider_by_name
+    return replace(
+        _build_documented_python_node(
+            kind=PythonNodeKind.ASSET,
+            discovered=asset,
+            provider_by_name=provider_by_name,
+            decorator_config={"columns": asset.columns, "column_lineage": asset.column_lineage},
         ),
         asset=DiscoveredPythonAssetMetadata(
             columns=asset.columns,
             column_lineage=asset.column_lineage,
             retry=asset.retry,
-        ),
-        identity=build_python_identity(
-            node_type=PythonNodeKind.ASSET.value,
-            node_name=asset.name,
-            function=asset.function,
-            project_dir=asset.file_path.parent,
-            decorator_config={
-                "columns": asset.columns,
-                "column_lineage": asset.column_lineage,
-                "description": asset.description,
-                "group": asset.group,
-                "meta": asset.meta,
-                "tags": asset.tags,
-            },
         ),
     )
 
@@ -290,34 +272,70 @@ def _build_asset_node(
 def _build_check_node(
     *, check: DiscoveredCheckFunction, provider_by_name: dict[str, DiscoveredProvider]
 ) -> DiscoveredPythonNode:
-    return DiscoveredPythonNode(
-        kind=PythonNodeKind.CHECK,
-        file_path=check.file_path,
-        relative_path=check.relative_path,
-        name=check.name,
-        function=check.function,
-        depends_on=check.depends_on,
-        sql_deps=_sql_deps(check.depends_on),
-        tags=check.tags,
-        group=check.group,
-        description=check.description,
-        meta=check.meta,
-        provider_usages=_provider_usages(
-            function=check.function, provider_by_name=provider_by_name
+    return replace(
+        _build_documented_python_node(
+            kind=PythonNodeKind.CHECK,
+            discovered=check,
+            provider_by_name=provider_by_name,
+            decorator_config={"severity": check.severity.value},
         ),
         check=DiscoveredPythonCheckMetadata(severity=check.severity),
-        identity=build_python_identity(
-            node_type=PythonNodeKind.CHECK.value,
-            node_name=check.name,
-            function=check.function,
-            project_dir=check.file_path.parent,
+    )
+
+
+def _build_documented_python_node(
+    *,
+    kind: PythonNodeKind,
+    discovered: _DocumentedPythonFunction,
+    provider_by_name: dict[str, DiscoveredProvider],
+    decorator_config: dict[str, object],
+) -> DiscoveredPythonNode:
+    return replace(
+        _build_python_node(
+            kind=kind,
+            discovered=discovered,
+            provider_by_name=provider_by_name,
             decorator_config={
-                "description": check.description,
-                "group": check.group,
-                "meta": check.meta,
-                "severity": check.severity.value,
-                "tags": check.tags,
+                **decorator_config,
+                "description": discovered.description,
+                "group": discovered.group,
+                "meta": discovered.meta,
+                "tags": discovered.tags,
             },
+        ),
+        tags=discovered.tags,
+        group=discovered.group,
+        description=discovered.description,
+        meta=discovered.meta,
+    )
+
+
+def _build_python_node(
+    *,
+    kind: PythonNodeKind,
+    discovered: _DiscoveredPythonFunction,
+    provider_by_name: dict[str, DiscoveredProvider],
+    decorator_config: dict[str, object],
+) -> DiscoveredPythonNode:
+    """Build the kind-independent node view; decorator_config is exactly the identity input."""
+
+    return DiscoveredPythonNode(
+        kind=kind,
+        file_path=discovered.file_path,
+        relative_path=discovered.relative_path,
+        name=discovered.name,
+        function=discovered.function,
+        depends_on=discovered.depends_on,
+        sql_deps=_sql_deps(discovered.depends_on),
+        provider_usages=_provider_usages(
+            function=discovered.function, provider_by_name=provider_by_name
+        ),
+        identity=build_python_identity(
+            node_type=kind.value,
+            node_name=discovered.name,
+            function=discovered.function,
+            project_dir=discovered.file_path.parent,
+            decorator_config=decorator_config,
         ),
     )
 
