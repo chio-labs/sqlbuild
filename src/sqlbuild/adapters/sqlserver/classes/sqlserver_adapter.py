@@ -15,10 +15,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _build_names_filter,
     _build_schemas_filter,
     _encode_typed_json,
-    _historical_hard_deleted_at_sql,
-    _historical_observed_group_sequence_cte_sql,
-    _historical_observed_group_sequence_from_sql,
-    _historical_reappearing_new_changes_ctes_sql,
     _historical_timestamp_changes_new_records_cte_sql,
     _quote_sql_string,
     _render_ansi_typed_scalar,
@@ -27,10 +23,18 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _snapshot_key_condition,
     _typed_scalar_payload,
 )
+from sqlbuild.adapter.contract.classes.historical_snapshot_sql import (
+    HistoricalSnapshotSql,
+    historical_insert_validity_sql,
+)
 from sqlbuild.adapter.contract.classes.microbatch import MicrobatchMixin
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.classes.unkeyed_diff import UnkeyedDiffMixin
-from sqlbuild.adapter.contract.constants import DIFF_LEFT_SIDE, DIFF_RIGHT_SIDE
+from sqlbuild.adapter.contract.constants import (
+    DIFF_LEFT_SIDE,
+    DIFF_RIGHT_SIDE,
+    SNAPSHOT_VERSION_START_COLUMN,
+)
 from sqlbuild.adapter.contract.exceptions import (
     AdapterUserError,
     UnsupportedTypedSqlRenderingError,
@@ -218,6 +222,16 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str,
         invalidate_hard_deletes: bool,
     ) -> str:
+        if invalidate_hard_deletes:
+            return HistoricalSnapshotSql(
+                origin=origin,
+                unique_key=unique_key,
+                observed_at_column=observed_at_column,
+                valid_from_column=valid_from_column,
+                valid_to_column=valid_to_column,
+                updated_at_column=updated_at_column,
+                distinct_condition=self._distinct_condition,
+            ).new_changes_ctes_sql(destination=destination)
         partition_sql: str = ", ".join(unique_key)
         first_key: str = unique_key[0]
         latest_join_condition: str = _snapshot_key_condition(
@@ -226,20 +240,6 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         updated_changed: str = self._distinct_condition(
             left=f"{updated_at_column}", right="__prev_updated_at"
         )
-        hard_deletes_sql: str = ""
-        if invalidate_hard_deletes:
-            hard_deleted_at_sql: str = _historical_hard_deleted_at_sql(
-                origin=origin,
-                unique_key=unique_key,
-                observed_at_column=observed_at_column,
-                row_alias="__target",
-            )
-            hard_deletes_sql = (
-                "), __hard_deletes AS ("
-                f"SELECT {', '.join(f'__target.{column}' for column in unique_key)}, "
-                f"{hard_deleted_at_sql} AS __close_at FROM {destination} AS __target "
-                f"WHERE __target.{valid_to_column} IS NULL"
-            )
         return (
             "__ordered AS ("
             f"SELECT *, LAG({updated_at_column}) OVER ("
@@ -257,7 +257,6 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"LEFT JOIN __latest ON {latest_join_condition} "
             f"WHERE __latest.{first_key} IS NULL "
             f"OR __delta_changes.{updated_at_column} > __latest.{valid_from_column}"
-            f"{hard_deletes_sql}"
             ")"
         )
 
@@ -273,6 +272,16 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str,
         invalidate_hard_deletes: bool,
     ) -> str:
+        if invalidate_hard_deletes:
+            return HistoricalSnapshotSql(
+                origin=origin,
+                unique_key=unique_key,
+                observed_at_column=observed_at_column,
+                valid_from_column=valid_from_column,
+                valid_to_column=valid_to_column,
+                check_columns=check_columns,
+                distinct_condition=self._distinct_condition,
+            ).new_changes_ctes_sql(destination=destination)
         partition_sql: str = ", ".join(unique_key)
         previous_columns_sql: str = ", ".join(
             self._lag_expr(
@@ -303,28 +312,6 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"__delta_changes.{observed_at_column} > __latest.{valid_from_column} "
             f"AND ({latest_change_condition}))"
         )
-        new_changes_sql: str = f"__new_changes AS ({changed_or_new_sql})"
-        hard_deletes_sql: str = ""
-        if invalidate_hard_deletes:
-            hard_deleted_at_sql: str = _historical_hard_deleted_at_sql(
-                origin=origin,
-                unique_key=unique_key,
-                observed_at_column=observed_at_column,
-                row_alias="__target",
-            )
-            new_changes_sql = _historical_reappearing_new_changes_ctes_sql(
-                changed_or_new_sql=changed_or_new_sql,
-                unique_key=unique_key,
-                observed_at_column=observed_at_column,
-                valid_to_column=valid_to_column,
-            )
-            hard_deletes_sql = (
-                ", __hard_deletes AS ("
-                f"SELECT {', '.join(f'__target.{column}' for column in unique_key)}, "
-                f"{hard_deleted_at_sql} AS __close_at FROM {destination} AS __target "
-                f"WHERE __target.{valid_to_column} IS NULL"
-                ")"
-            )
         changed_or_first_sql: str = (
             "SELECT * FROM __ordered WHERE __prev_observed_at IS NULL "
             f"OR ({delta_change_condition})"
@@ -341,7 +328,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"ORDER BY {valid_from_column} DESC) AS __rn FROM {destination}"
             "), __latest AS ("
             "SELECT * FROM __latest_ordered WHERE __rn = 1"
-            f"), {new_changes_sql}{hard_deletes_sql}"
+            f"), __new_changes AS ({changed_or_new_sql})"
         )
 
     def connect(self, config: dict[str, Any]) -> _SqlServerConnection:
@@ -1889,7 +1876,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 unique_key=unique_key,
                 valid_from_column=valid_from_column,
                 valid_to_column=valid_to_column,
-                change_time_column=observed_at_column,
+                change_time_column=SNAPSHOT_VERSION_START_COLUMN,
             )
         else:
             close_sql = (
@@ -1910,13 +1897,16 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
         output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
+        version_columns_sql: str = (
+            f"__new_changes.{observed_at_column}, LEAD(__new_changes.{observed_at_column}) OVER ("
+            f"PARTITION BY {partition_sql} ORDER BY __new_changes.{observed_at_column})"
+        )
+        if invalidate_hard_deletes:
+            version_columns_sql = historical_insert_validity_sql()
         insert_sql: str = (
             f";WITH {new_changes_sql} "
             f"INSERT INTO {destination} ({insert_column_sql}) "
-            f"SELECT {output_select_sql}, __new_changes.{observed_at_column}, "
-            f"LEAD(__new_changes.{observed_at_column}) OVER ("
-            f"PARTITION BY {partition_sql} ORDER BY __new_changes.{observed_at_column}"
-            f") "
+            f"SELECT {output_select_sql}, {version_columns_sql} "
             f"FROM __new_changes"
         )
         return (close_sql, insert_sql)
@@ -2004,7 +1994,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 unique_key=unique_key,
                 valid_from_column=valid_from_column,
                 valid_to_column=valid_to_column,
-                change_time_column=updated_at_column,
+                change_time_column=SNAPSHOT_VERSION_START_COLUMN,
             )
         else:
             close_sql = (
@@ -2025,13 +2015,16 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
         output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
+        version_columns_sql: str = (
+            f"__new_changes.{updated_at_column}, LEAD(__new_changes.{updated_at_column}) OVER ("
+            f"PARTITION BY {partition_sql} ORDER BY __new_changes.{updated_at_column})"
+        )
+        if invalidate_hard_deletes:
+            version_columns_sql = historical_insert_validity_sql()
         insert_sql: str = (
             f";WITH {new_changes_sql} "
             f"INSERT INTO {destination} ({insert_column_sql}) "
-            f"SELECT {output_select_sql}, __new_changes.{updated_at_column}, "
-            f"LEAD(__new_changes.{updated_at_column}) OVER ("
-            f"PARTITION BY {partition_sql} ORDER BY __new_changes.{updated_at_column}"
-            f") "
+            f"SELECT {output_select_sql}, {version_columns_sql} "
             f"FROM __new_changes"
         )
         return (close_sql, insert_sql)
@@ -2183,6 +2176,22 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
+        if invalidate_hard_deletes:
+            historical: HistoricalSnapshotSql = HistoricalSnapshotSql(
+                origin=origin,
+                unique_key=unique_key,
+                observed_at_column=observed_at_column,
+                valid_from_column=valid_from_column,
+                valid_to_column=valid_to_column,
+                check_columns=check_columns,
+                distinct_condition=self._distinct_condition,
+            )
+            return (
+                f"DROP TABLE IF EXISTS {destination}",
+                f";WITH {historical.initial_ctes_sql()} "
+                f"SELECT {historical.initial_select_list_sql(output_columns=output_columns)} "
+                f"INTO {destination} FROM __versions",
+            )
         partition_sql: str = ", ".join(unique_key)
         previous_columns_sql: str = ", ".join(
             self._lag_expr(
@@ -2200,13 +2209,6 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
         output_select_sql: str = ", ".join(output_columns)
         hard_deleted_at_sql: str = "CAST(NULL AS DATETIME2)"
-        if invalidate_hard_deletes:
-            hard_deleted_at_sql = _historical_hard_deleted_at_sql(
-                origin=origin,
-                unique_key=unique_key,
-                observed_at_column=observed_at_column,
-                row_alias="__changes",
-            )
         valid_to_expr: str = (
             "CASE "
             "WHEN __next_change_at IS NULL THEN __hard_deleted_at "
@@ -2214,35 +2216,12 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at "
             "ELSE __next_change_at END"
         )
-        ordered_sql: str = (
-            f"SELECT *, LAG({observed_at_column}) OVER ("
+        historical_sql: str = (
+            f";WITH __ordered AS (SELECT *, LAG({observed_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
             f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
-        )
-        changes_condition: str = f"__prev_observed_at IS NULL OR ({change_condition})"
-        leading_ctes_sql: str = ""
-        if invalidate_hard_deletes:
-            group_sequence_sql: str = _historical_observed_group_sequence_cte_sql(
-                origin=origin, observed_at_column=observed_at_column
-            )
-            grouped_origin_sql: str = _historical_observed_group_sequence_from_sql(
-                origin=origin, observed_at_column=observed_at_column
-            )
-            leading_ctes_sql = f"{group_sequence_sql}, "
-            ordered_sql = (
-                "SELECT __source.*, __observed_group_sequence.__prev_group_observed_at, "
-                f"LAG({observed_at_column}) OVER ("
-                f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-                f") AS __prev_observed_at{previous_columns_sql} {grouped_origin_sql}"
-            )
-            reappeared_condition: str = self._distinct_condition(
-                left="__prev_observed_at", right="__prev_group_observed_at"
-            )
-            changes_condition = f"{changes_condition} OR {reappeared_condition}"
-        historical_sql: str = (
-            f";WITH {leading_ctes_sql}__ordered AS ({ordered_sql}"
             "), __changes AS ("
-            f"SELECT * FROM __ordered WHERE {changes_condition}"
+            f"SELECT * FROM __ordered WHERE __prev_observed_at IS NULL OR ({change_condition})"
             "), __versions AS ("
             f"SELECT __changes.*, LEAD({observed_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"

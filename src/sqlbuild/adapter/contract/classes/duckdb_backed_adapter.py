@@ -16,11 +16,12 @@ from sqlbuild.adapter.contract._helpers.seed_csv import get_seed_csv_null_values
 from sqlbuild.adapter.contract.classes.base_adapter import (
     BaseAdapter,
     _encode_typed_json,
-    _historical_observed_group_sequence_cte_sql,
-    _historical_observed_group_sequence_from_sql,
-    _historical_reappearing_new_changes_ctes_sql,
     _render_ansi_typed_scalar,
     _render_typed_value_list,
+)
+from sqlbuild.adapter.contract.classes.historical_snapshot_sql import (
+    HistoricalSnapshotSql,
+    historical_insert_validity_sql,
 )
 from sqlbuild.adapter.contract.classes.observed_connection import ObservedConnection
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -29,6 +30,7 @@ from sqlbuild.adapter.contract.constants import (
     DIFF_LEFT_SIDE,
     DIFF_RIGHT_SIDE,
     QUALIFIED_NAME_SEPARATOR,
+    SNAPSHOT_VERSION_START_COLUMN,
 )
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.models import (
@@ -571,7 +573,7 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
                 unique_key=unique_key,
                 valid_from_column=valid_from_column,
                 valid_to_column=valid_to_column,
-                change_time_column=updated_at_column,
+                change_time_column=SNAPSHOT_VERSION_START_COLUMN,
             )
         else:
             close_sql = (
@@ -591,13 +593,16 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
         output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
+        version_columns_sql: str = (
+            f"__new_changes.{updated_at_column}, LEAD(__new_changes.{updated_at_column}) OVER ("
+            f"PARTITION BY {partition_sql} ORDER BY __new_changes.{updated_at_column})"
+        )
+        if invalidate_hard_deletes:
+            version_columns_sql = historical_insert_validity_sql()
         insert_sql: str = (
             f"WITH {new_changes_sql} "
             f"INSERT INTO {destination} ({insert_column_sql}) "
-            f"SELECT {output_select_sql}, __new_changes.{updated_at_column}, "
-            f"LEAD(__new_changes.{updated_at_column}) OVER ("
-            f"PARTITION BY {partition_sql} ORDER BY __new_changes.{updated_at_column}"
-            f") "
+            f"SELECT {output_select_sql}, {version_columns_sql} "
             f"FROM __new_changes"
         )
         return (close_sql, insert_sql)
@@ -786,7 +791,7 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
                 unique_key=unique_key,
                 valid_from_column=valid_from_column,
                 valid_to_column=valid_to_column,
-                change_time_column=observed_at_column,
+                change_time_column=SNAPSHOT_VERSION_START_COLUMN,
             )
         else:
             close_sql = (
@@ -806,13 +811,16 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
         output_select_sql: str = ", ".join(f"__new_changes.{column}" for column in output_columns)
         partition_sql: str = ", ".join(f"__new_changes.{column}" for column in unique_key)
+        version_columns_sql: str = (
+            f"__new_changes.{observed_at_column}, LEAD(__new_changes.{observed_at_column}) OVER ("
+            f"PARTITION BY {partition_sql} ORDER BY __new_changes.{observed_at_column})"
+        )
+        if invalidate_hard_deletes:
+            version_columns_sql = historical_insert_validity_sql()
         insert_sql: str = (
             f"WITH {new_changes_sql} "
             f"INSERT INTO {destination} ({insert_column_sql}) "
-            f"SELECT {output_select_sql}, __new_changes.{observed_at_column}, "
-            f"LEAD(__new_changes.{observed_at_column}) OVER ("
-            f"PARTITION BY {partition_sql} ORDER BY __new_changes.{observed_at_column}"
-            f") "
+            f"SELECT {output_select_sql}, {version_columns_sql} "
             f"FROM __new_changes"
         )
         return (close_sql, insert_sql)
@@ -2616,6 +2624,16 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> str:
+        if invalidate_hard_deletes:
+            return HistoricalSnapshotSql(
+                origin=origin,
+                unique_key=unique_key,
+                observed_at_column=observed_at_column,
+                valid_from_column=valid_from_column,
+                valid_to_column=valid_to_column,
+                check_columns=check_columns,
+            ).initial_select_sql(output_columns=output_columns)
+
         partition_sql: str = ", ".join(unique_key)
         previous_columns_sql: str = ", ".join(
             f"LAG({column}) OVER (PARTITION BY {partition_sql} ORDER BY {observed_at_column}) "
@@ -2628,42 +2646,6 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
             f"{column} IS DISTINCT FROM __prev_{column}" for column in check_columns
         )
         output_select_sql: str = ", ".join(column for column in output_columns)
-        if invalidate_hard_deletes:
-            hard_deleted_at_sql: str = cls._historical_hard_deleted_at_sql(
-                origin=origin,
-                unique_key=unique_key,
-                observed_at_column=observed_at_column,
-                row_alias="__changes",
-            )
-            group_sequence_sql: str = _historical_observed_group_sequence_cte_sql(
-                origin=origin, observed_at_column=observed_at_column
-            )
-            grouped_origin_sql: str = _historical_observed_group_sequence_from_sql(
-                origin=origin, observed_at_column=observed_at_column
-            )
-            return (
-                f"WITH {group_sequence_sql}, __ordered AS ("
-                "SELECT __source.*, __observed_group_sequence.__prev_group_observed_at, "
-                f"LAG({observed_at_column}) OVER ("
-                f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-                f") AS __prev_observed_at{previous_columns_sql} {grouped_origin_sql}"
-                "), __changes AS ("
-                f"SELECT * FROM __ordered WHERE __prev_observed_at IS NULL OR ({change_condition}) "
-                "OR __prev_observed_at IS DISTINCT FROM __prev_group_observed_at"
-                "), __versions AS ("
-                f"SELECT __changes.*, LEAD({observed_at_column}) OVER ("
-                f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-                f") AS __next_change_at, {hard_deleted_at_sql} AS __hard_deleted_at "
-                "FROM __changes"
-                ") "
-                f"SELECT {output_select_sql}, {observed_at_column} AS {valid_from_column}, "
-                "CASE "
-                "WHEN __next_change_at IS NULL THEN __hard_deleted_at "
-                "WHEN __hard_deleted_at IS NULL THEN __next_change_at "
-                "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at "
-                f"ELSE __next_change_at END AS {valid_to_column} "
-                "FROM __versions"
-            )
         return (
             "WITH __ordered AS ("
             f"SELECT *, LAG({observed_at_column}) OVER ("
@@ -2691,37 +2673,18 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> str:
-        partition_sql: str = ", ".join(unique_key)
-        output_select_sql: str = ", ".join(column for column in output_columns)
         if invalidate_hard_deletes:
-            hard_deleted_at_sql: str = cls._historical_hard_deleted_at_sql(
+            return HistoricalSnapshotSql(
                 origin=origin,
                 unique_key=unique_key,
                 observed_at_column=observed_at_column,
-                row_alias="__changes",
-            )
-            return (
-                "WITH __ordered AS ("
-                f"SELECT *, LAG({updated_at_column}) OVER ("
-                f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-                f") AS __prev_updated_at FROM {origin}"
-                "), __changes AS ("
-                f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL "
-                f"OR {updated_at_column} IS DISTINCT FROM __prev_updated_at"
-                "), __versions AS ("
-                f"SELECT __changes.*, LEAD({updated_at_column}) OVER ("
-                f"PARTITION BY {partition_sql} ORDER BY {updated_at_column}"
-                f") AS __next_change_at, {hard_deleted_at_sql} AS __hard_deleted_at "
-                "FROM __changes"
-                ") "
-                f"SELECT {output_select_sql}, {updated_at_column} AS {valid_from_column}, "
-                "CASE "
-                "WHEN __next_change_at IS NULL THEN __hard_deleted_at "
-                "WHEN __hard_deleted_at IS NULL THEN __next_change_at "
-                "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at "
-                f"ELSE __next_change_at END AS {valid_to_column} "
-                "FROM __versions"
-            )
+                valid_from_column=valid_from_column,
+                valid_to_column=valid_to_column,
+                updated_at_column=updated_at_column,
+            ).initial_select_sql(output_columns=output_columns)
+
+        partition_sql: str = ", ".join(unique_key)
+        output_select_sql: str = ", ".join(column for column in output_columns)
         return (
             "WITH __ordered AS ("
             f"SELECT *, LAG({updated_at_column}) OVER ("
@@ -2750,44 +2713,21 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str,
         invalidate_hard_deletes: bool,
     ) -> str:
+        if invalidate_hard_deletes:
+            return HistoricalSnapshotSql(
+                origin=origin,
+                unique_key=unique_key,
+                observed_at_column=observed_at_column,
+                valid_from_column=valid_from_column,
+                valid_to_column=valid_to_column,
+                updated_at_column=updated_at_column,
+            ).new_changes_ctes_sql(destination=destination)
+
         partition_sql: str = ", ".join(unique_key)
         latest_join_condition: str = cls._snapshot_key_condition(
             left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
         )
         first_key: str = unique_key[0]
-        if invalidate_hard_deletes:
-            latest_join_condition: str = cls._snapshot_key_condition(
-                left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
-            )
-            hard_deleted_at_sql: str = cls._historical_hard_deleted_at_sql(
-                origin=origin,
-                unique_key=unique_key,
-                observed_at_column=observed_at_column,
-                row_alias="__target",
-            )
-            return (
-                "__ordered AS ("
-                f"SELECT *, LAG({updated_at_column}) OVER ("
-                f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-                f") AS __prev_updated_at FROM {origin}"
-                "), __delta_changes AS ("
-                f"SELECT * FROM __ordered WHERE __prev_updated_at IS NULL "
-                f"OR {updated_at_column} IS DISTINCT FROM __prev_updated_at"
-                "), __latest AS ("
-                f"SELECT * FROM {destination} QUALIFY ROW_NUMBER() OVER ("
-                f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
-                ") = 1"
-                "), __new_changes AS ("
-                "SELECT __delta_changes.* FROM __delta_changes "
-                f"LEFT JOIN __latest ON {latest_join_condition} "
-                f"WHERE __latest.{first_key} IS NULL "
-                f"OR __delta_changes.{updated_at_column} > __latest.{valid_from_column}"
-                "), __hard_deletes AS ("
-                f"SELECT {', '.join(f'__target.{column}' for column in unique_key)}, "
-                f"{hard_deleted_at_sql} AS __close_at FROM {destination} AS __target "
-                f"WHERE __target.{valid_to_column} IS NULL"
-                ")"
-            )
         return (
             "__ordered AS ("
             f"SELECT *, LAG({updated_at_column}) OVER ("
@@ -2869,6 +2809,16 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str,
         invalidate_hard_deletes: bool,
     ) -> str:
+        if invalidate_hard_deletes:
+            return HistoricalSnapshotSql(
+                origin=origin,
+                unique_key=unique_key,
+                observed_at_column=observed_at_column,
+                valid_from_column=valid_from_column,
+                valid_to_column=valid_to_column,
+                check_columns=check_columns,
+            ).new_changes_ctes_sql(destination=destination)
+
         partition_sql: str = ", ".join(unique_key)
         previous_columns_sql: str = ", ".join(
             f"LAG({column}) OVER (PARTITION BY {partition_sql} ORDER BY {observed_at_column}) "
@@ -2892,49 +2842,6 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
             "SELECT * FROM __ordered WHERE __prev_observed_at IS NULL "
             f"OR ({delta_change_condition})"
         )
-        if invalidate_hard_deletes:
-            latest_join_condition: str = cls._snapshot_key_condition(
-                left_alias="__delta_changes", right_alias="__latest", unique_key=unique_key
-            )
-            latest_change_condition: str = " OR ".join(
-                f"__delta_changes.{column} IS DISTINCT FROM __latest.{column}"
-                for column in check_columns
-            )
-            hard_deleted_at_sql: str = cls._historical_hard_deleted_at_sql(
-                origin=origin,
-                unique_key=unique_key,
-                observed_at_column=observed_at_column,
-                row_alias="__target",
-            )
-            reappearing_new_changes_sql: str = _historical_reappearing_new_changes_ctes_sql(
-                changed_or_new_sql=(
-                    "SELECT __delta_changes.* FROM __delta_changes "
-                    f"LEFT JOIN __latest ON {latest_join_condition} "
-                    f"WHERE __latest.{first_key} IS NULL "
-                    f"OR (__delta_changes.{observed_at_column} > __latest.{valid_from_column} "
-                    f"AND ({latest_change_condition}))"
-                ),
-                unique_key=unique_key,
-                observed_at_column=observed_at_column,
-                valid_to_column=valid_to_column,
-            )
-            return (
-                "__ordered AS ("
-                f"SELECT *, LAG({observed_at_column}) OVER ("
-                f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-                f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
-                "), __delta_changes AS ("
-                f"{changed_or_first_sql}"
-                "), __latest AS ("
-                f"SELECT * FROM {destination} QUALIFY ROW_NUMBER() OVER ("
-                f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
-                ") = 1"
-                f"), {reappearing_new_changes_sql}, __hard_deletes AS ("
-                f"SELECT {', '.join(f'__target.{column}' for column in unique_key)}, "
-                f"{hard_deleted_at_sql} AS __close_at FROM {destination} AS __target "
-                f"WHERE __target.{valid_to_column} IS NULL"
-                ")"
-            )
         return (
             "__ordered AS ("
             f"SELECT *, LAG({observed_at_column}) OVER ("
@@ -2962,25 +2869,6 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
     ) -> str:
         return " AND ".join(
             f"{left_alias}.{column} = {right_alias}.{column}" for column in unique_key
-        )
-
-    @classmethod
-    def _historical_hard_deleted_at_sql(
-        cls, *, origin: str, unique_key: tuple[str, ...], observed_at_column: str, row_alias: str
-    ) -> str:
-        present_condition: str = cls._snapshot_key_condition(
-            left_alias="__present", right_alias=row_alias, unique_key=unique_key
-        )
-        return (
-            "(SELECT MIN(__observed_groups.__observed_at) "
-            f"FROM (SELECT DISTINCT {observed_at_column} AS __observed_at FROM {origin}) "
-            "AS __observed_groups "
-            f"WHERE __observed_groups.__observed_at > {row_alias}.{observed_at_column} "
-            "AND NOT EXISTS ("
-            f"SELECT 1 FROM {origin} AS __present "
-            f"WHERE __present.{observed_at_column} = __observed_groups.__observed_at "
-            f"AND {present_condition}"
-            "))"
         )
 
     @classmethod

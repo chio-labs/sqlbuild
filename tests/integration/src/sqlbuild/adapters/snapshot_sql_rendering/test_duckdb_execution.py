@@ -125,6 +125,46 @@ _HISTORICAL_SCENARIOS: tuple[SnapshotExecutionScenario, ...] = (
         ),
         expected_history=((1, "active", 1, 2), (1, "paused", 2, None)),
     ),
+    SnapshotExecutionScenario(
+        description="check multiple delete and reappear cycles in one build",
+        kind=HISTORICAL_CHECK_HARD_DELETES,
+        builds=(
+            _CHECK_DELETE_AND_REAPPEAR_ROWS[:2],
+            (
+                *_CHECK_DELETE_AND_REAPPEAR_ROWS,
+                (1, "active", 4),
+                (1, "active", 5),
+                (2, "active", 5),
+            ),
+        ),
+        expected_history=(
+            (1, "active", 1, None),
+            (2, "active", 1, 2),
+            (2, "active", 3, 4),
+            (2, "active", 5, None),
+        ),
+    ),
+    SnapshotExecutionScenario(
+        description="check reappearance, change and change back in one build",
+        kind=HISTORICAL_CHECK_HARD_DELETES,
+        builds=(
+            _CHECK_DELETE_AND_REAPPEAR_ROWS[:2],
+            (
+                *_CHECK_DELETE_AND_REAPPEAR_ROWS,
+                (1, "active", 4),
+                (2, "paused", 4),
+                (1, "active", 5),
+                (2, "active", 5),
+            ),
+        ),
+        expected_history=(
+            (1, "active", 1, None),
+            (2, "active", 1, 2),
+            (2, "active", 3, 4),
+            (2, "paused", 4, 5),
+            (2, "active", 5, None),
+        ),
+    ),
 )
 
 _CURRENT_STATE_SCENARIOS: tuple[SnapshotExecutionScenario, ...] = (
