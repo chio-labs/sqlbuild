@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 
 from sqlbuild.compiler.planner.models import (
@@ -97,6 +98,17 @@ def compute_cursor_bounds(
         backfill_duration=backfill_duration,
         policy=maximum_start_policy or MaximumStartPolicyInputs(),
         has_start_override=start_cursor_override is not None,
+    )
+
+
+def without_destination_cursor(*, cursor_snapshot: ModelCursorSnapshot) -> ModelCursorSnapshot:
+    """Return the snapshot as a first run sees it, ignoring the target's existing cursor."""
+
+    return replace(
+        cursor_snapshot,
+        target_max=None,
+        physical_target_max=None,
+        target_eligible_max=None,
     )
 
 

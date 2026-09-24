@@ -6,6 +6,7 @@ from pathlib import Path
 
 from sqlbuild.cli.commands._helpers.diff.validation import parse_diff_name_range
 from sqlbuild.cli.commands._helpers.entry.parsing import read_selector_file_inputs
+from sqlbuild.cli.commands._helpers.lint.positional_paths import format_path_selectors
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.constants import (
     DBT_INIT_COMMAND,
@@ -293,7 +294,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
             LineageCommandRequest(
                 project_dir=project_dir,
                 no_sql_validation=args.no_sql_validation,
-                target=args.lineage_target,
+                targets=tuple(args.lineage_targets),
                 output_format=args.lineage_format,
                 direction=args.lineage_direction,
                 depth=args.lineage_depth,
@@ -610,9 +611,12 @@ def _dispatch_lint_format_command(
     """Route the source-formatting command to its handler."""
     if args.format_diff and args.json:
         raise CliUserError("format --diff cannot be combined with --json", code="C112")
+    path_selectors: tuple[str, ...] = format_path_selectors(
+        paths=tuple(args.format_paths), project_dir=project_dir, cwd=Path.cwd()
+    )
     return handlers.run_format(
         project_dir,
-        select=select,
+        select=(*select, *path_selectors),
         exclude=tuple(args.exclude),
         check=args.format_check,
         diff=args.format_diff,

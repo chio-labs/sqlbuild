@@ -45,6 +45,7 @@ class SqlTestPlanInspectionE2ETestCase:
     repo_files: dict[str, str]
     expected_stdout_fragments: tuple[str, ...]
     expected_exit_code: int = 0
+    unexpected_stdout_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -112,3 +113,46 @@ class UnknownTableFunctionFixtureE2ETestCase:
 
     description: str
     expected_stderr_fragment: str
+
+
+@dataclass(frozen=True)
+class SharedGraphChainE2ETestCase:
+    """Test case for chained SQL tests over a shared (diamond) upstream graph."""
+
+    description: str
+    sql_analysis_enabled: bool
+    expected_stdout_fragments: tuple[str, ...]
+    once_rendered_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SharedGraphMissingMockE2ETestCase:
+    """Test case for one missing mock reached on every path of a deep shared graph."""
+
+    description: str
+    layers: int
+    expected_error: str
+    expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExpectedColumnSubsetE2ETestCase:
+    """Test case for SQL tests that compare only the expected CTE's listed columns."""
+
+    description: str
+    sql_analysis_enabled: bool
+    command: tuple[str, ...]
+    expected_tests: dict[str, str]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+    unexpected_output_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class MissingMockCliE2ETestCase:
+    """Test case for planning errors reported by plain test and compile commands."""
+
+    description: str
+    expected_error: str
+    compile_error_line: str
+    compile_summary_fragment: str

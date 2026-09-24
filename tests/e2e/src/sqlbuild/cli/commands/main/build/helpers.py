@@ -19,6 +19,24 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 )
 
 
+def run_replay_command(
+    *, command: tuple[str, ...], project_dir: Path
+) -> subprocess.CompletedProcess[str]:
+    """Run a successful replay lifecycle command and retain its output."""
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", *command), project_dir=project_dir
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return result
+
+
+def replay_order_rows(*, db_path: Path, table: str) -> list[tuple[object, ...]]:
+    """Read complete replay results in deterministic order."""
+    return query_duckdb(
+        db_path=db_path, sql=f"SELECT order_date, amount_cents FROM main.{table} ORDER BY 1"
+    )
+
+
 def capped_microbatch_project_files(
     *, limit_action: str, project_limit: str = ""
 ) -> dict[str, str]:

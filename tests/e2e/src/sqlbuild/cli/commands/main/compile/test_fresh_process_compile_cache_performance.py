@@ -51,16 +51,16 @@ _MAX_EDIT_TO_COLD_RATIO: float = 0.60
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=96 * _MIB,
             expected_cold_fingerprint=(
-                "36e2274af2bd6840f41d88ee1140a91034505a50f7fa27b61e2e47aa06765314"
+                "3a955baeac3aaef85d1bcfe25eddce899abf8e542ad168510faa8c6cb53b9a30"
             ),
             expected_leaf_edit_fingerprint=(
-                "f6cfcbb21bf7e011b76f08f5d8e61b2095316b6845d987090e79b1718ed54175"
+                "37171d29e89f3ed9db9b29b21d9af810a7c9bf3555cc497159c2d4ef87ae8f9d"
             ),
             expected_macro_edit_fingerprint=(
-                "ae102976a43c0fd6a68e5e55a7feeb9fac5f49ffc56bd3cdfcd389e199582081"
+                "e37d388dc19e21da66fcb2f6fad2c3ef8db288724e7ab65031a75180e1535949"
             ),
             expected_project_config_fingerprint=(
-                "96e996a556119f452e966096747b35219941bf7bd324624242aadf6375ba1a31"
+                "cbbe850cd2288979fd7682180176dfa9cda00bb48968ddb3b6c16ecd5728a389"
             ),
             macro_call_interval=6,
             scoped_macros=True,
@@ -83,16 +83,16 @@ _MAX_EDIT_TO_COLD_RATIO: float = 0.60
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=160 * _MIB,
             expected_cold_fingerprint=(
-                "686664bcadbbb0e339205d71b8fb3ab2d3f1226ca888eb4b2e6a5aa97ade1efb"
+                "b39d33782ca1bc09235a6b6190dbc6a35cec43a161ef29d459aafd3f6be90166"
             ),
             expected_leaf_edit_fingerprint=(
-                "43fa1db2d5db12c5031aef8f6fb2a0e4af89c51ece58b1f1772db0a9ea4d43a0"
+                "1bbf19080469c9716003c718fad5f8c196619778d20a44a4464a0af1c9f291d6"
             ),
             expected_macro_edit_fingerprint=(
-                "fd0cc80586b11d8d79a904d1daa6da4d559d22d6b4ebea02139a7d12626b770f"
+                "394e5ee7d30c4cccbf608ea9d0b0e3a37d81b3948804d83a867244eccd9f3135"
             ),
             expected_project_config_fingerprint=(
-                "44a292e9ada77cc7038036fb593d9d8d8cd4883062a07254d963963ed0b4bb45"
+                "4e2e86138b95fab8d4e45f97a990984f5057ad4686c4e05f0ba1de2de2ebe280"
             ),
             macro_call_interval=6,
             scoped_macros=True,
@@ -115,16 +115,16 @@ _MAX_EDIT_TO_COLD_RATIO: float = 0.60
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=320 * _MIB,
             expected_cold_fingerprint=(
-                "c1364cae404ee768c4443c3b964c42370e33268fbf83b101890b13558290e3e0"
+                "1e3a63aab6d47bd1425c23d6f03c084d5207086caad6ce0da7564be0ce048158"
             ),
             expected_leaf_edit_fingerprint=(
-                "fe35feb1b239a17ed0e7b22bca20c2af06e0f25335fe5f9fae212491a693911b"
+                "a853c671586612047923ffd1b8f0a5ef9d9a7c2d6edb634ad731432e5b641b16"
             ),
             expected_macro_edit_fingerprint=(
-                "bec17e83316ca926b76f450fa8a035e83f19c061e14a11b8effe04b7fa2e26fd"
+                "25793047e0ae59c5c9d3a67ace435990de502e0d2c2be9d25ba2b5589ecf778d"
             ),
             expected_project_config_fingerprint=(
-                "780e26aa973459fbc803dd8d64315d445aab8bc57e90b0ad1ecb94f074b22474"
+                "1cd1b9d836d9f5dd27c632cc8d9ab68464855dc22457c68ed44ad7efa7eb44af"
             ),
             macro_call_interval=6,
             scoped_macros=True,
@@ -174,6 +174,7 @@ def test_given_semantic_project_when_compiling_across_processes_then_cache_is_in
             measurement.semantic_fingerprint,
             fresh_process_compile_cache_metrics(measurement),
         )
+    for measurement in measurements.values():
         assert_successful_compile_cache_payload(measurement=measurement, test_case=test_case)
         assert measurement.peak_rss_bytes < test_case.expected_max_rss_bytes
 

@@ -47,6 +47,7 @@ from sqlbuild.compiler.planner._helpers.resolve.cursor import (
     compute_cursor_bounds,
     normalize_cursor_snapshot_grain,
     resolve_effective_timestamp_grain,
+    without_destination_cursor,
 )
 from sqlbuild.compiler.planner._helpers.resolve.cursor_policies import (
     resolve_future_cursor_config,
@@ -66,6 +67,9 @@ from sqlbuild.compiler.planner.constants import (
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.changes._model_changes import detect_model_changes
+from sqlbuild.compiler.planner.main.changes.relation_replacement import (
+    replaces_incremental_relation,
+)
 from sqlbuild.compiler.planner.main.execution.effective_microbatch_batch_size import (
     resolve_effective_microbatch_batch_size,
 )
@@ -157,6 +161,7 @@ class _MicrobatchRangeInputs:
     start_cursor_config: StartCursorsConfig | None
     invocation_time: datetime | None
     full_refresh: bool
+    replaces_relation: bool = False
 
 
 @dataclass(frozen=True)
@@ -649,6 +654,18 @@ def plan_model_from_change(
         source_warehouse_columns=context.source_warehouse_columns,
     )
 
+    action: PlanAction
+    reason: PlanReason
+    action, reason = resolve_model_plan_action(
+        model=model,
+        change_result=change_result,
+        full_refresh=full_refresh,
+    )
+    materialization_type: MaterializationType = get_materialization_type(model)
+    replaces_relation: bool = replaces_incremental_relation(
+        materialization_type=materialization_type, action=action
+    )
+
     resolved_sql: str = resolve_model_sql(
         adapter=adapter,
         model=model,
@@ -659,14 +676,7 @@ def plan_model_from_change(
         cursor_overrides=cursor_overrides,
         suppress_runtime_cursor_bounds=suppress_runtime_cursor_bounds,
         external_sql_reference_resolver=external_sql_reference_resolver,
-    )
-
-    action: PlanAction
-    reason: PlanReason
-    action, reason = resolve_model_plan_action(
-        model=model,
-        change_result=change_result,
-        full_refresh=full_refresh,
+        replaces_relation=replaces_relation,
     )
 
     on_schema_change: OnSchemaChange | None = _get_on_schema_change(model)
@@ -684,8 +694,6 @@ def plan_model_from_change(
     )
     unique_key: tuple[str, ...] = _get_unique_key(model)
     warehouse_columns: tuple[ColumnInfo, ...] = snapshot.existing_columns.get(model.name, ())
-
-    materialization_type: MaterializationType = get_materialization_type(model)
 
     warnings: tuple[PlanWarning, ...] = build_model_warnings(
         model_name=model.name,
@@ -767,6 +775,7 @@ def plan_model_from_change(
             start_cursor_config=effective_start_cursor_config,
             invocation_time=context.invocation_time,
             full_refresh=full_refresh,
+            replaces_relation=replaces_relation,
         ),
     )
 
@@ -1241,6 +1250,8 @@ def _compute_microbatch_range(
     cursor_snapshot: ModelCursorSnapshot | None = inputs.snapshot.cursor_snapshots.get(model.name)
     if cursor_snapshot is None:
         return None
+    if inputs.replaces_relation and not inputs.full_refresh:
+        cursor_snapshot = without_destination_cursor(cursor_snapshot=cursor_snapshot)
 
     cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
     downstream_grain: str | None = get_config_str(values=model.config.values, key="cursor_grain")
@@ -1366,6 +1377,8 @@ def _compute_plan_cursor_bounds(
     cursor_snapshot: ModelCursorSnapshot | None = snapshot.cursor_snapshots.get(model.name)
     if cursor_snapshot is None:
         return None
+    if backfill.action == BackfillAction.FULL:
+        cursor_snapshot = without_destination_cursor(cursor_snapshot=cursor_snapshot)
 
     lookback: str | None = get_config_str(values=model.config.values, key="lookback")
     cursor_start: str | None = get_config_cursor_bound(

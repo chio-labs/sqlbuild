@@ -1332,9 +1332,9 @@ class LineageCommandRequest:
 
     project_dir: Path | None
     no_sql_validation: bool = False
-    target: str | None = None
+    targets: tuple[str, ...] = ()
     output_format: str = "tree"
-    direction: str = "upstream"
+    direction: str | None = None
     depth: str = "all"
     select: tuple[str, ...] = ()
     exclude: tuple[str, ...] = ()

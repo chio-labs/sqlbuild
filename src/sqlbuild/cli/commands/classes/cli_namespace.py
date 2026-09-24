@@ -96,9 +96,9 @@ _DEFAULT_VALUES: dict[str, object] = {
     "cost_order": None,
     "cost_since": None,
     "cost_until": None,
-    "lineage_target": None,
+    "lineage_targets": [],
     "lineage_format": "tree",
-    "lineage_direction": "upstream",
+    "lineage_direction": None,
     "lineage_depth": "all",
     "lineage_mode": ColumnLineageMode.RICH,
     "lineage_include_uses": False,
@@ -154,6 +154,7 @@ _DEFAULT_VALUES: dict[str, object] = {
     "format_check": False,
     "format_diff": False,
     "format_fixtures_only": False,
+    "format_paths": [],
     "scope_target": None,
     "scope_at": None,
     "scope_as_path": None,
@@ -270,9 +271,9 @@ class CliNamespace:
     cost_order: str | None
     cost_since: str | None
     cost_until: str | None
-    lineage_target: str | None
+    lineage_targets: list[str]
     lineage_format: str
-    lineage_direction: str
+    lineage_direction: str | None
     lineage_depth: str
     lineage_mode: ColumnLineageMode
     lineage_include_uses: bool
@@ -328,6 +329,7 @@ class CliNamespace:
     format_check: bool
     format_diff: bool
     format_fixtures_only: bool
+    format_paths: list[str]
     scope_target: str | None
     scope_at: str | None
     scope_as_path: str | None

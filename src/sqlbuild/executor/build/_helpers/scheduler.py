@@ -9,6 +9,9 @@ from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.planner.constants import MICROBATCH_END_SENTINEL, MICROBATCH_START_SENTINEL
+from sqlbuild.compiler.planner.main.changes.relation_replacement import (
+    replaces_incremental_relation,
+)
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import (
     IncrementalMode,
@@ -123,10 +126,8 @@ def _dispatch_model(
         )
 
     is_microbatch: bool = entry.incremental_mode == IncrementalMode.MICROBATCH
-    is_full_refresh_microbatch: bool = (
-        is_microbatch
-        and entry.action == PlanAction.CREATE_TABLE
-        and entry.materialization_type == MaterializationType.INCREMENTAL
+    is_full_refresh_microbatch: bool = is_microbatch and replaces_incremental_relation(
+        materialization_type=entry.materialization_type, action=entry.action
     )
 
     if is_microbatch and entry.action in INCREMENTAL_ACTIONS:

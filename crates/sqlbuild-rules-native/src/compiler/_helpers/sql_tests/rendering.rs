@@ -3,6 +3,8 @@
 use std::collections::HashMap;
 
 use polyglot_sql::{Dialect, DialectType, Expression};
+
+use crate::compiler::_helpers::sql_tests::planning::leading_with_prefix_end;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +22,29 @@ struct RenderBatchRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct DifferenceSampleRequest {
+    step: ChainStep,
+    #[serde(default = "default_true")]
+    sql_analysis_enabled: bool,
+    #[serde(default = "default_set_difference")]
+    set_difference_operator: String,
+    #[serde(default)]
+    sql_analysis_dialect: Option<String>,
+    direction: DifferenceDirection,
+    sample_limit: usize,
+    #[serde(default)]
+    use_top_clause: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum DifferenceDirection {
+    Unexpected,
+    Missing,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct RenderRequest {
     #[serde(default)]
     pub(crate) chain: Vec<ChainStep>,
@@ -29,11 +54,13 @@ pub(crate) struct RenderRequest {
     pub(crate) sql_analysis_enabled: bool,
     #[serde(default = "default_set_difference")]
     pub(crate) set_difference_operator: String,
-    #[serde(default, rename = "sqlAnalysisDialect")]
-    pub(crate) _sql_analysis_dialect: Option<String>,
+    #[serde(default)]
+    pub(crate) sql_analysis_dialect: Option<String>,
+    #[serde(default)]
+    pub(crate) probe_step_index: Option<usize>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ChainStep {
     pub(crate) model_name: String,
@@ -44,9 +71,11 @@ pub(crate) struct ChainStep {
     pub(crate) lifted_ctes: Vec<(String, String)>,
     #[serde(default)]
     pub(crate) comparison_body_sql: Option<String>,
+    #[serde(default)]
+    pub(crate) expected_columns: Option<Vec<String>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AssertionStep {
     pub(crate) name: String,
@@ -63,18 +92,26 @@ struct RenderResponse {
     sql: String,
 }
 
-#[derive(Default)]
-struct RenderCteState {
+struct RenderCteState<'a> {
+    dialect: &'a Dialect,
     lifted: Vec<(String, String)>,
-    name_counts: HashMap<String, usize>,
+    name_counts: CteSuffixCounter,
 }
 
-impl RenderCteState {
+impl<'a> RenderCteState<'a> {
+    fn new(dialect: &'a Dialect) -> Self {
+        Self {
+            dialect,
+            lifted: Vec::new(),
+            name_counts: CteSuffixCounter::default(),
+        }
+    }
+
     fn lift(&mut self, sql: &str, enabled: bool) -> String {
-        if !enabled {
+        if !enabled || leading_with_prefix_end(sql).is_none() {
             return sql.to_string();
         }
-        let Some((step_ctes, body_sql)) = split_top_level_with(sql) else {
+        let Some((step_ctes, body_sql)) = split_top_level_with(sql, self.dialect) else {
             return sql.to_string();
         };
         if step_ctes.iter().any(|(name, body)| {
@@ -86,6 +123,22 @@ impl RenderCteState {
             return sql.to_string();
         }
         body_sql
+    }
+
+    /// Place a chain step's generated CTEs at top level and return its comparison body.
+    fn actual_step_sql(&mut self, step: &ChainStep, enabled: bool) -> String {
+        if step.lifted_ctes.is_empty() {
+            return self.lift(&step.resolved_sql, enabled);
+        }
+        if !self.merge(&step.lifted_ctes) {
+            return step.resolved_sql.clone();
+        }
+        self.lift(
+            step.comparison_body_sql
+                .as_deref()
+                .unwrap_or(&step.resolved_sql),
+            enabled,
+        )
     }
 
     fn merge(&mut self, ctes: &[(String, String)]) -> bool {
@@ -103,8 +156,20 @@ impl RenderCteState {
     }
 
     fn unique_suffix(&mut self, model_name: &str) -> String {
+        self.name_counts.next(model_name)
+    }
+}
+
+/// Readable, collision-free comparison CTE suffixes in step order.
+#[derive(Default)]
+struct CteSuffixCounter {
+    counts: HashMap<String, usize>,
+}
+
+impl CteSuffixCounter {
+    fn next(&mut self, model_name: &str) -> String {
         let base = sanitize_cte_suffix(model_name);
-        let count = self.name_counts.entry(base.clone()).or_default();
+        let count = self.counts.entry(base.clone()).or_default();
         *count += 1;
         if *count == 1 {
             base
@@ -112,6 +177,18 @@ impl RenderCteState {
             format!("{base}_{count}")
         }
     }
+}
+
+/// Mark the chain steps whose actual SQL the comparison renderer emits.
+pub(crate) fn rendered_chain_steps(chain: &[ChainStep], assertions: &[AssertionStep]) -> Vec<bool> {
+    let mut suffixes = CteSuffixCounter::default();
+    chain
+        .iter()
+        .map(|step| {
+            let actual_cte = format!("__actual__{}", suffixes.next(&step.model_name));
+            step.expected_cte_sql.is_some() || assertions_use_actual(assertions, &actual_cte)
+        })
+        .collect()
 }
 
 pub(crate) fn render_json(request_json: &str) -> Result<String, String> {
@@ -123,61 +200,124 @@ pub(crate) fn render_json(request_json: &str) -> Result<String, String> {
         .stack_size(WORKER_STACK_BYTES)
         .build()
         .map_err(|error| error.to_string())?;
+    let dialects: HashMap<Option<String>, Dialect> = request
+        .requests
+        .iter()
+        .map(|item| item.sql_analysis_dialect.clone())
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .map(|name| {
+            let dialect = render_dialect(name.as_deref());
+            (name, dialect)
+        })
+        .collect();
     let responses: Vec<RenderResponse> = pool.install(|| {
         request
             .requests
             .into_par_iter()
             .map(|request| RenderResponse {
-                sql: render_comparison_sql(request),
+                sql: render_comparison_sql(&request, &dialects[&request.sql_analysis_dialect]),
             })
             .collect()
     });
     serde_json::to_string(&responses).map_err(|error| error.to_string())
 }
 
-pub(crate) fn render_comparison_sql(request: RenderRequest) -> String {
+/// Resolve the SQL-analysis dialect used to split and regenerate top-level CTEs.
+pub(crate) fn render_dialect(name: Option<&str>) -> Dialect {
+    name.and_then(Dialect::get_by_name)
+        .unwrap_or_else(|| Dialect::get(DialectType::Generic))
+}
+
+pub(crate) fn render_difference_sample_json(request_json: &str) -> Result<String, String> {
+    let request: DifferenceSampleRequest =
+        serde_json::from_str(request_json).map_err(|error| error.to_string())?;
+    let dialect = render_dialect(request.sql_analysis_dialect.as_deref());
+    serde_json::to_string(&RenderResponse {
+        sql: render_difference_sample_sql(&request, &dialect),
+    })
+    .map_err(|error| error.to_string())
+}
+
+fn render_difference_sample_sql(request: &DifferenceSampleRequest, dialect: &Dialect) -> String {
+    let step = &request.step;
+    let Some(expected_input) = step.expected_cte_sql.as_deref() else {
+        return String::new();
+    };
+    let mut cte_state = RenderCteState::new(dialect);
+    let actual_sql = cte_state.actual_step_sql(step, request.sql_analysis_enabled);
+    let expected_sql = cte_state.lift(expected_input, request.sql_analysis_enabled);
+    let mut cte_parts: Vec<String> = cte_state
+        .lifted
+        .iter()
+        .map(|(name, sql)| cte_definition_sql(name, sql))
+        .collect();
+    cte_parts.push(cte_definition_sql("__actual", &actual_sql));
+    cte_parts.push(cte_definition_sql("__expected", &expected_sql));
+    let (left, right) = match request.direction {
+        DifferenceDirection::Unexpected => ("__actual", "__expected"),
+        DifferenceDirection::Missing => ("__expected", "__actual"),
+    };
+    let (bounded_select, limit_clause) = if request.use_top_clause {
+        (
+            format!("SELECT TOP {} *", request.sample_limit),
+            String::new(),
+        )
+    } else {
+        (
+            "SELECT *".to_string(),
+            format!(" LIMIT {}", request.sample_limit),
+        )
+    };
+    let projection = compared_projection(step);
+    format!(
+        "WITH {}\n{bounded_select} FROM (SELECT {projection} FROM {left} {} SELECT {projection} FROM {right}) AS __sqlbuild_difference{limit_clause}",
+        cte_parts.join(",\n"),
+        request.set_difference_operator,
+    )
+}
+
+/// Columns compared for an expected-output step: the listed expected columns, else every column.
+fn compared_projection(step: &ChainStep) -> String {
+    step.expected_columns
+        .as_ref()
+        .map_or_else(|| "*".to_string(), |columns| columns.join(", "))
+}
+
+pub(crate) fn render_comparison_sql(request: &RenderRequest, dialect: &Dialect) -> String {
     if request.chain.is_empty() && request.assertions.is_empty() {
         return String::new();
     }
-    let mut cte_state = RenderCteState::default();
+    let mut cte_state = RenderCteState::new(dialect);
     let mut comparison_ctes: Vec<String> = Vec::new();
     let mut select_parts: Vec<String> = Vec::new();
+    let rendered_steps = rendered_chain_steps(&request.chain, &request.assertions);
+    let mut probe_actual_cte: Option<String> = None;
 
     for (step_index, step) in request.chain.iter().enumerate() {
         let suffix = cte_state.unique_suffix(&step.model_name);
         let actual_cte = format!("__actual__{suffix}");
         let expected_cte = format!("__expected__{suffix}");
-        if step.expected_cte_sql.is_none()
-            && !assertions_use_actual(&request.assertions, &actual_cte)
-        {
+        if !rendered_steps[step_index] {
             continue;
         }
-        let actual_sql = if step.lifted_ctes.is_empty() {
-            cte_state.lift(&step.resolved_sql, request.sql_analysis_enabled)
-        } else {
-            if cte_state.merge(&step.lifted_ctes) {
-                cte_state.lift(
-                    step.comparison_body_sql
-                        .as_deref()
-                        .unwrap_or(&step.resolved_sql),
-                    request.sql_analysis_enabled,
-                )
-            } else {
-                step.resolved_sql.clone()
-            }
-        };
+        let actual_sql = cte_state.actual_step_sql(step, request.sql_analysis_enabled);
         comparison_ctes.push(cte_definition_sql(&actual_cte, &actual_sql));
+        if request.probe_step_index == Some(step_index) {
+            probe_actual_cte = Some(actual_cte.clone());
+        }
         let Some(expected_input) = step.expected_cte_sql.as_deref() else {
             continue;
         };
         let expected_sql = cte_state.lift(expected_input, request.sql_analysis_enabled);
         comparison_ctes.push(cte_definition_sql(&expected_cte, &expected_sql));
+        let projection = compared_projection(step);
         select_parts.push(format!(
             "SELECT {step_index} AS step_index, '{}' AS model_name, \
              (SELECT COUNT(*) FROM {actual_cte}) AS actual_count, \
              (SELECT COUNT(*) FROM {expected_cte}) AS expected_count, \
-             (SELECT COUNT(*) FROM (SELECT * FROM {actual_cte} {} SELECT * FROM {expected_cte}) AS __sqlbuild_mismatch) AS unexpected_count, \
-             (SELECT COUNT(*) FROM (SELECT * FROM {expected_cte} {} SELECT * FROM {actual_cte}) AS __sqlbuild_missing) AS missing_count",
+             (SELECT COUNT(*) FROM (SELECT {projection} FROM {actual_cte} {} SELECT {projection} FROM {expected_cte}) AS __sqlbuild_mismatch) AS unexpected_count, \
+             (SELECT COUNT(*) FROM (SELECT {projection} FROM {expected_cte} {} SELECT {projection} FROM {actual_cte}) AS __sqlbuild_missing) AS missing_count",
             escape_sql_string(&step.model_name),
             request.set_difference_operator,
             request.set_difference_operator,
@@ -224,6 +364,14 @@ pub(crate) fn render_comparison_sql(request: RenderRequest) -> String {
         .map(|(name, sql)| cte_definition_sql(name, sql))
         .collect();
     cte_parts.extend(comparison_ctes);
+    if request.probe_step_index.is_some() {
+        return probe_actual_cte.map_or_else(String::new, |actual_cte| {
+            format!(
+                "WITH {}\nSELECT * FROM {actual_cte} WHERE 1 = 0",
+                cte_parts.join(",\n")
+            )
+        });
+    }
     format!(
         "WITH {}\n{}",
         cte_parts.join(",\n"),
@@ -237,9 +385,8 @@ fn existing_cte<'a>(lifted: &'a [(String, String)], name: &str) -> Option<&'a (S
         .find(|(existing, _)| existing.eq_ignore_ascii_case(name))
 }
 
-fn split_top_level_with(sql: &str) -> Option<(Vec<(String, String)>, String)> {
+fn split_top_level_with(sql: &str, dialect: &Dialect) -> Option<(Vec<(String, String)>, String)> {
     let (protected, identifiers) = protect_backtick_identifiers(sql);
-    let dialect = Dialect::get(DialectType::Generic);
     let mut statements = match dialect.parse(&protected) {
         Ok(statements) => statements,
         Err(_) => return None,

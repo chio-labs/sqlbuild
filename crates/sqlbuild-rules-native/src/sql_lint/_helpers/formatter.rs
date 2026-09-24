@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use polyglot_sql::tokens::Token;
@@ -139,18 +140,32 @@ fn format_once(neutral_sql: &str, context: &FormatOnceContext<'_>) -> Result<Str
     {
         return Err(COMMENT_ATTACHMENT_FAILURE.to_string());
     }
-    let mut insertions: Vec<(usize, String)> = Vec::new();
+    let mut insertions: Vec<CommentInsertion> = Vec::new();
+    let mut leading_groups: BTreeMap<usize, Vec<&Comment>> = BTreeMap::new();
     for comment in context.comments {
-        insertions.push(comment_insertion(
+        if let Some(target) = leading_comment_target(context, comment) {
+            leading_groups.entry(target).or_default().push(comment);
+        } else {
+            insertions.push(trailing_comment_insertion(
+                &formatted,
+                &formatted_tokens,
+                context,
+                comment,
+            ));
+        }
+    }
+    for (target, comments) in &leading_groups {
+        insertions.push(leading_comment_insertion(
             &formatted,
-            &formatted_tokens,
-            context,
-            comment,
+            &formatted_tokens[*target],
+            comments,
         ));
     }
-    insertions.sort_by_key(|(offset, _)| *offset);
-    for (char_offset, text) in insertions.into_iter().rev() {
-        formatted.insert_str(char_to_byte(&formatted, char_offset)?, &text);
+    insertions.sort_by_key(|insertion| insertion.start);
+    for insertion in insertions.into_iter().rev() {
+        let start = char_to_byte(&formatted, insertion.start)?;
+        let end = char_to_byte(&formatted, insertion.end)?;
+        formatted.replace_range(start..end, &insertion.text);
     }
     Ok(formatted)
 }
@@ -239,25 +254,80 @@ fn token_text(sql: &str, token: &Token) -> Option<String> {
     char_slice(sql, token.span.start, token.span.end).map(|value| value.to_ascii_uppercase())
 }
 
-fn comment_insertion(
+struct CommentInsertion {
+    start: usize,
+    end: usize,
+    text: String,
+}
+
+fn leading_comment_target(context: &FormatOnceContext<'_>, comment: &Comment) -> Option<usize> {
+    if !comment.leading {
+        return None;
+    }
+    context
+        .original_tokens
+        .iter()
+        .position(|token| token.span.start >= comment.end)
+}
+
+/// Place a block of leading comments on their own lines directly above the token they explain.
+fn leading_comment_insertion(
+    formatted: &str,
+    target: &Token,
+    comments: &[&Comment],
+) -> CommentInsertion {
+    let characters: Vec<char> = formatted.chars().collect();
+    let target_start = target.span.start.min(characters.len());
+    let mut whitespace_start = target_start;
+    while whitespace_start > 0
+        && characters[whitespace_start - 1].is_whitespace()
+        && characters[whitespace_start - 1] != '\n'
+    {
+        whitespace_start -= 1;
+    }
+    let at_line_start = whitespace_start == 0 || characters[whitespace_start - 1] == '\n';
+    if at_line_start {
+        let indentation = " ".repeat(target_start - whitespace_start);
+        let text: String = comments
+            .iter()
+            .map(|comment| format!("{}\n{indentation}", comment.text))
+            .collect();
+        return CommentInsertion {
+            start: target_start,
+            end: target_start,
+            text,
+        };
+    }
+    let indentation = " ".repeat(line_indentation(&characters, whitespace_start));
+    let text: String = comments
+        .iter()
+        .map(|comment| format!("\n{indentation}{}", comment.text))
+        .chain(std::iter::once(format!("\n{indentation}")))
+        .collect();
+    CommentInsertion {
+        start: whitespace_start,
+        end: target_start,
+        text,
+    }
+}
+
+fn line_indentation(characters: &[char], offset: usize) -> usize {
+    let line_start = characters[..offset]
+        .iter()
+        .rposition(|character| *character == '\n')
+        .map_or(0, |position| position + 1);
+    characters[line_start..offset]
+        .iter()
+        .take_while(|character| **character == ' ' || **character == '\t')
+        .count()
+}
+
+fn trailing_comment_insertion(
     formatted: &str,
     formatted_tokens: &[Token],
     context: &FormatOnceContext<'_>,
     comment: &Comment,
-) -> (usize, String) {
-    if comment.leading
-        && let Some(next) = context
-            .original_tokens
-            .iter()
-            .position(|token| token.span.start >= comment.end)
-    {
-        let target = &formatted_tokens[next];
-        let indentation = indentation_before(formatted, target.span.start);
-        return (
-            target.span.start,
-            format!("{}\n{}", comment.text, " ".repeat(indentation)),
-        );
-    }
+) -> CommentInsertion {
     let previous = context
         .original_tokens
         .iter()
@@ -270,26 +340,11 @@ fn comment_insertion(
     } else {
         ""
     };
-    (
-        char_offset,
-        format!("{separator}{}{terminator}", comment.text),
-    )
-}
-
-fn indentation_before(value: &str, char_offset: usize) -> usize {
-    let characters: Vec<char> = value.chars().collect();
-    let mut index = char_offset.min(characters.len());
-    let mut indentation = 0_usize;
-    while index > 0 {
-        index -= 1;
-        if characters[index] == '\n' {
-            break;
-        }
-        if characters[index].is_whitespace() {
-            indentation += 1;
-        }
+    CommentInsertion {
+        start: char_offset,
+        end: char_offset,
+        text: format!("{separator}{}{terminator}", comment.text),
     }
-    indentation
 }
 
 fn restore_string_literals(

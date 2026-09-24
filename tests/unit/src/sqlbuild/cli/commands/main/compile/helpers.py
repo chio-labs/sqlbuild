@@ -355,6 +355,28 @@ def build_cached_target_writer_project(*, target_dir: Path) -> CompiledProject:
     )
 
 
+def build_missing_mock_target_writer_project(*, target_dir: Path) -> CompiledProject:
+    """Build a static cached project whose SQL test omits a required source mock."""
+
+    compiled_test, project = build_test_and_project(
+        PlanTestChainTestCase(
+            description="missing mock target writer project",
+            model_queries={"orders": 'SELECT order_id FROM __source("raw_orders")'},
+            mock_ref_ctes={},
+            mock_source_ctes={},
+            helper_ctes={},
+            expected_model_names=("orders",),
+            expected_chain_length=1,
+            expected_cte_bodies={"orders": "SELECT 2 AS order_id"},
+        )
+    )
+    return replace(
+        project,
+        compile_cache_dir=target_dir / "cache" / "compiler",
+        sql_tests=(compiled_test,),
+    )
+
+
 def build_compile_output_graph(*, model_names: tuple[str, ...]) -> ProjectGraph:
     """Build a static project graph for compile output formatter tests."""
 

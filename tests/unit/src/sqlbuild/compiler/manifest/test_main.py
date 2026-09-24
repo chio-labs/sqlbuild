@@ -843,6 +843,7 @@ def test_given_audit_when_building_manifest_then_produces_test_node(
             expected_sqlbuild_test_type="sql_native",
             expected_compiled_code_fragment="-- step: orders",
             expected_depends_on_nodes=(f"model.{_PROJECT}.orders",),
+            unexpected_compiled_code_fragments=("-- step: stg_orders",),
         ),
     ],
     ids=lambda case: case.description,
@@ -853,6 +854,7 @@ def test_given_sql_test_when_building_manifest_then_produces_test_node(
     model: CompiledModel = build_test_model(name="orders")
     project: CompiledProject = build_test_project(models=(model,))
     chain: tuple[ChainStep, ...] = (
+        ChainStep(model_name="stg_orders", resolved_sql=""),
         ChainStep(
             model_name="orders",
             resolved_sql="SELECT 1 AS id",
@@ -893,6 +895,9 @@ def test_given_sql_test_when_building_manifest_then_produces_test_node(
     assert node["resource_type"] == test_case.expected_resource_type
     assert node["name"] == test_case.expected_name
     assert node["meta"]["sqlbuild_test_type"] == test_case.expected_sqlbuild_test_type
+    assert test_case.expected_compiled_code_fragment in node["compiled_code"]
+    for fragment in test_case.unexpected_compiled_code_fragments:
+        assert fragment not in node["compiled_code"]
     assert node["checksum"] == {"name": "sha256", "checksum": "f" * 64}
     assert node["meta"]["sqlbuild_case_index"] == 0
     assert node["meta"]["sqlbuild_case_fingerprint"] == "f" * 64

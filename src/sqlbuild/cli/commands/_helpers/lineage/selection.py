@@ -52,6 +52,19 @@ class _ColumnLineageCandidateSelection:
     truncated: bool
 
 
+_KIND_SEPARATOR: str = ":"
+_GRAPH_OPERATORS: tuple[str, ...] = ("+", "@", "*")
+_TARGET_KINDS: frozenset[str] = frozenset(
+    {
+        str(CompiledResourceType.MODEL),
+        str(CompiledResourceType.SOURCE),
+        str(CompiledResourceType.SEED),
+        str(CompiledResourceType.UDF),
+        str(CompiledResourceType.TABLE_FN),
+    }
+)
+
+
 def parse_depth(raw_depth: str) -> int | None:
     """Parse a lineage depth value, returning None for unlimited traversal."""
 
@@ -66,29 +79,68 @@ def parse_depth(raw_depth: str) -> int | None:
     return depth
 
 
+def normalize_lineage_target(*, graph: ProjectGraph | RelationLineageIndex, target: str) -> str:
+    """Strip a printed kind prefix such as `model:` after checking it matches the resource."""
+
+    kind, separator, remainder = target.partition(_KIND_SEPARATOR)
+    if not separator or kind not in _TARGET_KINDS:
+        return target
+    name: str = remainder.split(COLUMN_TARGET_SEPARATOR, maxsplit=1)[0]
+    key: CompiledObjectKey | None = graph.all_keys.get(name)
+    if key is None or str(key.resource_type) != kind:
+        raise _unknown_target_error(target)
+    return remainder
+
+
 def select_target_lineage(
     *,
     graph: ProjectGraph | RelationLineageIndex,
-    target: str,
+    targets: tuple[str, ...],
     direction: str,
     depth: int | None,
 ) -> LineageGraph:
-    """Select lineage around one positional target."""
+    """Select lineage around one or more positional targets."""
 
-    key: CompiledObjectKey | None = graph.all_keys.get(target)
-    if key is None:
-        raise CliUserError(f"unknown lineage target '{target}'", code="C305")
-
-    selected: set[CompiledObjectKey] = {key}
-    if direction in {UPSTREAM_DIRECTION, BOTH_DIRECTIONS}:
-        selected.update(_walk_bounded(anchors=(key,), deps=graph.upstream_deps, max_depth=depth))
-    if direction in {DOWNSTREAM_DIRECTION, BOTH_DIRECTIONS}:
-        selected.update(_walk_bounded(anchors=(key,), deps=graph.downstream_deps, max_depth=depth))
+    keys: tuple[CompiledObjectKey, ...] = tuple(
+        _lookup_name(name=target, all_keys=graph.all_keys) for target in targets
+    )
+    selected: set[CompiledObjectKey] = set(keys)
+    selected.update(_expand(keys=keys, graph=graph, direction=direction, depth=depth))
     return build_lineage_graph(
         graph=graph,
         selected_keys=frozenset(selected),
-        focus_keys=(key,),
+        focus_keys=tuple(sorted(set(keys), key=_sort_key)),
         direction=direction,
+    )
+
+
+def _expand(
+    *,
+    keys: Iterable[CompiledObjectKey],
+    graph: ProjectGraph | RelationLineageIndex,
+    direction: str,
+    depth: int | None,
+) -> frozenset[CompiledObjectKey]:
+    anchors: tuple[CompiledObjectKey, ...] = tuple(keys)
+    expanded: set[CompiledObjectKey] = set()
+    if direction in {UPSTREAM_DIRECTION, BOTH_DIRECTIONS}:
+        expanded.update(_walk_bounded(anchors=anchors, deps=graph.upstream_deps, max_depth=depth))
+    if direction in {DOWNSTREAM_DIRECTION, BOTH_DIRECTIONS}:
+        expanded.update(_walk_bounded(anchors=anchors, deps=graph.downstream_deps, max_depth=depth))
+    return frozenset(expanded)
+
+
+def _unknown_target_error(target: str) -> CliUserError:
+    uses_graph_operator: bool = any(operator in target for operator in _GRAPH_OPERATORS)
+    return CliUserError(
+        f"unknown lineage target '{target}'",
+        code="C305",
+        help=(
+            "graph operators are not supported in lineage targets; "
+            "use --direction upstream|downstream|both and --depth N"
+            if uses_graph_operator
+            else "use a model, source or seed name, optionally prefixed like model:orders"
+        ),
     )
 
 
@@ -247,8 +299,9 @@ def select_selector_lineage(
     select: tuple[str, ...],
     exclude: tuple[str, ...],
     depth: int | None,
+    direction: str | None = None,
 ) -> LineageGraph:
-    """Select lineage using existing selector semantics."""
+    """Select lineage using selector semantics, expanding by direction when one is given."""
 
     selected_keys: frozenset[CompiledObjectKey] = _resolve_selectors(
         select=select,
@@ -259,6 +312,30 @@ def select_selector_lineage(
         tag_index=graph.tag_index,
         path_index=graph.path_index,
     )
+    if direction is not None:
+        excluded_keys: set[CompiledObjectKey] = set()
+        for raw_exclude in exclude:
+            for token in raw_exclude.split():
+                excluded_keys.update(
+                    _resolve_token(
+                        token=token,
+                        all_keys=graph.all_keys,
+                        upstream=graph.upstream_deps,
+                        downstream=graph.downstream_deps,
+                        tag_index=graph.tag_index,
+                        path_index=graph.path_index,
+                    )
+                )
+        return build_lineage_graph(
+            graph=graph,
+            selected_keys=(
+                selected_keys
+                | _expand(keys=selected_keys, graph=graph, direction=direction, depth=depth)
+            )
+            - excluded_keys,
+            focus_keys=tuple(sorted(selected_keys - excluded_keys, key=_sort_key)),
+            direction=direction,
+        )
     anchors: LineageSelectionAnchors = _resolve_selector_anchors(
         select=select,
         all_keys=graph.all_keys,
@@ -444,7 +521,7 @@ def _walk_all(
 def _lookup_name(*, name: str, all_keys: dict[str, CompiledObjectKey]) -> CompiledObjectKey:
     key: CompiledObjectKey | None = all_keys.get(name)
     if key is None:
-        raise CliUserError(f"unknown lineage target '{name}'", code="C305")
+        raise _unknown_target_error(name)
     return key
 
 

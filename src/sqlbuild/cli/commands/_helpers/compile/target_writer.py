@@ -27,8 +27,19 @@ from sqlbuild.cli.paths.main._compiled_sql_test_output_path import (
     compiled_sql_test_output_path,
 )
 from sqlbuild.cli.paths.main._sql_test_output_path import sql_test_output_path
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject, CompiledSqlTest
-from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.compile.models import (
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledSqlTest,
+    CompilerDiagnostic,
+)
+from sqlbuild.compiler.compile.types import (
+    CompiledResourceType,
+    DiagnosticPhase,
+    DiagnosticSeverity,
+    FunctionLanguage,
+)
+from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.execution.sql_test_artifacts import (
     plan_and_render_sql_test_artifacts,
 )
@@ -38,6 +49,7 @@ from sqlbuild.compiler.planner.main.execution.sql_test_model_chain import (
 from sqlbuild.compiler.planner.models import AuditPlanEntry, NativeSqlTestArtifact, PlanOutput
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
+from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 _COMPILED_DIR: str = "compiled"
 _RUN_DIR: str = "run"
@@ -51,6 +63,7 @@ _TESTS_DIR: str = "tests"
 _MANIFEST_FILE: str = "manifest.json"
 _SQL_FILE_SUFFIX: str = ".sql"
 _POSIX_LINE_SEPARATOR: str = "\n"
+_SQL_TEST_PLANNING_ERROR_CODE: str = PlannerInputError.code
 
 
 def write_compile_target(
@@ -132,13 +145,14 @@ def write_static_compile_target(
             project=project,
             check_existing=remove_stale_files,
         ),
-        _write_static_tests(
-            target_dir=target_dir,
-            adapter=adapter,
-            project=project,
-            check_existing=remove_stale_files,
-        ),
     )
+    test_paths, test_diagnostics = _write_static_tests(
+        target_dir=target_dir,
+        adapter=adapter,
+        project=project,
+        check_existing=remove_stale_files,
+    )
+    managed_paths.update(test_paths)
     if remove_stale_files:
         with record_compile_timing("stale_traversal_ms"):
             _remove_stale_compiled_files(target_dir=target_dir, managed_paths=managed_paths)
@@ -152,6 +166,7 @@ def write_static_compile_target(
         audit_count=len(project.audits),
         test_count=len(project.sql_tests),
         target_dir=target_dir,
+        diagnostics=test_diagnostics,
     )
 
 
@@ -185,6 +200,7 @@ def publish_static_compile_target(
         audit_count=prepared.audit_count,
         test_count=prepared.test_count,
         target_dir=target_dir,
+        diagnostics=prepared.diagnostics,
     )
 
 
@@ -351,10 +367,11 @@ def _write_static_tests(
     adapter: BaseAdapter,
     project: CompiledProject,
     check_existing: bool,
-) -> set[Path]:
-    """Write offline SQL-native test SQL."""
+) -> tuple[set[Path], tuple[CompilerDiagnostic, ...]]:
+    """Write offline SQL-native test SQL and report uncached planning errors."""
 
     managed_paths: set[Path] = set()
+    diagnostics: list[CompilerDiagnostic] = []
     tests_root: Path = target_dir / _COMPILED_DIR / _TESTS_DIR
     cached_records: dict[str, SqlTestArtifactCacheRecord] = read_sql_test_artifact_cache(
         cache_dir=project.compile_cache_dir
@@ -397,12 +414,16 @@ def _write_static_tests(
 
     native_artifacts: tuple[NativeSqlTestArtifact, ...] = ()
     if pending:
-        native_artifacts = plan_and_render_sql_test_artifacts(
-            project=project,
-            tests=tuple(test for test, _, _ in pending),
-            adapter=adapter,
-            sql_analysis_enabled=project.settings.sql_analysis,
-        )
+        with OperationLifecycle(
+            operation_kind="project", operation_name="sql_test_planning"
+        ) as lifecycle:
+            native_artifacts = plan_and_render_sql_test_artifacts(
+                project=project,
+                tests=tuple(test for test, _, _ in pending),
+                adapter=adapter,
+                sql_analysis_enabled=project.settings.sql_analysis,
+            )
+            lifecycle.completed(metadata={"item_count": len(native_artifacts)})
     for (test, record_key, artifact_identity), artifact in zip(
         pending, native_artifacts, strict=True
     ):
@@ -412,6 +433,12 @@ def _write_static_tests(
         )
         _write_sql(path=test_path, sql=artifact.sql, check_existing=check_existing)
         managed_paths.add(test_path)
+        if artifact.error_messages:
+            diagnostics.extend(
+                _sql_test_error_diagnostic(test=test, message=message)
+                for message in artifact.error_messages
+            )
+            continue
         if record_key is not None and artifact_identity is not None:
             record: SqlTestArtifactCacheRecord | None = build_sql_test_artifact_cache_record(
                 tests_root=tests_root,
@@ -425,7 +452,19 @@ def _write_static_tests(
             cache_dir=project.compile_cache_dir,
             records=current_records,
         )
-    return managed_paths
+    return managed_paths, tuple(diagnostics)
+
+
+def _sql_test_error_diagnostic(*, test: CompiledSqlTest, message: str) -> CompilerDiagnostic:
+    return CompilerDiagnostic(
+        phase=DiagnosticPhase.TEST,
+        severity=DiagnosticSeverity.ERROR,
+        code=_SQL_TEST_PLANNING_ERROR_CODE,
+        message=message,
+        resource_type=CompiledResourceType.SQL_TEST,
+        resource_name=test.name,
+        path=test.source_path,
+    )
 
 
 def _write_manifest(*, target_dir: Path, manifest: dict[str, object]) -> None:

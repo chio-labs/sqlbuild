@@ -1,15 +1,18 @@
-"""Build batches of executable SQL unit-test comparison queries."""
+"""Build batches of executable SQL unit-test comparison queries natively."""
 
 from __future__ import annotations
 
-import json
 from typing import Any, cast
+
+import orjson
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.planner.main.execution.sql_test_dialect import (
     restore_sql_test_dialect_function_names,
 )
 from sqlbuild.compiler.planner.models import SqlTestPlanEntry
+from sqlbuild.executor.testing._helpers.native_requests import comparison_request
+from sqlbuild.executor.testing.constants import SQL_TEST_NATIVE_RENDER_WORKERS
 from sqlbuild.executor.testing.exceptions import SqlTestRenderingError
 from sqlbuild.executor.testing.types import NativeSqlTestRenderingModule
 
@@ -24,41 +27,20 @@ def build_sql_test_comparison_sql_batch(
 
     if not test_entries:
         return ()
-    requests: list[dict[str, object]] = []
-    for test_entry in test_entries:
-        requests.append(
-            {
-                "chain": [
-                    {
-                        "modelName": step.model_name,
-                        "resolvedSql": step.resolved_sql,
-                        "expectedCteSql": step.expected_cte_sql,
-                        "liftedCtes": step.lifted_ctes,
-                        "comparisonBodySql": step.comparison_body_sql,
-                    }
-                    for step in test_entry.chain
-                ],
-                "assertions": [
-                    {
-                        "name": assertion.name,
-                        "resolvedSql": assertion.resolved_sql,
-                        "liftedCtes": assertion.lifted_ctes,
-                        "comparisonBodySql": assertion.comparison_body_sql,
-                    }
-                    for assertion in test_entry.assertions
-                ],
-                "sqlAnalysisEnabled": test_entry.sql_analysis_enabled,
-                "setDifferenceOperator": set_difference_operator,
-                "sqlAnalysisDialect": sql_analysis_dialect,
-            }
+    requests: list[dict[str, object]] = [
+        comparison_request(
+            test_entry=test_entry,
+            set_difference_operator=set_difference_operator,
+            sql_analysis_dialect=sql_analysis_dialect,
         )
-    response: object = json.loads(
+        for test_entry in test_entries
+    ]
+    response: object = orjson.loads(
         cast(NativeSqlTestRenderingModule, _native).render_sql_test_comparisons_json(
-            json.dumps(
-                {"requests": requests, "workers": 4},
-                sort_keys=True,
-                separators=(",", ":"),
-            )
+            orjson.dumps(
+                {"requests": requests, "workers": SQL_TEST_NATIVE_RENDER_WORKERS},
+                option=orjson.OPT_SORT_KEYS,
+            ).decode()
         )
     )
     if not isinstance(response, list) or len(response) != len(test_entries):

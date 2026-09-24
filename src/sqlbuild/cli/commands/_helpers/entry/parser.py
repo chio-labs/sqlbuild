@@ -315,6 +315,13 @@ def _add_quality_parsers(
         action="store_true",
         help="only remove redundant typed-null SQL test fixture columns",
     )
+    format_parser.add_argument(
+        "format_paths",
+        nargs="*",
+        default=[],
+        metavar="PATH",
+        help="SQL files or folders to format, relative to the current directory",
+    )
     _ = add_select_args(format_parser)
 
 
@@ -581,7 +588,14 @@ def _add_inspection_parsers(
     )
 
     lineage_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.LINEAGE)
-    lineage_parser.add_argument("lineage_target", nargs="?", metavar="target")
+    lineage_parser.add_argument(
+        "lineage_targets",
+        nargs="*",
+        default=[],
+        metavar="target",
+        help="models, sources or seeds (optionally kind-prefixed, e.g. model:orders), "
+        "or one model.column",
+    )
     _add_sql_analysis_override(lineage_parser)
     lineage_parser.add_argument(
         "--format",
@@ -600,7 +614,7 @@ def _add_inspection_parsers(
         "--direction",
         dest="lineage_direction",
         choices=("upstream", "downstream", "both"),
-        default="upstream",
+        default=None,
     )
     lineage_parser.add_argument("--depth", dest="lineage_depth", default="all")
     lineage_parser.add_argument(

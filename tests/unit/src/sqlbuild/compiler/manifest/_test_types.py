@@ -122,6 +122,7 @@ class ManifestSqlTestNodeTestCase:
     expected_sqlbuild_test_type: str
     expected_compiled_code_fragment: str
     expected_depends_on_nodes: tuple[str, ...]
+    unexpected_compiled_code_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -66,12 +66,16 @@ sqb lineage fact_orders                         # upstream tree (default)
 sqb lineage fact_orders --direction both        # upstream and downstream
 sqb lineage fact_orders --direction downstream --depth 1
 sqb lineage --select tag:finance --format list  # edges for a selection
+sqb lineage fact_orders dim_customers --depth 1 --format list   # direct parents of several models
+sqb lineage --select tag:finance --direction upstream --depth 1  # expand a selection
 sqb lineage fact_orders.total_cents             # where a column comes from
 sqb lineage fact_orders.order_id --direction downstream   # who consumes a column
 ```
 
-- Targets are resources (models, sources, seeds, functions). `model.column` switches to column
-  lineage.
+- Targets are resources (models, sources, seeds, functions), optionally with the printed kind
+  prefix (`model:fact_orders`). `model.column` switches to column lineage (one column per call).
+- Graph operators such as `1+fact_orders` are not lineage targets: use `--direction` and
+  `--depth`. Without `--direction`, `--select` shows only edges inside the selection.
 - Formats: `tree` (default), `list` (edges), `json` (nodes, edges, `qualified_name`).
 - Column edges carry a transform type (`direct`, `expression`, `aggregation`, `cast`, `star`,
   `constant`) and a confidence level. `--mode fast` trades detail for speed on large projects.

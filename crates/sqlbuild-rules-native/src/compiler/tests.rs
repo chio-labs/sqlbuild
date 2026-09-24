@@ -6,6 +6,8 @@ mod model_header_tokenization;
 mod sql_interpolation;
 #[path = "tests/test_sql_references.rs"]
 mod sql_references;
+#[path = "tests/test_sql_test_expected_columns.rs"]
+mod sql_test_expected_columns;
 #[path = "tests/test_sql_test_extraction.rs"]
 mod sql_test_extraction;
 #[path = "tests/test_sql_test_planning.rs"]

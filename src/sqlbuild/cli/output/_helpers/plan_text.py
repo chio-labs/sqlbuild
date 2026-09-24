@@ -965,7 +965,7 @@ def _format_detail_entry(
     lines = _append_cursor_detail(
         lines=lines,
         entry=entry,
-        show_range=entry.backfill.action != BackfillAction.FULL,
+        show_range=reason != PlanReason.FULL_REFRESH,
     )
     lines = _append_policy_line(lines=lines, entry=entry)
     lines = _append_run_despite_unchanged_detail(lines=lines, entry=entry)

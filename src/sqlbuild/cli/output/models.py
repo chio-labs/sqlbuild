@@ -57,6 +57,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditSeverity,
     ThresholdOperator,
 )
+from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.runtime.observability.constants import (
     RESOURCE_ATTEMPT_SKIPPED_EVENT,
@@ -576,6 +577,7 @@ class WrittenTarget:
     audit_count: int
     test_count: int
     target_dir: Path
+    diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
 
     def summary_line(self) -> str:
         """Build a human-readable summary line."""

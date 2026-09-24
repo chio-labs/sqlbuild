@@ -18,6 +18,7 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.cursor_algebra.constants import GRAIN_ORDER
 from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue
+from sqlbuild.cursor_algebra.types import BoundSentinel
 from sqlbuild.spec.contracts.constants import EFFECTIVE_BATCH_SIZE_TOKEN
 
 
@@ -30,6 +31,11 @@ def build_cursor_plan_details(*, entry: ModelPlanEntry) -> CursorPlanDetails | N
         relation.is_runtime_owned for relation in entry.cursor_input_relations
     ) and not (entry.start_cursor_override is not None and entry.end_cursor_override is not None)
     resolved_bounds: CursorBounds | None = entry.microbatch_range or entry.cursor_bounds
+    if resolved_bounds is not None and (
+        isinstance(resolved_bounds.start, BoundSentinel)
+        or isinstance(resolved_bounds.end, BoundSentinel)
+    ):
+        resolved_bounds = None
     effective_grain: str | None = _effective_grain(entry=entry)
     effective_batch_size: str | None = _effective_batch_size(
         entry=entry, effective_grain=effective_grain

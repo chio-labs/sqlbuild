@@ -408,3 +408,606 @@ pub(crate) fn ordered_comparison_batch_preserves_order() -> bool {
     assert!(sql.contains("EXCEPT"));
     true
 }
+
+pub(crate) fn shared_textual_chain_renders_each_model_once() -> bool {
+    const LAYERS: usize = 16;
+    let mut models: Vec<Value> = vec![json!({
+        "name": "orders_00",
+        "querySql": "SELECT order_id, amount FROM __source(\"raw_orders\")",
+        "modelDependencies": []
+    })];
+    for side in ["left", "right"] {
+        models.push(diamond_model(1, side, "orders_00", "orders_00"));
+    }
+    for layer in 2..=LAYERS {
+        let previous: String = format!("orders_{:02}_left", layer - 1);
+        let other: String = format!("orders_{:02}_right", layer - 1);
+        for side in ["left", "right"] {
+            models.push(diamond_model(layer, side, &previous, &other));
+        }
+    }
+    let top: String = format!("orders_{LAYERS:02}_left");
+    let response: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+            &json!({
+                "models": models,
+                "functions": [],
+                "tests": [{
+                    "name": "orders_totals",
+                    "fileLabel": "tests/orders_totals.sql",
+                    "payload": {
+                        "kind": "model",
+                        "authoredCtes": [{
+                            "name": "__source__raw_orders",
+                            "sqlBody": "SELECT 1 AS order_id, 1 AS amount"
+                        }],
+                        "expectedCtes": [{
+                            "name": format!("__expected__{top}"),
+                            "sqlBody": "SELECT 1 AS order_id, 65536 AS amount"
+                        }],
+                        "expectedModelNames": [top],
+                        "assertionCtes": []
+                    }
+                }],
+                "sqlAnalysisEnabled": false,
+                "sqlAnalysisDialect": "duckdb",
+                "setDifferenceOperator": "EXCEPT",
+                "workers": 1
+            })
+            .to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+
+    let sql = response["artifacts"][0]["sql"]
+        .as_str()
+        .expect("test assumption must hold");
+    assert!(sql.len() < 50_000, "rendered {} bytes", sql.len());
+    for layer in 1..LAYERS {
+        for side in ["left", "right"] {
+            let definition = format!("__ref__orders_{layer:02}_{side} AS (");
+            assert_eq!(sql.matches(&definition).count(), 1, "{definition}");
+        }
+    }
+    assert_eq!(sql.matches("__ref__orders_00 AS (").count(), 1);
+    true
+}
+
+fn diamond_model(layer: usize, side: &str, previous: &str, other: &str) -> Value {
+    json!({
+        "name": format!("orders_{layer:02}_{side}"),
+        "querySql": format!(
+            "SELECT a.order_id, a.amount + b.amount AS amount \
+             FROM __ref(\"{previous}\") AS a \
+             INNER JOIN __ref(\"{other}\") AS b ON a.order_id = b.order_id"
+        ),
+        "modelDependencies": [previous, other]
+    })
+}
+
+fn deep_diamond_models(layers: usize) -> Vec<Value> {
+    let mut models: Vec<Value> = vec![json!({
+        "name": "orders_00",
+        "querySql": "SELECT o.order_id, o.amount FROM __source(\"raw_orders\") AS o \
+                     INNER JOIN __source(\"raw_customers\") AS c ON o.customer_id = c.customer_id",
+        "modelDependencies": []
+    })];
+    for side in ["left", "right"] {
+        models.push(diamond_model(1, side, "orders_00", "orders_00"));
+    }
+    for layer in 2..=layers {
+        let previous: String = format!("orders_{:02}_left", layer - 1);
+        let other: String = format!("orders_{:02}_right", layer - 1);
+        for side in ["left", "right"] {
+            models.push(diamond_model(layer, side, &previous, &other));
+        }
+    }
+    models
+}
+
+fn plan_deep_diamond_with_missing_mock(sql_analysis_enabled: bool) -> Value {
+    const LAYERS: usize = 12;
+    let top: String = format!("orders_{LAYERS:02}_left");
+    serde_json::from_str(
+        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+            &json!({
+                "models": deep_diamond_models(LAYERS),
+                "tests": [{
+                    "name": "orders_totals",
+                    "fileLabel": "tests/orders_totals.sql",
+                    "payload": {
+                        "kind": "model",
+                        "authoredCtes": [{
+                            "name": "__source__raw_customers",
+                            "sqlBody": "SELECT 1 AS customer_id"
+                        }],
+                        "expectedCtes": [{
+                            "name": format!("__expected__{top}"),
+                            "sqlBody": "SELECT 1 AS order_id, 1 AS amount"
+                        }],
+                        "expectedModelNames": [top],
+                    }
+                }],
+                "sqlAnalysisEnabled": sql_analysis_enabled,
+                "sqlAnalysisDialect": "duckdb",
+                "renderSql": false
+            })
+            .to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold")
+}
+
+pub(crate) fn deep_shared_graph_reports_missing_mock_once() -> bool {
+    for sql_analysis_enabled in [true, false] {
+        let response = plan_deep_diamond_with_missing_mock(sql_analysis_enabled);
+        assert_eq!(
+            response["artifacts"][0]["warnings"],
+            json!([{
+                "modelName": "orders_00",
+                "severity": "error",
+                "message": "test 'orders_totals': model 'orders_00' references __source('raw_orders') which has no mock"
+            }]),
+            "sql_analysis_enabled={sql_analysis_enabled}"
+        );
+    }
+    true
+}
+
+pub(crate) fn plan_without_rendering_returns_executable_steps() -> bool {
+    let response: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+            &json!({
+                "models": [
+                    {
+                        "name": "stg_orders",
+                        "querySql": "SELECT * FROM __source(\"raw_orders\")",
+                        "modelDependencies": []
+                    },
+                    {
+                        "name": "orders",
+                        "querySql": "SELECT * FROM __ref(\"stg_orders\")",
+                        "modelDependencies": ["stg_orders"]
+                    }
+                ],
+                "tests": [{
+                    "name": "orders_case",
+                    "fileLabel": "tests/orders.sql",
+                    "payload": {
+                        "kind": "model",
+                        "authoredCtes": [{
+                            "name": "__source__raw_orders",
+                            "sqlBody": "SELECT 1 AS order_id"
+                        }],
+                        "expectedCtes": [{
+                            "name": "__expected__orders",
+                            "sqlBody": "SELECT 1 AS order_id"
+                        }],
+                        "expectedModelNames": ["orders"],
+                        "assertionCtes": [{
+                            "name": "__assert__positive",
+                            "sqlBody": "SELECT * FROM __ref(\"orders\") WHERE order_id < 0"
+                        }]
+                    }
+                }],
+                "sqlAnalysisEnabled": false,
+                "sqlAnalysisDialect": "duckdb",
+                "renderSql": false
+            })
+            .to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+
+    let artifact = &response["artifacts"][0];
+    assert_eq!(artifact["sql"], Value::Null);
+    assert_eq!(artifact["chain"][0]["modelName"], json!("stg_orders"));
+    assert_eq!(artifact["chain"][0]["expectedCteSql"], Value::Null);
+    assert_eq!(
+        artifact["chain"][1]["liftedCtes"],
+        json!([["__ref__stg_orders", "SELECT * FROM (SELECT 1 AS order_id)"]])
+    );
+    assert_eq!(
+        artifact["chain"][1]["comparisonBodySql"],
+        json!("SELECT * FROM __ref__stg_orders")
+    );
+    assert_eq!(
+        artifact["chain"][1]["expectedCteSql"],
+        json!("SELECT 1 AS order_id")
+    );
+    assert_eq!(artifact["assertions"][0]["name"], json!("positive"));
+    assert_eq!(
+        artifact["assertions"][0]["comparisonBodySql"],
+        json!("SELECT * FROM __ref__orders WHERE order_id < 0")
+    );
+    assert_eq!(
+        artifact["assertions"][0]["liftedCtes"][1],
+        json!(["__ref__orders", "SELECT * FROM __ref__stg_orders"])
+    );
+    assert!(
+        artifact["assertions"][0]["resolvedSql"]
+            .as_str()
+            .is_some_and(|sql| sql.contains("__ref__orders AS (SELECT * FROM __ref__stg_orders)"))
+    );
+    true
+}
+
+pub(crate) fn upstream_fallback_resolves() -> bool {
+    let request = json!({
+        "models": [
+            {"name": "stg_orders", "querySql": "SELECT __udf(\"identity_value\")(order_id) AS order_id FROM __source(\"raw_orders\")"},
+            {"name": "orders", "querySql": "SELECT * FROM __ref(\"stg_orders\")", "modelDependencies": ["stg_orders"]}
+        ],
+        "functions": [{"name": "identity_value", "udfPrefix": "identity_value(", "udfSuffix": ")"}],
+        "tests": [{
+            "name": "orders_case", "fileLabel": "tests/orders.sql",
+            "payload": {
+                "kind": "model",
+                "authoredCtes": [{"name": "__source__raw_orders", "sqlBody": "SELECT 1 AS order_id"}],
+                "expectedCtes": [{"name": "__expected__orders", "sqlBody": "SELECT 1 AS order_id"}],
+                "expectedModelNames": ["orders"],
+                "assertionCtes": [{"name": "__assert__positive", "sqlBody": "SELECT * FROM __ref(\"orders\") WHERE order_id < 0"}]
+            }
+        }],
+        "sqlAnalysisEnabled": true, "sqlAnalysisDialect": "duckdb"
+    });
+    let response: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_planning::plan_and_render_json(&request.to_string())
+            .expect("planning succeeds"),
+    )
+    .expect("valid JSON");
+    let artifact = &response["artifacts"][0];
+    assert_eq!(artifact["warnings"], json!([]));
+    let sql = artifact["sql"].as_str().expect("rendered SQL");
+    assert!(!sql.contains("__ref(\""));
+    assert!(sql.contains("identity_value((order_id))"), "{sql}");
+    assert!(sql.contains("__ref__stg_orders"));
+    let mut artifact_request = request;
+    artifact_request["includePlan"] = json!(false);
+    let compact: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+            &artifact_request.to_string(),
+        )
+        .expect("artifact planning succeeds"),
+    )
+    .expect("valid artifact JSON");
+    assert_eq!(compact["artifacts"][0]["sql"], artifact["sql"]);
+    assert_eq!(
+        compact["artifacts"][0]["modelNames"],
+        artifact["modelNames"]
+    );
+    assert_eq!(compact["artifacts"][0]["warnings"], artifact["warnings"]);
+    assert_eq!(compact["artifacts"][0]["chain"], json!([]));
+    assert_eq!(compact["artifacts"][0]["assertions"], json!([]));
+    true
+}
+
+pub(crate) fn chain_resolution_orders_unmocked_models() -> bool {
+    let response: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_chain_resolution::resolve_chains_json(
+            &json!({
+                "models": deep_diamond_models(2),
+                "tests": [
+                    {
+                        "name": "orders_totals",
+                        "fileLabel": "tests/orders_totals.sql",
+                        "payload": {
+                            "kind": "model",
+                            "authoredCtes": [{
+                                "name": "__ref__orders_01_right",
+                                "sqlBody": "SELECT 1 AS order_id, 1 AS amount"
+                            }],
+                            "expectedModelNames": ["orders_02_left"]
+                        }
+                    },
+                    {
+                        "name": "direct_case",
+                        "fileLabel": "tests/direct.sql",
+                        "payload": {
+                            "kind": "direct",
+                            "mode": "macro",
+                            "actualCte": {"name": "__macro_actual__", "sqlBody": "SELECT 1"},
+                            "expectedCte": {"name": "__macro_expected__", "sqlBody": "SELECT 1"}
+                        }
+                    }
+                ]
+            })
+            .to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+
+    assert_eq!(
+        response["chains"],
+        json!([["orders_00", "orders_01_left", "orders_02_left"], []])
+    );
+    true
+}
+
+pub(crate) fn difference_sample_lifts_generated_ctes_and_bounds_rows() -> bool {
+    let request = |use_top_clause: bool| {
+        json!({
+            "step": {
+                "modelName": "orders",
+                "resolvedSql": "WITH __ref__stg_orders AS (SELECT 1 AS order_id) SELECT * FROM __ref__stg_orders",
+                "expectedCteSql": "SELECT 2 AS order_id",
+                "liftedCtes": [["__ref__stg_orders", "SELECT 1 AS order_id"]],
+                "comparisonBodySql": "SELECT * FROM __ref__stg_orders"
+            },
+            "sqlAnalysisEnabled": false,
+            "setDifferenceOperator": "EXCEPT",
+            "sqlAnalysisDialect": "duckdb",
+            "direction": "missing",
+            "sampleLimit": 3,
+            "useTopClause": use_top_clause
+        })
+        .to_string()
+    };
+    let limited: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_difference_sampling::render_difference_sample_json(
+            &request(false),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+    let top: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_difference_sampling::render_difference_sample_json(
+            &request(true),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+
+    assert_eq!(
+        limited["sql"],
+        json!(
+            "WITH __ref__stg_orders AS (SELECT 1 AS order_id),\n\
+             __actual AS (SELECT * FROM __ref__stg_orders),\n\
+             __expected AS (SELECT 2 AS order_id)\n\
+             SELECT * FROM (SELECT * FROM __expected EXCEPT SELECT * FROM __actual) \
+             AS __sqlbuild_difference LIMIT 3"
+        )
+    );
+    assert!(
+        top["sql"]
+            .as_str()
+            .is_some_and(|sql| sql.contains("SELECT TOP 3 * FROM (") && !sql.contains("LIMIT"))
+    );
+    true
+}
+
+fn step_sql_bytes(step: &Value) -> usize {
+    let text_len = |value: &Value| value.as_str().map_or(0, str::len);
+    let lifted: usize = step["liftedCtes"].as_array().map_or(0, |ctes| {
+        ctes.iter()
+            .map(|cte| text_len(&cte[0]) + text_len(&cte[1]))
+            .sum()
+    });
+    text_len(&step["resolvedSql"]) + text_len(&step["comparisonBodySql"]) + lifted
+}
+
+pub(crate) fn long_chain_plan_output_stays_linear() -> bool {
+    const MODELS: usize = 200;
+    let mut models: Vec<Value> = vec![json!({
+        "name": "orders_000",
+        "querySql": "SELECT order_id, amount FROM __source(\"raw_orders\")",
+        "modelDependencies": []
+    })];
+    for index in 1..MODELS {
+        let previous: String = format!("orders_{:03}", index - 1);
+        models.push(json!({
+            "name": format!("orders_{index:03}"),
+            "querySql": format!(
+                "SELECT order_id, amount + 1 AS amount FROM __ref(\"{previous}\")"
+            ),
+            "modelDependencies": [previous]
+        }));
+    }
+    let tip: String = format!("orders_{:03}", MODELS - 1);
+    for sql_analysis_enabled in [true, false] {
+        let response: Value = serde_json::from_str(
+            &crate::compiler::main::sql_test_planning::plan_and_render_json(
+                &json!({
+                    "models": models,
+                    "tests": [{
+                        "name": "orders_tip",
+                        "fileLabel": "tests/orders_tip.sql",
+                        "payload": {
+                            "kind": "model",
+                            "authoredCtes": [{
+                                "name": "__source__raw_orders",
+                                "sqlBody": "SELECT 1 AS order_id, 0 AS amount"
+                            }],
+                            "expectedCtes": [{
+                                "name": format!("__expected__{tip}"),
+                                "sqlBody": "SELECT 1 AS order_id, 199 AS amount"
+                            }],
+                            "expectedModelNames": [tip],
+                        }
+                    }],
+                    "sqlAnalysisEnabled": sql_analysis_enabled,
+                    "sqlAnalysisDialect": "duckdb"
+                })
+                .to_string(),
+            )
+            .expect("test assumption must hold"),
+        )
+        .expect("test assumption must hold");
+        let artifact = &response["artifacts"][0];
+        let sql = artifact["sql"].as_str().expect("test assumption must hold");
+        let chain = artifact["chain"]
+            .as_array()
+            .expect("test assumption must hold");
+        assert_eq!(chain.len(), MODELS);
+        let step_bytes: usize = chain.iter().map(step_sql_bytes).sum();
+        assert!(
+            step_bytes <= 3 * sql.len(),
+            "step SQL {step_bytes} bytes for {} rendered bytes",
+            sql.len()
+        );
+        assert!(
+            chain[..MODELS - 1]
+                .iter()
+                .all(|step| step_sql_bytes(step) == 0)
+        );
+
+        let mut padded_chain: Vec<Value> = chain.clone();
+        for step in &mut padded_chain[..MODELS - 1] {
+            step["resolvedSql"] = json!("SELECT unrendered_column FROM unrendered_relation");
+            step["liftedCtes"] = json!([["unrendered_cte", "SELECT 1"]]);
+            step["comparisonBodySql"] = json!("SELECT unrendered_column");
+        }
+        let rendered: Value = serde_json::from_str(
+            &crate::compiler::main::sql_test_rendering::render_json(
+                &json!({
+                    "requests": [{
+                        "chain": padded_chain,
+                        "assertions": [],
+                        "sqlAnalysisEnabled": sql_analysis_enabled,
+                        "setDifferenceOperator": "EXCEPT",
+                        "sqlAnalysisDialect": "duckdb"
+                    }]
+                })
+                .to_string(),
+            )
+            .expect("test assumption must hold"),
+        )
+        .expect("test assumption must hold");
+        assert_eq!(rendered[0]["sql"].as_str(), Some(sql));
+    }
+    true
+}
+
+fn render_single(request: Value) -> String {
+    let response: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_rendering::render_json(
+            &json!({"requests": [request]}).to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+    response[0]["sql"]
+        .as_str()
+        .expect("test assumption must hold")
+        .to_string()
+}
+
+fn partial_expected_step() -> Value {
+    json!({
+        "modelName": "orders",
+        "resolvedSql": "SELECT 1 AS order_id, 'paid' AS status, 10 AS amount",
+        "expectedCteSql": "SELECT 'paid' AS status, 1 AS order_id",
+        "expectedColumns": ["status", "order_id"]
+    })
+}
+
+pub(crate) fn partial_expected_columns_project_both_sides() -> bool {
+    let sql = render_single(json!({
+        "chain": [partial_expected_step()],
+        "sqlAnalysisEnabled": false,
+        "sqlAnalysisDialect": "duckdb"
+    }));
+    assert!(sql.contains("(SELECT COUNT(*) FROM __actual__orders) AS actual_count"));
+    assert!(sql.contains(
+        "(SELECT status, order_id FROM __actual__orders EXCEPT SELECT status, order_id FROM __expected__orders) AS __sqlbuild_mismatch"
+    ), "{sql}");
+    assert!(sql.contains(
+        "(SELECT status, order_id FROM __expected__orders EXCEPT SELECT status, order_id FROM __actual__orders) AS __sqlbuild_missing"
+    ), "{sql}");
+    assert!(!sql.contains("SELECT * FROM __actual__orders"));
+    true
+}
+
+pub(crate) fn actual_probe_selects_zero_rows_from_step() -> bool {
+    let sql = render_single(json!({
+        "chain": [partial_expected_step()],
+        "sqlAnalysisEnabled": false,
+        "sqlAnalysisDialect": "duckdb",
+        "probeStepIndex": 0
+    }));
+    assert!(sql.starts_with("WITH __actual__orders AS ("), "{sql}");
+    assert!(
+        sql.ends_with("\nSELECT * FROM __actual__orders WHERE 1 = 0"),
+        "{sql}"
+    );
+    assert!(!sql.contains("UNION ALL"));
+    true
+}
+
+pub(crate) fn sqlserver_difference_sample_projects_bracketed_columns() -> bool {
+    let response: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_difference_sampling::render_difference_sample_json(
+            &json!({
+                "step": {
+                    "modelName": "orders",
+                    "resolvedSql": "SELECT 1 AS [Order Id], 10 AS amount, 'paid' AS status",
+                    "expectedCteSql": "SELECT 1 AS [Order Id], 10 AS amount",
+                    "expectedColumns": ["[Order Id]", "amount"]
+                },
+                "sqlAnalysisEnabled": true,
+                "setDifferenceOperator": "EXCEPT",
+                "sqlAnalysisDialect": "tsql",
+                "direction": "unexpected",
+                "sampleLimit": 3,
+                "useTopClause": true
+            })
+            .to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+    let sql = response["sql"].as_str().expect("test assumption must hold");
+    assert!(sql.contains(
+        "SELECT TOP 3 * FROM (SELECT [Order Id], amount FROM __actual EXCEPT SELECT [Order Id], amount FROM __expected) AS __sqlbuild_difference"
+    ), "{sql}");
+    true
+}
+
+pub(crate) fn snowflake_plan_keeps_quoted_expected_columns() -> bool {
+    let response: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+            &json!({
+                "models": [{
+                    "name": "orders",
+                    "querySql": "SELECT order_id AS \"Order Id\", status, amount FROM __source(\"raw_orders\")",
+                    "modelDependencies": []
+                }],
+                "tests": [{
+                    "name": "orders_case",
+                    "fileLabel": "tests/orders.sql",
+                    "payload": {
+                        "kind": "model",
+                        "authoredCtes": [{
+                            "name": "__source__raw_orders",
+                            "sqlBody": "SELECT 1 AS order_id, 'paid' AS status, 10 AS amount"
+                        }],
+                        "expectedCtes": [{
+                            "name": "__expected__orders",
+                            "sqlBody": "SELECT 'paid' AS status, 1 AS \"Order Id\""
+                        }],
+                        "expectedModelNames": ["orders"]
+                    }
+                }],
+                "sqlAnalysisEnabled": false,
+                "sqlAnalysisDialect": "snowflake"
+            })
+            .to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+    let artifact = &response["artifacts"][0];
+    assert_eq!(
+        artifact["chain"][0]["expectedColumns"],
+        json!(["status", "\"Order Id\""])
+    );
+    let sql = artifact["sql"].as_str().expect("test assumption must hold");
+    assert!(sql.contains(
+        "SELECT status, \"Order Id\" FROM __actual__orders EXCEPT SELECT status, \"Order Id\" FROM __expected__orders"
+    ), "{sql}");
+    true
+}

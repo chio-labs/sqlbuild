@@ -225,6 +225,18 @@ def build_mock_boundary_test_project_files() -> dict[str, str]:
     }
 
 
+MOCKED_UNSATISFIED_LEAF_TEST_SQL: str = (
+    "TEST();\n\n"
+    "WITH\n"
+    "__source__raw AS (SELECT 1 AS id),\n"
+    "__expected__fact_orders AS (\n"
+    "  SELECT 1 AS id, 1 AS adjusted, 'CA' AS country, "
+    "'real' AS literal_text, 'active' AS status\n"
+    ")\n"
+    "SELECT 1\n"
+)
+
+
 def build_unsatisfied_leaf_test_project_files() -> dict[str, str]:
     """Build a test that omits the source mock required by its real model chain."""
 
@@ -1015,3 +1027,161 @@ def build_macro_test_project_files() -> dict[str, str]:
             "SELECT 1\n"
         ),
     }
+
+
+def build_diamond_chain_test_project_files(*, sql_analysis_enabled: bool) -> dict[str, str]:
+    """Build a shared (diamond) upstream graph with one passing and one failing chain test."""
+
+    sql_analysis_value: str = {False: "false", True: "true"}[sql_analysis_enabled]
+    return {
+        "sqlbuild_project.toml": (
+            'name = "diamond_demo"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "diamond_demo.duckdb"\n\n'
+            "[settings]\n"
+            f"sql_analysis = {sql_analysis_value}\n\n"
+            "[defaults]\n"
+            'materialized = "table"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+        ),
+        "models/stg_orders.sql": (
+            "MODEL (materialized table);\n\n"
+            'SELECT id AS order_id, customer_id, amount FROM __source("raw_orders")\n'
+        ),
+        "models/large_orders.sql": (
+            "MODEL (materialized table);\n\n"
+            'SELECT order_id, customer_id, amount FROM __ref("stg_orders") WHERE amount >= 10\n'
+        ),
+        "models/small_orders.sql": (
+            "MODEL (materialized table);\n\n"
+            "WITH picked AS (\n"
+            '  SELECT order_id, customer_id, amount FROM __ref("stg_orders") WHERE amount < 10\n'
+            ")\n"
+            "SELECT * FROM picked -- small orders only\n"
+        ),
+        "models/customer_order_mix.sql": (
+            "MODEL (materialized table);\n\n"
+            "SELECT customer_id,\n"
+            '  (SELECT COUNT(*) FROM __ref("large_orders") AS l\n'
+            "    WHERE l.customer_id = c.customer_id) AS large_count,\n"
+            '  (SELECT COUNT(*) FROM __ref("small_orders") AS s\n'
+            "    WHERE s.customer_id = c.customer_id) AS small_count\n"
+            'FROM (SELECT DISTINCT customer_id FROM __ref("stg_orders")) AS c\n'
+        ),
+        "tests/unit/test_customer_order_mix.sql": (
+            'TEST (name "customer_order_mix_matches");\n\n'
+            "WITH\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT 1 AS id, 1 AS customer_id, 5 AS amount\n"
+            "  UNION ALL SELECT 2 AS id, 1 AS customer_id, 20 AS amount\n"
+            "  UNION ALL SELECT 3 AS id, 2 AS customer_id, 30 AS amount\n"
+            "),\n"
+            "__expected__customer_order_mix AS (\n"
+            "  SELECT 1 AS customer_id, 1 AS large_count, 1 AS small_count\n"
+            "  UNION ALL SELECT 2 AS customer_id, 1 AS large_count, 0 AS small_count\n"
+            "),\n"
+            "__assert__no_negative_large_orders AS (\n"
+            '  SELECT * FROM __ref("large_orders") WHERE amount < 0\n'
+            ")\n"
+            "SELECT 1\n"
+        ),
+        "tests/unit/test_customer_order_mix_wrong.sql": (
+            'TEST (name "customer_order_mix_wrong");\n\n'
+            "WITH\n"
+            "__source__raw_orders AS (SELECT 1 AS id, 1 AS customer_id, 5 AS amount),\n"
+            "__expected__customer_order_mix AS (\n"
+            "  SELECT 1 AS customer_id, 3 AS large_count, 1 AS small_count\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def build_deep_shared_missing_mock_project_files(*, layers: int) -> dict[str, str]:
+    """Build a deep diamond graph whose test omits one source mock reached on every path."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            'name = "deep_demo"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "deep_demo.duckdb"\n\n'
+            "[defaults]\n"
+            'materialized = "table"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+            "  - name: raw_customers\n    schema: main\n    table: raw_customers\n"
+        ),
+        "models/orders_00_left.sql": (
+            "MODEL (materialized table);\n\n"
+            "SELECT o.order_id, o.amount\n"
+            'FROM __source("raw_orders") AS o\n'
+            'JOIN __source("raw_customers") AS c ON c.customer_id = o.customer_id\n'
+        ),
+        "models/orders_00_right.sql": (
+            'MODEL (materialized table);\n\nSELECT order_id, amount FROM __ref("orders_00_left")\n'
+        ),
+    }
+    for layer in range(1, layers + 1):
+        previous_left: str = f"orders_{layer - 1:02d}_left"
+        previous_right: str = f"orders_{layer - 1:02d}_right"
+        for side in ("left", "right"):
+            files[f"models/orders_{layer:02d}_{side}.sql"] = (
+                "MODEL (materialized table);\n\n"
+                "SELECT a.order_id, a.amount + b.amount AS amount\n"
+                f'FROM __ref("{previous_left}") AS a\n'
+                f'JOIN __ref("{previous_right}") AS b ON a.order_id = b.order_id\n'
+            )
+    files["tests/unit/test_deep_orders.sql"] = (
+        'TEST (name "deep_orders_missing_mock");\n\n'
+        "WITH\n"
+        "__source__raw_customers AS (SELECT 1 AS customer_id),\n"
+        f"__expected__orders_{layers:02d}_left AS (SELECT 1 AS order_id, 1 AS amount)\n"
+        "SELECT 1\n"
+    )
+    return files
+
+
+def build_expected_column_subset_project_files(
+    *, expected_tests: dict[str, str], sql_analysis_enabled: bool = True
+) -> dict[str, str]:
+    """Build an orders model whose SQL tests list a chosen subset of its output columns."""
+
+    sql_analysis_value: str = {False: "false", True: "true"}[sql_analysis_enabled]
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            'name = "expected_columns_demo"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "expected_columns_demo.duckdb"\n\n'
+            "[settings]\n"
+            f"sql_analysis = {sql_analysis_value}\n\n"
+            "[defaults]\n"
+            'materialized = "table"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+        ),
+        "models/orders.sql": (
+            "MODEL (materialized table);\n\n"
+            "SELECT id AS order_id, customer_id, status, amount * 2 AS amount\n"
+            'FROM __source("raw_orders")\n'
+        ),
+    }
+    for test_name, expected_sql in expected_tests.items():
+        files[f"tests/unit/{test_name}.sql"] = (
+            f'TEST (name "{test_name}");\n\n'
+            "WITH\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT 1 AS id, 100 AS customer_id, 'paid' AS status, 5 AS amount\n"
+            "  UNION ALL SELECT 2 AS id, 200 AS customer_id, 'open' AS status, 7 AS amount\n"
+            "),\n"
+            f"__expected__orders AS (\n  {expected_sql}\n)\n"
+            "SELECT 1\n"
+        )
+    return files

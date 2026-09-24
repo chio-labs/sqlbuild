@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -89,11 +88,11 @@ from sqlbuild.sql_values.models import SqlValue
 
 @dataclass(frozen=True)
 class NativeSqlTestArtifact:
-    """One native-planned SQL-test artifact and its compact diagnostics."""
+    """One native-planned SQL-test artifact and its distinct planning error messages."""
 
     sql: str
     model_names: tuple[str, ...]
-    warnings: tuple[dict[str, object], ...]
+    error_messages: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -139,26 +138,6 @@ class RelationFixturePlanningContext:
     relations: dict[FixtureKey, FixtureRelationMetadata]
     authoritative_columns: dict[FixtureKey, frozenset[str]]
     expected_types: dict[FixtureKey, dict[str, str]]
-
-
-@dataclass(frozen=True)
-class TestFunctionAnalysisContext:
-    """Function locations and reusable marker targets for SQL-test analysis."""
-
-    locations: dict[str, str]
-    marker_targets: tuple[tuple[str, str, str], ...]
-
-
-@dataclass(frozen=True)
-class SqlTestPlanningContext:
-    """Project-wide SQL-test indexes and reusable chain topology."""
-
-    models_by_name: dict[str, CompiledModel]
-    model_dependencies: dict[str, frozenset[str]]
-    function_locations: dict[str, CompiledRelationLocation]
-    qualified_function_locations: dict[str, str]
-    function_analysis_context: TestFunctionAnalysisContext
-    chain_names_by_test_key: dict[CompiledObjectKey, tuple[str, ...]]
 
 
 @dataclass(frozen=True)
@@ -1189,6 +1168,7 @@ class ChainStep:
     expected_cte_sql: str | None = None
     lifted_ctes: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     comparison_body_sql: str | None = None
+    expected_columns: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -1199,16 +1179,6 @@ class SqlTestAssertionStep:
     resolved_sql: str
     lifted_ctes: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     comparison_body_sql: str | None = None
-
-
-@dataclass(frozen=True)
-class SqlAnalysisResolvedTestSql:
-    """SQL analysis-resolved test SQL plus reusable CTE state for downstream refs."""
-
-    resolved_sql: str
-    cte_body_sql: str
-    generated_ctes: OrderedDict[str, str]
-    reachable_mock_names: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -1235,6 +1205,26 @@ class SqlTestPlanEntry:
     scope_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
     function_deps: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
     sql_analysis_enabled: bool = True
+
+
+@dataclass(frozen=True)
+class NativeSqlTestPlan:
+    """Native chain and assertion steps for one SQL test, with SQL when rendered."""
+
+    chain: tuple[ChainStep, ...]
+    assertions: tuple[SqlTestAssertionStep, ...]
+    model_names: tuple[str, ...]
+    warnings: tuple[PlanWarning, ...]
+    sql: str | None = None
+
+
+@dataclass(frozen=True)
+class SqlTestPlanResult:
+    """One SQL test's plan entry and warnings, or the fixture diagnostics preventing it."""
+
+    entry: SqlTestPlanEntry | None
+    warnings: tuple[PlanWarning, ...] = field(default_factory=tuple)
+    fixture_diagnostics: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

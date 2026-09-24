@@ -115,7 +115,8 @@ window into batches, each with its own audits. Always `sqb plan` an incremental 
 
 **Tests.** SQL unit tests live under `tests/unit/`. A `TEST();` file mocks inputs with
 `__source__<name>`, `__ref__<name>`, `__seed__<name>` CTEs, states expected output with
-`__expected__<model>`, adds zero-row checks with `__assert__<name>`, and ends with `SELECT 1`.
+`__expected__<model>` (only the listed columns are compared, matched by name; unlisted columns are
+ignored), adds zero-row checks with `__assert__<name>`, and ends with `SELECT 1`.
 One test can span many models: mock the sources, assert on the final model, and every intermediate
 model runs from its real SQL. Read [references/testing.md](references/testing.md) for fixtures,
 parameterised cases, scenarios, audits and Rules.

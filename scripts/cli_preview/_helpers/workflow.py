@@ -17,8 +17,11 @@ from sqlbuild.presentation.main.supports_color import supports_color
 
 _PAYMENTS_MODEL_PATH: Path = Path("models/staging/stg_payments.sql")
 _VIRTUAL_MODEL_PATH: Path = Path("models/fact_waffle_orders.sql")
-_QUERY_MARKER: str = "SELECT\n"
-_CHANGED_QUERY_MARKER: str = "SELECT\n  1 AS preview_change,\n"
+_QUERY_MARKER: str = "  amount_cents,\n"
+_CHANGED_QUERY_MARKER: str = (
+    "  CAST(CASE WHEN payment_method = 'card' THEN 'preview'"
+    " ELSE CAST(amount_cents AS VARCHAR) END AS INTEGER) AS amount_cents,\n"
+)
 _VIRTUAL_QUERY_FILTER: str = "WHERE o.order_id IS NOT NULL"
 _JANITOR_SECTION_MARKER: str = "[janitor]"
 _JANITOR_CONFIG: str = "\n[janitor]\nenabled = true\nretention_days = 0\n"

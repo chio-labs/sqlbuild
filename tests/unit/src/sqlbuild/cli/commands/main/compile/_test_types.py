@@ -22,6 +22,13 @@ class TargetWriterCacheTestCase:
 
 
 @dataclass(frozen=True)
+class TargetWriterPlanningErrorTestCase:
+    description: str
+    expected_builder_calls: int
+    expected_message: str
+
+
+@dataclass(frozen=True)
 class CompileCommandTestCase:
     description: str
     expected_exit_code: int

@@ -63,7 +63,7 @@ def test_given_lineage_graph_when_formatting_then_returns_expected_human_output(
     graph: ProjectGraph = build_lineage_test_graph()
     lineage_graph: LineageGraph = select_target_lineage(
         graph=graph,
-        target="fact_orders",
+        targets=("fact_orders",),
         direction="upstream",
         depth=None,
     )
@@ -174,7 +174,7 @@ def test_given_lineage_graph_when_formatting_with_color_then_styles_semantic_par
     graph: ProjectGraph = build_lineage_test_graph()
     lineage_graph: LineageGraph = select_target_lineage(
         graph=graph,
-        target="fact_orders",
+        targets=("fact_orders",),
         direction="upstream",
         depth=None,
     )

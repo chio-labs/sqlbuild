@@ -13,11 +13,13 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     CanonicalFixtureFormatIntegrationTestCase,
     DescriptionFormatIntegrationTestCase,
     FormatCompileIntegrationTestCase,
+    FormatPathArgumentsIntegrationTestCase,
     FormatSafetyIntegrationTestCase,
     FormatScopeIntegrationTestCase,
     FormatterDeclineIntegrationTestCase,
     FormatWarningIntegrationTestCase,
     FromValuesFormatIntegrationTestCase,
+    LeadingCteCommentFormatIntegrationTestCase,
     MixedFromValuesFormatIntegrationTestCase,
     TypedNullFormatIntegrationTestCase,
 )
@@ -25,6 +27,8 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
     write_from_values_format_project,
     write_snowflake_format_test,
 )
+
+_UNFORMATTED_ORDERS_SQL: str = "MODEL (materialized table);\nselect   1 as order_id\n"
 
 
 @pytest.mark.parametrize(
@@ -793,3 +797,132 @@ def test_given_missing_description_when_formatting_then_warning_does_not_fail(
     assert isinstance(violations, list)
     assert violations[0]["code"] == test_case.expected_code
     assert violations[0]["severity"] == test_case.expected_severity
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FormatPathArgumentsIntegrationTestCase(
+            description="positional file formats only that file",
+            arguments=("models/marts/orders.sql",),
+            expected_exit_code=0,
+            expected_formatted=("models/marts/orders.sql",),
+            expected_unchanged=("models/staging/stg_orders.sql",),
+            expected_output_fragment="1 files",
+        ),
+        FormatPathArgumentsIntegrationTestCase(
+            description="bare file path in select formats only that file",
+            arguments=("--select", "models/staging/stg_orders.sql"),
+            expected_exit_code=0,
+            expected_formatted=("models/staging/stg_orders.sql",),
+            expected_unchanged=("models/marts/orders.sql",),
+            expected_output_fragment="1 files",
+        ),
+        FormatPathArgumentsIntegrationTestCase(
+            description="positional folder formats every file below it",
+            arguments=("models",),
+            expected_exit_code=0,
+            expected_formatted=("models/marts/orders.sql", "models/staging/stg_orders.sql"),
+            expected_unchanged=(),
+            expected_output_fragment="2 files",
+        ),
+        FormatPathArgumentsIntegrationTestCase(
+            description="missing positional path is a clear error",
+            arguments=("models/marts/missing.sql",),
+            expected_exit_code=1,
+            expected_formatted=(),
+            expected_unchanged=("models/marts/orders.sql", "models/staging/stg_orders.sql"),
+            expected_output_fragment="format path 'models/marts/missing.sql' does not exist",
+        ),
+        FormatPathArgumentsIntegrationTestCase(
+            description="path outside formatted folders lists the valid roots",
+            arguments=("sqlbuild_project.toml",),
+            expected_exit_code=1,
+            expected_formatted=(),
+            expected_unchanged=("models/marts/orders.sql", "models/staging/stg_orders.sql"),
+            expected_output_fragment="use a path under models/, tests/",
+        ),
+        FormatPathArgumentsIntegrationTestCase(
+            description="unknown path selector root lists the formatter roots",
+            arguments=("--select", "path:macros"),
+            expected_exit_code=1,
+            expected_formatted=(),
+            expected_unchanged=("models/marts/orders.sql", "models/staging/stg_orders.sql"),
+            expected_output_fragment="'functions/'",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_file_paths_when_formatting_then_only_named_files_change(
+    test_case: FormatPathArgumentsIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    for relative_path in ("models/marts/orders.sql", "models/staging/stg_orders.sql"):
+        (tmp_path / relative_path).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / relative_path).write_text(_UNFORMATTED_ORDERS_SQL, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    exit_code: int = main(["--no-color", "format", *test_case.arguments])
+    captured: CaptureResult[str] = capsys.readouterr()
+
+    assert exit_code == test_case.expected_exit_code
+    assert test_case.expected_output_fragment in captured.out + captured.err
+    assert {
+        path: (tmp_path / path).read_text(encoding="utf-8") != _UNFORMATTED_ORDERS_SQL
+        for path in (*test_case.expected_formatted, *test_case.expected_unchanged)
+    } == {
+        **dict.fromkeys(test_case.expected_formatted, True),
+        **dict.fromkeys(test_case.expected_unchanged, False),
+    }
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LeadingCteCommentFormatIntegrationTestCase(
+            description="comment block before a middle CTE stays above it and compiles",
+            authored_sql=(
+                "MODEL (materialized view);\n\n"
+                'WITH\nupstream AS (\n  SELECT *\n  FROM __ref("raw_orders")\n),\n\n'
+                "-- Explains the next CTE: line one,\n-- line two.\n"
+                "distinct_rows AS (\n    SELECT order_id, customer_id\n    FROM upstream\n"
+                "    GROUP BY ALL\n)\n\nSELECT order_id, customer_id FROM distinct_rows\n"
+            ),
+            expected_fragment="),\n-- Explains the next CTE: line one,\n-- line two.\ndistinct_rows AS (",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_leading_cte_comment_when_formatting_then_comment_rule_still_passes(
+    test_case: LeadingCteCommentFormatIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRSQL033"]\n',
+        encoding="utf-8",
+    )
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "raw_orders.sql").write_text(
+        "MODEL (materialized view);\n\nSELECT 1 AS order_id, 2 AS customer_id\n",
+        encoding="utf-8",
+    )
+    model_path: Path = models / "distinct_orders.sql"
+    model_path.write_text(test_case.authored_sql, encoding="utf-8")
+
+    format_exit: int = main(["--project-dir", str(tmp_path), "--no-color", "format"])
+    formatted_sql: str = model_path.read_text(encoding="utf-8")
+    second_format_exit: int = main(["--project-dir", str(tmp_path), "--no-color", "format"])
+    compile_exit: int = main(["--project-dir", str(tmp_path), "--no-color", "compile"])
+    output: CaptureResult[str] = capsys.readouterr()
+
+    assert (format_exit, second_format_exit, compile_exit) == (0, 0, 0), output.out + output.err
+    assert test_case.expected_fragment in formatted_sql
+    assert model_path.read_text(encoding="utf-8") == formatted_sql
+    assert "SQBRSQL033" not in output.out + output.err

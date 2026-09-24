@@ -1060,3 +1060,28 @@ class DynamicColumnContractE2ETestCase:
     description: str
     project_name: str
     expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ReplayFullRebuildE2ETestCase:
+    """Test case for full-history replay of an existing incremental model."""
+
+    description: str
+    target_table: str
+    changed_model_path: str
+    changed_model_sql: str
+    rebuild_command: tuple[str, ...]
+    expected_plan_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class WindowLimitedReplayE2ETestCase:
+    """Test case for incremental runs that must stay window-limited."""
+
+    description: str
+    changed_model_sql: str
+    source_mutation_sql: str
+    expected_plan_fragments: tuple[str, ...]
+    changed_rows_sql: str
+    expected_changed_rows: int
+    expected_total_rows: int

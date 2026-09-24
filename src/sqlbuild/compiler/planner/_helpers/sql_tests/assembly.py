@@ -1,13 +1,11 @@
-"""Test chain resolution for SQL-native unit tests."""
+"""SQL-native unit-test plan entries built from native chain planning."""
 
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass, field
+from dataclasses import replace
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.constants import (
-    ASSERT_TEST_CTE_PREFIX,
     DBT_REF_TEST_CTE_PREFIX,
     EXPECTED_TEST_CTE_PREFIX,
     REF_TEST_CTE_PREFIX,
@@ -21,578 +19,268 @@ from sqlbuild.compiler.compile.models import (
     CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationLocation,
     CompiledSqlTest,
     CompileSqlTestCte,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
-from sqlbuild.compiler.planner._helpers.resolve.refs import (
-    resolve_table_function_fixture_references,
-    resolve_table_function_references,
-    resolve_udf_references,
-)
-from sqlbuild.compiler.planner._helpers.sql_tests.analysis_assembly import (
-    TestFunctionAnalysisContext,
-    build_test_function_analysis_context,
-    try_resolve_test_model_sql_with_sql_analysis,
-)
-from sqlbuild.compiler.planner._helpers.sql_tests.comments import (
-    replace_uncommented_pattern,
-    uncommented_matches_by_pattern,
-    uncommented_pattern_matches,
-)
+from sqlbuild.compiler.planner._helpers.fixtures.completion import build_relation_fixture_context
 from sqlbuild.compiler.planner._helpers.sql_tests.fixture_validation import (
     build_validated_test_fixtures,
+    fixture_location,
 )
-from sqlbuild.compiler.planner.exceptions import PlannerInputError
+from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
+    plan_sql_tests_natively,
+    resolve_sql_test_model_chains,
+    sql_test_plan_error_messages,
+)
+from sqlbuild.compiler.planner.exceptions import SqlTestFixtureValidationError
 from sqlbuild.compiler.planner.models import (
-    ChainStep,
-    PlanWarning,
+    NativeSqlTestPlan,
     RelationFixturePlanningContext,
-    SqlAnalysisResolvedTestSql,
-    SqlTestAssertionStep,
     SqlTestPlanEntry,
-    SqlTestPlanningContext,
+    SqlTestPlanResult,
 )
-from sqlbuild.compiler.planner.types import WarningSeverity
-from sqlbuild.compiler.references.main._quoted_reference_call_pattern import (
-    quoted_reference_call_pattern,
+from sqlbuild.executor.testing.main.missing_expected_columns import (
+    describe_missing_expected_columns,
 )
-from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import (
-    reference_call_prefix_pattern_text,
+
+_FUNCTION_RESOURCE_TYPES: frozenset[CompiledResourceType] = frozenset(
+    {CompiledResourceType.UDF, CompiledResourceType.TABLE_FN}
 )
-from sqlbuild.compiler.references.types import SqlReferenceKind
-
-_REF_PATTERN: re.Pattern[str] = re.compile(
-    quoted_reference_call_pattern(SqlReferenceKind.REF).pattern, re.IGNORECASE
-)
-_SOURCE_PATTERN: re.Pattern[str] = re.compile(
-    quoted_reference_call_pattern(SqlReferenceKind.SOURCE).pattern, re.IGNORECASE
-)
-_SEED_PATTERN: re.Pattern[str] = re.compile(
-    quoted_reference_call_pattern(SqlReferenceKind.SEED).pattern, re.IGNORECASE
-)
-_DBT_REF_PATTERN: re.Pattern[str] = re.compile(
-    rf'{reference_call_prefix_pattern_text(SqlReferenceKind.DBT_REF)}"([^"]+)"'
-    r'(?:,\s*"([^"]+)")?\)',
-    re.IGNORECASE,
-)
-_TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
-    reference_call_prefix_pattern_text(SqlReferenceKind.TABLE_FUNCTION), re.IGNORECASE
-)
-_LEADING_WITH_PATTERN: re.Pattern[str] = re.compile(r"^\s*WITH\b", re.IGNORECASE)
-_TRAILING_LINE_COMMENT_PATTERN: re.Pattern[str] = re.compile(r"--[^\n]*\Z")
 
 
-@dataclass
-class _TextualChainResolver:
-    model_names: tuple[str, ...]
-    model_map: dict[str, CompiledModel]
-    test: CompiledSqlTest
-    mock_refs: dict[str, str]
-    mock_sources: dict[str, str]
-    mock_seeds: dict[str, str]
-    mock_dbt_refs: dict[str, str]
-    mock_table_functions: dict[str, str]
-    helper_ctes: tuple[CompileSqlTestCte, ...]
-    function_locations: dict[str, CompiledRelationLocation]
-    adapter: BaseAdapter
-    resolved: dict[str, str] = field(default_factory=dict)
-    step_sql: dict[str, str] = field(default_factory=dict)
-    reachable_mocks: set[str] = field(default_factory=set)
-
-    def ensure_through(self, count: int) -> None:
-        for model_name in self.model_names[:count]:
-            if model_name in self.resolved:
-                continue
-            model: CompiledModel | None = self.model_map.get(model_name)
-            if model is None:
-                continue
-            sql: str
-            reached: frozenset[str]
-            sql, reached = _resolve_test_model_sql(
-                query_sql=_resolve_test_model_query_sql(model=model, test=self.test),
-                mock_refs=self.mock_refs,
-                mock_sources=self.mock_sources,
-                mock_seeds=self.mock_seeds,
-                mock_dbt_refs=self.mock_dbt_refs,
-                mock_table_functions=self.mock_table_functions,
-                helper_ctes=self.helper_ctes,
-                resolved_chain=self.resolved,
-                function_locations=self.function_locations,
-                adapter=self.adapter,
-            )
-            self.reachable_mocks.update(reached)
-            self.step_sql[model_name] = sql
-            self.resolved[model_name] = f"({sql})"
-
-    def resolve_all(self) -> dict[str, str]:
-        self.ensure_through(len(self.model_names))
-        return self.resolved
-
-
-def build_sql_test_planning_context(
-    *, project: CompiledProject, tests: tuple[CompiledSqlTest, ...] = ()
-) -> SqlTestPlanningContext:
-    """Build project-wide indexes shared by every SQL test in one plan."""
-
-    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
-    model_dependencies: dict[str, frozenset[str]] = _build_model_dependencies(
-        model_map=models_by_name
-    )
-    function_locations: dict[str, CompiledRelationLocation] = {
-        function.name: function.destination for function in project.functions
-    }
-    chain_names_by_topology: dict[
-        tuple[tuple[str, ...], tuple[tuple[str, str], ...], frozenset[str]],
-        tuple[str, ...],
-    ] = {}
-    chain_names_by_test_key: dict[CompiledObjectKey, tuple[str, ...]] = {}
-    test: CompiledSqlTest
-    for test in tests:
-        topology_inputs: tuple[tuple[str, ...], dict[str, str], frozenset[str]] | None = (
-            _test_model_chain_topology_inputs(test=test)
-        )
-        if topology_inputs is None:
-            continue
-        expected_names, model_query_overrides, mock_ref_names = topology_inputs
-        topology_key: tuple[tuple[str, ...], tuple[tuple[str, str], ...], frozenset[str]] = (
-            tuple(sorted(set(expected_names))),
-            tuple(sorted(model_query_overrides.items())),
-            mock_ref_names,
-        )
-        ordered_names: tuple[str, ...] | None = chain_names_by_topology.get(topology_key)
-        if ordered_names is None:
-            ordered_names = _topo_sort_model_chain(
-                expected_names=expected_names,
-                model_map=models_by_name,
-                model_dependencies=model_dependencies,
-                model_query_overrides=model_query_overrides,
-                mock_ref_names=mock_ref_names,
-            )
-            chain_names_by_topology[topology_key] = ordered_names
-        chain_names_by_test_key[test.key] = ordered_names
-    qualified_function_locations: dict[str, str] = {
-        name: target.qualified_name
-        for name, target in function_locations.items()
-        if target.qualified_name is not None
-    }
-    return SqlTestPlanningContext(
-        models_by_name=models_by_name,
-        model_dependencies=model_dependencies,
-        function_locations=function_locations,
-        qualified_function_locations=qualified_function_locations,
-        function_analysis_context=build_test_function_analysis_context(
-            function_locations=qualified_function_locations
-        ),
-        chain_names_by_test_key=chain_names_by_test_key,
-    )
-
-
-def plan_test(
+def plan_sql_tests(
     *,
-    test: CompiledSqlTest,
+    tests: tuple[CompiledSqlTest, ...],
     project: CompiledProject,
     adapter: BaseAdapter,
     sql_analysis_enabled: bool = False,
     validate_fixtures: bool = False,
     fixture_planning_context: RelationFixturePlanningContext | None = None,
-    planning_context: SqlTestPlanningContext | None = None,
-) -> tuple[SqlTestPlanEntry, tuple[PlanWarning, ...]]:
-    """Build a test plan entry with chained resolution."""
+) -> tuple[SqlTestPlanResult, ...]:
+    """Plan SQL tests in one native batch, reporting fixture diagnostics per test."""
 
-    context: SqlTestPlanningContext = planning_context or build_sql_test_planning_context(
-        project=project,
-        tests=(test,),
-    )
-    if isinstance(test.payload, CompiledDirectLogicSqlTestPayload):
-        return (
-            _plan_direct_logic_test(
-                test=test,
-                function_locations=context.function_locations,
-                function_deps=_direct_function_deps(test=test, project=project),
-                adapter=adapter,
-                sql_analysis_enabled=sql_analysis_enabled,
-            ),
-            (),
-        )
-
-    model_payload: CompiledModelSqlTestPayload = test.payload
-
-    model_map: dict[str, CompiledModel] = context.models_by_name
-    function_locations: dict[str, CompiledRelationLocation] = context.function_locations
-    function_analysis_context: TestFunctionAnalysisContext = context.function_analysis_context
-    mock_refs: dict[str, str] = _extract_mock_refs(test)
-    mock_sources: dict[str, str] = _extract_mock_sources(test)
-    mock_seeds: dict[str, str] = _extract_mock_seeds(test)
-    mock_dbt_refs: dict[str, str] = _extract_mock_dbt_refs(test)
-    mock_table_functions: dict[str, str] = _extract_mock_table_functions(test)
-    helper_ctes: tuple[CompileSqlTestCte, ...] = _extract_helper_ctes(test)
-    expected_map: dict[str, str] = _extract_expected_ctes(test)
-    assertion_map: dict[str, str] = _extract_assertion_ctes(test)
-    assertion_target_names: tuple[str, ...] = _extract_assertion_ref_targets(
-        assertion_map=assertion_map
-    )
-
-    expected_names: tuple[str, ...] = tuple(
-        dict.fromkeys((*model_payload.expected_model_names, *assertion_target_names))
-    )
-    ordered_names: tuple[str, ...] | None = context.chain_names_by_test_key.get(test.key)
-    if ordered_names is None:
-        ordered_names = _topo_sort_model_chain(
-            expected_names=expected_names,
-            model_map=model_map,
-            model_dependencies=context.model_dependencies,
-            model_query_overrides=model_payload.model_query_overrides,
-            mock_ref_names=frozenset(mock_refs),
-        )
+    planned_tests: tuple[CompiledSqlTest, ...] = tests
+    diagnostics_by_index: dict[int, tuple[str, ...]] = {}
+    validation_context: RelationFixturePlanningContext | None = None
     if sql_analysis_enabled and validate_fixtures:
-        mock_refs, mock_sources, mock_seeds, expected_map = build_validated_test_fixtures(
-            test=test,
+        validation_context = fixture_planning_context or build_relation_fixture_context(
+            project=project
+        )
+        planned_tests, diagnostics_by_index = _validate_fixtures(
+            tests=tests,
             project=project,
             adapter=adapter,
-            ordered_model_names=ordered_names,
-            mock_refs=mock_refs,
-            mock_sources=mock_sources,
-            mock_seeds=mock_seeds,
-            expected_outputs=expected_map,
-            planning_context=fixture_planning_context,
+            fixture_planning_context=validation_context,
         )
-
-    warnings: list[PlanWarning] = []
-    reachable_mocks: set[str] = set()
-    sql_analysis_resolved: dict[str, SqlAnalysisResolvedTestSql] = {}
-    function_deps: list[CompiledObjectKey] = []
-    textual_chain: _TextualChainResolver = _TextualChainResolver(
-        model_names=ordered_names,
-        model_map=model_map,
-        test=test,
-        mock_refs=mock_refs,
-        mock_sources=mock_sources,
-        mock_seeds=mock_seeds,
-        mock_dbt_refs=mock_dbt_refs,
-        mock_table_functions=mock_table_functions,
-        helper_ctes=helper_ctes,
-        function_locations=function_locations,
-        adapter=adapter,
+    plannable_indexes: tuple[int, ...] = tuple(
+        index for index in range(len(tests)) if index not in diagnostics_by_index
     )
-
-    chain_steps: list[ChainStep] = []
-    model_index: int
-    model_name: str
-    for model_index, model_name in enumerate(ordered_names):
-        model: CompiledModel | None = model_map.get(model_name)
-        if model is None:
-            warnings.append(
-                PlanWarning(
-                    model_name=None,
-                    severity=WarningSeverity.ERROR,
-                    message=(
-                        f"test '{test.name}' expects model '{model_name}' which does not exist"
-                    ),
-                )
+    plans: tuple[NativeSqlTestPlan, ...] = plan_sql_tests_natively(
+        project=project,
+        tests=tuple(planned_tests[index] for index in plannable_indexes),
+        adapter=adapter,
+        sql_analysis_enabled=sql_analysis_enabled,
+        render_sql=False,
+    )
+    plans_by_index: dict[int, NativeSqlTestPlan] = dict(zip(plannable_indexes, plans, strict=True))
+    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    results: list[SqlTestPlanResult] = []
+    for index, test in enumerate(tests):
+        plan: NativeSqlTestPlan | None = plans_by_index.get(index)
+        if plan is None:
+            results.append(
+                SqlTestPlanResult(entry=None, fixture_diagnostics=diagnostics_by_index[index])
             )
             continue
-        function_deps.extend(
-            dep
-            for dep in model.deps
-            if dep.resource_type in {CompiledResourceType.UDF, CompiledResourceType.TABLE_FN}
-            and not (
-                dep.resource_type == CompiledResourceType.TABLE_FN
-                and dep.name in mock_table_functions
+        plan_diagnostics: tuple[str, ...] = (
+            *sql_test_plan_error_messages(warnings=plan.warnings),
+            *_expected_column_diagnostics(
+                test=test, plan=plan, fixture_planning_context=validation_context
+            ),
+        )
+        if plan_diagnostics:
+            results.append(SqlTestPlanResult(entry=None, fixture_diagnostics=plan_diagnostics))
+            continue
+        results.append(
+            SqlTestPlanResult(
+                entry=_plan_entry(
+                    test=test,
+                    plan=plan,
+                    project=project,
+                    models_by_name=models_by_name,
+                    sql_analysis_enabled=sql_analysis_enabled,
+                ),
+                warnings=plan.warnings,
             )
         )
-
-        query_sql: str = _resolve_test_model_query_sql(model=model, test=test)
-        step_sql: str | None = None
-        step_lifted_ctes: tuple[tuple[str, str], ...] = ()
-        comparison_body_sql: str | None = None
-        if sql_analysis_enabled:
-            analysis_query_sql, reached_table_functions = _resolve_table_function_fixtures(
-                query_sql=query_sql,
-                mock_table_functions=mock_table_functions,
-                helper_ctes=helper_ctes,
-            )
-            reachable_mocks.update(reached_table_functions)
-            sql_analysis_sql: SqlAnalysisResolvedTestSql | None = (
-                try_resolve_test_model_sql_with_sql_analysis(
-                    query_sql=analysis_query_sql,
-                    mock_refs=mock_refs,
-                    mock_sources=mock_sources,
-                    mock_seeds=mock_seeds,
-                    mock_dbt_refs=mock_dbt_refs,
-                    function_context=function_analysis_context,
-                    helper_ctes=helper_ctes,
-                    resolved_chain=sql_analysis_resolved,
-                    file_label=str(test.test_file.relative_path),
-                    sql_analysis_dialect=adapter.sql_analysis_dialect(),
-                )
-            )
-            if sql_analysis_sql is not None:
-                step_sql = sql_analysis_sql.resolved_sql
-                step_lifted_ctes = tuple(sql_analysis_sql.generated_ctes.items())
-                comparison_body_sql = sql_analysis_sql.cte_body_sql
-                sql_analysis_resolved[model_name] = sql_analysis_sql
-                reachable_mocks.update(sql_analysis_sql.reachable_mock_names)
-        if step_sql is None:
-            textual_chain.ensure_through(model_index + 1)
-            step_sql = textual_chain.step_sql[model_name]
-
-        unresolved_warnings: tuple[PlanWarning, ...] = _validate_resolved_sql(
-            resolved_sql=step_sql,
-            test_name=test.name,
-            model_name=model_name,
-        )
-        warnings.extend(unresolved_warnings)
-
-        expected_cte_sql: str = expected_map.get(model_name, "")
-        chain_steps.append(
-            ChainStep(
-                model_name=model_name,
-                resolved_sql=step_sql,
-                expected_cte_sql=expected_cte_sql or None,
-                lifted_ctes=step_lifted_ctes,
-                comparison_body_sql=comparison_body_sql,
-            )
-        )
-
-    assertion_steps: tuple[SqlTestAssertionStep, ...]
-    assertion_reached_table_functions: frozenset[str]
-    assertion_steps, assertion_reached_table_functions = _build_assertion_steps(
-        assertion_map=assertion_map,
-        test=test,
-        function_locations=function_locations,
-        function_analysis_context=function_analysis_context,
-        helper_ctes=helper_ctes,
-        mock_table_functions=mock_table_functions,
-        textual_chain=textual_chain,
-        sql_analysis_resolved=sql_analysis_resolved,
-        adapter=adapter,
-        sql_analysis_enabled=sql_analysis_enabled,
-    )
-    reachable_mocks.update(textual_chain.reachable_mocks)
-    reachable_mocks.update(assertion_reached_table_functions)
-    warnings.extend(
-        _unreachable_mock_warnings(
-            test_name=test.name,
-            reachable_mocks=reachable_mocks,
-            mock_refs=mock_refs,
-            mock_sources=mock_sources,
-            mock_seeds=mock_seeds,
-            mock_dbt_refs=mock_dbt_refs,
-            mock_table_functions=mock_table_functions,
-        )
-    )
-
-    entry: SqlTestPlanEntry = SqlTestPlanEntry(
-        key=test.key,
-        name=test.name,
-        source_path=test.source_path,
-        block_index=test.block_index,
-        parent_name=test.parent_name,
-        case_name=test.case_name,
-        case_index=test.case_index,
-        case_fingerprint=test.case_fingerprint,
-        parameter_schema=test.parameter_schema,
-        parameter_values=test.parameter_values,
-        mock_ref_names=tuple(sorted(mock_refs)),
-        mock_source_names=tuple(sorted(mock_sources)),
-        mock_seed_names=tuple(sorted(mock_seeds)),
-        mock_dbt_ref_names=tuple(sorted(mock_dbt_refs)),
-        mock_table_function_names=tuple(sorted(mock_table_functions)),
-        chain=tuple(chain_steps),
-        assertions=assertion_steps,
-        scope_deps=test.scope_deps,
-        function_deps=_dedupe_function_deps(function_deps),
-        sql_analysis_enabled=sql_analysis_enabled,
-    )
-    return entry, tuple(warnings)
+    return tuple(results)
 
 
-def _unreachable_mock_warnings(
+def _expected_column_diagnostics(
     *,
-    test_name: str,
-    reachable_mocks: set[str],
-    mock_refs: dict[str, str],
-    mock_sources: dict[str, str],
-    mock_seeds: dict[str, str],
-    mock_dbt_refs: dict[str, str],
-    mock_table_functions: dict[str, str],
-) -> tuple[PlanWarning, ...]:
-    warnings: list[PlanWarning] = []
-    messages_by_mock: tuple[tuple[set[str], str, str], ...] = (
-        (
-            set(mock_refs),
-            "__ref__",
-            " is unreachable because a downstream model is also in the expected chain",
-        ),
-        (set(mock_sources), "__source__", " is unreachable"),
-        (set(mock_seeds), "__seed__", " is unreachable"),
-        (set(mock_dbt_refs), "__dbt_ref__", " is unreachable"),
-        (set(mock_table_functions), "__table_fn__", " is unreachable"),
+    test: CompiledSqlTest,
+    plan: NativeSqlTestPlan,
+    fixture_planning_context: RelationFixturePlanningContext | None,
+) -> tuple[str, ...]:
+    """Report expected columns that authoritative model output metadata proves absent."""
+
+    if fixture_planning_context is None:
+        return ()
+    diagnostics: list[str] = []
+    for step in plan.chain:
+        available_columns: frozenset[str] | None = (
+            fixture_planning_context.authoritative_columns.get(
+                (CompiledResourceType.MODEL, step.model_name)
+            )
+        )
+        if step.expected_columns is None or available_columns is None:
+            continue
+        message: str | None = describe_missing_expected_columns(
+            model_name=step.model_name,
+            expected_columns=step.expected_columns,
+            available_columns=available_columns,
+        )
+        if message is None:
+            continue
+        location: str = fixture_location(
+            test=test, resource_type=CompiledResourceType.SQL_TEST, name=step.model_name
+        )
+        diagnostics.append(f"SQL test '{test.name}': {location}: {message}")
+    return tuple(diagnostics)
+
+
+def _validate_fixtures(
+    *,
+    tests: tuple[CompiledSqlTest, ...],
+    project: CompiledProject,
+    adapter: BaseAdapter,
+    fixture_planning_context: RelationFixturePlanningContext,
+) -> tuple[tuple[CompiledSqlTest, ...], dict[int, tuple[str, ...]]]:
+    """Return tests with validated fixture completions plus diagnostics by test index."""
+
+    model_indexes: tuple[int, ...] = tuple(
+        index
+        for index, test in enumerate(tests)
+        if isinstance(test.payload, CompiledModelSqlTestPayload)
     )
-    names: set[str]
-    prefix: str
-    suffix: str
-    for names, prefix, suffix in messages_by_mock:
-        for name in sorted(names - reachable_mocks):
-            warnings.append(
-                PlanWarning(
-                    model_name=None,
-                    severity=WarningSeverity.WARNING,
-                    message=f"test '{test_name}' mock {prefix}{name}{suffix}",
+    if not model_indexes:
+        return tests, {}
+    chains: tuple[tuple[str, ...], ...] = resolve_sql_test_model_chains(
+        project=project,
+        tests=tuple(tests[index] for index in model_indexes),
+    )
+    chains_by_index: dict[int, tuple[str, ...]] = dict(zip(model_indexes, chains, strict=True))
+    context: RelationFixturePlanningContext = fixture_planning_context
+    validated_tests: list[CompiledSqlTest] = []
+    diagnostics_by_index: dict[int, tuple[str, ...]] = {}
+    for index, test in enumerate(tests):
+        chain: tuple[str, ...] | None = chains_by_index.get(index)
+        if chain is None:
+            validated_tests.append(test)
+            continue
+        try:
+            validated_tests.append(
+                _with_validated_fixtures(
+                    test=test,
+                    project=project,
+                    adapter=adapter,
+                    ordered_model_names=chain,
+                    fixture_planning_context=context,
                 )
             )
-    return tuple(warnings)
+        except SqlTestFixtureValidationError as error:
+            validated_tests.append(test)
+            diagnostics_by_index[index] = error.diagnostics
+    return tuple(validated_tests), diagnostics_by_index
 
 
-def resolve_test_model_chain_names(
+def _with_validated_fixtures(
     *,
     test: CompiledSqlTest,
     project: CompiledProject,
-    model_map: dict[str, CompiledModel] | None = None,
-) -> tuple[str, ...]:
-    """Return the unmocked model closure used to build one SQL test plan."""
+    adapter: BaseAdapter,
+    ordered_model_names: tuple[str, ...],
+    fixture_planning_context: RelationFixturePlanningContext,
+) -> CompiledSqlTest:
+    payload: CompiledModelSqlTestPayload | CompiledDirectLogicSqlTestPayload = test.payload
+    if not isinstance(payload, CompiledModelSqlTestPayload):
+        return test
+    mock_refs, mock_sources, mock_seeds, expected_outputs = build_validated_test_fixtures(
+        test=test,
+        project=project,
+        adapter=adapter,
+        ordered_model_names=ordered_model_names,
+        mock_refs=_prefixed_ctes(ctes=payload.authored_ctes, prefix=REF_TEST_CTE_PREFIX),
+        mock_sources=_prefixed_ctes(ctes=payload.authored_ctes, prefix=SOURCE_TEST_CTE_PREFIX),
+        mock_seeds=_prefixed_ctes(ctes=payload.authored_ctes, prefix=SEED_TEST_CTE_PREFIX),
+        expected_outputs=_expected_outputs(payload=payload),
+        planning_context=fixture_planning_context,
+    )
+    completed_bodies: tuple[tuple[str, dict[str, str]], ...] = (
+        (REF_TEST_CTE_PREFIX, mock_refs),
+        (SOURCE_TEST_CTE_PREFIX, mock_sources),
+        (SEED_TEST_CTE_PREFIX, mock_seeds),
+    )
+    authored_ctes: tuple[CompileSqlTestCte, ...] = tuple(
+        _completed_cte(cte=cte, completed_bodies=completed_bodies) for cte in payload.authored_ctes
+    )
+    expected_ctes: tuple[CompileSqlTestCte, ...] = tuple(
+        replace(
+            cte,
+            sql_body=expected_outputs.get(
+                cte.name.removeprefix(EXPECTED_TEST_CTE_PREFIX), cte.sql_body
+            ),
+        )
+        for cte in payload.expected_ctes
+    )
+    return replace(
+        test,
+        payload=replace(payload, authored_ctes=authored_ctes, expected_ctes=expected_ctes),
+    )
 
+
+def _completed_cte(
+    *,
+    cte: CompileSqlTestCte,
+    completed_bodies: tuple[tuple[str, dict[str, str]], ...],
+) -> CompileSqlTestCte:
+    for prefix, bodies in completed_bodies:
+        if cte.name.startswith(prefix):
+            return replace(cte, sql_body=bodies.get(cte.name.removeprefix(prefix), cte.sql_body))
+    return cte
+
+
+def _expected_outputs(*, payload: CompiledModelSqlTestPayload) -> dict[str, str]:
+    return {
+        cte.name.removeprefix(EXPECTED_TEST_CTE_PREFIX): cte.sql_body
+        for cte in payload.expected_ctes
+    }
+
+
+def _prefixed_ctes(*, ctes: tuple[CompileSqlTestCte, ...], prefix: str) -> dict[str, str]:
+    return {
+        cte.name.removeprefix(prefix): cte.sql_body for cte in ctes if cte.name.startswith(prefix)
+    }
+
+
+def _prefixed_names(*, test: CompiledSqlTest, prefix: str) -> tuple[str, ...]:
     if not isinstance(test.payload, CompiledModelSqlTestPayload):
         return ()
-    effective_model_map: dict[str, CompiledModel] = (
-        {model.name: model for model in project.models} if model_map is None else model_map
-    )
-    assertion_target_names: tuple[str, ...] = _extract_assertion_ref_targets(
-        assertion_map=_extract_assertion_ctes(test)
-    )
-    expected_names: tuple[str, ...] = tuple(
-        dict.fromkeys((*test.payload.expected_model_names, *assertion_target_names))
-    )
-    return _topo_sort_model_chain(
-        expected_names=expected_names,
-        model_map=effective_model_map,
-        model_dependencies=_build_model_dependencies(model_map=effective_model_map),
-        model_query_overrides=test.payload.model_query_overrides,
-        mock_ref_names=frozenset(_extract_mock_refs(test)),
-    )
+    return tuple(sorted(_prefixed_ctes(ctes=test.payload.authored_ctes, prefix=prefix)))
 
 
-def _test_model_chain_topology_inputs(
-    *, test: CompiledSqlTest
-) -> tuple[tuple[str, ...], dict[str, str], frozenset[str]] | None:
-    if not isinstance(test.payload, CompiledModelSqlTestPayload):
-        return None
-    assertion_target_names: tuple[str, ...] = _extract_assertion_ref_targets(
-        assertion_map=_extract_assertion_ctes(test)
-    )
-    expected_names: tuple[str, ...] = tuple(
-        dict.fromkeys((*test.payload.expected_model_names, *assertion_target_names))
-    )
-    return (
-        expected_names,
-        test.payload.model_query_overrides,
-        frozenset(_extract_mock_refs(test)),
-    )
-
-
-def _build_assertion_steps(
-    *,
-    assertion_map: dict[str, str],
-    test: CompiledSqlTest,
-    function_locations: dict[str, CompiledRelationLocation],
-    function_analysis_context: TestFunctionAnalysisContext,
-    helper_ctes: tuple[CompileSqlTestCte, ...],
-    mock_table_functions: dict[str, str],
-    textual_chain: _TextualChainResolver,
-    sql_analysis_resolved: dict[str, SqlAnalysisResolvedTestSql],
-    adapter: BaseAdapter,
-    sql_analysis_enabled: bool,
-) -> tuple[tuple[SqlTestAssertionStep, ...], frozenset[str]]:
-    mock_refs: dict[str, str] = _extract_mock_refs(test)
-    mock_sources: dict[str, str] = _extract_mock_sources(test)
-    mock_seeds: dict[str, str] = _extract_mock_seeds(test)
-    mock_dbt_refs: dict[str, str] = _extract_mock_dbt_refs(test)
-    assertion_steps: list[SqlTestAssertionStep] = []
-    reached_table_functions: set[str] = set()
-    assertion_name: str
-    assertion_sql: str
-    for assertion_name, assertion_sql in assertion_map.items():
-        fixture_resolved_assertion_sql, reached = _resolve_table_function_fixtures(
-            query_sql=assertion_sql,
-            mock_table_functions=mock_table_functions,
-            helper_ctes=helper_ctes,
-        )
-        reached_table_functions.update(reached)
-        resolved_assertion_sql: str | None = None
-        assertion_lifted_ctes: tuple[tuple[str, str], ...] = ()
-        assertion_comparison_body_sql: str | None = None
-        if sql_analysis_enabled:
-            analyzed_assertion_sql: SqlAnalysisResolvedTestSql | None = (
-                try_resolve_test_model_sql_with_sql_analysis(
-                    query_sql=fixture_resolved_assertion_sql,
-                    mock_refs=mock_refs,
-                    mock_sources=mock_sources,
-                    mock_seeds=mock_seeds,
-                    mock_dbt_refs=mock_dbt_refs,
-                    function_context=function_analysis_context,
-                    helper_ctes=helper_ctes,
-                    resolved_chain=sql_analysis_resolved,
-                    file_label=str(test.test_file.relative_path),
-                    sql_analysis_dialect=adapter.sql_analysis_dialect(),
-                )
-            )
-            if analyzed_assertion_sql is not None and not _has_unresolved_test_reference(
-                analyzed_assertion_sql.resolved_sql
-            ):
-                resolved_assertion_sql = analyzed_assertion_sql.resolved_sql
-                assertion_lifted_ctes = tuple(analyzed_assertion_sql.generated_ctes.items())
-                assertion_comparison_body_sql = analyzed_assertion_sql.cte_body_sql
-        if resolved_assertion_sql is None:
-            resolved_assertion_sql = _resolve_assertion_sql(
-                sql=fixture_resolved_assertion_sql,
-                resolved_chain=textual_chain.resolve_all(),
-                mock_refs=mock_refs,
-                mock_sources=mock_sources,
-                mock_seeds=mock_seeds,
-                mock_dbt_refs=mock_dbt_refs,
-                helper_ctes=helper_ctes,
-                function_locations=function_locations,
-                adapter=adapter,
-            )
-        assertion_steps.append(
-            SqlTestAssertionStep(
-                name=assertion_name,
-                resolved_sql=resolved_assertion_sql,
-                lifted_ctes=assertion_lifted_ctes,
-                comparison_body_sql=assertion_comparison_body_sql,
-            )
-        )
-    return tuple(assertion_steps), frozenset(reached_table_functions)
-
-
-def _plan_direct_logic_test(
+def _plan_entry(
     *,
     test: CompiledSqlTest,
-    function_locations: dict[str, CompiledRelationLocation],
-    function_deps: tuple[CompiledObjectKey, ...],
-    adapter: BaseAdapter,
+    plan: NativeSqlTestPlan,
+    project: CompiledProject,
+    models_by_name: dict[str, CompiledModel],
     sql_analysis_enabled: bool,
 ) -> SqlTestPlanEntry:
-    if not isinstance(test.payload, CompiledDirectLogicSqlTestPayload):
-        raise PlannerInputError(f"test '{test.name}' is not a direct-logic SQL test")
-    helper_ctes: tuple[CompileSqlTestCte, ...] = test.payload.helper_ctes
-    helper_with: str = _build_helper_with_clause(helper_ctes)
-    actual_sql: str = test.payload.actual_cte.sql_body
-    if test.payload.mode == SqlTestMode.UDF:
-        actual_sql = resolve_udf_references(
-            query_sql=actual_sql,
-            function_locations=function_locations,
-            adapter=adapter,
-        )
-    if test.payload.mode == SqlTestMode.TABLE_FN:
-        actual_sql = resolve_table_function_references(
-            query_sql=actual_sql,
-            function_locations=function_locations,
-            adapter=adapter,
-        )
-    label: str = test.payload.mode.value
+    mock_table_function_names: tuple[str, ...] = _prefixed_names(
+        test=test, prefix=TABLE_FN_TEST_CTE_PREFIX
+    )
     return SqlTestPlanEntry(
         key=test.key,
         name=test.name,
@@ -604,23 +292,47 @@ def _plan_direct_logic_test(
         case_fingerprint=test.case_fingerprint,
         parameter_schema=test.parameter_schema,
         parameter_values=test.parameter_values,
-        chain=(
-            ChainStep(
-                model_name=f"{label} {test.name}",
-                resolved_sql=_wrap_direct_logic_sql(
-                    sql=actual_sql,
-                    helper_with=helper_with,
-                ),
-                expected_cte_sql=_wrap_direct_logic_sql(
-                    sql=test.payload.expected_cte.sql_body,
-                    helper_with=helper_with,
-                ),
-            ),
-        ),
+        mock_ref_names=_prefixed_names(test=test, prefix=REF_TEST_CTE_PREFIX),
+        mock_source_names=_prefixed_names(test=test, prefix=SOURCE_TEST_CTE_PREFIX),
+        mock_seed_names=_prefixed_names(test=test, prefix=SEED_TEST_CTE_PREFIX),
+        mock_dbt_ref_names=_prefixed_names(test=test, prefix=DBT_REF_TEST_CTE_PREFIX),
+        mock_table_function_names=mock_table_function_names,
+        chain=plan.chain,
+        assertions=plan.assertions,
         scope_deps=test.scope_deps,
-        function_deps=function_deps,
+        function_deps=(
+            _direct_function_deps(test=test, project=project)
+            if isinstance(test.payload, CompiledDirectLogicSqlTestPayload)
+            else _chain_function_deps(
+                model_names=plan.model_names,
+                models_by_name=models_by_name,
+                mocked_table_functions=frozenset(mock_table_function_names),
+            )
+        ),
         sql_analysis_enabled=sql_analysis_enabled,
     )
+
+
+def _chain_function_deps(
+    *,
+    model_names: tuple[str, ...],
+    models_by_name: dict[str, CompiledModel],
+    mocked_table_functions: frozenset[str],
+) -> tuple[CompiledObjectKey, ...]:
+    deps: dict[CompiledObjectKey, None] = {}
+    for model_name in model_names:
+        model: CompiledModel | None = models_by_name.get(model_name)
+        if model is None:
+            continue
+        for dep in model.deps:
+            if dep.resource_type not in _FUNCTION_RESOURCE_TYPES:
+                continue
+            if dep.resource_type == CompiledResourceType.TABLE_FN and (
+                dep.name in mocked_table_functions
+            ):
+                continue
+            deps[dep] = None
+    return tuple(deps)
 
 
 def _direct_function_deps(
@@ -628,13 +340,10 @@ def _direct_function_deps(
 ) -> tuple[CompiledObjectKey, ...]:
     if not isinstance(test.payload, CompiledDirectLogicSqlTestPayload):
         return ()
-    resource_type: CompiledResourceType | None = (
-        CompiledResourceType.UDF
-        if test.payload.mode == SqlTestMode.UDF
-        else CompiledResourceType.TABLE_FN
-        if test.payload.mode == SqlTestMode.TABLE_FN
-        else None
-    )
+    resource_type: CompiledResourceType | None = {
+        SqlTestMode.UDF: CompiledResourceType.UDF,
+        SqlTestMode.TABLE_FN: CompiledResourceType.TABLE_FN,
+    }.get(test.payload.mode)
     if resource_type is None:
         return ()
     tested_names: frozenset[str] = frozenset(test.payload.tested_resource_names)
@@ -643,572 +352,3 @@ def _direct_function_deps(
         for function in project.functions
         if function.key.resource_type == resource_type and function.name in tested_names
     )
-
-
-def _wrap_direct_logic_sql(*, sql: str, helper_with: str) -> str:
-    if helper_with:
-        return f"{helper_with} {sql}"
-    return sql
-
-
-def _extract_assertion_ref_targets(*, assertion_map: dict[str, str]) -> tuple[str, ...]:
-    targets: list[str] = []
-    sql: str
-    for sql in assertion_map.values():
-        match: re.Match[str]
-        for match in uncommented_pattern_matches(pattern=_REF_PATTERN, sql=sql):
-            targets.append(match.group(1))
-    return tuple(dict.fromkeys(targets))
-
-
-def _resolve_assertion_sql(
-    *,
-    sql: str,
-    resolved_chain: dict[str, str],
-    mock_refs: dict[str, str],
-    mock_sources: dict[str, str],
-    mock_seeds: dict[str, str],
-    mock_dbt_refs: dict[str, str],
-    helper_ctes: tuple[CompileSqlTestCte, ...],
-    function_locations: dict[str, CompiledRelationLocation],
-    adapter: BaseAdapter,
-) -> str:
-    assertion_resolved_chain: dict[str, str]
-    assertion_chain_ctes: tuple[str, ...]
-    assertion_resolved_chain, assertion_chain_ctes = _build_assertion_chain_ctes(
-        assertion_sql=sql,
-        resolved_chain=resolved_chain,
-        requires_flat_ctes=adapter.requires_derived_table_aliases(),
-    )
-    resolved_sql: str
-    resolved_sql, _ = _resolve_test_model_sql(
-        query_sql=sql,
-        mock_refs=mock_refs,
-        mock_sources=mock_sources,
-        mock_seeds=mock_seeds,
-        mock_dbt_refs=mock_dbt_refs,
-        mock_table_functions={},
-        helper_ctes=helper_ctes,
-        resolved_chain=assertion_resolved_chain,
-        function_locations=function_locations,
-        adapter=adapter,
-    )
-    if assertion_chain_ctes:
-        return f"WITH {', '.join(assertion_chain_ctes)} {resolved_sql}"
-    return resolved_sql
-
-
-def _build_assertion_chain_ctes(
-    *,
-    assertion_sql: str,
-    resolved_chain: dict[str, str],
-    requires_flat_ctes: bool,
-) -> tuple[dict[str, str], tuple[str, ...]]:
-    if requires_flat_ctes and _LEADING_WITH_PATTERN.search(assertion_sql) is not None:
-        raise PlannerInputError(
-            "SQL test assertion fallback cannot safely flatten an assertion beginning with WITH"
-        )
-    assertion_resolved_chain: dict[str, str] = {}
-    cte_parts: list[str] = []
-    seen_names: set[str] = set()
-    match: re.Match[str]
-    for match in uncommented_pattern_matches(pattern=_REF_PATTERN, sql=assertion_sql):
-        name: str = match.group(1)
-        if name in seen_names or name not in resolved_chain:
-            continue
-        seen_names.add(name)
-        cte_name: str = f"{REF_TEST_CTE_PREFIX}{name}"
-        resolved_sql: str = resolved_chain[name].strip()
-        if resolved_sql.startswith("(") and resolved_sql.endswith(")"):
-            resolved_sql = resolved_sql[1:-1].strip()
-        if requires_flat_ctes and _LEADING_WITH_PATTERN.search(resolved_sql) is not None:
-            raise PlannerInputError(
-                "SQL test assertion fallback cannot safely flatten a referenced model beginning "
-                "with WITH"
-            )
-        assertion_resolved_chain[name] = cte_name
-        cte_parts.append(_cte_definition_sql(name=cte_name, sql=resolved_sql))
-    return assertion_resolved_chain, tuple(cte_parts)
-
-
-def _dedupe_function_deps(deps: list[CompiledObjectKey]) -> tuple[CompiledObjectKey, ...]:
-    deduped: list[CompiledObjectKey] = []
-    seen: set[CompiledObjectKey] = set()
-    dep: CompiledObjectKey
-    for dep in deps:
-        if dep in seen:
-            continue
-        seen.add(dep)
-        deduped.append(dep)
-    return tuple(deduped)
-
-
-def _resolve_test_model_query_sql(
-    *,
-    model: CompiledModel,
-    test: CompiledSqlTest,
-) -> str:
-    """Resolve model SQL for one SQL test, applying test macro mocks if present."""
-
-    if not isinstance(test.payload, CompiledModelSqlTestPayload):
-        raise PlannerInputError(f"test '{test.name}' is not a model SQL test")
-    return test.payload.model_query_overrides.get(model.name, model.query_sql)
-
-
-def _resolve_test_model_sql(
-    *,
-    query_sql: str,
-    mock_refs: dict[str, str],
-    mock_sources: dict[str, str],
-    mock_seeds: dict[str, str],
-    mock_dbt_refs: dict[str, str],
-    mock_table_functions: dict[str, str],
-    helper_ctes: tuple[CompileSqlTestCte, ...],
-    resolved_chain: dict[str, str],
-    function_locations: dict[str, CompiledRelationLocation],
-    adapter: BaseAdapter,
-) -> tuple[str, frozenset[str]]:
-    """Replace refs and sources in model SQL and return it with reached mock names."""
-
-    ref_matches: tuple[re.Match[str], ...]
-    source_matches: tuple[re.Match[str], ...]
-    seed_matches: tuple[re.Match[str], ...]
-    dbt_ref_matches: tuple[re.Match[str], ...]
-    ref_matches, source_matches, seed_matches, dbt_ref_matches = uncommented_matches_by_pattern(
-        patterns=(_REF_PATTERN, _SOURCE_PATTERN, _SEED_PATTERN, _DBT_REF_PATTERN),
-        sql=query_sql,
-    )
-    reachable_mocks: set[str] = {
-        match.group(1)
-        for match in ref_matches
-        if match.group(1) in mock_refs and match.group(1) not in resolved_chain
-    }
-    reachable_mocks.update(
-        match.group(1) for match in source_matches if match.group(1) in mock_sources
-    )
-    reachable_mocks.update(match.group(1) for match in seed_matches if match.group(1) in mock_seeds)
-    reachable_mocks.update(
-        name
-        for match in dbt_ref_matches
-        if (name := _dbt_ref_fixture_name(package_name=match.group(1), model_name=match.group(2)))
-        in mock_dbt_refs
-    )
-    helper_with: str = _build_helper_with_clause(helper_ctes)
-
-    def _replace_ref(match: re.Match[str]) -> str:
-        ref_name: str = match.group(1)
-        if ref_name in resolved_chain:
-            return resolved_chain[ref_name]
-        if ref_name in mock_refs:
-            mock_body: str = mock_refs[ref_name]
-            return _wrap_mock_with_helpers(
-                mock_body=mock_body,
-                helper_with=helper_with,
-            )
-        return match.group(0)
-
-    def _replace_source(match: re.Match[str]) -> str:
-        source_name: str = match.group(1)
-        if source_name in mock_sources:
-            mock_body: str = mock_sources[source_name]
-            return _wrap_mock_with_helpers(
-                mock_body=mock_body,
-                helper_with=helper_with,
-            )
-        return match.group(0)
-
-    def _replace_seed(match: re.Match[str]) -> str:
-        seed_name: str = match.group(1)
-        if seed_name in mock_seeds:
-            mock_body: str = mock_seeds[seed_name]
-            return _wrap_mock_with_helpers(
-                mock_body=mock_body,
-                helper_with=helper_with,
-            )
-        return match.group(0)
-
-    def _replace_dbt_ref(match: re.Match[str]) -> str:
-        dbt_ref_name: str = _dbt_ref_fixture_name(
-            package_name=match.group(1), model_name=match.group(2)
-        )
-        if dbt_ref_name in mock_dbt_refs:
-            mock_body: str = mock_dbt_refs[dbt_ref_name]
-            return _wrap_mock_with_helpers(
-                mock_body=mock_body,
-                helper_with=helper_with,
-            )
-        return match.group(0)
-
-    result: str = replace_uncommented_pattern(
-        pattern=_REF_PATTERN, replacement=_replace_ref, sql=query_sql
-    )
-    result = replace_uncommented_pattern(
-        pattern=_SOURCE_PATTERN, replacement=_replace_source, sql=result
-    )
-    result = replace_uncommented_pattern(
-        pattern=_SEED_PATTERN, replacement=_replace_seed, sql=result
-    )
-    result = replace_uncommented_pattern(
-        pattern=_DBT_REF_PATTERN, replacement=_replace_dbt_ref, sql=result
-    )
-    result, reached_table_functions = _resolve_table_function_fixtures(
-        query_sql=result,
-        mock_table_functions=mock_table_functions,
-        helper_ctes=helper_ctes,
-    )
-    reachable_mocks.update(reached_table_functions)
-    result = resolve_udf_references(
-        query_sql=result,
-        function_locations=function_locations,
-        adapter=adapter,
-    )
-    result = resolve_table_function_references(
-        query_sql=result,
-        function_locations=function_locations,
-        adapter=adapter,
-    )
-    return result, frozenset(reachable_mocks)
-
-
-def _validate_resolved_sql(
-    *,
-    resolved_sql: str,
-    test_name: str,
-    model_name: str,
-) -> tuple[PlanWarning, ...]:
-    """Check for unresolved refs and sources in resolved test SQL."""
-
-    patterns: tuple[re.Pattern[str], ...] = (
-        _REF_PATTERN,
-        _SOURCE_PATTERN,
-        _SEED_PATTERN,
-        _DBT_REF_PATTERN,
-    )
-    if not any(pattern.search(resolved_sql) for pattern in patterns):
-        return ()
-    warnings: list[PlanWarning] = []
-    ref_matches: tuple[re.Match[str], ...]
-    source_matches: tuple[re.Match[str], ...]
-    seed_matches: tuple[re.Match[str], ...]
-    dbt_ref_matches: tuple[re.Match[str], ...]
-    ref_matches, source_matches, seed_matches, dbt_ref_matches = uncommented_matches_by_pattern(
-        patterns=patterns,
-        sql=resolved_sql,
-    )
-    ref_match: re.Match[str]
-    for ref_match in ref_matches:
-        ref_name: str = ref_match.group(1)
-        warnings.append(
-            PlanWarning(
-                model_name=model_name,
-                severity=WarningSeverity.ERROR,
-                message=(
-                    f"test '{test_name}': model '{model_name}'"
-                    f" references {SqlReferenceKind.REF.example_call(ref_name)} which has"
-                    f" no mock and is not in the expected chain"
-                ),
-            )
-        )
-    source_match: re.Match[str]
-    for source_match in source_matches:
-        source_name: str = source_match.group(1)
-        warnings.append(
-            PlanWarning(
-                model_name=model_name,
-                severity=WarningSeverity.ERROR,
-                message=(
-                    f"test '{test_name}': model '{model_name}'"
-                    f" references {SqlReferenceKind.SOURCE.example_call(source_name)} which"
-                    f" has no mock"
-                ),
-            )
-        )
-    seed_match: re.Match[str]
-    for seed_match in seed_matches:
-        seed_name: str = seed_match.group(1)
-        warnings.append(
-            PlanWarning(
-                model_name=model_name,
-                severity=WarningSeverity.ERROR,
-                message=(
-                    f"test '{test_name}': model '{model_name}'"
-                    f" references {SqlReferenceKind.SEED.example_call(seed_name)} which"
-                    f" has no mock"
-                ),
-            )
-        )
-    dbt_ref_match: re.Match[str]
-    for dbt_ref_match in dbt_ref_matches:
-        dbt_ref_name: str = _dbt_ref_fixture_name(
-            package_name=dbt_ref_match.group(1), model_name=dbt_ref_match.group(2)
-        )
-        warnings.append(
-            PlanWarning(
-                model_name=model_name,
-                severity=WarningSeverity.ERROR,
-                message=(
-                    f"test '{test_name}': model '{model_name}' references "
-                    f"__dbt_ref__{dbt_ref_name} which has no mock"
-                ),
-            )
-        )
-    return tuple(warnings)
-
-
-def _has_unresolved_test_reference(sql: str) -> bool:
-    reference_matches: tuple[tuple[re.Match[str], ...], ...] = uncommented_matches_by_pattern(
-        patterns=(
-            _REF_PATTERN,
-            _SOURCE_PATTERN,
-            _SEED_PATTERN,
-            _DBT_REF_PATTERN,
-            _TABLE_FUNCTION_PATTERN,
-        ),
-        sql=sql,
-    )
-    return any(reference_matches)
-
-
-def _wrap_mock_with_helpers(
-    *,
-    mock_body: str,
-    helper_with: str,
-) -> str:
-    """Wrap mock CTE body with helper CTEs as a subquery."""
-
-    if helper_with:
-        return f"({helper_with} {mock_body})"
-    return f"({mock_body})"
-
-
-def _resolve_table_function_fixtures(
-    *,
-    query_sql: str,
-    mock_table_functions: dict[str, str],
-    helper_ctes: tuple[CompileSqlTestCte, ...],
-) -> tuple[str, frozenset[str]]:
-    helper_with: str = _build_helper_with_clause(helper_ctes)
-    fixtures: dict[str, str] = {
-        name: _wrap_mock_with_helpers(mock_body=body, helper_with=helper_with)
-        for name, body in mock_table_functions.items()
-    }
-    return resolve_table_function_fixture_references(query_sql=query_sql, fixtures=fixtures)
-
-
-def _build_helper_with_clause(
-    helper_ctes: tuple[CompileSqlTestCte, ...],
-) -> str:
-    """Build a WITH clause from helper CTEs."""
-
-    if not helper_ctes:
-        return ""
-    parts: list[str] = []
-    cte: CompileSqlTestCte
-    for cte in helper_ctes:
-        parts.append(_cte_definition_sql(name=cte.name, sql=cte.sql_body))
-    return "WITH " + ", ".join(parts)
-
-
-def _cte_definition_sql(*, name: str, sql: str) -> str:
-    body: str = sql.rstrip()
-    terminator: str = "\n" if _TRAILING_LINE_COMMENT_PATTERN.search(body) is not None else ""
-    return f"{name} AS ({body}{terminator})"
-
-
-def _topo_sort_model_chain(
-    *,
-    expected_names: tuple[str, ...],
-    model_map: dict[str, CompiledModel],
-    model_dependencies: dict[str, frozenset[str]],
-    model_query_overrides: dict[str, str],
-    mock_ref_names: frozenset[str],
-) -> tuple[str, ...]:
-    """Sort asserted models and their unmocked model dependencies in execution order."""
-
-    ordered: list[str] = []
-    visited: set[str] = set()
-
-    def _visit(*, node: str, seen: set[str], result: list[str]) -> tuple[set[str], list[str]]:
-        if node in seen:
-            return seen, result
-        seen = seen | {node}
-        model: CompiledModel | None = model_map.get(node)
-        if model is not None:
-            dependency_names: set[str] = _test_model_dependency_names(
-                model=model,
-                query_override=model_query_overrides.get(node),
-                model_map=model_map,
-                model_dependencies=model_dependencies,
-                mock_ref_names=mock_ref_names,
-            )
-            dependency_name: str
-            for dependency_name in sorted(dependency_names):
-                seen, result = _visit(node=dependency_name, seen=seen, result=result)
-        return seen, [*result, node]
-
-    for name in sorted(expected_names):
-        visited, ordered = _visit(node=name, seen=visited, result=ordered)
-
-    return tuple(ordered)
-
-
-def _test_model_dependency_names(
-    *,
-    model: CompiledModel,
-    query_override: str | None,
-    model_map: dict[str, CompiledModel],
-    model_dependencies: dict[str, frozenset[str]],
-    mock_ref_names: frozenset[str],
-) -> set[str]:
-    if query_override is not None:
-        candidates: set[str] = {
-            match.group(1)
-            for match in uncommented_pattern_matches(pattern=_REF_PATTERN, sql=query_override)
-        }
-    else:
-        candidates = set(model_dependencies.get(model.name, ()))
-    return {name for name in candidates if name not in mock_ref_names and name in model_map}
-
-
-def _build_model_dependencies(*, model_map: dict[str, CompiledModel]) -> dict[str, frozenset[str]]:
-    dependencies_by_model: dict[str, frozenset[str]] = {}
-    model: CompiledModel
-    for model in model_map.values():
-        dependencies_by_model[model.name] = frozenset(
-            dependency.name
-            for dependency in model.deps
-            if dependency.resource_type == CompiledResourceType.MODEL
-            and dependency.name in model_map
-        )
-    return dependencies_by_model
-
-
-def _extract_mock_refs(test: CompiledSqlTest) -> dict[str, str]:
-    """Extract mock ref CTE bodies keyed by model name."""
-
-    result: dict[str, str] = {}
-    if not isinstance(test.payload, CompiledModelSqlTestPayload):
-        return result
-    cte: CompileSqlTestCte
-    for cte in test.payload.authored_ctes:
-        if cte.name.startswith(REF_TEST_CTE_PREFIX):
-            name: str = cte.name.removeprefix(REF_TEST_CTE_PREFIX)
-            result[name] = cte.sql_body
-    return result
-
-
-def _extract_mock_sources(test: CompiledSqlTest) -> dict[str, str]:
-    """Extract mock source CTE bodies keyed by source name."""
-
-    result: dict[str, str] = {}
-    if not isinstance(test.payload, CompiledModelSqlTestPayload):
-        return result
-    cte: CompileSqlTestCte
-    for cte in test.payload.authored_ctes:
-        if cte.name.startswith(SOURCE_TEST_CTE_PREFIX):
-            name: str = cte.name.removeprefix(SOURCE_TEST_CTE_PREFIX)
-            result[name] = cte.sql_body
-    return result
-
-
-def _extract_mock_seeds(test: CompiledSqlTest) -> dict[str, str]:
-    """Extract mock seed CTE bodies keyed by seed name."""
-
-    result: dict[str, str] = {}
-    if not isinstance(test.payload, CompiledModelSqlTestPayload):
-        return result
-    cte: CompileSqlTestCte
-    for cte in test.payload.authored_ctes:
-        if cte.name.startswith(SEED_TEST_CTE_PREFIX):
-            name: str = cte.name.removeprefix(SEED_TEST_CTE_PREFIX)
-            result[name] = cte.sql_body
-    return result
-
-
-def _extract_mock_dbt_refs(test: CompiledSqlTest) -> dict[str, str]:
-    """Extract mock dbt ref CTE bodies keyed by fixture name."""
-
-    result: dict[str, str] = {}
-    if not isinstance(test.payload, CompiledModelSqlTestPayload):
-        return result
-    cte: CompileSqlTestCte
-    for cte in test.payload.authored_ctes:
-        if cte.name.startswith(DBT_REF_TEST_CTE_PREFIX):
-            name: str = cte.name.removeprefix(DBT_REF_TEST_CTE_PREFIX)
-            result[name] = cte.sql_body
-    return result
-
-
-def _extract_mock_table_functions(test: CompiledSqlTest) -> dict[str, str]:
-    """Extract mock table-function CTE bodies keyed by function name."""
-
-    result: dict[str, str] = {}
-    if not isinstance(test.payload, CompiledModelSqlTestPayload):
-        return result
-    cte: CompileSqlTestCte
-    for cte in test.payload.authored_ctes:
-        if cte.name.startswith(TABLE_FN_TEST_CTE_PREFIX):
-            name: str = cte.name.removeprefix(TABLE_FN_TEST_CTE_PREFIX)
-            result[name] = cte.sql_body
-    return result
-
-
-def _dbt_ref_fixture_name(*, package_name: str, model_name: str | None) -> str:
-    if model_name is None:
-        return package_name
-    return f"{package_name}__{model_name}"
-
-
-def _extract_helper_ctes(
-    test: CompiledSqlTest,
-) -> tuple[CompileSqlTestCte, ...]:
-    """Extract helper CTEs (not mock refs, not mock sources)."""
-
-    helpers: list[CompileSqlTestCte] = []
-    if not isinstance(test.payload, CompiledModelSqlTestPayload):
-        return tuple(helpers)
-    cte: CompileSqlTestCte
-    for cte in test.payload.authored_ctes:
-        if cte.name.startswith(REF_TEST_CTE_PREFIX):
-            continue
-        if cte.name.startswith(SOURCE_TEST_CTE_PREFIX):
-            continue
-        if cte.name.startswith(SEED_TEST_CTE_PREFIX):
-            continue
-        if cte.name.startswith(DBT_REF_TEST_CTE_PREFIX):
-            continue
-        if cte.name.startswith(TABLE_FN_TEST_CTE_PREFIX):
-            continue
-        if cte.name.startswith(ASSERT_TEST_CTE_PREFIX):
-            continue
-        helpers.append(cte)
-    return tuple(helpers)
-
-
-def _extract_expected_ctes(
-    test: CompiledSqlTest,
-) -> dict[str, str]:
-    """Build expected model name to CTE SQL body mapping."""
-
-    result: dict[str, str] = {}
-    if not isinstance(test.payload, CompiledModelSqlTestPayload):
-        return result
-    cte: CompileSqlTestCte
-    for cte in test.payload.expected_ctes:
-        cte_name: str = cte.name
-        model_name: str = cte_name.removeprefix(EXPECTED_TEST_CTE_PREFIX)
-        result[model_name] = cte.sql_body
-    return result
-
-
-def _extract_assertion_ctes(
-    test: CompiledSqlTest,
-) -> dict[str, str]:
-    result: dict[str, str] = {}
-    if not isinstance(test.payload, CompiledModelSqlTestPayload):
-        return result
-    cte: CompileSqlTestCte
-    for cte in test.payload.assertion_ctes:
-        assertion_name: str = cte.name.removeprefix(ASSERT_TEST_CTE_PREFIX)
-        result[assertion_name] = cte.sql_body
-    return result

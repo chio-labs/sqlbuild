@@ -24,7 +24,7 @@ from sqlbuild.cli.compile.models import (
     CompileCommandRequest,
     CompileWriteResult,
 )
-from sqlbuild.compiler.compile.models import CompileAnalysisSelection
+from sqlbuild.compiler.compile.models import CompileAnalysisSelection, CompilerDiagnostic
 from sqlbuild.compiler.compile.types import DiagnosticPhase
 from sqlbuild.compiler.profiling.main.collect import collect_compile_timings
 from sqlbuild.compiler.profiling.models import CompileTimingCollector
@@ -126,7 +126,11 @@ def _run_compile_with_status(
         **detailed_timings.as_milliseconds(),
         "total_ms": elapsed_ms(total_start),
     }
-    exit_code: int = 1 if any(diagnostic.is_error for diagnostic in analysis.diagnostics) else 0
+    diagnostics: tuple[CompilerDiagnostic, ...] = (
+        *analysis.diagnostics,
+        *write_result.written.diagnostics,
+    )
+    exit_code: int = 1 if any(diagnostic.is_error for diagnostic in diagnostics) else 0
 
     if status is not None:
         status.close()
@@ -140,7 +144,7 @@ def _run_compile_with_status(
                 timings_ms=timings_ms,
                 lineage=analysis.lineage,
                 lineage_mode=lineage_mode,
-                diagnostics=analysis.diagnostics,
+                diagnostics=diagnostics,
                 selected_keys=analysis.selected_keys,
             )
         )
@@ -153,7 +157,7 @@ def _run_compile_with_status(
             manifest=manifest,
             lineage=analysis.lineage,
             lineage_mode=lineage_mode,
-            diagnostics=analysis.diagnostics,
+            diagnostics=diagnostics,
             selected_keys=analysis.selected_keys,
             use_color=(not no_color) and supports_color(),
         )

@@ -20,6 +20,7 @@ from sqlbuild.cli.commands._helpers.lineage.output import (
     format_lineage_tree,
 )
 from sqlbuild.cli.commands._helpers.lineage.selection import (
+    normalize_lineage_target,
     parse_depth,
     select_column_target_lineage,
     select_selector_lineage,
@@ -30,6 +31,7 @@ from sqlbuild.cli.commands.constants import (
     COLUMN_TARGET_SEPARATOR,
     JSON_OUTPUT_FORMAT,
     LIST_OUTPUT_FORMAT,
+    UPSTREAM_DIRECTION,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import (
@@ -72,10 +74,18 @@ def execute_lineage(*, request: LineageCommandRequest) -> int:
 
 
 def _validate_request(*, request: LineageCommandRequest) -> None:
-    if request.target is not None and request.select:
-        raise CliUserError("lineage accepts either a target or --select, not both", code="C301")
-    if request.target is None and not request.select:
+    if request.targets and request.select:
+        raise CliUserError("lineage accepts either targets or --select, not both", code="C301")
+    if not request.targets and not request.select:
         raise CliUserError("lineage requires a target or --select", code="C302")
+    if len(request.targets) > 1 and any(
+        COLUMN_TARGET_SEPARATOR in target for target in request.targets
+    ):
+        raise CliUserError(
+            "column lineage accepts exactly one model.column target",
+            code="C320",
+            help="run one lineage command per column",
+        )
     if request.exclude and not request.select:
         raise CliUserError("--exclude can only be used with --select", code="C303")
 
@@ -131,8 +141,8 @@ def _prepare_graph(
 
 
 def _requires_compiled_graph(*, request: LineageCommandRequest) -> bool:
-    return request.include_uses or (
-        request.target is not None and COLUMN_TARGET_SEPARATOR in request.target
+    return request.include_uses or any(
+        COLUMN_TARGET_SEPARATOR in target for target in request.targets
     )
 
 
@@ -162,20 +172,28 @@ def _render_lineage(
     graph: ProjectGraph | RelationLineageIndex,
     parsed_depth: int | None,
 ) -> str:
-    if request.target is not None:
-        column_trace: ColumnLineageTrace | None = select_column_target_lineage(
-            graph=graph,
-            target=request.target,
-            direction=request.direction,
-            depth=parsed_depth,
-            mode=request.lineage_mode,
+    if request.targets:
+        targets: tuple[str, ...] = tuple(
+            normalize_lineage_target(graph=graph, target=target) for target in request.targets
+        )
+        direction: str = request.direction or UPSTREAM_DIRECTION
+        column_trace: ColumnLineageTrace | None = (
+            select_column_target_lineage(
+                graph=graph,
+                target=targets[0],
+                direction=direction,
+                depth=parsed_depth,
+                mode=request.lineage_mode,
+            )
+            if len(targets) == 1
+            else None
         )
         if column_trace is not None:
             return _format_column_trace(trace=column_trace, output_format=request.output_format)
         lineage_graph: LineageGraph = select_target_lineage(
             graph=graph,
-            target=request.target,
-            direction=request.direction,
+            targets=targets,
+            direction=direction,
             depth=parsed_depth,
         )
     else:
@@ -184,6 +202,7 @@ def _render_lineage(
             select=request.select,
             exclude=request.exclude,
             depth=parsed_depth,
+            direction=request.direction,
         )
     return _format_graph(graph=lineage_graph, output_format=request.output_format)
 
@@ -207,8 +226,13 @@ def _format_graph(*, graph: LineageGraph, output_format: str) -> str:
 def _semantic_use_model_names(
     *, request: LineageCommandRequest, graph: ProjectGraph
 ) -> frozenset[str]:
-    if request.target is not None:
-        return frozenset({request.target.split(".", maxsplit=1)[0]})
+    if request.targets:
+        return frozenset(
+            normalize_lineage_target(graph=graph, target=target).split(
+                COLUMN_TARGET_SEPARATOR, maxsplit=1
+            )[0]
+            for target in request.targets
+        )
     keys: frozenset[CompiledObjectKey] = resolve_project_selectors(
         select=request.select,
         exclude=request.exclude,

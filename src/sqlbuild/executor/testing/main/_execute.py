@@ -7,9 +7,13 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.executor.testing._helpers.difference_samples import add_difference_samples
+from sqlbuild.executor.testing._helpers.expected_column_probe import (
+    missing_expected_columns_message,
+)
 from sqlbuild.executor.testing.constants import (
     SQL_TEST_ASSERTION_FAILED_CODE,
     SQL_TEST_EXECUTION_ERROR_CODE,
+    SQL_TEST_EXPECTED_COLUMNS_CODE,
     SQL_TEST_TOO_LARGE_CODE,
 )
 from sqlbuild.executor.testing.main._sql_length import (
@@ -95,8 +99,16 @@ def execute_sql_test(
                 connection=connection,
             )
         except Exception as error:
-            lifecycle.failed(error=error, error_code=SQL_TEST_EXECUTION_ERROR_CODE)
-            error_message = (
+            expected_columns_message: str | None = missing_expected_columns_message(
+                test_entry=test_entry, adapter=adapter, connection=connection
+            )
+            error_code: str = (
+                SQL_TEST_EXECUTION_ERROR_CODE
+                if expected_columns_message is None
+                else SQL_TEST_EXPECTED_COLUMNS_CODE
+            )
+            lifecycle.failed(error=error, error_code=error_code)
+            error_message = expected_columns_message or (
                 f"test '{test_entry.name}' encountered an execution error while running "
                 f"'{error_model_name}': {error}"
             )
@@ -115,11 +127,11 @@ def execute_sql_test(
                     StepResult(
                         model_name=error_model_name,
                         outcome=SqlTestOutcome.ERROR,
-                        error_code=SQL_TEST_EXECUTION_ERROR_CODE,
+                        error_code=error_code,
                         error_message=error_message,
                     ),
                 ),
-                error_code=SQL_TEST_EXECUTION_ERROR_CODE,
+                error_code=error_code,
                 error_message=error_message,
             )
 

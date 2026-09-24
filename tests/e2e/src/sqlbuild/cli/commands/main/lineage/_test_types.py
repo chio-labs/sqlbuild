@@ -24,3 +24,10 @@ class ColumnLineageCacheCliTestCase:
     description: str
     command: tuple[str, ...]
     expected_source_resource: str
+
+
+@dataclass(frozen=True)
+class LineageErrorCliTestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_fragments: tuple[str, ...]

@@ -20,6 +20,7 @@ from sqlbuild.compiler.planner.constants import (
     SELECTOR_KIND_SEPARATOR,
     SELECTOR_MISSING_NAME_ERROR_FRAGMENT,
     SELECTOR_PATH_SEPARATOR,
+    SQL_FILE_SELECTOR_SUFFIX,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection.selector_expansion import split_selector_expansion
@@ -344,7 +345,15 @@ def _resolve_path(
         if _path_matches(indexed_folder=indexed_folder, selector_folder=selector_folder)
     )
     if not matched_keys:
-        raise PlannerInputError(f"no models found under path '{folder}'.", code="S009")
+        raise PlannerInputError(
+            f"no models found under path '{folder}'."
+            + (
+                " Path selectors match folders; select a single model by its name."
+                if folder.endswith(SQL_FILE_SELECTOR_SUFFIX)
+                else ""
+            ),
+            code="S009",
+        )
 
     result: set[CompiledObjectKey] = set(matched_keys)
     key: CompiledObjectKey
