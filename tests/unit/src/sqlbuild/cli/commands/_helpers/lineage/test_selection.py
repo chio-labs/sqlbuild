@@ -69,7 +69,7 @@ def test_given_target_lineage_request_when_selecting_then_returns_expected_subgr
 
     result: LineageGraph = select_target_lineage(
         graph=graph,
-        target=test_case.target,
+        targets=(test_case.target,),
         direction=test_case.direction,
         depth=test_case.depth,
     )

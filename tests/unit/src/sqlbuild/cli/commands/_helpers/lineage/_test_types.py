@@ -61,7 +61,7 @@ class LargeColumnLineageOutputTestCase:
 @dataclass(frozen=True)
 class LineageCompiledGraphRequirementTestCase:
     description: str
-    target: str | None
+    targets: tuple[str, ...]
     select: tuple[str, ...]
     include_uses: bool
     expected_compiled_graph_required: bool

@@ -10,6 +10,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.lineage._test_types import (
     ColumnLineageCacheCliTestCase,
     LineageCacheCliTestCase,
     LineageCliTestCase,
+    LineageErrorCliTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.lineage.helpers import (
     lineage_node_ids,
@@ -72,6 +73,91 @@ _LINEAGE_CACHE_RELATIVE_PATH: Path = Path("target/cache/lineage/v1/structural-gr
                 "udf:is_completed_order->model:fact_orders",
                 "udf:is_completed_order_py->model:fact_orders",
                 "model:fact_orders->model:hourly_order_activity",
+            ),
+        ),
+        LineageCliTestCase(
+            description="unions direct parents of several targets",
+            command=(
+                "lineage",
+                "fact_orders",
+                "dim_customers",
+                "--direction",
+                "upstream",
+                "--depth",
+                "1",
+                "--format",
+                "json",
+            ),
+            expected_exit_code=0,
+            expected_node_ids=(
+                "model:dim_customers",
+                "model:fact_orders",
+                "model:stg_customers",
+                "model:stg_orders",
+                "model:stg_payments",
+                "seed:waffle_types",
+                "udf:is_completed_order",
+                "udf:is_completed_order_py",
+            ),
+            expected_edge_ids=(
+                "model:stg_customers->model:dim_customers",
+                "model:stg_orders->model:dim_customers",
+                "model:stg_payments->model:dim_customers",
+                "udf:is_completed_order->model:fact_orders",
+                "udf:is_completed_order_py->model:fact_orders",
+                "model:stg_orders->model:fact_orders",
+                "seed:waffle_types->model:fact_orders",
+                "model:stg_payments->model:fact_orders",
+            ),
+        ),
+        LineageCliTestCase(
+            description="accepts a printed kind-prefixed target",
+            command=("lineage", "model:fact_orders", "--depth", "1", "--format", "json"),
+            expected_exit_code=0,
+            expected_node_ids=(
+                "model:fact_orders",
+                "model:stg_orders",
+                "model:stg_payments",
+                "seed:waffle_types",
+                "udf:is_completed_order",
+                "udf:is_completed_order_py",
+            ),
+            expected_edge_ids=(
+                "udf:is_completed_order->model:fact_orders",
+                "udf:is_completed_order_py->model:fact_orders",
+                "model:stg_orders->model:fact_orders",
+                "seed:waffle_types->model:fact_orders",
+                "model:stg_payments->model:fact_orders",
+            ),
+        ),
+        LineageCliTestCase(
+            description="expands a selection by direction and depth",
+            command=(
+                "lineage",
+                "--select",
+                "stg_orders",
+                "--direction",
+                "downstream",
+                "--depth",
+                "1",
+                "--format",
+                "json",
+            ),
+            expected_exit_code=0,
+            expected_node_ids=(
+                "model:daily_order_partitioned",
+                "model:daily_revenue",
+                "model:dim_customers",
+                "model:fact_orders",
+                "model:scenario_order_prices",
+                "model:stg_orders",
+            ),
+            expected_edge_ids=(
+                "model:stg_orders->model:daily_order_partitioned",
+                "model:stg_orders->model:daily_revenue",
+                "model:stg_orders->model:dim_customers",
+                "model:stg_orders->model:fact_orders",
+                "model:stg_orders->model:scenario_order_prices",
             ),
         ),
     ],
@@ -233,3 +319,40 @@ def test_given_column_target_when_lineage_runs_then_bypasses_structural_cache(
     source: dict[str, object] = trace[0]["source"]  # type: ignore[assignment]
     assert source["resource_name"] == test_case.expected_source_resource
     assert not (project_dir / _LINEAGE_CACHE_RELATIVE_PATH).exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        LineageErrorCliTestCase(
+            description="graph operator target explains direction and depth",
+            command=("lineage", "1+fact_orders"),
+            expected_fragments=("C305", "--direction", "--depth"),
+        ),
+        LineageErrorCliTestCase(
+            description="kind prefix must match the resource",
+            command=("lineage", "source:fact_orders"),
+            expected_fragments=("C305", "source:fact_orders"),
+        ),
+        LineageErrorCliTestCase(
+            description="column target cannot be combined with other targets",
+            command=("lineage", "fact_orders.order_id", "dim_customers"),
+            expected_fragments=("C320",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_invalid_lineage_target_when_running_then_explains_the_error(
+    test_case: LineageErrorCliTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    for fragment in test_case.expected_fragments:
+        assert fragment in result.stderr, result.stderr

@@ -294,7 +294,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
             LineageCommandRequest(
                 project_dir=project_dir,
                 no_sql_validation=args.no_sql_validation,
-                target=args.lineage_target,
+                targets=tuple(args.lineage_targets),
                 output_format=args.lineage_format,
                 direction=args.lineage_direction,
                 depth=args.lineage_depth,

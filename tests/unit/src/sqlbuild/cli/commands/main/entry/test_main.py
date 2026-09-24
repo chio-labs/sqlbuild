@@ -1542,7 +1542,7 @@ def test_given_lineage_command_arguments_when_running_with_dependencies_then_it_
     assert received_args == [
         LineageCommandRequest(
             project_dir=None,
-            target="fact_orders",
+            targets=("fact_orders",),
             output_format="json",
             direction="both",
             depth="2",

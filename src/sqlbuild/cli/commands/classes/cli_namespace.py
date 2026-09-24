@@ -96,9 +96,9 @@ _DEFAULT_VALUES: dict[str, object] = {
     "cost_order": None,
     "cost_since": None,
     "cost_until": None,
-    "lineage_target": None,
+    "lineage_targets": [],
     "lineage_format": "tree",
-    "lineage_direction": "upstream",
+    "lineage_direction": None,
     "lineage_depth": "all",
     "lineage_mode": ColumnLineageMode.RICH,
     "lineage_include_uses": False,
@@ -271,9 +271,9 @@ class CliNamespace:
     cost_order: str | None
     cost_since: str | None
     cost_until: str | None
-    lineage_target: str | None
+    lineage_targets: list[str]
     lineage_format: str
-    lineage_direction: str
+    lineage_direction: str | None
     lineage_depth: str
     lineage_mode: ColumnLineageMode
     lineage_include_uses: bool
