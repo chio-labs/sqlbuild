@@ -79,10 +79,12 @@ def with_storage_policies(
     warehouse: PlannerWarehouseState,
     scopes: PlannerScopeResolution,
 ) -> PlanOutput:
-    """Attach selected Snowflake table-type and retention work to the plan."""
+    """Attach migrations and selected Snowflake table-type and retention work to the plan."""
 
     return replace(
         plan_output,
+        migration_entries=warehouse.migration_entries,
+        warnings=(*warehouse.migration_warnings, *plan_output.warnings),
         table_type_entries=plan_table_types(
             runtime=runtime, warehouse=warehouse, scope=scopes.selected_scope
         ),

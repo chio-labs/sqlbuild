@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
@@ -140,6 +140,7 @@ class _CursorGatherInputs:
     invocation_time: datetime | None
     start_cursor_config: StartCursorsConfig | None
     cursor_overrides: CursorOverrides | None
+    target_relation_overrides: dict[str, str] | None = None
 
 
 def build_warehouse_snapshot(
@@ -277,6 +278,52 @@ def gather_warehouse_snapshot(
         source_freshness_state_schemas=freshness_state_schemas,
         column_dialect=adapter.sql_analysis_dialect(),
     )
+
+
+def gather_redirected_cursor_snapshots(
+    *,
+    project: CompiledProject,
+    adapter: BaseAdapter,
+    connection: Any,
+    existing_relations: dict[str, RelationInfo],
+    target_relations: dict[str, str],
+    cursor_scope: CursorSnapshotScope,
+    full_refresh_model_names: frozenset[str],
+    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
+    on_progress: Callable[[str], None] | None = None,
+) -> dict[str, ModelCursorSnapshot]:
+    """Gather cursor snapshots for models whose target history lives in another relation."""
+
+    if not target_relations:
+        return {}
+    model_keys: frozenset[CompiledObjectKey] = frozenset(
+        CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name)
+        for name in target_relations
+    )
+    snapshots: dict[str, ModelCursorSnapshot] = _gather_cursor_snapshots(
+        project=project,
+        adapter=adapter,
+        connection=connection,
+        execute=adapter.execute,
+        existing_relations=existing_relations,
+        on_progress=on_progress,
+        inputs=_CursorGatherInputs(
+            selected_keys=model_keys,
+            full_refresh_model_names=full_refresh_model_names,
+            deferred_locations=deferred_locations,
+            runtime_producer_keys=cursor_scope.runtime_producer_keys,
+            invocation_time=cursor_scope.invocation_time,
+            start_cursor_config=cursor_scope.start_cursor_config,
+            cursor_overrides=cursor_scope.cursor_overrides,
+            target_relation_overrides=target_relations,
+        ),
+    )
+    model_map: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    return {
+        name: replace(snapshot, target_relation=model_map[name].destination.qualified_name)
+        for name, snapshot in snapshots.items()
+        if name in model_map
+    }
 
 
 def _relevant_state_keys(
@@ -704,7 +751,11 @@ def _collect_cursor_models(
         target_tag: str | None = None
         target_relation: str | None = None
         target_relation_info: RelationInfo | None = existing_relations.get(model.name)
-        if (
+        redirected_target: str | None = (inputs.target_relation_overrides or {}).get(model.name)
+        if redirected_target is not None:
+            target_tag = f"{model.name}__target__max"
+            target_relation = redirected_target
+        elif (
             model.destination.qualified_name is not None
             and target_relation_info is not None
             and target_relation_info.name == model.name

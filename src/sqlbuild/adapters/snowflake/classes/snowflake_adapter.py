@@ -2364,6 +2364,13 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         table_kind: str = "TRANSIENT TABLE" if origin_is_transient else "TABLE"
         return (f"CREATE OR REPLACE {table_kind} {destination} CLONE {origin}",)
 
+    def render_replace_with_clone(
+        self, *, origin: str, destination: str, origin_is_transient: bool = False
+    ) -> str:
+        return self.render_durable_clone(
+            origin=origin, destination=destination, origin_is_transient=origin_is_transient
+        )[0]
+
     def render_query_with_cursor_bounds(
         self,
         *,

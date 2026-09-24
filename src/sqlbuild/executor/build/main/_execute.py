@@ -21,6 +21,7 @@ from sqlbuild.executor.build._helpers.retention import (
     reconcile_retention_after_build,
 )
 from sqlbuild.executor.build.classes.build_scheduler import BuildScheduler
+from sqlbuild.executor.build.main._apply_model_migrations import apply_model_migrations
 from sqlbuild.executor.build.main.aggregate_result import aggregate_build_result
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
@@ -72,6 +73,13 @@ def execute_build_plan(
         schema_prepared=schema_prepared,
     )
 
+    _ = apply_model_migrations(
+        plan=plan,
+        adapter=adapter,
+        connection=scheduler_connection,
+        run_id=runtime.run_id,
+        on_progress=resolved_callbacks.on_migration_progress,
+    )
     _ = apply_retention_phase(
         plan=plan,
         adapter=adapter,

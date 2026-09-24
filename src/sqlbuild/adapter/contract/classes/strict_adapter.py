@@ -337,6 +337,13 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_replace_with_clone(
+        self, *, origin: str, destination: str, origin_is_transient: bool = False
+    ) -> str:
+        """Render one statement that replaces the destination with a durable source copy."""
+        ...
+
+    @abstractmethod
     def render_query_with_cursor_bounds(
         self,
         *,

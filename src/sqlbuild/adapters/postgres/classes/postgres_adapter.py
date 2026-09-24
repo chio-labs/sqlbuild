@@ -552,6 +552,14 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         del origin_is_transient
         return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
+    def render_replace_with_clone(
+        self, *, origin: str, destination: str, origin_is_transient: bool = False
+    ) -> str:
+        del origin, destination, origin_is_transient
+        raise AdapterUserError(
+            message=f"adapter '{self.adapter_name}' does not support model migrations"
+        )
+
     def render_query_with_cursor_bounds(
         self,
         *,

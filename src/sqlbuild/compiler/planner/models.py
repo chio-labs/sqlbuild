@@ -30,6 +30,11 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, FunctionLanguage
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, SqlTestParameterDeclaration
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.migrations.types import (
+    MigrationCompatibility,
+    MigrationDecision,
+    MigrationDiscovery,
+)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import (
     BackfillAction,
@@ -959,6 +964,34 @@ class TableTypePlanEntry:
 
 
 @dataclass(frozen=True)
+class ModelMigrationPlanEntry:
+    """One declared or discovered model migration and its per-run decision."""
+
+    model_name: str
+    discovery: MigrationDiscovery
+    decision: MigrationDecision
+    compatibility: MigrationCompatibility
+    origin_model: str | None
+    origin: CompiledRelationLocation
+    destination: CompiledRelationLocation
+    target_name: str | None
+    origin_version_hash: str = ""
+    origin_is_transient: bool = False
+    statement: str | None = None
+    completed_at: datetime | None = None
+    compatibility_findings: tuple[str, ...] = ()
+    message: str | None = None
+
+    @property
+    def blocks_build(self) -> bool:
+        """Return whether this migration must stop a build before any execution."""
+
+        return self.decision == MigrationDecision.CONFLICT or (
+            self.decision.moves_data and self.compatibility == MigrationCompatibility.INCOMPATIBLE
+        )
+
+
+@dataclass(frozen=True)
 class PlanOutputExtras:
     """Optional supplemental seed fingerprints and precomputed SQL tests for plan assembly."""
 
@@ -1365,6 +1398,7 @@ class PlanOutput:
     warnings: tuple[PlanWarning, ...] = field(default_factory=tuple)
     retention_entries: tuple[RetentionPlanEntry, ...] = field(default_factory=tuple)
     table_type_entries: tuple[TableTypePlanEntry, ...] = field(default_factory=tuple)
+    migration_entries: tuple[ModelMigrationPlanEntry, ...] = field(default_factory=tuple)
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = field(
         default_factory=dict
     )
@@ -1451,6 +1485,37 @@ class PlannerWarehouseState:
 
     snapshot: WarehouseSnapshot
     inspection_relations: PlannerRelationsContext
+    migration_entries: tuple[ModelMigrationPlanEntry, ...] = ()
+    migration_warnings: tuple[PlanWarning, ...] = ()
+
+
+@dataclass(frozen=True)
+class ModelMigrationRequest:
+    """One destination model whose data should come from an earlier relation."""
+
+    model: CompiledModel
+    discovery: MigrationDiscovery
+    raw_origin: str | None = None
+    origin_location: CompiledRelationLocation | None = None
+    origin_model: str | None = None
+    force: bool = False
+
+
+@dataclass(frozen=True)
+class MigrationCompatibilityResult:
+    """Compatibility status plus human-readable blocking findings."""
+
+    status: MigrationCompatibility
+    findings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ModelMigrationPlanning:
+    """Migration decisions plus the warehouse snapshot as it will look after moves."""
+
+    snapshot: WarehouseSnapshot
+    entries: tuple[ModelMigrationPlanEntry, ...] = ()
+    warnings: tuple[PlanWarning, ...] = ()
 
 
 @dataclass(frozen=True)

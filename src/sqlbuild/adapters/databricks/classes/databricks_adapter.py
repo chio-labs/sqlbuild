@@ -1855,6 +1855,12 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         del origin_is_transient
         return (f"CREATE TABLE {destination} DEEP CLONE {origin}",)
 
+    def render_replace_with_clone(
+        self, *, origin: str, destination: str, origin_is_transient: bool = False
+    ) -> str:
+        del origin_is_transient
+        return f"CREATE OR REPLACE TABLE {destination} DEEP CLONE {origin}"
+
     def render_query_with_cursor_bounds(
         self,
         *,

@@ -10,6 +10,8 @@ from typing import cast
 from sqlbuild.compiler.compile.constants import (
     MICROBATCH_LIMIT_ACTION_KEY,
     MICROBATCH_LIMIT_MAX_BATCHES_KEY,
+    MIGRATE_FORCE_CONFIG_KEY,
+    MIGRATE_FROM_CONFIG_KEY,
     SQL_WILDCARD_TOKEN,
     WATERMARK_CURSOR_INPUT_BLOCK_KEYS,
 )
@@ -947,6 +949,31 @@ def validate_non_incremental_config(
             raise CompileInputError(
                 f"model '{model_name}': {key} is only valid for incremental models"
             )
+
+
+def validate_model_migration_config(*, config: CompileModelConfig, model_name: str) -> None:
+    """Validate migrate_from and migrate_force on history-bearing materializations."""
+
+    migrate_from: object | None = config.values.get(MIGRATE_FROM_CONFIG_KEY)
+    migrate_force: object | None = config.values.get(MIGRATE_FORCE_CONFIG_KEY)
+    if migrate_from is None and migrate_force is None:
+        return
+    materialized: str | None = get_config_str(values=config.values, key="materialized")
+    if materialized not in {MaterializationType.INCREMENTAL, MaterializationType.SNAPSHOT}:
+        raise CompileInputError(
+            f"model '{model_name}': migrate_from is only valid for incremental and snapshot "
+            f"models; '{materialized}' models are rebuilt under their new name"
+        )
+    if migrate_from is None:
+        raise CompileInputError(f"model '{model_name}': migrate_force requires migrate_from")
+    if not isinstance(migrate_from, str) or not migrate_from.strip():
+        raise CompileInputError(
+            f"model '{model_name}': migrate_from must be a model name or a qualified relation"
+        )
+    if migrate_from.strip().lower() == model_name.lower():
+        raise CompileInputError(f"model '{model_name}': migrate_from cannot name the model itself")
+    if migrate_force is not None and not isinstance(migrate_force, bool):
+        raise CompileInputError(f"model '{model_name}': migrate_force must be true or false")
 
 
 def validate_snapshot_config(

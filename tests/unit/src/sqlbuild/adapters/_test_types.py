@@ -69,3 +69,12 @@ class RowDiffSampleSqlTestCase:
     description: str
     adapter: BaseAdapter
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AdapterReplaceWithCloneTestCase:
+    description: str
+    adapter: BaseAdapter
+    origin_is_transient: bool
+    expected_statement: str | None
+    expected_error_fragment: str | None = None

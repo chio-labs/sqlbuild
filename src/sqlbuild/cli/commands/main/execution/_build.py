@@ -25,21 +25,11 @@ from sqlbuild.cli.commands._helpers.build_planning.compile_target import write_b
 from sqlbuild.cli.commands._helpers.build_planning.defer_clone import (
     run_defer_clone_boundary_prephase,
 )
-from sqlbuild.cli.commands._helpers.build_planning.execution_limits import (
-    enforce_model_execution_limit,
-    executable_model_count,
-)
-from sqlbuild.cli.commands._helpers.build_planning.full_refresh import (
-    enforce_snapshot_full_refresh_policy,
-)
 from sqlbuild.cli.commands._helpers.build_planning.invocation import resolve_build_invocation
+from sqlbuild.cli.commands._helpers.build_planning.plan_policies import (
+    enforce_build_plan_policies,
+)
 from sqlbuild.cli.commands._helpers.build_planning.planning import compile_build_plan
-from sqlbuild.cli.commands._helpers.build_planning.retention_decrease import (
-    enforce_retention_decrease_policy,
-)
-from sqlbuild.cli.commands._helpers.build_planning.table_type import (
-    enforce_table_type_downgrade_policy,
-)
 from sqlbuild.cli.commands._helpers.cost.collection import (
     finalize_build_cost,
 )
@@ -163,29 +153,10 @@ def _run_build(
             invocation=invocation,
             pipeline_result=pipeline_result,
         )
-        enforce_model_execution_limit(
-            model_count=executable_model_count(plan=pipeline_result.plan_output),
-            target_name=invocation.effective_target_name,
-            limits=invocation.execution_limits,
-        )
-        enforce_snapshot_full_refresh_policy(
+        enforce_build_plan_policies(
+            request=request,
+            invocation=invocation,
             plan=pipeline_result.plan_output,
-            snapshots_config=invocation.discovered_inputs.project_config.snapshots,
-            allow_snapshot_full_refresh=request.allow_snapshot_full_refresh,
-            input_stream=sys.stdin,
-            output_stream=sys.stdout,
-        )
-        enforce_table_type_downgrade_policy(
-            plan=pipeline_result.plan_output,
-            allow_table_type_downgrade=request.allow_table_type_downgrade,
-            input_stream=sys.stdin,
-            output_stream=sys.stdout,
-        )
-        enforce_retention_decrease_policy(
-            plan=pipeline_result.plan_output,
-            allow_retention_decrease=request.allow_retention_decrease,
-            input_stream=sys.stdin,
-            output_stream=sys.stdout,
         )
         write_build_compile_target(
             request=request,

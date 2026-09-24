@@ -1853,6 +1853,15 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"CLONE {self._quote_identifier_path(origin)}",
         )
 
+    def render_replace_with_clone(
+        self, *, origin: str, destination: str, origin_is_transient: bool = False
+    ) -> str:
+        del origin_is_transient
+        return (
+            f"CREATE OR REPLACE TABLE {self._quote_identifier_path(destination)} "
+            f"CLONE {self._quote_identifier_path(origin)}"
+        )
+
     def render_query_with_cursor_bounds(
         self,
         *,

@@ -1690,6 +1690,12 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         del origin_is_transient
         return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
+    def render_replace_with_clone(
+        self, *, origin: str, destination: str, origin_is_transient: bool = False
+    ) -> str:
+        del origin_is_transient
+        return f"CREATE OR REPLACE TABLE {destination} AS SELECT * FROM {origin}"
+
     def render_query_with_cursor_bounds(
         self,
         *,

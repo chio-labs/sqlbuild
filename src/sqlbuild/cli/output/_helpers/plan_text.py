@@ -22,6 +22,9 @@ from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclus
 from sqlbuild.compiler.planner.main.execution.model_materialization_label import (
     model_materialization_label,
 )
+from sqlbuild.compiler.planner.main.pre_build.pre_build_work_display import (
+    format_pre_build_work,
+)
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
     CursorBounds,
@@ -90,50 +93,6 @@ _SCHEMA_CHANGE_SYMBOLS: dict[SchemaChangeKind, str] = {
 }
 
 
-def _format_retention(
-    *, lines: list[str], plan: PlanOutput, display_options: DisplayOptions
-) -> list[str]:
-    if plan.table_type_entries:
-        lines.append("Table type conversions")
-        for table_type_entry in visible_entries(
-            entries=plan.table_type_entries, options=display_options
-        ):
-            actual_type: str = table_type_entry.actual_type or "unknown"
-            lines.append(
-                f"  {table_type_entry.model_name} desired={table_type_entry.desired_type} "
-                f"actual={actual_type} source={table_type_entry.source}"
-            )
-            if table_type_entry.irreversible_warning is not None:
-                lines.append(f"    WARNING: {table_type_entry.irreversible_warning}")
-        lines = append_overflow_line(
-            lines=lines,
-            total_count=len(plan.table_type_entries),
-            visible_count=len(
-                visible_entries(entries=plan.table_type_entries, options=display_options)
-            ),
-            indent="  ",
-            options=display_options,
-        )
-    if plan.retention_entries:
-        lines.append("Retention")
-    for entry in plan.retention_entries:
-        scope: str = ".".join(
-            part
-            for part in (entry.request.database, entry.request.schema, entry.request.name)
-            if part
-        )
-        actual: str = "missing" if entry.actual_days is None else f"{entry.actual_days}d"
-        effective: str = "missing" if entry.effective_days is None else f"{entry.effective_days}d"
-        lines.append(
-            f"  {scope} desired={entry.request.desired_days}d actual={actual} "
-            f"effective={effective} source={entry.source} direction={entry.direction.value} "
-            f"phase={entry.phase.value}"
-        )
-        if entry.irreversible_warning is not None:
-            lines.append(f"    WARNING: {entry.irreversible_warning}")
-    return lines
-
-
 def format_plan(
     *,
     plan: PlanOutput,
@@ -174,7 +133,9 @@ def format_plan(
             include_direct_freshness_diagnostics=(include_direct_freshness_diagnostics),
             display_options=resolved_display_options,
         )
-        lines = _format_retention(lines=lines, plan=plan, display_options=resolved_display_options)
+        lines = format_pre_build_work(
+            lines=lines, plan=plan, display_options=resolved_display_options
+        )
         result: str = "\n".join(lines)
         return result if use_color else _strip_ansi(result)
 
@@ -225,7 +186,7 @@ def format_plan(
         display_options=resolved_display_options,
         skipped_header_style=style.muted,
     )
-    lines = _format_retention(lines=lines, plan=plan, display_options=resolved_display_options)
+    lines = format_pre_build_work(lines=lines, plan=plan, display_options=resolved_display_options)
 
     lines = _format_python_plan_entries(
         lines=lines,
