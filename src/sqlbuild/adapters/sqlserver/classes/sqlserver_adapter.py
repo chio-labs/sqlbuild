@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -1663,11 +1662,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str,
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
-        return HistoricalTimestampSnapshotSql(
-            dialect=replace(
-                self._snapshot_sql_dialect, latest_version=SnapshotLatestVersionStyle.QUALIFY
-            )
-        ).changes_apply_sql(
+        return HistoricalTimestampSnapshotSql(dialect=self._snapshot_sql_dialect).changes_apply_sql(
             destination=destination,
             origin=origin,
             unique_key=unique_key,
