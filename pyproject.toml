@@ -57,7 +57,6 @@ rivers = [
 [project.scripts]
 sqb = "sqlbuild.cli.entry.main.entry:main"
 sqlbuild = "sqlbuild.cli.entry.main.entry:main"
-dupscore = "scripts.dupscore.main.dupscore:dupscore"
 
 [dependency-groups]
 dev = [
@@ -78,7 +77,7 @@ dev = [
   "pytest-cov>=7.0.0",
   "pytest-xdist>=3.8.0",
   "ruff>=0.12.0",
-  "fensu>=0.22.0",
+  "fensu>=0.23.0",
   "testcontainers>=4.8.1",
   "ty>=0.0.1a19",
 ]
@@ -90,8 +89,6 @@ python-source = "src"
 features = ["extension-module"]
 include = [
   { path = "LICENSE", format = ["sdist", "wheel"] },
-  { path = "scripts/dupscore/**/*.py", format = ["sdist", "wheel"] },
-  { path = "scripts/dupscore/dupscore.toml", format = ["sdist", "wheel"] },
 ]
 
 [tool.commitizen]
