@@ -21,6 +21,8 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.cli.commands._helpers.lineage._test_types import (
     ColumnLineageSelectionTestCase,
+    LineagePathSelectorErrorTestCase,
+    LineagePathSelectorTestCase,
     LineageSelectionTestCase,
     LineageSelectorDepthErrorTestCase,
 )
@@ -249,4 +251,86 @@ def test_given_unclear_selector_anchor_with_depth_when_selecting_then_raises_use
             depth=1,
         )
 
+    assert test_case.expected_error_fragment in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LineagePathSelectorTestCase(
+            description="keeps only nodes on paths between endpoints",
+            select=("raw_orders~daily_rollup",),
+            expected_node_ids=(
+                "model:daily_rollup",
+                "model:fact_orders",
+                "model:stg_orders",
+                "source:raw_orders",
+            ),
+        ),
+        LineagePathSelectorTestCase(
+            description="adds upstreams of the path start",
+            select=("+stg_orders~daily_rollup",),
+            expected_node_ids=(
+                "model:daily_rollup",
+                "model:fact_orders",
+                "model:stg_orders",
+                "source:raw_orders",
+            ),
+        ),
+        LineagePathSelectorTestCase(
+            description="adds downstreams of the path end",
+            select=("raw_orders~stg_orders+",),
+            expected_node_ids=(
+                "model:daily_rollup",
+                "model:fact_orders",
+                "model:stg_orders",
+                "source:raw_orders",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_path_selector_when_selecting_lineage_then_returns_path_nodes(
+    test_case: LineagePathSelectorTestCase,
+) -> None:
+    graph: ProjectGraph = build_lineage_test_graph()
+
+    result: LineageGraph = select_selector_lineage(
+        graph=graph,
+        select=test_case.select,
+        exclude=(),
+        depth=None,
+    )
+
+    assert node_ids(result.nodes) == test_case.expected_node_ids
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LineagePathSelectorErrorTestCase(
+            description="rejects an end that is not downstream of the start",
+            select=("daily_rollup~raw_orders",),
+            expected_error_code="C319",
+            expected_error_fragment=(
+                "'source:raw_orders' is not downstream of 'model:daily_rollup'"
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unreachable_path_selector_when_selecting_lineage_then_raises_user_error(
+    test_case: LineagePathSelectorErrorTestCase,
+) -> None:
+    graph: ProjectGraph = build_lineage_test_graph()
+
+    with pytest.raises(CliUserError) as error:
+        select_selector_lineage(
+            graph=graph,
+            select=test_case.select,
+            exclude=(),
+            depth=None,
+        )
+
+    assert error.value.code == test_case.expected_error_code
     assert test_case.expected_error_fragment in str(error.value)
