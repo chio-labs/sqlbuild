@@ -209,3 +209,4 @@ class BigQueryRelationAgeMetadataTestCase:
     description: str
     metadata_rows: tuple[tuple[object, ...], ...]
     expected_timestamps: tuple[tuple[str, str], ...]
+    relation_names: tuple[str, ...] = ("old_orders", "old_orders_view")

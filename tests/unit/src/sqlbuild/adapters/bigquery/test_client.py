@@ -1115,7 +1115,7 @@ def test_given_timestamp_cursor_when_counting_rows_then_bigquery_uses_typed_filt
             description="dataset metadata supplies UTC creation and last-modified times",
             metadata_rows=(
                 (
-                    "Old_Orders",
+                    "old_orders",
                     datetime(2026, 8, 1, 3, 0, tzinfo=timezone(timedelta(hours=-7))),
                     datetime(2026, 8, 2, 10, 30, tzinfo=UTC),
                 ),
@@ -1131,6 +1131,27 @@ def test_given_timestamp_cursor_when_counting_rows_then_bigquery_uses_typed_filt
             metadata_rows=(),
             expected_timestamps=(("None", "None"), ("None", "None")),
         ),
+        BigQueryRelationAgeMetadataTestCase(
+            description="case-distinct tables keep their own timestamps",
+            metadata_rows=(
+                (
+                    "Orders",
+                    datetime(2025, 1, 1, tzinfo=UTC),
+                    datetime(2025, 1, 2, tzinfo=UTC),
+                ),
+                (
+                    "orders",
+                    datetime(2026, 8, 1, tzinfo=UTC),
+                    datetime(2026, 8, 2, tzinfo=UTC),
+                ),
+            ),
+            expected_timestamps=(
+                ("2026-08-01 00:00:00+00:00", "2026-08-02 00:00:00+00:00"),
+                ("2025-01-01 00:00:00+00:00", "2025-01-02 00:00:00+00:00"),
+                ("None", "None"),
+            ),
+            relation_names=("orders", "Orders", "ORDERS"),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -1143,19 +1164,14 @@ def test_given_listed_relations_when_adding_age_metadata_then_bigquery_reads_eac
             rows=test_case.metadata_rows,
         )
     )
-    relations: tuple[RelationInfo, ...] = (
+    relations: tuple[RelationInfo, ...] = tuple(
         RelationInfo(
             database="example-project",
             schema="dev_orders",
-            name="old_orders",
+            name=name,
             relation_type="table",
-        ),
-        RelationInfo(
-            database="example-project",
-            schema="dev_orders",
-            name="old_orders_view",
-            relation_type="view",
-        ),
+        )
+        for name in test_case.relation_names
     )
 
     enriched: tuple[RelationInfo, ...] = BigQueryAdapter().with_relation_age_metadata(

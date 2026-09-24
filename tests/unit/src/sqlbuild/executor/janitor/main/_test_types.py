@@ -170,3 +170,15 @@ class JanitorAgeReadScopeTestCase:
     exclude_patterns: tuple[str, ...]
     protected_relation_keys: frozenset[JanitorRelationKey]
     expected_age_requests: tuple[tuple[str, ...], ...]
+    retention_days: int = 7
+
+
+@dataclass(frozen=True)
+class JanitorCaseSafetyTestCase:
+    description: str
+    relation_names: tuple[str, ...]
+    direct_mode: bool
+    tracked_names: tuple[str, ...]
+    exclude_patterns: tuple[str, ...]
+    expected_skipped_relations: tuple[tuple[str, str], ...]
+    expected_dropped_targets: tuple[str, ...]

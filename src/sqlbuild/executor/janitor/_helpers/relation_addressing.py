@@ -1,4 +1,4 @@
-"""Direct-mode janitor guard for relation names that are safe to address unquoted."""
+"""Janitor guards for relation names that are safe to address unquoted."""
 
 from __future__ import annotations
 
@@ -26,6 +26,12 @@ def unaddressable_relation_reason(*, name: str, colliding_names: frozenset[str])
 
     if _PLAIN_LOWERCASE_IDENTIFIER_RE.fullmatch(name) is None:
         return UNQUOTED_ADDRESSING_REASON
+    return case_collision_reason(name=name, colliding_names=colliding_names)
+
+
+def case_collision_reason(*, name: str, colliding_names: frozenset[str]) -> str | None:
+    """Return why a relation whose folded name is shared in its listing must not be dropped."""
+
     if name.lower() in colliding_names:
         return CASE_COLLISION_REASON
     return None

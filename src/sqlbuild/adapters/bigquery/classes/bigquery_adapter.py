@@ -2090,7 +2090,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 raise
             return {}
         return {
-            (database, schema.lower(), str(row[0]).lower()): (
+            (database, schema, str(row[0])): (
                 relation_age_timestamp_utc(row[1]),
                 relation_age_timestamp_utc(row[2]),
             )
@@ -2099,7 +2099,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
 
     @staticmethod
     def _age_key(relation: RelationInfo) -> tuple[str | None, str, str]:
-        return (relation.database, str(relation.schema).lower(), relation.name.lower())
+        return (relation.database, str(relation.schema), relation.name)
 
     def list_functions(
         self,

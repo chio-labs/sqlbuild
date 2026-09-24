@@ -29,6 +29,7 @@ from sqlbuild.executor.janitor._helpers.plan import (
 )
 from sqlbuild.executor.janitor._helpers.relation_addressing import (
     case_colliding_names,
+    case_collision_reason,
     unaddressable_relation_reason,
 )
 from sqlbuild.executor.janitor._helpers.tracking import collect_tracked_relation_keys
@@ -204,6 +205,10 @@ def classify_janitor_relations(
             skip_reason = unaddressable_relation_reason(
                 name=relation_key.name, colliding_names=colliding_names
             )
+        elif skip_reason is None:
+            skip_reason = case_collision_reason(
+                name=relation_key.name, colliding_names=colliding_names
+            )
         if skip_reason is not None:
             skipped_relations.append(
                 JanitorSkippedRelation(key=relation_key, relation=relation, reason=skip_reason)
@@ -212,7 +217,8 @@ def classify_janitor_relations(
         eligible_relations.append(relation)
     age_supported: bool = age_reader.supported()
     aged_relation: RelationInfo
-    for aged_relation in age_reader.read(tuple(eligible_relations)):
+    eligible: tuple[RelationInfo, ...] = tuple(eligible_relations)
+    for aged_relation in age_reader.read(eligible) if retention_days > 0 else eligible:
         relation_key = build_relation_key(aged_relation)
         age_timestamp: datetime | None = relation_age_timestamp(aged_relation)
         if retention_days > 0:
@@ -296,12 +302,14 @@ def matching_exclude_pattern(
     key: JanitorRelationKey,
     patterns: tuple[str, ...],
 ) -> str | None:
-    """Return the first exclude pattern matching a relation name or qualified name."""
+    """Return the first exclude pattern matching a relation or qualified name, ignoring case."""
 
-    display_name: str = key.display_name()
+    name: str = key.name.lower()
+    display_name: str = key.display_name().lower()
     pattern: str
     for pattern in patterns:
-        if fnmatchcase(key.name, pattern) or fnmatchcase(display_name, pattern):
+        folded_pattern: str = pattern.lower()
+        if fnmatchcase(name, folded_pattern) or fnmatchcase(display_name, folded_pattern):
             return pattern
     return None
 
