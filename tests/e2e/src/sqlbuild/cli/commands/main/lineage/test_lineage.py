@@ -26,6 +26,89 @@ _LINEAGE_CACHE_RELATIVE_PATH: Path = Path("target/cache/lineage/v1/structural-gr
 
 @pytest.mark.parametrize(
     "test_case",
+    (
+        LineageCliTestCase(
+            description="directional expansion preserves exclusions",
+            command=(
+                "lineage",
+                "--select",
+                "fact_orders",
+                "--exclude",
+                "stg_orders",
+                "--direction",
+                "upstream",
+                "--depth",
+                "1",
+                "--format",
+                "json",
+            ),
+            expected_exit_code=0,
+            expected_node_ids=("model:fact_orders",),
+            expected_edge_ids=(),
+        ),
+        LineageCliTestCase(
+            description="tag selections expand with depth",
+            command=(
+                "lineage",
+                "--select",
+                "tag:finance",
+                "--direction",
+                "upstream",
+                "--depth",
+                "1",
+                "--format",
+                "json",
+            ),
+            expected_exit_code=0,
+            expected_node_ids=("model:fact_orders", "model:stg_orders"),
+            expected_edge_ids=("model:stg_orders->model:fact_orders",),
+        ),
+        LineageCliTestCase(
+            description="path selections expand with depth and tag exclusions",
+            command=(
+                "lineage",
+                "--select",
+                "path:staging",
+                "--exclude",
+                "tag:finance",
+                "--direction",
+                "downstream",
+                "--depth",
+                "1",
+                "--format",
+                "json",
+            ),
+            expected_exit_code=0,
+            expected_node_ids=("model:stg_customers", "model:stg_orders"),
+            expected_edge_ids=(),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_directional_selectors_when_expanding_then_depth_and_exclusions_are_respected(
+    test_case: LineageCliTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = prepare_lineage_cache_project(tmp_path=tmp_path)
+    staging_dir: Path = project_dir / "models" / "staging"
+    staging_dir.mkdir()
+    for name in ("stg_orders.sql", "stg_customers.sql"):
+        (project_dir / "models" / name).rename(staging_dir / name)
+    (project_dir / "models" / "fact_orders.sql").write_text(
+        'MODEL (materialized view, tags [finance]);\nSELECT * FROM __ref("stg_orders")\n',
+        encoding="utf-8",
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command, project_dir=project_dir
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    payload: dict[str, object] = json.loads(result.stdout)
+    assert lineage_node_ids(payload=payload) == test_case.expected_node_ids
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [
         LineageCliTestCase(
             description="renders upstream fact orders lineage json without warehouse tables",

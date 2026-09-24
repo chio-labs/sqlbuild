@@ -312,6 +312,30 @@ def select_selector_lineage(
         tag_index=graph.tag_index,
         path_index=graph.path_index,
     )
+    if direction is not None:
+        excluded_keys: set[CompiledObjectKey] = set()
+        for raw_exclude in exclude:
+            for token in raw_exclude.split():
+                excluded_keys.update(
+                    _resolve_token(
+                        token=token,
+                        all_keys=graph.all_keys,
+                        upstream=graph.upstream_deps,
+                        downstream=graph.downstream_deps,
+                        tag_index=graph.tag_index,
+                        path_index=graph.path_index,
+                    )
+                )
+        return build_lineage_graph(
+            graph=graph,
+            selected_keys=(
+                selected_keys
+                | _expand(keys=selected_keys, graph=graph, direction=direction, depth=depth)
+            )
+            - excluded_keys,
+            focus_keys=tuple(sorted(selected_keys - excluded_keys, key=_sort_key)),
+            direction=direction,
+        )
     anchors: LineageSelectionAnchors = _resolve_selector_anchors(
         select=select,
         all_keys=graph.all_keys,
@@ -321,14 +345,6 @@ def select_selector_lineage(
         path_index=graph.path_index,
         require_clear_anchors=depth is not None,
     )
-    if direction is not None:
-        return build_lineage_graph(
-            graph=graph,
-            selected_keys=selected_keys
-            | _expand(keys=selected_keys, graph=graph, direction=direction, depth=depth),
-            focus_keys=tuple(sorted(selected_keys, key=_sort_key)),
-            direction=direction,
-        )
     if depth is not None:
         selected_keys = _trim_selected_keys(
             selected_keys=selected_keys,
