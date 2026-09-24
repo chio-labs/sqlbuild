@@ -10,4 +10,11 @@ class NewestEventTestCase:
     description: str
     events: tuple[tuple[str, str], ...]
     relation: str
-    expected: tuple[str, str] | None
+    expected_newest_index: int | None
+
+
+@dataclass(frozen=True)
+class RepeatedEventWriteTestCase:
+    description: str
+    write_count: int
+    expected_stored_count: int

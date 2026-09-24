@@ -1024,6 +1024,7 @@ class ModelPlanEntry:
     fingerprint_query_sql: str
     resolved_sql: str
     logical_ddl: str
+    migration_fingerprint: str | None = None
     incremental_strategy: str | None = None
     incremental_mode: str | None = None
     microbatch_strategy: str | None = None
@@ -1499,6 +1500,15 @@ class ModelMigrationRequest:
     origin_location: CompiledRelationLocation | None = None
     origin_model: str | None = None
     force: bool = False
+
+
+@dataclass(frozen=True)
+class ModelMigrationDiscovery:
+    """Manual and automatically discovered migration requests for one plan."""
+
+    requests: tuple[ModelMigrationRequest, ...] = ()
+    warnings: tuple[PlanWarning, ...] = ()
+    destination_fingerprints: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

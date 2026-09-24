@@ -2,7 +2,29 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+
+import pytest
+
+
+@dataclass(frozen=True)
+class MigrationOutcomeTestCase:
+    description: str
+    expected_decisions: tuple[str, ...]
+    expected_events: tuple[tuple[str, str, str], ...] = ()
+    expected_destination_ids: tuple[int, ...] = ()
+    expected_output_fragment: str = ""
+    expected_reason: str = ""
+
+
+@dataclass(frozen=True)
+class BackAndForthMigrationTestCase:
+    description: str
+    expected_day_decisions: tuple[tuple[str, ...], ...]
+    expected_day_five_ids: tuple[int, ...]
+    expected_final_ids: tuple[int, ...]
+    expected_events: tuple[tuple[str, str, str], ...]
 
 
 @dataclass(frozen=True)
@@ -26,8 +48,26 @@ class MigrationCompatibilityTestCase:
 @dataclass(frozen=True)
 class MigrationInterruptionTestCase:
     description: str
-    failure_point: str
+    install_failure: Callable[[pytest.MonkeyPatch], None]
+    rerun_with_force: bool
     expected_first_exit_code: int
     expected_decision_after_failure: str
-    rerun_with_force: bool
     expected_final_decisions: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AutomaticMigrationTestCase:
+    description: str
+    expected_migrations: tuple[tuple[str, str, str, str], ...] = ()
+    expected_events: tuple[tuple[str, str, str], ...] = ()
+    expected_reason: str = ""
+    expected_warning: str = ""
+
+
+@dataclass(frozen=True)
+class PlanAsTargetTestCase:
+    description: str
+    preview_target: str
+    expected_exit_code: int
+    expected_decisions: tuple[str, ...] = ()
+    expected_fragment: str = ""

@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import time
 
-from sqlbuild.compiler.planner._helpers.migrations.planning import (
-    manual_migration_requests,
-    plan_model_migrations,
-)
+from sqlbuild.compiler.planner._helpers.migrations.planning import plan_model_migrations
 from sqlbuild.compiler.planner._helpers.output.plan_entry import build_planner_relations_context
 from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
     effectively_full_refreshed_model_names,
@@ -64,7 +61,6 @@ def gather_planner_warehouse_state(
         runtime=runtime,
         scope=scopes.selected_scope,
         snapshot=snapshot,
-        requests=manual_migration_requests(scope=scopes.selected_scope),
         overrides=overrides,
         deferral=deferral,
     )

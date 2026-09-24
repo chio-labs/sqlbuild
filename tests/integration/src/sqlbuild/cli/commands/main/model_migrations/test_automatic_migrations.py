@@ -1,0 +1,250 @@
+"""Integration coverage for fingerprint-based automatic migrations through the real CLI."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from tests.integration.src.sqlbuild.cli.commands.main.model_migrations._test_types import (
+    AutomaticMigrationTestCase,
+)
+from tests.integration.src.sqlbuild.cli.commands.main.model_migrations.helpers import (
+    CliRun,
+    build_ok,
+    build_original_order_models,
+    daily_totals_sql,
+    execute,
+    incremental_orders_sql,
+    load_raw_orders,
+    migration_events,
+    model_entry,
+    order_ids,
+    original_order_models,
+    plan_json,
+    planned_migrations,
+    renamed_order_models,
+    row_count,
+    warning_messages,
+    write_project,
+)
+
+_FIRST_RUN: str = "first_run"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AutomaticMigrationTestCase(
+            description="incremental, view, and incremental renamed together",
+            expected_migrations=(
+                ("daily_order_totals", "customer_daily_order_totals", "automatic", "migrate"),
+                ("stg_orders", "stg_customer_orders", "automatic", "migrate"),
+            ),
+            expected_events=(
+                ("daily_order_totals", "customer_daily_order_totals", "migrate"),
+                ("stg_orders", "stg_customer_orders", "migrate"),
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_coordinated_renames_when_building_then_history_moves_automatically(
+    test_case: AutomaticMigrationTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    build_original_order_models(project_dir=tmp_path, capsys=capsys)
+    load_raw_orders(project_dir=tmp_path, first_day=3, last_day=8)
+    write_project(project_dir=tmp_path, models=renamed_order_models())
+
+    plan: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)
+    result: CliRun = build_ok(project_dir=tmp_path, capsys=capsys)
+    rebuild_plan: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)
+
+    assert planned_migrations(plan) == test_case.expected_migrations
+    assert model_entry(plan=plan, name="stg_customer_orders")["reason"] != _FIRST_RUN
+    assert model_entry(plan=plan, name="customer_daily_order_totals")["reason"] != _FIRST_RUN
+    assert "Migrated main.stg_orders -> main.stg_customer_orders" in result.output
+    assert order_ids(project_dir=tmp_path, relation="main.stg_customer_orders") == tuple(
+        range(1, 9)
+    )
+    assert row_count(project_dir=tmp_path, relation="main.customer_daily_order_totals") == 8
+    assert tuple(sorted(migration_events(project_dir=tmp_path))) == test_case.expected_events
+    assert planned_migrations(rebuild_plan) == ()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AutomaticMigrationTestCase(
+            description="downstream rename matches after an upstream logic change",
+            expected_migrations=(
+                ("daily_order_totals", "customer_daily_order_totals", "automatic", "migrate"),
+            ),
+            expected_events=(("daily_order_totals", "customer_daily_order_totals", "migrate"),),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_upstream_logic_change_when_renaming_then_downstream_still_matches(
+    test_case: AutomaticMigrationTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    build_original_order_models(project_dir=tmp_path, capsys=capsys)
+    models: dict[str, str] = original_order_models()
+    models["stg_orders"] = incremental_orders_sql(
+        select_sql=(
+            "SELECT order_id, order_date, amount_cents * 2 AS amount_cents "
+            'FROM __source("raw_orders")'
+        )
+    )
+    models["customer_daily_order_totals"] = daily_totals_sql(
+        upstream="orders_enriched", cte="enriched"
+    )
+    del models["daily_order_totals"]
+    write_project(project_dir=tmp_path, models=models)
+
+    plan: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+
+    assert planned_migrations(plan) == test_case.expected_migrations
+    assert model_entry(plan=plan, name="customer_daily_order_totals")["reason"] != _FIRST_RUN
+    assert migration_events(project_dir=tmp_path) == test_case.expected_events
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AutomaticMigrationTestCase(
+            description="renamed model with a new filter starts fresh",
+            expected_reason="first_run",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_changed_logic_when_renaming_then_destination_is_first_run(
+    test_case: AutomaticMigrationTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    build_original_order_models(project_dir=tmp_path, capsys=capsys)
+    write_project(
+        project_dir=tmp_path,
+        models={
+            "stg_customer_orders": incremental_orders_sql(
+                select_sql=(
+                    'SELECT order_id, order_date, amount_cents FROM __source("raw_orders") '
+                    "WHERE amount_cents > 0"
+                )
+            )
+        },
+    )
+
+    plan: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)
+
+    assert planned_migrations(plan) == test_case.expected_migrations
+    assert model_entry(plan=plan, name="stg_customer_orders")["reason"] == (
+        test_case.expected_reason
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AutomaticMigrationTestCase(
+            description="two identical removed models make the match ambiguous",
+            expected_reason="first_run",
+            expected_warning=(
+                "'stg_customer_orders' matches several earlier models (orders_copy, stg_orders); "
+                "no automatic migration was inferred. Add migrate_from to choose one."
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_identical_orphans_when_renaming_then_warns_and_does_not_migrate(
+    test_case: AutomaticMigrationTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_project(
+        project_dir=tmp_path,
+        models={"stg_orders": incremental_orders_sql(), "orders_copy": incremental_orders_sql()},
+    )
+    load_raw_orders(project_dir=tmp_path, first_day=1, last_day=3)
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+    write_project(project_dir=tmp_path, models={"stg_customer_orders": incremental_orders_sql()})
+
+    plan: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)
+
+    assert planned_migrations(plan) == test_case.expected_migrations
+    assert test_case.expected_warning in warning_messages(plan)
+    assert model_entry(plan=plan, name="stg_customer_orders")["reason"] == (
+        test_case.expected_reason
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AutomaticMigrationTestCase(
+            description="dropped removed relation cannot migrate",
+            expected_reason="first_run",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_dropped_old_relation_when_renaming_then_destination_is_first_run(
+    test_case: AutomaticMigrationTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_project(project_dir=tmp_path, models={"stg_orders": incremental_orders_sql()})
+    load_raw_orders(project_dir=tmp_path, first_day=1, last_day=3)
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+    execute(project_dir=tmp_path, sql="DROP TABLE main.stg_orders")
+    write_project(project_dir=tmp_path, models={"stg_customer_orders": incremental_orders_sql()})
+
+    plan: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)
+
+    assert planned_migrations(plan) == test_case.expected_migrations
+    assert model_entry(plan=plan, name="stg_customer_orders")["reason"] == (
+        test_case.expected_reason
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AutomaticMigrationTestCase(
+            description="migrate_from wins over a matching fingerprint",
+            expected_migrations=(("legacy_orders", "stg_customer_orders", "manual", "migrate"),),
+            expected_events=(("legacy_orders", "stg_customer_orders", "migrate"),),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_explicit_migrate_from_when_fingerprint_matches_another_then_manual_wins(
+    test_case: AutomaticMigrationTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_project(
+        project_dir=tmp_path,
+        models={
+            "stg_orders": incremental_orders_sql(),
+            "legacy_orders": incremental_orders_sql(
+                select_sql=(
+                    'SELECT order_id, order_date, amount_cents FROM __source("raw_orders") '
+                    "WHERE order_id <= 2"
+                )
+            ),
+        },
+    )
+    load_raw_orders(project_dir=tmp_path, first_day=1, last_day=4)
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+    write_project(
+        project_dir=tmp_path,
+        models={"stg_customer_orders": incremental_orders_sql(migrate_from="legacy_orders")},
+    )
+
+    plan: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+
+    assert planned_migrations(plan) == test_case.expected_migrations
+    assert migration_events(project_dir=tmp_path) == test_case.expected_events
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-vv"])

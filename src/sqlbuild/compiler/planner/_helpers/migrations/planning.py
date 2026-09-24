@@ -10,9 +10,11 @@ from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.compile.constants import MIGRATE_FORCE_CONFIG_KEY, MIGRATE_FROM_CONFIG_KEY
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.migrations.main._newest_event import newest_migration_event_mentioning
-from sqlbuild.compiler.migrations.models import MigrationEvent, MigrationRelation
+from sqlbuild.compiler.migrations.main.relation_for_location import migration_relation_for_location
+from sqlbuild.compiler.migrations.models import MigrationEvent
 from sqlbuild.compiler.migrations.types import (
     MigrationCompatibility,
     MigrationDecision,
@@ -21,6 +23,10 @@ from sqlbuild.compiler.migrations.types import (
 from sqlbuild.compiler.planner._helpers.migrations.compatibility import (
     MigrationCompatibilityResult,
     check_migration_compatibility,
+)
+from sqlbuild.compiler.planner._helpers.migrations.discovery import (
+    discover_model_migrations,
+    stored_migration_fingerprint,
 )
 from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
     effectively_full_refreshed_model_names,
@@ -40,6 +46,7 @@ from sqlbuild.compiler.planner.models import (
     CursorSnapshotScope,
     DeferralInputs,
     ModelCursorSnapshot,
+    ModelMigrationDiscovery,
     ModelMigrationPlanEntry,
     ModelMigrationPlanning,
     ModelMigrationRequest,
@@ -87,24 +94,33 @@ def plan_model_migrations(
     runtime: PlannerRuntime,
     scope: PlannerScope,
     snapshot: WarehouseSnapshot,
-    requests: tuple[ModelMigrationRequest, ...],
     overrides: PlannerOverrides,
     deferral: DeferralInputs,
-    inspection: MigrationStateInspection | None = None,
 ) -> ModelMigrationPlanning:
-    """Decide every requested migration and project the post-migration snapshot."""
+    """Decide every declared or discovered migration and project the post-migration snapshot."""
 
-    if not requests:
-        return ModelMigrationPlanning(snapshot=snapshot)
-    state: MigrationStateInspection = inspection or MigrationStateInspection(
+    manual: tuple[ModelMigrationRequest, ...] = manual_migration_requests(scope=scope)
+    schemas: set[str] = project_schemas(runtime=runtime)
+    state: MigrationStateInspection = MigrationStateInspection(
         adapter=runtime.adapter,
         connection=runtime.connection,
         database=planning_database(runtime=runtime),
     )
-    state.inspect_schemas(schemas=project_schemas(runtime=runtime))
+    if manual:
+        state.inspect_schemas(schemas=schemas)
+    discovery: ModelMigrationDiscovery = discover_model_migrations(
+        runtime=runtime,
+        scope=scope,
+        snapshot=snapshot,
+        manual_requests=manual,
+        state=state,
+        project_schemas=schemas,
+    )
+    if not discovery.requests:
+        return ModelMigrationPlanning(snapshot=snapshot, warnings=discovery.warnings)
     resolved: list[tuple[ModelMigrationRequest, CompiledRelationLocation, str | None]] = [
         (request, *_resolve_origin(request=request, runtime=runtime, state=state))
-        for request in requests
+        for request in discovery.requests
     ]
     origin: CompiledRelationLocation
     for _, origin, _ in resolved:
@@ -138,7 +154,11 @@ def plan_model_migrations(
         )
         entries.append(entry)
         if applies:
-            handovers[request.model.name] = handover
+            handovers[request.model.name] = _equivalent_definition(
+                model=request.model,
+                handover=handover,
+                destination_fingerprint=discovery.destination_fingerprints.get(request.model.name),
+            )
     return ModelMigrationPlanning(
         snapshot=_overlay_snapshot(
             runtime=runtime,
@@ -151,9 +171,26 @@ def plan_model_migrations(
             deferral=deferral,
         ),
         entries=tuple(entries),
-        warnings=tuple(
-            warning for entry in entries if (warning := _entry_warning(entry)) is not None
+        warnings=(
+            *discovery.warnings,
+            *(warning for entry in entries if (warning := _entry_warning(entry)) is not None),
         ),
+    )
+
+
+def _equivalent_definition(
+    *, model: CompiledModel, handover: Fingerprint | None, destination_fingerprint: str | None
+) -> Fingerprint | None:
+    if (
+        handover is None
+        or destination_fingerprint is None
+        or stored_migration_fingerprint(handover) != destination_fingerprint
+    ):
+        return handover
+    return replace(
+        handover,
+        definition=model.query_sql,
+        definition_hash=compute_query_hash(model.query_sql),
     )
 
 
@@ -198,10 +235,6 @@ def _require_same_database(
 
 def _relation_key(location: CompiledRelationLocation) -> tuple[str, str]:
     return ((location.schema or "").lower(), location.name.lower())
-
-
-def _migration_relation(location: CompiledRelationLocation) -> MigrationRelation:
-    return MigrationRelation(database=location.database, schema=location.schema, name=location.name)
 
 
 def _resolve_origin(
@@ -292,7 +325,7 @@ def _decide(
             f"model '{model.name}': migrate_from names the model's own relation"
         )
     newest: MigrationEvent | None = newest_migration_event_mentioning(
-        events=state.events, relation=_migration_relation(destination)
+        events=state.events, relation=migration_relation_for_location(destination)
     )
     origin_relation: RelationInfo | None = state.relation(origin)
     origin_fingerprint: Fingerprint | None = state.model_fingerprint(
@@ -314,8 +347,8 @@ def _decide(
     )
     if (
         newest is not None
-        and newest.destination.matches(_migration_relation(destination))
-        and newest.origin.matches(_migration_relation(origin))
+        and newest.destination.matches(migration_relation_for_location(destination))
+        and newest.origin.matches(migration_relation_for_location(origin))
     ):
         return (
             replace(
@@ -346,7 +379,7 @@ def _decide(
     decision: MigrationDecision
     if model.name not in snapshot.existing_relations:
         decision = MigrationDecision.MIGRATE
-    elif newest is not None and newest.origin.matches(_migration_relation(destination)):
+    elif newest is not None and newest.origin.matches(migration_relation_for_location(destination)):
         decision = MigrationDecision.SUPERSEDED_REPLACE
     elif request.force:
         decision = MigrationDecision.FORCED_REPLACE

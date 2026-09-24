@@ -9,10 +9,10 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.migrations.main.deterministic_event_id import (
     deterministic_migration_event_id,
 )
+from sqlbuild.compiler.migrations.main.relation_for_location import migration_relation_for_location
 from sqlbuild.compiler.migrations.main.write_event import write_migration_event
 from sqlbuild.compiler.migrations.models import MigrationEvent, MigrationRelation
 from sqlbuild.compiler.planner.models import ModelMigrationPlanEntry, PlanOutput
@@ -91,8 +91,8 @@ def _clone_and_record(
         statement_recorder=StatementRecorder(),
     )
     _ = adapter.execute(connection=connection, sql=entry.statement or "")
-    origin: MigrationRelation = _relation(entry.origin)
-    destination: MigrationRelation = _relation(entry.destination)
+    origin: MigrationRelation = migration_relation_for_location(entry.origin)
+    destination: MigrationRelation = migration_relation_for_location(entry.destination)
     write_migration_event(
         connection=connection,
         execute=adapter.execute,
@@ -118,7 +118,3 @@ def _clone_and_record(
         render_framework_type=adapter.render_framework_type,
         transient=adapter.state_tables_transient,
     )
-
-
-def _relation(location: CompiledRelationLocation) -> MigrationRelation:
-    return MigrationRelation(database=location.database, schema=location.schema, name=location.name)

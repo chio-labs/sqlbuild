@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner._helpers.migrations.fingerprint import with_migration_fingerprints
 from sqlbuild.compiler.planner._helpers.output.plan_output import build_plan_output
 from sqlbuild.compiler.planner._helpers.planning.retention import plan_retention, plan_table_types
 from sqlbuild.compiler.planner._helpers.pruning.selection_staleness import (
@@ -83,6 +84,11 @@ def with_storage_policies(
 
     return replace(
         plan_output,
+        model_entries=with_migration_fingerprints(
+            entries=plan_output.model_entries,
+            models_by_name={model.name: model for model in runtime.project.models},
+            dialect=runtime.adapter.sql_analysis_dialect(),
+        ),
         migration_entries=warehouse.migration_entries,
         warnings=(*warehouse.migration_warnings, *plan_output.warnings),
         table_type_entries=plan_table_types(

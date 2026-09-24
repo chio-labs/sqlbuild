@@ -62,3 +62,22 @@ WHOLE_DAY_CURSOR_GRAINS: frozenset[str] = frozenset({"day", "month", "year"})
 VIEW_RELATION_TYPE_MARKER: str = "VIEW"
 QUALIFIED_RELATION_MAX_PARTS: int = 3
 MIGRATION_MODEL_NAME_METADATA_KEY: str = "model_name"
+MIGRATION_FINGERPRINT_METADATA_KEY: str = "migration_fingerprint"
+MIGRATION_REF_PLACEHOLDER_PREFIX: str = "__sqb_migration_ref__"
+MIGRATION_LOCAL_NAME_PREFIX: str = "__sqb_local_"
+MIGRATION_FINGERPRINT_EXCLUDED_CONFIG_KEYS: frozenset[str] = frozenset(
+    {
+        "batch_size",
+        "full_refresh",
+        "incremental_mode",
+        "incremental_strategy",
+        "lookback",
+        "materialized",
+        "max_microbatches",
+        "microbatch_limit",
+        "microbatch_strategy",
+        "on_schema_change",
+        "snapshot_full_refresh",
+        "snapshot_schema_change",
+    }
+)

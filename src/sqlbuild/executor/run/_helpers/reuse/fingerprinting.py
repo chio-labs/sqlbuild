@@ -15,6 +15,7 @@ from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run._helpers.reuse.fingerprint_metadata import (
     model_fingerprint_metadata_with_audit_gate,
+    model_fingerprint_metadata_with_migration_fingerprint,
 )
 
 
@@ -45,6 +46,9 @@ def try_write_fingerprint(
             model_audits=model_audits,
             audit_results=audit_results,
             run_id=run_id,
+        )
+        metadata_json = model_fingerprint_metadata_with_migration_fingerprint(
+            metadata_json=metadata_json, migration_fingerprint=entry.migration_fingerprint
         )
         fingerprint: Fingerprint = Fingerprint(
             node_type=NODE_TYPE_MODEL,
