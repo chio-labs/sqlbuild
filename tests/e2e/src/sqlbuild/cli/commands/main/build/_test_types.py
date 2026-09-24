@@ -1056,6 +1056,19 @@ class RemoveColumnSemanticsBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SnapshotReappearingKeyBuildE2ETestCase:
+    """Test case for hard-deleted keys that reappear in historical check snapshots."""
+
+    description: str
+    repo_files: dict[str, str]
+    initial_seed_sql: str
+    observation_sql_by_round: tuple[tuple[str, ...], ...]
+    history_query_template: str
+    expected_incremental_rows_by_round: tuple[tuple[tuple[object, ...], ...], ...]
+    expected_full_history_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class DynamicColumnContractE2ETestCase:
     description: str
     project_name: str
@@ -1085,3 +1098,14 @@ class WindowLimitedReplayE2ETestCase:
     changed_rows_sql: str
     expected_changed_rows: int
     expected_total_rows: int
+
+
+@dataclass(frozen=True)
+class SqlHookIdentityBuildE2ETestCase:
+    """Test case for model version identity after a SQL hook resource edit."""
+
+    description: str
+    removed_hook_path: str
+    added_hook_path: str
+    added_hook_contents: str
+    expected_reason: str

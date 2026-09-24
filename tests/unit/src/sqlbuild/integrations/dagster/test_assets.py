@@ -21,6 +21,7 @@ from sqlbuild.integrations.dagster.exceptions import DagsterDagInputError
 from sqlbuild.integrations.dagster.models import SqlBuildProject
 from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterAssetCheckFilterTestCase,
+    DagsterAssetSelectionErrorTestCase,
     DagsterAssetSelectionTestCase,
     DagsterAssetSpecTestCase,
     DagsterConflictingInputTestCase,
@@ -32,6 +33,7 @@ from tests.unit.src.sqlbuild.integrations.dagster._test_types import (
     DagsterSourceAssetKeyTestCase,
 )
 from tests.unit.src.sqlbuild.integrations.dagster.helpers import (
+    build_dagster_selection_graph_dag,
     build_dagster_test_dag,
     build_python_augmented_dagster_test_dag,
 )
@@ -209,6 +211,94 @@ def test_given_sqlbuild_selectors_when_building_asset_selection_then_resolves_da
     test_case: DagsterAssetSelectionTestCase,
 ) -> None:
     dag: Mapping[str, Any] = build_dagster_test_dag()
+
+    @sqlbuild_assets(dag=dag)
+    def assets_def() -> dg.MaterializeResult:
+        return dg.MaterializeResult()
+
+    selection: Any = build_sqlbuild_asset_selection(
+        sqlbuild_assets=[assets_def],
+        dag=dag,
+        sqlbuild_select=test_case.select,
+        sqlbuild_exclude=test_case.exclude,
+    )
+
+    assert tuple(sorted(tuple(key.path) for key in selection.resolve([assets_def]))) == tuple(
+        sorted(test_case.expected_asset_keys)
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DagsterAssetSelectionTestCase(
+            description="both-direction expansion keeps only ancestors and descendants",
+            select="+orders+",
+            exclude=None,
+            expected_asset_keys=(("analytics", "orders"), ("analytics", "stg_orders")),
+        ),
+        DagsterAssetSelectionTestCase(
+            description="downstream expansion includes every child",
+            select="stg_orders+",
+            exclude=None,
+            expected_asset_keys=(
+                ("analytics", "customers"),
+                ("analytics", "orders"),
+                ("analytics", "stg_orders"),
+            ),
+        ),
+        DagsterAssetSelectionTestCase(
+            description="path selector keeps every node on every path",
+            select="raw_events~events_report",
+            exclude=None,
+            expected_asset_keys=(
+                ("analytics", "events_joined"),
+                ("analytics", "events_left"),
+                ("analytics", "events_report"),
+                ("analytics", "events_right"),
+                ("analytics", "raw_events"),
+            ),
+        ),
+        DagsterAssetSelectionTestCase(
+            description="path selector keeps both equal-length diamond branches",
+            select="raw_events~events_joined",
+            exclude=None,
+            expected_asset_keys=(
+                ("analytics", "events_joined"),
+                ("analytics", "events_left"),
+                ("analytics", "events_right"),
+                ("analytics", "raw_events"),
+            ),
+        ),
+        DagsterAssetSelectionTestCase(
+            description="path selector expands upstream of start and downstream of end",
+            select="+events_left~events_joined+",
+            exclude=None,
+            expected_asset_keys=(
+                ("analytics", "events_joined"),
+                ("analytics", "events_left"),
+                ("analytics", "events_report"),
+                ("analytics", "raw_events"),
+            ),
+        ),
+        DagsterAssetSelectionTestCase(
+            description="both-direction expansion of a middle node skips siblings",
+            select="+events_left+",
+            exclude=None,
+            expected_asset_keys=(
+                ("analytics", "events_joined"),
+                ("analytics", "events_left"),
+                ("analytics", "events_report"),
+                ("analytics", "raw_events"),
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_branching_dag_when_building_asset_selection_then_expands_from_matched_nodes(
+    test_case: DagsterAssetSelectionTestCase,
+) -> None:
+    dag: Mapping[str, Any] = build_dagster_selection_graph_dag()
 
     @sqlbuild_assets(dag=dag)
     def assets_def() -> dg.MaterializeResult:
@@ -529,3 +619,36 @@ def test_given_sqlbuild_dag_when_building_check_specs_then_can_exclude_scenarios
 
     assert check_names == test_case.expected_check_names
     assert not set(test_case.unexpected_check_names).intersection(check_names)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterAssetSelectionErrorTestCase(
+            description="rejects a path whose end is not downstream of its start",
+            select="events_report~raw_events",
+            expected_error_fragment="no SQLBuild DAG path exists between",
+        ),
+        DagsterAssetSelectionErrorTestCase(
+            description="rejects a path from a node to itself like the planner",
+            select="orders~orders",
+            expected_error_fragment="no SQLBuild DAG path exists between",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unreachable_path_selector_when_building_asset_selection_then_raises_input_error(
+    test_case: DagsterAssetSelectionErrorTestCase,
+) -> None:
+    dag: Mapping[str, Any] = build_dagster_selection_graph_dag()
+
+    @sqlbuild_assets(dag=dag)
+    def assets_def() -> dg.MaterializeResult:
+        return dg.MaterializeResult()
+
+    with pytest.raises(DagsterDagInputError, match=test_case.expected_error_fragment):
+        build_sqlbuild_asset_selection(
+            sqlbuild_assets=[assets_def],
+            dag=dag,
+            sqlbuild_select=test_case.select,
+        )

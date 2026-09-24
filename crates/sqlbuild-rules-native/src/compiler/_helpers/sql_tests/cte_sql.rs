@@ -1,6 +1,7 @@
 //! CTE definition and leading-WITH assembly shared by SQL-test planning and rendering.
 
-use crate::compiler::_helpers::sql_tests::sql_scan::{comment_end, skip_whitespace};
+use crate::sql_scan::main::comment_end::comment_end;
+use crate::sql_scan::main::skip_whitespace::skip_whitespace;
 
 /// Render one `name AS (body)` definition, closing a trailing line comment first.
 pub(crate) fn cte_definition_sql(name: &str, sql: &str) -> String {
@@ -53,7 +54,7 @@ pub(crate) fn leading_with_prefix_end(sql: &str) -> Option<usize> {
 fn skip_leading_ignorable(sql: &str, mut index: usize) -> usize {
     loop {
         index = skip_whitespace(sql, index);
-        match comment_end(sql, index) {
+        match comment_end(sql.as_bytes(), index) {
             Ok(Some(end)) => index = end,
             Ok(None) | Err(_) => return index,
         }

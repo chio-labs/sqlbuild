@@ -870,6 +870,43 @@ def build_star_mock_fixture_project_files() -> dict[str, str]:
     return files
 
 
+def build_union_distinct_expected_project_files() -> dict[str, str]:
+    """Build a SQL test whose expected rows combine branches with UNION DISTINCT."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "union_distinct_expected"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "union_distinct_expected.duckdb"\n'
+        ),
+        "models/orders.sql": (
+            'MODEL ();\n\nSELECT DISTINCT order_id FROM __source("raw_orders")\n'
+        ),
+        "sources/raw_orders.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n"
+            "    schema: main\n"
+            "    table: raw_orders\n"
+            "    columns:\n"
+            "      - name: order_id\n        type: INTEGER\n"
+        ),
+        "tests/unit/test_orders.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT 1 AS order_id UNION ALL SELECT 1 AS order_id UNION ALL SELECT 2 AS order_id\n"
+            "),\n"
+            "__expected__orders AS (\n"
+            "  SELECT 1 AS order_id\n"
+            "  UNION DISTINCT\n"
+            "  SELECT 2 AS order_id\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
 def build_transformed_collection_project_files() -> dict[str, str]:
     """Build a valid aggregation that changes a scalar input into a collection output."""
 

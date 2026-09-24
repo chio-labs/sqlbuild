@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -12,9 +12,13 @@ from typing import Any
 from sqlbuild.adapter.contract.types import (
     CursorKind,
     FunctionNullabilityRule,
+    HistoricalSnapshotCloseStyle,
+    HistoricalSnapshotInsertStyle,
     LifeCycleEventKind,
     RetentionChangePhase,
     RetentionScope,
+    SnapshotLatestVersionStyle,
+    SnapshotUpdateStyle,
     TypeFamily,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
@@ -200,6 +204,18 @@ class SnapshotChangeTarget:
     valid_from_column: str
     valid_to_column: str
     output_columns: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnapshotSqlDialect:
+    """Dialect differences in adapter-rendered snapshot SQL."""
+
+    timestamp_type: str
+    distinct_condition: Callable[..., str]
+    update_style: SnapshotUpdateStyle
+    latest_version: SnapshotLatestVersionStyle
+    historical_close: HistoricalSnapshotCloseStyle
+    historical_insert: HistoricalSnapshotInsertStyle
 
 
 @dataclass(frozen=True)

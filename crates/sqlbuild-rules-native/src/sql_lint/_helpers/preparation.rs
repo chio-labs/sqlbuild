@@ -6,6 +6,8 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use crate::sql_lint::types::{InterpolationSite, PreparedSql};
+use crate::sql_scan::main::matching_paren::matching_paren as scan_matching_paren;
+use crate::sql_scan::models::QuotePolicy;
 
 static SITES: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| {
     Regex::new(
@@ -135,49 +137,9 @@ fn scan_name(bytes: &[u8], mut index: usize, interpolation: bool) -> usize {
     index
 }
 
-fn matching_paren(bytes: &[u8], mut index: usize) -> Option<usize> {
-    let mut depth = 0;
-    let mut quote = None;
-    while index < bytes.len() {
-        let byte = bytes[index];
-        if let Some(quoted) = quote {
-            if byte == b'\\' && index + 1 < bytes.len() {
-                index += 2;
-                continue;
-            }
-            if byte == quoted {
-                if bytes.get(index + 1) == Some(&quoted) {
-                    index += 2;
-                    continue;
-                }
-                quote = None;
-            }
-        } else if bytes[index..].starts_with(b"--") {
-            index = bytes[index + 2..]
-                .iter()
-                .position(|byte| *byte == b'\n')
-                .map_or(bytes.len(), |offset| index + offset + 3);
-            continue;
-        } else if bytes[index..].starts_with(b"/*") {
-            index = bytes[index + 2..]
-                .windows(2)
-                .position(|pair| pair == b"*/")
-                .map_or(bytes.len(), |offset| index + offset + 4);
-            continue;
-        } else {
-            match byte {
-                b'\'' | b'"' => quote = Some(byte),
-                b'(' => depth += 1,
-                b')' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return Some(index + 1);
-                    }
-                }
-                _ => {}
-            }
-        }
-        index += 1;
+fn matching_paren(bytes: &[u8], open: usize) -> Option<usize> {
+    match scan_matching_paren(bytes, open, QuotePolicy::SQL_LINT) {
+        Ok(close) => Some(close + 1),
+        Err(_) => None,
     }
-    None
 }

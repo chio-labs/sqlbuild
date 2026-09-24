@@ -231,3 +231,13 @@ def discovered_test_case_values(
     for test_case in cases:
         case_values.append(tuple(value.value for _name, value in test_case.values))
     return tuple(case_values)
+
+
+def write_unreadable_files(*, project_dir: Path, relative_paths: tuple[str, ...]) -> None:
+    """Write files whose bytes are not valid UTF-8 under project_dir."""
+
+    relative_path: str
+    for relative_path in relative_paths:
+        file_path: Path = project_dir / relative_path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        _ = file_path.write_bytes(b"\xff\xfe\xfa")

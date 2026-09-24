@@ -100,3 +100,36 @@ class TypeDialect(StrEnum):
     DATABRICKS = "databricks"
     POSTGRES = "postgres"
     TSQL = "tsql"
+
+
+class SnapshotLatestVersionStyle(StrEnum):
+    """How incremental snapshot SQL selects each key's latest stored version."""
+
+    QUALIFY = "qualify"
+    DERIVED_TABLE = "derived_table"
+    ORDERED_CTE = "ordered_cte"
+
+
+class SnapshotUpdateStyle(StrEnum):
+    """How current-state snapshot SQL closes active versions."""
+
+    UPDATE_FROM = "update_from"
+    MERGE = "merge"
+    TSQL = "tsql"
+
+
+class HistoricalSnapshotCloseStyle(StrEnum):
+    """How historical snapshot SQL closes versions superseded by new observations."""
+
+    CORRELATED = "correlated"
+    UPDATE_FROM = "update_from"
+    MERGE_HARD_DELETES = "merge_hard_deletes"
+    TSQL = "tsql"
+
+
+class HistoricalSnapshotInsertStyle(StrEnum):
+    """Where historical snapshot inserts place their common table expressions."""
+
+    WITH_INSERT = "with_insert"
+    INSERT_WITH = "insert_with"
+    TSQL = "tsql"

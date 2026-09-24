@@ -4,12 +4,16 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
-use crate::compiler::_helpers::sql_tests::sql_scan::{
-    self, Unclosed, comment_end, quoted_end, skip_whitespace,
-};
 use crate::constants::{
     DIRECT_DEPENDENCY_PATH_LENGTH, MACRO_TEST_MODE, TABLE_FUNCTION_TEST_MODE, UDF_TEST_MODE,
 };
+use crate::sql_scan::main::comment_end::comment_end;
+use crate::sql_scan::main::matching_paren::matching_paren as scan_matching_paren;
+use crate::sql_scan::main::non_code_end::non_code_end;
+use crate::sql_scan::main::quote_end::quote_end;
+use crate::sql_scan::main::skip_whitespace::skip_whitespace;
+use crate::sql_scan::models::QuotePolicy;
+use crate::sql_scan::models::Unclosed;
 
 const MODEL_PREFIXES: [&str; 8] = [
     "__macro__",
@@ -430,13 +434,13 @@ fn validate_expected(
     let branches = split_unions(&cte.1)?;
     let mut names: Vec<Vec<String>> = Vec::new();
     for branch in branches {
-        names.push(projection_names(branch, file)?);
+        names.push(projection_names(branch, file, label)?);
     }
     if let Some(first) = names.first() {
         for (index, branch) in names.iter().enumerate().skip(1) {
             if branch != first {
                 return Err(format!(
-                    "SQL test '{file}' must use the same __expected__<model> projection names and order in every set-operation branch; branch {} does not match branch 1",
+                    "SQL test '{file}' must use the same {label} projection names and order in every set-operation branch; branch {} does not match branch 1",
                     index + 1
                 ));
             }
@@ -477,9 +481,11 @@ pub(crate) fn empty_fixture_marker_matches(sql: &str) -> Result<bool, String> {
     Ok(index == sql.len())
 }
 
-fn projection_names(branch: &str, file: &str) -> Result<Vec<String>, String> {
+fn projection_names(branch: &str, file: &str, label: &str) -> Result<Vec<String>, String> {
     let start = skip_ignorable(branch, 0)?;
-    let select_end = consume_keyword(branch, start, "SELECT").ok_or_else(|| format!("SQL test '{file}' must define each __expected__<model> set-operation branch as a SELECT query"))?;
+    let select_end = consume_keyword(branch, start, "SELECT").ok_or_else(|| {
+        format!("SQL test '{file}' must define each {label} set-operation branch as a SELECT query")
+    })?;
     let mut end = branch.len();
     for keyword in [
         "FROM", "WHERE", "GROUP", "HAVING", "QUALIFY", "WINDOW", "ORDER", "LIMIT", "OFFSET",
@@ -492,16 +498,16 @@ fn projection_names(branch: &str, file: &str) -> Result<Vec<String>, String> {
     let expressions = split_top_level(&branch[select_end..end], b',')?;
     if expressions.is_empty() {
         return Err(format!(
-            "SQL test '{file}' must project at least one column in __expected__<model>"
+            "SQL test '{file}' must project at least one column in {label}"
         ));
     }
     expressions
         .into_iter()
-        .map(|expression| projection_name(expression, file))
+        .map(|expression| projection_name(expression, file, label))
         .collect()
 }
 
-fn projection_name(expression: &str, file: &str) -> Result<String, String> {
+fn projection_name(expression: &str, file: &str, label: &str) -> Result<String, String> {
     if let Some(position) = find_last_top_level_keyword(expression, "AS")? {
         let alias_start = skip_ignorable(expression, position + 2)?;
         if let Some((alias, end)) = read_identifier(expression, alias_start)
@@ -521,7 +527,7 @@ fn projection_name(expression: &str, file: &str) -> Result<String, String> {
         return Ok(alias);
     }
     Err(format!(
-        "SQL test '{file}' must alias every non-trivial __expected__<model> projection"
+        "SQL test '{file}' must alias every non-trivial {label} projection"
     ))
 }
 
@@ -862,8 +868,10 @@ fn split_unions(sql: &str) -> Result<Vec<&str>, String> {
                 values.push(value);
             }
             index = skip_ignorable(sql, end)?;
-            if let Some(all_end) = consume_keyword(sql, index, "ALL") {
-                index = skip_ignorable(sql, all_end)?;
+            if let Some(quantifier_end) = consume_keyword(sql, index, "ALL")
+                .or_else(|| consume_keyword(sql, index, "DISTINCT"))
+            {
+                index = skip_ignorable(sql, quantifier_end)?;
             }
             start = index;
             continue;
@@ -1060,7 +1068,9 @@ fn char_len(sql: &str, index: usize) -> usize {
 fn skip_ignorable(sql: &str, mut index: usize) -> Result<usize, String> {
     loop {
         index = skip_whitespace(sql, index);
-        match comment_end(sql, index).map_err(|error| scan_error_message(error, "SQL test"))? {
+        match comment_end(sql.as_bytes(), index)
+            .map_err(|error| scan_error_message(error, "SQL test"))?
+        {
             Some(end) => index = end,
             None => return Ok(index),
         }
@@ -1068,26 +1078,21 @@ fn skip_ignorable(sql: &str, mut index: usize) -> Result<usize, String> {
 }
 
 fn skip_non_code(sql: &str, index: usize) -> Result<usize, String> {
-    if let Some(end) =
-        comment_end(sql, index).map_err(|error| scan_error_message(error, "SQL test"))?
-    {
-        return Ok(end);
-    }
-    if matches!(byte_at(sql, index), Some(b'\'') | Some(b'"') | Some(b'`')) {
-        return skip_quote(sql, index, "SQL test");
-    }
-    Ok(index)
+    Ok(non_code_end(sql.as_bytes(), index, QuotePolicy::COMPILER)
+        .map_err(|error| scan_error_message(error, "SQL test"))?
+        .unwrap_or(index))
 }
 
 fn skip_quote(sql: &str, start: usize, context: &str) -> Result<usize, String> {
     if byte_at(sql, start).is_none() {
         return Err(format!("{context} expected a quote"));
     }
-    quoted_end(sql, start).map_err(|error| scan_error_message(error, context))
+    quote_end(sql.as_bytes(), start, QuotePolicy::COMPILER)
+        .map_err(|error| scan_error_message(error, context))
 }
 
 fn matching_paren(sql: &str, open: usize, context: &str) -> Result<usize, String> {
-    sql_scan::matching_paren(sql, open).map_err(|error| match error {
+    scan_matching_paren(sql.as_bytes(), open, QuotePolicy::COMPILER).map_err(|error| match error {
         Unclosed::Parenthesis => scan_error_message(error, context),
         _ => scan_error_message(error, "SQL test"),
     })

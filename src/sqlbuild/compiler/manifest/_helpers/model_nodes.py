@@ -5,7 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.compiler.compile.models import CompiledModel
-from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
+from sqlbuild.compiler.discovery.constants import SQL_HOOK_OUTPUT_FIELDS
+from sqlbuild.compiler.discovery.main.serialize_hook_entries import serialize_hook_entries
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.manifest._helpers.shared import (
     build_columns_dict,
@@ -151,33 +152,8 @@ def _extract_meta(
 def _serialize_hooks(
     *, value: object, python_hook_metadata: dict[str, dict[str, object]]
 ) -> list[dict[str, object]]:
-    if not isinstance(value, list | tuple):
-        return []
-    hooks: list[dict[str, object]] = []
-    entry: object
-    for entry in value:
-        if isinstance(entry, SqlHookEntry):
-            hook: dict[str, object] = {
-                "type": "sql",
-                "statement": entry.statement,
-            }
-            if entry.name is not None:
-                hook["name"] = entry.name
-            if entry.relative_path is not None:
-                hook["relative_path"] = entry.relative_path.as_posix()
-            if entry.definition_sql is not None:
-                hook["definition_sql"] = entry.definition_sql
-            if entry.kwargs is not None:
-                hook["kwargs"] = entry.kwargs
-            if entry.description is not None:
-                hook["description"] = entry.description
-            hooks.append(hook)
-        elif isinstance(entry, PythonHookEntry):
-            python_hook: dict[str, object] = {
-                "type": "python",
-                "name": entry.name,
-                "kwargs": entry.kwargs,
-            }
-            python_hook.update(python_hook_metadata.get(entry.name, {}))
-            hooks.append(python_hook)
-    return hooks
+    return serialize_hook_entries(
+        value=value,
+        sql_fields=SQL_HOOK_OUTPUT_FIELDS,
+        python_hook_fields=python_hook_metadata,
+    )

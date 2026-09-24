@@ -828,3 +828,21 @@ class LoadTargetRetentionPoliciesErrorTestCase:
     description: str
     target_lines: tuple[str, ...]
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class DiscoverFileFaultsTestCase:
+    description: str
+    discovery_name: str
+    unreadable_files: tuple[str, ...]
+    expected_fault_paths: tuple[Path, ...]
+    expected_error_type: type[Exception] = UnicodeDecodeError
+
+
+@dataclass(frozen=True)
+class DiscoverModuleImportFailureTestCase:
+    description: str
+    discovery_name: str
+    broken_file: str
+    expected_error_type: type[Exception]
+    expected_error_fragment: str

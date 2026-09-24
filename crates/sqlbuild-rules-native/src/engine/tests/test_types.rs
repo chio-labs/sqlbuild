@@ -1,5 +1,7 @@
 use serde_json::Value;
 
+use crate::sql_scan::models::Unclosed;
+
 pub(crate) struct NativeEvaluationTestCase {
     pub(crate) description: &'static str,
     pub(crate) config: Value,
@@ -164,4 +166,20 @@ pub(crate) struct EmptyInputMinimumTestsTestCase {
     pub(crate) tests: Value,
     pub(crate) allowed_tests: Value,
     pub(crate) expected_messages: &'static [&'static str],
+}
+
+/// One SQL fragment scanned by every native quote- and comment-aware scanner.
+pub(crate) struct SqlScannerTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) fragment: &'static str,
+    pub(crate) expected_compiler_paren: Result<usize, Unclosed>,
+    pub(crate) expected_table_function: &'static str,
+    pub(crate) expected_table_function_token: &'static str,
+    pub(crate) expected_snowflake_exclude: &'static str,
+    pub(crate) expected_snowflake_comma: &'static str,
+    pub(crate) expected_compact: &'static str,
+    pub(crate) expected_snowflake_compact: &'static str,
+    /// `None` when SQL lint declines non-ASCII input; `Some("")` when no macro site closes.
+    pub(crate) expected_lint_site: Option<&'static str>,
+    pub(crate) expected_reference_fast_path: bool,
 }

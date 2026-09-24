@@ -126,3 +126,9 @@ class PythonNodeIdentityChangeTestCase:
     expected_version_hash_changed: bool
     before_decorator_config: dict[str, object] | None = None
     after_decorator_config: dict[str, object] | None = None
+
+
+@dataclass(frozen=True)
+class PythonNodeIdentityConfigTestCase:
+    description: str
+    expected_decorator_config_keys_by_selector: dict[str, tuple[str, ...]]

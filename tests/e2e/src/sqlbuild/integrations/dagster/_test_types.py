@@ -126,3 +126,12 @@ class DagsterComputeLogE2ETestCase:
     expected_stdout_fragments: tuple[str, ...]
     unexpected_structured_log_fragment: str
     expected_materialization_fragment: str
+
+
+@dataclass(frozen=True)
+class DagsterSelectorParityE2ETestCase:
+    """Test case comparing Dagster asset selection with the SQLBuild planner."""
+
+    description: str
+    select: str
+    expected_model_names: tuple[str, ...]

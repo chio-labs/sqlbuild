@@ -27,3 +27,5 @@ DIFF_RIGHT_SIDE: str = "right"
 QUALIFIED_NAME_SEPARATOR: str = "."
 PYTHON_INIT_FILE_NAME: str = "__init__.py"
 PYTHON_IDENTIFIER_REPLACEMENT: str = "_"
+
+SNAPSHOT_VERSION_START_COLUMN: str = "__version_start"

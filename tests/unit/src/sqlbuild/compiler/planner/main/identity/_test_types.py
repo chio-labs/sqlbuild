@@ -30,3 +30,19 @@ class CursorRoleIdentityTestCase:
     original_config: dict[str, object]
     changed_config: dict[str, object]
     expected_equal: bool
+
+
+@dataclass(frozen=True)
+class HookIdentityTestCase:
+    description: str
+    original_hooks: dict[str, object]
+    changed_hooks: dict[str, object]
+    expected_changed: bool
+
+
+@dataclass(frozen=True)
+class HookIdentityPayloadTestCase:
+    description: str
+    hooks: dict[str, object]
+    expected_fragments: tuple[str, ...]
+    forbidden_fragments: tuple[str, ...]

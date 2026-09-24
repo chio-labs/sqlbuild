@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     ConditionalPublicationPayload,
+    StateRefContractObservation,
 )
 
 
@@ -209,3 +211,19 @@ class PostgresRetiredMicrobatchRecordTestCase:
     description: str
     retired_record_type: str
     expected_event_count: int
+
+
+@dataclass(frozen=True)
+class PostgresStateReadContractTestCase:
+    description: str
+    sqlbuild_version: str
+    expected_environments: tuple[tuple[str, VirtualEnvironmentStatus], ...]
+    expected_active_lock_keys: tuple[str, ...]
+    expected_expired_lock_keys: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PostgresStateBackendRefContractTestCase:
+    description: str
+    expected_observation: StateRefContractObservation
+    sqlbuild_version: str

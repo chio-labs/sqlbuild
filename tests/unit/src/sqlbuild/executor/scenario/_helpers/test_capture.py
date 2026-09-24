@@ -6,15 +6,19 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.planner.models import ScenarioExecutionPlan, SeedPlanEntry
+from sqlbuild.compiler.planner.types import ScenarioArtifactKind
+from sqlbuild.executor.scenario._helpers.capture import core as capture_core
 from sqlbuild.executor.scenario._helpers.capture.core import execute_scenario_snapshot_capture_steps
 from sqlbuild.executor.scenario.models import (
     ScenarioCaptureSettings,
+    ScenarioFixtureExecutionResult,
     ScenarioSnapshotCaptureRunResult,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.observability import EventDispatcher, LifecycleEvent, dispatcher_scope
 from tests.unit.src.sqlbuild.executor.scenario._helpers._test_types import (
     ExecuteScenarioSnapshotCaptureStepsTestCase,
+    ScenarioCaptureMissingFixtureMessageTestCase,
     ScenarioCaptureRunIdentityTestCase,
 )
 from tests.unit.src.sqlbuild.executor.scenario._helpers.helpers import (
@@ -205,3 +209,60 @@ def test_given_multiple_capture_seeds_when_executing_then_operation_and_resource
         test_case.expected_seed_resource_ids[1],
         test_case.expected_seed_resource_ids[1],
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ScenarioCaptureMissingFixtureMessageTestCase(
+            description="failed fixture without a message uses the capture fallback message",
+            fixture_error_message=None,
+            expected_error_message="scenario snapshot capture failed",
+        ),
+        ScenarioCaptureMissingFixtureMessageTestCase(
+            description="failed fixture with an empty message uses the capture fallback message",
+            fixture_error_message="",
+            expected_error_message="scenario snapshot capture failed",
+        ),
+        ScenarioCaptureMissingFixtureMessageTestCase(
+            description="failed fixture message is reported unchanged",
+            fixture_error_message="orders fixture failed",
+            expected_error_message="orders fixture failed",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_failed_fixture_message_when_capturing_then_reports_message_or_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    test_case: ScenarioCaptureMissingFixtureMessageTestCase,
+) -> None:
+    failed_fixture: ScenarioFixtureExecutionResult = ScenarioFixtureExecutionResult(
+        scenario_name=SCENARIO_PLAN.name,
+        kind=ScenarioArtifactKind.SOURCE,
+        logical_name="raw__orders",
+        target_relation="scenario_schema.raw__orders",
+        status=ExecutionStatus.FAILED,
+        error_message=test_case.fixture_error_message,
+    )
+    monkeypatch.setattr(
+        capture_core, "execute_scenario_fixtures", lambda **_kwargs: (failed_fixture,)
+    )
+
+    result: ScenarioSnapshotCaptureRunResult = execute_scenario_snapshot_capture_steps(
+        project_dir=tmp_path,
+        scenario_plan=SCENARIO_PLAN,
+        adapter=ScenarioSnapshotCaptureStepsTestAdapter(),
+        connection=object(),
+        run_id="capture-test-run",
+        settings=ScenarioCaptureSettings(
+            captured_at="2026-05-09T00:00:00Z",
+            capture_adapter="duckdb",
+            capture_dialect="duckdb",
+            sqlbuild_version="0.1.0",
+            retain=False,
+        ),
+    )
+
+    assert result.status == ExecutionStatus.FAILED
+    assert result.error_message == test_case.expected_error_message

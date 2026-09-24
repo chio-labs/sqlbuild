@@ -5,7 +5,10 @@ use std::collections::HashSet;
 use regex::{Captures, Regex};
 
 use crate::compiler::_helpers::sql_tests::planning::compile_error;
-use crate::compiler::_helpers::sql_tests::sql_scan::{Unclosed, matching_paren, skip_whitespace};
+use crate::sql_scan::main::matching_paren::matching_paren;
+use crate::sql_scan::main::skip_whitespace::skip_whitespace;
+use crate::sql_scan::models::QuotePolicy;
+use crate::sql_scan::models::Unclosed;
 
 pub(crate) fn replace_callable_markers<F>(
     sql: &str,
@@ -51,7 +54,7 @@ where
 }
 
 fn matching_paren_end(sql: &str, open: usize) -> Result<usize, String> {
-    matching_paren(sql, open)
+    matching_paren(sql.as_bytes(), open, QuotePolicy::COMPILER)
         .map(|close| close + 1)
         .map_err(|error| {
             compile_error(match error {

@@ -8,17 +8,19 @@ from typing import cast
 import yaml
 from yaml import YAMLError
 
+from sqlbuild.compiler.auditing.main._parse_audit_instances import parse_audit_instances
+from sqlbuild.compiler.authored_values.main._optional_bool import optional_bool
+from sqlbuild.compiler.authored_values.main._optional_mapping import optional_mapping
+from sqlbuild.compiler.authored_values.main._optional_non_empty_string import (
+    optional_non_empty_string,
+)
+from sqlbuild.compiler.authored_values.main._require_non_empty_string import (
+    require_non_empty_string,
+)
 from sqlbuild.compiler.discovery._helpers.integrations.loaders import (
     integration_loader_name,
     parse_dlt_sources,
     parse_source_integration_loader,
-)
-from sqlbuild.compiler.discovery._helpers.yml.primitives import (
-    optional_bool,
-    optional_mapping,
-    optional_non_empty_string,
-    parse_audit_instances,
-    require_non_empty_string,
 )
 from sqlbuild.compiler.discovery.constants import (
     NOT_NULL_AUDIT_NAME,
@@ -208,7 +210,11 @@ def _parse_source_entry(*, entry: dict[str, object], file_path: Path) -> SourceE
         ),
         columns=columns,
         audits=parse_audit_instances(
-            entry=entry, file_path=file_path, label="source", error_class=SourceParseError
+            raw_audits=entry.get("audits", []),
+            file_path=file_path,
+            label="source",
+            error_class=SourceParseError,
+            null_as_empty=False,
         ),
     )
     _validate_source_entry(entry=source_entry, file_path=file_path)
@@ -589,10 +595,11 @@ def _parse_columns(*, entry: dict[str, object], file_path: Path) -> tuple[Source
             error_class=SourceParseError,
         )
         audits: tuple[SchemaAuditInstance, ...] = parse_audit_instances(
-            entry=column,
+            raw_audits=column.get("audits", []),
             file_path=file_path,
             label=column_label,
             error_class=SourceParseError,
+            null_as_empty=False,
         )
         _validate_nullable_audits(
             file_path=file_path,

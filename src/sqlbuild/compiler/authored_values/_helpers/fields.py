@@ -1,42 +1,12 @@
-"""Shared YAML field-extraction primitives for discovery parsers."""
+"""Authored configuration value validation implementations."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import cast
 
-from sqlbuild.compiler.auditing.main._parse_audit_instance import parse_audit_instance
-from sqlbuild.spec.contracts.models import SchemaAuditInstance
 
-
-def parse_audit_instances(
-    *,
-    entry: dict[str, object],
-    file_path: Path,
-    label: str,
-    error_class: type[Exception],
-) -> tuple[SchemaAuditInstance, ...]:
-    """Parse a list of schema-attached audit instances from a YAML entry."""
-
-    raw_audits: object = entry.get("audits", [])
-    if not isinstance(raw_audits, list):
-        raise error_class(f"{file_path} {label} audits must be a list")
-
-    parsed_audits: list[SchemaAuditInstance] = []
-    raw_audit: object
-    for raw_audit in raw_audits:
-        parsed_audits.append(
-            parse_audit_instance(
-                raw_audit=raw_audit,
-                file_path=file_path,
-                label=label,
-                error_class=error_class,
-            )
-        )
-    return tuple(parsed_audits)
-
-
-def require_non_empty_string(
+def require_non_empty_string_impl(
     *,
     entry: dict[str, object],
     key: str,
@@ -44,7 +14,7 @@ def require_non_empty_string(
     label: str,
     error_class: type[Exception],
 ) -> str:
-    """Extract a required non-empty string from a YAML mapping."""
+    """Extract a required non-empty string from a mapping."""
 
     raw_value: object | None = entry.get(key)
     if not isinstance(raw_value, str) or not raw_value.strip():
@@ -52,7 +22,7 @@ def require_non_empty_string(
     return raw_value
 
 
-def optional_non_empty_string(
+def optional_non_empty_string_impl(
     *,
     entry: dict[str, object],
     key: str,
@@ -60,9 +30,9 @@ def optional_non_empty_string(
     label: str,
     error_class: type[Exception],
 ) -> str | None:
-    """Extract an optional non-empty string from a YAML mapping."""
+    """Extract an optional non-empty string from a mapping."""
 
-    return optional_named_string(
+    return optional_named_string_impl(
         raw_value=entry.get(key),
         file_path=file_path,
         label=label,
@@ -71,7 +41,7 @@ def optional_non_empty_string(
     )
 
 
-def optional_named_string(
+def optional_named_string_impl(
     *,
     raw_value: object | None,
     file_path: Path,
@@ -88,7 +58,25 @@ def optional_named_string(
     return raw_value
 
 
-def optional_bool(
+def optional_named_bool_impl[D: (bool, None)](
+    *,
+    raw_value: object | None,
+    file_path: Path,
+    label: str,
+    key: str,
+    error_class: type[Exception],
+    default: D,
+) -> bool | D:
+    """Validate and return an optional named boolean value."""
+
+    if raw_value is None:
+        return default
+    if not isinstance(raw_value, bool):
+        raise error_class(f"{file_path} {label} '{key}' must be a boolean")
+    return raw_value
+
+
+def optional_bool_impl(
     *,
     entry: dict[str, object],
     key: str,
@@ -96,17 +84,19 @@ def optional_bool(
     label: str,
     error_class: type[Exception],
 ) -> bool | None:
-    """Extract an optional boolean from a YAML mapping."""
+    """Extract an optional boolean from a mapping."""
 
-    raw_value: object | None = entry.get(key)
-    if raw_value is None:
-        return None
-    if not isinstance(raw_value, bool):
-        raise error_class(f"{file_path} {label} '{key}' must be a boolean")
-    return raw_value
+    return optional_named_bool_impl(
+        raw_value=entry.get(key),
+        file_path=file_path,
+        label=label,
+        key=key,
+        error_class=error_class,
+        default=None,
+    )
 
 
-def optional_mapping(
+def optional_mapping_impl(
     *,
     entry: dict[str, object],
     key: str,
@@ -114,7 +104,7 @@ def optional_mapping(
     label: str,
     error_class: type[Exception],
 ) -> dict[str, object]:
-    """Extract an optional mapping from a YAML mapping."""
+    """Extract an optional mapping from a mapping, defaulting to empty."""
 
     raw_value: object | None = entry.get(key)
     if raw_value is None:
@@ -124,7 +114,7 @@ def optional_mapping(
     return cast(dict[str, object], raw_value)
 
 
-def optional_string_tuple(
+def optional_string_tuple_impl(
     *,
     entry: dict[str, object],
     key: str,
@@ -132,7 +122,7 @@ def optional_string_tuple(
     label: str,
     error_class: type[Exception],
 ) -> tuple[str, ...]:
-    """Extract an optional list of strings from a YAML mapping."""
+    """Extract an optional list of strings from a mapping."""
 
     raw_value: object | None = entry.get(key)
     if raw_value is None:

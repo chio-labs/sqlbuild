@@ -15,7 +15,7 @@ from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledResourceType,
 )
-from sqlbuild.compiler.planner._helpers.graph.core import expand_downstream
+from sqlbuild.compiler.planner._helpers.graph.core import expand_downstream, expand_upstream
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.references.types import SqlReferenceKind
@@ -110,8 +110,8 @@ def _model_lifecycle_attachment_is_safe(
     attached_key: CompiledObjectKey = CompiledObjectKey(
         resource_type=CompiledResourceType.MODEL, name=audit.attached_target_name
     )
-    attached_upstream: frozenset[CompiledObjectKey] = _expand_upstream(
-        key=attached_key, upstream_deps=upstream_deps
+    attached_upstream: frozenset[CompiledObjectKey] = expand_upstream(
+        key=attached_key, upstream=upstream_deps
     )
 
     dep_key: CompiledObjectKey
@@ -211,23 +211,3 @@ def _find_single_safe_latest_owner(
             return deepest.name
 
     return None
-
-
-def _expand_upstream(
-    *,
-    key: CompiledObjectKey,
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-) -> frozenset[CompiledObjectKey]:
-    """Return all transitive upstream keys reachable from the given key."""
-
-    visited: set[CompiledObjectKey] = set()
-    stack: list[CompiledObjectKey] = [key]
-    while stack:
-        current: CompiledObjectKey = stack.pop()
-        neighbor: CompiledObjectKey
-        for neighbor in upstream_deps.get(current, ()):
-            if neighbor in visited:
-                continue
-            visited.add(neighbor)
-            stack.append(neighbor)
-    return frozenset(visited)

@@ -34,6 +34,9 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.graph.main.path_nodes import path_nodes
+from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
+from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.lineage.main.columns import build_project_column_lineage
 from sqlbuild.compiler.lineage.models import (
     ColumnLineageEdge,
@@ -124,9 +127,17 @@ def _expand(
     anchors: tuple[CompiledObjectKey, ...] = tuple(keys)
     expanded: set[CompiledObjectKey] = set()
     if direction in {UPSTREAM_DIRECTION, BOTH_DIRECTIONS}:
-        expanded.update(_walk_bounded(anchors=anchors, deps=graph.upstream_deps, max_depth=depth))
+        expanded.update(
+            transitive_closure_many(
+                starts=anchors, edges=graph.upstream_deps, include_starts=False, max_depth=depth
+            )
+        )
     if direction in {DOWNSTREAM_DIRECTION, BOTH_DIRECTIONS}:
-        expanded.update(_walk_bounded(anchors=anchors, deps=graph.downstream_deps, max_depth=depth))
+        expanded.update(
+            transitive_closure_many(
+                starts=anchors, edges=graph.downstream_deps, include_starts=False, max_depth=depth
+            )
+        )
     return frozenset(expanded)
 
 
@@ -233,7 +244,7 @@ def _column_lineage_candidate_selection(
     deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
         graph.downstream_deps if direction == DOWNSTREAM_DIRECTION else graph.upstream_deps
     )
-    selected.update(_walk_bounded(anchors=(key,), deps=deps, max_depth=depth))
+    selected.update(transitive_closure(start=key, edges=deps, max_depth=depth))
     model_names: frozenset[str] = frozenset(
         selected_key.name
         for selected_key in selected
@@ -242,7 +253,7 @@ def _column_lineage_candidate_selection(
     if depth is None:
         return _ColumnLineageCandidateSelection(model_names=model_names, truncated=False)
     extended: set[CompiledObjectKey] = {key}
-    extended.update(_walk_bounded(anchors=(key,), deps=deps, max_depth=depth + 1))
+    extended.update(transitive_closure(start=key, edges=deps, max_depth=depth + 1))
     return _ColumnLineageCandidateSelection(
         model_names=model_names,
         truncated=extended != selected,
@@ -466,56 +477,19 @@ def _trim_selected_keys(
     retained.update(anchors.upstream)
     retained.update(anchors.downstream)
     retained.update(
-        _walk_bounded(anchors=anchors.upstream, deps=upstream_deps, max_depth=max_depth)
+        transitive_closure_many(
+            starts=anchors.upstream, edges=upstream_deps, include_starts=False, max_depth=max_depth
+        )
     )
     retained.update(
-        _walk_bounded(anchors=anchors.downstream, deps=downstream_deps, max_depth=max_depth)
+        transitive_closure_many(
+            starts=anchors.downstream,
+            edges=downstream_deps,
+            include_starts=False,
+            max_depth=max_depth,
+        )
     )
     return frozenset(selected_keys & retained)
-
-
-def _walk_bounded(
-    *,
-    anchors: Iterable[CompiledObjectKey],
-    deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    max_depth: int | None,
-) -> frozenset[CompiledObjectKey]:
-    if max_depth is None:
-        result: set[CompiledObjectKey] = set()
-        for anchor in anchors:
-            result.update(_walk_all(key=anchor, deps=deps))
-        return frozenset(result)
-    if max_depth == 0:
-        return frozenset()
-    visited: set[CompiledObjectKey] = set()
-    queue: list[tuple[CompiledObjectKey, int]] = [(anchor, 0) for anchor in anchors]
-    while queue:
-        current, current_depth = queue.pop(0)
-        if current_depth >= max_depth:
-            continue
-        for neighbor in deps.get(current, ()):
-            if neighbor in visited:
-                continue
-            visited.add(neighbor)
-            queue.append((neighbor, current_depth + 1))
-    return frozenset(visited)
-
-
-def _walk_all(
-    *,
-    key: CompiledObjectKey,
-    deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-) -> frozenset[CompiledObjectKey]:
-    visited: set[CompiledObjectKey] = set()
-    stack: list[CompiledObjectKey] = [key]
-    while stack:
-        current: CompiledObjectKey = stack.pop()
-        for neighbor in deps.get(current, ()):
-            if neighbor in visited:
-                continue
-            visited.add(neighbor)
-            stack.append(neighbor)
-    return frozenset(visited)
 
 
 def _lookup_name(*, name: str, all_keys: dict[str, CompiledObjectKey]) -> CompiledObjectKey:
@@ -562,13 +536,14 @@ def _resolve_selectors(
                 )
             )
     scoped: set[CompiledObjectKey] = selected - excluded
-    for key in tuple(scoped):
-        for upstream_key in _walk_all(key=key, deps=upstream):
-            if upstream_key.resource_type in {
-                CompiledResourceType.UDF,
-                CompiledResourceType.TABLE_FN,
-            }:
-                scoped.add(upstream_key)
+    for upstream_key in transitive_closure_many(
+        starts=tuple(scoped), edges=upstream, include_starts=False
+    ):
+        if upstream_key.resource_type in {
+            CompiledResourceType.UDF,
+            CompiledResourceType.TABLE_FN,
+        }:
+            scoped.add(upstream_key)
     return frozenset(scoped)
 
 
@@ -616,9 +591,9 @@ def _resolve_single(
             _find_path_keys(start=start_key, end=end_key, downstream=downstream)
         )
         if parsed.upstream:
-            result.update(_walk_all(key=start_key, deps=upstream))
+            result.update(transitive_closure(start=start_key, edges=upstream))
         if parsed.downstream:
-            result.update(_walk_all(key=end_key, deps=downstream))
+            result.update(transitive_closure(start=end_key, edges=downstream))
         return frozenset(result)
     if parsed.kind == SelectorKind.TAG:
         matched_keys: frozenset[CompiledObjectKey] = tag_index.get(parsed.value, frozenset())
@@ -648,11 +623,14 @@ def _apply_selector_expansion(
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> frozenset[CompiledObjectKey]:
     result: set[CompiledObjectKey] = set(matched_keys)
-    for key in matched_keys:
-        if parsed.upstream:
-            result.update(_walk_all(key=key, deps=upstream))
-        if parsed.downstream:
-            result.update(_walk_all(key=key, deps=downstream))
+    if parsed.upstream:
+        result.update(
+            transitive_closure_many(starts=matched_keys, edges=upstream, include_starts=False)
+        )
+    if parsed.downstream:
+        result.update(
+            transitive_closure_many(starts=matched_keys, edges=downstream, include_starts=False)
+        )
     return frozenset(result)
 
 
@@ -729,28 +707,16 @@ def _find_path_keys(
     end: CompiledObjectKey,
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> frozenset[CompiledObjectKey]:
-    reachable_from_start: frozenset[CompiledObjectKey] = _walk_all(key=start, deps=downstream)
-    if end not in reachable_from_start:
+    path_keys: frozenset[CompiledObjectKey] | None = path_nodes(
+        start=start, end=end, downstream=downstream
+    )
+    if path_keys is None:
         raise CliUserError(
             f"'{end.resource_type}:{end.name}' is not downstream of "
             f"'{start.resource_type}:{start.name}'",
             code="C319",
         )
-    upstream: dict[CompiledObjectKey, list[CompiledObjectKey]] = {}
-    for key, dep_keys in downstream.items():
-        for dep_key in dep_keys:
-            upstream.setdefault(dep_key, []).append(key)
-    upstream_from_end: set[CompiledObjectKey] = set()
-    stack: list[CompiledObjectKey] = [end]
-    while stack:
-        current: CompiledObjectKey = stack.pop()
-        if current in upstream_from_end:
-            continue
-        upstream_from_end.add(current)
-        for parent in upstream.get(current, ()):
-            if parent in reachable_from_start or parent == start:
-                stack.append(parent)
-    return frozenset(reachable_from_start & upstream_from_end | {start, end})
+    return path_keys
 
 
 def _match_path(
