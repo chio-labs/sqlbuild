@@ -613,3 +613,12 @@ class FormatPathArgumentsIntegrationTestCase:
     expected_formatted: tuple[str, ...]
     expected_unchanged: tuple[str, ...]
     expected_output_fragment: str
+
+
+@dataclass(frozen=True)
+class LeadingCteCommentFormatIntegrationTestCase:
+    """One leading CTE comment that must survive formatting and compile."""
+
+    description: str
+    authored_sql: str
+    expected_fragment: str

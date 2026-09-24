@@ -19,6 +19,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     FormatterDeclineIntegrationTestCase,
     FormatWarningIntegrationTestCase,
     FromValuesFormatIntegrationTestCase,
+    LeadingCteCommentFormatIntegrationTestCase,
     MixedFromValuesFormatIntegrationTestCase,
     TypedNullFormatIntegrationTestCase,
 )
@@ -878,3 +879,50 @@ def test_given_file_paths_when_formatting_then_only_named_files_change(
         **dict.fromkeys(test_case.expected_formatted, True),
         **dict.fromkeys(test_case.expected_unchanged, False),
     }
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LeadingCteCommentFormatIntegrationTestCase(
+            description="comment block before a middle CTE stays above it and compiles",
+            authored_sql=(
+                "MODEL (materialized view);\n\n"
+                'WITH\nupstream AS (\n  SELECT *\n  FROM __ref("raw_orders")\n),\n\n'
+                "-- Explains the next CTE: line one,\n-- line two.\n"
+                "distinct_rows AS (\n    SELECT order_id, customer_id\n    FROM upstream\n"
+                "    GROUP BY ALL\n)\n\nSELECT order_id, customer_id FROM distinct_rows\n"
+            ),
+            expected_fragment="),\n-- Explains the next CTE: line one,\n-- line two.\ndistinct_rows AS (",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_leading_cte_comment_when_formatting_then_comment_rule_still_passes(
+    test_case: LeadingCteCommentFormatIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRSQL033"]\n',
+        encoding="utf-8",
+    )
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "raw_orders.sql").write_text(
+        "MODEL (materialized view);\n\nSELECT 1 AS order_id, 2 AS customer_id\n",
+        encoding="utf-8",
+    )
+    model_path: Path = models / "distinct_orders.sql"
+    model_path.write_text(test_case.authored_sql, encoding="utf-8")
+
+    format_exit: int = main(["--project-dir", str(tmp_path), "--no-color", "format"])
+    formatted_sql: str = model_path.read_text(encoding="utf-8")
+    second_format_exit: int = main(["--project-dir", str(tmp_path), "--no-color", "format"])
+    compile_exit: int = main(["--project-dir", str(tmp_path), "--no-color", "compile"])
+    output: CaptureResult[str] = capsys.readouterr()
+
+    assert (format_exit, second_format_exit, compile_exit) == (0, 0, 0), output.out + output.err
+    assert test_case.expected_fragment in formatted_sql
+    assert model_path.read_text(encoding="utf-8") == formatted_sql
+    assert "SQBRSQL033" not in output.out + output.err
