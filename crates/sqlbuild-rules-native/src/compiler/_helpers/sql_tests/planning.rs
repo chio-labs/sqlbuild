@@ -53,6 +53,8 @@ struct PlanBatchRequest {
     workers: usize,
     #[serde(default = "default_true")]
     render_sql: bool,
+    #[serde(default = "default_true")]
+    include_plan: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -549,6 +551,7 @@ pub(crate) fn plan_and_render_json(request_json: &str) -> Result<String, String>
     let request: PlanBatchRequest =
         serde_json::from_str(request_json).map_err(|error| error.to_string())?;
     let render_sql = request.render_sql;
+    let include_plan = request.include_plan;
     let render_dialect = Arc::new(render_dialect(request.sql_analysis_dialect.as_deref()));
     let context = ProjectContext {
         models: request
@@ -592,11 +595,15 @@ pub(crate) fn plan_and_render_json(request_json: &str) -> Result<String, String>
             .into_par_iter()
             .map(|test| {
                 let planning_start = Instant::now();
-                let planned = plan_test(test, &context)?;
+                let mut planned = plan_test(test, &context)?;
                 let planning_ns = planning_start.elapsed().as_nanos();
                 let rendering_start = Instant::now();
                 let sql = render_sql
                     .then(|| render_comparison_sql(&planned.request, &context.render_dialect));
+                if !include_plan {
+                    planned.request.chain.clear();
+                    planned.request.assertions.clear();
+                }
                 let response = PlanResponse {
                     sql,
                     chain: planned.request.chain,

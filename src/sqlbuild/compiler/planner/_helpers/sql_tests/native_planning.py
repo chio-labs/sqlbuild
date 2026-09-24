@@ -54,6 +54,7 @@ def plan_and_render_sql_test_artifacts(
         adapter=adapter,
         sql_analysis_enabled=sql_analysis_enabled,
         render_sql=True,
+        include_plan=False,
     ):
         if plan.sql is None:
             raise NativeSqlTestPlanningError("native SQL-test planning omitted rendered SQL")
@@ -84,6 +85,7 @@ def plan_sql_tests_natively(
     adapter: BaseAdapter,
     sql_analysis_enabled: bool,
     render_sql: bool,
+    include_plan: bool = True,
 ) -> tuple[NativeSqlTestPlan, ...]:
     """Plan SQL-test chains and assertions in one native batch, optionally rendering SQL."""
 
@@ -100,6 +102,7 @@ def plan_sql_tests_natively(
         "requiresDerivedTableAliases": adapter.requires_derived_table_aliases(),
         "workers": _NATIVE_WORKERS,
         "renderSql": render_sql,
+        "includePlan": include_plan,
     }
     try:
         native_response: str = cast(

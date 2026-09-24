@@ -665,6 +665,23 @@ pub(crate) fn upstream_fallback_resolves() -> bool {
     assert!(!sql.contains("__ref(\""));
     assert!(sql.contains("identity_value((order_id))"), "{sql}");
     assert!(sql.contains("__ref__stg_orders"));
+    let mut artifact_request = request;
+    artifact_request["includePlan"] = json!(false);
+    let compact: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+            &artifact_request.to_string(),
+        )
+        .expect("artifact planning succeeds"),
+    )
+    .expect("valid artifact JSON");
+    assert_eq!(compact["artifacts"][0]["sql"], artifact["sql"]);
+    assert_eq!(
+        compact["artifacts"][0]["modelNames"],
+        artifact["modelNames"]
+    );
+    assert_eq!(compact["artifacts"][0]["warnings"], artifact["warnings"]);
+    assert_eq!(compact["artifacts"][0]["chain"], json!([]));
+    assert_eq!(compact["artifacts"][0]["assertions"], json!([]));
     true
 }
 
