@@ -1799,3 +1799,38 @@ def _layered_pad_model_sql(*, sql: str, target_bytes: int, index: int) -> str:
         for line in range(line_count)
     )
     return f"{sql.rstrip()}\n{comments}"
+
+
+def build_rule_gated_test_project_files(*, filler_model_count: int) -> dict[str, str]:
+    """Build a project with one rule error and one SQL test that lacks a source mock."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            'name = "rule_gated_orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRMODEL102"]\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+            "  - name: raw_refunds\n    schema: main\n    table: raw_refunds\n"
+        ),
+        "models/orders.sql": (
+            "MODEL (materialized view);\n\n"
+            'SELECT o.order_id, r.refund_id FROM __source("raw_orders") AS o\n'
+            'LEFT JOIN __source("raw_refunds") AS r ON r.order_id = o.order_id\n'
+        ),
+        "models/bad_star.sql": (
+            'MODEL (materialized view);\n\nSELECT * FROM __source("raw_orders")\n'
+        ),
+        "tests/unit/orders_case.sql": (
+            'TEST (name "orders_case");\n'
+            "WITH\n"
+            "__source__raw_orders AS (SELECT 1 AS order_id),\n"
+            "__expected__orders AS (SELECT 1 AS order_id)\n"
+            "SELECT 1\n"
+        ),
+    }
+    for index in range(filler_model_count):
+        files[f"models/filler/filler_{index:03d}.sql"] = (
+            f"MODEL (materialized view);\n\nSELECT {index} AS filler_id\n"
+        )
+    return files

@@ -1,19 +1,22 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
 from sqlbuild.cli.commands._helpers.compile import lineage as compile_lineage
 from sqlbuild.cli.commands._helpers.compile import pipeline as compile_pipeline
 from sqlbuild.cli.commands._helpers.compile import status as compile_status
+from sqlbuild.cli.commands.classes import prepared_compile_artifacts
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.main.run import run_compile
 from sqlbuild.cli.compile.models import (
     CompileCommandRequest,
 )
+from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
@@ -23,10 +26,12 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileJsonDiagnosticsTestCase,
     CompileLineageModeTestCase,
     CompilePythonDagArtifactTestCase,
+    RuleGatedTestPlanningTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
     NoConnectDuckDbAdapter,
     prepare_python_compile_project,
+    prepare_rule_gated_compile_project,
     prepare_static_compile_project,
 )
 
@@ -537,3 +542,86 @@ def test_given_lineage_disabled_when_building_compile_lineage_then_skips_analyze
 
     assert lineage is None
     assert test_case.expected_lineage_mode_values == ()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RuleGatedTestPlanningTestCase(
+            description="inline writer plans once for withheld artifacts",
+            min_prepared_models=128,
+            test_header='name "orders_case"',
+            expected_codes=("SQBRMODEL102", "S000"),
+            expected_message_fragment="references __source('raw_refunds') which has no mock",
+            expected_inline_planning_calls=1,
+        ),
+        RuleGatedTestPlanningTestCase(
+            description="background preparation reuses staged planning",
+            min_prepared_models=1,
+            test_header='name "orders_case"',
+            expected_codes=("SQBRMODEL102", "S000"),
+            expected_message_fragment="references __source('raw_refunds') which has no mock",
+            expected_inline_planning_calls=0,
+        ),
+        RuleGatedTestPlanningTestCase(
+            description="inline planning input error becomes a diagnostic",
+            min_prepared_models=128,
+            test_header='name "orders_case", cursor_start "2026-02-01"',
+            expected_codes=("SQBRMODEL102", "P001"),
+            expected_message_fragment="declares cursor_start or cursor_end",
+            expected_inline_planning_calls=1,
+        ),
+        RuleGatedTestPlanningTestCase(
+            description="background planning input error becomes a diagnostic",
+            min_prepared_models=1,
+            test_header='name "orders_case", cursor_start "2026-02-01"',
+            expected_codes=("SQBRMODEL102", "P001"),
+            expected_message_fragment="declares cursor_start or cursor_end",
+            expected_inline_planning_calls=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_rule_error_when_compiling_json_then_withheld_test_planning_errors_are_reported(
+    test_case: RuleGatedTestPlanningTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project_dir: Path = prepare_rule_gated_compile_project(
+        tmp_path, test_header=test_case.test_header
+    )
+    planning_calls: list[Path] = []
+    static_planning: Callable[..., tuple[CompilerDiagnostic, ...]] = (
+        compile_pipeline.static_sql_test_planning_diagnostics
+    )
+
+    def counted_static_planning(**kwargs: Any) -> tuple[CompilerDiagnostic, ...]:
+        planning_calls.append(kwargs["target_dir"])
+        return static_planning(**kwargs)
+
+    monkeypatch.setattr(
+        compile_pipeline, "resolve_adapter", lambda *args, **kwargs: NoConnectDuckDbAdapter()
+    )
+    monkeypatch.setattr(
+        compile_pipeline, "static_sql_test_planning_diagnostics", counted_static_planning
+    )
+    monkeypatch.setattr(
+        prepared_compile_artifacts,
+        "_MIN_PREPARED_ARTIFACT_MODELS",
+        test_case.min_prepared_models,
+    )
+
+    exit_code: int = run_compile(
+        CompileCommandRequest(project_dir=project_dir, json_output=True, no_cache=True)
+    )
+    payload: dict[str, Any] = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert tuple(diagnostic["code"] for diagnostic in payload["diagnostics"]) == (
+        test_case.expected_codes
+    )
+    assert test_case.expected_message_fragment in payload["diagnostics"][-1]["message"]
+    assert payload["summary"]["errors"] == len(test_case.expected_codes)
+    assert len(planning_calls) == test_case.expected_inline_planning_calls
+    assert not (project_dir / "target" / "compiled" / "tests").exists()

@@ -522,3 +522,38 @@ def build_runtime_target_execution_result() -> BuildExecutionResult:
         ),
         success_count=1,
     )
+
+
+def prepare_rule_gated_compile_project(root: Path, *, test_header: str) -> Path:
+    """Create a project with a rule error and a SQL test that has a planning error."""
+
+    project_dir: Path = prepare_static_compile_project(root)
+    with (project_dir / "sqlbuild_project.toml").open("a", encoding="utf-8") as config:
+        config.write('\n[rules]\nselect = ["SQBRMODEL102"]\n')
+    (project_dir / "sources").mkdir()
+    (project_dir / "sources" / "raw.yml").write_text(
+        "sources:\n"
+        "  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+        "  - name: raw_refunds\n    schema: main\n    table: raw_refunds\n",
+        encoding="utf-8",
+    )
+    (project_dir / "models" / "orders.sql").write_text(
+        "MODEL (materialized view);\n\n"
+        'SELECT o.order_id, r.refund_id FROM __source("raw_orders") AS o\n'
+        'LEFT JOIN __source("raw_refunds") AS r ON r.order_id = o.order_id\n',
+        encoding="utf-8",
+    )
+    (project_dir / "models" / "bad_star.sql").write_text(
+        'MODEL (materialized view);\n\nSELECT * FROM __source("raw_orders")\n',
+        encoding="utf-8",
+    )
+    (project_dir / "tests" / "unit").mkdir(parents=True)
+    (project_dir / "tests" / "unit" / "orders_case.sql").write_text(
+        f"TEST ({test_header});\n"
+        "WITH\n"
+        "__source__raw_orders AS (SELECT 1 AS order_id),\n"
+        "__expected__orders AS (SELECT 1 AS order_id)\n"
+        "SELECT 1\n",
+        encoding="utf-8",
+    )
+    return project_dir

@@ -13,6 +13,7 @@ from sqlbuild.cli.commands._helpers.compile.output import (
 from sqlbuild.cli.commands._helpers.compile.pipeline import (
     analyze_compile_project,
     build_compile_manifest_payload,
+    compile_sql_test_planning_diagnostics,
     write_compile_artifacts,
     write_compile_dag_artifact,
 )
@@ -126,9 +127,17 @@ def _run_compile_with_status(
         **detailed_timings.as_milliseconds(),
         "total_ms": elapsed_ms(total_start),
     }
+    withheld_test_diagnostics: tuple[CompilerDiagnostic, ...] = (
+        compile_sql_test_planning_diagnostics(
+            project_dir=project_dir, analysis=analysis, prepared_artifacts=prepared_artifacts
+        )
+        if rules_failed and not request.profile_flags.skip_write
+        else ()
+    )
     diagnostics: tuple[CompilerDiagnostic, ...] = (
         *analysis.diagnostics,
         *write_result.written.diagnostics,
+        *withheld_test_diagnostics,
     )
     exit_code: int = 1 if any(diagnostic.is_error for diagnostic in diagnostics) else 0
 

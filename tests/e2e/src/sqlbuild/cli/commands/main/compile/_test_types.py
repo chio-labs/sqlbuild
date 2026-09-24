@@ -196,3 +196,12 @@ class DenseCompileGuardTestCase:
     expected_max_wall_seconds: float
     expected_max_rss_bytes: int
     expected_fingerprint: str
+
+
+@dataclass(frozen=True)
+class RuleGatedTestDiagnosticsTestCase:
+    description: str
+    filler_model_count: int
+    extra_args: tuple[str, ...]
+    expected_diagnostics: tuple[tuple[str, str, str], ...]
+    expected_text_lines: tuple[str, ...]
