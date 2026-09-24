@@ -101,8 +101,8 @@ _BATCH_CONCURRENCY_CONFIG_KEY: str = "batch_concurrency"
 _MAX_BATCHES_CONFIG_KEY: str = "max_batches"
 _EVENT_EXPORTER_FILTER_KEYS: frozenset[str] = frozenset({"event_kinds", "min_severity"})
 _LIFECYCLE_SHUTDOWN_TIMEOUT_CONFIG_KEY: str = "shutdown_timeout"
-_LIFECYCLE_SHUTDOWN_TIMEOUT_ZERO: str = "0s"
 _LIFECYCLE_SHUTDOWN_TIMEOUT_MAX_SECONDS: int = 600
+_ZERO_FIXED_DURATION: str = "0s"
 _EVENT_EXPORTER_KEYS: frozenset[str] = _EVENT_EXPORTER_FILTER_KEYS | frozenset(
     {"named", _LIFECYCLE_SHUTDOWN_TIMEOUT_CONFIG_KEY}
 )
@@ -199,8 +199,7 @@ def _load_diff(*, payload: object, file_path: Path) -> DiffConfig:
         file_path=file_path,
     )
     value: str = _optional_str(payload=mapping, key=key) or "24h"
-    duration: Duration | None = Duration.parse(value)
-    if duration is None or duration.has_calendar_component:
+    if _fixed_duration_seconds(value) is None:
         raise ProjectConfigError(
             f"{file_path} diff.{key} must be a positive fixed duration such as '24h'"
         )
@@ -316,16 +315,21 @@ def _load_lifecycle_shutdown_timeout(
     )
     if not isinstance(value, str):
         raise ProjectConfigError(message)
-    if value == _LIFECYCLE_SHUTDOWN_TIMEOUT_ZERO:
-        return value, 0
-    duration: Duration | None = Duration.parse(value)
-    if (
-        duration is None
-        or duration.has_calendar_component
-        or duration.fixed_seconds > _LIFECYCLE_SHUTDOWN_TIMEOUT_MAX_SECONDS
-    ):
+    seconds: int | None = _fixed_duration_seconds(value, allow_zero=True)
+    if seconds is None or seconds > _LIFECYCLE_SHUTDOWN_TIMEOUT_MAX_SECONDS:
         raise ProjectConfigError(message)
-    return value, duration.fixed_seconds
+    return value, seconds
+
+
+def _fixed_duration_seconds(value: str, *, allow_zero: bool = False) -> int | None:
+    """Return a fixed duration's seconds, or None when it is invalid or calendar-based."""
+
+    if allow_zero and value == _ZERO_FIXED_DURATION:
+        return 0
+    duration: Duration | None = Duration.parse(value)
+    if duration is None or duration.has_calendar_component:
+        return None
+    return duration.fixed_seconds
 
 
 def load_local_config(*, project_dir: Path) -> LocalConfig:
@@ -1381,12 +1385,11 @@ def _load_execution_limits(
     max_duration: str | None = _optional_str(payload=mapping, key="max_duration")
     max_duration_seconds: int | None = None
     if max_duration is not None:
-        duration: Duration | None = Duration.parse(max_duration)
-        if duration is None or duration.has_calendar_component or duration.fixed_seconds <= 0:
+        max_duration_seconds = _fixed_duration_seconds(max_duration)
+        if max_duration_seconds is None:
             raise ProjectConfigError(
                 f"{file_path} {label}.max_duration must be a positive fixed duration such as '30m'"
             )
-        max_duration_seconds = duration.fixed_seconds
     return ExecutionLimitsConfig(
         max_models=max_models,
         max_duration=max_duration,
