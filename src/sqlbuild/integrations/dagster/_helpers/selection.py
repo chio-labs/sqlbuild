@@ -6,6 +6,7 @@ from collections import deque
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.planner.types import SelectorKind
@@ -118,16 +119,22 @@ def _resolve_atomic(
         end_id: str = _node_id_for_name(nodes_by_id=nodes_by_id, name=parsed.end_name)
         matched: set[str] = _shortest_path(start_id=start_id, end_id=end_id, downstream=downstream)
         if parsed.upstream:
-            matched.update(_expand(start_ids={start_id}, adjacency=upstream))
+            matched.update(
+                transitive_closure_many(starts=(start_id,), edges=upstream, include_starts=True)
+            )
         if parsed.downstream:
-            matched.update(_expand(start_ids={end_id}, adjacency=downstream))
+            matched.update(
+                transitive_closure_many(starts=(end_id,), edges=downstream, include_starts=True)
+            )
         return matched
 
     matched = _match_parsed_selector(parsed=parsed, dag=dag, nodes_by_id=nodes_by_id)
     if parsed.upstream:
-        matched.update(_expand(start_ids=matched, adjacency=upstream))
+        matched.update(transitive_closure_many(starts=matched, edges=upstream, include_starts=True))
     if parsed.downstream:
-        matched.update(_expand(start_ids=matched, adjacency=downstream))
+        matched.update(
+            transitive_closure_many(starts=matched, edges=downstream, include_starts=True)
+        )
     return matched
 
 
@@ -197,19 +204,6 @@ def _dependency_indexes(
         upstream[to_id].add(from_id)
         downstream[from_id].add(to_id)
     return upstream, downstream
-
-
-def _expand(*, start_ids: set[str], adjacency: Mapping[str, set[str]]) -> set[str]:
-    expanded: set[str] = set(start_ids)
-    pending: list[str] = list(start_ids)
-    while pending:
-        node_id: str = pending.pop()
-        for adjacent_id in adjacency.get(node_id, set()):
-            if adjacent_id in expanded:
-                continue
-            expanded.add(adjacent_id)
-            pending.append(adjacent_id)
-    return expanded
 
 
 def _node_id_for_name(*, nodes_by_id: Mapping[str, Mapping[str, Any]], name: str) -> str:

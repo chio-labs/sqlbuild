@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
+from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
@@ -49,10 +49,9 @@ def python_upstream_closure(
 ) -> frozenset[str]:
     """Return all Python upstreams for selected Python nodes."""
 
-    names: set[str] = set()
-    for node_name in selected_python_names:
-        names.update(transitive_closure(start=node_name, edges=python_graph.upstream_deps))
-    return frozenset(names)
+    return transitive_closure_many(
+        starts=selected_python_names, edges=python_graph.upstream_deps, include_starts=False
+    )
 
 
 def python_downstream_closure(

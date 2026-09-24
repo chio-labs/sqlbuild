@@ -65,3 +65,12 @@ class ForeignSnapshotRelationTestCase:
     desired_days: int
     expected_direction: str
     expected_inspections: int
+
+
+@dataclass(frozen=True)
+class PlannerScopesTestCase:
+    description: str
+    model_deps: dict[str, tuple[str, ...]]
+    select: tuple[str, ...]
+    expected_selected_names: frozenset[str]
+    expected_stale_warning_names: tuple[str, ...]

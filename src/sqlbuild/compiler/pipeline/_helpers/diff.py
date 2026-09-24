@@ -15,6 +15,7 @@ from sqlbuild.compiler.graph.main._build_lineage_downstream_deps import (
 from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import (
     build_lineage_upstream_deps,
 )
+from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.pipeline.constants import (
     MODEL_PATH_ROOT,
     PATH_SELECTOR_PREFIX,
@@ -222,28 +223,10 @@ def _expand_keys(
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> frozenset[CompiledObjectKey]:
     expanded: set[CompiledObjectKey] = set(keys)
-    key: CompiledObjectKey
-    for key in keys:
-        if upstream_requested:
-            expanded.update(_expand_graph(key=key, graph=upstream))
-        if downstream_requested:
-            expanded.update(_expand_graph(key=key, graph=downstream))
+    if upstream_requested:
+        expanded.update(transitive_closure_many(starts=keys, edges=upstream, include_starts=False))
+    if downstream_requested:
+        expanded.update(
+            transitive_closure_many(starts=keys, edges=downstream, include_starts=False)
+        )
     return frozenset(expanded)
-
-
-def _expand_graph(
-    *,
-    key: CompiledObjectKey,
-    graph: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-) -> frozenset[CompiledObjectKey]:
-    visited: set[CompiledObjectKey] = set()
-    stack: list[CompiledObjectKey] = [key]
-    while stack:
-        current: CompiledObjectKey = stack.pop()
-        neighbor: CompiledObjectKey
-        for neighbor in graph.get(current, ()):
-            if neighbor in visited:
-                continue
-            visited.add(neighbor)
-            stack.append(neighbor)
-    return frozenset(visited)
