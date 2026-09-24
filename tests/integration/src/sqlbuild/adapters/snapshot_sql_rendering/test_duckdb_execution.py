@@ -262,6 +262,34 @@ _CURRENT_STATE_SCENARIOS: tuple[SnapshotExecutionScenario, ...] = (
             (2, "active", FIRST_CLOCK_DAY + 2, None),
         ),
     ),
+    SnapshotExecutionScenario(
+        description="current timestamp hard delete then unchanged reappearance",
+        kind=CURRENT_TIMESTAMP_HARD_DELETES,
+        builds=(
+            ((1, "basic", 1), (2, "pro", 1)),
+            ((1, "basic", 1),),
+            ((1, "basic", 1), (2, "pro", 1)),
+        ),
+        expected_history=(
+            (1, "basic", 1, None),
+            (2, "pro", 1, FIRST_CLOCK_DAY + 1),
+            (2, "pro", FIRST_CLOCK_DAY + 2, None),
+        ),
+    ),
+    SnapshotExecutionScenario(
+        description="current timestamp hard delete then reappearance with a newer updated_at",
+        kind=CURRENT_TIMESTAMP_HARD_DELETES,
+        builds=(
+            ((1, "basic", 1), (2, "pro", 1)),
+            ((1, "basic", 1),),
+            ((1, "basic", 1), (2, "team", 5)),
+        ),
+        expected_history=(
+            (1, "basic", 1, None),
+            (2, "pro", 1, FIRST_CLOCK_DAY + 1),
+            (2, "team", FIRST_CLOCK_DAY + 2, None),
+        ),
+    ),
 )
 
 _RUNS: tuple[SnapshotExecutionRun, ...] = build_execution_runs(

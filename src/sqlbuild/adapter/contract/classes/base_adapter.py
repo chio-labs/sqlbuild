@@ -912,12 +912,30 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
             f"CASE WHEN __active.{first_key} IS NULL THEN {initial_valid_from_expr} "
             f"ELSE __source.{updated_at_column} END"
         )
+        history_join_sql: str = ""
+        if invalidate_hard_deletes:
+            key_sql: str = ", ".join(unique_key)
+            history_condition: str = " AND ".join(
+                f"__history.{column} = __source.{column}" for column in unique_key
+            )
+            version_valid_from_expr = (
+                f"CASE WHEN __active.{first_key} IS NULL AND __history.__closed_at IS NOT NULL "
+                f"AND __history.__closed_at <> __source.{updated_at_column} "
+                f"THEN {current_timestamp} "
+                f"WHEN __active.{first_key} IS NULL THEN {initial_valid_from_expr} "
+                f"ELSE __source.{updated_at_column} END"
+            )
+            history_join_sql = (
+                f"LEFT JOIN (SELECT {key_sql}, MAX({valid_to_column}) AS __closed_at "
+                f"FROM {destination} GROUP BY {key_sql}) AS __history ON {history_condition} "
+            )
         insert_sql: str = (
             f"INSERT INTO {destination} ({insert_column_sql}) "
             f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS TIMESTAMP) "
             f"FROM {origin} AS __source "
             f"LEFT JOIN {destination} AS __active "
             f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
+            f"{history_join_sql}"
             f"WHERE __active.{first_key} IS NULL "
             f"OR __source.{updated_at_column} > __active.{updated_at_column}"
         )
