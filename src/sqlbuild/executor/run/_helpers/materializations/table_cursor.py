@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from sqlbuild.compiler.planner.main.changes.relation_replacement import (
+    replaces_incremental_relation,
+)
 from sqlbuild.compiler.planner.main.execution.future_cursor_warning import (
     future_cursor_cap_warning,
 )
@@ -54,7 +57,12 @@ def resolve_table_cursor(
         target_database=targets.target_database,
         target_schema=targets.target_schema,
         target_name=targets.target_table,
-        spec=build_runtime_cursor_spec(entry=entry),
+        spec=build_runtime_cursor_spec(
+            entry=entry,
+            read_destination_cursor=not replaces_incremental_relation(
+                materialization_type=entry.materialization_type, action=entry.action
+            ),
+        ),
         watermark_resolver=context.watermark_resolver,
     )
     if bounds is None:

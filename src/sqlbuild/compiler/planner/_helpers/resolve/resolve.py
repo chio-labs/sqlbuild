@@ -20,7 +20,10 @@ from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
 from sqlbuild.compiler.planner._helpers.resolve.config import (
     get_config_append_cursor_inclusive,
 )
-from sqlbuild.compiler.planner._helpers.resolve.cursor import compute_cursor_bounds
+from sqlbuild.compiler.planner._helpers.resolve.cursor import (
+    compute_cursor_bounds,
+    without_destination_cursor,
+)
 from sqlbuild.compiler.planner._helpers.resolve.cursor_policies import (
     resolve_future_cursor_config,
     resolve_start_cursor_config,
@@ -68,6 +71,7 @@ def resolve_model_sql(
     cursor_overrides: CursorOverridePair,
     suppress_runtime_cursor_bounds: bool = False,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    replaces_relation: bool = False,
 ) -> str:
     """Resolve all references in a model's query SQL to produce executable SQL."""
 
@@ -90,6 +94,7 @@ def resolve_model_sql(
         runtime_cursor_producer_names=context.runtime_cursor_producer_names,
         suppress_runtime_cursor_bounds=suppress_runtime_cursor_bounds,
         context=context,
+        replaces_relation=replaces_relation,
     )
 
     cursor_roles: CursorInputRoles = resolve_cursor_input_roles(model=model)
@@ -222,6 +227,7 @@ def _compute_model_cursor_bounds(
     runtime_cursor_producer_names: frozenset[str],
     suppress_runtime_cursor_bounds: bool,
     context: ModelPlanContext,
+    replaces_relation: bool = False,
 ) -> CursorBounds | None:
     """Compute cursor bounds for a model if it is incremental with a cursor."""
 
@@ -280,6 +286,8 @@ def _compute_model_cursor_bounds(
         return CursorBounds(start=BoundSentinel.START, end=BoundSentinel.END)
     if cursor_snapshot is None:
         return None
+    if replaces_relation:
+        cursor_snapshot = without_destination_cursor(cursor_snapshot=cursor_snapshot)
 
     lookback: str | None = get_config_str(values=model.config.values, key="lookback")
     cursor_start: str | None = get_config_cursor_bound(
