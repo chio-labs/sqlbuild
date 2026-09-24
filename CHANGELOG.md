@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.116.0](https://github.com/chio-labs/sqlbuild/compare/v0.115.0...v0.116.0) (2026-09-24)
+
+
+### Features
+
+* **dupscore:** ignore forced adapter overrides and compare call targets ([#807](https://github.com/chio-labs/sqlbuild/issues/807)) ([5f0dbb5](https://github.com/chio-labs/sqlbuild/commit/5f0dbb5599c0d9b8327fb38dcbc3075d6b01cd26))
+
+
+### Documentation
+
+* add missing 0.113.5 changelog entry for the PIVOT lineage fix ([#805](https://github.com/chio-labs/sqlbuild/issues/805)) ([adb9248](https://github.com/chio-labs/sqlbuild/commit/adb9248105df0137663df40387ca4f73de4b51e3))
+
 ## [0.115.0](https://github.com/chio-labs/sqlbuild/compare/v0.114.2...v0.115.0) (2026-09-24)
 
 
