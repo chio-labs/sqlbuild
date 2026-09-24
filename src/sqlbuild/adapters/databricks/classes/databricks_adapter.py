@@ -866,20 +866,17 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str,
         initial_valid_from: str | None,
     ) -> tuple[str, ...]:
-        current_timestamp: str = self.render_current_timestamp()
-        valid_from_expr: str = SnapshotSql.initial_valid_from_expr(
-            snapshot_strategy=snapshot_strategy,
-            updated_at_column=updated_at_column,
-            observed_at_column=observed_at_column,
-            initial_valid_from=initial_valid_from,
-            source_alias=None,
-            current_timestamp=current_timestamp,
-        )
         return self.render_create_table_as(
             destination=destination,
-            sql=(
-                f"SELECT *, {valid_from_expr} AS {valid_from_column}, "
-                f"CAST(NULL AS TIMESTAMP) AS {valid_to_column} FROM {origin}"
+            sql=SnapshotSql(dialect=self._snapshot_sql_dialect).initial_select_sql(
+                origin=origin,
+                snapshot_strategy=snapshot_strategy,
+                updated_at_column=updated_at_column,
+                observed_at_column=observed_at_column,
+                valid_from_column=valid_from_column,
+                valid_to_column=valid_to_column,
+                initial_valid_from=initial_valid_from,
+                current_timestamp=self.render_current_timestamp(),
             ),
         )
 
@@ -897,76 +894,21 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
-        current_timestamp: str = self.render_current_timestamp()
-        initial_valid_from_expr: str = SnapshotSql.initial_valid_from_expr(
-            snapshot_strategy="timestamp",
+        return SnapshotSql(dialect=self._snapshot_sql_dialect).timestamp_changes_sql(
+            target=SnapshotChangeTarget(
+                destination=destination,
+                origin=origin,
+                unique_key=unique_key,
+                valid_from_column=valid_from_column,
+                valid_to_column=valid_to_column,
+                output_columns=output_columns,
+            ),
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
             initial_valid_from=initial_valid_from,
-            source_alias="__source",
-            current_timestamp=current_timestamp,
+            invalidate_hard_deletes=invalidate_hard_deletes,
+            current_timestamp=self.render_current_timestamp(),
         )
-        key_condition: str = SnapshotSql.key_condition(
-            left_alias="__target", right_alias="__source", unique_key=unique_key
-        )
-        close_sql: str = (
-            f"MERGE INTO {destination} AS __target "
-            f"USING {origin} AS __source "
-            f"ON {key_condition} "
-            f"AND __target.{valid_to_column} IS NULL "
-            f"AND __source.{updated_at_column} > __target.{updated_at_column} "
-            f"WHEN MATCHED THEN UPDATE SET {valid_to_column} = __source.{updated_at_column}"
-        )
-        insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
-        output_select_sql: str = ", ".join(f"__source.{column}" for column in output_columns)
-        active_join_condition: str = SnapshotSql.key_condition(
-            left_alias="__active", right_alias="__source", unique_key=unique_key
-        )
-        first_key: str = unique_key[0]
-        version_valid_from_expr: str = (
-            f"CASE WHEN __active.{first_key} IS NULL THEN {initial_valid_from_expr} "
-            f"ELSE __source.{updated_at_column} END"
-        )
-        history_join_sql: str = ""
-        if invalidate_hard_deletes:
-            key_sql: str = ", ".join(unique_key)
-            history_condition: str = " AND ".join(
-                f"__history.{column} = __source.{column}" for column in unique_key
-            )
-            version_valid_from_expr = (
-                f"CASE WHEN __active.{first_key} IS NULL AND __history.__closed_at IS NOT NULL "
-                f"AND __history.__closed_at <> __source.{updated_at_column} "
-                f"THEN {current_timestamp} "
-                f"WHEN __active.{first_key} IS NULL THEN {initial_valid_from_expr} "
-                f"ELSE __source.{updated_at_column} END"
-            )
-            history_join_sql = (
-                f"LEFT JOIN (SELECT {key_sql}, MAX({valid_to_column}) AS __closed_at "
-                f"FROM {destination} GROUP BY {key_sql}) AS __history ON {history_condition} "
-            )
-        insert_sql: str = (
-            f"INSERT INTO {destination} ({insert_column_sql}) "
-            f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS TIMESTAMP) "
-            f"FROM {origin} AS __source "
-            f"LEFT JOIN {destination} AS __active "
-            f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
-            f"{history_join_sql}"
-            f"WHERE __active.{first_key} IS NULL "
-            f"OR __source.{updated_at_column} > __active.{updated_at_column}"
-        )
-        statements: tuple[str, ...] = (close_sql, insert_sql)
-        if invalidate_hard_deletes:
-            statements = (
-                *statements,
-                SnapshotSql.hard_delete_close_sql(
-                    destination=destination,
-                    origin=origin,
-                    unique_key=unique_key,
-                    valid_to_column=valid_to_column,
-                    current_timestamp=current_timestamp,
-                ),
-            )
-        return statements
 
     def render_create_initial_historical_timestamp_snapshot_destination(
         self,
@@ -1074,69 +1016,15 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         initial_valid_from: str | None,
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
-        destination: str = target.destination
-        origin: str = target.origin
-        unique_key: tuple[str, ...] = target.unique_key
-        valid_from_column: str = target.valid_from_column
-        valid_to_column: str = target.valid_to_column
-        output_columns: tuple[str, ...] = target.output_columns
-        current_timestamp: str = self.render_current_timestamp()
-        initial_valid_from_expr: str = SnapshotSql.initial_valid_from_expr(
-            snapshot_strategy="check",
+        return SnapshotSql(dialect=self._snapshot_sql_dialect).check_changes_sql(
+            target=target,
+            check_columns=check_columns,
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
             initial_valid_from=initial_valid_from,
-            source_alias="__source",
-            current_timestamp=current_timestamp,
+            invalidate_hard_deletes=invalidate_hard_deletes,
+            current_timestamp=self.render_current_timestamp(),
         )
-        key_condition: str = SnapshotSql.key_condition(
-            left_alias="__target", right_alias="__source", unique_key=unique_key
-        )
-        change_condition: str = " OR ".join(
-            f"__source.{column} IS DISTINCT FROM __target.{column}" for column in check_columns
-        )
-        close_sql: str = (
-            f"MERGE INTO {destination} AS __target "
-            f"USING {origin} AS __source "
-            f"ON {key_condition} "
-            f"AND __target.{valid_to_column} IS NULL "
-            f"AND ({change_condition}) "
-            f"WHEN MATCHED THEN UPDATE SET {valid_to_column} = {current_timestamp}"
-        )
-        insert_column_sql: str = ", ".join((*output_columns, valid_from_column, valid_to_column))
-        output_select_sql: str = ", ".join(f"__source.{column}" for column in output_columns)
-        active_join_condition: str = SnapshotSql.key_condition(
-            left_alias="__active", right_alias="__source", unique_key=unique_key
-        )
-        active_change_condition: str = " OR ".join(
-            f"__source.{column} IS DISTINCT FROM __active.{column}" for column in check_columns
-        )
-        first_key: str = unique_key[0]
-        version_valid_from_expr: str = (
-            f"CASE WHEN __active.{first_key} IS NULL THEN {initial_valid_from_expr} "
-            f"ELSE {current_timestamp} END"
-        )
-        insert_sql: str = (
-            f"INSERT INTO {destination} ({insert_column_sql}) "
-            f"SELECT {output_select_sql}, {version_valid_from_expr}, CAST(NULL AS TIMESTAMP) "
-            f"FROM {origin} AS __source "
-            f"LEFT JOIN {destination} AS __active "
-            f"ON {active_join_condition} AND __active.{valid_to_column} IS NULL "
-            f"WHERE __active.{first_key} IS NULL OR ({active_change_condition})"
-        )
-        statements: tuple[str, ...] = (close_sql, insert_sql)
-        if invalidate_hard_deletes:
-            statements = (
-                *statements,
-                SnapshotSql.hard_delete_close_sql(
-                    destination=destination,
-                    origin=origin,
-                    unique_key=unique_key,
-                    valid_to_column=valid_to_column,
-                    current_timestamp=current_timestamp,
-                ),
-            )
-        return statements
 
     def render_create_initial_historical_check_snapshot_destination(
         self,
