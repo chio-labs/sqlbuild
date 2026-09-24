@@ -23,3 +23,11 @@ class JanitorPlanOutputTestCase:
     use_color: bool
     expected_output_fragments: tuple[str, ...]
     unexpected_output_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class JanitorDirectArchiveConfirmationTestCase:
+    description: str
+    typed_response: str
+    expected_result: bool
+    expected_output_fragments: tuple[str, ...]

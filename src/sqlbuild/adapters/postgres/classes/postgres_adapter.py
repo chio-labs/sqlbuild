@@ -1582,6 +1582,18 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"ON {table_name} (run_id, invocation_id, result_id)",
         )
 
+    def render_create_janitor_event_table_sql(self, *, database: str | None, schema: str) -> str:
+        from sqlbuild.executor.janitor_events.main.create_table_sql import (
+            build_janitor_events_create_table_sql,
+        )
+
+        return build_janitor_events_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        )
+
     def render_read_latest_source_freshness_sql(
         self,
         *,
@@ -1880,6 +1892,10 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
         destination_name: str = destination.split(".")[-1]
         return (f"ALTER TABLE {origin} RENAME TO {destination_name}",)
+
+    def render_rename_view(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        destination_name: str = destination.split(".")[-1]
+        return (f"ALTER VIEW {origin} RENAME TO {destination_name}",)
 
     def load_seed(
         self,

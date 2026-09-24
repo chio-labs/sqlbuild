@@ -72,3 +72,43 @@ def relation_info(
         created_at=created_at,
         last_altered_at=last_altered_at,
     )
+
+
+@dataclass(frozen=True)
+class JanitorArchivePlanTestCase:
+    description: str
+    relation_infos: tuple[RelationInfo, ...]
+    direct_mode: bool = True
+    retention_days: int = 7
+    archive_retention_days: int = 14
+    source_schema: str | None = None
+    exclude_patterns: tuple[str, ...] = field(default_factory=tuple)
+    identifier_limit: int = 255
+    expected_archive_source_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_existing_archive_deletion_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_same_run_deletion_source_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_retained_archive_names: tuple[str, ...] = field(default_factory=tuple)
+    expected_skipped_relations: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    expected_suppressed_archive_deletion_names: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class JanitorArchiveExecutionTestCase:
+    description: str
+    relation_infos: tuple[RelationInfo, ...]
+    archive_retention_days: int
+    expected_renamed_origins: tuple[str, ...]
+    expected_view_rename_origins: tuple[str, ...]
+    expected_dropped_targets: tuple[str, ...]
+    expected_dropped_view_targets: tuple[str, ...]
+    expected_event_insert_count: int
+    expected_event_table_create_count: int
+
+
+@dataclass(frozen=True)
+class JanitorArchiveEventFailureTestCase:
+    description: str
+    relation_infos: tuple[RelationInfo, ...]
+    expected_error_fragment: str
+    expected_renamed_origins: tuple[str, ...]
+    expected_dropped_targets: tuple[str, ...]

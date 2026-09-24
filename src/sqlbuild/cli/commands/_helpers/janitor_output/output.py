@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TextIO
 
 from sqlbuild.executor.janitor.models import (
+    JanitorArchiveCandidate,
+    JanitorArchivedRelation,
     JanitorCheckpointCandidate,
     JanitorDeleteCandidate,
     JanitorDetachedVirtualEnvironmentCandidate,
@@ -32,7 +35,8 @@ def write_disabled(*, stream: TextIO, use_color: bool = False) -> None:
         f"Add this block to {style.object_name('sqlbuild_project.toml')}:\n\n"
         "janitor:\n"
         "  enabled: true\n"
-        "  retention_days: 30\n\n"
+        "  retention_days: 14\n"
+        "  archive_retention_days: 14\n\n"
         "After enabling, run janitor again to preview cleanup:\n"
         f"  {style.accent('sqb janitor')}\n"
     )
@@ -46,14 +50,34 @@ def _write_plan_summary(*, plan: JanitorPlan, stream: TextIO, style: CliStyle) -
         stream.write(f"  {'retention':<22} {style.accent(f'{plan.retention_days} days')}\n")
         if not plan.age_metadata_supported:
             stream.write(f"  {'age metadata':<22} {style.accent('unavailable')}\n")
+    if plan.direct_mode:
+        archive_retention: str = f"{plan.archive_retention_days} days"
+        stream.write(f"  {'archive retention':<22} {style.accent(archive_retention)}\n")
     stream.write(f"  {'schemas scanned':<22} {style.accent(str(plan.scanned_schema_count))}\n")
     stream.write(f"  {'schemas skipped':<22} {style.accent(str(len(plan.skipped_schemas)))}\n")
-    _write_count_row(
-        stream=stream,
-        style=style,
-        label="reported objects" if plan.direct_mode else "eligible for deletion",
-        items=plan.candidates,
-    )
+    if plan.direct_mode:
+        _write_count_row(
+            stream=stream,
+            style=style,
+            label="relations to archive",
+            items=plan.archive_candidates,
+        )
+        _write_count_row(
+            stream=stream,
+            style=style,
+            label="archives to delete",
+            items=plan.archive_deletion_candidates,
+        )
+        stream.write(
+            f"  {'archives retained':<22} {style.accent(str(len(plan.retained_archives)))}\n"
+        )
+    else:
+        _write_count_row(
+            stream=stream,
+            style=style,
+            label="eligible for deletion",
+            items=plan.candidates,
+        )
     _write_count_row(
         stream=stream,
         style=style,
@@ -123,6 +147,77 @@ def _write_query_artifact_candidates(*, plan: JanitorPlan, stream: TextIO, style
         stream.write(f"  {style.object_name(query_artifact.key.display_name())}\n")
 
 
+def _write_archive_sections(*, plan: JanitorPlan, stream: TextIO, style: CliStyle) -> None:
+    if plan.archive_candidates:
+        stream.write(f"\n{style.success('Relations to archive')}\n")
+        archive_candidate: JanitorArchiveCandidate
+        for archive_candidate in plan.archive_candidates:
+            expiry: str = (
+                "deleted in this run"
+                if archive_candidate.expires_at <= archive_candidate.archived_at
+                else f"delete after {_utc(archive_candidate.expires_at)}"
+            )
+            detail: str = f"{_age(value=archive_candidate.age_timestamp, plan=plan)}, {expiry}"
+            stream.write(
+                f"  {style.object_name(archive_candidate.key.display_name())}  ->  "
+                f"{style.object_name(archive_candidate.archive_key.display_name())}  "
+                f"{style.muted(detail)}\n"
+            )
+    if plan.archive_deletion_candidates:
+        stream.write(f"\n{style.success('Archives to delete')}\n")
+        deletion: JanitorArchivedRelation
+        for deletion in plan.archive_deletion_candidates:
+            detail = (
+                "archived in this run"
+                if deletion.original_key is not None
+                else f"archived {_utc(deletion.archived_at)}, "
+                f"{_age(value=deletion.archived_at, plan=plan)}, "
+                f"expired {_utc(deletion.expires_at)}"
+            )
+            stream.write(
+                f"  {style.object_name(deletion.key.display_name())}  {style.muted(detail)}\n"
+            )
+    if plan.retained_archives:
+        stream.write(f"\n{style.success('Retained archives')}\n")
+        retained: JanitorArchivedRelation
+        for retained in plan.retained_archives:
+            detail = f"archived {_utc(retained.archived_at)}, expires {_utc(retained.expires_at)}"
+            stream.write(
+                f"  {style.object_name(retained.key.display_name())}  {style.muted(detail)}\n"
+            )
+
+
+def _utc(value: datetime) -> str:
+    return f"{value:%Y-%m-%d %H:%M:%S} UTC"
+
+
+def _age(*, value: datetime | None, plan: JanitorPlan) -> str:
+    if value is None or plan.planned_at is None:
+        return "age unknown"
+    return f"age {max((plan.planned_at - value).days, 0)}d"
+
+
+def _write_blocked_schemas(*, plan: JanitorPlan, stream: TextIO, style: CliStyle) -> None:
+    if not plan.blocked_schemas:
+        return
+    stream.write(f"\n{style.error_strong('Janitor blocked')}\n")
+    stream.write(f"  {style.error('Managed target schemas contain active configured sources.')}\n")
+    suppressed_action: str = "archive" if plan.direct_mode else "deletion"
+    for blocked_schema in plan.blocked_schemas:
+        sources: str = ", ".join(blocked_schema.source_names)
+        stream.write(
+            f"  {style.object_name(blocked_schema.display_name())}  "
+            f"{style.error_muted('active sources: ' + sources)}\n"
+        )
+        for candidate in blocked_schema.suppressed_candidates:
+            suppressed: str = f"suppressed {suppressed_action}: {candidate.key.display_name()}"
+            stream.write(f"    {style.error_muted(suppressed)}\n")
+        for archived in blocked_schema.suppressed_archive_deletions:
+            suppressed = f"suppressed archive deletion: {archived.key.display_name()}"
+            stream.write(f"    {style.error_muted(suppressed)}\n")
+    stream.write(f"  {style.error('No janitor actions will be performed.')}\n")
+
+
 def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) -> None:
     """Write a janitor preview."""
 
@@ -132,21 +227,7 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
     stream.write(f"{style.title('Janitor preview')}  {rendered_env}\n\n")
     _write_plan_summary(plan=plan, stream=stream, style=style)
 
-    if plan.blocked_schemas:
-        stream.write(f"\n{style.error_strong('Janitor blocked')}\n")
-        stream.write(
-            f"  {style.error('Managed target schemas contain active configured sources.')}\n"
-        )
-        for blocked_schema in plan.blocked_schemas:
-            sources: str = ", ".join(blocked_schema.source_names)
-            stream.write(
-                f"  {style.object_name(blocked_schema.display_name())}  "
-                f"{style.error_muted('active sources: ' + sources)}\n"
-            )
-            for candidate in blocked_schema.suppressed_candidates:
-                suppressed: str = f"suppressed deletion: {candidate.key.display_name()}"
-                stream.write(f"    {style.error_muted(suppressed)}\n")
-        stream.write(f"  {style.error('No janitor actions will be performed.')}\n")
+    _write_blocked_schemas(plan=plan, stream=stream, style=style)
 
     if plan.skipped_schemas:
         stream.write(f"\n{style.success('Skipped schemas')}\n")
@@ -158,15 +239,13 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
                 f"{style.muted('contains active source ' + sources)}\n"
             )
 
-    if plan.candidates:
-        heading: str = "Report-only objects" if plan.direct_mode else "Eligible objects"
-        stream.write(f"\n{style.success(heading)}\n")
+    if plan.candidates and not plan.direct_mode:
+        stream.write(f"\n{style.success('Eligible objects')}\n")
         candidate: JanitorDeleteCandidate
         for candidate in plan.candidates:
-            reason: str = "  direct mode does not delete relations" if plan.direct_mode else ""
-            stream.write(
-                f"  {style.object_name(candidate.key.display_name())}{style.muted(reason)}\n"
-            )
+            stream.write(f"  {style.object_name(candidate.key.display_name())}\n")
+
+    _write_archive_sections(plan=plan, stream=stream, style=style)
 
     _write_query_artifact_candidates(plan=plan, stream=stream, style=style)
 
@@ -255,16 +334,26 @@ def confirmation_text(plan: JanitorPlan) -> str:
         + len(plan.direct_state_prune_candidates)
         + len(plan.virtual_state_prune_candidates)
     )
-    if state_candidate_count == 0:
-        deletion_count: int = (0 if plan.direct_mode else len(plan.candidates)) + len(
-            plan.query_diff_artifact_candidates
-        )
-        return f"delete {deletion_count} objects from {environment_label(plan)}"
-    physical_deletion_count: int = (0 if plan.direct_mode else len(plan.candidates)) + len(
-        plan.query_diff_artifact_candidates
+    archive_prefix: str = (
+        f"archive {len(plan.archive_candidates)} and " if plan.archive_candidates else ""
     )
+    physical_deletion_count: int = physical_janitor_deletion_count(plan)
+    if state_candidate_count == 0:
+        return (
+            f"{archive_prefix}delete {physical_deletion_count} objects "
+            f"from {environment_label(plan)}"
+        )
     deletion_count: int = physical_deletion_count + state_candidate_count
-    return f"delete {deletion_count} items from {environment_label(plan)}"
+    return f"{archive_prefix}delete {deletion_count} items from {environment_label(plan)}"
+
+
+def physical_janitor_deletion_count(plan: JanitorPlan) -> int:
+    """Count warehouse relations the janitor plan will drop."""
+
+    relation_count: int = (
+        len(plan.archive_deletion_candidates) if plan.direct_mode else len(plan.candidates)
+    )
+    return relation_count + len(plan.query_diff_artifact_candidates)
 
 
 def environment_label(plan: JanitorPlan) -> str:

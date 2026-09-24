@@ -58,6 +58,7 @@ def classify_target_schemas(
                     retention_days=retention_days,
                     age_supported=age_supported,
                     now=now,
+                    direct_mode=direct_mode,
                 )
                 blocked_schemas.append(
                     JanitorBlockedSchema(
@@ -86,6 +87,7 @@ def classify_target_schemas(
             retention_days=retention_days,
             age_supported=age_supported,
             now=now,
+            direct_mode=direct_mode,
         )
         candidates.extend(classification.candidates)
         skipped_relations.extend(classification.skipped_relations)
@@ -107,6 +109,7 @@ def _classify_schema(
     retention_days: int,
     age_supported: bool,
     now: datetime,
+    direct_mode: bool,
 ) -> JanitorRelationClassification:
     return classify_janitor_relations(
         schema_relations=schema_relations,
@@ -118,4 +121,5 @@ def _classify_schema(
         retention_days=retention_days,
         age_supported=age_supported,
         now=now,
+        direct_mode=direct_mode,
     )

@@ -667,7 +667,7 @@ schema = "dev"
                 }
             },
             expected_janitor_enabled=False,
-            expected_retention_days=30,
+            expected_retention_days=14,
             expected_janitor_max_checkpoints=20,
             expected_janitor_delete_tracked_only=True,
             expected_janitor_exclude_patterns=(),
@@ -735,7 +735,8 @@ allow_as_clone_destination = true
 
 [janitor]
 enabled = true
-retention_days = 14
+retention_days = 21
+archive_retention_days = 3
 max_checkpoints = 3
 delete_tracked_only = false
 exclude_patterns = ["partition_*"]
@@ -814,7 +815,8 @@ enabled = true
                 }
             },
             expected_janitor_enabled=True,
-            expected_retention_days=14,
+            expected_retention_days=21,
+            expected_janitor_archive_retention_days=3,
             expected_janitor_max_checkpoints=3,
             expected_janitor_delete_tracked_only=False,
             expected_janitor_exclude_patterns=("partition_*",),
@@ -891,6 +893,9 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     } == test_case.expected_targets
     assert config.janitor.enabled is test_case.expected_janitor_enabled
     assert config.janitor.retention_days == test_case.expected_retention_days
+    assert (
+        config.janitor.archive_retention_days == test_case.expected_janitor_archive_retention_days
+    )
     assert config.janitor.max_checkpoints == test_case.expected_janitor_max_checkpoints
     assert config.janitor.delete_tracked_only is test_case.expected_janitor_delete_tracked_only
     assert config.janitor.exclude_patterns == test_case.expected_janitor_exclude_patterns
@@ -1668,6 +1673,17 @@ adapter = "duckdb"
 direct_state_history_versions = -1
 """.strip(),
             expected_error_fragment="janitor.direct_state_history_versions must be >= 0",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when janitor archive retention days is negative",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[janitor]
+archive_retention_days = -1
+""".strip(),
+            expected_error_fragment="janitor.archive_retention_days must be >= 0",
         ),
         LoadProjectConfigErrorTestCase(
             description="raises when project settings contain unknown key",

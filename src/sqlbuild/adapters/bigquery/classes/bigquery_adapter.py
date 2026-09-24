@@ -282,6 +282,18 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         del database, schema
         return ()
 
+    def render_create_janitor_event_table_sql(self, *, database: str | None, schema: str) -> str:
+        from sqlbuild.executor.janitor_events.main.create_table_sql import (
+            build_janitor_events_create_table_sql,
+        )
+
+        return build_janitor_events_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        )
+
     def render_prune_fingerprint_history_sql(
         self,
         *,
@@ -1824,6 +1836,10 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
         destination_name: str = self._strip_identifier_quotes(destination).split(".")[-1]
         return (f"ALTER TABLE {self._quote_identifier_path(origin)} RENAME TO {destination_name}",)
+
+    def render_rename_view(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        del origin, destination
+        raise AdapterUserError(message="BigQuery does not support renaming views")
 
     def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
         raise AdapterUserError(message="BigQuery does not support atomic table swap")

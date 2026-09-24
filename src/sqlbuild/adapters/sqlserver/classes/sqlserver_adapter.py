@@ -504,16 +504,12 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"{COLUMN_TIMESTAMP} DATETIME2 NOT NULL"
             f")"
         )
-        escaped_schema: str = schema.replace("'", "''")
-        escaped_table: str = FINGERPRINT_TABLE_NAME.replace("'", "''")
-        exists_sql: str = (
-            "SELECT 1 FROM information_schema.tables "
-            f"WHERE table_schema = '{escaped_schema}' AND table_name = '{escaped_table}'"
+        return self._create_table_if_missing_sql(
+            create_sql=create_sql,
+            database=database,
+            schema=schema,
+            table_name=FINGERPRINT_TABLE_NAME,
         )
-        if database is not None:
-            escaped_database: str = database.replace("'", "''")
-            exists_sql += f" AND table_catalog = '{escaped_database}'"
-        return f"IF NOT EXISTS ({exists_sql}) {create_sql}"
 
     def render_create_microbatch_state_table_sql(self, *, database: str | None, schema: str) -> str:
         from sqlbuild.microbatches.constants import MICROBATCH_TABLE_NAME
@@ -525,16 +521,12 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             render_qualified_name=self.render_qualified_name,
             render_framework_type=self.render_framework_type,
         ).replace("CREATE TABLE IF NOT EXISTS ", "CREATE TABLE ", 1)
-        escaped_schema: str = schema.replace("'", "''")
-        escaped_table: str = MICROBATCH_TABLE_NAME.replace("'", "''")
-        exists_sql: str = (
-            "SELECT 1 FROM information_schema.tables "
-            f"WHERE table_schema = '{escaped_schema}' AND table_name = '{escaped_table}'"
+        return self._create_table_if_missing_sql(
+            create_sql=create_sql,
+            database=database,
+            schema=schema,
+            table_name=MICROBATCH_TABLE_NAME,
         )
-        if database is not None:
-            escaped_database: str = database.replace("'", "''")
-            exists_sql += f" AND table_catalog = '{escaped_database}'"
-        return f"IF NOT EXISTS ({exists_sql}) {create_sql}"
 
     def render_create_fingerprint_index_sqls(
         self,
@@ -676,16 +668,12 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             "status",
         ):
             create_sql = create_sql.replace(f"{column} NVARCHAR(MAX)", f"{column} NVARCHAR(450)")
-        escaped_schema: str = schema.replace("'", "''")
-        escaped_table: str = NODE_RESULTS_TABLE_NAME.replace("'", "''")
-        exists_sql: str = (
-            "SELECT 1 FROM information_schema.tables "
-            f"WHERE table_schema = '{escaped_schema}' AND table_name = '{escaped_table}'"
+        return self._create_table_if_missing_sql(
+            create_sql=create_sql,
+            database=database,
+            schema=schema,
+            table_name=NODE_RESULTS_TABLE_NAME,
         )
-        if database is not None:
-            escaped_database: str = database.replace("'", "''")
-            exists_sql += f" AND table_catalog = '{escaped_database}'"
-        return f"IF NOT EXISTS ({exists_sql}) {create_sql}"
 
     def render_create_node_result_index_sqls(
         self,
@@ -752,16 +740,12 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             "outcome",
         ):
             create_sql = create_sql.replace(f"{column} NVARCHAR(MAX)", f"{column} NVARCHAR(450)")
-        escaped_schema: str = schema.replace("'", "''")
-        escaped_table: str = AUDIT_RESULTS_TABLE_NAME.replace("'", "''")
-        exists_sql: str = (
-            "SELECT 1 FROM information_schema.tables "
-            f"WHERE table_schema = '{escaped_schema}' AND table_name = '{escaped_table}'"
+        return self._create_table_if_missing_sql(
+            create_sql=create_sql,
+            database=database,
+            schema=schema,
+            table_name=AUDIT_RESULTS_TABLE_NAME,
         )
-        if database is not None:
-            escaped_database: str = database.replace("'", "''")
-            exists_sql += f" AND table_catalog = '{escaped_database}'"
-        return f"IF NOT EXISTS ({exists_sql}) {create_sql}"
 
     def render_create_audit_result_index_sqls(
         self, *, database: str | None, schema: str
@@ -790,6 +774,25 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"AND object_id = OBJECT_ID(N'{escaped_table_name}')) "
             f"CREATE INDEX {run_id_index_name} ON {table_name} "
             "(run_id, invocation_id, result_id)",
+        )
+
+    def render_create_janitor_event_table_sql(self, *, database: str | None, schema: str) -> str:
+        from sqlbuild.executor.janitor_events.constants import JANITOR_EVENTS_TABLE_NAME
+        from sqlbuild.executor.janitor_events.main.create_table_sql import (
+            build_janitor_events_create_table_sql,
+        )
+
+        create_sql: str = build_janitor_events_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        ).replace("CREATE TABLE IF NOT EXISTS", "CREATE TABLE", 1)
+        return self._create_table_if_missing_sql(
+            create_sql=create_sql,
+            database=database,
+            schema=schema,
+            table_name=JANITOR_EVENTS_TABLE_NAME,
         )
 
     def render_read_latest_source_freshness_sql(
@@ -891,6 +894,23 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         origin_name: str = self._sp_rename_relation_name(origin)
         destination_name: str = self._unquote_relation_part(destination.split(".")[-1])
         return (f"EXEC sp_rename '{origin_name}', '{destination_name}'",)
+
+    def render_rename_view(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        return self.render_rename(origin=origin, destination=destination)
+
+    def _create_table_if_missing_sql(
+        self, *, create_sql: str, database: str | None, schema: str, table_name: str
+    ) -> str:
+        escaped_schema: str = schema.replace("'", "''")
+        escaped_table: str = table_name.replace("'", "''")
+        exists_sql: str = (
+            "SELECT 1 FROM information_schema.tables "
+            f"WHERE table_schema = '{escaped_schema}' AND table_name = '{escaped_table}'"
+        )
+        if database is not None:
+            escaped_database: str = database.replace("'", "''")
+            exists_sql += f" AND table_catalog = '{escaped_database}'"
+        return f"IF NOT EXISTS ({exists_sql}) {create_sql}"
 
     def render_add_columns(
         self, *, destination: str, columns: tuple[ColumnInfo, ...]

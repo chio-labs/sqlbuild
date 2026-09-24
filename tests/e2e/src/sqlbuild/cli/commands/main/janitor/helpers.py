@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from textwrap import dedent
+from types import MappingProxyType
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
@@ -14,7 +16,10 @@ from sqlbuild.compiler.source_freshness.models import (
     SourceFreshnessRecord,
     SourceFreshnessRenderers,
 )
-from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    prepare_inline_project,
+    query_duckdb,
+)
 
 
 def prepare_janitor_project(
@@ -194,3 +199,164 @@ def create_direct_state_history(*, db_path: Path) -> None:
             )
     finally:
         connection.close()
+
+
+AGED_JANITOR_ADAPTER_NAME: str = "aged_janitor_duckdb"
+JANITOR_TEST_SETTINGS_FILENAME: str = "janitor_test_settings.json"
+AGED_JANITOR_ADAPTER_SOURCE: str = """
+import json
+from dataclasses import replace
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+
+_SETTINGS_PATH = Path(__file__).resolve().parent.parent / "janitor_test_settings.json"
+
+
+def _settings() -> dict[str, Any]:
+    if not _SETTINGS_PATH.exists():
+        return {}
+    return json.loads(_SETTINGS_PATH.read_text(encoding="utf-8"))
+
+
+class AgedJanitorDuckDbAdapter(DuckDbAdapter):
+    adapter_name = "aged_janitor_duckdb"
+
+    def supports_relation_age_metadata(self) -> bool:
+        return True
+
+    def maximum_identifier_length(self) -> int:
+        return int(_settings().get("identifier_limit", super().maximum_identifier_length()))
+
+    def list_relations(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[RelationInfo, ...]:
+        created_at: dict[str, str] = _settings().get("created_at", {})
+        return tuple(
+            replace(relation, created_at=datetime.fromisoformat(created_at[relation.name]))
+            if relation.name in created_at
+            else relation
+            for relation in super().list_relations(
+                connection=connection, database=database, schemas=schemas, names=names
+            )
+        )
+
+    def _execute(self, *, connection: Any, sql: str) -> Any:
+        if (
+            _settings().get("fail_janitor_event_insert")
+            and sql.startswith("INSERT INTO")
+            and "_sqlbuild_janitor_events" in sql
+        ):
+            raise AdapterUserError("simulated janitor event write failure")
+        return super()._execute(connection=connection, sql=sql)
+"""
+
+
+def prepare_archive_janitor_project(
+    *,
+    tmp_path: Path,
+    project_name: str,
+    janitor_config: str,
+    model_names: tuple[str, ...] = ("orders",),
+    use_aged_adapter: bool = False,
+) -> Path:
+    """Create a DuckDB project whose janitor archives stale relations."""
+
+    repo_files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            f'name = "{project_name}"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            f'database = "{(tmp_path / project_name / "janitor.duckdb").as_posix()}"\n\n'
+            f"[janitor]\n{dedent(janitor_config).strip()}\n\n"
+            "[defaults]\n"
+            'materialized = "table"\n'
+        ),
+        **{
+            f"models/{model_name}.sql": f"MODEL ();\n\nSELECT 1 AS {model_name}_id\n"
+            for model_name in model_names
+        },
+        f"adapters/{AGED_JANITOR_ADAPTER_NAME}.py": AGED_JANITOR_ADAPTER_SOURCE,
+        **{
+            False: {},
+            True: {"sqlbuild_local.toml": f'adapter = "{AGED_JANITOR_ADAPTER_NAME}"\n'},
+        }[use_aged_adapter],
+    }
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files=repo_files,
+    )
+
+
+def write_janitor_test_settings(
+    *,
+    project_dir: Path,
+    created_at: Mapping[str, datetime] = MappingProxyType({}),
+    identifier_limit: int = 255,
+    fail_janitor_event_insert: bool = False,
+) -> None:
+    """Write relation ages and fault switches consumed by the aged janitor adapter."""
+
+    import json
+
+    payload: dict[str, object] = {
+        "created_at": {name: value.isoformat() for name, value in created_at.items()},
+        "identifier_limit": identifier_limit,
+        "fail_janitor_event_insert": fail_janitor_event_insert,
+    }
+    (project_dir / JANITOR_TEST_SETTINGS_FILENAME).write_text(json.dumps(payload), encoding="utf-8")
+
+
+def archive_timestamp_text(value: datetime) -> str:
+    """Render the UTC timestamp component embedded in janitor archive names."""
+
+    return value.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
+
+
+def list_archive_names(*, db_path: Path, schema: str = "main") -> tuple[str, ...]:
+    """Return archive-prefixed relation names in one schema."""
+
+    rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT table_name FROM information_schema.tables "
+            f"WHERE table_schema = '{schema}' AND starts_with(table_name, '_SQB_ARCHIVE__') "
+            "ORDER BY table_name"
+        ),
+    )
+    return tuple(str(row[0]) for row in rows)
+
+
+def read_janitor_events(*, db_path: Path) -> list[tuple[object, ...]]:
+    """Return janitor audit rows in a stable order."""
+
+    return query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT event_type, original_name, original_qualified_name, archive_name, run_id "
+            "FROM main._sqlbuild_janitor_events ORDER BY occurred_at, event_type, archive_name"
+        ),
+    )
+
+
+def read_current_janitor_events(*, db_path: Path, run_id: str) -> list[tuple[object, ...]]:
+    """Return janitor audit rows excluding one seeded historical run."""
+
+    return query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT event_type, original_name, original_qualified_name, archive_name, run_id "
+            f"FROM main._sqlbuild_janitor_events WHERE run_id <> '{run_id}' "
+            "ORDER BY archive_name"
+        ),
+    )

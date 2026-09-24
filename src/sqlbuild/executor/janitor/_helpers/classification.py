@@ -17,6 +17,7 @@ from sqlbuild.compiler.planner.main.scenarios.is_scenario_artifact_physical_name
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.executor.diff.classes.query_artifact_lifecycle import QueryDiffArtifactLifecycle
 from sqlbuild.executor.diff.models import QueryDiffArtifactInspection
+from sqlbuild.executor.janitor._helpers.archive_names import is_archive_lookalike_name
 from sqlbuild.executor.janitor._helpers.plan import (
     collect_desired_keys,
     collect_source_schemas,
@@ -169,6 +170,7 @@ def classify_janitor_relations(
     retention_days: int,
     age_supported: bool,
     now: datetime,
+    direct_mode: bool = False,
 ) -> JanitorRelationClassification:
     """Split one schema's relations into delete candidates and skipped relations."""
 
@@ -178,6 +180,8 @@ def classify_janitor_relations(
     for relation in schema_relations:
         relation_key: JanitorRelationKey = build_relation_key(relation)
         if relation_key in facts.desired_keys:
+            continue
+        if direct_mode and is_archive_lookalike_name(relation_key.name):
             continue
         skip_reason: str | None = _relation_skip_reason(
             relation_key=relation_key,
@@ -238,7 +242,7 @@ def _relation_skip_reason(
             relation_key,
             "relation is referenced by a retained virtual checkpoint",
         )
-    exclude_pattern: str | None = _matching_exclude_pattern(
+    exclude_pattern: str | None = matching_exclude_pattern(
         key=relation_key,
         patterns=effective_exclude_patterns,
     )
@@ -269,11 +273,13 @@ def _retention_skip_reason(
     return None
 
 
-def _matching_exclude_pattern(
+def matching_exclude_pattern(
     *,
     key: JanitorRelationKey,
     patterns: tuple[str, ...],
 ) -> str | None:
+    """Return the first exclude pattern matching a relation name or qualified name."""
+
     display_name: str = key.display_name()
     pattern: str
     for pattern in patterns:

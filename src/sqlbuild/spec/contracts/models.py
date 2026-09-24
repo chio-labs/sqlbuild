@@ -313,7 +313,8 @@ class JanitorConfig:
     """Janitor command defaults."""
 
     enabled: bool = False
-    retention_days: int = 30
+    retention_days: int = 14
+    archive_retention_days: int = 14
     max_checkpoints: int = 20
     direct_state_history_versions: int = 20
     delete_tracked_only: bool = True

@@ -81,19 +81,20 @@ def test_given_default_config_when_running_janitor_then_it_reports_disabled(
     "test_case",
     [
         JanitorCleanupE2ETestCase(
-            description="tracked-only direct janitor reports stale relations without deleting",
+            description="tracked-only direct janitor archives only tracked stale relations",
             build_command=("--no-color", "build", "--full-refresh"),
             janitor_command=("janitor", "--auto-approve"),
             expected_exit_code=0,
             expected_stdout_fragments=(
-                "reported objects       1",
+                "relations to archive   1",
+                "archives to delete     0",
                 "objects skipped        4",
-                "main.janitor_tracked_extra",
+                "main.janitor_tracked_extra  ->  main._SQB_ARCHIVE__",
                 "main.janitor_untracked_extra  relation is not tracked by SQLBuild",
                 "main.partition_state  relation matches exclude pattern 'partition_*'",
                 "main._sqlbuild_fingerprints  relation matches exclude pattern",
                 "main._sqlbuild_microbatches  relation matches exclude pattern",
-                "direct mode does not delete relations",
+                "Archived 1 relations.",
             ),
             expected_existing_tables=(
                 "orders",
@@ -101,14 +102,15 @@ def test_given_default_config_when_running_janitor_then_it_reports_disabled(
                 "partition_state",
                 "_sqlbuild_fingerprints",
                 "_sqlbuild_microbatches",
-                "janitor_tracked_extra",
+                "_sqlbuild_janitor_events",
             ),
-            expected_missing_tables=(),
+            expected_missing_tables=("janitor_tracked_extra",),
+            expected_archived_original_names=("janitor_tracked_extra",),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_stale_relations_when_running_direct_janitor_then_it_reports_without_deleting(
+def test_given_stale_relations_when_running_direct_janitor_then_it_archives_tracked_relations(
     test_case: JanitorCleanupE2ETestCase,
     tmp_path: Path,
 ) -> None:
@@ -150,6 +152,14 @@ def test_given_stale_relations_when_running_direct_janitor_then_it_reports_witho
         assert table_exists(db_path=db_path, table_name=table_name)
     for table_name in test_case.expected_missing_tables:
         assert not table_exists(db_path=db_path, table_name=table_name)
+    for original_name in test_case.expected_archived_original_names:
+        assert query_duckdb(
+            db_path=db_path,
+            sql=(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                f"WHERE table_name LIKE '_SQB_ARCHIVE__%__{original_name}'"
+            ),
+        ) == [(1,)]
     assert "Eligible expired VDEs" not in janitor_result.stdout
     assert "Eligible state backups" not in janitor_result.stdout
     assert "Eligible expired locks" not in janitor_result.stdout
@@ -166,7 +176,7 @@ def test_given_stale_relations_when_running_direct_janitor_then_it_reports_witho
                 "Janitor blocked",
                 "Managed target schemas contain active configured sources.",
                 "main  active sources: raw_events",
-                "suppressed deletion: main.stale_main",
+                "suppressed archive: main.stale_main",
                 "No janitor actions will be performed.",
             ),
             expected_existing_relations=(
@@ -355,30 +365,30 @@ def test_given_virtual_microbatch_history_when_running_janitor_then_events_remai
     "test_case",
     [
         JanitorCleanupE2ETestCase(
-            description="tracked-only direct janitor reports strict scenario artifacts",
+            description="tracked-only direct janitor archives strict scenario artifacts",
             build_command=("--no-color", "build", "--full-refresh"),
             janitor_command=("janitor", "--auto-approve"),
             expected_exit_code=0,
             expected_stdout_fragments=(
-                "reported objects       2",
+                "relations to archive   2",
                 "objects skipped        2",
-                "main.__sqb_a13f09c2e7b8__model__daily_revenue",
-                "main.__sqb_a13f09c2e7b8__source__raw_orders",
+                "main.__sqb_a13f09c2e7b8__model__daily_revenue  ->  main._SQB_ARCHIVE__",
+                "main.__sqb_a13f09c2e7b8__source__raw_orders  ->  main._SQB_ARCHIVE__",
                 "main.__sqb_a13f09c2e7b__model__daily_revenue  relation is not tracked by SQLBuild",
-                "direct mode does not delete relations",
             ),
             expected_existing_tables=(
                 "orders",
                 "__sqb_a13f09c2e7b__model__daily_revenue",
+            ),
+            expected_missing_tables=(
                 "__sqb_a13f09c2e7b8__source__raw_orders",
                 "__sqb_a13f09c2e7b8__model__daily_revenue",
             ),
-            expected_missing_tables=(),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_scenario_artifacts_when_running_direct_janitor_then_it_reports_without_deleting(
+def test_given_scenario_artifacts_when_running_direct_janitor_then_it_archives_them(
     test_case: JanitorCleanupE2ETestCase,
     tmp_path: Path,
 ) -> None:

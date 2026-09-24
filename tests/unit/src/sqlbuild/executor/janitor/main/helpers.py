@@ -30,6 +30,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
+from sqlbuild.executor.janitor_events.constants import JANITOR_EVENTS_TABLE_NAME
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SchemaSeedEntry, SeedCsvSettings, SourceEntry
 
@@ -43,10 +44,14 @@ class FakeJanitorAdapter(BaseAdapter):
         relation_infos: tuple[RelationInfo, ...],
         supports_age_metadata: bool = True,
         tracked_relations: tuple[tuple[str | None, str | None, str], ...] = (),
+        identifier_limit: int = 255,
     ) -> None:
         self.relation_infos: tuple[RelationInfo, ...] = relation_infos
         self.age_metadata_supported: bool = supports_age_metadata
+        self.identifier_limit: int = identifier_limit
         self.dropped_targets: list[str] = []
+        self.dropped_view_targets: list[str] = []
+        self.renamed_targets: list[tuple[str, str]] = []
         self.executed_sql: list[str] = []
         self.tracked_relations: tuple[tuple[str | None, str | None, str], ...] = tracked_relations
         self._tracked_rows: tuple[tuple[Any, ...], ...] = tuple(
@@ -101,6 +106,9 @@ class FakeJanitorAdapter(BaseAdapter):
     def supports_relation_age_metadata(self) -> bool:
         return self.age_metadata_supported
 
+    def maximum_identifier_length(self) -> int:
+        return self.identifier_limit
+
     def default_schema(self) -> str | None:
         return "analytics"
 
@@ -126,7 +134,9 @@ class FakeJanitorAdapter(BaseAdapter):
             True: (),
             False: self._tracked_rows,
         }
-        return _FakeResult(rows=rows_by_query_kind["LIMIT 0" in sql])
+        return _FakeResult(
+            rows=rows_by_query_kind["LIMIT 0" in sql or JANITOR_EVENTS_TABLE_NAME in sql]
+        )
 
     def list_relations(
         self,
@@ -212,6 +222,17 @@ class FakeJanitorAdapter(BaseAdapter):
     ) -> None:
         del connection, if_exists, statement_recorder
         self.dropped_targets.append(destination)
+
+    def drop_view(
+        self,
+        connection: Any,
+        *,
+        destination: str,
+        if_exists: bool = True,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        del connection, if_exists, statement_recorder
+        self.dropped_view_targets.append(destination)
 
     def create_table_as(
         self,
@@ -336,7 +357,8 @@ class FakeJanitorAdapter(BaseAdapter):
         destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        raise NotImplementedError
+        del connection, statement_recorder
+        self.renamed_targets.append((origin, destination))
 
     def swap(
         self,
@@ -436,6 +458,28 @@ class FailingDropAdapter(FakeJanitorAdapter):
         del connection, if_exists, statement_recorder
         self.dropped_targets.append(destination)
         raise RuntimeError(self.message)
+
+
+class FailingJanitorEventAdapter(FakeJanitorAdapter):
+    def _execute(self, connection: Any, sql: str) -> Any:
+        is_event_insert: bool = sql.startswith("INSERT INTO") and JANITOR_EVENTS_TABLE_NAME in sql
+        _EVENT_WRITE_GUARDS[is_event_insert](sql)
+        return super()._execute(connection=connection, sql=sql)
+
+
+def _allow_statement(sql: str) -> None:
+    del sql
+
+
+def _fail_event_write(sql: str) -> None:
+    del sql
+    raise RuntimeError("simulated janitor event write failure")
+
+
+_EVENT_WRITE_GUARDS: dict[bool, Callable[[str], None]] = {
+    False: _allow_statement,
+    True: _fail_event_write,
+}
 
 
 class _FakeResult:

@@ -53,4 +53,7 @@ def resolve_janitor_settings(
     return JanitorSettings(
         retention_days=retention_days,
         direct_state_history_versions=direct_state_history_versions,
+        archive_retention_days=(
+            invocation.discovered_inputs.project_config.janitor.archive_retention_days
+        ),
     )

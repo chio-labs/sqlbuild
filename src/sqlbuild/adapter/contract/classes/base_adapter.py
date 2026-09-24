@@ -626,6 +626,9 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     def render_rename(self, *, origin: str, destination: str) -> tuple[str, ...]:
         return (f"ALTER TABLE {origin} RENAME TO {destination}",)
 
+    def render_rename_view(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        return (f"ALTER VIEW {origin} RENAME TO {destination}",)
+
     def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
         staging: str = self._with_replaced_relation_name(
             relation=left, name=f"{self._relation_name(left)}__swap_staging"
@@ -2341,6 +2344,21 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         """Render optional audit result table index DDL statements."""
         del database, schema
         return ()
+
+    def render_create_janitor_event_table_sql(self, *, database: str | None, schema: str) -> str:
+        """Render DDL that creates the janitor audit event table when it is missing."""
+
+        from sqlbuild.executor.janitor_events.main.create_table_sql import (
+            build_janitor_events_create_table_sql,
+        )
+
+        return build_janitor_events_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+            transient=self.state_tables_transient,
+        )
 
     def render_prune_fingerprint_history_sql(
         self,
