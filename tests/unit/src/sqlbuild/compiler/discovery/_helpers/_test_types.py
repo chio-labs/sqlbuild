@@ -581,6 +581,14 @@ class ParseSqlTestFileErrorTestCase:
 
 
 @dataclass(frozen=True)
+class ParseSqlTestCursorWindowTestCase:
+    description: str
+    contents: str
+    expected_cursor_start: str | None
+    expected_cursor_end: str | None
+
+
+@dataclass(frozen=True)
 class ParseSqlScenarioFileTestCase:
     description: str
     contents: str

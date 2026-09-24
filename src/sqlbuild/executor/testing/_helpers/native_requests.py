@@ -34,6 +34,7 @@ def chain_step_request(*, step: ChainStep) -> dict[str, object]:
         "liftedCtes": step.lifted_ctes,
         "comparisonBodySql": step.comparison_body_sql,
         "expectedColumns": step.expected_columns,
+        "expectedLiftedCtes": step.expected_lifted_ctes,
     }
 
 

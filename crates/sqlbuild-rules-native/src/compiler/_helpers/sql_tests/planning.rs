@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::compiler::_helpers::sql_tests::expected_columns::expected_columns;
+use crate::compiler::_helpers::sql_tests::helper_scope::{helper_scope_ctes, merged_scoped_ctes};
 use crate::compiler::_helpers::sql_tests::rendering::{
     AssertionStep, ChainStep, RenderRequest, render_comparison_sql, render_dialect,
     rendered_chain_steps,
@@ -20,10 +21,10 @@ use crate::constants::{TABLE_FUNCTION_TEST_MODE, UDF_TEST_MODE};
 const DEFAULT_WORKERS: usize = 4;
 const MAX_WORKERS: usize = 4;
 const WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
-const REF_PREFIX: &str = "__ref__";
-const SOURCE_PREFIX: &str = "__source__";
-const SEED_PREFIX: &str = "__seed__";
-const DBT_REF_PREFIX: &str = "__dbt_ref__";
+pub(crate) const REF_PREFIX: &str = "__ref__";
+pub(crate) const SOURCE_PREFIX: &str = "__source__";
+pub(crate) const SEED_PREFIX: &str = "__seed__";
+pub(crate) const DBT_REF_PREFIX: &str = "__dbt_ref__";
 const TABLE_FUNCTION_PREFIX: &str = "__table_fn__";
 const EXPECTED_PREFIX: &str = "__expected__";
 const ASSERT_PREFIX: &str = "__assert__";
@@ -131,9 +132,9 @@ enum TestPayload {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CteInput {
-    name: String,
-    sql_body: String,
+pub(crate) struct CteInput {
+    pub(crate) name: String,
+    pub(crate) sql_body: String,
 }
 
 /// One planned SQL test: the executable chain and assertion steps plus optional rendered SQL.
@@ -183,7 +184,7 @@ struct ProjectContext {
 }
 
 #[derive(Clone)]
-struct SqlTestPatterns {
+pub(crate) struct SqlTestPatterns {
     reference: Regex,
     source: Regex,
     seed: Regex,
@@ -191,7 +192,8 @@ struct SqlTestPatterns {
     table_function: Regex,
     dbt_reference: Regex,
     test_reference: Regex,
-    protected: Regex,
+    pub(crate) protected: Regex,
+    pub(crate) identifier: Regex,
 }
 
 impl SqlTestPatterns {
@@ -209,6 +211,7 @@ impl SqlTestPatterns {
             protected: compile_pattern(
                 r#"(?s)'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\$\$.*?\$\$|--[^\n]*|/\*.*?\*/"#,
             )?,
+            identifier: compile_pattern(r"[A-Za-z_][A-Za-z0-9_$]*")?,
         })
     }
 }
@@ -236,13 +239,13 @@ pub(crate) struct AnalysisTemplate {
 type AnalysisTemplateCell = Arc<OnceLock<Option<AnalysisTemplate>>>;
 type AnalysisTemplateCache = Mutex<HashMap<String, AnalysisTemplateCell>>;
 
-struct TestFixtures {
-    mock_refs: BTreeMap<String, String>,
-    mock_sources: BTreeMap<String, String>,
-    mock_seeds: BTreeMap<String, String>,
-    mock_dbt_refs: BTreeMap<String, String>,
+pub(crate) struct TestFixtures {
+    pub(crate) mock_refs: BTreeMap<String, String>,
+    pub(crate) mock_sources: BTreeMap<String, String>,
+    pub(crate) mock_seeds: BTreeMap<String, String>,
+    pub(crate) mock_dbt_refs: BTreeMap<String, String>,
     mock_table_functions: BTreeMap<String, String>,
-    helpers: Vec<CteInput>,
+    pub(crate) helpers: Vec<CteInput>,
     expected: BTreeMap<String, String>,
     assertions: Vec<(String, String)>,
 }
@@ -480,14 +483,7 @@ impl GeneratedCteState {
                 request.file_label, request.referenced_name
             )));
         }
-        let sql = if request.fixtures.helpers.is_empty() {
-            mock_body.clone()
-        } else {
-            format!(
-                "{} {mock_body}",
-                helper_with_clause(&request.fixtures.helpers)
-            )
-        };
+        let sql = mock_cte_sql(mock_body, &request.fixtures.helpers);
         self.insert(&generated_name, &sql, request.file_label)?;
         Ok(Some(generated_name))
     }
@@ -695,6 +691,7 @@ fn plan_direct_test(
             model_name: model_name.clone(),
             resolved_sql: wrap_direct_sql(&actual_sql, &helper_with),
             expected_cte_sql: Some(wrap_direct_sql(&plan.expected_cte.sql_body, &helper_with)),
+            expected_lifted_ctes: Vec::new(),
             lifted_ctes: Vec::new(),
             comparison_body_sql: None,
             expected_columns: None,
@@ -797,6 +794,14 @@ fn plan_model_test(
             reported: &mut reported_missing_mocks,
         }));
         let expected_cte_sql = fixtures.expected.get(model_name).cloned();
+        let expected_lifted_ctes = match expected_cte_sql.as_deref() {
+            Some(sql) => {
+                let scope = helper_scope_ctes(sql, &fixtures, &context.patterns, &plan.file_label)?;
+                reachable_mocks.extend(scope.reached_mocks);
+                scope.ctes
+            }
+            None => Vec::new(),
+        };
         chain.push(ChainStep {
             model_name: model_name.clone(),
             resolved_sql,
@@ -804,6 +809,7 @@ fn plan_model_test(
                 .as_deref()
                 .and_then(|sql| expected_columns(sql, &context.render_dialect)),
             expected_cte_sql,
+            expected_lifted_ctes,
             lifted_ctes,
             comparison_body_sql,
         });
@@ -834,7 +840,7 @@ fn plan_model_test(
             } else {
                 None
             };
-        let (resolved_sql, lifted_ctes, comparison_body_sql) = match analyzed {
+        let (mut resolved_sql, mut lifted_ctes, comparison_body_sql) = match analyzed {
             Some(value)
                 if !has_unresolved_test_reference(&value.resolved_sql, &context.patterns) =>
             {
@@ -876,6 +882,20 @@ fn plan_model_test(
                 )
             }
         };
+        let scope = helper_scope_ctes(
+            &fixture_resolved_sql,
+            &fixtures,
+            &context.patterns,
+            &plan.file_label,
+        )?;
+        if !scope.ctes.is_empty() {
+            reachable_mocks.extend(scope.reached_mocks);
+            lifted_ctes = merged_scoped_ctes(lifted_ctes, scope.ctes, &plan.file_label)?;
+            resolved_sql = with_generated_ctes(
+                &lifted_ctes,
+                comparison_body_sql.as_deref().unwrap_or(&resolved_sql),
+            );
+        }
         assertions.push(AssertionStep {
             name: assertion_name.clone(),
             resolved_sql,
@@ -919,6 +939,7 @@ fn omit_unrendered_step_sql(chain: Vec<ChainStep>, assertions: &[AssertionStep])
                     model_name: step.model_name,
                     resolved_sql: String::new(),
                     expected_cte_sql: step.expected_cte_sql,
+                    expected_lifted_ctes: step.expected_lifted_ctes,
                     lifted_ctes: Vec::new(),
                     comparison_body_sql: None,
                     expected_columns: step.expected_columns,
@@ -1676,14 +1697,14 @@ fn marker_names(pattern: &Regex, protected_pattern: &Regex, sql: &str) -> Vec<St
     names
 }
 
-fn protected_ranges(pattern: &Regex, sql: &str) -> Vec<(usize, usize)> {
+pub(crate) fn protected_ranges(pattern: &Regex, sql: &str) -> Vec<(usize, usize)> {
     pattern
         .find_iter(sql)
         .map(|value| (value.start(), value.end()))
         .collect()
 }
 
-fn in_protected_range(index: usize, ranges: &[(usize, usize)]) -> bool {
+pub(crate) fn in_protected_range(index: usize, ranges: &[(usize, usize)]) -> bool {
     ranges
         .iter()
         .any(|(start, end)| index >= *start && index < *end)
@@ -1894,6 +1915,15 @@ fn helper_with_clause(helpers: &[CteInput]) -> String {
     )
 }
 
+/// Generated mock CTE body: the authored mock with every helper CTE in scope.
+pub(crate) fn mock_cte_sql(mock_body: &str, helpers: &[CteInput]) -> String {
+    if helpers.is_empty() {
+        mock_body.to_string()
+    } else {
+        format!("{} {mock_body}", helper_with_clause(helpers))
+    }
+}
+
 fn cte_definition_sql(name: &str, sql: &str) -> String {
     let body = sql.trim_end();
     let final_line = body.rsplit_once('\n').map_or(body, |(_, line)| line);
@@ -1951,7 +1981,7 @@ fn default_set_difference() -> String {
     "EXCEPT".to_string()
 }
 
-fn compile_error(message: &str) -> String {
+pub(crate) fn compile_error(message: &str) -> String {
     format!("compile_input:{message}")
 }
 

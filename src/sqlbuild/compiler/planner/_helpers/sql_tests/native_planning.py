@@ -12,12 +12,19 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
+    CompiledModel,
     CompiledModelSqlTestPayload,
     CompiledProject,
     CompiledSqlTest,
     CompileSqlTestCte,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.planner._helpers.sql_tests.cursor_window import (
+    declared_window_cursor_models,
+    declares_cursor_window,
+    render_test_cursor_intrinsics,
+    uses_cursor_intrinsics,
+)
 from sqlbuild.compiler.planner.exceptions import NativeSqlTestPlanningError, PlannerInputError
 from sqlbuild.compiler.planner.main.execution.sql_test_dialect import (
     restore_sql_test_dialect_function_names,
@@ -93,9 +100,9 @@ def plan_sql_tests_natively(
         return ()
     start_ns: int = time.perf_counter_ns()
     request: dict[str, object] = {
-        "models": _model_requests(project=project),
+        "models": _model_requests(project=project, adapter=adapter),
         "functions": _function_requests(project=project, adapter=adapter),
-        "tests": [_test_request(test=test) for test in tests],
+        "tests": _planning_test_requests(project=project, tests=tests, adapter=adapter),
         "sqlAnalysisEnabled": sql_analysis_enabled,
         "sqlAnalysisDialect": adapter.sql_analysis_dialect(),
         "setDifferenceOperator": adapter.render_set_difference_operator(),
@@ -223,6 +230,7 @@ def _chain_step(*, value: object) -> ChainStep:
         expected_columns=_optional_string_tuple(
             value=payload.get("expectedColumns"), context="chain step expected columns"
         ),
+        expected_lifted_ctes=_cte_pairs(value=payload.get("expectedLiftedCtes", [])),
     )
 
 
@@ -317,7 +325,79 @@ def _function_requests(
     return functions
 
 
-def _test_request(*, test: CompiledSqlTest) -> dict[str, object]:
+def _planning_test_requests(
+    *, project: CompiledProject, tests: tuple[CompiledSqlTest, ...], adapter: BaseAdapter
+) -> list[dict[str, object]]:
+    """Build test requests whose model SQL has cursor intrinsics rendered for the test window."""
+
+    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    windowed_indexes: tuple[int, ...] = tuple(
+        index
+        for index, test in enumerate(tests)
+        if isinstance(test.payload, CompiledModelSqlTestPayload)
+        and declares_cursor_window(test=test)
+    )
+    chains: tuple[tuple[str, ...], ...] = (
+        resolve_sql_test_model_chains(
+            project=project, tests=tuple(tests[index] for index in windowed_indexes)
+        )
+        if windowed_indexes
+        else ()
+    )
+    chains_by_index: dict[int, tuple[str, ...]] = dict(zip(windowed_indexes, chains, strict=True))
+    return [
+        _test_request(
+            test=test,
+            model_query_overrides=_windowed_model_query_overrides(
+                test=test,
+                models_by_name=models_by_name,
+                adapter=adapter,
+                chain=chains_by_index.get(index),
+            ),
+        )
+        for index, test in enumerate(tests)
+    ]
+
+
+def _windowed_model_query_overrides(
+    *,
+    test: CompiledSqlTest,
+    models_by_name: dict[str, CompiledModel],
+    adapter: BaseAdapter,
+    chain: tuple[str, ...] | None,
+) -> dict[str, str] | None:
+    payload: CompiledModelSqlTestPayload | CompiledDirectLogicSqlTestPayload = test.payload
+    if not isinstance(payload, CompiledModelSqlTestPayload):
+        return None
+    chain_names: frozenset[str] = frozenset(chain or ())
+    overrides: dict[str, str] = {}
+    for model_name, sql in payload.model_query_overrides.items():
+        model: CompiledModel | None = models_by_name.get(model_name)
+        overrides[model_name] = (
+            sql
+            if model is None
+            else render_test_cursor_intrinsics(
+                sql=sql,
+                model=model,
+                adapter=adapter,
+                test=test if model_name in chain_names else None,
+            )
+        )
+    if chain is not None:
+        chain_models: tuple[CompiledModel, ...] = tuple(
+            models_by_name[name] for name in chain if name in models_by_name
+        )
+        for model in declared_window_cursor_models(test=test, chain_models=chain_models):
+            if model.name not in overrides:
+                overrides[model.name] = render_test_cursor_intrinsics(
+                    sql=model.query_sql, model=model, adapter=adapter, test=test
+                )
+    return overrides
+
+
+def _test_request(
+    *, test: CompiledSqlTest, model_query_overrides: dict[str, str] | None = None
+) -> dict[str, object]:
     payload: CompiledModelSqlTestPayload | CompiledDirectLogicSqlTestPayload = test.payload
     if isinstance(payload, CompiledDirectLogicSqlTestPayload):
         payload_request: dict[str, object] = {
@@ -331,7 +411,11 @@ def _test_request(*, test: CompiledSqlTest) -> dict[str, object]:
         payload_request = {
             "kind": "model",
             "authoredCtes": [_cte_request(cte=cte) for cte in payload.authored_ctes],
-            "modelQueryOverrides": payload.model_query_overrides,
+            "modelQueryOverrides": (
+                payload.model_query_overrides
+                if model_query_overrides is None
+                else model_query_overrides
+            ),
             "expectedCtes": [_cte_request(cte=cte) for cte in payload.expected_ctes],
             "expectedModelNames": list(payload.expected_model_names),
             "assertionCtes": [_cte_request(cte=cte) for cte in payload.assertion_ctes],
@@ -343,17 +427,24 @@ def _test_request(*, test: CompiledSqlTest) -> dict[str, object]:
     }
 
 
-def _model_requests(*, project: CompiledProject) -> list[dict[str, object]]:
+def _model_requests(
+    *, project: CompiledProject, adapter: BaseAdapter | None = None
+) -> list[dict[str, object]]:
     requests: list[dict[str, object]] = []
     for model in project.models:
         dependencies: list[str] = []
         for dependency in model.deps:
             if dependency.resource_type == CompiledResourceType.MODEL:
                 dependencies.append(dependency.name)
+        query_sql: str = model.query_sql
+        if adapter is not None and uses_cursor_intrinsics(sql=query_sql):
+            query_sql = render_test_cursor_intrinsics(
+                sql=query_sql, model=model, adapter=adapter, test=None
+            )
         requests.append(
             {
                 "name": model.name,
-                "querySql": model.query_sql,
+                "querySql": query_sql,
                 "modelDependencies": dependencies,
             }
         )

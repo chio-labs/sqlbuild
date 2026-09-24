@@ -23,6 +23,7 @@ from sqlbuild.compiler.discovery.models import (
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ExpectedCountTestCase,
+    ParseSqlTestCursorWindowTestCase,
     ParseSqlTestFileErrorTestCase,
     ParseSqlTestFileTestCase,
 )
@@ -411,6 +412,19 @@ def test_given_sql_test_file_variants_when_parsing_then_it_returns_expected_raw_
             expected_error_fragment="is not nullable",
         ),
         ParseSqlTestFileErrorTestCase(
+            description="rejects a cursor window outside model tests",
+            contents='TEST (mode macro, cursor_start "2026-02-01");\nSELECT 1\n',
+            expected_error_fragment=(
+                "declares `cursor_start` or `cursor_end`, which are only supported for model "
+                "tests, not mode 'macro'"
+            ),
+        ),
+        ParseSqlTestFileErrorTestCase(
+            description="rejects a boolean cursor bound",
+            contents="TEST (cursor_end true);\nSELECT 1\n",
+            expected_error_fragment="cursor_end in '.*' must be a non-empty string or an integer",
+        ),
+        ParseSqlTestFileErrorTestCase(
             description="rejects malformed case names",
             contents=(
                 "TEST (parameters (status string), "
@@ -426,3 +440,43 @@ def test_given_invalid_sql_test_file_contents_when_parsing_then_it_raises_clear_
 ) -> None:
     with pytest.raises(SqlTestParseError, match=test_case.expected_error_fragment):
         parse_sql_test_file(contents=test_case.contents, file_path=Path("tests/unit/orders.sql"))
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseSqlTestCursorWindowTestCase(
+            description="omitted keys leave the default window",
+            contents='TEST (name "orders");\nSELECT 1\n',
+            expected_cursor_start=None,
+            expected_cursor_end=None,
+        ),
+        ParseSqlTestCursorWindowTestCase(
+            description="timestamp bounds are kept as authored",
+            contents=(
+                'TEST (name "orders", cursor_start "2026-02-01", cursor_end "2026-02-03");\n'
+                "SELECT 1\n"
+            ),
+            expected_cursor_start="2026-02-01",
+            expected_cursor_end="2026-02-03",
+        ),
+        ParseSqlTestCursorWindowTestCase(
+            description="integer bounds are normalized to text independently",
+            contents='TEST (name "orders", cursor_end 20);\nSELECT 1\n',
+            expected_cursor_start=None,
+            expected_cursor_end="20",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_test_cursor_window_header_when_parsing_then_bounds_are_recorded(
+    test_case: ParseSqlTestCursorWindowTestCase,
+) -> None:
+    blocks: tuple[DiscoveredSqlTestBlock, ...] = parse_sql_test_file(
+        contents=test_case.contents, file_path=Path("tests/unit/orders.sql")
+    )
+
+    assert (blocks[0].cursor_start, blocks[0].cursor_end) == (
+        test_case.expected_cursor_start,
+        test_case.expected_cursor_end,
+    )

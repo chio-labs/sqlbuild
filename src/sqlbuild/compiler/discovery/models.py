@@ -303,6 +303,8 @@ class DiscoveredSqlTestBlock:
     mode: SqlTestMode = DEFAULT_SQL_TEST_MODE
     parameters: tuple[SqlTestParameterDeclaration, ...] = field(default_factory=tuple)
     cases: tuple[DiscoveredSqlTestCase, ...] = field(default_factory=tuple)
+    cursor_start: str | None = None
+    cursor_end: str | None = None
 
 
 @dataclass(frozen=True)

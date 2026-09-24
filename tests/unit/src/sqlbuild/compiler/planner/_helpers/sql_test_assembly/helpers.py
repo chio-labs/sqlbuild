@@ -10,6 +10,7 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.compile._helpers.render.macros import expand_sql_macros
 from sqlbuild.compiler.compile.constants import (
     ASSERT_TEST_CTE_PREFIX,
@@ -493,3 +494,62 @@ def _build_test_sql_body(
     for name, body in expected_bodies.items():
         parts.append(f"{EXPECTED_TEST_CTE_PREFIX}{name} AS ({body})")
     return ("WITH " + ", ".join(parts) + " SELECT 1", "SELECT 1")[not parts]
+
+
+CURSOR_WINDOW_MODEL_SQL: str = (
+    "SELECT order_date FROM orders "
+    "WHERE order_date >= __cursor_start() AND order_date < __cursor_end()"
+)
+CURSOR_WINDOW_ADAPTERS: dict[str, BaseAdapter] = {
+    "duckdb": DuckDbAdapter(),
+    "snowflake": SnowflakeAdapter(),
+}
+
+
+def build_cursor_model(*, cursor_type: str, cursor_grain: str | None) -> CompiledModel:
+    """Build one incremental model whose query uses both cursor intrinsics."""
+
+    values: dict[str, object] = {
+        "materialized": "incremental",
+        "cursor": "order_date",
+        "cursor_type": cursor_type,
+        "cursor_grain": cursor_grain,
+    }
+    return CompiledModel(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="daily_orders"),
+        deps=(),
+        name="daily_orders",
+        relative_path=Path("models/daily_orders.sql"),
+        query_sql=CURSOR_WINDOW_MODEL_SQL,
+        config=CompileModelConfig(values=values),
+        destination=CompiledRelationLocation(
+            database=None,
+            schema="main",
+            name="daily_orders",
+            qualified_name="main.daily_orders",
+        ),
+    )
+
+
+def build_windowed_sql_test(*, cursor_start: str | None, cursor_end: str | None) -> CompiledSqlTest:
+    """Build one model SQL test whose header declares the given cursor window."""
+
+    return CompiledSqlTest(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.SQL_TEST, name="orders_case"),
+        scope_deps=(),
+        name="orders_case",
+        test_file=DiscoveredSqlTestFile(
+            file_path=Path("tests/unit/orders_case.sql"),
+            relative_path=Path("tests/unit/orders_case.sql"),
+            contents="",
+            blocks=(),
+        ),
+        test_block=DiscoveredSqlTestBlock(
+            test_index=1,
+            header_values={},
+            sql_body="",
+            cursor_start=cursor_start,
+            cursor_end=cursor_end,
+        ),
+        sql_body="",
+    )

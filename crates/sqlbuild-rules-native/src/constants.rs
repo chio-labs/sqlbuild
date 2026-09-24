@@ -49,3 +49,7 @@ pub(crate) const TABLE_FUNCTION_TEST_MODE: &str = "table_fn";
 pub(crate) const THRESHOLDS_KEY: &str = "thresholds";
 pub(crate) const TYPE_KEY: &str = "type";
 pub(crate) const UDF_TEST_MODE: &str = "udf";
+pub(crate) const SQL_TEST_ACTUAL_CTE: &str = "__actual";
+pub(crate) const SQL_TEST_EXPECTED_CTE: &str = "__expected";
+pub(crate) const SQL_TEST_ACTUAL_CTE_PREFIX: &str = "__actual__";
+pub(crate) const QUOTED_IDENTIFIER_DELIMITER_BYTES: usize = 2;

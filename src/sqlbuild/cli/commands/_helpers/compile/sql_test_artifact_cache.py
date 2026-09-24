@@ -206,6 +206,10 @@ def _model_identity(*, model: CompiledModel) -> str:
             "name": model.name,
             "query_sql": model.query_sql,
             "deps": sorted((str(dep.resource_type), dep.name) for dep in model.deps),
+            "cursor": (
+                model.config.values.get("cursor_type"),
+                model.config.values.get("cursor_grain"),
+            ),
         }
     )
 
@@ -224,6 +228,7 @@ def _test_payload(*, test: CompiledSqlTest) -> dict[str, object]:
             "model_query_overrides": sorted(test.payload.model_query_overrides.items()),
             "expected_model_names": test.payload.expected_model_names,
             "assertion_ctes": _cte_payload(test.payload.assertion_ctes),
+            "cursor_window": (test.test_block.cursor_start, test.test_block.cursor_end),
         }
     elif isinstance(test.payload, CompiledDirectLogicSqlTestPayload):
         payload["direct"] = {

@@ -68,6 +68,8 @@ pub(crate) struct ChainStep {
     #[serde(default)]
     pub(crate) expected_cte_sql: Option<String>,
     #[serde(default)]
+    pub(crate) expected_lifted_ctes: Vec<(String, String)>,
+    #[serde(default)]
     pub(crate) lifted_ctes: Vec<(String, String)>,
     #[serde(default)]
     pub(crate) comparison_body_sql: Option<String>,
@@ -139,6 +141,17 @@ impl<'a> RenderCteState<'a> {
                 .unwrap_or(&step.resolved_sql),
             enabled,
         )
+    }
+
+    /// Place an expected step's helper CTEs at top level and return its comparison body.
+    fn expected_step_sql(&mut self, step: &ChainStep, expected_sql: &str, enabled: bool) -> String {
+        if step.expected_lifted_ctes.is_empty() {
+            return self.lift(expected_sql, enabled);
+        }
+        if !self.merge(&step.expected_lifted_ctes) {
+            return with_leading_ctes(&step.expected_lifted_ctes, expected_sql);
+        }
+        self.lift(expected_sql, enabled)
     }
 
     fn merge(&mut self, ctes: &[(String, String)]) -> bool {
@@ -246,7 +259,8 @@ fn render_difference_sample_sql(request: &DifferenceSampleRequest, dialect: &Dia
     };
     let mut cte_state = RenderCteState::new(dialect);
     let actual_sql = cte_state.actual_step_sql(step, request.sql_analysis_enabled);
-    let expected_sql = cte_state.lift(expected_input, request.sql_analysis_enabled);
+    let expected_sql =
+        cte_state.expected_step_sql(step, expected_input, request.sql_analysis_enabled);
     let mut cte_parts: Vec<String> = cte_state
         .lifted
         .iter()
@@ -309,7 +323,8 @@ pub(crate) fn render_comparison_sql(request: &RenderRequest, dialect: &Dialect) 
         let Some(expected_input) = step.expected_cte_sql.as_deref() else {
             continue;
         };
-        let expected_sql = cte_state.lift(expected_input, request.sql_analysis_enabled);
+        let expected_sql =
+            cte_state.expected_step_sql(step, expected_input, request.sql_analysis_enabled);
         comparison_ctes.push(cte_definition_sql(&expected_cte, &expected_sql));
         let projection = compared_projection(step);
         select_parts.push(format!(
@@ -482,6 +497,19 @@ fn sanitize_cte_suffix(model_name: &str) -> String {
         format!("model_{suffix}")
     } else {
         suffix.to_string()
+    }
+}
+
+/// Prefix CTEs to a query, merging into its own leading WITH clause when present.
+fn with_leading_ctes(ctes: &[(String, String)], body: &str) -> String {
+    let definitions: String = ctes
+        .iter()
+        .map(|(name, sql)| cte_definition_sql(name, sql))
+        .collect::<Vec<_>>()
+        .join(", ");
+    match leading_with_prefix_end(body) {
+        Some(end) => format!("{}{definitions}, {}", &body[..end], &body[end..]),
+        None => format!("WITH {definitions} {body}"),
     }
 }
 

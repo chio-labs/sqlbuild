@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date, datetime
 from inspect import cleandoc
 from pathlib import Path
 from typing import cast
@@ -36,6 +37,8 @@ _TEST_NAME_HEADER_KEY: str = "name"
 _TEST_MODE_HEADER_KEY: str = "mode"
 _TEST_PARAMETERS_HEADER_KEY: str = "parameters"
 _TEST_CASES_HEADER_KEY: str = "cases"
+_TEST_CURSOR_START_HEADER_KEY: str = "cursor_start"
+_TEST_CURSOR_END_HEADER_KEY: str = "cursor_end"
 _PARAMETER_TYPES: tuple[SqlValueKind, ...] = (
     SqlValueKind.STRING,
     SqlValueKind.INTEGER,
@@ -135,6 +138,17 @@ def _parse_single_sql_test_block(
         header_values=header_values,
         file_path=file_path,
     )
+    cursor_start: str | None = _parse_test_cursor_bound(
+        header_values=header_values, key=_TEST_CURSOR_START_HEADER_KEY, file_path=file_path
+    )
+    cursor_end: str | None = _parse_test_cursor_bound(
+        header_values=header_values, key=_TEST_CURSOR_END_HEADER_KEY, file_path=file_path
+    )
+    if (cursor_start is not None or cursor_end is not None) and test_mode != SqlTestMode.MODEL:
+        raise SqlTestParseError(
+            f"TEST() in '{file_path}' declares `cursor_start` or `cursor_end`, which are only "
+            f"supported for model tests, not mode '{test_mode.value}'"
+        )
     return DiscoveredSqlTestBlock(
         test_index=test_index,
         header_values=header_values,
@@ -143,6 +157,25 @@ def _parse_single_sql_test_block(
         mode=test_mode,
         parameters=parameters,
         cases=cases,
+        cursor_start=cursor_start,
+        cursor_end=cursor_end,
+    )
+
+
+def _parse_test_cursor_bound(
+    *, header_values: dict[str, object], key: str, file_path: Path
+) -> str | None:
+    value: object | None = header_values.get(key)
+    if value is None:
+        return None
+    if isinstance(value, datetime | date):
+        return value.isoformat()
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    raise SqlTestParseError(
+        f"TEST() {key} in '{file_path}' must be a non-empty string or an integer"
     )
 
 
@@ -160,6 +193,8 @@ def _parse_test_header(*, header: str, file_path: Path) -> dict[str, object]:
             _TEST_MODE_HEADER_KEY,
             _TEST_PARAMETERS_HEADER_KEY,
             _TEST_CASES_HEADER_KEY,
+            _TEST_CURSOR_START_HEADER_KEY,
+            _TEST_CURSOR_END_HEADER_KEY,
         }
     )
     unsupported_keys: tuple[str, ...] = tuple(
@@ -167,8 +202,8 @@ def _parse_test_header(*, header: str, file_path: Path) -> dict[str, object]:
     )
     if unsupported_keys:
         raise SqlTestParseError(
-            f"TEST() in '{file_path}' only supports `name`, `mode`, `parameters`, and "
-            "`cases`; unsupported keys: "
+            f"TEST() in '{file_path}' only supports `name`, `mode`, `parameters`, `cases`, "
+            "`cursor_start`, and `cursor_end`; unsupported keys: "
             f"{', '.join(unsupported_keys)}"
         )
 
