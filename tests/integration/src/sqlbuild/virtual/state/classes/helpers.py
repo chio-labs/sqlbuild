@@ -301,6 +301,9 @@ class StateRefContractObservation(NamedTuple):
     grouped_seed_refs: tuple[VirtualEnvironmentNodeRefRecord, ...]
     published_environment: VirtualEnvironmentRecord | None
     published_model_refs: tuple[VirtualEnvironmentNodeRefRecord, ...]
+    deleted_environment: VirtualEnvironmentRecord | None
+    deleted_model_refs: tuple[VirtualEnvironmentNodeRefRecord, ...]
+    surviving_model_refs: tuple[VirtualEnvironmentNodeRefRecord, ...]
 
 
 def exercise_state_ref_contract(
@@ -394,6 +397,22 @@ def exercise_state_ref_contract(
             connection=connection, schema=schema, virtual_environment_name="prod", node_type="model"
         )
     )
+    backend.delete_virtual_environment(
+        connection=connection, schema=schema, virtual_environment_name="prod"
+    )
+    deleted_environment: VirtualEnvironmentRecord | None = backend.get_virtual_environment(
+        connection=connection, schema=schema, virtual_environment_name="prod"
+    )
+    deleted_model_refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = (
+        backend.get_virtual_environment_node_refs(
+            connection=connection, schema=schema, virtual_environment_name="prod", node_type="model"
+        )
+    )
+    surviving_model_refs: tuple[VirtualEnvironmentNodeRefRecord, ...] = (
+        backend.get_virtual_environment_node_refs(
+            connection=connection, schema=schema, virtual_environment_name="qa", node_type="model"
+        )
+    )
     return StateRefContractObservation(
         node_refs_after_first_replace=node_refs_after_first_replace,
         node_refs_after_second_replace=node_refs_after_second_replace,
@@ -403,6 +422,9 @@ def exercise_state_ref_contract(
         grouped_seed_refs=grouped_seed_refs,
         published_environment=published_environment,
         published_model_refs=published_model_refs,
+        deleted_environment=deleted_environment,
+        deleted_model_refs=deleted_model_refs,
+        surviving_model_refs=surviving_model_refs,
     )
 
 
@@ -423,4 +445,7 @@ EXPECTED_STATE_REF_CONTRACT_OBSERVATION: StateRefContractObservation = StateRefC
     grouped_seed_refs=(VirtualEnvironmentNodeRefRecord("qa", "seed", "countries", "seed-v2"),),
     published_environment=VirtualEnvironmentRecord("prod", VirtualEnvironmentStatus.ACTIVE),
     published_model_refs=(VirtualEnvironmentNodeRefRecord("prod", "model", "orders", "orders-v1"),),
+    deleted_environment=None,
+    deleted_model_refs=(),
+    surviving_model_refs=(VirtualEnvironmentNodeRefRecord("qa", "model", "orders", "orders-v3"),),
 )
