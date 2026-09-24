@@ -23,9 +23,6 @@ from sqlbuild.adapter.contract.classes.historical_check_snapshot_sql import (
 from sqlbuild.adapter.contract.classes.historical_snapshot_sql import (
     render_is_distinct_from,
 )
-from sqlbuild.adapter.contract.classes.historical_snapshot_statement_sql import (
-    HistoricalSnapshotStatementSql,
-)
 from sqlbuild.adapter.contract.classes.historical_timestamp_snapshot_sql import (
     HistoricalTimestampSnapshotSql,
 )
@@ -1388,7 +1385,9 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
-        historical_sql: str = HistoricalTimestampSnapshotSql.initial_select_sql(
+        historical_sql: str = HistoricalTimestampSnapshotSql(
+            dialect=self._snapshot_sql_dialect
+        ).initial_select_sql(
             origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
@@ -1439,21 +1438,12 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         output_columns: tuple[str, ...],
         invalidate_hard_deletes: bool,
     ) -> tuple[str, ...]:
-        new_changes_sql: str = HistoricalTimestampSnapshotSql.new_changes_ctes_sql(
+        return HistoricalTimestampSnapshotSql(dialect=self._snapshot_sql_dialect).apply_sql(
             destination=destination,
             origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
             observed_at_column=observed_at_column,
-            valid_from_column=valid_from_column,
-            valid_to_column=valid_to_column,
-            invalidate_hard_deletes=invalidate_hard_deletes,
-        )
-        return HistoricalSnapshotStatementSql(dialect=self._snapshot_sql_dialect).apply_sql(
-            destination=destination,
-            new_changes_sql=new_changes_sql,
-            unique_key=unique_key,
-            change_time_column=updated_at_column,
             valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
             output_columns=output_columns,
@@ -1471,22 +1461,14 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         valid_to_column: str,
         output_columns: tuple[str, ...],
     ) -> tuple[str, ...]:
-        new_changes_sql: str = HistoricalTimestampSnapshotSql.changes_new_records_ctes_sql(
+        return HistoricalTimestampSnapshotSql(dialect=self._snapshot_sql_dialect).changes_apply_sql(
             destination=destination,
             origin=origin,
             unique_key=unique_key,
             updated_at_column=updated_at_column,
-            valid_to_column=valid_to_column,
-        )
-        return HistoricalSnapshotStatementSql(dialect=self._snapshot_sql_dialect).apply_sql(
-            destination=destination,
-            new_changes_sql=new_changes_sql,
-            unique_key=unique_key,
-            change_time_column=updated_at_column,
             valid_from_column=valid_from_column,
             valid_to_column=valid_to_column,
             output_columns=output_columns,
-            invalidate_hard_deletes=False,
         )
 
     def render_apply_check_snapshot_changes(
