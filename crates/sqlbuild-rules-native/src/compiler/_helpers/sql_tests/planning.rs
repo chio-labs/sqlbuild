@@ -12,6 +12,7 @@ use serde_json::Value;
 
 use crate::compiler::_helpers::sql_tests::rendering::{
     AssertionStep, ChainStep, RenderRequest, render_comparison_sql, render_dialect,
+    rendered_chain_steps,
 };
 use crate::constants::{TABLE_FUNCTION_TEST_MODE, UDF_TEST_MODE};
 
@@ -872,6 +873,7 @@ fn plan_model_test(
         &reachable_mocks,
         &fixtures,
     ));
+    let chain = omit_unrendered_step_sql(chain, &assertions);
     let model_names: Vec<String> = chain.iter().map(|step| step.model_name.clone()).collect();
     let request = RenderRequest {
         chain,
@@ -885,6 +887,28 @@ fn plan_model_test(
         model_names,
         warnings,
     })
+}
+
+/// Drop SQL from chain steps the renderer never emits, keeping plan output linear in chain length.
+fn omit_unrendered_step_sql(chain: Vec<ChainStep>, assertions: &[AssertionStep]) -> Vec<ChainStep> {
+    let rendered_steps = rendered_chain_steps(&chain, assertions);
+    chain
+        .into_iter()
+        .zip(rendered_steps)
+        .map(|(step, rendered)| {
+            if rendered {
+                step
+            } else {
+                ChainStep {
+                    model_name: step.model_name,
+                    resolved_sql: String::new(),
+                    expected_cte_sql: step.expected_cte_sql,
+                    lifted_ctes: Vec::new(),
+                    comparison_body_sql: None,
+                }
+            }
+        })
+        .collect()
 }
 
 fn ensure_textual_chain_through(

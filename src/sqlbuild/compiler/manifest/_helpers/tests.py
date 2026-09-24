@@ -96,6 +96,8 @@ def build_sql_test_nodes(
     compiled_parts: list[str] = []
     step: ChainStep
     for step in test_entry.chain:
+        if not step.resolved_sql:
+            continue
         compiled_parts.append(f"-- step: {step.model_name}")
         compiled_parts.append(step.resolved_sql)
     compiled_code: str = "\n\n".join(compiled_parts)

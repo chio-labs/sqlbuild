@@ -1,7 +1,8 @@
 use crate::compiler::tests::helpers::{
     chain_resolution_orders_unmocked_models, concurrent_requests_initialize_shared_template_once,
-    deep_shared_graph_reports_missing_mock_once, model_test_batch_returns_ordered_artifact,
-    plan_without_rendering_returns_executable_steps, shared_textual_chain_renders_each_model_once,
+    deep_shared_graph_reports_missing_mock_once, long_chain_plan_output_stays_linear,
+    model_test_batch_returns_ordered_artifact, plan_without_rendering_returns_executable_steps,
+    shared_textual_chain_renders_each_model_once,
     unicode_cte_after_leading_with_preserves_identifier,
     unresolved_reference_fast_rejection_preserves_warning,
 };
@@ -43,6 +44,11 @@ fn given_sql_test_planning_cases_when_exercising_native_planner_then_expected_be
         SqlTestPlanningTestCase {
             description: "planning without rendering returns executable steps",
             run: plan_without_rendering_returns_executable_steps,
+            expected_success: true,
+        },
+        SqlTestPlanningTestCase {
+            description: "long chain plan output stays linear",
+            run: long_chain_plan_output_stays_linear,
             expected_success: true,
         },
         SqlTestPlanningTestCase {

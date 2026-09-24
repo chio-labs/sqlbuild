@@ -220,6 +220,10 @@ def build_test_and_project(
             mock_dbt_ref_names=tuple(test_case.mock_dbt_ref_ctes.keys()),
             mock_table_function_names=tuple(test_case.mock_table_function_ctes.keys()),
             expected_model_names=test_case.expected_model_names,
+            expected_ctes=tuple(
+                CompileSqlTestCte(name=f"{EXPECTED_TEST_CTE_PREFIX}{name}", sql_body=body)
+                for name, body in test_case.expected_cte_bodies.items()
+            ),
             assertion_ctes=tuple(
                 CompileSqlTestCte(
                     name=f"{ASSERT_TEST_CTE_PREFIX}{name}",

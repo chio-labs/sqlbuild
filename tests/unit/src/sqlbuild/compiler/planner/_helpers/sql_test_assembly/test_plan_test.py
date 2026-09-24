@@ -257,6 +257,7 @@ from tests.unit.src.sqlbuild.executor.testing.main.helpers import build_comparis
             expected_model_names=("orders",),
             expected_chain_length=1,
             table_function_locations={"customer_orders": "main.customer_orders"},
+            expected_cte_bodies={"orders": "SELECT 1 AS order_id"},
             expected_sql_fragments={
                 "orders": "FROM main.customer_orders(42)",
             },
@@ -279,6 +280,7 @@ from tests.unit.src.sqlbuild.executor.testing.main.helpers import build_comparis
             expected_model_names=("orders",),
             expected_chain_length=1,
             table_function_locations={"customer_orders": "main.customer_orders"},
+            expected_cte_bodies={"orders": "SELECT 7 AS order_id"},
             expected_sql_fragments={"orders": "SELECT 7 AS order_id"},
             unexpected_sql_fragments={
                 "orders": ("main.customer_orders", "COALESCE", "customer_id"),

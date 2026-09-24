@@ -94,6 +94,10 @@ def build_test_and_project(
             mock_model_names=tuple(test_case.mock_ref_ctes.keys()),
             mock_source_names=tuple(test_case.mock_source_ctes.keys()),
             expected_model_names=test_case.expected_model_names,
+            expected_ctes=tuple(
+                CompileSqlTestCte(name=f"__expected__{name}", sql_body=body)
+                for name, body in test_case.expected_cte_bodies.items()
+            ),
         ),
     )
 

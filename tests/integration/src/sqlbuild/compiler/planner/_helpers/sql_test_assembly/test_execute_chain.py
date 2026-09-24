@@ -189,8 +189,6 @@ SELECT 1
             },
             expected_chain_length=3,
             expected_results={
-                "A": ((1, 50),),
-                "B": ((1, 100),),
                 "C": ((1, 101),),
             },
         ),
@@ -318,15 +316,14 @@ def test_given_chain_when_executing_resolved_sql_then_produces_expected_rows(
 
     assert len(entry.chain) == test_case.expected_chain_length
 
-    step: ChainStep
-    for step in entry.chain:
-        expected_rows: tuple[tuple[object, ...], ...] | None = test_case.expected_results.get(
-            step.model_name
-        )
-        result: Any = connection.execute(step.resolved_sql)
+    steps_by_name: dict[str, ChainStep] = {step.model_name: step for step in entry.chain}
+    model_name: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    for model_name, expected_rows in test_case.expected_results.items():
+        result: Any = connection.execute(steps_by_name[model_name].resolved_sql)
         rows: list[Any] = result.fetchall()
         actual: tuple[tuple[object, ...], ...] = tuple(tuple(row) for row in rows)
-        assert expected_rows is None or actual == expected_rows
+        assert actual == expected_rows
 
 
 @pytest.mark.parametrize(

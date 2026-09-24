@@ -91,7 +91,7 @@ struct RenderResponse {
 struct RenderCteState<'a> {
     dialect: &'a Dialect,
     lifted: Vec<(String, String)>,
-    name_counts: HashMap<String, usize>,
+    name_counts: CteSuffixCounter,
 }
 
 impl<'a> RenderCteState<'a> {
@@ -99,7 +99,7 @@ impl<'a> RenderCteState<'a> {
         Self {
             dialect,
             lifted: Vec::new(),
-            name_counts: HashMap::new(),
+            name_counts: CteSuffixCounter::default(),
         }
     }
 
@@ -152,8 +152,20 @@ impl<'a> RenderCteState<'a> {
     }
 
     fn unique_suffix(&mut self, model_name: &str) -> String {
+        self.name_counts.next(model_name)
+    }
+}
+
+/// Readable, collision-free comparison CTE suffixes in step order.
+#[derive(Default)]
+struct CteSuffixCounter {
+    counts: HashMap<String, usize>,
+}
+
+impl CteSuffixCounter {
+    fn next(&mut self, model_name: &str) -> String {
         let base = sanitize_cte_suffix(model_name);
-        let count = self.name_counts.entry(base.clone()).or_default();
+        let count = self.counts.entry(base.clone()).or_default();
         *count += 1;
         if *count == 1 {
             base
@@ -161,6 +173,18 @@ impl<'a> RenderCteState<'a> {
             format!("{base}_{count}")
         }
     }
+}
+
+/// Mark the chain steps whose actual SQL the comparison renderer emits.
+pub(crate) fn rendered_chain_steps(chain: &[ChainStep], assertions: &[AssertionStep]) -> Vec<bool> {
+    let mut suffixes = CteSuffixCounter::default();
+    chain
+        .iter()
+        .map(|step| {
+            let actual_cte = format!("__actual__{}", suffixes.next(&step.model_name));
+            step.expected_cte_sql.is_some() || assertions_use_actual(assertions, &actual_cte)
+        })
+        .collect()
 }
 
 pub(crate) fn render_json(request_json: &str) -> Result<String, String> {
@@ -255,14 +279,13 @@ pub(crate) fn render_comparison_sql(request: &RenderRequest, dialect: &Dialect) 
     let mut cte_state = RenderCteState::new(dialect);
     let mut comparison_ctes: Vec<String> = Vec::new();
     let mut select_parts: Vec<String> = Vec::new();
+    let rendered_steps = rendered_chain_steps(&request.chain, &request.assertions);
 
     for (step_index, step) in request.chain.iter().enumerate() {
         let suffix = cte_state.unique_suffix(&step.model_name);
         let actual_cte = format!("__actual__{suffix}");
         let expected_cte = format!("__expected__{suffix}");
-        if step.expected_cte_sql.is_none()
-            && !assertions_use_actual(&request.assertions, &actual_cte)
-        {
+        if !rendered_steps[step_index] {
             continue;
         }
         let actual_sql = cte_state.actual_step_sql(step, request.sql_analysis_enabled);

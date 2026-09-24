@@ -729,3 +729,105 @@ pub(crate) fn difference_sample_lifts_generated_ctes_and_bounds_rows() -> bool {
     );
     true
 }
+
+fn step_sql_bytes(step: &Value) -> usize {
+    let text_len = |value: &Value| value.as_str().map_or(0, str::len);
+    let lifted: usize = step["liftedCtes"].as_array().map_or(0, |ctes| {
+        ctes.iter()
+            .map(|cte| text_len(&cte[0]) + text_len(&cte[1]))
+            .sum()
+    });
+    text_len(&step["resolvedSql"]) + text_len(&step["comparisonBodySql"]) + lifted
+}
+
+pub(crate) fn long_chain_plan_output_stays_linear() -> bool {
+    const MODELS: usize = 200;
+    let mut models: Vec<Value> = vec![json!({
+        "name": "orders_000",
+        "querySql": "SELECT order_id, amount FROM __source(\"raw_orders\")",
+        "modelDependencies": []
+    })];
+    for index in 1..MODELS {
+        let previous: String = format!("orders_{:03}", index - 1);
+        models.push(json!({
+            "name": format!("orders_{index:03}"),
+            "querySql": format!(
+                "SELECT order_id, amount + 1 AS amount FROM __ref(\"{previous}\")"
+            ),
+            "modelDependencies": [previous]
+        }));
+    }
+    let tip: String = format!("orders_{:03}", MODELS - 1);
+    for sql_analysis_enabled in [true, false] {
+        let response: Value = serde_json::from_str(
+            &crate::compiler::main::sql_test_planning::plan_and_render_json(
+                &json!({
+                    "models": models,
+                    "tests": [{
+                        "name": "orders_tip",
+                        "fileLabel": "tests/orders_tip.sql",
+                        "payload": {
+                            "kind": "model",
+                            "authoredCtes": [{
+                                "name": "__source__raw_orders",
+                                "sqlBody": "SELECT 1 AS order_id, 0 AS amount"
+                            }],
+                            "expectedCtes": [{
+                                "name": format!("__expected__{tip}"),
+                                "sqlBody": "SELECT 1 AS order_id, 199 AS amount"
+                            }],
+                            "expectedModelNames": [tip],
+                        }
+                    }],
+                    "sqlAnalysisEnabled": sql_analysis_enabled,
+                    "sqlAnalysisDialect": "duckdb"
+                })
+                .to_string(),
+            )
+            .expect("test assumption must hold"),
+        )
+        .expect("test assumption must hold");
+        let artifact = &response["artifacts"][0];
+        let sql = artifact["sql"].as_str().expect("test assumption must hold");
+        let chain = artifact["chain"]
+            .as_array()
+            .expect("test assumption must hold");
+        assert_eq!(chain.len(), MODELS);
+        let step_bytes: usize = chain.iter().map(step_sql_bytes).sum();
+        assert!(
+            step_bytes <= 3 * sql.len(),
+            "step SQL {step_bytes} bytes for {} rendered bytes",
+            sql.len()
+        );
+        assert!(
+            chain[..MODELS - 1]
+                .iter()
+                .all(|step| step_sql_bytes(step) == 0)
+        );
+
+        let mut padded_chain: Vec<Value> = chain.clone();
+        for step in &mut padded_chain[..MODELS - 1] {
+            step["resolvedSql"] = json!("SELECT unrendered_column FROM unrendered_relation");
+            step["liftedCtes"] = json!([["unrendered_cte", "SELECT 1"]]);
+            step["comparisonBodySql"] = json!("SELECT unrendered_column");
+        }
+        let rendered: Value = serde_json::from_str(
+            &crate::compiler::main::sql_test_rendering::render_json(
+                &json!({
+                    "requests": [{
+                        "chain": padded_chain,
+                        "assertions": [],
+                        "sqlAnalysisEnabled": sql_analysis_enabled,
+                        "setDifferenceOperator": "EXCEPT",
+                        "sqlAnalysisDialect": "duckdb"
+                    }]
+                })
+                .to_string(),
+            )
+            .expect("test assumption must hold"),
+        )
+        .expect("test assumption must hold");
+        assert_eq!(rendered[0]["sql"].as_str(), Some(sql));
+    }
+    true
+}
