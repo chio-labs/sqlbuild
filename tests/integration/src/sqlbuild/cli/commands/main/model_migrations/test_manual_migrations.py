@@ -263,7 +263,8 @@ def test_given_destination_with_build_history_when_building_then_conflict_until_
     ) == test_case.expected_decisions
     assert conflict.exit_code == 1
     assert test_case.expected_output_fragment in conflict.output
-    assert "M103" in conflict.output
+    assert conflict.output.count("error[M103]") == 1
+    assert "Errors (1)\n└── stg_customer_orders\n    └── migration conflict:" in conflict.output
     assert preserved == (1, 2)
     assert (
         order_ids(project_dir=tmp_path, relation=f"main.{DESTINATION_MODEL}")
@@ -309,7 +310,11 @@ def test_given_missing_origin_without_event_when_building_then_fails_before_buil
     )
     assert "origin missing  main.retired_orders -> main.stg_customer_orders" in text.output
     assert result.exit_code == 1
-    assert "M102" in result.output
+    assert result.output.count("error[M102]") == 1
+    assert result.output.count("= help:") == 1
+    assert "Errors (1)" in text.output
+    assert "Warnings (" not in text.output
+    assert "Errors (1)" in result.output
     assert test_case.expected_output_fragment in result.output
     assert relation_names(project_dir=tmp_path, schema="main") == ["raw_orders"]
 
