@@ -16,6 +16,9 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _build_schemas_filter,
     _encode_typed_json,
     _historical_hard_deleted_at_sql,
+    _historical_observed_group_sequence_cte_sql,
+    _historical_observed_group_sequence_from_sql,
+    _historical_reappearing_new_changes_ctes_sql,
     _historical_timestamp_changes_new_records_cte_sql,
     _quote_sql_string,
     _render_ansi_typed_scalar,
@@ -293,6 +296,14 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             for column in check_columns
         )
         first_key: str = unique_key[0]
+        changed_or_new_sql: str = (
+            "SELECT __delta_changes.* FROM __delta_changes "
+            f"LEFT JOIN __latest ON {latest_join_condition} "
+            f"WHERE __latest.{first_key} IS NULL OR ("
+            f"__delta_changes.{observed_at_column} > __latest.{valid_from_column} "
+            f"AND ({latest_change_condition}))"
+        )
+        new_changes_sql: str = f"__new_changes AS ({changed_or_new_sql})"
         hard_deletes_sql: str = ""
         if invalidate_hard_deletes:
             hard_deleted_at_sql: str = _historical_hard_deleted_at_sql(
@@ -301,11 +312,18 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 observed_at_column=observed_at_column,
                 row_alias="__target",
             )
+            new_changes_sql = _historical_reappearing_new_changes_ctes_sql(
+                changed_or_new_sql=changed_or_new_sql,
+                unique_key=unique_key,
+                observed_at_column=observed_at_column,
+                valid_to_column=valid_to_column,
+            )
             hard_deletes_sql = (
-                "), __hard_deletes AS ("
+                ", __hard_deletes AS ("
                 f"SELECT {', '.join(f'__target.{column}' for column in unique_key)}, "
                 f"{hard_deleted_at_sql} AS __close_at FROM {destination} AS __target "
                 f"WHERE __target.{valid_to_column} IS NULL"
+                ")"
             )
         changed_or_first_sql: str = (
             "SELECT * FROM __ordered WHERE __prev_observed_at IS NULL "
@@ -323,14 +341,7 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"ORDER BY {valid_from_column} DESC) AS __rn FROM {destination}"
             "), __latest AS ("
             "SELECT * FROM __latest_ordered WHERE __rn = 1"
-            "), __new_changes AS ("
-            "SELECT __delta_changes.* FROM __delta_changes "
-            f"LEFT JOIN __latest ON {latest_join_condition} "
-            f"WHERE __latest.{first_key} IS NULL OR ("
-            f"__delta_changes.{observed_at_column} > __latest.{valid_from_column} "
-            f"AND ({latest_change_condition}))"
-            f"{hard_deletes_sql}"
-            ")"
+            f"), {new_changes_sql}{hard_deletes_sql}"
         )
 
     def connect(self, config: dict[str, Any]) -> _SqlServerConnection:
@@ -2203,12 +2214,35 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             "WHEN __hard_deleted_at < __next_change_at THEN __hard_deleted_at "
             "ELSE __next_change_at END"
         )
-        historical_sql: str = (
-            f";WITH __ordered AS (SELECT *, LAG({observed_at_column}) OVER ("
+        ordered_sql: str = (
+            f"SELECT *, LAG({observed_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
             f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
+        )
+        changes_condition: str = f"__prev_observed_at IS NULL OR ({change_condition})"
+        leading_ctes_sql: str = ""
+        if invalidate_hard_deletes:
+            group_sequence_sql: str = _historical_observed_group_sequence_cte_sql(
+                origin=origin, observed_at_column=observed_at_column
+            )
+            grouped_origin_sql: str = _historical_observed_group_sequence_from_sql(
+                origin=origin, observed_at_column=observed_at_column
+            )
+            leading_ctes_sql = f"{group_sequence_sql}, "
+            ordered_sql = (
+                "SELECT __source.*, __observed_group_sequence.__prev_group_observed_at, "
+                f"LAG({observed_at_column}) OVER ("
+                f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
+                f") AS __prev_observed_at{previous_columns_sql} {grouped_origin_sql}"
+            )
+            reappeared_condition: str = self._distinct_condition(
+                left="__prev_observed_at", right="__prev_group_observed_at"
+            )
+            changes_condition = f"{changes_condition} OR {reappeared_condition}"
+        historical_sql: str = (
+            f";WITH {leading_ctes_sql}__ordered AS ({ordered_sql}"
             "), __changes AS ("
-            f"SELECT * FROM __ordered WHERE __prev_observed_at IS NULL OR ({change_condition})"
+            f"SELECT * FROM __ordered WHERE {changes_condition}"
             "), __versions AS ("
             f"SELECT __changes.*, LEAD({observed_at_column}) OVER ("
             f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"

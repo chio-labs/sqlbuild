@@ -16,6 +16,9 @@ from sqlbuild.adapter.contract._helpers.seed_csv import get_seed_csv_null_values
 from sqlbuild.adapter.contract.classes.base_adapter import (
     BaseAdapter,
     _encode_typed_json,
+    _historical_observed_group_sequence_cte_sql,
+    _historical_observed_group_sequence_from_sql,
+    _historical_reappearing_new_changes_ctes_sql,
     _render_ansi_typed_scalar,
     _render_typed_value_list,
 )
@@ -2632,13 +2635,21 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
                 observed_at_column=observed_at_column,
                 row_alias="__changes",
             )
+            group_sequence_sql: str = _historical_observed_group_sequence_cte_sql(
+                origin=origin, observed_at_column=observed_at_column
+            )
+            grouped_origin_sql: str = _historical_observed_group_sequence_from_sql(
+                origin=origin, observed_at_column=observed_at_column
+            )
             return (
-                "WITH __ordered AS ("
-                f"SELECT *, LAG({observed_at_column}) OVER ("
+                f"WITH {group_sequence_sql}, __ordered AS ("
+                "SELECT __source.*, __observed_group_sequence.__prev_group_observed_at, "
+                f"LAG({observed_at_column}) OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
-                f") AS __prev_observed_at{previous_columns_sql} FROM {origin}"
+                f") AS __prev_observed_at{previous_columns_sql} {grouped_origin_sql}"
                 "), __changes AS ("
-                f"SELECT * FROM __ordered WHERE __prev_observed_at IS NULL OR ({change_condition})"
+                f"SELECT * FROM __ordered WHERE __prev_observed_at IS NULL OR ({change_condition}) "
+                "OR __prev_observed_at IS DISTINCT FROM __prev_group_observed_at"
                 "), __versions AS ("
                 f"SELECT __changes.*, LEAD({observed_at_column}) OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {observed_at_column}"
@@ -2895,6 +2906,18 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
                 observed_at_column=observed_at_column,
                 row_alias="__target",
             )
+            reappearing_new_changes_sql: str = _historical_reappearing_new_changes_ctes_sql(
+                changed_or_new_sql=(
+                    "SELECT __delta_changes.* FROM __delta_changes "
+                    f"LEFT JOIN __latest ON {latest_join_condition} "
+                    f"WHERE __latest.{first_key} IS NULL "
+                    f"OR (__delta_changes.{observed_at_column} > __latest.{valid_from_column} "
+                    f"AND ({latest_change_condition}))"
+                ),
+                unique_key=unique_key,
+                observed_at_column=observed_at_column,
+                valid_to_column=valid_to_column,
+            )
             return (
                 "__ordered AS ("
                 f"SELECT *, LAG({observed_at_column}) OVER ("
@@ -2906,13 +2929,7 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
                 f"SELECT * FROM {destination} QUALIFY ROW_NUMBER() OVER ("
                 f"PARTITION BY {partition_sql} ORDER BY {valid_from_column} DESC"
                 ") = 1"
-                "), __new_changes AS ("
-                "SELECT __delta_changes.* FROM __delta_changes "
-                f"LEFT JOIN __latest ON {latest_join_condition} "
-                f"WHERE __latest.{first_key} IS NULL "
-                f"OR (__delta_changes.{observed_at_column} > __latest.{valid_from_column} "
-                f"AND ({latest_change_condition}))"
-                "), __hard_deletes AS ("
+                f"), {reappearing_new_changes_sql}, __hard_deletes AS ("
                 f"SELECT {', '.join(f'__target.{column}' for column in unique_key)}, "
                 f"{hard_deleted_at_sql} AS __close_at FROM {destination} AS __target "
                 f"WHERE __target.{valid_to_column} IS NULL"

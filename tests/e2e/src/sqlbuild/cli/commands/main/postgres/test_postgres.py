@@ -1116,6 +1116,7 @@ def test_given_intermediate_strategy_project_when_loading_twice_on_postgres_then
                 ("1", "active", "2026-01-01", "2026-01-03"),
                 ("1", "paused", "2026-01-03", None),
                 ("2", "active", "2026-01-01", "2026-01-02"),
+                ("2", "active", "2026-01-03", None),
             ),
             expected_failure_fragments=(
                 "current_customer_snapshot",
@@ -1231,6 +1232,7 @@ def test_given_snapshot_project_when_building_on_postgres_then_scd2_history_is_v
                 ("1", "active", "2026-01-01", "2026-01-03"),
                 ("1", "paused", "2026-01-03", None),
                 ("2", "active", "2026-01-01", "2026-01-02"),
+                ("2", "active", "2026-01-03", None),
             ),
         )
     ],
