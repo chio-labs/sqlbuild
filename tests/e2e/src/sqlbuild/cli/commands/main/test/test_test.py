@@ -62,6 +62,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     build_star_partial_fixture_project_files,
     build_table_function_fixture_project_files,
     build_transformed_collection_project_files,
+    build_union_distinct_expected_project_files,
     build_unsatisfied_leaf_test_project_files,
     build_unspecified_nullability_fixture_project_files,
     build_untyped_null_fixture_project_files,
@@ -314,6 +315,11 @@ def test_given_inspection_when_requesting_json_file_then_parser_rejects_conflict
         FixtureCompatibilityE2ETestCase(
             description="star mock fixture defers static shape validation",
             repo_files=build_star_mock_fixture_project_files(),
+            expected_stdout_fragment="PASS=1",
+        ),
+        FixtureCompatibilityE2ETestCase(
+            description="union distinct expected branches are validated per branch",
+            repo_files=build_union_distinct_expected_project_files(),
             expected_stdout_fragment="PASS=1",
         ),
         FixtureCompatibilityE2ETestCase(

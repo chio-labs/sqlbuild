@@ -720,9 +720,11 @@ def _split_set_operation_branches(sql: str) -> tuple[str, ...]:
         if branch_sql:
             branches.append(branch_sql)
         resume = _skip_ignorable(sql=sql, start=union_end)
-        all_end: int | None = _try_consume_keyword(sql=sql, start=resume, keyword="ALL")
-        if all_end is not None:
-            resume = _skip_ignorable(sql=sql, start=all_end)
+        quantifier_end: int | None = _try_consume_keyword(
+            sql=sql, start=resume, keyword="ALL"
+        ) or _try_consume_keyword(sql=sql, start=resume, keyword="DISTINCT")
+        if quantifier_end is not None:
+            resume = _skip_ignorable(sql=sql, start=quantifier_end)
         branch_start = resume
 
     final_branch_sql: str = sql[branch_start:].strip()
