@@ -165,6 +165,78 @@ _HISTORICAL_SCENARIOS: tuple[SnapshotExecutionScenario, ...] = (
             (2, "active", 5, None),
         ),
     ),
+    SnapshotExecutionScenario(
+        description="timestamp unchanged updated_at reappearance across builds",
+        kind=HISTORICAL_TIMESTAMP_HARD_DELETES,
+        builds=(
+            _TIMESTAMP_DELETE_AND_REAPPEAR_ROWS[:2],
+            _TIMESTAMP_DELETE_AND_REAPPEAR_ROWS[:3],
+            _TIMESTAMP_DELETE_AND_REAPPEAR_ROWS,
+        ),
+        expected_history=((1, "basic", 1, None), (2, "pro", 1, 2), (2, "pro", 3, None)),
+    ),
+    SnapshotExecutionScenario(
+        description="timestamp unchanged updated_at reappearance in the same build",
+        kind=HISTORICAL_TIMESTAMP_HARD_DELETES,
+        builds=(_TIMESTAMP_DELETE_AND_REAPPEAR_ROWS[:2], _TIMESTAMP_DELETE_AND_REAPPEAR_ROWS),
+        expected_history=((1, "basic", 1, None), (2, "pro", 1, 2), (2, "pro", 3, None)),
+    ),
+    SnapshotExecutionScenario(
+        description="timestamp multiple delete and reappear cycles in one build",
+        kind=HISTORICAL_TIMESTAMP_HARD_DELETES,
+        builds=(
+            _TIMESTAMP_DELETE_AND_REAPPEAR_ROWS[:2],
+            (
+                *_TIMESTAMP_DELETE_AND_REAPPEAR_ROWS,
+                (1, "basic", 1, 4),
+                (1, "basic", 1, 5),
+                (2, "pro", 1, 5),
+            ),
+        ),
+        expected_history=(
+            (1, "basic", 1, None),
+            (2, "pro", 1, 2),
+            (2, "pro", 3, 4),
+            (2, "pro", 5, None),
+        ),
+    ),
+    SnapshotExecutionScenario(
+        description="timestamp changed reappearance starts at the new updated_at",
+        kind=HISTORICAL_TIMESTAMP_HARD_DELETES,
+        builds=(
+            _TIMESTAMP_DELETE_AND_REAPPEAR_ROWS[:2],
+            _TIMESTAMP_DELETE_AND_REAPPEAR_ROWS[:3],
+            (*_TIMESTAMP_DELETE_AND_REAPPEAR_ROWS[:3], (1, "basic", 1, 4), (2, "team", 3, 4)),
+        ),
+        expected_history=((1, "basic", 1, None), (2, "pro", 1, 2), (2, "team", 3, None)),
+    ),
+)
+
+_WINDOWED_SOURCE_SCENARIOS: tuple[SnapshotExecutionScenario, ...] = (
+    SnapshotExecutionScenario(
+        description="check reappearance after the deletion observation left the source window",
+        kind=HISTORICAL_CHECK_HARD_DELETES,
+        builds=(
+            _CHECK_DELETE_AND_REAPPEAR_ROWS[:2],
+            _CHECK_DELETE_AND_REAPPEAR_ROWS[:3],
+            _CHECK_DELETE_AND_REAPPEAR_ROWS[3:],
+        ),
+        expected_history=(
+            (1, "active", 1, None),
+            (2, "active", 1, 2),
+            (2, "active", 3, None),
+        ),
+    ),
+    SnapshotExecutionScenario(
+        description="timestamp reappearance after the deletion observation left the source window",
+        kind=HISTORICAL_TIMESTAMP_HARD_DELETES,
+        builds=(
+            _TIMESTAMP_DELETE_AND_REAPPEAR_ROWS[:2],
+            _TIMESTAMP_DELETE_AND_REAPPEAR_ROWS[:3],
+            _TIMESTAMP_DELETE_AND_REAPPEAR_ROWS[3:],
+        ),
+        expected_history=((1, "basic", 1, None), (2, "pro", 1, 2), (2, "pro", 3, None)),
+    ),
 )
 
 _CURRENT_STATE_SCENARIOS: tuple[SnapshotExecutionScenario, ...] = (
@@ -193,7 +265,11 @@ _CURRENT_STATE_SCENARIOS: tuple[SnapshotExecutionScenario, ...] = (
 )
 
 _RUNS: tuple[SnapshotExecutionRun, ...] = build_execution_runs(
-    incremental_scenarios=(*_HISTORICAL_SCENARIOS, *_CURRENT_STATE_SCENARIOS),
+    incremental_scenarios=(
+        *_HISTORICAL_SCENARIOS,
+        *_WINDOWED_SOURCE_SCENARIOS,
+        *_CURRENT_STATE_SCENARIOS,
+    ),
     full_history_scenarios=_HISTORICAL_SCENARIOS,
 )
 

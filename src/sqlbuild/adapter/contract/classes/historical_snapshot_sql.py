@@ -107,7 +107,8 @@ class HistoricalSnapshotSql:
             f"CASE WHEN __latest.{first_key} IS NULL THEN 0 ELSE 1 END AS __has_latest, "
             f"__latest.{self.valid_from_column} AS __latest_valid_from, "
             f"{self._differs_from_latest_sql()} AS __differs_from_latest, "
-            f"{self._incremental_reappearance_sql()} AS __is_reappearance "
+            f"{self._incremental_reappearance_sql()} AS __is_reappearance, "
+            f"{self._unchanged_from_previous_sql()} AS __is_unchanged "
             f"FROM __tracked LEFT JOIN __latest ON {latest_join_condition}"
             "), __changed_or_new AS ("
             f"SELECT __classified.*, {self._incremental_version_start_sql()} "
@@ -173,16 +174,14 @@ class HistoricalSnapshotSql:
         return f"__prev_observed_at IS NULL OR ({changed_sql})"
 
     def _initial_reappearance_sql(self) -> str:
-        if self.updated_at_column is not None:
-            return "1 = 0"
         return "(__prev_observed_at IS NOT NULL AND __prev_observed_at <> __prev_group_observed_at)"
 
     def _initial_version_start_sql(self) -> str:
-        return self.updated_at_column or self.observed_at_column
+        return self._version_start_sql(
+            unchanged_reappearance_sql=f"{self._initial_reappearance_sql()} AND __is_change = 0"
+        )
 
     def _incremental_reappearance_sql(self) -> str:
-        if self.updated_at_column is not None:
-            return "0"
         return (
             "CASE WHEN __tracked.__prev_group_observed_at IS NOT NULL AND ("
             f"(__tracked.__prev_observed_at IS NULL AND __latest.{self.unique_key[0]} IS NOT NULL) "
@@ -191,7 +190,32 @@ class HistoricalSnapshotSql:
         )
 
     def _incremental_version_start_sql(self) -> str:
-        return self.updated_at_column or self.observed_at_column
+        return self._version_start_sql(
+            unchanged_reappearance_sql="__is_reappearance = 1 AND __is_unchanged = 1"
+        )
+
+    def _version_start_sql(self, *, unchanged_reappearance_sql: str) -> str:
+        if self.updated_at_column is None:
+            return self.observed_at_column
+        return (
+            f"CASE WHEN {unchanged_reappearance_sql} THEN {self.observed_at_column} "
+            f"ELSE {self.updated_at_column} END"
+        )
+
+    def _unchanged_from_previous_sql(self) -> str:
+        if self.updated_at_column is None:
+            return "0"
+        changed_from_latest_sql: str = self.distinct_condition(
+            left=f"__tracked.{self.updated_at_column}",
+            right=f"__latest.{self.updated_at_column}",
+        )
+        return (
+            "CASE WHEN __tracked.__prev_observed_at IS NOT NULL AND __tracked.__is_change = 0 "
+            "THEN 1 "
+            "WHEN __tracked.__prev_observed_at IS NULL AND __latest."
+            f"{self.unique_key[0]} IS NOT NULL AND NOT ({changed_from_latest_sql}) THEN 1 "
+            "ELSE 0 END"
+        )
 
     def _differs_from_latest_sql(self) -> str:
         if not self.check_columns:
@@ -220,8 +244,6 @@ class HistoricalSnapshotSql:
         )
 
     def _new_change_starts_sql(self) -> str:
-        if self.updated_at_column is not None:
-            return "__new_change_starts AS (SELECT * FROM __changed_or_new)"
         observed_at: str = self.observed_at_column
         classified_key_sql: str = self._key_sql(alias="__classified")
         return (

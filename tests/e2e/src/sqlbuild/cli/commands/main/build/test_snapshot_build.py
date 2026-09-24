@@ -32,6 +32,32 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     table_exists,
 )
 
+_TIMESTAMP_REAPPEARING_KEY_FINAL_HISTORY: tuple[tuple[object, ...], ...] = (
+    (1, "basic", "2024-01-15", "2024-02-03"),
+    (1, "pro", "2024-02-03", None),
+    (2, "basic", "2024-01-15", "2024-02-02"),
+    (2, "basic", "2024-02-03", None),
+    (3, "basic", "2024-01-15", "2024-02-04"),
+    (3, "basic", "2024-02-05", None),
+)
+_TIMESTAMP_REAPPEARING_KEY_ROUND_ROWS: tuple[str, ...] = (
+    "(1, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-01'), "
+    "(2, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-01'), "
+    "(3, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-01')",
+    "(1, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-02'), "
+    "(3, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-02')",
+    "(1, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-03'), "
+    "(2, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-03'), "
+    "(3, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-03')",
+    "(1, 'pro', TIMESTAMP '2024-02-03', TIMESTAMP '2024-02-04'), "
+    "(2, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-04'), "
+    "(1, 'pro', TIMESTAMP '2024-02-03', TIMESTAMP '2024-02-05'), "
+    "(2, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-05'), "
+    "(3, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-05')",
+)
+_TIMESTAMP_REAPPEARING_KEY_TABLE_SQL: str = (
+    "(customer_id INTEGER, status VARCHAR, updated_at TIMESTAMP, observed_at TIMESTAMP)"
+)
 _REAPPEARING_KEY_FINAL_HISTORY: tuple[tuple[object, ...], ...] = (
     (1, "active", "2024-02-01", "2024-02-04"),
     (1, "paused", "2024-02-04", None),
@@ -2065,7 +2091,118 @@ def test_given_shallow_waffle_shop_snapshot_edges_when_sources_change_then_cli_t
                 _REAPPEARING_KEY_FINAL_HISTORY,
             ),
             expected_full_history_rows=_REAPPEARING_KEY_FINAL_HISTORY,
-        )
+        ),
+        SnapshotReappearingKeyBuildE2ETestCase(
+            description=(
+                "historical timestamp snapshot reopens hard-deleted keys at the observation time"
+            ),
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
+                    name = "snapshot_reappearing_keys"
+                    adapter = "duckdb"
+
+                    [connection]
+                    database = "snapshot_reappearing_keys.duckdb"
+                    """
+                ).strip()
+                + "\n",
+                "sources/raw.yml": dedent(
+                    """
+                    sources:
+                      - name: raw_membership_observations
+                        schema: main
+                        table: raw_membership_observations
+                      - name: raw_membership_full_history
+                        schema: main
+                        table: raw_membership_full_history
+                    """
+                ).strip()
+                + "\n",
+                "models/membership_incremental_snapshot.sql": dedent(
+                    """
+                    MODEL (
+                      materialized snapshot,
+                      unique_key [customer_id],
+                      snapshot_strategy timestamp,
+                      updated_at updated_at,
+                      observed_at observed_at,
+                      historical_input snapshot,
+                      invalidate_hard_deletes true
+                    );
+
+                    SELECT customer_id, status, updated_at, observed_at
+                    FROM __source("raw_membership_observations")
+                    """
+                ).strip()
+                + "\n",
+                "models/membership_full_history_snapshot.sql": dedent(
+                    """
+                    MODEL (
+                      materialized snapshot,
+                      unique_key [customer_id],
+                      snapshot_strategy timestamp,
+                      updated_at updated_at,
+                      observed_at observed_at,
+                      historical_input snapshot,
+                      invalidate_hard_deletes true
+                    );
+
+                    SELECT customer_id, status, updated_at, observed_at
+                    FROM __source("raw_membership_full_history")
+                    """
+                ).strip()
+                + "\n",
+            },
+            initial_seed_sql=(
+                f"CREATE TABLE main.raw_membership_observations {_TIMESTAMP_REAPPEARING_KEY_TABLE_SQL}; "
+                "INSERT INTO main.raw_membership_observations VALUES "
+                f"{_TIMESTAMP_REAPPEARING_KEY_ROUND_ROWS[0]}; "
+                f"CREATE TABLE main.raw_membership_full_history {_TIMESTAMP_REAPPEARING_KEY_TABLE_SQL}; "
+                "INSERT INTO main.raw_membership_full_history VALUES "
+                f"{', '.join(_TIMESTAMP_REAPPEARING_KEY_ROUND_ROWS)}"
+            ),
+            observation_sql_by_round=(
+                (),
+                (
+                    "INSERT INTO main.raw_membership_observations VALUES "
+                    f"{_TIMESTAMP_REAPPEARING_KEY_ROUND_ROWS[1]}",
+                ),
+                (
+                    "INSERT INTO main.raw_membership_observations VALUES "
+                    f"{_TIMESTAMP_REAPPEARING_KEY_ROUND_ROWS[2]}",
+                ),
+                (
+                    "INSERT INTO main.raw_membership_observations VALUES "
+                    f"{_TIMESTAMP_REAPPEARING_KEY_ROUND_ROWS[3]}",
+                ),
+            ),
+            history_query_template=(
+                "SELECT customer_id, status, strftime(valid_from, '%Y-%m-%d'), "
+                "strftime(valid_to, '%Y-%m-%d') FROM main.{table_name} "
+                "ORDER BY customer_id, valid_from"
+            ),
+            expected_incremental_rows_by_round=(
+                (
+                    (1, "basic", "2024-01-15", None),
+                    (2, "basic", "2024-01-15", None),
+                    (3, "basic", "2024-01-15", None),
+                ),
+                (
+                    (1, "basic", "2024-01-15", None),
+                    (2, "basic", "2024-01-15", "2024-02-02"),
+                    (3, "basic", "2024-01-15", None),
+                ),
+                (
+                    (1, "basic", "2024-01-15", None),
+                    (2, "basic", "2024-01-15", "2024-02-02"),
+                    (2, "basic", "2024-02-03", None),
+                    (3, "basic", "2024-01-15", None),
+                ),
+                _TIMESTAMP_REAPPEARING_KEY_FINAL_HISTORY,
+            ),
+            expected_full_history_rows=_TIMESTAMP_REAPPEARING_KEY_FINAL_HISTORY,
+        ),
     ],
     ids=lambda case: case.description,
 )
