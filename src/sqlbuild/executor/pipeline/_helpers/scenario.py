@@ -97,7 +97,6 @@ def run_scenario_test_pipeline(
         adapter=adapter,
         connection_config=connection_config,
         connection_hooks=connection_hooks,
-        observe_connection=False,
     ) as connection:
 
         def execute(scenario_plan: ScenarioExecutionPlan) -> ScenarioRunResult:
@@ -204,7 +203,6 @@ def run_scenario_capture_pipeline(
         adapter=adapter,
         connection_config=connection_config,
         connection_hooks=connection_hooks,
-        observe_connection=True,
     ) as connection:
 
         def execute(scenario_plan: ScenarioExecutionPlan) -> ScenarioSnapshotCaptureRunResult:
@@ -249,20 +247,16 @@ def _scenario_target_connection(
     adapter: BaseAdapter,
     connection_config: dict[str, object],
     connection_hooks: ConnectionHooks | None,
-    observe_connection: bool,
 ) -> Iterator[Any]:
     hooks: ConnectionHooks = connection_hooks if connection_hooks is not None else ConnectionHooks()
     if hooks.on_connection_start is not None:
         hooks.on_connection_start(1)
     start: float = time.monotonic()
     try:
-        if observe_connection:
-            with OperationLifecycle(
-                operation_kind="scenario", operation_name="scenario_target_connection"
-            ):
-                connection: Any = adapter.connect(connection_config)
-        else:
-            connection = adapter.connect(connection_config)
+        with OperationLifecycle(
+            operation_kind="scenario", operation_name="scenario_target_connection"
+        ):
+            connection: Any = adapter.connect(connection_config)
     except Exception:
         if hooks.on_connection_error is not None:
             hooks.on_connection_error(1, elapsed_seconds=time.monotonic() - start)
