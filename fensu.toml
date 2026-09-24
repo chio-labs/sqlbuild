@@ -94,11 +94,6 @@ path = "src/sqlbuild/adapters/sqlserver/classes/sqlserver_adapter.py"
 reason = "The SQL Server adapter intentionally keeps overrideable backend behavior on one class."
 
 [[targets.python.rule_exceptions]]
-rule = "FFR601"
-path = "src/sqlbuild/virtual/state/classes/postgres.py"
-reason = "The Postgres state backend intentionally keeps its transactional storage contract on one class."
-
-[[targets.python.rule_exceptions]]
 rule = "FFS120"
 path = "src/sqlbuild/integrations/dbt/_helpers/profile/render.py"
 symbols = ["_render_string.env_var", "_render_string.var"]
