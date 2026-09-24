@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 from collections.abc import Callable
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
@@ -495,6 +496,32 @@ class FoldingJanitorAdapter(FakeJanitorAdapter):
                 name=relation.name.lower(),
             )
             for relation in matching
+        )
+
+
+class SeparateAgeMetadataJanitorAdapter(FakeJanitorAdapter):
+    """Warehouse double that lists without timestamps and supplies ages separately."""
+
+    def __init__(
+        self,
+        *,
+        relation_infos: tuple[RelationInfo, ...],
+        relation_ages: dict[str, datetime],
+    ) -> None:
+        super().__init__(relation_infos=relation_infos)
+        self.relation_ages: dict[str, datetime] = relation_ages
+        self.age_metadata_requests: list[tuple[str, ...]] = []
+
+    def with_relation_age_metadata(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+    ) -> tuple[RelationInfo, ...]:
+        self.age_metadata_requests.append(tuple(relation.name for relation in relations))
+        return tuple(
+            replace(relation, last_altered_at=self.relation_ages.get(relation.name))
+            for relation in relations
         )
 
 

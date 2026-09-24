@@ -63,6 +63,7 @@ from sqlbuild.adapter.contract.types import (
 from sqlbuild.adapter.relations.main.get_columns_for_relations import (
     get_columns_for_relations_bulk,
 )
+from sqlbuild.adapter.relations.main.relation_age_timestamp import relation_age_timestamp_utc
 from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
     render_insert_source_freshness_records_sql,
 )
@@ -1269,7 +1270,7 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         return True
 
     def supports_relation_age_metadata(self) -> bool:
-        return False
+        return True
 
     def recommended_max_sql_length(self) -> int | None:
         return 256_000
@@ -1406,8 +1407,8 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             return ()
         information_schema: str = self._information_schema(database)
         query: str = (
-            f"SELECT table_name, table_schema, table_type FROM {information_schema}.tables "
-            "WHERE 1=1"
+            "SELECT table_name, table_schema, table_type, created, last_altered "
+            f"FROM {information_schema}.tables WHERE 1=1"
         )
         query += self._build_in_filter(column="table_schema", values=schemas)
         if names:
@@ -1424,9 +1425,19 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 schema=str(row[1]).lower(),
                 name=str(row[0]).lower(),
                 relation_type=self._normalize_relation_type(str(row[2])),
+                created_at=relation_age_timestamp_utc(row[3]),
+                last_altered_at=relation_age_timestamp_utc(row[4]),
             )
             for row in rows
         )
+
+    def with_relation_age_metadata(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+    ) -> tuple[RelationInfo, ...]:
+        return relations
 
     def list_functions(
         self,

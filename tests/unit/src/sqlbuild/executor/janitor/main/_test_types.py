@@ -150,3 +150,11 @@ class JanitorFoldedIdentifierPlanTestCase:
     expected_skipped_relations: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     expected_blocked_sources: tuple[str, ...] = field(default_factory=tuple)
     expected_suppressed_names: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class JanitorSeparateAgeMetadataPlanTestCase:
+    description: str
+    relation_ages: dict[str, datetime]
+    expected_candidate_names: tuple[str, ...]
+    expected_skipped_relations: tuple[tuple[str, str], ...]

@@ -1674,6 +1674,14 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         cursor: Any = connection.execute(query)
         return tuple(ColumnInfo(name=row[0], type=row[1]) for row in cursor.fetchall())
 
+    def with_relation_age_metadata(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+    ) -> tuple[RelationInfo, ...]:
+        return relations
+
     def list_functions(
         self,
         *,
@@ -2922,6 +2930,8 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         return False
 
     def supports_relation_age_metadata(self) -> bool:
+        """Return False because sys.objects.modify_date ignores DML, so written tables look old."""
+
         return False
 
     def supports_table_functions(self) -> bool:

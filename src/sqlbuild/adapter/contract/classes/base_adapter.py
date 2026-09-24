@@ -389,6 +389,14 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         )
         return cursor.fetchone() is not None
 
+    def with_relation_age_metadata(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+    ) -> tuple[RelationInfo, ...]:
+        return relations
+
     def list_relations(
         self,
         *,

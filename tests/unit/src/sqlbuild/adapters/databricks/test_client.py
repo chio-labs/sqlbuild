@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from typing import Any, cast
 
 import pytest
 
 from sqlbuild.adapter.contract.models import (
     ExpressionInferenceProfile,
+    RelationInfo,
     TableFreshnessMetadata,
     TableFreshnessRequest,
 )
@@ -22,6 +24,7 @@ from tests.unit.src.sqlbuild.adapters.databricks._test_types import (
     DatabricksMergeExclusionTestCase,
     DatabricksPruneSqlTestCase,
     DatabricksPythonFunctionSupportTestCase,
+    DatabricksRelationAgeMetadataTestCase,
     DatabricksRenderCloneTestCase,
     DatabricksRenderDeleteInsertCursorTestCase,
     DatabricksRenderDurableCloneTestCase,
@@ -575,3 +578,64 @@ def test_given_table_function_when_rendering_then_databricks_returns_expected_dd
     )
 
     assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksRelationAgeMetadataTestCase(
+            description="managed table offset timestamps are normalized to UTC",
+            table_type="MANAGED",
+            created=datetime(2026, 8, 1, 3, 0, tzinfo=timezone(timedelta(hours=-7))),
+            last_altered=datetime(2026, 8, 2, 12, 30, tzinfo=timezone(timedelta(hours=2))),
+            expected_relation_type="table",
+            expected_timestamps=("2026-08-01 10:00:00+00:00", "2026-08-02 10:30:00+00:00"),
+        ),
+        DatabricksRelationAgeMetadataTestCase(
+            description="view naive timestamps are treated as UTC",
+            table_type="VIEW",
+            created=datetime(2026, 8, 1, 3, 0),
+            last_altered=datetime(2026, 8, 3, 4, 0),
+            expected_relation_type="view",
+            expected_timestamps=("2026-08-01 03:00:00+00:00", "2026-08-03 04:00:00+00:00"),
+        ),
+        DatabricksRelationAgeMetadataTestCase(
+            description="missing timestamps stay unknown",
+            table_type="MANAGED",
+            created=None,
+            last_altered=None,
+            expected_relation_type="table",
+            expected_timestamps=("None", "None"),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_databricks_relation_timestamps_when_listing_then_exposes_utc_age_metadata(
+    test_case: DatabricksRelationAgeMetadataTestCase,
+) -> None:
+    cursor: FakeDatabricksMetadataCursor = FakeDatabricksMetadataCursor(
+        rows=[
+            (
+                "OLD_ORDERS",
+                "DEV_ORDERS",
+                test_case.table_type,
+                test_case.created,
+                test_case.last_altered,
+            )
+        ]
+    )
+    adapter: DatabricksAdapter = DatabricksAdapter()
+
+    relations: tuple[RelationInfo, ...] = adapter.list_relations(
+        connection=cast(Any, FakeDatabricksMetadataConnection((cursor,))),
+        database="analytics",
+        schemas=("dev_orders",),
+    )
+
+    assert "table_type, created, last_altered" in str(cursor.executed_sql)
+    assert relations[0].name == "old_orders"
+    assert relations[0].relation_type == test_case.expected_relation_type
+    assert (
+        str(relations[0].created_at),
+        str(relations[0].last_altered_at),
+    ) == test_case.expected_timestamps

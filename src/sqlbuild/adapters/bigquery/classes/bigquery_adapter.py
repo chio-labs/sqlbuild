@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -64,6 +65,7 @@ from sqlbuild.adapter.contract.types import (
 from sqlbuild.adapter.relations.main.get_columns_for_relations import (
     get_columns_for_relations_bulk,
 )
+from sqlbuild.adapter.relations.main.relation_age_timestamp import relation_age_timestamp_utc
 from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
     render_insert_source_freshness_records_sql,
 )
@@ -362,7 +364,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
 
     def supports_relation_age_metadata(self) -> bool:
-        return False
+        return True
 
     def supports_table_freshness_metadata(self) -> bool:
         return True
@@ -2045,6 +2047,59 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 if not self._is_google_not_found(error):
                     raise
         return tuple(relations)
+
+    def with_relation_age_metadata(
+        self,
+        *,
+        connection: _BigQueryConnection,
+        relations: tuple[RelationInfo, ...],
+    ) -> tuple[RelationInfo, ...]:
+        timestamps: dict[tuple[str | None, str, str], tuple[datetime | None, datetime | None]] = {}
+        dataset_key: tuple[str | None, str]
+        for dataset_key in sorted(
+            {(relation.database, str(relation.schema)) for relation in relations},
+            key=lambda key: (key[0] or "", key[1]),
+        ):
+            timestamps.update(
+                self._dataset_relation_timestamps(
+                    connection=connection, database=dataset_key[0], schema=dataset_key[1]
+                )
+            )
+        return tuple(
+            replace(
+                relation,
+                created_at=timestamps.get(self._age_key(relation), (None, None))[0],
+                last_altered_at=timestamps.get(self._age_key(relation), (None, None))[1],
+            )
+            for relation in relations
+        )
+
+    def _dataset_relation_timestamps(
+        self, *, connection: _BigQueryConnection, database: str | None, schema: str
+    ) -> dict[tuple[str | None, str, str], tuple[datetime | None, datetime | None]]:
+        dataset_id: str = self._build_dataset_id(database=database, schema=schema)
+        try:
+            cursor: _BigQueryCursor = self.execute(
+                connection=connection,
+                sql="SELECT table_id, TIMESTAMP_MILLIS(creation_time), "
+                f"TIMESTAMP_MILLIS(last_modified_time) FROM `{dataset_id}.__TABLES__`",
+            )
+            rows: list[tuple[Any, ...]] = cursor.fetchall()
+        except Exception as error:
+            if not self._is_google_not_found(error):
+                raise
+            return {}
+        return {
+            (database, schema.lower(), str(row[0]).lower()): (
+                relation_age_timestamp_utc(row[1]),
+                relation_age_timestamp_utc(row[2]),
+            )
+            for row in rows
+        }
+
+    @staticmethod
+    def _age_key(relation: RelationInfo) -> tuple[str | None, str, str]:
+        return (relation.database, str(relation.schema).lower(), relation.name.lower())
 
     def list_functions(
         self,

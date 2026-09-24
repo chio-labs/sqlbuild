@@ -97,6 +97,8 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         return False
 
     def supports_relation_age_metadata(self) -> bool:
+        """Return False because the DuckDB and MotherDuck catalogs record no relation timestamps."""
+
         return False
 
     def supports_table_freshness_metadata(self) -> bool:
@@ -1322,6 +1324,14 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
             )
             for row in rows
         )
+
+    def with_relation_age_metadata(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+    ) -> tuple[RelationInfo, ...]:
+        return relations
 
     def list_functions(
         self,

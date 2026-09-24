@@ -127,3 +127,13 @@ class DatabricksTableFreshnessFallbackTestCase:
     description: str
     expected_data_versions: tuple[datetime, ...]
     expected_query_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DatabricksRelationAgeMetadataTestCase:
+    description: str
+    table_type: str
+    created: datetime | None
+    last_altered: datetime | None
+    expected_relation_type: str
+    expected_timestamps: tuple[str, str]

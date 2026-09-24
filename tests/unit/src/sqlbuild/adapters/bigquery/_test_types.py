@@ -202,3 +202,10 @@ class BigQueryTableFreshnessWildcardTestCase:
     description: str
     table_name: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class BigQueryRelationAgeMetadataTestCase:
+    description: str
+    metadata_rows: tuple[tuple[object, ...], ...]
+    expected_timestamps: tuple[tuple[str, str], ...]

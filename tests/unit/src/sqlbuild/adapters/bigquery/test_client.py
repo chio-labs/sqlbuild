@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
@@ -10,6 +10,7 @@ from sqlbuild.adapter.contract.models import (
     CursorValue,
     ExpressionInferenceProfile,
     QueryResult,
+    RelationInfo,
     RowDiffColumnResult,
     RowDiffResult,
     RowDiffSampleCell,
@@ -43,6 +44,7 @@ from tests.unit.src.sqlbuild.adapters.bigquery._test_types import (
     BigQueryMergeExclusionTestCase,
     BigQueryPruneSqlTestCase,
     BigQueryQueryTestCase,
+    BigQueryRelationAgeMetadataTestCase,
     BigQueryRenderCloneTestCase,
     BigQueryRenderCursorBoundLiteralTestCase,
     BigQueryRenderDeleteInsertTestCase,
@@ -1104,3 +1106,68 @@ def test_given_timestamp_cursor_when_counting_rows_then_bigquery_uses_typed_filt
 
     assert result == test_case.expected_count
     assert executed_sql == [test_case.expected_sql]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryRelationAgeMetadataTestCase(
+            description="dataset metadata supplies UTC creation and last-modified times",
+            metadata_rows=(
+                (
+                    "Old_Orders",
+                    datetime(2026, 8, 1, 3, 0, tzinfo=timezone(timedelta(hours=-7))),
+                    datetime(2026, 8, 2, 10, 30, tzinfo=UTC),
+                ),
+                ("old_orders_view", datetime(2026, 8, 3, 4, 0), None),
+            ),
+            expected_timestamps=(
+                ("2026-08-01 10:00:00+00:00", "2026-08-02 10:30:00+00:00"),
+                ("2026-08-03 04:00:00+00:00", "None"),
+            ),
+        ),
+        BigQueryRelationAgeMetadataTestCase(
+            description="relations missing from dataset metadata stay unknown",
+            metadata_rows=(),
+            expected_timestamps=(("None", "None"), ("None", "None")),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_listed_relations_when_adding_age_metadata_then_bigquery_reads_each_dataset_once(
+    test_case: BigQueryRelationAgeMetadataTestCase,
+) -> None:
+    client: FakeBigQueryClient = FakeBigQueryClient(
+        rows=FakeBigQueryRows(
+            columns=("table_id", "creation_time", "last_modified_time"),
+            rows=test_case.metadata_rows,
+        )
+    )
+    relations: tuple[RelationInfo, ...] = (
+        RelationInfo(
+            database="example-project",
+            schema="dev_orders",
+            name="old_orders",
+            relation_type="table",
+        ),
+        RelationInfo(
+            database="example-project",
+            schema="dev_orders",
+            name="old_orders_view",
+            relation_type="view",
+        ),
+    )
+
+    enriched: tuple[RelationInfo, ...] = BigQueryAdapter().with_relation_age_metadata(
+        connection=_BigQueryConnection(client=client, location=None),
+        relations=relations,
+    )
+
+    assert (
+        tuple((str(relation.created_at), str(relation.last_altered_at)) for relation in enriched)
+        == test_case.expected_timestamps
+    )
+    assert tuple(sql for sql, _ in client.queries) == (
+        "SELECT table_id, TIMESTAMP_MILLIS(creation_time), "
+        "TIMESTAMP_MILLIS(last_modified_time) FROM `example-project.dev_orders.__TABLES__`",
+    )
