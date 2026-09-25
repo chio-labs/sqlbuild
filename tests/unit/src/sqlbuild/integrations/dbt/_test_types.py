@@ -3,12 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCommandResult,
     DbtInteropParsedArgs,
-    DbtLsNode,
 )
 from sqlbuild.spec.contracts.models import DbtConfig, LocalDbtConfig
 
@@ -98,17 +96,6 @@ class DbtSelectionErrorTestCase:
     sqlbuild_model_path_by_name: dict[str, str]
     select: tuple[str, ...]
     expected_error_fragment: str
-
-
-@dataclass(frozen=True)
-class DbtExecutionSpacingTestCase:
-    description: str
-    expected_spacing_fragment: str
-    expected_no_work_spacing_fragment: str
-    unexpected_no_blank_fragment: str
-    unexpected_no_work_no_blank_fragment: str
-    unexpected_extra_blank_fragment: str
-    unexpected_no_work_extra_blank_fragment: str
 
 
 @dataclass(frozen=True)
@@ -212,22 +199,6 @@ class DbtExecutionSelectionStatusTestCase:
 
 
 @dataclass(frozen=True)
-class DbtRunResultsFallbackRenderTestCase:
-    description: str
-    unique_id: str
-    status: str
-    message: str
-    expected_output_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtExecutionTotalRenderTestCase:
-    description: str
-    expected_output_fragments: tuple[str, ...]
-    unexpected_output_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class DbtExecutionSummaryFooterTestCase:
     description: str
     node_statuses: tuple[str, ...]
@@ -319,21 +290,6 @@ class DbtPlanTestCase:
     expected_sqlbuild_skipped: bool
     expected_human_fragments: tuple[str, ...]
     expected_json_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtPlanHumanFormatterTestCase:
-    description: str
-    dbt_ls_nodes: tuple[DbtLsNode, ...]
-    sqlbuild_model_names: tuple[str, ...]
-    sqlbuild_plan_model_names: tuple[str, ...]
-    display_limit: int | None
-    use_color: bool
-    expected_human_fragments: tuple[str, ...]
-    expected_human_regex_fragments: tuple[str, ...]
-    expected_absent_fragments: tuple[str, ...]
-    sqlbuild_command_argvs: tuple[tuple[str, ...], ...] = ()
-    sqlbuild_plan_output: PlanOutput | None = None
 
 
 @dataclass(frozen=True)

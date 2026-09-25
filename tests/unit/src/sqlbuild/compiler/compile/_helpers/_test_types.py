@@ -18,7 +18,6 @@ from sqlbuild.compiler.lineage.types import (
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.scopes.models import UsageRecord
-from sqlbuild.compiler.scopes.types import ScopeKind
 from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention
 from sqlbuild.sql_values.models import SqlValue
 
@@ -186,23 +185,6 @@ class ExpandSqlMacrosErrorTestCase:
     sql: str
     expected_error_fragment: str
     macro_overrides: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class ScopedMacroExpansionTestCase:
-    description: str
-    definitions: dict[str, tuple[str, ScopeKind, str | None, str]]
-    expected_sql: str
-    expected_dependencies: tuple[str, ...]
-    expected_usages: tuple[tuple[str, str], ...]
-
-
-@dataclass(frozen=True)
-class ScopedMacroExpansionErrorTestCase:
-    description: str
-    definitions: dict[str, tuple[str, ScopeKind, str | None, str]]
-    sql: str
-    expected_error_fragment: str
 
 
 @dataclass(frozen=True)
@@ -689,15 +671,6 @@ class ExpandTemplateDataErrorTestCase:
     preserve_context_tokens: bool
     preserve_unknown_context: bool
     expected_error_fragment: str
-
-
-@dataclass(frozen=True)
-class VarMacroCollisionTestCase:
-    description: str
-    var_names: tuple[str, ...]
-    macro_names: tuple[str, ...]
-    expected_valid: bool
-    expected_error_fragment: str | None = None
 
 
 @dataclass(frozen=True)

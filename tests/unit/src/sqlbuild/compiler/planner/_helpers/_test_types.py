@@ -21,7 +21,6 @@ from sqlbuild.compiler.planner.models import (
     MissingUpstream,
     ParsedSelector,
     PathSelector,
-    PlannerScope,
     ScenarioArtifactIdentity,
     ScenarioGraphPlan,
     ScenarioRelationMap,
@@ -182,34 +181,6 @@ class SeedIdentityCsvConfigTestCase:
     description: str
     seed_contents: str
     expected_same_identity: bool
-
-
-@dataclass(frozen=True)
-class MarkVersionIdentityStaleActionsTestCase:
-    description: str
-    model_key: CompiledObjectKey
-    change_kind: ChangeKind
-    previous_version_hash: str
-    expected_version_hash: str
-    expected_cascade_present: bool
-
-
-@dataclass(frozen=True)
-class DirectParentRunActionTestCase:
-    description: str
-    parent_key: CompiledObjectKey
-    child_key: CompiledObjectKey
-    expected_cascade_present: bool
-    expected_root_cause: str | None = None
-    expected_root_reason: PlanReason | None = None
-
-
-@dataclass(frozen=True)
-class DirectIdentityStaleModelNamesTestCase:
-    description: str
-    expected_version_hashes: dict[str, str]
-    built_version_hashes: dict[str, str | None]
-    expected_stale_model_names: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -438,13 +409,6 @@ class FindPathKeysErrorTestCase:
     start: CompiledObjectKey
     end: CompiledObjectKey
     expected_error_type: type[Exception]
-
-
-@dataclass(frozen=True)
-class PruneUnchangedScopeTestCase:
-    description: str
-    scope: PlannerScope
-    expected_selected_keys: frozenset[CompiledObjectKey]
 
 
 @dataclass(frozen=True)
@@ -960,13 +924,6 @@ class RunDespiteUnchangedPlanningTestCase:
     expected_root_model_names: frozenset[str]
     expected_stale_model_names: frozenset[str]
     expected_error_fragment: str | None = None
-
-
-@dataclass(frozen=True)
-class ReuseSatisfiedStalenessTestCase:
-    description: str
-    reuse_satisfied_model_names: frozenset[str]
-    expected_warns: bool
 
 
 @dataclass(frozen=True)

@@ -88,16 +88,6 @@ class ExternalBlockedPlanOutputTestCase:
 
 
 @dataclass(frozen=True)
-class DirectInputBaselineTestCase:
-    description: str
-    models_by_name: dict[str, str]
-    origin_model_names: tuple[str, ...]
-    selected_model_name: str
-    expected_baseline_names: tuple[str, ...]
-    unexpected_baseline_names: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class SelectorExpansionTestCase:
     description: str
     raw: str
