@@ -70,6 +70,8 @@ def get_schema_validations(
 ) -> tuple[SqlBindingResult, ...]:
     """Validate a SQL batch without exposing Polyglot payloads."""
 
+    if not requests:
+        return ()
     payloads: list[dict[str, object]] = [_request_payload(request=request) for request in requests]
     responses: Any = json.loads(
         cast(NativeValidationModule, _native).validate_sql_with_schemas_json(

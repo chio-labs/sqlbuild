@@ -516,9 +516,14 @@ def _prepare_compact_analysis_batch(
                     sql=cleaned_sql,
                     dialect=dialect,
                     schema=binding_schema,
+                    known_functions=inference_profile.semantic_known_functions,
+                    known_types=inference_profile.semantic_known_types,
+                    quoted_identifiers_ignore_case=inference_profile.quoted_identifiers_ignore_case,
                 )
             )
             query["binding_schema"] = binding_payload["schema"]
+            if not inference_profile.quoted_identifiers_ignore_case:
+                query["binding_options"] = binding_payload["options"]
         query_key: tuple[str, str, bytes | None, bytes | None] = (
             analysis_sql,
             dialect or "generic",

@@ -179,6 +179,7 @@ class _ModelSqlAnalysis:
     polyglot_analysis: PolyglotAnalysisResult
     placeholders: dict[str, str] | None
     cached: bool = False
+    fused_binding_validated: bool = False
 
 
 @dataclass(frozen=True)
@@ -227,6 +228,10 @@ def assemble_compiled_project(
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
     profile = replace(
         profile,
+        semantic_known_functions=known_function_names(inputs.sql_function_inputs),
+        semantic_known_types=known_declared_types(
+            functions=inputs.sql_function_inputs, column_types=column_types_by_table
+        ),
         quoted_identifiers_ignore_case=ignores_quoted_case(
             connection=inputs.effective_connection, dialect=profile.sql_analysis_dialect
         ),
@@ -997,6 +1002,8 @@ def _analyze_model_sql_requests(
                             sql=prepared_by_index[index].cleaned_sql,
                             dialect=inference_profile.sql_analysis_dialect,
                             schema=requests[index].binding_schema or {},
+                            known_functions=inference_profile.semantic_known_functions,
+                            known_types=inference_profile.semantic_known_types,
                             quoted_identifiers_ignore_case=inference_profile.quoted_identifiers_ignore_case,
                         )
                         for index in validation_indices
@@ -1138,6 +1145,13 @@ def _complete_inferred_bindings(
             continue
         required_names = _binding_required_names(request.model_input)
         if required_names is None:
+            continue
+        if (
+            not inference_profile.quoted_identifiers_ignore_case
+            and results[index].fused_binding_validated
+            and request.binding_schema
+            == {name: complete_schemas.get(name, {}) for name in required_names}
+        ):
             continue
         deferred_validation_indices.append(index)
         deferred_validation_requests.append(
@@ -1285,6 +1299,9 @@ def _analyze_model_sql(
     return _ModelSqlAnalysis(
         polyglot_analysis=polyglot_analysis,
         placeholders=request.placeholders,
+        fused_binding_validated=precomputed is not None
+        and precomputed.binding_diagnostics is not None
+        and not inference_profile.quoted_identifiers_ignore_case,
     )
 
 

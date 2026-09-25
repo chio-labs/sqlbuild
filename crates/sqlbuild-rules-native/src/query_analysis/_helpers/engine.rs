@@ -34,6 +34,47 @@ struct AnalysisRequest {
     schema: Option<ValidationSchema>,
     #[serde(default)]
     binding_schema: Option<ValidationSchema>,
+    #[serde(default)]
+    binding_options: Option<BindingOptions>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct BindingOptions {
+    #[serde(default)]
+    check_types: bool,
+    #[serde(default)]
+    semantic: bool,
+    #[serde(default)]
+    known_functions: Vec<String>,
+    #[serde(default)]
+    known_types: Vec<String>,
+}
+
+impl AnalysisRequest {
+    fn validation_options(&self) -> SchemaValidationOptions {
+        SchemaValidationOptions {
+            check_types: self
+                .binding_options
+                .as_ref()
+                .is_some_and(|options| options.check_types),
+            semantic: self
+                .binding_options
+                .as_ref()
+                .is_some_and(|options| options.semantic),
+            known_functions: self
+                .binding_options
+                .as_ref()
+                .map_or_else(Vec::new, |options| options.known_functions.clone()),
+            known_types: self
+                .binding_options
+                .as_ref()
+                .map_or_else(Vec::new, |options| options.known_types.clone()),
+            check_references: true,
+            strict: Some(true),
+            strict_syntax: false,
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -474,41 +515,8 @@ fn try_borrowed_query(
                 })
         })
         .and_then(|schema| super::borrowed_facts::infer_bound(&expression, Some(schema), dialect));
-    let validation = work
-        .query
-        .binding_schema
-        .as_ref()
-        .or(work.query.schema.as_ref())
-        .map(|schema| {
-            if bound_facts.is_some() {
-                return Ok(ValidationResult::with_errors(Vec::new()));
-            }
-            let result = polyglot_sql::validation::validate_parsed_with_schema(
-                vec![expression.clone()],
-                dialect,
-                schema,
-                &SchemaValidationOptions {
-                    check_types: false,
-                    check_references: true,
-                    strict: Some(true),
-                    semantic: false,
-                    strict_syntax: false,
-                    ..Default::default()
-                },
-            );
-            crate::semantic_validation::main::complete_parsed_validation(
-                crate::semantic_validation::main::ParsedValidationRequest {
-                    sql: &work.query.sql,
-                    dialect,
-                    schema,
-                    result,
-                    expression: Some(&expression),
-                },
-            )
-        });
-    if !matches!(validation, Some(Ok(ref result)) if result.valid) {
-        return Err(Box::new(work));
-    }
+    let validation_expression =
+        (bound_facts.is_none() || work.query.binding_options.is_some()).then(|| expression.clone());
     let unannotated_outputs: Option<Vec<_>> = work
         .projections
         .iter()
@@ -624,6 +632,34 @@ fn try_borrowed_query(
                 preserve_fallback_lineage: true,
             }),
         ));
+    }
+    let validation = work
+        .query
+        .binding_schema
+        .as_ref()
+        .or(work.query.schema.as_ref())
+        .map(|schema| {
+            let Some(validation_expression) = validation_expression else {
+                return Ok(ValidationResult::with_errors(Vec::new()));
+            };
+            let result = polyglot_sql::validation::validate_parsed_with_schema(
+                vec![validation_expression],
+                dialect,
+                schema,
+                &work.query.validation_options(),
+            );
+            crate::semantic_validation::main::complete_parsed_validation(
+                crate::semantic_validation::main::ParsedValidationRequest {
+                    sql: &work.query.sql,
+                    dialect,
+                    schema,
+                    result,
+                    expression: Some(&expression),
+                },
+            )
+        });
+    if !matches!(validation, Some(Ok(ref result)) if result.valid) {
+        return Err(Box::new(work));
     }
     Ok(CompiledQueryWorkResult {
         projections,
@@ -799,6 +835,7 @@ type CompiledQueryResult = (
 );
 
 fn compile_query(mut request: AnalysisRequest, project_projections: bool) -> CompiledQueryResult {
+    let validation_options = request.validation_options();
     let Some(schema) = request.binding_schema.take() else {
         return (query_analysis(request, project_projections), None, None);
     };
@@ -814,14 +851,7 @@ fn compile_query(mut request: AnalysisRequest, project_projections: bool) -> Com
             schema: request.schema,
         },
         &schema,
-        &SchemaValidationOptions {
-            check_types: false,
-            check_references: true,
-            strict: Some(true),
-            semantic: false,
-            strict_syntax: false,
-            ..Default::default()
-        },
+        &validation_options,
         project_projections,
     );
     let validation = crate::semantic_validation::main::complete_parsed_validation(

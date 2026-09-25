@@ -12,6 +12,7 @@ from sqlbuild.adapter.type_system.main.normalize_type import normalize_type
 from sqlbuild.compiler.compile._helpers.analysis.columns import _polyglot_expression_type
 from sqlbuild.compiler.compile._helpers.analysis.compact import (
     analyze_columns_and_lineage_with_polyglot,
+    analyze_queries_with_compact_polyglot_batch,
     get_complete_schema_binding_request,
 )
 from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
@@ -25,6 +26,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledModelSqlTestPayload,
     CompiledProject,
     CompilerDiagnostic,
+    NativeCompactAnalysis,
     PolyglotAnalysisResult,
 )
 from sqlbuild.compiler.compile.types import (
@@ -295,7 +297,7 @@ def _sql_test_errors(
     profile: ExpressionInferenceProfile,
 ) -> tuple[CompilerDiagnostic, ...]:
     diagnostics: list[CompilerDiagnostic] = []
-    columns_by_sql: dict[str, tuple[str, ...]] = {}
+    columns_by_sql: dict[str, tuple[str, ...]] = _sql_test_columns(project=project, profile=profile)
     for test in project.sql_tests:
         if not isinstance(test.payload, CompiledModelSqlTestPayload):
             continue
@@ -306,16 +308,6 @@ def _sql_test_errors(
             shape: dict[str, str] | None = shapes.get(match.group(1)) if match else None
             if shape is None:
                 continue
-            if cte.sql_body not in columns_by_sql:
-                analysis: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
-                    query_sql=cte.sql_body,
-                    references=(),
-                    inference_profile=profile,
-                    allow_compact_analysis=True,
-                )
-                columns_by_sql[cte.sql_body] = tuple(
-                    column.name for column in analysis.columns or ()
-                )
             available: set[str] = {name.casefold() for name in shape}
             for column_name in columns_by_sql[cte.sql_body]:
                 if column_name.casefold() not in available:
@@ -347,6 +339,40 @@ def _sql_test_errors(
                         )
                     )
     return tuple(diagnostics)
+
+
+def _sql_test_columns(
+    *, project: CompiledProject, profile: ExpressionInferenceProfile
+) -> dict[str, tuple[str, ...]]:
+    """Infer fixture interfaces in one batch instead of repeating Python AST walks."""
+    bodies: dict[str, None] = {}
+    for test in project.sql_tests:
+        if isinstance(test.payload, CompiledModelSqlTestPayload):
+            for cte in (*test.payload.authored_ctes, *test.payload.expected_ctes):
+                bodies[cte.sql_body] = None
+    queries: tuple[str, ...] = tuple(bodies)
+    if not queries:
+        return {}
+    prepared: tuple[NativeCompactAnalysis, ...] = analyze_queries_with_compact_polyglot_batch(
+        query_sqls=queries,
+        references=((),) * len(queries),
+        placeholders=(None,) * len(queries),
+        column_nullability_by_table={},
+        column_types_by_table={},
+        inference_profile=profile,
+        recover_cte_facts=(False,) * len(queries),
+    )
+    result: dict[str, tuple[str, ...]] = {}
+    for sql, native in zip(queries, prepared, strict=True):
+        analysis: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+            query_sql=sql,
+            references=(),
+            inference_profile=profile,
+            allow_compact_analysis=True,
+            precomputed=native,
+        )
+        result[sql] = tuple(column.name for column in analysis.columns or ())
+    return result
 
 
 def _names(value: object) -> tuple[str, ...]:

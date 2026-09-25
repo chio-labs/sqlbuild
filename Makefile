@@ -244,6 +244,13 @@ test-e2e-cold-compile-performance:
 		-m cold_compile_performance -k "models_$(SQLBUILD_BENCHMARK_MODELS)" \
 		-vv --log-cli-level=INFO --color=yes
 
+.PHONY: test-e2e-diagnostic-compile-performance
+test-e2e-diagnostic-compile-performance:
+	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=4 uv run pytest \
+		tests/e2e/src/sqlbuild/cli/commands/main/compile/test_diagnostic_compile_performance.py \
+		-n auto --dist loadfile -m cold_compile_performance \
+		-vv -rP --log-level=INFO --log-cli-level=INFO --color=yes
+
 test-e2e-dense-compile-performance:
 	test -n "$(SQLBUILD_BENCHMARK_MODELS)"
 	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=4 uv run pytest \
