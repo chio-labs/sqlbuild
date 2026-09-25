@@ -4,7 +4,7 @@
 
 > Feature comparison between SQLBuild, dbt, and SQLMesh.
 
-Online: https://sqlbuild.com/docs/feature-comparison/
+Online: https://docs.sqlbuild.com/feature-comparison
 
 ## Contents
 
@@ -76,6 +76,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 
 | Feature | SQLBuild | dbt | SQLMesh |
 |---------|----------|-----|---------|
+| Virtual environments | No. Build branches into their own schema, and copy relations between targets with `sqb clone` | No | Pointer swaps, no compute cost |
 | Data diffs | Full row-level data comparison across targets | No | Table diff |
 | Zero-copy cloning | `sqb clone` | No | No |
 
@@ -130,7 +131,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 |------|----------|
 | **SQLBuild** | Rigor-first SQL pipelines: compile-time verification, pre-promotion audit gating, multi-model tests, and local E2E replay by default. Opt into change-aware builds and warehouse-native state when full rebuilds get expensive, plus ingestion and Python nodes as the project grows. |
 | **dbt** | The most widely adopted SQL transformation framework with the largest adapter and community ecosystem. |
-| **SQLMesh** | State-managed pipelines with interval tracking and cross-dialect transpilation. |
+| **SQLMesh** | State-managed pipelines with virtual environments, interval tracking, and cross-dialect transpilation. |
 
 ## Not yet in SQLBuild
 

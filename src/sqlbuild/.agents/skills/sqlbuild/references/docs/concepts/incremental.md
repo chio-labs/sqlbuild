@@ -247,6 +247,11 @@ does not claim that its intervals are available.
 
 ### Concurrent batches
 
+**Upgrading after virtual-environment removal:** concurrent microbatch event IDs changed.
+Drop existing `_sqlbuild_microbatches` tables written by earlier versions before the next
+concurrent run. Sequential runs never use this table. SQLBuild creates the current schema
+when concurrent execution next needs it.
+
 Sequential execution is the default and does not read or write `_sqlbuild_microbatches`. To opt into
 concurrent `delete_insert` batches, enable the project gate and choose a model limit:
 

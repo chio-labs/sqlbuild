@@ -1,10 +1,10 @@
 <!-- generated-by: sqlbuild skills -->
 
-# sqb build
+# build
 
 > Compile, plan, and execute the selected build lifecycle.
 
-Online: https://sqlbuild.com/docs/cli/build/
+Online: https://docs.sqlbuild.com/cli/build
 
 ## Contents
 
@@ -17,6 +17,8 @@ Online: https://sqlbuild.com/docs/cli/build/
 - Failure behavior
 - Fingerprints
 - Runtime artifacts
+
+# sqb build
 
 Compiles, plans, and executes the selected build lifecycle, running the full selected scope. Use
 `--no-tests` and `--no-audits` to skip validation for fast iteration.
