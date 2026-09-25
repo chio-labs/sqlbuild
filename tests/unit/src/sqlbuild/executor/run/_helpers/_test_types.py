@@ -499,3 +499,19 @@ class RuntimeContractValidationTestCase:
     contract_dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = ()
     expected_error_fragment: str | None = None
     expected_error_code: str | None = None
+
+
+@dataclass(frozen=True)
+class StagedPromotionTestCase:
+    description: str
+    adapter_name: str
+    target_exists: bool
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FullRefreshPromotionTestCase:
+    description: str
+    adapter_name: str
+    target_exists: bool
+    expected_statements: tuple[str, ...]
