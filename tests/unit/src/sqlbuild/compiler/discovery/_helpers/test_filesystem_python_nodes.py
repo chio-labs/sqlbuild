@@ -7,9 +7,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.discovery._helpers.filesystem.core import (
-    discover_asset_functions,
-    discover_check_functions,
-    discover_task_functions,
+    discover_python_node_functions,
 )
 from sqlbuild.compiler.discovery.exceptions import PythonNodeDiscoveryError
 from sqlbuild.compiler.discovery.models import (
@@ -93,8 +91,12 @@ def test_given_project_dir_when_discovering_python_nodes_then_returns_expected(
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(contents, encoding="utf-8")
 
-    tasks: tuple[DiscoveredTaskFunction, ...] = discover_task_functions(project_dir=tmp_path)
-    assets: tuple[DiscoveredAssetFunction, ...] = discover_asset_functions(project_dir=tmp_path)
+    tasks: tuple[DiscoveredTaskFunction, ...] = tuple(
+        discover_python_node_functions(project_dir=tmp_path).tasks
+    )
+    assets: tuple[DiscoveredAssetFunction, ...] = tuple(
+        discover_python_node_functions(project_dir=tmp_path).assets
+    )
 
     assert tuple(task.name for task in tasks) == test_case.expected_task_names
     assert (
@@ -148,7 +150,7 @@ def test_given_python_node_import_error_when_discovering_then_raises_clear_error
         file_path.write_text(contents, encoding="utf-8")
 
     with pytest.raises(PythonNodeDiscoveryError, match=test_case.expected_error_fragment):
-        discover_task_functions(project_dir=tmp_path)
+        discover_python_node_functions(project_dir=tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -211,7 +213,9 @@ def test_given_project_dir_when_discovering_checks_then_returns_expected(
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(contents, encoding="utf-8")
 
-    checks: tuple[DiscoveredCheckFunction, ...] = discover_check_functions(project_dir=tmp_path)
+    checks: tuple[DiscoveredCheckFunction, ...] = tuple(
+        discover_python_node_functions(project_dir=tmp_path).checks
+    )
 
     assert tuple(check.name for check in checks) == test_case.expected_check_names
     assert tuple(len(check.depends_on) for check in checks) == (

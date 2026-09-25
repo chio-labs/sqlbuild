@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.compiler.scopes._helpers.identities import format_identity, parse_identity
 from sqlbuild.compiler.scopes.exceptions import InvalidQualifiedIdentityError
-from sqlbuild.compiler.scopes.main._parse_qualified_identity import parse_qualified_identity
-from sqlbuild.compiler.scopes.main._qualified_identity_text import format_qualified_identity
 from sqlbuild.compiler.scopes.models import DeclarationIdentity, ResourceIdentity
 from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind
 from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
@@ -43,10 +42,10 @@ from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
 def test_given_qualified_identity_when_parsing_and_formatting_then_round_trips(
     test_case: QualifiedIdentityCase,
 ) -> None:
-    parsed: ResourceIdentity | DeclarationIdentity = parse_qualified_identity(value=test_case.text)
+    parsed: ResourceIdentity | DeclarationIdentity = parse_identity(value=test_case.text)
 
     assert parsed == test_case.expected_identity
-    assert format_qualified_identity(identity=parsed) == test_case.text
+    assert format_identity(identity=parsed) == test_case.text
 
 
 @pytest.mark.parametrize(
@@ -77,7 +76,7 @@ def test_given_bare_name_when_parsing_then_rejects_unqualified_identity(
     test_case: InvalidIdentityCase,
 ) -> None:
     with pytest.raises(test_case.expected_error, match="kind-qualified"):
-        parse_qualified_identity(value=test_case.value)
+        parse_identity(value=test_case.value)
 
 
 if __name__ == "__main__":

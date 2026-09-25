@@ -521,29 +521,6 @@ def _resolve_model_schema(
     return declaration
 
 
-def _merge_schema_tags(
-    *, config: CompileModelConfig, schema_entry: SchemaModelEntry
-) -> CompileModelConfig:
-    """Union schema.yml tags into model config values."""
-
-    if not schema_entry.tags:
-        return config
-    merged_values: dict[str, object] = _merged_with_tag_union(
-        base=dict(config.values),
-        overlay={"tags": list(schema_entry.tags)},
-    )
-    return CompileModelConfig(
-        values=merged_values,
-        model_header_keys=config.model_header_keys,
-        matched_path_default=config.matched_path_default,
-        logical_schema=config.logical_schema,
-        layer_schema=config.layer_schema,
-        logical_database=config.logical_database,
-        time_travel_retention=config.time_travel_retention,
-        table_type=config.table_type,
-    )
-
-
 def find_matching_path_default(
     *,
     model_file: DiscoveredSqlModelFile,

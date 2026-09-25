@@ -2,7 +2,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
@@ -521,19 +520,6 @@ class ResolveSchemaActionsTestCase:
     schema_findings: tuple[SchemaFinding, ...]
     on_schema_change: OnSchemaChange | None
     expected_actions: tuple[SchemaAction, ...]
-
-
-@dataclass(frozen=True)
-class BuildLogicalDdlTestCase:
-    description: str
-    action: PlanAction
-    resolved_sql: str
-    qualified_name: str | None
-    unique_key: tuple[str, ...]
-    warehouse_columns: tuple[ColumnInfo, ...]
-    expected_ddl_fragment: str
-    merge_exclude_columns: tuple[str, ...] = ()
-    unexpected_ddl_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

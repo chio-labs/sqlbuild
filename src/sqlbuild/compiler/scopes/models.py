@@ -219,8 +219,6 @@ class ScopeLookup:
     usages_by_consumer: Mapping[ResourceIdentity | DeclarationIdentity, tuple[UsageRecord, ...]]
     usages_by_declaration: Mapping[DeclarationIdentity, tuple[UsageRecord, ...]]
     grants_by_resource: Mapping[ResourceIdentity, tuple[GrantRecord, ...]]
-    visibility_by_resource: Mapping[ResourceIdentity, tuple[VisibilityRecord, ...]]
-    inaccessible_by_resource: Mapping[ResourceIdentity, tuple[InaccessibleRecord, ...]]
 
 
 @dataclass(frozen=True)

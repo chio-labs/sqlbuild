@@ -190,23 +190,6 @@ def _check_with_heuristic(
     return None
 
 
-def _classify_type_heuristic(warehouse_type: str) -> CursorType | None:
-    """Classify a warehouse type string as timestamp or integer via substrings."""
-
-    upper: str = warehouse_type.upper()
-
-    substring: str
-    for substring in _TIMESTAMP_SUBSTRINGS:
-        if substring in upper:
-            return CursorType.TIMESTAMP
-
-    for substring in _INTEGER_SUBSTRINGS:
-        if substring in upper:
-            return CursorType.INTEGER
-
-    return None
-
-
 def classify_cursor_sql_type(sql_type: str) -> CursorType | None:
     """Classify a supported cross-adapter SQL cursor type."""
 

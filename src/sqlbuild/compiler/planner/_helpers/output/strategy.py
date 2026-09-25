@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
-    CompiledRelationLocation,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
@@ -127,47 +125,6 @@ def resolve_schema_actions(
                 )
 
     return tuple(actions)
-
-
-def build_logical_ddl(
-    *,
-    action: PlanAction,
-    resolved_sql: str,
-    target: CompiledRelationLocation,
-    unique_key: tuple[str, ...],
-    warehouse_columns: tuple[ColumnInfo, ...],
-    merge_exclude_columns: tuple[str, ...] = (),
-) -> str:
-    """Generate the logical DDL string for a model plan entry."""
-
-    qualified_name: str = target.qualified_name or target.name
-
-    if action == PlanAction.CREATE_VIEW:
-        return f"CREATE OR REPLACE VIEW {qualified_name} AS (\n{resolved_sql}\n)"
-
-    if action == PlanAction.CREATE_TABLE:
-        return f"CREATE TABLE {qualified_name} AS (\n{resolved_sql}\n)"
-
-    if action == PlanAction.INCREMENTAL_APPEND:
-        return f"INSERT INTO {qualified_name}\n{resolved_sql}"
-
-    if action == PlanAction.INCREMENTAL_DELETE_INSERT:
-        return _build_delete_insert_ddl(
-            qualified_name=qualified_name,
-            resolved_sql=resolved_sql,
-            unique_key=unique_key,
-        )
-
-    if action == PlanAction.INCREMENTAL_MERGE:
-        return _build_merge_ddl(
-            qualified_name=qualified_name,
-            resolved_sql=resolved_sql,
-            unique_key=unique_key,
-            warehouse_columns=warehouse_columns,
-            merge_exclude_columns=merge_exclude_columns,
-        )
-
-    return ""
 
 
 def build_model_warnings(
@@ -386,61 +343,6 @@ def _incremental_action(
         )
 
     return action, reason
-
-
-def _build_delete_insert_ddl(
-    *,
-    qualified_name: str,
-    resolved_sql: str,
-    unique_key: tuple[str, ...],
-) -> str:
-    """Build logical DDL for delete+insert strategy."""
-
-    key_list: str = ", ".join(unique_key)
-    source_key_list: str = ", ".join(unique_key)
-    delete_stmt: str = (
-        f"DELETE FROM {qualified_name}\n"
-        f"WHERE ({key_list}) IN (SELECT {source_key_list} FROM (\n{resolved_sql}\n))"
-    )
-    insert_stmt: str = f"INSERT INTO {qualified_name}\n{resolved_sql}"
-    return f"{delete_stmt};\n\n{insert_stmt}"
-
-
-def _build_merge_ddl(
-    *,
-    qualified_name: str,
-    resolved_sql: str,
-    unique_key: tuple[str, ...],
-    warehouse_columns: tuple[ColumnInfo, ...],
-    merge_exclude_columns: tuple[str, ...],
-) -> str:
-    """Build logical DDL for merge/upsert strategy."""
-
-    on_clause: str = " AND ".join(
-        f"{_DDL_MERGE_TARGET_ALIAS}.{k} = {_DDL_MERGE_SOURCE_ALIAS}.{k}" for k in unique_key
-    )
-
-    immutable_columns: frozenset[str] = frozenset(
-        column.lower() for column in (*unique_key, *merge_exclude_columns)
-    )
-    non_key_columns: list[str] = [
-        col.name for col in warehouse_columns if col.name.lower() not in immutable_columns
-    ]
-    all_columns: list[str] = [col.name for col in warehouse_columns]
-
-    update_clause: str = ", ".join(
-        f"{col} = {_DDL_MERGE_SOURCE_ALIAS}.{col}" for col in non_key_columns
-    )
-    insert_columns: str = ", ".join(all_columns)
-    insert_values: str = ", ".join(f"{_DDL_MERGE_SOURCE_ALIAS}.{col}" for col in all_columns)
-
-    return (
-        f"MERGE INTO {qualified_name} AS {_DDL_MERGE_TARGET_ALIAS}\n"
-        f"USING (\n{resolved_sql}\n) AS {_DDL_MERGE_SOURCE_ALIAS}\n"
-        f"ON {on_clause}\n"
-        f"WHEN MATCHED THEN UPDATE SET {update_clause}\n"
-        f"WHEN NOT MATCHED THEN INSERT ({insert_columns}) VALUES ({insert_values})"
-    )
 
 
 def _describe_finding(finding: SchemaFinding) -> str:

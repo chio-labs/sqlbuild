@@ -436,24 +436,6 @@ def _location_for_projection_range(
     )
 
 
-def _location_for_header_token(
-    *,
-    contents: str,
-    header_start: int,
-    token: _ModelHeaderToken,
-    relative_path: Path,
-    line_starts: tuple[int, ...],
-) -> SourceLocation:
-    absolute_position: int = header_start + token.position
-    return _location_for_absolute_span(
-        contents=contents,
-        start=absolute_position,
-        end=absolute_position + len(token.value),
-        relative_path=relative_path,
-        line_starts=line_starts,
-    )
-
-
 def _location_for_absolute_span(
     *, contents: str, start: int, end: int, relative_path: Path, line_starts: tuple[int, ...]
 ) -> SourceLocation:
@@ -483,38 +465,6 @@ def _line_starts(contents: str) -> tuple[int, ...]:
         starts.append(index + 1)
         index = contents.find("\n", index + 1)
     return tuple(starts)
-
-
-def _find_top_level_keyword(*, sql: str, keyword: str, start: int) -> int | None:
-    depth: int = 0
-    index: int = start
-    in_quote: str | None = None
-    while index < len(sql):
-        character: str = sql[index]
-        if in_quote is not None:
-            if character == _MODEL_HEADER_ESCAPE_CHARACTER:
-                index += 2
-                continue
-            if character == in_quote:
-                in_quote = None
-            index += 1
-            continue
-        if character in _MODEL_HEADER_QUOTE_NAMES:
-            in_quote = character
-            index += 1
-            continue
-        if character == _MODEL_HEADER_OPEN_PAREN:
-            depth += 1
-            index += 1
-            continue
-        if character == _MODEL_HEADER_CLOSE_PAREN:
-            depth = max(0, depth - 1)
-            index += 1
-            continue
-        if depth == 0 and _keyword_at(sql=sql, keyword=keyword, index=index):
-            return index
-        index += 1
-    return None
 
 
 def _split_top_level_select_items(*, sql: str, start: int, end: int) -> tuple[tuple[int, int], ...]:

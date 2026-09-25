@@ -1113,33 +1113,6 @@ def build_model_config(*, request: ModelConfigBuildRequest) -> CompileModelConfi
     )
 
 
-def expand_model_hook_macros(
-    *,
-    values: dict[str, object],
-    file_path: Path,
-    effective_vars: dict[str, object],
-    context_values: dict[str, str | None],
-    loaded_macros: dict[str, LoadedMacro],
-    macro_context: MacroContext,
-    declaration_expansion: DeclarationExpansionContext,
-    sql_hook_definitions: dict[str, DiscoveredSqlHookFile] | None = None,
-    consumer: ResourceIdentity | None = None,
-) -> dict[str, object]:
-    """Expand SQL interpolation and macros within executable hook SQL strings."""
-
-    return expand_model_hook_macros_result(
-        values=values,
-        file_path=file_path,
-        effective_vars=effective_vars,
-        context_values=context_values,
-        loaded_macros=loaded_macros,
-        macro_context=macro_context,
-        declaration_expansion=declaration_expansion,
-        sql_hook_definitions=sql_hook_definitions,
-        consumer=consumer,
-    ).values
-
-
 def expand_model_hook_macros_result(
     *,
     values: dict[str, object],

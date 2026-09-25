@@ -38,8 +38,6 @@ from sqlbuild.compiler.planner.types import (
     CursorWatermarkMode,
     FixtureKey,
     GraphResourceKind,
-    LocalNodePlanAction,
-    LocalNodePlanReason,
     MaterializationType,
     OnSchemaChange,
     PlanAction,
@@ -155,25 +153,6 @@ class SelectorExpansion:
     core: str
     upstream: bool = False
     downstream: bool = False
-
-
-@dataclass(frozen=True)
-class LocalNodePlanInput:
-    """Local state used to classify one planner graph node."""
-
-    fingerprint_exists: bool
-    relation_exists: bool
-    full_refresh: bool = False
-    local_hash: str | None = None
-    previous_hash: str | None = None
-
-
-@dataclass(frozen=True)
-class LocalNodePlanOutcome:
-    """Local planner action and reason for one graph node."""
-
-    action: LocalNodePlanAction
-    reason: LocalNodePlanReason
 
 
 @dataclass(frozen=True)
@@ -1001,7 +980,6 @@ class ModelPlanEntry:
     cursor_start: str | None = None
     cursor_end: str | None = None
     lookback: str | None = None
-    lookback_is_default: bool = False
     cursor_bounds: CursorBounds | None = None
     cursor_input_relations: tuple[CursorInputRelation, ...] = field(default_factory=tuple)
     batch_size: str | None = None

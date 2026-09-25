@@ -390,12 +390,6 @@ def serialize_result(*, result: ScopeReport | ScopeBrowseResult | ScopeListResul
     return json.dumps(payload, sort_keys=True, ensure_ascii=True, separators=(",", ":")) + "\n"
 
 
-def serialize_report(*, report: ScopeReport) -> str:
-    """Serialize the schema-version-one report payload as deterministic ASCII JSON."""
-
-    return serialize_result(result=report)
-
-
 def _reports(
     *,
     lookup: ScopeLookup,
