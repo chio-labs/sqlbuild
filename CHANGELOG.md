@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.118.2](https://github.com/chio-labs/sqlbuild/compare/v0.118.1...v0.118.2) (2026-09-25)
+
+
+### Bug Fixes
+
+* recreate relations missing from the warehouse snapshot ([#818](https://github.com/chio-labs/sqlbuild/issues/818)) ([19b42fd](https://github.com/chio-labs/sqlbuild/commit/19b42fd058392d64692fce77060e59ee2cf2f5cd))
+
 ## [0.118.1](https://github.com/chio-labs/sqlbuild/compare/v0.118.0...v0.118.1) (2026-09-25)
 
 
