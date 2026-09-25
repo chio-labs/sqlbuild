@@ -33,6 +33,31 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (  # n
             sql="SELECT order_id, status FROM expected_rows",
             expected_branch_column_names=(("order_id", "status"),),
         ),
+        ExtractSqlAnalysisExpectedBranchesTestCase(
+            description="fallback ignores an apostrophe in a line comment",
+            sql="SELECT 1 AS order_id; -- don't mix\nUNION ALL SELECT 2 AS order_id",
+            expected_branch_column_names=(("order_id",), ("order_id",)),
+        ),
+        ExtractSqlAnalysisExpectedBranchesTestCase(
+            description="fallback ignores a set operation inside a block comment",
+            sql="SELECT 1 AS order_id; /* UNION ALL */ UNION ALL SELECT 2 AS order_id",
+            expected_branch_column_names=(("order_id",), ("order_id",)),
+        ),
+        ExtractSqlAnalysisExpectedBranchesTestCase(
+            description="fallback splits union distinct",
+            sql="SELECT 1 AS order_id; UNION DISTINCT SELECT 2 AS order_id",
+            expected_branch_column_names=(("order_id",), ("order_id",)),
+        ),
+        ExtractSqlAnalysisExpectedBranchesTestCase(
+            description="fallback keeps doubled quotes inside one string",
+            sql="SELECT 1 AS order_id; UNION SELECT 'it''s UNION' AS order_id",
+            expected_branch_column_names=(("order_id",), ("order_id",)),
+        ),
+        ExtractSqlAnalysisExpectedBranchesTestCase(
+            description="fallback defers to textual analysis when a branch cannot parse",
+            sql='SELECT __udf("net_amount")(1) AS amount UNION ALL SELECT 2 AS amount',
+            expected_branch_column_names=None,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -60,6 +85,21 @@ def test_given_sql_analysis_available_when_extracting_expected_branches_then_it_
         ExtractSqlAnalysisExpectedBranchesErrorTestCase(
             description="raises when expected branch is not a select query",
             sql="SELECT 1 AS order_id UNION ALL VALUES (2)",
+            expected_error_fragment="set-operation branch as a SELECT query",
+        ),
+        ExtractSqlAnalysisExpectedBranchesErrorTestCase(
+            description="parsed intersect is not a supported expected branch",
+            sql="SELECT 1 AS order_id INTERSECT SELECT 2 AS order_id",
+            expected_error_fragment="set-operation branch as a SELECT query",
+        ),
+        ExtractSqlAnalysisExpectedBranchesErrorTestCase(
+            description="fallback rejects intersect like the parsed path",
+            sql="SELECT 1 AS order_id; INTERSECT SELECT 2 AS order_id",
+            expected_error_fragment="set-operation branch as a SELECT query",
+        ),
+        ExtractSqlAnalysisExpectedBranchesErrorTestCase(
+            description="fallback rejects except like the parsed path",
+            sql="SELECT 1 AS order_id; EXCEPT SELECT 2 AS order_id",
             expected_error_fragment="set-operation branch as a SELECT query",
         ),
         ExtractSqlAnalysisExpectedBranchesErrorTestCase(

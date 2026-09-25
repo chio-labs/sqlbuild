@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.compile._helpers.sql_tests import core as sql_test_core
+from sqlbuild.compiler.sql_analysis.main._split_union_branches import split_union_branches
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ExpectedProjectionScanTestCase,
 )
@@ -82,7 +83,9 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
 def test_given_expected_cte_sql_when_scanning_top_level_then_results_are_characterised(
     test_case: ExpectedProjectionScanTestCase,
 ) -> None:
-    assert sql_test_core._split_set_operation_branches(test_case.sql) == test_case.expected_branches
+    assert (
+        split_union_branches(sql=test_case.sql, context="SQL test") == test_case.expected_branches
+    )
     assert (
         sql_test_core._find_select_list_end(sql=test_case.sql, start=0)
         == test_case.expected_select_list_end
