@@ -393,30 +393,6 @@ class TryWriteFingerprintAuditGateTestCase:
 
 
 @dataclass(frozen=True)
-class AuditGateReuseDecisionTestCase:
-    description: str
-    metadata_mode: str
-    status: AuditGateStatus
-    planned_attached_column_name: str | None
-    planned_resolved_sql: str
-    expected_reusable: bool
-    expected_reason: AuditGateReuseReason
-    expected_reusable_count: int
-    expected_missing_count: int
-    planned_always_run: bool = False
-
-
-@dataclass(frozen=True)
-class AuditGatePartialReuseDecisionTestCase:
-    description: str
-    changed_resolved_sql: str
-    expected_reusable: bool
-    expected_reason: AuditGateReuseReason
-    expected_reusable_count: int
-    expected_missing_count: int
-
-
-@dataclass(frozen=True)
 class ReuseFromAuditGateDecisionTestCase:
     description: str
     origin_unresolved_sql: str
