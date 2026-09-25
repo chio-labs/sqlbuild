@@ -160,23 +160,6 @@ export const sidebar = [
 		]
 	},
 	{
-		"label": "Virtual Environments (Alpha)",
-		"items": [
-			"docs/concepts/virtual-environments",
-			"docs/concepts/virtual-environments/setup",
-			"docs/concepts/virtual-environments/building",
-			"docs/concepts/virtual-environments/promotion",
-			"docs/concepts/virtual-environments/rollback",
-			"docs/concepts/virtual-environments/adopt-detach",
-			"docs/concepts/virtual-environments/clone",
-			"docs/concepts/virtual-environments/diff",
-			"docs/concepts/virtual-environments/reconcile",
-			"docs/concepts/virtual-environments/locks",
-			"docs/concepts/virtual-environments/janitor",
-			"docs/concepts/virtual-environments/recovery"
-		]
-	},
-	{
 		"label": "Integrations",
 		"items": [
 			{
@@ -220,11 +203,7 @@ export const sidebar = [
 			"docs/cli/debug",
 			"docs/cli/janitor",
 			"docs/cli/clean",
-			"docs/cli/dbt",
-			"docs/cli/state",
-			"docs/cli/promote",
-			"docs/cli/rollback",
-			"docs/cli/reconcile"
+			"docs/cli/dbt"
 		]
 	}
 ];

@@ -15,8 +15,8 @@ When `--to` is omitted, the destination is the active target selected by `--targ
 `--from` selects only the origin namespace and its clone-origin policy. `--to`, or the active
 target when it is omitted, selects the sole physical connection used by the operation. The
 origin namespace must therefore be visible and readable through the destination connection.
-SQLBuild never resolves or opens the origin target's connection, including for direct,
-deferred, and virtual clone. Clone cannot perform a cross-account, cross-server, or cross-file
+SQLBuild never resolves or opens the origin target's connection, including for direct and
+deferred clone. Clone cannot perform a cross-account, cross-server, or cross-file
 transfer by opening a second connection.
 
 ## Usage
