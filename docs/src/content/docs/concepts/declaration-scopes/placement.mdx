@@ -1,0 +1,97 @@
+---
+title: "Where to Put Declarations"
+description: "Choose the narrowest folder that contains every real use."
+---
+
+import Card from '../../../../components/mintlify/Card.astro';
+
+Start with the ordinary project-wide directories unless you have a reason to limit access:
+
+```text
+macros/
+enums/
+constants/
+```
+
+Move a declaration closer to its users when it should be available only in one folder or one folder
+tree.
+
+## Choose a location
+
+| Where it is needed | Location |
+|--------------------|----------|
+| One model only | Inside that model's `MODEL()` header, for enums and constants |
+| SQL files directly in one directory | `_sqlbuild/_macros/`, `_sqlbuild/_enums/`, or `_sqlbuild/_constants/` |
+| A directory and its descendants | `_sqlbuild/macros/`, `_sqlbuild/enums/`, or `_sqlbuild/constants/` |
+| Different trees, such as models and tests | Top-level `macros/`, `enums/`, or `constants/` |
+
+## One directory
+
+These two models use the same constant and both sit directly in `commerce/`:
+
+```text
+models/
+└── commerce/
+    ├── _sqlbuild/
+    │   └── _constants/
+    │       └── minimum_value.sql
+    ├── orders.sql
+    └── customers.sql
+```
+
+Use `_sqlbuild/_constants/` because no descendant directory needs the value.
+
+## One directory tree
+
+These models use the same constant across two child directories:
+
+```text
+models/
+└── commerce/
+    ├── _sqlbuild/
+    │   └── constants/
+    │       └── reporting_day.sql
+    ├── finance/
+    │   └── revenue.sql
+    └── fulfillment/
+        └── shipments.sql
+```
+
+Use `_sqlbuild/constants/` in `commerce/` so both child directories can use it.
+
+## Different resource trees
+
+When a declaration is used directly from unrelated trees, make it project-wide:
+
+```text
+my_project/
+├── constants/
+│   └── order_status.sql
+├── models/
+│   └── commerce/orders.sql
+└── tests/
+    └── scenarios/order_lifecycle.sql
+```
+
+Top-level placement is valid when consumers genuinely cross resource trees or otherwise have no
+shared owner folder. SQLBuild applies the same nearest-shared-folder analysis to project-wide
+declarations, so a declaration used only under one narrower folder must move closer to those users.
+
+## What SQLBuild checks
+
+Every declaration must be used by real compiled SQL. A name appearing only in a comment, quoted
+string, mock identity, or documentation does not count as use.
+
+For every declaration, including project-wide declarations, SQLBuild finds the nearest shared owner
+folder of the files that use it. If the declaration is in a broader location, the error shows:
+
+- Where the declaration is now
+- Which files use it
+- Which directory form is required
+- The destination directory
+
+These checks use the complete project rather than only the models selected by the current command.
+
+<Card title="Inspect a placement" icon="compass" href="/concepts/declaration-scopes/explorer">
+  Use Scope Explorer to see what a file can access or preview moving the file.
+</Card>

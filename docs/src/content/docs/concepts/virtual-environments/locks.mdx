@@ -1,0 +1,57 @@
+---
+title: "Locks"
+description: "Advisory locks for concurrent access control."
+---
+
+Virtual mode uses advisory locks with TTL to prevent concurrent operations from conflicting. Locks are stored in the state database and are scoped to specific resources.
+
+## Lock types
+
+| Lock key | Protects | Acquired by |
+|----------|----------|-------------|
+| `virtual_env:<name>` | VDE pointer set and views | build, promote, rollback, reconcile, adopt, detach |
+| `model_version:<model>:<hash>` | Physical version creation | build (per model version) |
+| `state_migration` | State schema changes | state init, migrate, rollback, reset |
+
+Different VDEs can be locked concurrently. Two builds targeting different VDEs do not block each other.
+
+## Lock behavior
+
+- Locks have an expiry time (`expires_at`). Active locks are those where `expires_at > now`.
+- When a lock is successfully released, the lock row is deleted.
+- Acquiring a lock over an expired lock replaces it.
+- Owner identity is checked on release - only the owner that acquired the lock can release it.
+
+## When locks block
+
+If a lock is active and an operation requires it, the operation fails immediately with a clear error:
+
+```
+error[S014]: virtual environment 'dev' is locked
+```
+
+The operation does not wait or retry. This is intentional - SQLBuild does not implement lock queuing. If a lock is active, either wait for the holding operation to complete or clear the lock manually.
+
+## Inspecting locks
+
+List active locks:
+
+```bash
+sqb state locks
+```
+
+## Clearing stuck locks
+
+If a process crashed while holding a lock, the lock may remain active until it expires. To clear it immediately:
+
+```bash
+sqb state locks clear virtual_env:dev --force
+```
+
+Only clear locks when you are certain the holding operation is no longer running. Clearing a lock while the operation is still active can cause state corruption.
+
+## Lock expiry
+
+Locks are acquired with a TTL (typically 10 minutes for VDE locks). If an operation takes longer than the TTL, the lock expires and another operation can acquire it. This is a safety net against abandoned locks, not a normal operating condition.
+
+If operations consistently exceed the lock TTL, the TTL may need to be increased in a future configuration option.

@@ -2,9 +2,11 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightLlmsTxt from 'starlight-llms-txt';
 import { sqlbuildDark, sqlbuildLight } from './src/code-themes.mjs';
+import { redirects, sidebar } from './src/navigation.mjs';
 
 export default defineConfig({
 	site: 'https://docs.sqlbuild.com',
+	redirects,
 	integrations: [
 		starlight({
 			title: 'SQLBuild',
@@ -53,11 +55,7 @@ export default defineConfig({
 					borderColor: 'var(--sqb-line)',
 				},
 			},
-			sidebar: [
-				{ label: 'Getting Started', items: ['index', 'quickstart'] },
-				{ label: 'Concepts', items: ['concepts/interpolation', { label: 'Models', items: ['concepts/models/contracts'] }] },
-				{ label: 'CLI Reference', items: ['cli/plan'] },
-			],
+			sidebar,
 			plugins: [
 				starlightLlmsTxt({
 					projectName: 'SQLBuild',

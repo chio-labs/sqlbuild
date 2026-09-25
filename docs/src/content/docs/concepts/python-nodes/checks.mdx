@@ -1,0 +1,116 @@
+---
+title: "Checks"
+description: "Validate tasks, assets, and loaders with Python checks."
+---
+
+Checks are Python nodes that validate other Python nodes. They are the Python analog of SQL [audits](/concepts/audits): audits validate SQL relations, checks validate the output of tasks, assets, and loaders. See [Python Nodes](/concepts/python-nodes/overview) for the shared model.
+
+Checks are separate graph nodes, not callbacks embedded in a task or asset. A check declares what it validates through `depends_on`.
+
+## Defining a check
+
+Place Python files under `checks/` and decorate functions with `@check`. `depends_on` is required:
+
+```python
+# checks/orders.py
+from sqlbuild.checks import check, CheckContext
+from tasks.orders import export_orders
+
+
+@check(depends_on=export_orders)
+def check_orders_exported(ctx: CheckContext):
+    result = ctx.result_of(export_orders)
+    if result.metadata.get("rows", 0) == 0:
+        return ctx.fail("no orders exported")
+    return ctx.pass_("orders exported")
+```
+
+The check receives a `CheckContext` and reads its dependencies' persisted results with `ctx.result_of(...)`.
+
+## Results
+
+Return a result through the context helpers, or a bool shorthand:
+
+```python
+@check(depends_on=orders_asset)
+def rows_present(ctx):
+    return ctx.result_of(orders_asset).payload["rows"] > 0   # True -> pass, False -> fail
+```
+
+| Return | Meaning |
+|--------|---------|
+| `ctx.pass_(message=None, metadata=None)` | Passing |
+| `ctx.fail(message, metadata=None)` | Failing, using the check's severity |
+| `ctx.warn(message, metadata=None)` | Warning, regardless of severity |
+| `True` | Pass |
+| `False` | Fail |
+
+Returning `None` is not allowed - checks must be explicit.
+
+## Severity
+
+`@check` takes a `severity` of `error` (default) or `warn`:
+
+```python
+@check(depends_on=export_orders, severity="warn")
+def orders_freshness(ctx):
+    if stale():
+        return ctx.fail("export is stale")   # recorded as a warning, does not fail the build
+    return ctx.pass_()
+```
+
+- `error` (default) - a failing check fails `sqb build`.
+- `warn` - a failing check is reported but does not fail the build.
+
+`ctx.warn(...)` always produces a warning regardless of the declared severity.
+
+## What checks can depend on
+
+- Checks may depend on **tasks, assets, and loaders**.
+- Checks may **not** depend on SQL models, sources, seeds, or functions. Use SQL [audits](/concepts/audits) to validate SQL relations.
+- Checks may **not** depend on other checks.
+- Checks may **not** depend on a terminal source loader directly. Validate loaded source data with a source audit instead.
+
+A check that depends on a single node is displayed grouped under that node. Multi-dependency checks are shown as standalone validation nodes, grouped by `group`, tags, or path.
+
+## Decorator parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `depends_on` | Required. Tasks/assets/loaders to validate (function, tuple, or list) |
+| `name` | Override the node name (defaults to the function name) |
+| `severity` | `error` (default) or `warn` |
+| `tags` | Labels for selection and grouping |
+| `group` | Display/catalog grouping |
+| `description` | Docs (defaults to docstring) |
+| `meta` | Freeform JSON metadata |
+
+Checks do not support `columns`, `column_lineage`, or `retry`.
+
+## Running checks
+
+Checks run automatically during `sqb build` when their Python dependencies run. They are skipped when `--no-audits` is passed. To run checks on their own, use [`sqb check`](/cli/check):
+
+```bash
+# Run all checks
+sqb check
+
+# Run a specific check (and its required dependencies)
+sqb check --select +check_orders_exported
+
+# Run checks by tag
+sqb check --select tag:exports
+```
+
+`sqb check` rejects selecting non-check nodes; use `sqb build` to run tasks and assets. Check results are written to `target/run/checks/python_checks.json`, and `sqb check --json` prints them to stdout.
+
+## Checks vs audits
+
+| | Checks | Audits |
+|---|--------|--------|
+| Validates | Python tasks, assets, loaders | SQL relations |
+| Authored in | `checks/` (Python) | `MODEL()` headers / `audits/` (SQL) |
+| Run by | `sqb build`, `sqb check` | `sqb build`, `sqb audit` |
+| Severity | `error`, `warn` | `error`, `warn` |
+
+`sqb build` runs both. `sqb audit` runs SQL audits only; `sqb check` runs Python checks only.

@@ -1,0 +1,104 @@
+---
+title: "Python Hooks"
+description: "Define Python lifecycle hooks with runtime context, providers, SQL access, and skips."
+---
+
+Python hooks run model lifecycle logic that needs Python control flow, providers, warehouse queries, logging, or explicit skip decisions.
+
+For shared lifecycle ordering, failure timing, naming, and identity rules, see the [Hooks overview](/concepts/models/hooks).
+
+## Define a Python hook
+
+SQLBuild discovers decorated functions recursively from `.py` files under `hooks/python/`:
+
+**`hooks/python/notifications.py`**
+
+```python
+from sqlbuild.hooks import hook
+
+
+@hook
+def notify_complete(ctx, channel="#data-builds"):
+    ctx.log(
+        f"Notify {channel}: "
+        f"{ctx.model_name} completed during {ctx.phase}"
+    )
+```
+
+By default, the hook name is the function name. The decorator accepts optional `name` and `description` arguments. A Python file may define multiple decorated hooks.
+
+Files named `__init__.py` or beginning with `_` are skipped. Imported decorated functions are not registered again from the importing module.
+
+## Invoke a Python hook
+
+Reference the hook by name and optionally pass keyword arguments:
+
+```sql
+MODEL (
+  materialized table,
+  post_hooks [
+    python(
+      "notify_complete",
+      channel: "#model-alerts",
+    ),
+  ],
+);
+
+SELECT 1 AS id
+```
+
+Python hook arguments are ordinary configuration values and are not SQL-expanded. An argument containing `@@CTX:...` or `@macro()` reaches the function unchanged.
+
+## Signature validation
+
+Unknown hooks, unknown keyword arguments, missing required arguments, required positional-only arguments, and arguments that conflict with context or provider injection fail compilation. A function with `**kwargs` can accept additional configured arguments.
+
+Python hooks must return `None` or `ctx.skip(...)`. Any other return value fails execution.
+
+## Hook context
+
+Python hooks declare a `HookContext` parameter named `ctx`, `context`, `_ctx`, or `hook_context`. It need not be the first parameter when providers or configured arguments are also present:
+
+| Field | Description |
+|-------|-------------|
+| `ctx.model_name` | Model being built |
+| `ctx.phase` | `pre_hooks` or `post_hooks` |
+| `ctx.hook_name` | Invoked hook name |
+| `ctx.hook_index` | Zero-based position in the authored hook list |
+| `ctx.run_id` | Current run ID |
+| `ctx.target` | Active target |
+| `ctx.vars` | Effective project variables |
+| `ctx.destination` | Destination relation metadata |
+| `ctx.adapter_name` | Active adapter name |
+| `ctx.adapter` | Adapter instance |
+| `ctx.connection` | Live connection |
+| `ctx.execute_sql(sql)` | Execute SQL |
+| `ctx.query(sql)` | Execute SQL and return rows |
+| `ctx.log(message)` | Write run output |
+| `ctx.skip(reason="...", mode="soft")` | Return a soft or hard skip result; arguments are keyword-only |
+| `ctx.providers` | Access discovered [providers](/concepts/python-nodes/providers) |
+
+## Providers
+
+Providers may be injected into Python hook parameters by name or accessed through `ctx.providers`. They are resolved lazily using the same lifecycle as loaders, tasks, assets, and checks. SQL hooks cannot use providers because they are compiled SQL statements rather than Python callables.
+
+```python
+from sqlbuild.hooks import hook
+
+
+@hook
+def notify_complete(ctx, slack_notifier):
+    slack_notifier.send(
+        f"Model {ctx.model_name} built successfully"
+    )
+```
+
+## Skips and failures
+
+Returning `ctx.skip(...)` stops the remaining hooks in the current phase. Runtime exceptions fail that lifecycle phase. See [Lifecycle and failure timing](/concepts/models/hooks#lifecycle-and-failure-timing) for the effects of pre-hook and post-hook skips, soft and hard modes, and failures after warehouse mutation.
+
+## Identity and diagnostics
+
+Python hook invocations and version hashes participate in model identity as described in [Names and identity](/concepts/models/hooks#names-and-identity). Executed hooks also record their own fingerprints after successful completion or an explicit skip.
+
+Compilation reports unknown hooks and invalid signatures with the model name and indexed invocation label, such as `post_hooks[1] python("notify_complete")`. Runtime output preserves the authored index and hook name. Exceptions and unsupported return values fail with the Python hook identity attached.

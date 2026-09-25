@@ -1,0 +1,62 @@
+---
+title: "BigQuery"
+description: "BigQuery adapter configuration for SQLBuild."
+---
+
+BigQuery requires the optional `google-cloud-bigquery` dependency:
+
+```bash
+pip install 'sqlbuild[bigquery]'
+# or
+uv pip install 'sqlbuild[bigquery]'
+```
+
+## Connection config
+
+```toml
+adapter = "bigquery"
+default_target = "dev"
+
+[connections.gcp]
+project = "my-gcp-project"
+location = "europe-west2"
+
+[targets.dev]
+connection = "gcp"
+database = "my-gcp-project"
+schema = "analytics_dev"
+```
+
+| Field | Description |
+|-------|-------------|
+| `project` | GCP project ID (required) |
+| `location` | BigQuery dataset location - a region (`europe-west2`, `us-east1`) or multi-region (`US`, `EU`) |
+| `credentials_path` | Path to a service account JSON key file. If omitted, uses Application Default Credentials (ADC). |
+
+## Authentication
+
+BigQuery supports two authentication methods:
+
+**Application Default Credentials (default):** Uses the credentials from `gcloud auth application-default login` or the environment's service account. No config needed beyond `project`.
+
+**Service account file:**
+
+```toml
+[connections.gcp]
+project = "my-gcp-project"
+credentials_path = "/path/to/service-account.json"
+```
+
+## Typed constants
+
+BigQuery renders typed constant arrays with bracket syntax, objects as native JSON expressions, and exact decimals as `NUMERIC` expressions. For example:
+
+```sql
+['GB', 'FR', 'HK']
+JSON '{"GB":"Great Britain"}'
+NUMERIC '2.4700'
+```
+
+BigQuery does not support arrays of arrays. A nested list or set requested with `render_as array` fails at compile time rather than producing invalid BigQuery SQL. Parenthesized `value_list` rendering remains available for ordinary scalar collections used with `IN`.
+
+See [Collections and Rendering](/concepts/constants/collections-and-rendering#native-array-rendering) for declarations, rendering precedence, and the cross-adapter matrix.

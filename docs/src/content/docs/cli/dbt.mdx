@@ -1,0 +1,81 @@
+---
+title: "sqb dbt"
+description: "Coordinate dbt and SQLBuild projects."
+sidebar:
+  label: "dbt"
+---
+
+Orchestrate dbt and SQLBuild together. Each subcommand runs dbt first, then SQLBuild, with selection logic across both project graphs. dbt remains responsible for dbt-owned models; SQLBuild validates and executes SQLBuild-owned models downstream. See [Using SQLBuild with dbt](/concepts/dbt-compatibility/overview) for scope and selection behavior.
+
+## sqb dbt plan
+
+Preview combined dbt and SQLBuild work without executing.
+
+```bash
+sqb dbt plan [--select <selector>...] [--exclude <selector>...] [--json] [--verbose]
+```
+
+Shows which dbt models will run, which SQLBuild models will run, and the dbt/SQLBuild commands that would be executed.
+
+## sqb dbt run
+
+Run dbt models first, then SQLBuild models.
+
+```bash
+sqb dbt run [--select <selector>...] [--exclude <selector>...]
+```
+
+## sqb dbt build
+
+Build dbt models first (including dbt tests), then SQLBuild models with audits.
+
+```bash
+sqb dbt build [--select <selector>...] [--exclude <selector>...]
+```
+
+## sqb dbt debug
+
+Run dbt diagnostics followed by SQLBuild diagnostics.
+
+```bash
+sqb dbt debug [--no-connection]
+```
+
+## Selectors
+
+All `sqb dbt` commands accept `--select` and `--exclude`. Selectors work across both dbt and SQLBuild:
+
+```bash
+# SQLBuild model with dbt dependencies
+sqb dbt build --select downstream_orders
+
+# Full upstream chain including dbt
+sqb dbt build --select +downstream_orders
+
+# Downstream of modified dbt models
+sqb dbt build --select state:modified+
+
+# SQLBuild models by tag
+sqb dbt build --select tag:nightly
+
+# SQLBuild models by path
+sqb dbt build --select path:models/marts
+
+# Exclude by tag
+sqb dbt build --select fact_orders+ --exclude tag:nightly
+```
+
+See [Selection](/concepts/dbt-compatibility/selection) for full details on how selectors route work between dbt and SQLBuild.
+
+## Configuration
+
+Configure the dbt project location in `sqlbuild_project.toml`:
+
+```toml
+[dbt]
+project_dir = "../dbt_project"
+profiles_dir = "../profiles"
+target_path = "../dbt_project/target"
+```
+
+See [Project Configuration](/concepts/project-configuration#dbt) for all fields.

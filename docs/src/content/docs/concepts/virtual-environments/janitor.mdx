@@ -1,0 +1,73 @@
+---
+title: "Janitor"
+description: "Cleanup of virtual environment artifacts and retention policies."
+---
+
+The janitor manages cleanup of virtual mode artifacts: expired VDEs, old checkpoints, unreferenced physical versions, stale state backups, and expired locks. All cleanup runs through `sqb janitor` with preview and confirmation.
+
+## Physical version protection
+
+Physical version relations are never deleted while referenced by:
+
+- Any active (non-detached) VDE's current refs
+- Any retained checkpoint's refs
+
+The janitor resolves the complete set of protected physical relations before considering any deletions.
+
+## Checkpoint retention
+
+Checkpoints are retained according to `[janitor] max_checkpoints` (default: 20):
+
+```toml
+[janitor]
+max_checkpoints = 20
+```
+
+Values below 1 are rejected. Checkpoint creation never prunes history - pruning is janitor-only, behind preview and confirmation.
+
+When old checkpoints are pruned, physical versions that were protected only by those checkpoints become eligible for deletion in the same janitor run (if not protected by active VDE refs or remaining checkpoints).
+
+## Expired VDE cleanup
+
+Non-active, non-detached VDEs older than `[janitor] retention_days` are pruned:
+
+```toml
+[janitor]
+retention_days = 30
+```
+
+Active/default VDEs are always protected. This catches abandoned PR preview VDEs that were never promoted or cleaned up.
+
+## Detached VDE cleanup
+
+Detached VDEs (created by `sqb state detach`) are eligible for cleanup after `retention_days`:
+
+- `retention_days = 0` makes them eligible immediately
+- Refs, function refs, and VDE row are deleted
+- Checkpoint rows remain governed by checkpoint retention
+- Physical versions newly unprotected by removed refs can be deleted in the same run
+
+Active VDE refs continue to protect physical versions even when detached refs are pruned.
+
+## State cleanup
+
+The janitor also prunes state-only artifacts:
+
+- **Migration backups**: old backup schemas are deleted, but the latest backup is always preserved
+- **Expired locks**: lock rows with `expires_at` in the past are deleted; active locks are never touched
+
+## Execution order
+
+The janitor drops warehouse physical versions before pruning state rows. If a warehouse drop fails, the corresponding state refs are preserved so the janitor can retry on the next run.
+
+## Usage
+
+```bash
+# Preview what would be cleaned
+sqb janitor
+
+# Execute cleanup with confirmation
+sqb janitor --auto-approve
+```
+
+The janitor shows a preview of all candidates (checkpoints, VDEs, physical versions, state items) and requires confirmation before executing any destructive operations.

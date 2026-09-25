@@ -1,0 +1,161 @@
+---
+title: "sqb dag"
+description: "Generate the static DAG artifact for Dagster and other integrations."
+sidebar:
+  label: "dag"
+---
+
+Compiles the project and outputs the static DAG artifact. The artifact contains every node (source, seed, model, function), dependency edge, and check (test, audit, scenario) in your project as structured JSON. It is the bridge between SQLBuild and external orchestrators like Dagster.
+
+This artifact describes resource dependencies, not column-level lineage. Use [`sqb lineage`](/cli/lineage) to inspect or export column traces.
+
+## Usage
+
+```bash
+sqb --project-dir <path> dag [flags]
+```
+
+## Flags
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Print the full DAG artifact as JSON to stdout |
+| `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
+| `--vars` | JSON object of project variable overrides |
+
+Without `--json`, the command prints a summary:
+
+```
+DAG ready (24 nodes, 18 edges, 15 checks)
+```
+
+## Generating via compile
+
+You can also generate the DAG artifact as part of a compile:
+
+```bash
+# Write to default location (target/sqlbuild_dag.json)
+sqb compile --dag
+
+# Write to a specific path
+sqb compile --dag target/my_dag.json
+```
+
+This is useful when you want to compile and generate the DAG in one step. The `SqlBuildProject.prepare()` method in the Dagster integration uses this path.
+
+## Output format
+
+The JSON artifact has this structure:
+
+```json
+{
+  "version": 1,
+  "project_name": "waffle_shop",
+  "nodes": [...],
+  "edges": [...],
+  "checks": [...]
+}
+```
+
+### Nodes
+
+Each node represents a source, seed, model, or function:
+
+```json
+{
+  "id": "model:fact_orders",
+  "kind": "model",
+  "name": "fact_orders",
+  "asset_key": ["dev", "fact_orders"],
+  "target": {
+    "database": null,
+    "schema": "dev",
+    "name": "fact_orders",
+    "qualified_name": "dev.fact_orders"
+  },
+  "path": "models/marts/fact_orders.sql",
+  "description": "Order fact table with waffle and payment details.",
+  "tags": ["marts"],
+  "columns": [
+    {"name": "order_id", "type": "INTEGER"},
+    {"name": "customer_id"}
+  ],
+  "materialization_type": "table"
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `id` | Unique identifier (`{kind}:{name}`) |
+| `kind` | `source`, `seed`, `model`, or `function` |
+| `name` | Resource name |
+| `asset_key` | Tuple used as the Dagster asset key (typically `[schema, name]` or `[database, schema, name]`) |
+| `target` | Warehouse identity (database, schema, name, qualified_name) |
+| `path` | Relative file path in the project |
+| `description` | Model or source description, if declared |
+| `tags` | Model tags |
+| `columns` | Column metadata (name, type, nullable, description) |
+| `materialization_type` | For models: `view`, `table`, `incremental`, or custom name |
+| `language` | For functions: `sql` or `python` |
+| `return_kind` | For functions: `scalar` or `table` |
+| `arguments` | For functions: argument name and type pairs |
+
+### Edges
+
+Each edge is a dependency between two nodes:
+
+```json
+{
+  "from_id": "model:stg_orders",
+  "to_id": "model:fact_orders"
+}
+```
+
+### Checks
+
+Each check represents a test, audit, or scenario:
+
+```json
+{
+  "id": "audit:not_null:model:fact_orders:order_id",
+  "kind": "audit",
+  "name": "not_null",
+  "checked_asset_ids": ["model:fact_orders"],
+  "path": "audits/generic/not_null.sql",
+  "severity": "error",
+  "attached_target_name": "fact_orders",
+  "attached_column_name": "order_id"
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `id` | Unique check identifier |
+| `kind` | `sql_test`, `audit`, or `scenario` |
+| `name` | Check name |
+| `checked_asset_ids` | Node IDs this check is attached to |
+| `path` | Relative file path |
+| `severity` | For audits: `error` or `warn` |
+| `mode` | For tests: `model`, `macro`, `udf`, or `table_fn` |
+| `assertion_names` | For scenarios: names of `__assert__` CTEs |
+| `expected_model_names` | For scenarios: names of `__expected__` models |
+| `fixture_refs` | For scenarios: names of fixture sources, refs, and seeds |
+
+## Examples
+
+```bash
+# Summary output
+sqb dag
+
+# Full JSON to stdout
+sqb dag --json
+
+# Generate as part of compile
+sqb compile --dag
+
+# Generate to a specific path
+sqb compile --dag target/sqlbuild_dag.json
+
+# Pipe to jq for inspection
+sqb dag --json | jq '.nodes | length'
+```

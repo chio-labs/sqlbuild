@@ -1,0 +1,83 @@
+---
+title: "Execution Observability"
+description: "Choose authoritative lifecycle facts, readable logs, or command-output records."
+---
+
+SQLBuild keeps execution facts separate from human output. Do not parse terminal text to determine
+whether work started, completed, failed, skipped, or retried.
+
+| Record | Purpose | Authority |
+|--------|---------|-----------|
+| `LifecycleEvent` | Immutable invocation, run, resource-attempt, operation, statement, retry, and audit facts | Canonical lifecycle evidence once durably stored |
+| `DiagnosticLog` | Structured framework diagnostics | Explanatory only |
+| `stdout.log` / `stderr.log` | Exact host-local process output | Troubleshooting transcript |
+| `CommandOutputRecord` | Bounded, ANSI-free remote stdout/stderr chunks | Potentially sensitive and lossy troubleshooting data |
+| Final JSON output | End-of-command aggregate | Result projection, not event history |
+
+Human-readable CLI output remains the normal operator interface. Structured records are a separate
+contract for integrations and durable consumers.
+
+## Lifecycle envelope
+
+New events use lifecycle schema version 2:
+
+```json
+{
+  "event_id": "9fb6d899754d4bd79c703067a8d5046c",
+  "event_type": "statement_completed",
+  "schema_version": 2,
+  "producer": "sqlbuild",
+  "producer_version": "0.91.0",
+  "occurred_at": "2026-09-07T18:15:30.125000Z",
+  "invocation_id": "4cc757dd93fe466aad2a220f1e76625e",
+  "invocation_sequence": 17,
+  "run_id": "run-20260907-181500",
+  "resource_id": "model:orders",
+  "resource_attempt_id": "97933c4aa29441cda133641345515e20",
+  "operation_id": "c978e47367494051bdde68ad03e56db4",
+  "statement_id": "5113ebc5afe247eb9c41dc0b27ef1a9a",
+  "external_context": {
+    "integration": {
+      "name": "dagster",
+      "run_id": "dagster-run-1",
+      "job_name": "daily_models",
+      "step_key": "sqlbuild_assets",
+      "retry_number": 0,
+      "partition_key": "2026-09-07"
+    }
+  },
+  "payload": {
+    "adapter": "snowflake",
+    "duration_ms": 318.4,
+    "query_id": "01b6f1c2-0000-0000-0000-000000000000",
+    "sql_digest": "881b77b00a75e07936d7f20ea308a55e9ef98f2f1fd42c144a3a998d32094c1b"
+  }
+}
+```
+
+`event_id` is the immutable deduplication identity. `invocation_sequence` is unique and increasing
+in synchronous publication order within one invocation, including concurrent workers. A sink may
+prioritize delivery, so consumers reconstruct invocation chronology by sorting this field rather
+than relying on arrival timestamps.
+
+Schema-version-1 events remain readable. Unknown event names and future schema versions are retained
+as opaque envelopes instead of being assigned invented semantics.
+
+## Correlation and privacy
+
+Every fact has an invocation ID. Nested IDs identify a run, logical resource and attempt, non-SQL
+operation, and SQL statement. Orchestrators may provide bounded JSON-compatible
+`external_context`; the Dagster integration supplies run, job, step, retry, and partition values
+when its execution context exposes them.
+
+Lifecycle payloads exclude full SQL, parameter values, credentials, arbitrary user messages, and
+raw process output. Command output and local logs can contain sensitive data and require an explicit
+retention and access policy.
+
+## Failure semantics
+
+A start without a terminal fact is unknown or presumed lost. Consumers must not fabricate success
+or failure. Sink delivery is bounded and best effort; destination failure does not change successful
+warehouse work, and successful delivery does not prove the command succeeded.
+
+See [Typed Sinks](/concepts/observability/sinks) to export lifecycle and command-output records.

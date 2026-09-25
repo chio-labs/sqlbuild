@@ -1,0 +1,72 @@
+---
+title: "Selection"
+description: "How select and exclude flags route work across the dbt and SQLBuild graphs."
+---
+
+The `sqb dbt` commands use `--select` and `--exclude` to scope what runs. Selectors work across both dbt and SQLBuild, with the system determining which side owns each selector and how to route work.
+
+## SQLBuild-recognized selectors
+
+These selectors match SQLBuild models directly:
+
+| Selector | Example | Behavior |
+|----------|---------|----------|
+| Model name | `fact_orders` | Selects that SQLBuild model. Auto-includes its immediate dbt upstream dependencies. |
+| Leading `+` | `+fact_orders` | Selects the model plus walks upstream through both SQLBuild and dbt models. |
+| Trailing `+` | `fact_orders+` | Selects the model plus all downstream SQLBuild models. |
+| Both `+` | `+fact_orders+` | Full upstream (including dbt) and downstream expansion. |
+| Tag | `tag:nightly` | Selects all SQLBuild models with that tag. Auto-includes dbt dependencies. |
+| Tag with `+` | `+tag:nightly` | Tag match plus upstream expansion through the combined graph. |
+| Path | `path:models/marts` | Selects SQLBuild models under that project-relative directory - the same syntax as dbt's `path:` selector. |
+| Path with `+` | `+path:models/marts` | Path match plus upstream/downstream expansion. |
+
+When a SQLBuild model is selected, its immediate dbt upstream dependencies are always included so dbt can build the tables that SQLBuild models read from.
+
+## dbt-only selectors
+
+Selectors that SQLBuild does not recognize (like `state:modified`, `package:stripe`, `source:stripe.charges`) are passed to `dbt ls` to resolve:
+
+| Selector | Example | Behavior |
+|----------|---------|----------|
+| Without `+` | `state:modified` | dbt-only work. No SQLBuild models selected. |
+| With trailing `+` | `state:modified+` | SQLBuild runs `dbt ls` to find which dbt models match, then walks downstream into SQLBuild territory. |
+| With both `+` | `+state:modified+` | Same downstream expansion, plus upstream dbt expansion. |
+
+This means you can use dbt-native selectors like `state:modified+` to trigger rebuilds of SQLBuild models that depend on changed dbt models. If `dbt ls` returns no matching models, no SQLBuild work is triggered.
+
+## Exclude
+
+`--exclude` removes matching SQLBuild models from the final selection:
+
+```bash
+sqb dbt build --select fact_orders+ --exclude tag:nightly
+```
+
+## Examples
+
+```bash
+# Build a specific SQLBuild model and its dbt dependencies
+sqb dbt build --select downstream_orders
+
+# Build everything downstream of a SQLBuild model
+sqb dbt build --select downstream_orders+
+
+# Build a SQLBuild model with full upstream dbt chain
+sqb dbt build --select +downstream_orders
+
+# Build SQLBuild models downstream of modified dbt models
+sqb dbt build --select state:modified+
+
+# Build all SQLBuild models tagged "nightly" with their dbt dependencies
+sqb dbt build --select tag:nightly
+
+# Build SQLBuild models under a path
+sqb dbt build --select path:models/marts
+```
+
+## Execution order
+
+For `sqb dbt run` and `sqb dbt build`:
+
+1. **dbt runs** - a single `dbt run/build` command executes with the user's selectors merged with any additional dbt models required by selected SQLBuild models
+2. **SQLBuild runs** - selected SQLBuild models execute against the now-built dbt tables

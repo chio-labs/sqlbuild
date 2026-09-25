@@ -1,0 +1,97 @@
+---
+title: "Enums"
+description: "Define a fixed set of named string or integer values and use them safely in SQL."
+---
+
+import Card from '../../../components/mintlify/Card.astro';
+import CardGroup from '../../../components/mintlify/CardGroup.astro';
+
+Enums give a name to a fixed set of allowed values. SQLBuild checks the enum and every member
+reference during compilation, then renders the selected value as a safe SQL literal.
+
+## Create an enum
+
+Put project-wide enums under the top-level `enums/` directory. Files are discovered recursively, so
+subdirectories can organize a large enum library without changing where the enums are available.
+
+```text
+my_project/
+├── enums/
+│   ├── fulfillment/
+│   │   └── fulfillment_method.sql
+│   └── order_status.sql
+├── models/
+└── sqlbuild_project.toml
+```
+
+```sql
+-- enums/fulfillment/fulfillment_method.sql
+ENUM (
+  name fulfillment_method,
+  members [DELIVERY, PICKUP, SHIPPING],
+);
+```
+
+The shorthand above uses each member name as its string value. Use explicit values when the name
+used in SQLBuild should differ from the stored value:
+
+```sql
+ENUM (
+  name source,
+  members (
+    WEB "web",
+    PARTNER "partner",
+  ),
+);
+```
+
+Integer enums always use explicit values:
+
+```sql
+ENUM (
+  name priority,
+  members (LOW 1, HIGH 3),
+);
+```
+
+## Use an enum member
+
+Reference one member with `@enum("name").MEMBER`:
+
+```sql
+SELECT *
+FROM orders
+WHERE fulfillment_method = @enum("fulfillment_method").DELIVERY
+  AND source = @enum("source").WEB
+```
+
+SQLBuild validates the enum name and member name before the query runs. The active adapter safely
+renders the underlying string or integer value.
+
+Enum references work in model queries, SQL hooks, SQL functions, audits, unit tests, scenarios, and
+inline source expressions.
+
+## Validation rules
+
+- An enum must contain at least one member.
+- Every member must use the same value type: all strings or all integers.
+- Enum names and member names must be SQL identifiers.
+- Member names must be uppercase and lookup is case-sensitive.
+- Enum names must be unique across all public enums in the project.
+- Project-wide names cannot begin with `_`; that prefix is reserved for model-private values.
+
+Invalid declarations, unknown enums, and unknown members fail compilation.
+
+## More enum features
+
+<CardGroup cols={2}>
+  <Card title="Enum Model Contracts" icon="shield-check" href="/concepts/enums/model-contracts">
+    Use an enum as a portable model-column domain and generate accepted-value validation.
+  </Card>
+  <Card title="Model-Private Values" icon="lock" href="/concepts/model-private-values">
+    Keep an enum inside one model when no other resource should use it.
+  </Card>
+</CardGroup>
+
+To limit an enum to one folder, or to that folder and its child folders, see
+[Declarations and Scopes](/concepts/declaration-scopes).

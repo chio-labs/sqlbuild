@@ -1,0 +1,71 @@
+---
+title: "Reconcile"
+description: "Diagnose and repair drift between state and warehouse."
+---
+
+Reconcile detects and repairs inconsistencies between the virtual state store and the actual warehouse objects.
+
+## Report
+
+Run reconcile without a subcommand to get a diagnostic report:
+
+```bash
+sqb reconcile --virtual-env dev
+```
+
+This inspects the VDE's refs, checks that logical views exist and point to the expected physical relations, and reports any issues without changing anything.
+
+## Repair view
+
+Recreate a logical VDE view from trusted state:
+
+```bash
+sqb reconcile repair-view --virtual-env dev --model fact_orders
+```
+
+This runs `CREATE OR REPLACE VIEW` for the logical VDE view, pointing it at the physical version relation recorded in the VDE's refs. It is idempotent - running it when the view is already correct is a no-op.
+
+### Guards
+
+| Condition | Behavior |
+|-----------|----------|
+| Logical target is a table (not a view) | Blocks. Drop the table manually first, then retry. |
+| Physical relation is missing | Blocks. Rebuild the model with `sqb build --select <model>`. |
+| Target VDE is locked | Blocks. Wait or clear the lock. |
+
+No confirmation is needed. The command is explicit and idempotent.
+
+## Attach
+
+Rebind a VDE model ref to a different tracked physical relation:
+
+```bash
+sqb reconcile attach --virtual-env dev --model fact_orders \
+  --physical-relation dev__sqb_physical.fact_orders__v_8f3a9c12
+```
+
+This updates the VDE ref for `fact_orders` to point at the specified physical relation and refreshes the logical view.
+
+### Guards
+
+| Condition | Behavior |
+|-----------|----------|
+| Physical relation not tracked in state | Blocks. Only physical relations registered in SQLBuild state can be attached. |
+| Physical relation tracked for a different model | Blocks. Cannot attach a relation that belongs to another model. |
+| Logical target is a table (not a view) | Blocks. |
+| Target VDE is locked | Blocks. |
+| Wrong confirmation | Blocks. Refs remain unchanged. |
+
+Attach requires confirmation by default. Type the confirmation text when prompted, or cancel to leave refs unchanged.
+
+## When to use reconcile
+
+- **Missing logical views** after a failed build, promotion, or detach - use `repair-view`
+- **Wrong physical version** if a VDE ref was corrupted or you need to manually override which version a model points to - use `attach`
+- **Diagnostic inspection** before or after recovery operations - use the default report
+
+Reconcile records events in the `reconcile_events` state table for audit trail.
+
+## Limitations
+
+Reconcile repairs pointer/view state. It does not rebuild physical versions. If a physical relation is missing from the warehouse, the only remedy is rebuilding the model with `sqb build --select <model>`.

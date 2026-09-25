@@ -1,0 +1,278 @@
+---
+title: "Scenarios"
+description: "End-to-end tests that build real project graphs against coherent fixture data."
+---
+
+Scenarios are end-to-end tests for coherent slices of your warehouse. You define fixture inputs, SQLBuild builds the real project graph against them in isolated physical relations, and you assert that the result is correct.
+
+## When to use scenarios vs unit tests
+
+[SQL unit tests](/concepts/testing) compile to a single comparison query. They are fast, inline, and work well for checking individual model transformations. But when you need to test across many models with related entities - customers that have orders, orders that have payments, refunds that reference original orders - a single query can become unwieldy or hit SQL size limits.
+
+Scenarios materialize physical relations in the warehouse and build the actual model graph. This means:
+
+- Fixture inputs are real tables, not CTEs inside one query
+- Models execute with real SQL, real materializations, and real dependency ordering
+- You can test end-to-end business logic across an entire pipeline slice
+- Debugging is easier because you can inspect intermediate tables with `--retain`
+
+Use unit tests for transformation logic. Use scenarios for coherent end-to-end validation.
+
+## Authoring scenarios
+
+Scenario files live under `tests/scenarios/` and use one file per scenario:
+
+```
+tests/
+  scenarios/
+    revenue/
+      daily_revenue_minimal.sql
+      daily_revenue_multi_order.sql
+    fulfillment/
+      fulfillment__late_shipment.sql
+```
+
+Folders are organizational only. The scenario name is the filename stem and must be globally unique across all discovered scenario files.
+
+### Scenario format
+
+Each file has a `SCENARIO()` header followed by CTEs that define inputs, expected outputs, and assertions:
+
+```sql
+SCENARIO (
+  description "Daily revenue includes only successful payments",
+  tags ["revenue", "example"]
+);
+
+WITH
+__ref__stg_orders AS (
+  SELECT
+    1 AS order_id, 10 AS customer_id, 1 AS waffle_type_id,
+    2 AS quantity, CAST('2026-04-01 09:15:00' AS TIMESTAMP) AS ordered_at,
+    'completed' AS status
+),
+
+__ref__stg_payments AS (
+  SELECT
+    1 AS payment_id, 1 AS order_id, 1700 AS amount_cents,
+    'credit_card' AS payment_method,
+    CAST('2026-04-01 09:16:00' AS TIMESTAMP) AS paid_at,
+    'success' AS payment_status
+  UNION ALL
+  SELECT
+    2 AS payment_id, 2 AS order_id, 1050 AS amount_cents,
+    'credit_card' AS payment_method,
+    CAST('2026-04-01 10:01:00' AS TIMESTAMP) AS paid_at,
+    'failed' AS payment_status
+),
+
+__expected__daily_revenue AS (
+  SELECT
+    CAST('2026-04-01' AS DATE) AS revenue_date,
+    1 AS order_count, 2 AS waffles_sold,
+    1700 AS total_revenue_cents
+),
+
+__assert__all_orders_have_payments AS (
+  SELECT *
+  FROM __ref("fact_orders")
+  WHERE payment_amount_cents IS NULL
+)
+
+SELECT 1
+```
+
+### CTE conventions
+
+| Prefix | Purpose |
+|--------|---------|
+| `__source__<name>` | Fixture source input. Materializes as a scenario table. |
+| `__ref__<model>` | Fixture model boundary. Prevents SQLBuild from building that model upstream. |
+| `__seed__<seed>` | Fixture seed data. |
+| `__expected__<model>` | Full expected output. Compared order-insensitively against the scenario-built model. |
+| `__assert__<name>` | Zero-row assertion. Passes if the query returns no rows; fails with the returned rows as diagnostics. |
+
+For sources with two-part identity, use double underscores: `__source__raw__orders`.
+
+Every scenario must have at least one fixture CTE and at least one `__expected__` or `__assert__` CTE.
+
+Scenario SQL uses macros, enums, and constants available from the scenario file's directory under
+`tests/scenarios/`. Public enums and constants available to a model are also available when the
+scenario defines `__expected__model_name` output for that model. Model-private values and macros
+available only to the model are not included. See
+[How Visibility Works](/concepts/declaration-scopes/visibility#tests-and-expected-output).
+
+### SCENARIO() header
+
+The header is metadata only:
+
+| Field | Description |
+|-------|-------------|
+| `description` | Optional description string |
+| `tags` | Optional list of string tags |
+
+## How scenarios execute
+
+### Graph inference
+
+SQLBuild infers which models to build from your scenario:
+
+1. Target models come from `__expected__<model>` CTE names and `__ref(...)` calls inside `__assert__` CTEs
+2. SQLBuild walks upstream from targets, building every required model
+3. `__ref__<model>` fixtures act as boundaries - upstream traversal stops there
+4. All required sources must be provided by `__source__` fixtures
+5. Required project seeds are loaded automatically unless overridden by `__seed__` fixtures
+
+### Isolation
+
+Scenario artifacts are physically isolated from production:
+
+- Every scenario-owned relation uses a deterministic prefixed name (based on a hash of the project and scenario identity)
+- All `ref()`, `source()`, and `seed()` calls resolve to scenario-owned relations, never production tables
+- Fixture CTEs can read from existing warehouse relations if you choose, but downstream models always read the materialized scenario fixture, not the original
+
+### Execution flow
+
+1. Clean any existing scenario artifacts from a previous run
+2. Materialize source, ref, and seed fixtures as physical tables
+3. Load required project seeds
+4. Build required models in dependency order (incremental models run as full-refresh in scenarios)
+5. Run expected-output comparisons (order-insensitive)
+6. Run zero-row assertions
+7. Clean up all scenario-owned artifacts (unless `--retain`)
+
+### Inspecting with `--retain`
+
+When a scenario fails or you want to inspect intermediate state:
+
+```bash
+sqb scenario test --select daily_revenue_minimal --retain
+```
+
+This keeps all scenario-owned relations in the warehouse and prints a relation map showing the logical-to-physical name mapping. You can then query the scenario tables directly to debug.
+
+Runtime artifacts (fixture SQL, model lifecycle SQL, check SQL, cleanup SQL) are always written to `target/run/scenarios/<scenario_name>/` regardless of `--retain`.
+
+## Local scenario testing
+
+Scenarios can run locally against DuckDB using captured JSONL snapshots - no warehouse connection needed. This is useful for CI pipelines and fast developer iteration.
+
+### Capture
+
+First, capture scenario inputs from the real warehouse:
+
+```bash
+sqb scenario capture --select daily_revenue_minimal
+```
+
+This:
+
+1. Materializes scenario input fixtures in the warehouse
+2. Runs a preflight `COUNT(*)` on each fixture to check row counts against safety limits
+3. Inspects column types and maps them to DuckDB-compatible types
+4. Downloads rows as JSONL files (enforcing byte limits during writing)
+5. Writes a `scenario.json` manifest with column metadata, types, row counts, and an input fingerprint
+6. Cleans up warehouse artifacts
+
+Snapshots are written to `tests/_scenario_snapshots/<scenario_name>/` and can be committed to version control. JSONL is human-readable and git-diffable.
+
+### Capture safety limits
+
+Capture enforces row and byte limits to prevent accidentally saving large datasets. Limits can be set in `sqlbuild_project.toml`:
+
+```toml
+[scenario.snapshot_limits]
+max_rows_per_relation = 10000
+max_total_rows = 50000
+max_bytes_per_relation = 10485760   # 10 MB
+max_total_bytes = 52428800          # 50 MB
+```
+
+Or per-command via CLI flags:
+
+```bash
+sqb scenario capture --max-snapshot-rows 5000 --max-snapshot-total-rows 20000
+sqb scenario capture --max-snapshot-bytes 5242880
+```
+
+CLI flags override TOML config. Use `--force` to bypass all limits:
+
+```bash
+sqb scenario capture --force
+```
+
+When a limit is exceeded, capture fails with a clear error and suggests narrowing the fixture query, raising the limit, or using `--force`.
+
+### Local replay
+
+Run scenarios locally against DuckDB:
+
+```bash
+sqb scenario test --local
+```
+
+This:
+
+1. Checks snapshot freshness via the input fingerprint (missing/stale snapshots are skipped by default)
+2. Creates a temporary DuckDB database at `target/run/scenarios/<scenario_name>/local.duckdb`
+3. Loads JSONL snapshots into typed DuckDB tables using column metadata from `scenario.json`
+4. Transpiles model and check SQL from the project adapter dialect to DuckDB
+5. Builds functions, models, and runs expected/assertion checks in DuckDB
+6. Keeps the local DuckDB file for inspection (it lives under `target/`, so it's always retained)
+
+### Sync snapshots
+
+Instead of running capture and test separately, sync snapshots in one command:
+
+```bash
+# Capture missing/stale snapshots, then run locally
+sqb scenario test --local --sync-snapshots
+
+# Recapture all snapshots, then run locally
+sqb scenario test --local --refresh
+```
+
+With `--sync-snapshots`, fresh snapshots are reused. With `--refresh`, all selected snapshots are recaptured even if fresh.
+
+### Strict mode
+
+By default, missing or stale snapshots are skipped with a warning. Use `--strict` to treat them as errors:
+
+```bash
+sqb scenario test --local --strict
+```
+
+### Local type overrides
+
+When the automatic warehouse-to-DuckDB type conversion produces an incompatible type, you can override it in `sqlbuild_project.toml`:
+
+```toml
+[scenario.local_type_overrides.snowflake]
+"OBJECT" = "JSON"
+"ARRAY" = "JSON"
+"NUMBER(*,0)" = "BIGINT"
+```
+
+Override keys are structural type patterns. Values can reference matched type arguments with `{1}`, `{2}`, etc:
+
+```toml
+[scenario.local_type_overrides.bigquery]
+"NUMERIC({1},{2})" = "DECIMAL({1},{2})"
+```
+
+These overrides are written into `scenario.json` during capture and used when loading snapshots into DuckDB.
+
+## Cleanup
+
+By default, remote scenario artifacts are dropped after each run (pass or fail). The janitor command also recognizes scenario artifacts and can clean retained or orphaned scenario relations:
+
+```bash
+sqb janitor
+```
+
+See the [CLI reference](/cli/scenario) for full command documentation.
+
+## Limitations
+
+- Custom materializations are not supported in scenarios yet. Scenario models using custom materializations will fail with a clear error.
+- Local replay transpiles SQL from the project adapter dialect to DuckDB. Adapter-specific SQL that cannot be translated will produce a clear error with the failing resource name and reason.

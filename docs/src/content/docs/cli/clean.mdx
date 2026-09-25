@@ -1,0 +1,16 @@
+---
+title: "sqb clean"
+description: "Remove compiled artifacts from the target directory."
+sidebar:
+  label: "clean"
+---
+
+Removes the `target/` directory containing compiled artifacts, runtime SQL recordings, and other build outputs.
+
+## Usage
+
+```bash
+sqb --project-dir <path> clean
+```
+
+No flags. This command has no confirmation prompt since it only removes local build artifacts, not warehouse data.

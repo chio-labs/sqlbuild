@@ -1,0 +1,56 @@
+---
+title: "Adding SQLBuild models"
+description: "Grow into SQLBuild's own models, tests, audits, and scenarios downstream of your dbt project."
+---
+
+The dbt compatibility bridge does not require SQLBuild models. You can optionally add SQLBuild models, tests, audits, and scenarios downstream of dbt outputs.
+
+This is purely additive. Your dbt models stay in dbt, and the layout gains a `models/` directory in the SQLBuild project.
+
+```
+my-workspace/
+  analytics/                  # your existing dbt project, untouched
+    dbt_project.yml
+    models/
+    target/
+      manifest.json
+  sqlbuild_project/           # created by SQLBuild
+    sqlbuild_project.toml
+    models/
+      marts/downstream_orders.sql   # references dbt models via __dbt_ref
+    tests/
+      unit/test_downstream_orders.sql
+```
+
+## Referencing dbt models
+
+SQLBuild models reference dbt model outputs with `__dbt_ref("package", "model")`:
+
+```sql
+MODEL (
+  tags [finance],
+  columns (order_id (audits [not_null])),
+);
+
+SELECT order_id FROM __dbt_ref("analytics", "fact_orders")
+```
+
+This resolves to the qualified warehouse table name from the dbt manifest (e.g. `analytics.fact_orders`). The dbt model becomes an upstream dependency in the combined graph, so SQLBuild models downstream of it build against its output.
+
+SQLBuild models can also reference other SQLBuild models with `__ref()` as usual:
+
+```sql
+MODEL (tags [marts]);
+
+SELECT order_id FROM __ref("downstream_orders")
+```
+
+## Tests, audits, and scenarios
+
+SQLBuild models added downstream of dbt get SQLBuild's full validation surface:
+
+- **Unit tests** can mock dbt model dependencies with `__dbt_ref__` fixture CTEs, so you can test a SQLBuild model without a warehouse connection or a compiled dbt manifest. See [Testing](/concepts/testing).
+- **Audits** declared inline in the `MODEL()` header block promotion when they fail, the same as in a standalone SQLBuild project. See [Audits](/concepts/audits).
+- **Scenarios** run the combined graph against fixture inputs for end-to-end checks. See [Scenarios](/concepts/scenarios).
+
+For the full model authoring reference (materializations, incremental strategies, contracts, and more), see [Models](/concepts/models).
