@@ -202,7 +202,8 @@ fn classify_model(ctes: Vec<Cte>, file: &str) -> Result<Classified, String> {
             authored.push(cte);
         } else if let Some(value) = name.strip_prefix("__expected__") {
             expected_models.push(required(value, "__expected__<model>", file)?);
-            validate_expected(&cte, file, "__expected__<model>", true)?;
+            let label = cte.0.clone();
+            validate_expected(&cte, file, &label, true)?;
             expected.push(cte);
         } else if let Some(value) = name.strip_prefix("__assert__") {
             assertion_names.push(required(value, "__assert__<assertion>", file)?);
@@ -431,7 +432,7 @@ fn validate_expected(
             "SQL test '{file}' must not use SELECT * in {label} CTEs"
         ));
     }
-    let branches = split_unions(&cte.1)?;
+    let branches = split_set_operations(&cte.1)?;
     let mut names: Vec<Vec<String>> = Vec::new();
     for branch in branches {
         names.push(projection_names(branch, file, label)?);
@@ -883,11 +884,15 @@ fn non_empty_trimmed(value: &str) -> Option<&str> {
     Some(value.trim()).filter(|trimmed| !trimmed.is_empty())
 }
 
-pub(crate) fn split_unions(sql: &str) -> Result<Vec<&str>, String> {
+/// Split on top-level `UNION`, `INTERSECT` and `EXCEPT`, each with an optional `ALL`/`DISTINCT`.
+pub(crate) fn split_set_operations(sql: &str) -> Result<Vec<&str>, String> {
     let mut values: Vec<&str> = Vec::new();
     let mut start = 0;
     scan_code::<()>(sql, 0, |index, depth| {
-        let Some(end) = consume_keyword(sql, index, "UNION").filter(|_| depth == 0) else {
+        if depth != 0 {
+            return Ok(CodeStep::Advance);
+        }
+        let Some(end) = set_operator_end(sql, index)? else {
             return Ok(CodeStep::Advance);
         };
         values.extend(non_empty_trimmed(&sql[start..index]));
@@ -902,6 +907,19 @@ pub(crate) fn split_unions(sql: &str) -> Result<Vec<&str>, String> {
     })?;
     values.extend(non_empty_trimmed(&sql[start..]));
     Ok(values)
+}
+
+/// Return the end of a set operator at `index`; `* EXCEPT (...)` star modifiers are not operators.
+fn set_operator_end(sql: &str, index: usize) -> Result<Option<usize>, String> {
+    if let Some(end) =
+        consume_keyword(sql, index, "UNION").or_else(|| consume_keyword(sql, index, "INTERSECT"))
+    {
+        return Ok(Some(end));
+    }
+    match consume_keyword(sql, index, "EXCEPT") {
+        Some(end) if previous_code_byte(sql, index)? != Some(b'*') => Ok(Some(end)),
+        _ => Ok(None),
+    }
 }
 
 pub(crate) fn split_top_level(sql: &str, separator: u8) -> Result<Vec<&str>, String> {

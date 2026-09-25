@@ -54,6 +54,27 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (  # n
             expected_branch_column_names=(("order_id",), ("order_id",)),
         ),
         ExtractSqlAnalysisExpectedBranchesTestCase(
+            description="parsed intersect and except return every branch in order",
+            sql=(
+                "SELECT 1 AS order_id UNION SELECT 2 AS order_id EXCEPT ALL "
+                "SELECT 3 AS other_id INTERSECT DISTINCT SELECT 4 AS extra_id"
+            ),
+            expected_branch_column_names=(
+                ("order_id",),
+                ("order_id",),
+                ("other_id",),
+                ("extra_id",),
+            ),
+        ),
+        ExtractSqlAnalysisExpectedBranchesTestCase(
+            description="fallback splits intersect and except with quantifiers",
+            sql=(
+                "SELECT 1 AS order_id; INTERSECT ALL SELECT 2 AS order_id "
+                "EXCEPT DISTINCT SELECT 3 AS other_id"
+            ),
+            expected_branch_column_names=(("order_id",), ("order_id",), ("other_id",)),
+        ),
+        ExtractSqlAnalysisExpectedBranchesTestCase(
             description="fallback defers to textual analysis when a branch cannot parse",
             sql='SELECT __udf("net_amount")(1) AS amount UNION ALL SELECT 2 AS amount',
             expected_branch_column_names=None,
@@ -88,18 +109,8 @@ def test_given_sql_analysis_available_when_extracting_expected_branches_then_it_
             expected_error_fragment="set-operation branch as a SELECT query",
         ),
         ExtractSqlAnalysisExpectedBranchesErrorTestCase(
-            description="parsed intersect is not a supported expected branch",
-            sql="SELECT 1 AS order_id INTERSECT SELECT 2 AS order_id",
-            expected_error_fragment="set-operation branch as a SELECT query",
-        ),
-        ExtractSqlAnalysisExpectedBranchesErrorTestCase(
-            description="fallback rejects intersect like the parsed path",
-            sql="SELECT 1 AS order_id; INTERSECT SELECT 2 AS order_id",
-            expected_error_fragment="set-operation branch as a SELECT query",
-        ),
-        ExtractSqlAnalysisExpectedBranchesErrorTestCase(
-            description="fallback rejects except like the parsed path",
-            sql="SELECT 1 AS order_id; EXCEPT SELECT 2 AS order_id",
+            description="fallback rejects a values branch after except",
+            sql="SELECT 1 AS order_id; EXCEPT VALUES (2)",
             expected_error_fragment="set-operation branch as a SELECT query",
         ),
         ExtractSqlAnalysisExpectedBranchesErrorTestCase(

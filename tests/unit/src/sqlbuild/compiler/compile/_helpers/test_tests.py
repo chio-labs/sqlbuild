@@ -648,7 +648,7 @@ def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_return
         __expected__orders AS (SELECT * FROM __source__raw_orders)
         SELECT 1
         """.strip(),
-            expected_error_fragment=r"must not use SELECT \* in __expected__<model> CTEs",
+            expected_error_fragment=r"must not use SELECT \* in __expected__orders CTEs",
         ),
         ExtractSqlTestCtesErrorTestCase(
             description="rejects empty fixture marker for direct logic expected output",
@@ -684,7 +684,7 @@ def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_return
         )
         SELECT 1
         """.strip(),
-            expected_error_fragment="must alias every non-trivial __expected__<model> projection",
+            expected_error_fragment="must alias every non-trivial __expected__orders projection",
         ),
         ExtractSqlTestCtesErrorTestCase(
             description="raises when non union projection alias is missing",
@@ -695,7 +695,7 @@ def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_return
         )
         SELECT 1
         """.strip(),
-            expected_error_fragment="must alias every non-trivial __expected__<model> projection",
+            expected_error_fragment="must alias every non-trivial __expected__orders projection",
         ),
         ExtractSqlTestCtesErrorTestCase(
             description="raises when expected branch is not a select query",

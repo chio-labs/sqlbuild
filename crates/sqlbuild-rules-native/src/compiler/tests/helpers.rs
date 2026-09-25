@@ -212,12 +212,98 @@ pub(crate) fn expected_projection_errors_name_the_expected_cte() -> bool {
         ),
         (
             r#"{"tests":[{"sql":"WITH __source__raw_orders AS (SELECT 1 AS id), __expected__orders AS (SELECT 1 + 1) SELECT 1","fileLabel":"tests/orders.sql","mode":"model"}]}"#,
-            "SQL test 'tests/orders.sql' must alias every non-trivial __expected__<model> projection",
+            "SQL test 'tests/orders.sql' must alias every non-trivial __expected__orders projection",
         ),
     ];
     for (request, expected_error) in cases {
         let error = extract_batch_json(request).expect_err("expected projection is rejected");
         assert_eq!(error, expected_error);
+    }
+    true
+}
+
+fn extract_expected(
+    mode: &str,
+    actual: &str,
+    expected_name: &str,
+    expected_sql: &str,
+) -> Result<String, String> {
+    let sql = format!("WITH {actual}, {expected_name} AS ({expected_sql}) SELECT 1");
+    extract_batch_json(
+        &json!({"tests": [{"sql": sql, "fileLabel": "tests/orders.sql", "mode": mode}]})
+            .to_string(),
+    )
+}
+
+pub(crate) fn set_operation_expected_ctes_validate_every_branch() -> bool {
+    let kinds = [
+        (
+            "model",
+            "__source__raw_orders AS (SELECT 1 AS order_id)",
+            "__expected__orders",
+        ),
+        (
+            "macro",
+            "__macro_actual__ AS (SELECT 1 AS order_id)",
+            "__macro_expected__",
+        ),
+        (
+            "udf",
+            "__udf_actual__ AS (SELECT 1 AS order_id)",
+            "__udf_expected__",
+        ),
+        (
+            "table_fn",
+            "__table_fn_actual__ AS (SELECT 1 AS order_id)",
+            "__table_fn_expected__",
+        ),
+    ];
+    let accepted = [
+        "SELECT 1 AS order_id INTERSECT SELECT 1 AS order_id",
+        "SELECT 1 AS order_id INTERSECT ALL SELECT 1 AS order_id",
+        "SELECT 1 AS order_id INTERSECT DISTINCT SELECT 1 AS order_id",
+        "SELECT 1 AS order_id EXCEPT SELECT 2 AS order_id",
+        "SELECT 1 AS order_id EXCEPT ALL SELECT 2 AS order_id",
+        "SELECT 1 AS order_id EXCEPT DISTINCT SELECT 2 AS order_id",
+        "SELECT 1 AS order_id UNION SELECT 2 AS order_id EXCEPT SELECT 3 AS order_id",
+        "SELECT 1 AS order_id INTERSECT /* EXCEPT */ -- UNION\n SELECT 1 AS order_id",
+    ];
+    for (mode, actual, expected_name) in kinds {
+        for expected_sql in accepted {
+            assert!(
+                extract_expected(mode, actual, expected_name, expected_sql).is_ok(),
+                "{mode}: {expected_sql}"
+            );
+        }
+        let mismatch = format!(
+            "SQL test 'tests/orders.sql' must use the same {expected_name} projection names and order in every set-operation branch; branch 2 does not match branch 1"
+        );
+        let third_mismatch = mismatch.replace("branch 2", "branch 3");
+        let not_select = format!(
+            "SQL test 'tests/orders.sql' must define each {expected_name} set-operation branch as a SELECT query"
+        );
+        let rejected = [
+            (
+                "SELECT 1 AS order_id INTERSECT SELECT 1 AS other_id",
+                &mismatch,
+            ),
+            (
+                "SELECT 1 AS order_id EXCEPT ALL SELECT 1 AS order_id, 2 AS extra",
+                &mismatch,
+            ),
+            (
+                "SELECT 1 AS order_id UNION SELECT 2 AS order_id EXCEPT SELECT 3 AS other_id",
+                &third_mismatch,
+            ),
+            ("SELECT 1 AS order_id EXCEPT VALUES (1)", &not_select),
+        ];
+        for (expected_sql, expected_error) in rejected {
+            assert_eq!(
+                extract_expected(mode, actual, expected_name, expected_sql).as_ref(),
+                Err(expected_error),
+                "{mode}: {expected_sql}"
+            );
+        }
     }
     true
 }
