@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TextIO
 
 from sqlbuild.cli.commands._helpers.build_execution.run_context import (
     write_build_run_context,
@@ -166,6 +166,9 @@ def execute_build_plan(
             providers=providers,
         ),
         callbacks=BuildCallbacks(
+            on_migration_progress=lambda message: _write_progress_line(
+                stream=invocation.progress_stream, message=message
+            ),
             on_node_start=lambda name, resource_kind: preparation.callbacks.on_node_start(
                 name=name, resource_kind=resource_kind
             ),
@@ -215,3 +218,8 @@ def execute_build_plan(
         result=result,
         python_results=preparation.python_lifecycle.python_results,
     )
+
+
+def _write_progress_line(*, stream: TextIO, message: str) -> None:
+    stream.write(f"{message}\n")
+    stream.flush()

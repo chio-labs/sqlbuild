@@ -65,6 +65,9 @@ def resolve_model_plan_action(
     if change_result.change_kind == ChangeKind.FIRST_RUN:
         return PlanAction.CREATE_TABLE, PlanReason.FIRST_RUN
 
+    if change_result.change_kind == ChangeKind.RENAMED:
+        return PlanAction.CREATE_TABLE, PlanReason.RENAMED
+
     if change_result.backfill.action == BackfillAction.FULL:
         reason: PlanReason = _backfill_reason(change_result)
         return PlanAction.CREATE_TABLE, reason
@@ -253,6 +256,8 @@ def _view_reason(*, change_result: ChangeDetectionResult, full_refresh: bool) ->
         return PlanReason.FULL_REFRESH
     if change_result.change_kind == ChangeKind.FIRST_RUN:
         return PlanReason.FIRST_RUN
+    if change_result.change_kind == ChangeKind.RENAMED:
+        return PlanReason.RENAMED
     if change_result.change_kind == ChangeKind.QUERY_CHANGED:
         return PlanReason.QUERY_CHANGED
     if change_result.change_kind == ChangeKind.CONFIG_CHANGED:

@@ -11,6 +11,7 @@ from sqlbuild.compiler.auditing.main.identity import build_audit_gate_identity
 from sqlbuild.compiler.auditing.models import AuditGateIdentity, AuditIdentity
 from sqlbuild.compiler.auditing.types import AuditOutcome, AuditSeverity
 from sqlbuild.compiler.fingerprints.constants import AUDIT_GATE_METADATA_KEY
+from sqlbuild.compiler.planner.constants import MIGRATION_FINGERPRINT_METADATA_KEY
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.run.models import (
@@ -81,6 +82,20 @@ def model_fingerprint_metadata_with_audit_gate(
         },
     )
     metadata[AUDIT_GATE_METADATA_KEY] = render_audit_gate_metadata(audit_gate)
+    return json.dumps(metadata, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def model_fingerprint_metadata_with_migration_fingerprint(
+    *, metadata_json: str, migration_fingerprint: str | None
+) -> str:
+    """Return model fingerprint metadata JSON carrying the rename-matching fingerprint."""
+
+    if migration_fingerprint is None:
+        return metadata_json
+    metadata: object = json.loads(metadata_json or "{}")
+    if not isinstance(metadata, dict):
+        return metadata_json
+    metadata[MIGRATION_FINGERPRINT_METADATA_KEY] = migration_fingerprint
     return json.dumps(metadata, sort_keys=True, separators=(",", ":"), default=str)
 
 

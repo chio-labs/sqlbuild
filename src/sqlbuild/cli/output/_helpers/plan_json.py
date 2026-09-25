@@ -98,6 +98,7 @@ def format_plan_json(
         "warnings": warnings,
         "retention": retention,
         "table_type_conversions": table_type_conversions,
+        "migrations": _serialize_model_migrations(plan),
     }
     if plan.metadata:
         result["metadata"] = plan.metadata
@@ -469,3 +470,31 @@ def _serialize_provider_usage(usage: PlanProviderUsage) -> dict[str, object]:
             "module": usage.annotation_module,
         }
     return payload
+
+
+def _serialize_model_migrations(plan: PlanOutput) -> list[dict[str, object]]:
+    return [
+        {
+            "kind": "model_migration",
+            "model": entry.model_name,
+            "discovery": entry.discovery.value,
+            "decision": entry.decision.value,
+            "compatibility": entry.compatibility.value,
+            "compatibility_findings": list(entry.compatibility_findings),
+            "origin_model": entry.origin_model,
+            "origin": entry.origin.qualified_name or entry.origin.name,
+            "destination": entry.destination.qualified_name or entry.destination.name,
+            "target": entry.target_name,
+            "origin_version_hash": entry.origin_version_hash,
+            "transfer": entry.transfer.value if entry.transfer is not None else None,
+            "transfer_fallback": (
+                entry.transfer_fallback.value if entry.transfer_fallback is not None else None
+            ),
+            "storage_transition": entry.storage_transition,
+            "promotion": entry.promotion.value if entry.promotion is not None else None,
+            "completed_at": (
+                entry.completed_at.isoformat() if entry.completed_at is not None else None
+            ),
+        }
+        for entry in plan.migration_entries
+    ]

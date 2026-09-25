@@ -142,3 +142,25 @@ class SqlServerPruneSqlTestCase:
     schema: str
     retain_versions: int
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SqlServerMigrationEventWriteTestCase:
+    description: str
+    existing_rows: tuple[tuple[object, ...], ...]
+    expected_statement_prefixes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SqlServerMigrationTableTestCase:
+    description: str
+    schema: str
+    expected_prefix: str
+    expected_suffix: str
+
+
+@dataclass(frozen=True)
+class SqlServerMigrationEventReadTestCase:
+    description: str
+    stored_created_at: object
+    expected_read_suffix: str

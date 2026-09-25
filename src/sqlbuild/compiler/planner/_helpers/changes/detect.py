@@ -183,6 +183,14 @@ def detect_model_changes(
             fingerprint_metadata_json=metadata_json,
             fingerprint_version_hash=expected_version_hash,
         )
+    if not relation_exists and model_name in snapshot.renamed_models:
+        return ChangeDetectionResult(
+            model_name=model_name,
+            change_kind=ChangeKind.RENAMED,
+            backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
+            fingerprint_metadata_json=metadata_json,
+            fingerprint_version_hash=expected_version_hash,
+        )
 
     query_changed: bool = False
     config_changed: bool = (

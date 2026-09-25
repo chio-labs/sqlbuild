@@ -38,6 +38,7 @@ from sqlbuild.compiler.compile._helpers.config.model_validation import (
     validate_custom_materialization_config,
     validate_incremental_config,
     validate_microbatch_project_capability,
+    validate_model_migration_config,
     validate_non_incremental_config,
     validate_placeholder_config,
     validate_snapshot_config,
@@ -757,6 +758,7 @@ def _validate_model_input(
         custom_materialization_names=context.custom_materialization_names,
     )
     validate_storage_policies(config=config, model_name=model_name)
+    validate_model_migration_config(config=config, model_name=model_name)
     validate_placeholder_config(
         config=config,
         model_name=model_name,

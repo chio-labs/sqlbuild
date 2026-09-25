@@ -6,6 +6,8 @@ from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecord
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditOutcome,
@@ -263,3 +265,36 @@ class FakeRelationReuseAdapter(BaseAdapter):
         del connection, destination, config, statement_recorder
         self.calls.append("create_table_as")
         self.sql = sql
+
+
+class RecordingConnection:
+    def __init__(self) -> None:
+        self.executed: list[str] = []
+
+    def execute(self, sql: str) -> None:
+        self.executed.append(sql)
+
+
+class RecordingSnowflakeAdapter(SnowflakeAdapter):
+    def _execute(self, *, connection: Any, sql: str) -> Any:
+        return connection.execute(sql)
+
+
+class RecordingPostgresAdapter(PostgresAdapter):
+    def _execute(self, *, connection: Any, sql: str) -> Any:
+        return connection.execute(sql)
+
+
+class RecordingDuckDbAdapter(DuckDbAdapter):
+    def _execute(self, *, connection: Any, sql: str) -> Any:
+        return connection.execute(sql)
+
+
+def build_recording_adapter(
+    adapter_name: str,
+) -> RecordingSnowflakeAdapter | RecordingPostgresAdapter | RecordingDuckDbAdapter:
+    return {
+        "snowflake": RecordingSnowflakeAdapter,
+        "postgres": RecordingPostgresAdapter,
+        "duckdb": RecordingDuckDbAdapter,
+    }[adapter_name]()

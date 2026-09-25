@@ -15,6 +15,7 @@ from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
     ExpressionInferenceProfile,
+    MigrationStagePlan,
     RowDiffTolerance,
     RowDiffTolerances,
     SnapshotChangeTarget,
@@ -328,6 +329,30 @@ class StrictAdapter(
         self, *, origin: str, destination: str, origin_is_transient: bool = False
     ) -> tuple[str, ...]:
         """Render SQL statements that clone/copy into a durable independent destination."""
+        ...
+
+    @abstractmethod
+    def render_migration_stage(
+        self,
+        *,
+        origin: str,
+        stage: str,
+        origin_is_transient: bool = False,
+        stage_is_transient: bool | None = None,
+    ) -> MigrationStagePlan:
+        """Render statements that create a fresh, independent stage holding the origin's data."""
+        ...
+
+    @abstractmethod
+    def capture_dependent_view_rebinds(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        """Capture statements that re-point identity-bound dependent views at this table name."""
+        ...
+
+    @abstractmethod
+    def supports_transactional_ddl(self) -> bool:
+        """Return whether renames and state inserts can commit or roll back together."""
         ...
 
     @abstractmethod
@@ -847,6 +872,11 @@ class StrictAdapter(
     @abstractmethod
     def render_create_janitor_event_table_sql(self, *, database: str | None, schema: str) -> str:
         """Render DDL that creates the janitor audit event table when it is missing."""
+        ...
+
+    @abstractmethod
+    def render_create_migration_state_table_sql(self, *, database: str | None, schema: str) -> str:
+        """Render DDL that creates the model migration event table when it is missing."""
         ...
 
     @abstractmethod

@@ -50,6 +50,7 @@ _DEFAULT_VALUES: dict[str, object] = {
     "fail_fast": False,
     "full_refresh": False,
     "virtual_env": None,
+    "as_target": None,
     "skip_locked": False,
     "include_stale_upstreams": False,
     "changes_only": False,
@@ -223,6 +224,7 @@ class CliNamespace:
     fail_fast: bool
     full_refresh: bool
     virtual_env: str | None
+    as_target: str | None
     skip_locked: bool
     include_stale_upstreams: bool
     changes_only: bool

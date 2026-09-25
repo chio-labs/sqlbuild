@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
+from sqlbuild.adapter.contract.types import MigrationTransfer
 
 
 @dataclass(frozen=True)
@@ -53,3 +54,21 @@ class AdapterRelationAgeMetadataCapabilityTestCase:
     description: str
     adapter: StrictAdapter
     expected_supported: bool
+
+
+@dataclass(frozen=True)
+class AdapterMigrationStageTestCase:
+    description: str
+    adapter: BaseAdapter
+    origin_is_transient: bool
+    stage_is_transient: bool | None
+    expected_transfer: MigrationTransfer
+    expected_statements: tuple[str, ...]
+    expected_fallback_statements: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class AdapterTransactionalDdlTestCase:
+    description: str
+    adapter: BaseAdapter
+    expected_transactional: bool

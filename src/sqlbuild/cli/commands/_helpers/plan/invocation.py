@@ -13,6 +13,7 @@ from sqlbuild.cli.commands._helpers.runtime.mode_policy import (
     enforce_no_defer_to_in_virtual_mode,
     enforce_virtual_only_flags_in_virtual_mode,
 )
+from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import (
     AdapterConnectionContext,
     PlanCommandRequest,
@@ -46,6 +47,7 @@ def resolve_plan_invocation(*, request: PlanCommandRequest) -> PlanInvocation:
         selected_target=request.selected_target,
         cli_changes_only=request.changes_only,
     )
+    _validate_preview_target(discovered_inputs=discovered_inputs, as_target=request.as_target)
     enforce_no_defer_to_in_virtual_mode(
         discovered_inputs=discovered_inputs,
         command_name="plan",
@@ -89,3 +91,23 @@ def resolve_plan_invocation(*, request: PlanCommandRequest) -> PlanInvocation:
         should_load_sources=should_load_sources,
         virtual_mode=bool(discovered_inputs.project_config.settings.virtual_environments),
     )
+
+
+def _validate_preview_target(
+    *, discovered_inputs: DiscoveredProjectInputs, as_target: str | None
+) -> None:
+    if as_target is None:
+        return
+    if discovered_inputs.project_config.settings.virtual_environments:
+        raise CliUserError(
+            "plan --as is supported only in direct mode",
+            help="Virtual environments preview other environments with --virtual-env.",
+        )
+    configured: set[str] = set(discovered_inputs.project_config.targets) | set(
+        discovered_inputs.local_config.targets
+    )
+    if as_target not in configured:
+        raise CliUserError(
+            f"unknown target '{as_target}' for plan --as",
+            help=f"Configured targets: {', '.join(sorted(configured)) or 'none'}.",
+        )

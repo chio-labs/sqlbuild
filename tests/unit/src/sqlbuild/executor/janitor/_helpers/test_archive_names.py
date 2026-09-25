@@ -111,6 +111,26 @@ def test_given_non_strict_name_when_parsing_archive_name_then_returns_none(
             expected_length=63,
             expected_logical_name_is_original=False,
         ),
+        ArchiveNameBuildTestCase(
+            description="kind segment follows the timestamp and precedes the original name",
+            original_name="orders",
+            archived_at=ARCHIVED_AT,
+            identifier_limit=255,
+            expected_prefix="_sqb_archive__20260924t101500z__migration_stage__orders",
+            expected_length=len("_sqb_archive__20260924t101500z__migration_stage__orders"),
+            expected_logical_name_is_original=False,
+            kind="migration_stage",
+        ),
+        ArchiveNameBuildTestCase(
+            description="long name is fitted after an intact kind at the postgres limit",
+            original_name=LONG_NAME,
+            archived_at=ARCHIVED_AT,
+            identifier_limit=63,
+            expected_prefix="_sqb_archive__20260924t101500z__migration_previous__fu_",
+            expected_length=63,
+            expected_logical_name_is_original=False,
+            kind="migration_previous",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -121,6 +141,7 @@ def test_given_original_name_when_building_archive_name_then_round_trips_through
         original_name=test_case.original_name,
         archived_at=test_case.archived_at,
         identifier_limit=test_case.identifier_limit,
+        kind=test_case.kind,
     )
 
     parsed: JanitorParsedArchiveName | None = parse_archive_name(archive_name)

@@ -130,6 +130,7 @@ E2E_DUCKDB_CLI_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/init \
 	tests/e2e/src/sqlbuild/cli/commands/main/rules \
 	tests/e2e/src/sqlbuild/cli/commands/main/lineage \
+	tests/e2e/src/sqlbuild/cli/commands/main/model_migrations \
 	tests/e2e/src/sqlbuild/cli/commands/main/motherduck \
 	tests/e2e/src/sqlbuild/cli/commands/main/playground \
 	tests/e2e/src/sqlbuild/cli/commands/main/postgres \

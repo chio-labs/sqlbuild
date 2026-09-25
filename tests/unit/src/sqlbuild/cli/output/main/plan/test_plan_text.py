@@ -898,6 +898,30 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
             ),
         ),
         FormatPlanTestCase(
+            description="error-severity diagnostics render under an errors heading",
+            plan_output=build_plan_output(
+                warnings=(
+                    build_warning(
+                        model_name="stg_customer_orders",
+                        message="migrate_from origin main.stg_orders does not exist",
+                        severity=WarningSeverity.ERROR,
+                        code="M102",
+                    ),
+                    build_warning(
+                        model_name="stg_customers",
+                        message="type change detected",
+                        severity=WarningSeverity.WARNING,
+                    ),
+                ),
+            ),
+            expected_fragments=(
+                "Errors (1)\n└── stg_customer_orders\n"
+                "    └── migrate_from origin main.stg_orders does not exist",
+                "Warnings (1)\n└── stg_customers\n    └── type change detected",
+            ),
+            unexpected_fragments=("Warnings (2)",),
+        ),
+        FormatPlanTestCase(
             description="multiline warning messages terminate their child tree",
             plan_output=build_plan_output(
                 warnings=(

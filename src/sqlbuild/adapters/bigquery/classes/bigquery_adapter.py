@@ -46,6 +46,7 @@ from sqlbuild.adapter.contract.models import (
     ExpressionInferenceProfile,
     FunctionDefinition,
     FunctionInfo,
+    MigrationStagePlan,
     QueryResult,
     RelationInfo,
     RenderedRetentionChange,
@@ -73,6 +74,7 @@ from sqlbuild.adapter.contract.types import (
     HistoricalSnapshotCloseStyle,
     HistoricalSnapshotInsertStyle,
     LoaderLogicalType,
+    MigrationTransfer,
     PromotionStrategy,
     RetentionChangePhase,
     RetentionScope,
@@ -93,6 +95,7 @@ from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
 from sqlbuild.adapter.type_system.main.first_arg_nullability import first_arg_nullability
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
+from sqlbuild.adapters.bigquery._helpers.clone_refusal import is_bigquery_clone_refusal
 from sqlbuild.adapters.bigquery._helpers.statement_telemetry import affected_rows
 from sqlbuild.adapters.bigquery.classes.bigquery_connection import _BigQueryConnection
 from sqlbuild.adapters.bigquery.classes.bigquery_cursor import _BigQueryCursor
@@ -315,6 +318,18 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
 
         return build_janitor_events_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        )
+
+    def render_create_migration_state_table_sql(self, *, database: str | None, schema: str) -> str:
+        from sqlbuild.compiler.migrations.main.create_table_sql import (
+            build_migration_state_create_table_sql,
+        )
+
+        return build_migration_state_create_table_sql(
             database=database,
             schema=schema,
             render_qualified_name=self.render_qualified_name,
@@ -1711,6 +1726,33 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"CREATE TABLE {self._quote_identifier_path(destination)} "
             f"CLONE {self._quote_identifier_path(origin)}",
         )
+
+    def render_migration_stage(
+        self,
+        *,
+        origin: str,
+        stage: str,
+        origin_is_transient: bool = False,
+        stage_is_transient: bool | None = None,
+    ) -> MigrationStagePlan:
+        del origin_is_transient, stage_is_transient
+        quoted_stage: str = self._quote_identifier_path(stage)
+        quoted_origin: str = self._quote_identifier_path(origin)
+        return MigrationStagePlan(
+            transfer=MigrationTransfer.CLONE,
+            statements=(f"CREATE TABLE {quoted_stage} CLONE {quoted_origin}",),
+            fallback_statements=(f"CREATE TABLE {quoted_stage} COPY {quoted_origin}",),
+            is_clone_refusal=is_bigquery_clone_refusal,
+        )
+
+    def capture_dependent_view_rebinds(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        del connection, database, schema, name
+        return ()
+
+    def supports_transactional_ddl(self) -> bool:
+        return False
 
     def render_seed_select_before_cursor(
         self,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from sqlbuild.compiler.fingerprints.constants import AUDIT_GATE_METADATA_KEY
+from sqlbuild.compiler.planner.constants import MIGRATION_FINGERPRINT_METADATA_KEY
 
 
 def version_identity_metadata_payload(metadata_json: str | None) -> object:
@@ -20,4 +21,5 @@ def version_identity_metadata_payload(metadata_json: str | None) -> object:
         return None
     identity_payload: dict[str, object] = dict(payload)
     identity_payload.pop(AUDIT_GATE_METADATA_KEY, None)
+    identity_payload.pop(MIGRATION_FINGERPRINT_METADATA_KEY, None)
     return identity_payload

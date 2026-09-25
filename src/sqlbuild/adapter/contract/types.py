@@ -35,6 +35,19 @@ class PromotionStrategy(StrEnum):
     ATOMIC_REPLACE = "atomic_replace"
 
 
+class MigrationTransfer(StrEnum):
+    """How a model migration stage receives the origin's data."""
+
+    CLONE = "clone"
+    COPY = "copy"
+
+    @property
+    def label(self) -> str:
+        """Return the human-readable plan label for this transfer."""
+
+        return "zero-copy clone" if self == MigrationTransfer.CLONE else "physical copy"
+
+
 class TablePromotionMode(StrEnum):
     IMMEDIATE = "immediate"
     STAGED = "staged"

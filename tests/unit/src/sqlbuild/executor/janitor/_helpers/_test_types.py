@@ -28,6 +28,7 @@ class ArchiveNameBuildTestCase:
     expected_prefix: str
     expected_length: int
     expected_logical_name_is_original: bool
+    kind: str | None = None
 
 
 @dataclass(frozen=True)
