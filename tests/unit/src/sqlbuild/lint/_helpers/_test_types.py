@@ -158,16 +158,6 @@ class DialectNeutralizeInterpolationTestCase:
 
 
 @dataclass(frozen=True)
-class MapOffsetTestCase:
-    """Test case for neutralized-to-original offset mapping."""
-
-    description: str
-    body: str
-    neutralized_offset: int
-    expected_original_offset: int
-
-
-@dataclass(frozen=True)
 class RestoreInterpolationTestCase:
     """Test case for restoring sentinels after native formatting."""
 

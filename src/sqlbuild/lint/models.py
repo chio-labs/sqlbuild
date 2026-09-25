@@ -96,18 +96,6 @@ class FormatChange:
 
 
 @dataclass(frozen=True)
-class LintFixRecord:
-    """One applied or skipped lint repair for human and machine reporting."""
-
-    file_path: Path
-    code: str
-    line: int
-    column: int
-    status: str
-    reason: str | None = None
-
-
-@dataclass(frozen=True)
 class LintConfig:
     """Resolved lint and format configuration for one run."""
 
@@ -144,34 +132,6 @@ class LintRunResult:
     def warnings(self) -> tuple[LintViolation, ...]:
         """Return violations with warning severity."""
 
-        return tuple(
-            violation
-            for violation in self.violations
-            if violation.severity == VIOLATION_SEVERITY_WARNING
-        )
-
-
-@dataclass(frozen=True)
-class FixRunResult:
-    """Aggregated result of planning or applying native lint repairs."""
-
-    files_checked: int
-    violations: tuple[LintViolation, ...]
-    changed_files: tuple[Path, ...]
-    changes: tuple[FormatChange, ...]
-    fixes: tuple[LintFixRecord, ...]
-    source_texts: Mapping[Path, str] = field(default_factory=dict, repr=False, compare=False)
-
-    @property
-    def faults(self) -> tuple[LintViolation, ...]:
-        return tuple(
-            violation
-            for violation in self.violations
-            if violation.severity == VIOLATION_SEVERITY_FAULT
-        )
-
-    @property
-    def warnings(self) -> tuple[LintViolation, ...]:
         return tuple(
             violation
             for violation in self.violations

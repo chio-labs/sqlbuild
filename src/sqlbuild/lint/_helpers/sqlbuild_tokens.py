@@ -243,22 +243,6 @@ def sentinel_spans(*, sites: tuple[InterpolationSite, ...]) -> tuple[ExpansionSp
     return tuple(spans)
 
 
-def map_neutralized_offset(*, offset: int, sites: tuple[InterpolationSite, ...]) -> int:
-    """Map an offset in neutralized text back onto the authored body."""
-
-    mapped: int = offset
-    site: InterpolationSite
-    for site in sites:
-        if offset < site.neutralized_start:
-            break
-        if offset < site.neutralized_end:
-            return site.original_start
-        mapped += (site.original_end - site.original_start) - (
-            site.neutralized_end - site.neutralized_start
-        )
-    return mapped
-
-
 def _interpolation_site_end(*, body: str, start: int, backtick_identifiers: bool) -> int | None:
     character: str = body[start]
     if character == MACRO_TOKEN:

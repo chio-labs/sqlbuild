@@ -6,7 +6,6 @@ import pytest
 
 import sqlbuild._native as _native
 from sqlbuild.lint._helpers.sqlbuild_tokens import (
-    map_neutralized_offset,
     neutralize_interpolation,
     restore_interpolation,
 )
@@ -14,7 +13,6 @@ from sqlbuild.lint.exceptions import InterpolationRestorationError
 from sqlbuild.lint.models import InterpolationSite
 from tests.unit.src.sqlbuild.lint._helpers._test_types import (
     DialectNeutralizeInterpolationTestCase,
-    MapOffsetTestCase,
     NeutralizeInterpolationTestCase,
     RestoreFailureTestCase,
     RestoreInterpolationTestCase,
@@ -246,51 +244,6 @@ def test_given_many_sites_when_neutralizing_then_every_sentinel_is_distinct(
     assert neutralized == test_case.expected_neutralized
     sentinels: tuple[str, ...] = tuple(site.sentinel for site in sites)
     assert len(set(sentinels)) == len(test_case.expected_original_texts)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        MapOffsetTestCase(
-            description="offset before any site is unchanged",
-            body="SELECT @a FROM t",
-            neutralized_offset=0,
-            expected_original_offset=0,
-        ),
-        MapOffsetTestCase(
-            description="offset at a sentinel start maps to the interpolation start",
-            body="SELECT @a FROM t",
-            neutralized_offset=7,
-            expected_original_offset=7,
-        ),
-        MapOffsetTestCase(
-            description="offset inside a sentinel clamps to the interpolation start",
-            body="SELECT @a FROM t",
-            neutralized_offset=12,
-            expected_original_offset=7,
-        ),
-        MapOffsetTestCase(
-            description="offset after a sentinel is shifted back by the length delta",
-            body="SELECT @a FROM t",
-            neutralized_offset=22,
-            expected_original_offset=10,
-        ),
-        MapOffsetTestCase(
-            description="offset after two sentinels accumulates both deltas",
-            body="SELECT @a, @b FROM t",
-            neutralized_offset=39,
-            expected_original_offset=15,
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_neutralized_offset_when_mapping_then_authored_offset_matches(
-    test_case: MapOffsetTestCase,
-) -> None:
-    sites: tuple[InterpolationSite, ...]
-    _neutralized, sites = neutralize_interpolation(body=test_case.body, dialect="generic")
-    mapped: int = map_neutralized_offset(offset=test_case.neutralized_offset, sites=sites)
-    assert mapped == test_case.expected_original_offset
 
 
 @pytest.mark.parametrize(

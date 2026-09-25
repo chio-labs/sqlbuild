@@ -31,12 +31,6 @@ class _PreparedBody:
     interpolation_sites: tuple[InterpolationSite, ...]
 
 
-def newline_style(*, contents: str) -> str:
-    """Return the newline convention used by the authored contents."""
-
-    return CARRIAGE_RETURN_LINE_FEED if CARRIAGE_RETURN_LINE_FEED in contents else LINE_FEED
-
-
 def with_newline_style(*, contents: str, newline: str) -> str:
     """Normalize generated contents back to the authored newline convention."""
 
