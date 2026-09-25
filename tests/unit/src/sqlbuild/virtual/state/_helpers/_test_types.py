@@ -45,7 +45,6 @@ class StateLockServiceTestCase:
     ttl: timedelta
     expected_virtual_environment_lock_key: str
     expected_model_version_lock_key: str
-    expected_state_migration_lock_key: str
 
 
 @dataclass(frozen=True)

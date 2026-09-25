@@ -152,7 +152,6 @@ class VirtualBuildPipelineResult:
     """Result returned by the virtual build pipeline."""
 
     project: CompiledProject
-    direct_plan_output: PlanOutput
     display_plan_output: PlanOutput
     execution_plan: PlanOutput
     execution_result: BuildExecutionResult

@@ -168,24 +168,6 @@ def guard_partial_rollback_scope(
     return tuple(sorted({*selected_model_names, *stale_upstream_set})), final_version_hashes
 
 
-def read_model_versions(
-    *,
-    backend: Any,
-    state_connection: Any,
-    schema: str,
-    refs: tuple[VirtualEnvironmentModelRefRecord, ...],
-) -> dict[str, Any]:
-    return {
-        ref.model_name: backend.get_model_version(
-            connection=state_connection,
-            schema=schema,
-            model_name=ref.model_name,
-            version_hash=ref.version_hash,
-        )
-        for ref in refs
-    }
-
-
 def read_physical_relations(
     *,
     backend: Any,

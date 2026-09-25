@@ -374,7 +374,6 @@ def run_virtual_build(
 
     return VirtualBuildPipelineResult(
         project=rewritten.project,
-        direct_plan_output=plan.plan_output,
         display_plan_output=plan.plan_output,
         execution_plan=plan.executor_plan_output,
         execution_result=result,
