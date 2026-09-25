@@ -1,0 +1,69 @@
+---
+title: "Promotion"
+description: "Promote VDE refs and diff virtual environments."
+---
+
+Promotion copies model version refs from one VDE to another and refreshes the target's logical views. No models are rebuilt - it is a pointer swap.
+
+## Basic usage
+
+```bash
+sqb promote --from pr_123 --to dev
+```
+
+This updates VDE `dev` to point at the same physical versions that VDE `pr_123` uses. The target's logical views (`dev__dev.*` or `dev.*` if unsuffixed) are refreshed to point at the promoted physical relations.
+
+## What happens during promotion
+
+1. Target VDE lock is acquired
+2. Source VDE is validated (finalized, current with workspace)
+3. Source model refs are copied to target VDE refs
+4. Source function refs are copied and function definitions are republished in the target schema
+5. Target logical VDE views are refreshed
+6. A checkpoint is created if the target is finalized
+7. Target VDE lock is released
+
+## Partial promotion
+
+Promote a subset of models with `--select`:
+
+```bash
+sqb promote --from pr_123 --to dev --select fact_orders
+```
+
+Partial promotion can leave the target VDE with stale downstream models - models that still point at older versions than the promoted scope expects. When this happens, promotion is blocked by default so you don't accidentally leave the target in a working state.
+
+To accept a working target, pass `--allow-partial-promotion`:
+
+```bash
+sqb promote --from pr_123 --to dev --select fact_orders --allow-partial-promotion
+```
+
+The target VDE is marked `working` after the promotion. You can finalize it later by promoting or building the remaining models.
+
+If the models you select depend on upstream models that are themselves stale in the source, the promoted scope would not be coherent on its own. Pass `--include-stale-upstreams` to expand the selection to include the minimal set of required upstream models:
+
+```bash
+sqb promote --from pr_123 --to dev --select fact_orders --include-stale-upstreams
+```
+
+## Source VDE requirements
+
+**Whole promotion** requires the source VDE to be finalized and current with the workspace (no stale models vs current code). If the source VDE has been built but the code has since changed, you need to rebuild the source VDE first or use partial promotion.
+
+**Partial promotion** does not require a finalized source. A working source VDE is allowed when using `--select` for a coherent scope.
+
+## Guards
+
+| Condition | Behavior |
+|-----------|----------|
+| Source VDE not finalized (whole promotion) | Blocks. Use `--select` for partial promotion from a working source. |
+| Source VDE has stale models vs workspace | Blocks. Rebuild the source VDE or use `--select`. |
+| Target VDE is locked | Blocks. Wait or clear the lock with `sqb state locks clear`. |
+| Target VDE is detached | Blocks. Detached VDEs cannot be promoted to. |
+| Source VDE is detached | Blocks. Detached VDEs cannot be promoted from. |
+| Partial promotion leaves target working | Blocks unless `--allow-partial-promotion` is set. |
+
+## Comparing VDEs before promotion
+
+Use `sqb diff` to compare VDE ref sets before promoting. See [Diff](/docs/concepts/virtual-environments/diff) for details.

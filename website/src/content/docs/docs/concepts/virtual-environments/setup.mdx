@@ -1,0 +1,174 @@
+---
+title: "Setup"
+description: "Configure virtual environments and initialize the state store."
+---
+
+Virtual environments require two things: `virtual_environments = true` in your project settings, and a state store configured for your active target.
+
+## Project configuration
+
+```toml
+name = "my_project"
+adapter = "duckdb"
+default_target = "dev"
+
+[settings]
+virtual_environments = true
+
+[connections.local]
+database = "warehouse.duckdb"
+
+[targets.dev]
+connection = "local"
+schema = "dev"
+
+[targets.dev.state]
+backend = "duckdb"
+schema = "sqlbuild_state"
+
+[targets.dev.state.connection]
+database = "state.duckdb"
+```
+
+The `virtual_environments` setting switches the project from direct mode (default) to virtual mode. All state, plan, build, promote, rollback, and reconcile commands route through the virtual path when this is enabled.
+
+## State configuration
+
+Each physical target that uses virtual mode needs a `[targets.<name>.state]` block:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `backend` | Yes | State store engine: `duckdb` or `postgres` |
+| `schema` | Yes | Schema name for state tables |
+| `connection` | Yes | Backend-specific connection config |
+| `allow_reset` | No | Whether `sqb state reset` is permitted (default: `false`) |
+| `unsuffixed_virtual_env` | No | VDE name that uses the base schema without a suffix (for [adopt/detach](/docs/concepts/virtual-environments/adopt-detach)) |
+
+### DuckDB state backend
+
+```toml
+[targets.dev.state]
+backend = "duckdb"
+schema = "sqlbuild_state"
+
+[targets.dev.state.connection]
+database = "state.duckdb"
+```
+
+DuckDB state stores are file-based. Relative paths are resolved against the project directory. Suitable for local development and single-user workflows. Not recommended when multiple processes or CI jobs need concurrent state access.
+
+### Postgres state backend
+
+```toml
+[targets.prod.state]
+backend = "postgres"
+schema = "sqlbuild_state"
+
+[targets.prod.state.connection]
+host = "state-db.internal"
+port = 5432
+user = "sqlbuild_state"
+password = "${ENV:STATE_DB_PASSWORD}"
+dbname = "sqlbuild_state"
+```
+
+Postgres is recommended for production. It supports concurrent access from multiple developers or CI jobs.
+
+## State initialization
+
+Before using virtual commands, initialize the state store:
+
+```bash
+sqb state init
+```
+
+This creates the state tables in the configured schema. Run it once per physical target.
+
+## State lifecycle
+
+| Command | Description |
+|---------|-------------|
+| `sqb state init` | Create state tables |
+| `sqb state migrate` | Back up current state and re-initialize tables |
+| `sqb state rollback` | Restore from the latest backup |
+| `sqb state rollback --backup-id <id>` | Restore from a specific backup |
+| `sqb state reset --auto-approve` | Drop all state tables (requires `allow_reset = true`) |
+
+`state migrate` creates a backup schema (e.g. `sqlbuild_state__backup_<id>`) before re-initializing. This lets you roll back if a migration causes problems.
+
+`state reset` is destructive and requires both `allow_reset = true` in config and `--auto-approve` on the command line.
+
+## Local overrides
+
+Use `sqlbuild_local.toml` to override state connection config per developer:
+
+```toml
+[targets.dev.state.connection]
+database = "local-state.duckdb"
+```
+
+This is useful when each developer uses a local state file while the project config points to a shared state database.
+
+## Per-target state
+
+Different physical targets can use different state backends:
+
+```toml
+[targets.dev.state]
+backend = "duckdb"
+schema = "sqlbuild_state"
+
+[targets.dev.state.connection]
+database = "state.duckdb"
+
+[targets.prod.state]
+backend = "postgres"
+schema = "sqlbuild_state"
+
+[targets.prod.state.connection]
+host = "prod-state.internal"
+dbname = "sqlbuild_state"
+```
+
+Each physical target has its own state store. VDEs are scoped to their physical target and cannot be promoted or compared across different physical targets.
+
+## Unsuffixed VDE naming
+
+By default, all VDE logical views use a suffixed schema: `dev__kevin.fact_orders`. For the primary VDE that consumers query directly (e.g. the production VDE), you typically want clean unsuffixed names: `dev.fact_orders`.
+
+Configure this with `unsuffixed_virtual_env`:
+
+```toml
+[targets.dev.state]
+backend = "duckdb"
+schema = "sqlbuild_state"
+unsuffixed_virtual_env = "dev"
+
+[targets.dev.state.connection]
+database = "state.duckdb"
+```
+
+With this config, VDE `dev` uses `dev.fact_orders` while other VDEs like `kevin` use `dev__kevin.fact_orders`.
+
+This setting is also required for [adopt and detach](/docs/concepts/virtual-environments/adopt-detach) operations so that existing consumer queries continue to work after migrating to virtual mode.
+
+## Janitor configuration
+
+When using virtual environments, configure the janitor to run periodically to clean up expired VDEs, old checkpoints, and unreferenced physical versions:
+
+```toml
+[janitor]
+enabled = true
+retention_days = 30
+max_checkpoints = 20
+```
+
+See [Janitor](/docs/concepts/virtual-environments/janitor) for details on what gets cleaned up and how retention works.
+
+## State tables
+
+The state store contains current-state tables and append-only history tables. You do not need to interact with these directly, but understanding what is stored helps when debugging:
+
+**Current state:** `state_versions`, `model_versions`, `function_versions`, `physical_relations`, `physical_relation_ancestry`, `virtual_environments`, `virtual_environment_refs`, `virtual_environment_function_refs`, `virtual_environment_checkpoints`, `virtual_environment_checkpoint_refs`, `virtual_environment_checkpoint_function_refs`, `locks`, `state_operations`
+
+**History:** `plan_runs`, `virtual_environment_ref_events`, `reconcile_events`, `state_migration_events`, `state_operation_events`

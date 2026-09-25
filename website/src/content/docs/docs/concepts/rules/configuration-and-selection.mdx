@@ -1,0 +1,76 @@
+---
+title: "Configuration and selection"
+description: "Select built-in and custom Rules by exact code or family prefix."
+---
+
+import Card from '../../../../../components/mintlify/Card.astro';
+
+Configure built-in and custom Rules together:
+
+```toml
+[rules]
+select = ["SQBRSQL", "SQBRGRAPH", "XSQBRARCH"]
+ignore = ["SQBRSQL004"]
+```
+
+An empty `select` disables configurable Rules. It does not disable mandatory compiler correctness.
+
+## Codes and families
+
+Built-in codes use `SQBR<FAMILY><three digits>`, such as `SQBRSQL004`, `SQBRMODEL101`, and
+`SQBRGRAPH101`. Custom codes use `XSQBR<optional uppercase family><three digits>`, such as
+`XSQBRARCH001`.
+
+A family is always the code with its final three digits removed:
+
+```text
+SQBRSQL004    → SQBRSQL
+XSQBRARCH001  → XSQBRARCH
+XSQBR001      → XSQBR
+```
+
+Exact codes select one Rule. Prefixes select every matching Rule. `ignore` uses the same matching
+semantics and takes precedence over `select`.
+
+Use the catalogue to inspect available codes and metadata:
+
+```bash
+sqb rules list
+sqb rules show SQBRSQL004
+```
+
+## Rule options
+
+Built-in and Custom Rules can declare typed options. Configure them by exact code:
+
+```toml
+[rules.rule_options.XSQBRNAME001]
+required_prefix = "order"
+
+[rules.rule_options.SQBRTEST203]
+allowed_tests = ["customers__reviewed_empty_input"]
+```
+
+`SQBRTEST203` (`empty-input-only-test`) accepts `allowed_tests`, a list of SQL test names that are
+reviewed exceptions. Listed tests are not flagged and still count toward `SQBRTEST202`'s
+`min_tests_per_model`. Entries that name no existing test are reported as stale. See
+[Empty-input tests](/docs/concepts/testing#empty-input-tests).
+
+Unknown Rule codes, option names, and invalid option values fail configuration.
+
+## Focused selection
+
+Run one exact Rule or family while developing or adopting it:
+
+```bash
+sqb rules run SQBRSQL004
+sqb rules run SQBRSQL
+sqb rules run XSQBRARCH --select customer_orders
+```
+
+Focused execution constructs the compiler facts needed by the selected Rules. It does not replace
+the complete configured enforcement performed by `sqb compile`.
+
+<Card title="CLI reference" icon="terminal" href="/docs/cli/rules">
+  See every `sqb rules` command and exit code.
+</Card>

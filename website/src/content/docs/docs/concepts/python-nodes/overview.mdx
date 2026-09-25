@@ -1,0 +1,162 @@
+---
+title: "Overview"
+description: "Tasks, assets, loaders, and checks as first-class nodes in the SQLBuild graph."
+---
+
+Python nodes let your project grow beyond warehouse-only SQL while keeping the SQL graph clean. They are ordinary Python functions, decorated to become nodes in the same DAG as your SQL models, and they run as part of `sqb build`.
+
+There are four kinds, authored in dedicated top-level folders:
+
+| Kind | Decorator | Folder | Purpose |
+|------|-----------|--------|---------|
+| Loader | `@loader` | `loaders/` | Load external data into a managed source |
+| Task | `@task` | `tasks/` | Run Python computation or side effects |
+| Asset | `@asset` | `assets/` | Produce or observe an external artifact |
+| Check | `@check` | `checks/` | Validate tasks, assets, and loaders |
+
+All four share the same decorator conventions, dependency model, selection syntax, and runtime context helpers. The pages for each kind cover their specifics:
+
+- [Loaders](/docs/concepts/python-nodes/loaders) - load data into managed sources
+- [Tasks](/docs/concepts/python-nodes/tasks) - Python computation and side effects
+- [Assets](/docs/concepts/python-nodes/assets) - external artifacts
+- [Checks](/docs/concepts/python-nodes/checks) - Python validations
+- [Factories](/docs/concepts/python-nodes/factories) - generate nodes programmatically with `@factory`
+- [SQL references](/docs/concepts/python-nodes/sql-references) - read SQL models and sources from Python
+
+Nodes can also be generated programmatically with [`@factory`](/docs/concepts/python-nodes/factories) instead of authored one at a time.
+
+## The SQL boundary
+
+The most important rule: **SQL models never depend on Python nodes.** The dependency direction is strictly one way.
+
+- SQL models depend only on other SQL resources (models, sources, seeds, functions).
+- Python nodes may depend on other Python nodes.
+- The only way Python data reaches SQL is through a **loader populating a source**: `loader -> source -> model`.
+- Python nodes may **read** SQL models and sources at runtime through typed references (see [SQL references](/docs/concepts/python-nodes/sql-references)), but reading a model does not make it a SQL dependency.
+
+This keeps the SQL graph fully analyzable and testable on its own, while letting Python participate around the edges.
+
+```
+            depends_on
+  task ----------------> task
+   |                       |
+   | (read only)           v
+   |                     asset
+   v                       |
+ source <-- loader         | check (validates tasks/assets/loaders)
+   |
+   v
+ model (SQL) ----> model (SQL)
+```
+
+## Decorators
+
+Every decorator accepts the same organizational metadata:
+
+| Argument | Description |
+|----------|-------------|
+| `depends_on` | A single function, tuple, or list of upstream nodes (and, where allowed, `model()`/`source()` references) |
+| `tags` | Labels for selection, filtering, and catalog grouping |
+| `group` | A display/catalog grouping string |
+| `description` | Human-readable docs (defaults to the function docstring) |
+| `meta` | Freeform JSON metadata for catalogs and integrations |
+
+`@task` and `@asset` also accept a `retry` policy. `@asset` additionally accepts `columns` and `column_lineage`. Node kind is inferred from the decorator - you never pass `kind=`.
+
+## Identity tracking
+
+Every Python node is fingerprinted by source code hash, decorator config hash, and transitive dependency hashes (scoped to the git root, so third-party package updates don't affect identities). The plan shows source and dependency diffs when a node's identity changes, giving you visibility into what changed in your Python code.
+
+Unlike SQL models, Python nodes may depend on external inputs the framework cannot observe (APIs, files, third-party services). Skip/run decisions are therefore user-controlled via `ctx.skip()`: the node's own logic decides whether it needs to run. See [Planning and Change Detection](/docs/concepts/planning#python-nodes) for details.
+
+## Runtime context
+
+Each node receives a context object as its first argument (`TaskContext`, `AssetContext`, `CheckContext`, or `LoaderContext`). They share these helpers:
+
+| Helper | Description |
+|--------|-------------|
+| `ctx.run_id` | Unique identifier for this run |
+| `ctx.target` | Active target name |
+| `ctx.vars` | Project variables |
+| `ctx.is_reload` | `True` when `--reload` was passed |
+| `ctx.adapter` / `ctx.connection` | Adapter and live connection |
+| `ctx.log(message)` | Log to the run output |
+| `ctx.query(sql)` / `ctx.execute_sql(sql)` | Run SQL on the connection |
+| `ctx.qualify_name(name)` | Qualify a relation name |
+| `ctx.relation(ref)` | Resolve a declared `model()`/`source()` reference to a relation |
+| `ctx.result_of(node_fn)` | Read the latest persisted result of an upstream node (current or previous run) |
+| `ctx.results_of(node_fn, limit=N)` | Read the last N successful results of an upstream node, newest first |
+| `ctx.providers` | Access discovered [providers](/docs/concepts/python-nodes/providers) by name |
+
+Task and asset contexts add `ctx.result(...)` and `ctx.skip(...)`. Check contexts add `ctx.pass_(...)`, `ctx.fail(...)`, and `ctx.warn(...)`.
+
+Providers can also be injected directly as function parameters by name. See [Providers](/docs/concepts/python-nodes/providers) for details.
+
+## Returns and skips
+
+Tasks and assets return through `ctx.result(...)`:
+
+```python
+@task
+def export_orders(ctx):
+    return ctx.result(payload={"rows": 120}, metadata={"rows": 120})
+```
+
+- A plain value or `None` is also accepted and normalized to a successful result.
+- `ctx.skip(reason, mode=...)` skips the node. `mode` accepts `"soft"` (default, skips only this node) or `"hard"` (also blocks dependents), as a string or the `SkipMode` enum from `sqlbuild.tasks`/`sqlbuild.assets`.
+- Assets may pass `materialized=True`/`False` to record whether an artifact was produced.
+
+Downstream nodes run only if at least one upstream succeeded. If all upstreams are skipped, the downstream is skipped. A failed or hard-skipped upstream blocks its dependents.
+
+## Result persistence
+
+Node results (payload, metadata, status, errors) are persisted after each execution. In direct mode, results are stored in `_sqlbuild_node_results` in the warehouse alongside your data. In virtual mode, results are stored in the VDE state backend scoped per environment. Results persist across runs, so they are available for observability, debugging, and downstream consumption.
+
+## Selection
+
+Python nodes are selected like SQL resources, by bare name or typed selector:
+
+```bash
+sqb build --select export_orders          # bare name
+sqb build --select task:export_orders      # typed
+sqb build --select asset:orders_export
+sqb build --select check:check_orders
+sqb build --select tag:exports             # by tag
+sqb build --select +orders_export           # with upstreams
+```
+
+Names are globally unique across models, sources, seeds, functions, loaders, tasks, assets, checks, providers, and hooks.
+
+## Lifecycle: run, build, check
+
+Python nodes run in two phases relative to SQL:
+
+- **Ingress (pre-SQL):** loaders, and tasks/assets that feed sources, run before SQL models are built.
+- **Read-side (post-SQL):** tasks/assets that read SQL run after their SQL dependencies are built.
+
+The commands differ in what they include by default:
+
+| Command | SQL | Loaders / tasks / assets | Checks | Audits |
+|---------|-----|--------------------------|--------|--------|
+| `sqb build` | Yes | Yes | Yes | Yes |
+| `sqb build --no-tests --no-audits` | Yes | Yes | No | No |
+| `sqb check` | No | No | Selected checks only | No |
+
+- `sqb build` is the complete build-and-validate command: it runs SQL, the required Python nodes, SQL audits, and Python checks.
+- `sqb build --no-tests --no-audits` executes the DAG without validation, for fast iteration.
+- `sqb check` runs Python checks only. See [`sqb check`](/docs/cli/check).
+
+Use `--no-python` on `plan` and `build` to suppress read-side tasks/assets. Loader-side Python required to populate selected sources still runs (use `--no-load` to skip source loading). See the [`sqb build`](/docs/cli/build) reference.
+
+## Try it
+
+The `python_nodes` playground is a small working project with a task, loader, model, asset, and check:
+
+```bash
+sqb playground --template python_nodes
+cd sqlbuild-playground
+sqb build --select +fact_orders --select +orders_export
+sqb check --select +check_orders_export
+```
+
+See [`sqb playground`](/docs/cli/playground).

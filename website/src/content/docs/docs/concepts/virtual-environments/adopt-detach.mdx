@@ -1,0 +1,114 @@
+---
+title: "Adopt and Detach"
+description: "Migrate existing projects to and from virtual mode."
+---
+
+Adopt converts an existing stateless project into virtual mode. Detach reverses the process. Both are interactive operations that require typed confirmation.
+
+## Adopt
+
+`sqb state adopt` takes existing warehouse relations (tables and views) and converts them into versioned physical relations with VDE views at the original names.
+
+### Prerequisites
+
+1. State store must be initialized (`sqb state init`)
+2. `unsuffixed_virtual_env` must be configured so existing object names are preserved:
+
+```toml
+[targets.dev.state]
+backend = "duckdb"
+schema = "sqlbuild_state"
+unsuffixed_virtual_env = "dev"
+
+[targets.dev.state.connection]
+database = "state.duckdb"
+```
+
+Without `unsuffixed_virtual_env`, adopt blocks with a config error. This is intentional - without it, existing relations would be renamed to suffixed schemas (e.g. `dev__dev.fact_orders`), breaking existing consumers.
+
+### What happens
+
+1. For each model, the existing table is moved/renamed into the physical schema (`dev__sqb_physical.fact_orders__v_<hash>`)
+2. A logical VDE view is created at the original name (`dev.fact_orders`) pointing to the physical version
+3. Model versions, physical relations, VDE record, and VDE refs are persisted in state
+
+### Usage
+
+```bash
+sqb state adopt --allow-copy
+```
+
+The command prints an adoption plan and requires typed confirmation:
+
+```
+Type "adopt dev" to confirm: adopt dev
+```
+
+`--allow-copy` is required when the adapter does not support native same-schema rename (cross-schema moves, some adapters). Without it, adopt blocks with `requires --allow-copy` if a copy fallback would be needed.
+
+### View models
+
+View models are adopted the same way - a versioned physical view is created in the physical schema, and the original name becomes a logical VDE view.
+
+## Detach
+
+`sqb state detach` reverses adoption, collapsing a VDE back into normal stateless relations.
+
+### Prerequisites
+
+The VDE must be `finalized`. If the VDE is working (has stale models), detach blocks:
+
+```
+error: detach requires a finalized virtual environment
+```
+
+Build the VDE to finalize it first, or resolve any pending changes.
+
+### What happens
+
+1. For each table model, the physical version is moved/renamed back to the original target name
+2. For each view model, the view is recreated from compiled SQL at the original target name (not copied from the physical ref)
+3. The VDE is marked `detached` in state
+4. VDE refs are preserved for audit/recovery and janitor protection
+
+### Usage
+
+```bash
+sqb state detach --allow-copy
+```
+
+Requires typed confirmation:
+
+```
+Type "detach dev" to confirm: detach dev
+```
+
+### After detach
+
+A detached VDE is blocked from further virtual operations:
+
+- `sqb build` blocks with "virtual environment is detached"
+- `sqb promote --from <detached>` or `--to <detached>` blocks
+- `sqb rollback` on a detached VDE blocks
+
+The project can continue operating in direct mode, or you can re-adopt to return to virtual mode.
+
+### Detached VDE cleanup
+
+Detached VDE refs and state rows are cleaned up by the [janitor](/docs/concepts/virtual-environments/janitor), not by detach itself. This preserves refs for recovery if detach fails partway through.
+
+## Interrupted operations
+
+Adopt and detach are multi-step warehouse operations that cannot be wrapped in a single transaction. If an operation fails partway through:
+
+- A `failed` operation record is persisted in state with the error message
+- VDE refs and checkpoints remain intact
+- The warehouse may have partial artifacts (e.g. table moved to physical schema but view not yet created)
+
+Recovery path:
+
+1. Run `sqb reconcile` to diagnose the current state
+2. Use `sqb reconcile repair-view` or manual warehouse repair as needed
+3. Retry the adopt or detach operation
+
+There is no automatic resume command. SQLBuild records the failure state and leaves recovery to the operator.

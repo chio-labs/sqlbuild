@@ -1,0 +1,169 @@
+---
+title: "Functions"
+description: "User-defined functions and table functions managed as part of your project."
+---
+
+Functions are SQL or Python definitions under `functions/` that SQLBuild compiles and deploys to the warehouse alongside your models. They participate in the DAG - if a function definition changes, every model that uses it is rebuilt.
+
+## Scalar UDFs
+
+Scalar UDFs return a single value per row. They can be written in SQL or Python.
+
+### SQL UDFs
+
+Place SQL function files under `functions/sql/`. Each file has a `FUNCTION()` header declaring arguments and return type, followed by a SQL expression body:
+
+```sql
+-- functions/sql/udf__is_completed_order.sql
+FUNCTION (
+  arguments (order_status STRING),
+  returns BOOLEAN,
+);
+
+order_status = 'completed'
+```
+
+### Python UDFs
+
+Place Python function files under `functions/python/`. Each file has exactly one function decorated with `@udf(...)`:
+
+```python
+# functions/python/is_completed_order_py.py
+from sqlbuild.functions import udf
+
+@udf(
+    arguments={"order_status": "STRING"},
+    returns="BOOLEAN",
+    runtime_version="3.11",
+)
+def main(order_status: str | None) -> bool:
+    return order_status == "completed"
+```
+
+Python UDFs are deployed as warehouse-native functions (Snowflake Python UDFs, BigQuery remote functions, etc.). The `@udf` decorator is used for static discovery only - SQLBuild parses the AST without importing your code.
+
+### Using scalar UDFs
+
+Reference scalar UDFs in models with `__udf("name")`:
+
+```sql
+SELECT
+  order_id,
+  __udf("udf__is_completed_order")(status) AS is_completed
+FROM __ref("stg_orders")
+```
+
+The function name is the file stem (filename without extension). `__udf()` resolves to the adapter-native function call at compile time.
+
+## Table functions
+
+Table functions return multiple rows and columns. They are written in SQL under `functions/sql/` with a `returns table(...)` declaration:
+
+```sql
+-- functions/sql/table_fn__customer_orders.sql
+FUNCTION (
+  arguments (p_customer_id INTEGER),
+  returns table (
+    order_id INTEGER,
+    ordered_at TIMESTAMP,
+    waffle_name VARCHAR,
+    line_total_cents INTEGER,
+    order_status VARCHAR,
+    is_completed_order BOOLEAN
+  )
+);
+
+SELECT
+  order_id,
+  ordered_at,
+  waffle_name,
+  line_total_cents,
+  order_status,
+  is_completed_order
+FROM __ref("fact_orders")
+WHERE customer_id = p_customer_id
+```
+
+### Why table functions exist
+
+Table functions are designed as an alternative to final-layer views for cases where views don't push predicates efficiently. A view over `fact_orders` with a `WHERE customer_id = ?` filter may scan the entire table if the engine doesn't push the predicate down. A table function accepts the filter as an argument and guarantees the predicate is applied at execution time.
+
+### Managed table function dependencies
+
+Models call managed table functions with `__table_fn("name")(arguments...)`:
+
+```sql
+SELECT customer_id, order_id
+FROM __table_fn("table_fn__customer_orders")(42)
+```
+
+The name must be double quoted and the second argument list is required, including for a zero-argument function. SQLBuild validates that the target exists, is a table function, and receives the declared number of arguments.
+
+The reference creates a typed dependency in the project DAG. Selecting a consuming model also selects the required function, function changes propagate to consumers, and cycles through models and functions are rejected. SQLBuild treats the call as an opaque relation for SQL analysis and uses the function's declared `returns table(...)` columns for star expansion and terminal lineage.
+
+Incremental state still belongs to the consuming model. A table function does not own a cursor interval or retain execution state.
+
+### Using table functions
+
+Applications and analysts can call the deployed warehouse function directly:
+
+```sql
+SELECT * FROM table_fn__customer_orders(42)
+```
+
+## References inside functions
+
+SQL functions can reference the same resources as models:
+
+| Reference | Syntax |
+|-----------|--------|
+| Model | `__ref("model_name")` |
+| Seed | `__seed("seed_name")` |
+| Source | `__source("source_name")` |
+| Scalar UDF | `__udf("function_name")` |
+| Table function | `__table_fn("function_name")(arguments...)` |
+
+These references are resolved at compile time and create DAG edges. If a referenced model changes, the function is redeployed.
+
+A SQL function uses macros, constants, and enums available from its file under `functions/sql/`.
+See [How Visibility Works](/docs/concepts/declaration-scopes/visibility) to limit declarations to one
+function folder or to that folder and its children.
+
+## Change propagation
+
+Functions participate in fingerprint-based change detection. Their identity includes dependencies and declared return contracts in addition to the function body and runtime metadata. If a function changes, SQLBuild redeploys it and marks dependent models as changed.
+
+## Project layout
+
+```
+functions/
+  sql/
+    udf__is_completed_order.sql        # scalar SQL UDF
+    table_fn__customer_orders.sql     # table function (returns table)
+  python/
+    is_completed_order_py.py      # scalar Python UDF
+```
+
+## Python UDF options
+
+The `@udf` decorator accepts these keyword arguments:
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `arguments` | Yes | Dict mapping argument names to SQL types |
+| `returns` | Yes | SQL return type string |
+| `runtime_version` | No | Python runtime version (e.g. `"3.11"`) |
+| `entry_point` | No | Function name to use as the entry point (defaults to the decorated function name) |
+| `packages` | No | List of Python packages required at runtime |
+
+## Adapter support
+
+All four supported adapters implement SQL UDFs, Python UDFs, and table functions:
+
+| Feature | DuckDB | Snowflake | BigQuery | Databricks |
+|---------|--------|-----------|----------|------------|
+| SQL UDFs | Yes | Yes | Yes | Yes |
+| Python UDFs | Yes | Yes | Yes | Yes |
+| Table functions | Yes | Yes | Yes | Yes |
+
+Future adapters may not support all function types. SQLBuild raises a clear error if a function type is unsupported by the configured adapter.

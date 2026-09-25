@@ -1,0 +1,107 @@
+---
+title: "Hooks"
+description: "Run SQL or Python lifecycle hooks around model materialization."
+---
+
+Pre-hooks and post-hooks run before and after model materialization. Use SQL hooks for warehouse statements and Python hooks for runtime control flow, providers, queries, and skip decisions.
+
+## Project layout
+
+SQL and Python hooks live in language-specific directories:
+
+```text
+my_project/
+  models/
+    marts/
+      orders.sql
+  hooks/
+    sql/
+      permissions/
+        grant_access.sql
+      record_access.sql
+    python/
+      notifications.py
+```
+
+Directories below `hooks/sql/` and `hooks/python/` are organizational. They do not namespace resource names: `hooks/sql/permissions/grant_access.sql` is still invoked as `sql("grant_access")`.
+
+## Choose a hook type
+
+<a id="reusable-sql-hooks"></a>
+<a id="sql-hook-arguments"></a>
+<a id="inline-sql-hooks"></a>
+<a id="sql-compilation"></a>
+<a id="python-hooks"></a>
+<a id="hook-context"></a>
+<a id="providers"></a>
+<a id="skip-timing"></a>
+
+Hook lists use three explicit entry types:
+
+| Entry | Definition | Use |
+|-------|------------|-----|
+| [`inline_sql("...")`](/docs/concepts/models/hooks/sql#inline-sql-hooks) | SQL written directly in the model header | Short, model-specific SQL |
+| [`sql("name", args...)`](/docs/concepts/models/hooks/sql) | A reusable resource under `hooks/sql/` | Shared, parameterized SQL |
+| [`python("name", args...)`](/docs/concepts/models/hooks/python) | A decorated function under `hooks/python/` | Control flow, providers, queries, or skips |
+
+Bare SQL strings are not hook entries. The singular `pre_hook` and `post_hook` fields are also invalid; use `pre_hooks` and `post_hooks` with one of the three typed forms above. `sql("...")` always means a named SQL hook and never falls back to inline SQL.
+
+## Configure model hooks
+
+Models may mix SQL and Python entries in one ordered hook list:
+
+```sql
+MODEL (
+  materialized table,
+  pre_hooks [
+    inline_sql("INSERT INTO audit.build_log VALUES ('starting')"),
+  ],
+  post_hooks [
+    sql(
+      "grant_access",
+      relation: "@@CTX:destination.qualified",
+      role: "analyst_role",
+    ),
+    python(
+      "notify_complete",
+      channel: "#data-builds",
+    ),
+  ],
+);
+
+SELECT 1 AS id
+```
+
+Entries execute in the order authored, including when SQL and Python entries are mixed.
+
+<a id="failure-timing"></a>
+
+## Lifecycle and failure timing
+
+Pre-hooks run before materialization. A failed pre-hook prevents materialization, and a Python pre-hook that returns `ctx.skip(...)` stops the remaining pre-hooks and prevents the model from running.
+
+Post-hooks run after warehouse mutation and audits. They are not promotion gates: a failed post-hook marks the model run as failed, but the relation has already been created, promoted, or incrementally updated. Put logic that must prevent materialization in a pre-hook, contract, pre-promotion audit, or the materialization itself.
+
+A Python post-hook that returns `ctx.skip(...)` stops the remaining post-hooks and changes the reported model result. `mode="hard"` blocks downstream nodes. A soft skip does not automatically block every downstream node; scheduler propagation also depends on the other upstream results.
+
+## Names and identity
+
+SQL and Python hook names share the project-wide resource namespace with models, sources, seeds, functions, loaders, tasks, assets, checks, and providers. Any collision fails discovery, including two same-stem SQL hook files in different directories or a SQL and Python hook with the same name.
+
+The ordered hook list participates in each model's version identity:
+
+- Inline and named SQL hooks contribute their fully rendered statements. Named hooks also retain their resource name, definition, arguments, description, and source path in identity metadata.
+- Python hooks contribute the invocation name, configured arguments, and a version hash derived from the decorated function, its transitive first-party dependencies, and decorator configuration.
+- Changing a hook body, arguments, or order changes the consuming model's identity and makes it stale for change-aware planning.
+- Executed Python hooks record their own hook fingerprints after successful completion or an explicit skip.
+
+Named SQL hooks compile into their consuming models rather than becoming independently scheduled nodes. Python hooks also run as part of their model's lifecycle phase rather than as independently selected Python nodes.
+
+## Diagnostics
+
+Discovery and compilation fail early for malformed definitions and invocations. Diagnostics include the resource path and, for model entries, the model name and indexed label such as `post_hooks[1] sql("grant_access")`.
+
+See the language-specific pages for definition, argument, validation, and runtime diagnostics:
+
+- [SQL hooks](/docs/concepts/models/hooks/sql)
+- [Python hooks](/docs/concepts/models/hooks/python)
