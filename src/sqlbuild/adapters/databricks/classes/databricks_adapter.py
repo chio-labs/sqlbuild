@@ -44,6 +44,7 @@ from sqlbuild.adapter.contract.models import (
     ExpressionInferenceProfile,
     FunctionDefinition,
     FunctionInfo,
+    MigrationStagePlan,
     QueryResult,
     RelationInfo,
     RenderedRetentionChange,
@@ -71,6 +72,7 @@ from sqlbuild.adapter.contract.types import (
     HistoricalSnapshotCloseStyle,
     HistoricalSnapshotInsertStyle,
     LoaderLogicalType,
+    MigrationTransfer,
     PromotionStrategy,
     RelationType,
     RetentionChangePhase,
@@ -1756,6 +1758,23 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     ) -> str:
         del origin_is_transient
         return f"CREATE OR REPLACE TABLE {destination} DEEP CLONE {origin}"
+
+    def render_migration_stage(
+        self,
+        *,
+        origin: str,
+        stage: str,
+        origin_is_transient: bool = False,
+        stage_is_transient: bool | None = None,
+    ) -> MigrationStagePlan:
+        del origin_is_transient, stage_is_transient
+        return MigrationStagePlan(
+            transfer=MigrationTransfer.COPY,
+            statements=(f"CREATE TABLE {stage} DEEP CLONE {origin}",),
+        )
+
+    def supports_transactional_ddl(self) -> bool:
+        return False
 
     def render_query_with_cursor_bounds(
         self,

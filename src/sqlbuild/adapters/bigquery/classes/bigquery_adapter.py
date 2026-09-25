@@ -46,6 +46,7 @@ from sqlbuild.adapter.contract.models import (
     ExpressionInferenceProfile,
     FunctionDefinition,
     FunctionInfo,
+    MigrationStagePlan,
     QueryResult,
     RelationInfo,
     RenderedRetentionChange,
@@ -73,6 +74,7 @@ from sqlbuild.adapter.contract.types import (
     HistoricalSnapshotCloseStyle,
     HistoricalSnapshotInsertStyle,
     LoaderLogicalType,
+    MigrationTransfer,
     PromotionStrategy,
     RetentionChangePhase,
     RetentionScope,
@@ -1719,6 +1721,26 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         raise AdapterUserError(
             message=f"adapter '{self.adapter_name}' does not support model migrations"
         )
+
+    def render_migration_stage(
+        self,
+        *,
+        origin: str,
+        stage: str,
+        origin_is_transient: bool = False,
+        stage_is_transient: bool | None = None,
+    ) -> MigrationStagePlan:
+        del origin_is_transient, stage_is_transient
+        quoted_stage: str = self._quote_identifier_path(stage)
+        quoted_origin: str = self._quote_identifier_path(origin)
+        return MigrationStagePlan(
+            transfer=MigrationTransfer.CLONE,
+            statements=(f"CREATE TABLE {quoted_stage} CLONE {quoted_origin}",),
+            fallback_statements=(f"CREATE TABLE {quoted_stage} COPY {quoted_origin}",),
+        )
+
+    def supports_transactional_ddl(self) -> bool:
+        return False
 
     def render_query_with_cursor_bounds(
         self,

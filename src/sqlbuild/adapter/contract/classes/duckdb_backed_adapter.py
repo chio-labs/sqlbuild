@@ -41,6 +41,7 @@ from sqlbuild.adapter.contract.models import (
     ExpressionInferenceProfile,
     FunctionDefinition,
     FunctionInfo,
+    MigrationStagePlan,
     QueryResult,
     RelationInfo,
     RowDiffColumnResult,
@@ -61,6 +62,7 @@ from sqlbuild.adapter.contract.types import (
     CursorKind,
     FrameworkType,
     LoaderLogicalType,
+    MigrationTransfer,
     PromotionStrategy,
     TablePromotionMode,
 )
@@ -1529,6 +1531,23 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
     ) -> str:
         del origin_is_transient
         return f"CREATE OR REPLACE TABLE {destination} AS SELECT * FROM {origin}"
+
+    def render_migration_stage(
+        self,
+        *,
+        origin: str,
+        stage: str,
+        origin_is_transient: bool = False,
+        stage_is_transient: bool | None = None,
+    ) -> MigrationStagePlan:
+        del origin_is_transient, stage_is_transient
+        return MigrationStagePlan(
+            transfer=MigrationTransfer.COPY,
+            statements=(f"CREATE TABLE {stage} AS SELECT * FROM {origin}",),
+        )
+
+    def supports_transactional_ddl(self) -> bool:
+        return True
 
     def render_query_with_cursor_bounds(
         self,

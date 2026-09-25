@@ -36,6 +36,13 @@ class PromotionStrategy(StrEnum):
     CREATE_NEW = "create_new"
 
 
+class MigrationTransfer(StrEnum):
+    """How a model migration stage receives the origin's data."""
+
+    CLONE = "clone"
+    COPY = "copy"
+
+
 class TablePromotionMode(StrEnum):
     IMMEDIATE = "immediate"
     STAGED = "staged"

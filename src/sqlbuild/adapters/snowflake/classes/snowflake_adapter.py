@@ -41,6 +41,7 @@ from sqlbuild.adapter.contract.models import (
     ExpressionInferenceProfile,
     FunctionDefinition,
     FunctionInfo,
+    MigrationStagePlan,
     QueryResult,
     RelationInfo,
     RenderedRetentionChange,
@@ -68,6 +69,7 @@ from sqlbuild.adapter.contract.types import (
     HistoricalSnapshotCloseStyle,
     HistoricalSnapshotInsertStyle,
     LoaderLogicalType,
+    MigrationTransfer,
     PromotionStrategy,
     RetentionChangePhase,
     RetentionScope,
@@ -2236,6 +2238,32 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         return self.render_durable_clone(
             origin=origin, destination=destination, origin_is_transient=origin_is_transient
         )[0]
+
+    def render_migration_stage(
+        self,
+        *,
+        origin: str,
+        stage: str,
+        origin_is_transient: bool = False,
+        stage_is_transient: bool | None = None,
+    ) -> MigrationStagePlan:
+        transient: bool = origin_is_transient if stage_is_transient is None else stage_is_transient
+        if origin_is_transient and not transient:
+            return MigrationStagePlan(
+                transfer=MigrationTransfer.COPY,
+                statements=(
+                    f"CREATE TABLE {stage} LIKE {origin} COPY GRANTS",
+                    f"INSERT INTO {stage} SELECT * FROM {origin}",
+                ),
+            )
+        table_kind: str = "TRANSIENT TABLE" if transient else "TABLE"
+        return MigrationStagePlan(
+            transfer=MigrationTransfer.CLONE,
+            statements=(f"CREATE {table_kind} {stage} CLONE {origin} COPY GRANTS",),
+        )
+
+    def supports_transactional_ddl(self) -> bool:
+        return False
 
     def render_query_with_cursor_bounds(
         self,

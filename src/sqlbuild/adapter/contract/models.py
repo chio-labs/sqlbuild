@@ -15,6 +15,7 @@ from sqlbuild.adapter.contract.types import (
     HistoricalSnapshotCloseStyle,
     HistoricalSnapshotInsertStyle,
     LifeCycleEventKind,
+    MigrationTransfer,
     RetentionChangePhase,
     RetentionScope,
     SnapshotLatestVersionStyle,
@@ -182,6 +183,15 @@ class RenderedRetentionChange:
 
     phase: RetentionChangePhase
     statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MigrationStagePlan:
+    """Statements that create a fresh migration stage, plus a copy fallback if clone is refused."""
+
+    transfer: MigrationTransfer
+    statements: tuple[str, ...]
+    fallback_statements: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -15,6 +15,7 @@ from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
     ExpressionInferenceProfile,
+    MigrationStagePlan,
     RowDiffTolerance,
     RowDiffTolerances,
     SnapshotChangeTarget,
@@ -346,6 +347,23 @@ class StrictAdapter(
         self, *, origin: str, destination: str, origin_is_transient: bool = False
     ) -> str:
         """Render one statement that replaces the destination with a durable source copy."""
+        ...
+
+    @abstractmethod
+    def render_migration_stage(
+        self,
+        *,
+        origin: str,
+        stage: str,
+        origin_is_transient: bool = False,
+        stage_is_transient: bool | None = None,
+    ) -> MigrationStagePlan:
+        """Render statements that create a fresh, independent stage holding the origin's data."""
+        ...
+
+    @abstractmethod
+    def supports_transactional_ddl(self) -> bool:
+        """Return whether renames and state inserts can commit or roll back together."""
         ...
 
     @abstractmethod
