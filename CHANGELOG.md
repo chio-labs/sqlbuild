@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.118.1](https://github.com/chio-labs/sqlbuild/compare/v0.118.0...v0.118.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* align SQL scanners and remove obsolete implementations ([#815](https://github.com/chio-labs/sqlbuild/issues/815)) ([920a933](https://github.com/chio-labs/sqlbuild/commit/920a933ba7c2c6d4f612320d964e0a57504a61a1))
+
 ## [0.118.0](https://github.com/chio-labs/sqlbuild/compare/v0.117.1...v0.118.0) (2026-09-25)
 
 
