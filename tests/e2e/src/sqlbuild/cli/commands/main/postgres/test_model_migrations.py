@@ -17,6 +17,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
     archive_names,
     build_unique_schema_name,
     cleanup_postgres_schema,
+    create_external_dependent_views,
     create_unwritable_migration_table,
     ensure_postgres_schema_ready,
     execute_postgres_sql,
@@ -25,6 +26,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
     ordered_ids,
     orders_sql,
     report_view_sql,
+    view_catalog,
     write_migration_project,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
@@ -41,6 +43,11 @@ _ALL_IDS: tuple[tuple[object, ...], ...] = ((1,), (2,), (3,), (4,), (5,))
             expected_destination_ids=_ALL_IDS,
             expected_view_ids=_ALL_IDS,
             expected_archive_ids=((1,), (2,)),
+            expected_view_options=(
+                ("orders_checked", "check_option=cascaded"),
+                ("orders_dashboard", ""),
+                ("orders_invoker", "security_barrier=true,security_invoker=true"),
+            ),
             expected_events=((ORIGIN_MODEL, DESTINATION_MODEL, "forced_replace"),),
         )
     ],
@@ -72,12 +79,11 @@ def test_given_views_on_destination_when_forcing_migration_then_views_follow_the
         initial: subprocess.CompletedProcess[str] = run_sqb(
             command=("--no-color", "build"), project_dir=project_dir
         )
-        execute_postgres_sql(
-            sql=(
-                f"CREATE VIEW {raw_schema_name}.orders_dashboard AS "
-                f"SELECT order_id FROM {schema_name}.{DESTINATION_MODEL}"
-            ),
-            config=postgres_e2e_config,
+        create_external_dependent_views(
+            raw_schema_name=raw_schema_name, schema_name=schema_name, config=postgres_e2e_config
+        )
+        views_before: tuple[tuple[object, ...], ...] = view_catalog(
+            raw_schema_name=raw_schema_name, config=postgres_e2e_config
         )
         project_dir = write_migration_project(
             tmp_path=tmp_path,
@@ -92,6 +98,9 @@ def test_given_views_on_destination_when_forcing_migration_then_views_follow_the
         migrated: subprocess.CompletedProcess[str] = run_sqb(
             command=("--no-color", "build"), project_dir=project_dir
         )
+        views_after: tuple[tuple[object, ...], ...] = view_catalog(
+            raw_schema_name=raw_schema_name, config=postgres_e2e_config
+        )
         archives: tuple[tuple[object, ...], ...] = archive_names(
             schema_name=schema_name, kind="migration_previous", config=postgres_e2e_config
         )
@@ -105,6 +114,12 @@ def test_given_views_on_destination_when_forcing_migration_then_views_follow_the
 
         assert initial.returncode == 0, initial.stdout + initial.stderr
         assert migrated.returncode == 0, migrated.stdout + migrated.stderr
+        assert views_after == views_before
+        assert tuple((row[0], row[1]) for row in views_after) == test_case.expected_view_options
+        assert (
+            ordered_ids(relation=f"{raw_schema_name}.orders_checked", config=postgres_e2e_config)
+            == test_case.expected_view_ids
+        )
         assert len(archives) == 1
         assert archive_ids == test_case.expected_archive_ids
         assert janitor.returncode == 0, janitor.stdout + janitor.stderr

@@ -85,6 +85,7 @@ from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql 
 )
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
+from sqlbuild.adapters.postgres._helpers.view_rebind import render_postgres_view_rebind
 from sqlbuild.adapters.postgres.classes.postgres_connection import _PostgresConnection
 from sqlbuild.adapters.postgres.constants import TABLE_FUNCTION_RETURN_TYPE
 from sqlbuild.compiler.compile.types import FunctionLanguage
@@ -599,7 +600,8 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         del database
         query: str = (
             "SELECT DISTINCT dependent_namespace.nspname, dependent.relname, "
-            "pg_get_viewdef(dependent.oid) "
+            "pg_get_viewdef(dependent.oid), "
+            "array_to_string(dependent.reloptions, chr(31)) "
             "FROM pg_depend AS dependency "
             "JOIN pg_rewrite AS rewrite ON rewrite.oid = dependency.objid "
             "JOIN pg_class AS dependent ON dependent.oid = rewrite.ev_class "
@@ -618,8 +620,11 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
         cursor: Any = connection.execute(query)
         return tuple(
-            f"CREATE OR REPLACE VIEW {self.render_identifier(str(row[0]))}."
-            f"{self.render_identifier(str(row[1]))} AS {str(row[2]).strip().rstrip(';')}"
+            render_postgres_view_rebind(
+                view=f"{self.render_identifier(str(row[0]))}.{self.render_identifier(str(row[1]))}",
+                definition=str(row[2]),
+                reloptions=tuple(str(row[3]).split(chr(31))) if row[3] else (),
+            )
             for row in cursor.fetchall()
         )
 

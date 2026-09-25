@@ -762,3 +762,45 @@ def ordered_ids(*, relation: str, config: dict[str, object]) -> tuple[tuple[obje
     """Return the sorted order IDs readable through one relation."""
 
     return fetch_postgres_rows(sql=f"SELECT order_id FROM {relation} ORDER BY 1", config=config)
+
+
+def create_external_dependent_views(
+    *, raw_schema_name: str, schema_name: str, config: dict[str, object]
+) -> None:
+    """Create plain, security-option, and check-option views on the destination."""
+
+    destination: str = f"{schema_name}.{DESTINATION_MODEL}"
+    statements: tuple[str, ...] = (
+        f"CREATE VIEW {raw_schema_name}.orders_dashboard AS SELECT order_id FROM {destination}",
+        f"GRANT SELECT ON {raw_schema_name}.orders_dashboard TO PUBLIC",
+        (
+            f"CREATE VIEW {raw_schema_name}.orders_invoker "
+            "WITH (security_barrier=true, security_invoker=true) AS "
+            f"SELECT order_id FROM {destination}"
+        ),
+        (
+            f"CREATE VIEW {raw_schema_name}.orders_checked AS "
+            f"SELECT order_id, order_date, amount_cents FROM {destination} "
+            "WHERE order_id > 0 WITH CASCADED CHECK OPTION"
+        ),
+    )
+    statement: str
+    for statement in statements:
+        execute_postgres_sql(sql=statement, config=config)
+
+
+def view_catalog(
+    *, raw_schema_name: str, config: dict[str, object]
+) -> tuple[tuple[object, ...], ...]:
+    """Return (view, options, owner, privileges) for every view in the source schema."""
+
+    return fetch_postgres_rows(
+        sql=(
+            "SELECT view.relname, coalesce(array_to_string(view.reloptions, ','), ''), "
+            "pg_get_userbyid(view.relowner), coalesce(view.relacl::text, '') "
+            "FROM pg_class AS view JOIN pg_namespace AS namespace "
+            "ON namespace.oid = view.relnamespace "
+            f"WHERE namespace.nspname = '{raw_schema_name}' AND view.relkind = 'v' ORDER BY 1"
+        ),
+        config=config,
+    )

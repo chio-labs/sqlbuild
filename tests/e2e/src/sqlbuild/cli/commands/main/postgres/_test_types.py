@@ -268,6 +268,7 @@ class PostgresModelMigrationE2ETestCase:
     expected_destination_ids: tuple[tuple[object, ...], ...]
     expected_view_ids: tuple[tuple[object, ...], ...]
     expected_archive_ids: tuple[tuple[object, ...], ...]
+    expected_view_options: tuple[tuple[object, ...], ...]
     expected_events: tuple[tuple[object, ...], ...]
 
 
