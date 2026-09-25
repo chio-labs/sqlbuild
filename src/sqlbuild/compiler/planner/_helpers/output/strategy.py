@@ -165,7 +165,7 @@ def build_model_warnings(
                         ),
                     )
                 )
-        elif finding.source == SchemaColumnSource.SQLGLOT:
+        elif finding.source == SchemaColumnSource.SQL_ANALYSIS:
             if finding.kind in (
                 SchemaChangeKind.COLUMN_ADDED,
                 SchemaChangeKind.COLUMN_TYPE_CHANGED,

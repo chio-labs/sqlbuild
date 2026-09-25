@@ -91,7 +91,7 @@ class SchemaChangeKind(StrEnum):
 
 class SchemaColumnSource(StrEnum):
     YML = "yml"
-    SQLGLOT = "sql_analysis"
+    SQL_ANALYSIS = "sql_analysis"
 
 
 class RetentionDirection(StrEnum):
