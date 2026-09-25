@@ -160,6 +160,13 @@ def test_given_macro_before_invalid_aggregate_when_compiling_then_reports_author
             "SELECT CAST(TIMESTAMP '2026-01-01' AS INTEGER) AS result",
             "W213",
         ),
+        SemanticCompileCase(
+            "identical span-less warnings",
+            _UPSTREAM,
+            "SELECT 1 = 'not-a-number' AS first_result, 2 = 'not-a-number' AS second_result",
+            "W213",
+            expected_warning_count=2,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -178,10 +185,15 @@ def test_given_runtime_conversion_when_compiling_cold_and_warm_then_warnings_do_
     warm: dict[str, Any] = json.loads(capsys.readouterr().out)
     assert cold["diagnostics"] == warm["diagnostics"]
     assert cold["summary"]["errors"] == 0
-    assert cold["summary"]["warnings"] >= 1
+    assert cold["summary"]["warnings"] == test_case.expected_warning_count
     warnings: list[dict[str, Any]] = cold["diagnostics"]
     assert test_case.expected_code in {warning["code"] for warning in warnings}
     assert all(warning["severity"] == "warning" for warning in warnings)
+    assert len(warnings) == test_case.expected_warning_count
+    assert main(arguments[:-1]) == 0
+    human: str = capsys.readouterr().out
+    assert human.count(f"warning[{test_case.expected_code}]") == 1
+    assert f"{test_case.expected_warning_count} warning" in human
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
@@ -530,7 +531,17 @@ def _format_diagnostics_text(
     *, diagnostics: tuple[CompilerDiagnostic, ...], source_texts: dict[Path, str], style: CliStyle
 ) -> str:
     lines: list[str] = []
+    warning_counts: Counter[CompilerDiagnostic] = Counter(
+        diagnostic
+        for diagnostic in diagnostics
+        if diagnostic.severity == DiagnosticSeverity.WARNING
+    )
+    shown_warnings: set[CompilerDiagnostic] = set()
     for diagnostic in diagnostics:
+        if diagnostic in shown_warnings:
+            continue
+        if diagnostic.severity == DiagnosticSeverity.WARNING:
+            shown_warnings.add(diagnostic)
         lines.extend(
             _format_diagnostic_text(
                 diagnostic=diagnostic,
@@ -538,6 +549,9 @@ def _format_diagnostics_text(
                 style=style,
             )
         )
+        count: int = warning_counts[diagnostic]
+        if count > 1:
+            lines.append(f"  = {count} occurrences; all retained in JSON and the warning count")
         lines.append("")
     if lines:
         lines.pop()

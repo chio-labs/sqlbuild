@@ -13,6 +13,7 @@ class SemanticCompileCase:
     downstream: str
     expected_code: str | None
     header: str = "MODEL (materialized view);\n"
+    expected_warning_count: int = 1
 
 
 @dataclass(frozen=True)

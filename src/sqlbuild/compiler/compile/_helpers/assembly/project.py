@@ -1469,7 +1469,7 @@ def _binding_compiler_diagnostics(
             line,
             column,
         )
-        if key in seen:
+        if key in seen and diagnostic.severity == DiagnosticSeverity.ERROR:
             continue
         seen.add(key)
         result.append(
