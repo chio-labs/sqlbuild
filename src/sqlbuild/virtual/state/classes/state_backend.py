@@ -167,12 +167,6 @@ class StateBackend(ABC):
         """Read runtime node result rows for one virtual environment identity."""
         ...
 
-    def append_microbatch_event(
-        self, *, connection: Any, schema: str, event: MicrobatchEvent
-    ) -> None:
-        """Append one logical microbatch event to virtual state."""
-        raise MicrobatchStateError("virtual state backend does not support microbatch events")
-
     def append_microbatch_events(
         self, *, connection: Any, schema: str, events: tuple[MicrobatchEvent, ...]
     ) -> MicrobatchWriteResult:

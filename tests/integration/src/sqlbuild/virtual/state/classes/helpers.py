@@ -488,22 +488,24 @@ def build_production_shaped_microbatch_event(
         "execution_run_started_at": run_started_at,
         "created_at": datetime(2026, 1, 1, 9, 0, 1),
     }
-    if record_type == MicrobatchRecordType.REPLAY_REQUIREMENT:
-        return MicrobatchEvent(
+    events: dict[MicrobatchRecordType, MicrobatchEvent] = {
+        MicrobatchRecordType.REPLAY_REQUIREMENT: MicrobatchEvent(
             event_id="requirement-1",
             record_type=record_type,
             replay_requirement_id="requirement-1",
             required_model_version_hash="F2",
             replay_policy="full",
             **common,
-        )
-    return MicrobatchEvent(
-        event_id="completion-1",
-        record_type=record_type,
-        completion_type=MicrobatchCompletionType.INITIAL,
-        partition_start="0",
-        partition_end="1",
-        rows_affected=3,
-        completed_at=datetime(2026, 1, 1, 9, 0, 2),
-        **common,
-    )
+        ),
+        MicrobatchRecordType.PARTITION_COMPLETION: MicrobatchEvent(
+            event_id="completion-1",
+            record_type=record_type,
+            completion_type=MicrobatchCompletionType.INITIAL,
+            partition_start="0",
+            partition_end="1",
+            rows_affected=3,
+            completed_at=datetime(2026, 1, 1, 9, 0, 2),
+            **common,
+        ),
+    }
+    return events[record_type]

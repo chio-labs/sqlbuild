@@ -57,9 +57,6 @@ from sqlbuild.virtual.state.types import (
     StateSchemaValidationIssueKind,
     VirtualEnvironmentStatus,
 )
-from tests.integration.src.sqlbuild.virtual.state.classes._test_types import (
-    MicrobatchBulkAppendTestCase,
-)
 from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     ACTIVE_CHECKPOINT_PAYLOAD,
     ACTIVE_PAYLOAD,
@@ -88,6 +85,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     exercise_state_ref_contract,
 )
 from tests.integration.src.sqlbuild.virtual.state.classes.postgres._test_types import (
+    MicrobatchBulkAppendTestCase,
     PostgresAtomicFinalizedVirtualPublishTestCase,
     PostgresConditionalPublicationPayloadContractTestCase,
     PostgresConditionalVirtualRefPublishTestCase,
@@ -150,10 +148,10 @@ def test_given_retired_postgres_rows_when_reading_history_then_only_active_event
     )
     scope: MicrobatchScope = postgres_microbatch_scope()
     event: MicrobatchEvent = postgres_microbatch_event(scope=scope, event_id="active-event")
-    postgres_state_backend.append_microbatch_event(
+    postgres_state_backend.append_microbatch_events(
         connection=postgres_state_connection,
         schema=postgres_state_schema,
-        event=event,
+        events=(event,),
     )
     insert_raw_postgres_microbatch_record(
         connection=postgres_state_connection,
@@ -415,7 +413,7 @@ def test_given_all_null_nullable_columns_when_bulk_appending_then_postgres_persi
     history: tuple[MicrobatchEvent, ...] = postgres_state_backend.read_microbatch_scope_history(
         connection=postgres_state_connection, schema=postgres_state_schema, scope=scope
     )
-    assert (first.inserted, second.already_existing) == (1, 1)
+    assert (first.inserted, second.already_existing) == test_case.expected_write_counts
     assert history == (event,)
 
 
@@ -473,15 +471,15 @@ def test_given_postgres_microbatch_event_when_appending_then_scope_history_round
         created_at=datetime(2026, 1, 1),
     )
 
-    postgres_state_backend.append_microbatch_event(
+    postgres_state_backend.append_microbatch_events(
         connection=postgres_state_connection,
         schema=postgres_state_schema,
-        event=event,
+        events=(event,),
     )
-    postgres_state_backend.append_microbatch_event(
+    postgres_state_backend.append_microbatch_events(
         connection=postgres_state_connection,
         schema=postgres_state_schema,
-        event=event,
+        events=(event,),
     )
 
     history: tuple[MicrobatchEvent, ...] = postgres_state_backend.read_microbatch_scope_history(

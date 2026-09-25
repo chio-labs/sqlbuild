@@ -337,7 +337,7 @@ def test_given_all_null_nullable_columns_when_bulk_appending_then_duckdb_persist
     finally:
         backend.close(connection)
 
-    assert (first.inserted, second.already_existing) == (1, 1)
+    assert (first.inserted, second.already_existing) == test_case.expected_write_counts
     assert history == (event,)
 
 
@@ -389,12 +389,16 @@ def test_given_virtual_microbatch_event_when_appending_then_scope_history_round_
     )
     try:
         backend.initialize(connection=connection, schema="sqlbuild_state", sqlbuild_version="test")
-        backend.append_microbatch_event(connection=connection, schema="sqlbuild_state", event=event)
-        second_event: MicrobatchEvent = replace(event, event_id="event-2")
-        backend.append_microbatch_event(
-            connection=connection, schema="sqlbuild_state", event=second_event
+        backend.append_microbatch_events(
+            connection=connection, schema="sqlbuild_state", events=(event,)
         )
-        backend.append_microbatch_event(connection=connection, schema="sqlbuild_state", event=event)
+        second_event: MicrobatchEvent = replace(event, event_id="event-2")
+        backend.append_microbatch_events(
+            connection=connection, schema="sqlbuild_state", events=(second_event,)
+        )
+        backend.append_microbatch_events(
+            connection=connection, schema="sqlbuild_state", events=(event,)
+        )
 
         history: tuple[MicrobatchEvent, ...] = backend.read_microbatch_scope_history(
             connection=connection, schema="sqlbuild_state", scope=scope

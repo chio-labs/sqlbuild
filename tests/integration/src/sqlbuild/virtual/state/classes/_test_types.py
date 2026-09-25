@@ -281,3 +281,4 @@ class MicrobatchBulkAppendTestCase:
 
     description: str
     record_type: MicrobatchRecordType
+    expected_write_counts: tuple[int, int] = (1, 1)

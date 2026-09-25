@@ -165,20 +165,6 @@ class PostgresStateBackend(SqlStateBackend):
             existing_indexes_by_table=indexes_by_table,
         )
 
-    def append_microbatch_event(
-        self, *, connection: Any, schema: str, event: MicrobatchEvent
-    ) -> None:
-        placeholders: str = ", ".join("%s" for _ in MICROBATCH_COLUMNS)
-        with connection.cursor() as cursor:
-            cursor.execute(
-                f"INSERT INTO {self._qualified_name(schema=schema, table=MICROBATCH_EVENT_TABLE)} "
-                f"({', '.join(MICROBATCH_COLUMNS)}) SELECT {placeholders} "
-                "WHERE NOT EXISTS (SELECT 1 FROM "
-                f"{self._qualified_name(schema=schema, table=MICROBATCH_EVENT_TABLE)} "
-                "WHERE event_id = %s)",
-                [*MicrobatchEventCodec.values(event), event.event_id],
-            )
-
     def append_microbatch_events(
         self, *, connection: Any, schema: str, events: tuple[MicrobatchEvent, ...]
     ) -> MicrobatchWriteResult:
@@ -196,7 +182,6 @@ class PostgresStateBackend(SqlStateBackend):
                 event for event in events if event.event_id not in existing_ids
             )
             if missing:
-                # VALUES resolves all-NULL columns before the INSERT target can type them.
                 row_placeholders: str = (
                     "("
                     + ", ".join(
