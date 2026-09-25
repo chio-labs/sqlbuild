@@ -202,6 +202,9 @@ def build_snapshot_from_test_case(test_case: DetectModelChangesTestCase) -> Ware
         existing_relations=relations,
         existing_columns=columns,
         fingerprints=WarehouseFingerprints(models=fingerprints),
+        renamed_models=(frozenset(), frozenset({test_case.model_name}))[
+            test_case.renamed_by_migration
+        ],
     )
 
 
@@ -260,6 +263,7 @@ def _build_fingerprints(test_case: DetectModelChangesTestCase) -> dict[str, Fing
                 config_values=fingerprint_config_values,
             ),
             ts=_STUB_TS,
+            version_hash="recorded_version",
         )
     }
     return ({}, fingerprints)[test_case.fingerprint_query_hash is not None]

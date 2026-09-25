@@ -736,6 +736,7 @@ class ChangeDetectionResult:
     backfill: BackfillResult = field(
         default_factory=lambda: BackfillResult(action=BackfillAction.FORWARD_ONLY)
     )
+    recorded_build_relation_missing: bool = False
 
 
 @dataclass(frozen=True)

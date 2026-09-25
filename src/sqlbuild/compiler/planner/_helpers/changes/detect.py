@@ -175,14 +175,6 @@ def detect_model_changes(
     relation_exists: bool = model_name in snapshot.existing_relations
     fingerprint: Fingerprint | None = snapshot.fingerprints.models.get(model_name)
 
-    if not relation_exists and fingerprint is None:
-        return ChangeDetectionResult(
-            model_name=model_name,
-            change_kind=ChangeKind.FIRST_RUN,
-            backfill=BackfillResult(action=BackfillAction.FULL),
-            fingerprint_metadata_json=metadata_json,
-            fingerprint_version_hash=expected_version_hash,
-        )
     if not relation_exists and model_name in snapshot.renamed_models:
         return ChangeDetectionResult(
             model_name=model_name,
@@ -190,6 +182,15 @@ def detect_model_changes(
             backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
             fingerprint_metadata_json=metadata_json,
             fingerprint_version_hash=expected_version_hash,
+        )
+    if not relation_exists:
+        return ChangeDetectionResult(
+            model_name=model_name,
+            change_kind=ChangeKind.FIRST_RUN,
+            backfill=BackfillResult(action=BackfillAction.FULL),
+            fingerprint_metadata_json=metadata_json,
+            fingerprint_version_hash=expected_version_hash,
+            recorded_build_relation_missing=fingerprint is not None,
         )
 
     query_changed: bool = False

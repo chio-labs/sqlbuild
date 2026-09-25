@@ -69,6 +69,20 @@
 - State the expected verification scope in subagent prompts and explicitly prohibit unnecessary full-suite runs.
 - Do not delay committing and pushing a focused fix solely to repeat checks already completed successfully by another agent or CI.
 
+## State and Source of Truth
+
+- Do not store what can be calculated. If a value can be derived from the project or the live
+  warehouse at the point of use, derive it there and then instead of persisting it and reading it
+  back later.
+- Stored state is for history, auditing, logging, and facts that genuinely cannot be recalculated:
+  what was built, when, at which version, and whether a migration or batch completed.
+- The warehouse catalog and planner snapshot are authoritative for live facts such as relation
+  existence, relation type, columns and types, table type, and retention. Never infer a live fact
+  from fingerprints, events, bindings, or a plan reason when the warehouse can answer; built-up
+  state drifts through external drops and edits and then needs reconciliation.
+- Consult stored state only after the live facts it describes are confirmed. For example, a model
+  whose relation is missing plans as a first run regardless of any recorded fingerprint.
+
 ## Direct-Mode Warehouse State
 
 - NEVER implement a mutable lifecycle state machine in raw warehouse state tables in direct mode. Do not represent progress by repeatedly updating one row through statuses such as `PLANNED`, `RUNNING`, and `COMPLETE`.

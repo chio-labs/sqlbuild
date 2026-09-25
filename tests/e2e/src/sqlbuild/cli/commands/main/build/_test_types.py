@@ -1113,3 +1113,10 @@ class PythonNodeIdentityBuildE2ETestCase:
     edited_text: str
     expected_asset_identity_status: str
     expected_loader_version_count: int
+
+
+@dataclass(frozen=True)
+class DroppedIncrementalRelationE2ETestCase:
+    description: str
+    incremental_strategy: str
+    expected_rows: tuple[tuple[int, str], ...]

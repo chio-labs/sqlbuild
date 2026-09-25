@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.planner.models import BackfillResult, SchemaFinding
-from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
+from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind, PlanAction, PlanReason
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 
@@ -25,6 +25,16 @@ class DetectModelChangesTestCase:
     fingerprint_config_values: dict[str, object] | None = None
     inferred_columns: tuple[InferredColumn, ...] | None = None
     fast_lineage_has_star: bool = False
+    expected_recorded_build_relation_missing: bool = False
+    renamed_by_migration: bool = False
+
+
+@dataclass(frozen=True)
+class DroppedRelationPlanActionTestCase:
+    description: str
+    config_values: dict[str, object]
+    expected_action: PlanAction
+    expected_reason: PlanReason
 
 
 @dataclass(frozen=True)

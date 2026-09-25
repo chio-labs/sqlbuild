@@ -306,6 +306,8 @@ def _serialize_warning(warning: PlanWarning) -> dict[str, object]:
     }
     if warning.model_name is not None:
         result["model_name"] = warning.model_name
+    if warning.code is not None:
+        result["code"] = warning.code
     return result
 
 

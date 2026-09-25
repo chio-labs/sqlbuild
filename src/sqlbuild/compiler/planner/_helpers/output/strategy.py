@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
 )
+from sqlbuild.compiler.planner.constants import RECORDED_RELATION_MISSING_WARNING_CODE
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
@@ -141,6 +142,20 @@ def build_model_warnings(
 
     effective: OnSchemaChange = on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE
     warnings: list[PlanWarning] = []
+
+    if change_result.recorded_build_relation_missing:
+        warnings.append(
+            PlanWarning(
+                model_name=model_name,
+                severity=WarningSeverity.WARNING,
+                code=RECORDED_RELATION_MISSING_WARNING_CODE,
+                message=(
+                    f"{model_name}: SQLBuild state records a previous build, but the relation "
+                    "no longer exists in the warehouse. It may have been dropped outside "
+                    "SQLBuild; planning a first run to recreate it."
+                ),
+            )
+        )
 
     if effective == OnSchemaChange.FAIL and change_result.schema_findings:
         warnings.append(
