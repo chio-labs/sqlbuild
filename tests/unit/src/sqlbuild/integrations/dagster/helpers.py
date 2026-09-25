@@ -568,3 +568,47 @@ def assert_json_output_file_behavior(*, command: tuple[str, ...]) -> None:
     assert "--json" not in command
     json_output_index: int = command.index("--json-output") + 1
     assert not Path(command[json_output_index]).exists()
+
+
+def _selection_model_node(name: str) -> dict[str, Any]:
+    return {
+        "id": f"model:{name}",
+        "kind": "model",
+        "name": name,
+        "asset_key": ["analytics", name],
+        "path": f"models/{name}.sql",
+        "materialization_type": "table",
+    }
+
+
+def _selection_edge(from_name: str, to_name: str) -> dict[str, str]:
+    return {"from_id": f"model:{from_name}", "to_id": f"model:{to_name}"}
+
+
+def build_dagster_selection_graph_dag() -> Mapping[str, Any]:
+    return {
+        "version": 1,
+        "project_name": "dagster_selection_project",
+        "nodes": [
+            _selection_model_node("stg_orders"),
+            _selection_model_node("orders"),
+            _selection_model_node("customers"),
+            _selection_model_node("raw_events"),
+            _selection_model_node("events_left"),
+            _selection_model_node("events_right"),
+            _selection_model_node("events_joined"),
+            _selection_model_node("events_report"),
+            _selection_model_node("events_side"),
+        ],
+        "edges": [
+            _selection_edge("stg_orders", "orders"),
+            _selection_edge("stg_orders", "customers"),
+            _selection_edge("raw_events", "events_left"),
+            _selection_edge("raw_events", "events_right"),
+            _selection_edge("raw_events", "events_side"),
+            _selection_edge("events_left", "events_joined"),
+            _selection_edge("events_right", "events_joined"),
+            _selection_edge("events_joined", "events_report"),
+        ],
+        "checks": [],
+    }

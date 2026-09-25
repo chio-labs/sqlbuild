@@ -5,6 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 
 from sqlbuild.adapter.contract.types import FrameworkType
+from sqlbuild.adapter.state_sql.main.render_state_table_create_sql import (
+    render_state_table_create_sql,
+)
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.audit_results.constants import (
     AUDIT_RESULT_COLUMN_TYPES,
@@ -52,7 +55,6 @@ from sqlbuild.executor.audit_results.constants import (
 )
 from sqlbuild.executor.audit_results.models import AuditResultRecord
 from sqlbuild.sql_values.main.render_state_literal import render_state_sql_literal
-from sqlbuild.sql_values.types import StateSqlValueType
 
 _REQUIRED_COLUMNS: frozenset[str] = frozenset(
     {
@@ -95,21 +97,16 @@ def build_create_table_sql(
     render_framework_type: Callable[[FrameworkType], str],
     transient: bool = False,
 ) -> str:
-    qualified_name: str = build_qualified_table_name(
-        database=database, schema=schema, render_qualified_name=render_qualified_name
+    return render_state_table_create_sql(
+        qualified_name=build_qualified_table_name(
+            database=database, schema=schema, render_qualified_name=render_qualified_name
+        ),
+        columns=AUDIT_RESULT_COLUMNS,
+        column_types=AUDIT_RESULT_COLUMN_TYPES,
+        required_columns=_REQUIRED_COLUMNS,
+        render_framework_type=render_framework_type,
+        transient=transient,
     )
-    rendered_types: dict[StateSqlValueType, str] = {
-        StateSqlValueType.STRING: render_framework_type(FrameworkType.STRING),
-        StateSqlValueType.INTEGER: render_framework_type(FrameworkType.INTEGER),
-        StateSqlValueType.TEXT_TIMESTAMP: render_framework_type(FrameworkType.TIMESTAMP),
-    }
-    definitions: list[str] = []
-    for column in AUDIT_RESULT_COLUMNS:
-        required: str = " NOT NULL" if column in _REQUIRED_COLUMNS else ""
-        column_type: str = rendered_types[AUDIT_RESULT_COLUMN_TYPES[column]]
-        definitions.append(f"{column} {column_type}{required}")
-    table_kind: str = "TRANSIENT TABLE" if transient else "TABLE"
-    return f"CREATE {table_kind} IF NOT EXISTS {qualified_name} ({', '.join(definitions)})"
 
 
 def build_insert_sql(

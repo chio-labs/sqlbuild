@@ -6,7 +6,8 @@ from typing import Any
 
 from sqlbuild.compiler.compile.models import CompiledModel
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
+from sqlbuild.compiler.discovery.constants import SQL_HOOK_IDENTITY_FIELDS
+from sqlbuild.compiler.discovery.main.serialize_hook_entries import serialize_hook_entries
 from sqlbuild.compiler.planner._helpers.identity.model_metadata import contract_output_signature
 from sqlbuild.compiler.planner.constants import (
     MODEL_CUSTOM_CONFIG_KEY,
@@ -77,35 +78,11 @@ def _model_execution_signature(
 def _hook_execution_signature(
     *, value: object, hook_version_hashes: dict[str, str]
 ) -> list[dict[str, object]]:
-    if not isinstance(value, list | tuple):
-        return []
-    hooks: list[dict[str, object]] = []
-    entry: object
-    for entry in value:
-        if isinstance(entry, SqlHookEntry):
-            hook: dict[str, object] = {
-                "type": "sql",
-                "statement": entry.statement,
-            }
-            if entry.name is not None:
-                hook["name"] = entry.name
-            if entry.relative_path is not None:
-                hook["relative_path"] = entry.relative_path.as_posix()
-            if entry.definition_sql is not None:
-                hook["definition_sql"] = entry.definition_sql
-            if entry.kwargs is not None:
-                hook["kwargs"] = entry.kwargs
-            if entry.description is not None:
-                hook["description"] = entry.description
-            hooks.append(hook)
-        elif isinstance(entry, PythonHookEntry):
-            python_hook: dict[str, object] = {
-                "type": "python",
-                "name": entry.name,
-                "kwargs": entry.kwargs,
-            }
-            version_hash: str | None = hook_version_hashes.get(entry.name)
-            if version_hash is not None:
-                python_hook["version_hash"] = version_hash
-            hooks.append(python_hook)
-    return hooks
+    return serialize_hook_entries(
+        value=value,
+        sql_fields=SQL_HOOK_IDENTITY_FIELDS,
+        python_hook_fields={
+            hook_name: {"version_hash": version_hash}
+            for hook_name, version_hash in hook_version_hashes.items()
+        },
+    )

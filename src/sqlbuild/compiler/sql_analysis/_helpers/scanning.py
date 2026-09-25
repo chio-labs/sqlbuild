@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.sql_analysis.constants import (
@@ -78,6 +79,31 @@ def find_matching_paren_impl(*, sql: str, open_paren_index: int, context: str = 
                 return index
         index += 1
     raise CompileInputError(f"{context} contains an unclosed parenthesis")
+
+
+def iter_code_positions_impl(*, sql: str, context: str = "SQL") -> Iterator[tuple[int, int]]:
+    """Yield code offsets outside comments, quotes, and parentheses with their nesting depth."""
+
+    depth: int = 0
+    index: int = 0
+    while index < len(sql):
+        if sql.startswith("--", index):
+            index = skip_line_comment_impl(sql=sql, start=index)
+            continue
+        if sql.startswith("/*", index):
+            index = skip_block_comment_impl(sql=sql, start=index, context=context)
+            continue
+        character: str = sql[index]
+        if character in SQL_QUOTE_CHARACTERS:
+            index = skip_quoted_text_impl(sql=sql, start=index, context=context)
+            continue
+        if character == SQL_OPEN_PARENTHESIS:
+            depth += 1
+        elif character == SQL_CLOSE_PARENTHESIS:
+            depth -= 1
+        else:
+            yield index, depth
+        index += 1
 
 
 def is_identifier_start_impl(character: str) -> bool:

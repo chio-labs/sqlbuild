@@ -92,6 +92,16 @@ class ScenarioFailureHelpTestCase:
 
 
 @dataclass(frozen=True)
+class ScenarioConnectionLifecycleTestCase:
+    """One warehouse scenario pipeline target-connection lifecycle case."""
+
+    description: str
+    expected_event_types: tuple[str, ...]
+    expected_operation_names: tuple[str, ...]
+    expected_connection_events: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ScenarioTestPipelineTestCase:
     """One scenario test pipeline orchestration case."""
 

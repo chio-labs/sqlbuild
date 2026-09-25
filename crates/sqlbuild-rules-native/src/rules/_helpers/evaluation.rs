@@ -11,6 +11,10 @@ use crate::rules::_helpers::{
 use crate::rules::models::{
     FaultCollector, ModelEvaluationRequest, ProjectEvaluationRequest, ResolvedThresholdOverride,
 };
+use crate::sql_scan::main::matching_paren::matching_paren;
+use crate::sql_scan::main::non_code_end::non_code_end;
+use crate::sql_scan::main::quote_end::quote_end;
+use crate::sql_scan::models::QuotePolicy;
 use globset::{Glob, GlobSetBuilder};
 use sqlparser::ast::{
     BinaryOperator, Expr, GroupByExpr, JoinConstraint, JoinOperator, Query, Select, SelectItem,
@@ -70,6 +74,7 @@ struct ParsedModel<'a> {
     model: &'a Model,
     classification: ModelClassification,
     authored_compact_sql: String,
+    quote_policy: QuotePolicy,
 }
 
 struct ModelClassification {
@@ -145,12 +150,14 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
         ));
     };
     let query = *query;
+    let quote_policy = rules_quote_policy(&request.dialect);
     let classification = classify_model(&query, model, &request.dialect)?;
     let parsed = ParsedModel {
         query,
         model,
         classification,
-        authored_compact_sql: numeric_decisions::compact_sql(&model.authored_sql),
+        authored_compact_sql: numeric_decisions::compact_sql(&model.authored_sql, quote_policy),
+        quote_policy,
     };
     if let Some(rule) = metadata("SQBRMODEL101") {
         import_ctes(&parsed, rule, &faults);
@@ -260,26 +267,20 @@ pub(super) fn parse_rule_statements(
 }
 
 fn normalize_generic_fallback(sql: &str) -> String {
+    let policy = rules_quote_policy("generic");
     let mut bytes = sql.as_bytes().to_vec();
-    let mut quote: Option<u8> = None;
     let mut index = 0;
     while index < bytes.len() {
         let byte = bytes[index];
         let next = bytes.get(index + 1).copied();
-        if let Some(active_quote) = quote {
-            if byte == active_quote {
-                if next == Some(active_quote) {
-                    index += 2;
-                    continue;
-                }
-                quote = None;
-            }
-            index += 1;
+        if policy.is_quote(byte) {
+            let Ok(end) = quote_end(&bytes, index, policy) else {
+                break;
+            };
+            index = end;
             continue;
         }
-        if matches!(byte, b'\'' | b'"') {
-            quote = Some(byte);
-        } else if byte == b'-' && next == Some(b'>') {
+        if byte == b'-' && next == Some(b'>') {
             bytes[index] = b',';
             bytes[index + 1] = b' ';
             index += 2;
@@ -303,6 +304,17 @@ fn parse_with_dialect(sql: &str, dialect: &dyn Dialect) -> Result<Vec<Statement>
     parser.parse_statements()
 }
 
+pub(crate) fn rules_quote_policy(dialect_name: &str) -> QuotePolicy {
+    let dialect = rules_dialect(dialect_name);
+    let backslash_escapes = dialect.supports_string_literal_backslash_escape();
+    QuotePolicy {
+        backtick_identifiers: dialect.is_delimited_identifier_start('`'),
+        single_quote_backslash_escapes: backslash_escapes,
+        double_quote_backslash_escapes: backslash_escapes
+            && !dialect.is_delimited_identifier_start('"'),
+    }
+}
+
 fn rules_dialect(name: &str) -> Box<dyn Dialect> {
     match name.to_ascii_lowercase().as_str() {
         "bigquery" => Box::new(BigQueryDialect {}),
@@ -317,57 +329,22 @@ fn rules_dialect(name: &str) -> Box<dyn Dialect> {
 }
 
 pub(crate) fn normalize_rules_sql(dialect: &str, sql: &str) -> String {
-    let sql = normalize_table_function_calls(sql);
+    let policy = rules_quote_policy(dialect);
+    let sql = normalize_table_function_calls(sql, policy);
     if !dialect.eq_ignore_ascii_case("snowflake") {
         return sql;
     }
     let mut bytes = sql.as_bytes().to_vec();
     let mut index = 0;
-    let mut quote: Option<u8> = None;
-    let mut line_comment = false;
-    let mut block_comment = false;
     while index < bytes.len() {
         let byte = bytes[index];
-        let next = bytes.get(index + 1).copied();
-        if line_comment {
-            line_comment = byte != b'\n';
-            index += 1;
-            continue;
-        }
-        if block_comment {
-            if byte == b'*' && next == Some(b'/') {
-                block_comment = false;
-                index += 2;
-            } else {
-                index += 1;
+        match non_code_end(&bytes, index, policy) {
+            Ok(Some(end)) => {
+                index = end;
+                continue;
             }
-            continue;
-        }
-        if let Some(active_quote) = quote {
-            if byte == active_quote {
-                if next == Some(active_quote) {
-                    index += 2;
-                    continue;
-                }
-                quote = None;
-            }
-            index += 1;
-            continue;
-        }
-        if byte == b'-' && next == Some(b'-') {
-            line_comment = true;
-            index += 2;
-            continue;
-        }
-        if byte == b'/' && next == Some(b'*') {
-            block_comment = true;
-            index += 2;
-            continue;
-        }
-        if matches!(byte, b'\'' | b'"') {
-            quote = Some(byte);
-            index += 1;
-            continue;
+            Ok(None) => {}
+            Err(_) => break,
         }
         if byte == b',' && clause_follows(&bytes, index + 1) {
             bytes[index] = b' ';
@@ -389,7 +366,7 @@ pub(crate) fn normalize_rules_sql(dialect: &str, sql: &str) -> String {
             if word.eq_ignore_ascii_case(b"EXCLUDE")
                 && is_star_modifier_before(sql.as_bytes(), start)
                 && bytes.get(following) == Some(&b'(')
-                && let Some(close) = matching_parenthesis(&bytes, following)
+                && let Ok(close) = matching_paren(&bytes, following, policy)
             {
                 blank_preserving_newlines(&mut bytes[start..=close]);
                 index = close + 1;
@@ -398,7 +375,7 @@ pub(crate) fn normalize_rules_sql(dialect: &str, sql: &str) -> String {
             if word.eq_ignore_ascii_case(b"ARRAY")
                 && is_cast_type_before(sql.as_bytes(), start)
                 && bytes.get(following) == Some(&b'(')
-                && let Some(close) = matching_parenthesis(&bytes, following)
+                && let Ok(close) = matching_paren(&bytes, following, policy)
             {
                 bytes[start..index].copy_from_slice(b"TEXT ");
                 blank_preserving_newlines(&mut bytes[following..=close]);
@@ -419,16 +396,17 @@ pub(crate) fn normalize_rules_sql(dialect: &str, sql: &str) -> String {
     String::from_utf8(bytes).unwrap_or(sql)
 }
 
-fn normalize_table_function_calls(sql: &str) -> String {
+fn normalize_table_function_calls(sql: &str, policy: QuotePolicy) -> String {
     const TABLE_FUNCTION: &[u8] = b"__table_fn(";
     let mut bytes = sql.as_bytes().to_vec();
     let mut cursor = 0;
     while cursor + TABLE_FUNCTION.len() <= bytes.len() {
-        let Some(token_start) = find_token_outside_syntax(&bytes, TABLE_FUNCTION, cursor) else {
+        let Some(token_start) = find_token_outside_syntax(&bytes, TABLE_FUNCTION, cursor, policy)
+        else {
             break;
         };
         let open = token_start + TABLE_FUNCTION.len() - 1;
-        let Some(close) = matching_parenthesis(&bytes, open) else {
+        let Ok(close) = matching_paren(&bytes, open, policy) else {
             break;
         };
         let mut next = close + 1;
@@ -452,53 +430,21 @@ fn blank_preserving_newlines(sql: &mut [u8]) {
     }
 }
 
-fn find_token_outside_syntax(sql: &[u8], token: &[u8], start: usize) -> Option<usize> {
+fn find_token_outside_syntax(
+    sql: &[u8],
+    token: &[u8],
+    start: usize,
+    policy: QuotePolicy,
+) -> Option<usize> {
     let mut index = start;
-    let mut quote: Option<u8> = None;
-    let mut line_comment = false;
-    let mut block_comment = false;
     while index + token.len() <= sql.len() {
-        let byte = sql[index];
-        let next = sql.get(index + 1).copied();
-        if line_comment {
-            line_comment = byte != b'\n';
-            index += 1;
-            continue;
-        }
-        if block_comment {
-            if byte == b'*' && next == Some(b'/') {
-                block_comment = false;
-                index += 2;
-            } else {
-                index += 1;
+        match non_code_end(sql, index, policy) {
+            Ok(Some(end)) => {
+                index = end;
+                continue;
             }
-            continue;
-        }
-        if let Some(active_quote) = quote {
-            if byte == active_quote {
-                if next == Some(active_quote) {
-                    index += 2;
-                    continue;
-                }
-                quote = None;
-            }
-            index += 1;
-            continue;
-        }
-        if byte == b'-' && next == Some(b'-') {
-            line_comment = true;
-            index += 2;
-            continue;
-        }
-        if byte == b'/' && next == Some(b'*') {
-            block_comment = true;
-            index += 2;
-            continue;
-        }
-        if matches!(byte, b'\'' | b'"') {
-            quote = Some(byte);
-            index += 1;
-            continue;
+            Ok(None) => {}
+            Err(_) => return None,
         }
         if sql[index..index + token.len()].eq_ignore_ascii_case(token) {
             return Some(index);
@@ -546,70 +492,6 @@ fn is_cast_type_before(sql: &[u8], type_start: usize) -> bool {
         && sql[cursor - AS_KEYWORD_LENGTH..cursor].eq_ignore_ascii_case(b"AS")
         && (cursor == AS_KEYWORD_LENGTH
             || !sql[cursor - BYTE_BEFORE_AS_OFFSET].is_ascii_alphanumeric())
-}
-
-fn matching_parenthesis(sql: &[u8], open: usize) -> Option<usize> {
-    let mut depth = 0;
-    let mut index = open;
-    let mut quote: Option<u8> = None;
-    let mut line_comment = false;
-    let mut block_comment = false;
-    while index < sql.len() {
-        let byte = sql[index];
-        let next = sql.get(index + 1).copied();
-        if line_comment {
-            line_comment = byte != b'\n';
-            index += 1;
-            continue;
-        }
-        if block_comment {
-            if byte == b'*' && next == Some(b'/') {
-                block_comment = false;
-                index += 2;
-            } else {
-                index += 1;
-            }
-            continue;
-        }
-        if let Some(active_quote) = quote {
-            if byte == active_quote {
-                if next == Some(active_quote) {
-                    index += 2;
-                    continue;
-                }
-                quote = None;
-            }
-            index += 1;
-            continue;
-        }
-        if byte == b'-' && next == Some(b'-') {
-            line_comment = true;
-            index += 2;
-            continue;
-        }
-        if byte == b'/' && next == Some(b'*') {
-            block_comment = true;
-            index += 2;
-            continue;
-        }
-        if matches!(byte, b'\'' | b'"') {
-            quote = Some(byte);
-            index += 1;
-            continue;
-        }
-        match byte {
-            b'(' => depth += 1,
-            b')' => {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(index);
-                }
-            }
-            _ => {}
-        }
-        index += 1;
-    }
-    None
 }
 
 fn is_lambda_parameter_before(sql: &[u8], type_start: usize) -> bool {
@@ -1374,6 +1256,7 @@ fn evaluate_literal_rules(
                     equality: comparison.equality,
                     output_name: comparison.output_name.as_deref(),
                     literal,
+                    quote_policy: parsed.quote_policy,
                 })
             });
             if magic {

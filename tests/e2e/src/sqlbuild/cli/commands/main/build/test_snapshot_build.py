@@ -18,6 +18,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     SnapshotHistoricalCheckBuildE2ETestCase,
     SnapshotHistoricalTimestampBuildE2ETestCase,
     SnapshotHookBuildE2ETestCase,
+    SnapshotReappearingKeyBuildE2ETestCase,
     SnapshotSelectorBuildE2ETestCase,
     SnapshotTimestampBuildE2ETestCase,
     SnapshotTimestampFailureBuildE2ETestCase,
@@ -29,6 +30,56 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     query_duckdb,
     run_sqb,
     table_exists,
+)
+
+_TIMESTAMP_REAPPEARING_KEY_FINAL_HISTORY: tuple[tuple[object, ...], ...] = (
+    (1, "basic", "2024-01-15", "2024-02-03"),
+    (1, "pro", "2024-02-03", None),
+    (2, "basic", "2024-01-15", "2024-02-02"),
+    (2, "basic", "2024-02-03", None),
+    (3, "basic", "2024-01-15", "2024-02-04"),
+    (3, "basic", "2024-02-05", None),
+)
+_TIMESTAMP_REAPPEARING_KEY_ROUND_ROWS: tuple[str, ...] = (
+    "(1, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-01'), "
+    "(2, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-01'), "
+    "(3, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-01')",
+    "(1, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-02'), "
+    "(3, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-02')",
+    "(1, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-03'), "
+    "(2, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-03'), "
+    "(3, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-03')",
+    "(1, 'pro', TIMESTAMP '2024-02-03', TIMESTAMP '2024-02-04'), "
+    "(2, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-04'), "
+    "(1, 'pro', TIMESTAMP '2024-02-03', TIMESTAMP '2024-02-05'), "
+    "(2, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-05'), "
+    "(3, 'basic', TIMESTAMP '2024-01-15', TIMESTAMP '2024-02-05')",
+)
+_TIMESTAMP_REAPPEARING_KEY_TABLE_SQL: str = (
+    "(customer_id INTEGER, status VARCHAR, updated_at TIMESTAMP, observed_at TIMESTAMP)"
+)
+_REAPPEARING_KEY_FINAL_HISTORY: tuple[tuple[object, ...], ...] = (
+    (1, "active", "2024-02-01", "2024-02-04"),
+    (1, "paused", "2024-02-04", None),
+    (2, "active", "2024-02-01", "2024-02-02"),
+    (2, "active", "2024-02-03", None),
+    (3, "active", "2024-02-01", "2024-02-04"),
+    (3, "active", "2024-02-05", None),
+)
+_REAPPEARING_KEY_OBSERVATIONS_SQL: str = (
+    "SELECT 1 AS customer_id, 'active' AS status, TIMESTAMP '2024-02-01' AS observed_at "
+    "UNION ALL SELECT 2, 'active', TIMESTAMP '2024-02-01' "
+    "UNION ALL SELECT 3, 'active', TIMESTAMP '2024-02-01' "
+    "UNION ALL SELECT 1, 'active', TIMESTAMP '2024-02-02' "
+    "UNION ALL SELECT 3, 'active', TIMESTAMP '2024-02-02' "
+    "UNION ALL SELECT 1, 'active', TIMESTAMP '2024-02-03' "
+    "UNION ALL SELECT 2, 'active', TIMESTAMP '2024-02-03' "
+    "UNION ALL SELECT 3, 'active', TIMESTAMP '2024-02-03' "
+    "UNION ALL SELECT 1, 'paused', TIMESTAMP '2024-02-04' "
+    "UNION ALL SELECT 2, 'active', TIMESTAMP '2024-02-04' "
+    "UNION ALL SELECT 1, 'paused', TIMESTAMP '2024-02-05' "
+    "UNION ALL SELECT 2, 'active', TIMESTAMP '2024-02-05' "
+    "UNION ALL SELECT 3, 'active', TIMESTAMP '2024-02-05'"
 )
 
 
@@ -1925,6 +1976,294 @@ def test_given_shallow_waffle_shop_snapshot_edges_when_sources_change_then_cli_t
             "customer_status_historical_check_hard_delete_snapshot",
             "customer_status_historical_check_snapshot",
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnapshotReappearingKeyBuildE2ETestCase(
+            description=(
+                "historical check snapshot reopens hard-deleted keys that reappear unchanged"
+            ),
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
+                    name = "snapshot_reappearing_keys"
+                    adapter = "duckdb"
+
+                    [connection]
+                    database = "snapshot_reappearing_keys.duckdb"
+                    """
+                ).strip()
+                + "\n",
+                "sources/raw.yml": dedent(
+                    """
+                    sources:
+                      - name: raw_membership_observations
+                        schema: main
+                        table: raw_membership_observations
+                      - name: raw_membership_full_history
+                        schema: main
+                        table: raw_membership_full_history
+                    """
+                ).strip()
+                + "\n",
+                "models/membership_incremental_snapshot.sql": dedent(
+                    """
+                    MODEL (
+                      materialized snapshot,
+                      unique_key [customer_id],
+                      snapshot_strategy check,
+                      check_columns [status],
+                      observed_at observed_at,
+                      invalidate_hard_deletes true
+                    );
+
+                    SELECT customer_id, status, observed_at
+                    FROM __source("raw_membership_observations")
+                    """
+                ).strip()
+                + "\n",
+                "models/membership_full_history_snapshot.sql": dedent(
+                    """
+                    MODEL (
+                      materialized snapshot,
+                      unique_key [customer_id],
+                      snapshot_strategy check,
+                      check_columns [status],
+                      observed_at observed_at,
+                      invalidate_hard_deletes true
+                    );
+
+                    SELECT customer_id, status, observed_at
+                    FROM __source("raw_membership_full_history")
+                    """
+                ).strip()
+                + "\n",
+            },
+            initial_seed_sql=(
+                "CREATE TABLE main.raw_membership_observations AS "
+                "SELECT 1 AS customer_id, 'active' AS status, TIMESTAMP '2024-02-01' AS observed_at "
+                "UNION ALL SELECT 2, 'active', TIMESTAMP '2024-02-01' "
+                "UNION ALL SELECT 3, 'active', TIMESTAMP '2024-02-01'; "
+                f"CREATE TABLE main.raw_membership_full_history AS {_REAPPEARING_KEY_OBSERVATIONS_SQL}"
+            ),
+            observation_sql_by_round=(
+                (),
+                (
+                    "INSERT INTO main.raw_membership_observations VALUES "
+                    "(1, 'active', TIMESTAMP '2024-02-02'), (3, 'active', TIMESTAMP '2024-02-02')",
+                ),
+                (
+                    "INSERT INTO main.raw_membership_observations VALUES "
+                    "(1, 'active', TIMESTAMP '2024-02-03'), (2, 'active', TIMESTAMP '2024-02-03'), "
+                    "(3, 'active', TIMESTAMP '2024-02-03')",
+                ),
+                (
+                    "INSERT INTO main.raw_membership_observations VALUES "
+                    "(1, 'paused', TIMESTAMP '2024-02-04'), (2, 'active', TIMESTAMP '2024-02-04'), "
+                    "(1, 'paused', TIMESTAMP '2024-02-05'), (2, 'active', TIMESTAMP '2024-02-05'), "
+                    "(3, 'active', TIMESTAMP '2024-02-05')",
+                ),
+            ),
+            history_query_template=(
+                "SELECT customer_id, status, strftime(valid_from, '%Y-%m-%d'), "
+                "strftime(valid_to, '%Y-%m-%d') FROM main.{table_name} "
+                "ORDER BY customer_id, valid_from"
+            ),
+            expected_incremental_rows_by_round=(
+                (
+                    (1, "active", "2024-02-01", None),
+                    (2, "active", "2024-02-01", None),
+                    (3, "active", "2024-02-01", None),
+                ),
+                (
+                    (1, "active", "2024-02-01", None),
+                    (2, "active", "2024-02-01", "2024-02-02"),
+                    (3, "active", "2024-02-01", None),
+                ),
+                (
+                    (1, "active", "2024-02-01", None),
+                    (2, "active", "2024-02-01", "2024-02-02"),
+                    (2, "active", "2024-02-03", None),
+                    (3, "active", "2024-02-01", None),
+                ),
+                _REAPPEARING_KEY_FINAL_HISTORY,
+            ),
+            expected_full_history_rows=_REAPPEARING_KEY_FINAL_HISTORY,
+        ),
+        SnapshotReappearingKeyBuildE2ETestCase(
+            description=(
+                "historical timestamp snapshot reopens hard-deleted keys at the observation time"
+            ),
+            repo_files={
+                "sqlbuild_project.toml": dedent(
+                    """
+                    name = "snapshot_reappearing_keys"
+                    adapter = "duckdb"
+
+                    [connection]
+                    database = "snapshot_reappearing_keys.duckdb"
+                    """
+                ).strip()
+                + "\n",
+                "sources/raw.yml": dedent(
+                    """
+                    sources:
+                      - name: raw_membership_observations
+                        schema: main
+                        table: raw_membership_observations
+                      - name: raw_membership_full_history
+                        schema: main
+                        table: raw_membership_full_history
+                    """
+                ).strip()
+                + "\n",
+                "models/membership_incremental_snapshot.sql": dedent(
+                    """
+                    MODEL (
+                      materialized snapshot,
+                      unique_key [customer_id],
+                      snapshot_strategy timestamp,
+                      updated_at updated_at,
+                      observed_at observed_at,
+                      historical_input snapshot,
+                      invalidate_hard_deletes true
+                    );
+
+                    SELECT customer_id, status, updated_at, observed_at
+                    FROM __source("raw_membership_observations")
+                    """
+                ).strip()
+                + "\n",
+                "models/membership_full_history_snapshot.sql": dedent(
+                    """
+                    MODEL (
+                      materialized snapshot,
+                      unique_key [customer_id],
+                      snapshot_strategy timestamp,
+                      updated_at updated_at,
+                      observed_at observed_at,
+                      historical_input snapshot,
+                      invalidate_hard_deletes true
+                    );
+
+                    SELECT customer_id, status, updated_at, observed_at
+                    FROM __source("raw_membership_full_history")
+                    """
+                ).strip()
+                + "\n",
+            },
+            initial_seed_sql=(
+                f"CREATE TABLE main.raw_membership_observations {_TIMESTAMP_REAPPEARING_KEY_TABLE_SQL}; "
+                "INSERT INTO main.raw_membership_observations VALUES "
+                f"{_TIMESTAMP_REAPPEARING_KEY_ROUND_ROWS[0]}; "
+                f"CREATE TABLE main.raw_membership_full_history {_TIMESTAMP_REAPPEARING_KEY_TABLE_SQL}; "
+                "INSERT INTO main.raw_membership_full_history VALUES "
+                f"{', '.join(_TIMESTAMP_REAPPEARING_KEY_ROUND_ROWS)}"
+            ),
+            observation_sql_by_round=(
+                (),
+                (
+                    "INSERT INTO main.raw_membership_observations VALUES "
+                    f"{_TIMESTAMP_REAPPEARING_KEY_ROUND_ROWS[1]}",
+                ),
+                (
+                    "INSERT INTO main.raw_membership_observations VALUES "
+                    f"{_TIMESTAMP_REAPPEARING_KEY_ROUND_ROWS[2]}",
+                ),
+                (
+                    "INSERT INTO main.raw_membership_observations VALUES "
+                    f"{_TIMESTAMP_REAPPEARING_KEY_ROUND_ROWS[3]}",
+                ),
+            ),
+            history_query_template=(
+                "SELECT customer_id, status, strftime(valid_from, '%Y-%m-%d'), "
+                "strftime(valid_to, '%Y-%m-%d') FROM main.{table_name} "
+                "ORDER BY customer_id, valid_from"
+            ),
+            expected_incremental_rows_by_round=(
+                (
+                    (1, "basic", "2024-01-15", None),
+                    (2, "basic", "2024-01-15", None),
+                    (3, "basic", "2024-01-15", None),
+                ),
+                (
+                    (1, "basic", "2024-01-15", None),
+                    (2, "basic", "2024-01-15", "2024-02-02"),
+                    (3, "basic", "2024-01-15", None),
+                ),
+                (
+                    (1, "basic", "2024-01-15", None),
+                    (2, "basic", "2024-01-15", "2024-02-02"),
+                    (2, "basic", "2024-02-03", None),
+                    (3, "basic", "2024-01-15", None),
+                ),
+                _TIMESTAMP_REAPPEARING_KEY_FINAL_HISTORY,
+            ),
+            expected_full_history_rows=_TIMESTAMP_REAPPEARING_KEY_FINAL_HISTORY,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_hard_deleted_key_when_it_reappears_unchanged_then_snapshot_opens_new_version(
+    test_case: SnapshotReappearingKeyBuildE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="snapshot_reappearing_keys",
+        repo_files=test_case.repo_files,
+    )
+    db_path: Path = project_dir / "snapshot_reappearing_keys.duckdb"
+
+    import duckdb
+
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(db_path))
+    connection.execute(test_case.initial_seed_sql)
+    connection.close()
+
+    observation_sql_round: tuple[str, ...]
+    expected_incremental_rows: tuple[tuple[object, ...], ...]
+    for observation_sql_round, expected_incremental_rows in zip(
+        test_case.observation_sql_by_round,
+        test_case.expected_incremental_rows_by_round,
+        strict=True,
+    ):
+        connection = duckdb.connect(str(db_path))
+        observation_sql: str
+        for observation_sql in observation_sql_round:
+            connection.execute(observation_sql)
+        connection.close()
+
+        result: object = run_sqb(command=("--no-color", "build"), project_dir=project_dir)
+        assert result.returncode == 0, result.stdout + result.stderr
+
+        incremental_rows: tuple[tuple[object, ...], ...] = tuple(
+            tuple(row)
+            for row in query_duckdb(
+                db_path=db_path,
+                sql=test_case.history_query_template.format(
+                    table_name="membership_incremental_snapshot"
+                ),
+            )
+        )
+        full_history_rows: tuple[tuple[object, ...], ...] = tuple(
+            tuple(row)
+            for row in query_duckdb(
+                db_path=db_path,
+                sql=test_case.history_query_template.format(
+                    table_name="membership_full_history_snapshot"
+                ),
+            )
+        )
+        assert incremental_rows == expected_incremental_rows
+        assert full_history_rows == test_case.expected_full_history_rows
+        table_name: str
+        for table_name in ("membership_incremental_snapshot", "membership_full_history_snapshot"):
+            assert_snapshot_scd2_invariants(
+                db_path=db_path, table_name=table_name, key_columns=("customer_id",)
+            )
 
 
 @pytest.mark.parametrize(

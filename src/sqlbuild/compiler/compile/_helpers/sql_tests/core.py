@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
@@ -28,9 +30,7 @@ from sqlbuild.compiler.compile.constants import (
     SOURCE_TEST_CTE_PREFIX,
     SQL_ARGUMENT_SEPARATOR_TOKEN,
     SQL_CEREMONIAL_SELECT_VALUE,
-    SQL_CLOSE_PAREN_TOKEN,
     SQL_OPEN_PAREN_TOKEN,
-    SQL_QUOTE_TOKENS,
     SQL_SINGLE_QUOTE_TOKEN,
     SQL_STATEMENT_TERMINATOR_TOKEN,
     SQL_WILDCARD_TOKEN,
@@ -57,6 +57,7 @@ from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
     is_identifier_character,
 )
 from sqlbuild.compiler.sql_analysis.main._is_identifier_start import is_identifier_start
+from sqlbuild.compiler.sql_analysis.main._iter_code_positions import iter_code_positions
 from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
 from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import (
@@ -65,8 +66,54 @@ from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import (
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 
 _CONTEXT: str = "SQL test"
+_SQL_TEST_WITH_REQUIREMENT: str = "mock CTEs and one __expected__<model> CTE"
 _DIRECT_DEPENDENCY_PATH_LENGTH: int = 2
 _SQL_IDENTIFIER_QUOTE_TOKENS: frozenset[str] = frozenset({'"', "`"})
+
+
+@dataclass(frozen=True)
+class _DirectLogicModeSpec:
+    mode: SqlTestMode
+    actual_cte_name: str
+    expected_cte_name: str
+    foreign_ctes: tuple[tuple[frozenset[str], str], ...]
+
+
+_MACRO_TEST_CTE_NAMES: frozenset[str] = frozenset(
+    {MACRO_ACTUAL_TEST_CTE_NAME, MACRO_EXPECTED_TEST_CTE_NAME}
+)
+_UDF_TEST_CTE_NAMES: frozenset[str] = frozenset(
+    {UDF_ACTUAL_TEST_CTE_NAME, UDF_EXPECTED_TEST_CTE_NAME}
+)
+_TABLE_FN_TEST_CTE_NAMES: frozenset[str] = frozenset(
+    {TABLE_FN_ACTUAL_TEST_CTE_NAME, TABLE_FN_EXPECTED_TEST_CTE_NAME}
+)
+_DIRECT_LOGIC_MODE_SPECS: dict[SqlTestMode, _DirectLogicModeSpec] = {
+    SqlTestMode.MACRO: _DirectLogicModeSpec(
+        mode=SqlTestMode.MACRO,
+        actual_cte_name=MACRO_ACTUAL_TEST_CTE_NAME,
+        expected_cte_name=MACRO_EXPECTED_TEST_CTE_NAME,
+        foreign_ctes=(
+            (_UDF_TEST_CTE_NAMES, "UDF-test"),
+            (_TABLE_FN_TEST_CTE_NAMES, "table_fn-test"),
+        ),
+    ),
+    SqlTestMode.UDF: _DirectLogicModeSpec(
+        mode=SqlTestMode.UDF,
+        actual_cte_name=UDF_ACTUAL_TEST_CTE_NAME,
+        expected_cte_name=UDF_EXPECTED_TEST_CTE_NAME,
+        foreign_ctes=(
+            (_MACRO_TEST_CTE_NAMES, "macro-test"),
+            (_TABLE_FN_TEST_CTE_NAMES, "table_fn-test"),
+        ),
+    ),
+    SqlTestMode.TABLE_FN: _DirectLogicModeSpec(
+        mode=SqlTestMode.TABLE_FN,
+        actual_cte_name=TABLE_FN_ACTUAL_TEST_CTE_NAME,
+        expected_cte_name=TABLE_FN_EXPECTED_TEST_CTE_NAME,
+        foreign_ctes=((_MACRO_TEST_CTE_NAMES | _UDF_TEST_CTE_NAMES, "another direct-logic"),),
+    ),
+}
 
 
 def extract_sql_test_ctes(
@@ -87,9 +134,12 @@ def extract_unclassified_sql_test_ctes(
     """Extract raw top-level CTEs before mode-specific classification."""
 
     try:
-        ctes: tuple[CompileSqlTestCte, ...] = _extract_sql_test_ctes_with_scanner(
+        ctes: tuple[CompileSqlTestCte, ...] = extract_top_level_ctes_with_scanner(
             sql=sql,
             file_label=file_label,
+            context_label=_CONTEXT,
+            with_requirement=_SQL_TEST_WITH_REQUIREMENT,
+            cte_type=CompileSqlTestCte,
         )
     except CompileInputError as scanner_error:
         cte_values: tuple[tuple[str, str], ...] | None = extract_top_level_ctes_with_sql_analysis(
@@ -121,9 +171,12 @@ def extract_sql_test_expected_model_names(
     start: int = _skip_ignorable(sql=sql, start=0)
     if _try_consume_keyword(sql=sql, start=start, keyword=SQL_WITH_KEYWORD) is None:
         return ()
-    ctes: tuple[CompileSqlTestCte, ...] = _extract_sql_test_ctes_with_scanner(
+    ctes: tuple[CompileSqlTestCte, ...] = extract_top_level_ctes_with_scanner(
         sql=sql,
         file_label=file_label,
+        context_label=_CONTEXT,
+        with_requirement=_SQL_TEST_WITH_REQUIREMENT,
+        cte_type=CompileSqlTestCte,
     )
     return tuple(
         _require_prefixed_name(
@@ -151,43 +204,66 @@ def extract_assertion_target_model_names(*, assertion_sql: tuple[str, ...]) -> t
 
 
 @lru_cache(maxsize=4096)
-def _extract_sql_test_ctes_with_scanner(
-    *, sql: str, file_label: str
-) -> tuple[CompileSqlTestCte, ...]:
-    index: int = _skip_ignorable(sql=sql, start=0)
-    index = _consume_keyword(sql=sql, start=index, keyword="WITH", file_label=file_label)
-    index = _skip_ignorable(sql=sql, start=index)
+def extract_top_level_ctes_with_scanner[CteT](
+    *,
+    sql: str,
+    file_label: str,
+    context_label: str,
+    with_requirement: str,
+    cte_type: Callable[..., CteT],
+) -> tuple[CteT, ...]:
+    """Scan top-level `WITH` CTEs followed by the ceremonial `SELECT 1` of a test file."""
+
+    with_end: int | None = _try_consume_keyword(
+        sql=sql,
+        start=_skip_ignorable(sql=sql, start=0, context_label=context_label),
+        keyword=SQL_WITH_KEYWORD,
+    )
+    if with_end is None:
+        raise CompileInputError(
+            f"{context_label} '{file_label}' must declare {with_requirement} before `SELECT 1`"
+        )
+    index: int = _skip_ignorable(sql=sql, start=with_end, context_label=context_label)
     recursive_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="RECURSIVE")
     if recursive_end is not None:
-        index = _skip_ignorable(sql=sql, start=recursive_end)
+        index = _skip_ignorable(sql=sql, start=recursive_end, context_label=context_label)
 
-    ctes: list[CompileSqlTestCte] = []
+    ctes: list[CteT] = []
     seen_cte_names: set[str] = set()
     while True:
-        cte_name, index = _read_identifier(sql=sql, start=index, file_label=file_label)
+        cte_name, index = _read_identifier(
+            sql=sql, start=index, file_label=file_label, context_label=context_label
+        )
         if cte_name in seen_cte_names:
-            raise CompileInputError(f"SQL test '{file_label}' defines duplicate CTE '{cte_name}'")
+            raise CompileInputError(
+                f"{context_label} '{file_label}' defines duplicate CTE '{cte_name}'"
+            )
         seen_cte_names.add(cte_name)
 
-        index = _skip_ignorable(sql=sql, start=index)
+        index = _skip_ignorable(sql=sql, start=index, context_label=context_label)
         if index < len(sql) and sql[index] == SQL_OPEN_PAREN_TOKEN:
-            index = find_matching_paren(sql=sql, open_paren_index=index, context=_CONTEXT) + 1
-            index = _skip_ignorable(sql=sql, start=index)
-        index = _consume_keyword(sql=sql, start=index, keyword="AS", file_label=file_label)
-        index = _skip_ignorable(sql=sql, start=index)
-        if index >= len(sql) or sql[index] != SQL_OPEN_PAREN_TOKEN:
-            raise CompileInputError(f"SQL test '{file_label}' CTE '{cte_name}' must use AS (...)")
-        cte_body_start: int = index + 1
-        cte_body_end: int = find_matching_paren(sql=sql, open_paren_index=index, context=_CONTEXT)
-        ctes.append(
-            CompileSqlTestCte(
-                name=cte_name,
-                sql_body=sql[cte_body_start:cte_body_end].strip(),
-            )
+            index = find_matching_paren(sql=sql, open_paren_index=index, context=context_label) + 1
+            index = _skip_ignorable(sql=sql, start=index, context_label=context_label)
+        index = _consume_keyword(
+            sql=sql,
+            start=index,
+            keyword="AS",
+            file_label=file_label,
+            context_label=context_label,
         )
-        index = _skip_ignorable(sql=sql, start=cte_body_end + 1)
+        index = _skip_ignorable(sql=sql, start=index, context_label=context_label)
+        if index >= len(sql) or sql[index] != SQL_OPEN_PAREN_TOKEN:
+            raise CompileInputError(
+                f"{context_label} '{file_label}' CTE '{cte_name}' must use AS (...)"
+            )
+        cte_body_start: int = index + 1
+        cte_body_end: int = find_matching_paren(
+            sql=sql, open_paren_index=index, context=context_label
+        )
+        ctes.append(cte_type(name=cte_name, sql_body=sql[cte_body_start:cte_body_end].strip()))
+        index = _skip_ignorable(sql=sql, start=cte_body_end + 1, context_label=context_label)
         if index < len(sql) and sql[index] == SQL_ARGUMENT_SEPARATOR_TOKEN:
-            index = _skip_ignorable(sql=sql, start=index + 1)
+            index = _skip_ignorable(sql=sql, start=index + 1, context_label=context_label)
             continue
         break
 
@@ -195,6 +271,7 @@ def _extract_sql_test_ctes_with_scanner(
         sql=sql,
         start=index,
         file_label=file_label,
+        context_label=context_label,
     )
     return tuple(ctes)
 
@@ -205,177 +282,86 @@ def _classify_sql_test_ctes(
     match mode:
         case SqlTestMode.MODEL:
             return _classify_model_sql_test_ctes(ctes=ctes, file_label=file_label)
-        case SqlTestMode.MACRO:
-            return _classify_macro_sql_test_ctes(ctes=ctes, file_label=file_label)
-        case SqlTestMode.UDF:
-            return _classify_udf_sql_test_ctes(ctes=ctes, file_label=file_label)
-        case SqlTestMode.TABLE_FN:
-            return _classify_table_fn_sql_test_ctes(ctes=ctes, file_label=file_label)
+        case SqlTestMode.MACRO | SqlTestMode.UDF | SqlTestMode.TABLE_FN:
+            return _classify_direct_logic_sql_test_ctes(
+                ctes=ctes, file_label=file_label, spec=_DIRECT_LOGIC_MODE_SPECS[mode]
+            )
         case _:
             raise CompileInputError(f"SQL test '{file_label}' has unsupported mode '{mode}'")
 
 
-def _classify_macro_sql_test_ctes(
-    *, ctes: tuple[CompileSqlTestCte, ...], file_label: str
+def _classify_direct_logic_sql_test_ctes(
+    *, ctes: tuple[CompileSqlTestCte, ...], file_label: str, spec: _DirectLogicModeSpec
 ) -> CompileSqlTestCtes:
+    mode: str = spec.mode.value
     authored_ctes: list[CompileSqlTestCte] = []
-    macro_actual_cte: CompileSqlTestCte | None = None
-    macro_expected_cte: CompileSqlTestCte | None = None
+    actual_cte: CompileSqlTestCte | None = None
+    expected_cte: CompileSqlTestCte | None = None
 
     cte: CompileSqlTestCte
     for cte in ctes:
-        if cte.name == MACRO_ACTUAL_TEST_CTE_NAME:
-            if macro_actual_cte is not None:
+        if cte.name == spec.actual_cte_name:
+            if actual_cte is not None:
                 raise CompileInputError(
-                    f"SQL test '{file_label}' mode 'macro' must define exactly one "
-                    f"{MACRO_ACTUAL_TEST_CTE_NAME} CTE"
+                    f"SQL test '{file_label}' mode '{mode}' must define exactly one "
+                    f"{spec.actual_cte_name} CTE"
                 )
-            macro_actual_cte = cte
+            actual_cte = cte
             continue
-        if cte.name == MACRO_EXPECTED_TEST_CTE_NAME:
-            if macro_expected_cte is not None:
+        if cte.name == spec.expected_cte_name:
+            if expected_cte is not None:
                 raise CompileInputError(
-                    f"SQL test '{file_label}' mode 'macro' must define exactly one "
-                    f"{MACRO_EXPECTED_TEST_CTE_NAME} CTE"
+                    f"SQL test '{file_label}' mode '{mode}' must define exactly one "
+                    f"{spec.expected_cte_name} CTE"
                 )
             _validate_expected_cte_query(cte=cte, file_label=file_label, label=cte.name)
-            macro_expected_cte = cte
+            expected_cte = cte
             continue
         if _is_model_mode_cte(cte.name):
             raise CompileInputError(
-                f"SQL test '{file_label}' is mode 'macro' but defines model-test CTE '{cte.name}'"
+                f"SQL test '{file_label}' is mode '{mode}' but defines model-test CTE '{cte.name}'"
             )
-        if cte.name in {UDF_ACTUAL_TEST_CTE_NAME, UDF_EXPECTED_TEST_CTE_NAME}:
-            raise CompileInputError(
-                f"SQL test '{file_label}' is mode 'macro' but defines UDF-test CTE '{cte.name}'"
-            )
-        if cte.name in {TABLE_FN_ACTUAL_TEST_CTE_NAME, TABLE_FN_EXPECTED_TEST_CTE_NAME}:
-            raise CompileInputError(
-                f"SQL test '{file_label}' is mode 'macro' but defines table_fn-test CTE "
-                f"'{cte.name}'"
-            )
+        foreign_names: frozenset[str]
+        foreign_label: str
+        for foreign_names, foreign_label in spec.foreign_ctes:
+            if cte.name in foreign_names:
+                raise CompileInputError(
+                    f"SQL test '{file_label}' is mode '{mode}' but defines {foreign_label} CTE "
+                    f"'{cte.name}'"
+                )
         if cte.name in RESERVED_SQL_TEST_CTE_NAMES:
             raise CompileInputError(
                 f"SQL test '{file_label}' uses reserved helper CTE name '{cte.name}'"
             )
         authored_ctes.append(cte)
 
-    direct_logic_payload: CompileDirectLogicSqlTestCtes = _validate_macro_test_ctes(
-        authored_ctes=tuple(authored_ctes),
-        macro_actual_cte=macro_actual_cte,
-        macro_expected_cte=macro_expected_cte,
-        file_label=file_label,
+    if actual_cte is None or expected_cte is None:
+        raise CompileInputError(
+            f"SQL test '{file_label}' mode '{mode}' must define exactly one "
+            f"{spec.actual_cte_name} CTE and exactly one "
+            f"{spec.expected_cte_name} CTE"
+        )
+    if spec.mode is SqlTestMode.MACRO:
+        _validate_macro_test_bodies(
+            helper_ctes=tuple(authored_ctes), expected_cte=expected_cte, file_label=file_label
+        )
+    else:
+        _validate_call_free_direct_logic_bodies(
+            helper_ctes=tuple(authored_ctes),
+            expected_cte=expected_cte,
+            file_label=file_label,
+            mode=spec.mode,
+            actual_cte_name=spec.actual_cte_name,
+        )
+    return CompileSqlTestCtes(
+        mode=spec.mode,
+        payload=CompileDirectLogicSqlTestCtes(
+            mode=spec.mode,
+            helper_ctes=tuple(authored_ctes),
+            actual_cte=actual_cte,
+            expected_cte=expected_cte,
+        ),
     )
-    return CompileSqlTestCtes(mode=SqlTestMode.MACRO, payload=direct_logic_payload)
-
-
-def _classify_udf_sql_test_ctes(
-    *, ctes: tuple[CompileSqlTestCte, ...], file_label: str
-) -> CompileSqlTestCtes:
-    authored_ctes: list[CompileSqlTestCte] = []
-    udf_actual_cte: CompileSqlTestCte | None = None
-    udf_expected_cte: CompileSqlTestCte | None = None
-
-    cte: CompileSqlTestCte
-    for cte in ctes:
-        if cte.name == UDF_ACTUAL_TEST_CTE_NAME:
-            if udf_actual_cte is not None:
-                raise CompileInputError(
-                    f"SQL test '{file_label}' mode 'udf' must define exactly one "
-                    f"{UDF_ACTUAL_TEST_CTE_NAME} CTE"
-                )
-            udf_actual_cte = cte
-            continue
-        if cte.name == UDF_EXPECTED_TEST_CTE_NAME:
-            if udf_expected_cte is not None:
-                raise CompileInputError(
-                    f"SQL test '{file_label}' mode 'udf' must define exactly one "
-                    f"{UDF_EXPECTED_TEST_CTE_NAME} CTE"
-                )
-            _validate_expected_cte_query(cte=cte, file_label=file_label, label=cte.name)
-            udf_expected_cte = cte
-            continue
-        if _is_model_mode_cte(cte.name):
-            raise CompileInputError(
-                f"SQL test '{file_label}' is mode 'udf' but defines model-test CTE '{cte.name}'"
-            )
-        if cte.name in {MACRO_ACTUAL_TEST_CTE_NAME, MACRO_EXPECTED_TEST_CTE_NAME}:
-            raise CompileInputError(
-                f"SQL test '{file_label}' is mode 'udf' but defines macro-test CTE '{cte.name}'"
-            )
-        if cte.name in {TABLE_FN_ACTUAL_TEST_CTE_NAME, TABLE_FN_EXPECTED_TEST_CTE_NAME}:
-            raise CompileInputError(
-                f"SQL test '{file_label}' is mode 'udf' but defines table_fn-test CTE '{cte.name}'"
-            )
-        if cte.name in RESERVED_SQL_TEST_CTE_NAMES:
-            raise CompileInputError(
-                f"SQL test '{file_label}' uses reserved helper CTE name '{cte.name}'"
-            )
-        authored_ctes.append(cte)
-
-    direct_logic_payload: CompileDirectLogicSqlTestCtes = _validate_udf_test_ctes(
-        authored_ctes=tuple(authored_ctes),
-        udf_actual_cte=udf_actual_cte,
-        udf_expected_cte=udf_expected_cte,
-        file_label=file_label,
-    )
-    return CompileSqlTestCtes(mode=SqlTestMode.UDF, payload=direct_logic_payload)
-
-
-def _classify_table_fn_sql_test_ctes(
-    *, ctes: tuple[CompileSqlTestCte, ...], file_label: str
-) -> CompileSqlTestCtes:
-    authored_ctes: list[CompileSqlTestCte] = []
-    table_fn_actual_cte: CompileSqlTestCte | None = None
-    table_fn_expected_cte: CompileSqlTestCte | None = None
-
-    cte: CompileSqlTestCte
-    for cte in ctes:
-        if cte.name == TABLE_FN_ACTUAL_TEST_CTE_NAME:
-            if table_fn_actual_cte is not None:
-                raise CompileInputError(
-                    f"SQL test '{file_label}' mode 'table_fn' must define exactly one "
-                    f"{TABLE_FN_ACTUAL_TEST_CTE_NAME} CTE"
-                )
-            table_fn_actual_cte = cte
-            continue
-        if cte.name == TABLE_FN_EXPECTED_TEST_CTE_NAME:
-            if table_fn_expected_cte is not None:
-                raise CompileInputError(
-                    f"SQL test '{file_label}' mode 'table_fn' must define exactly one "
-                    f"{TABLE_FN_EXPECTED_TEST_CTE_NAME} CTE"
-                )
-            _validate_expected_cte_query(cte=cte, file_label=file_label, label=cte.name)
-            table_fn_expected_cte = cte
-            continue
-        if _is_model_mode_cte(cte.name):
-            raise CompileInputError(
-                f"SQL test '{file_label}' is mode 'table_fn' but defines model-test CTE "
-                f"'{cte.name}'"
-            )
-        if cte.name in {
-            MACRO_ACTUAL_TEST_CTE_NAME,
-            MACRO_EXPECTED_TEST_CTE_NAME,
-            UDF_ACTUAL_TEST_CTE_NAME,
-            UDF_EXPECTED_TEST_CTE_NAME,
-        }:
-            raise CompileInputError(
-                f"SQL test '{file_label}' is mode 'table_fn' but defines another "
-                f"direct-logic CTE '{cte.name}'"
-            )
-        if cte.name in RESERVED_SQL_TEST_CTE_NAMES:
-            raise CompileInputError(
-                f"SQL test '{file_label}' uses reserved helper CTE name '{cte.name}'"
-            )
-        authored_ctes.append(cte)
-
-    direct_logic_payload: CompileDirectLogicSqlTestCtes = _validate_table_fn_test_ctes(
-        authored_ctes=tuple(authored_ctes),
-        table_fn_actual_cte=table_fn_actual_cte,
-        table_fn_expected_cte=table_fn_expected_cte,
-        file_label=file_label,
-    )
-    return CompileSqlTestCtes(mode=SqlTestMode.TABLE_FN, payload=direct_logic_payload)
 
 
 def _classify_model_sql_test_ctes(
@@ -563,112 +549,51 @@ def _is_model_mode_cte(cte_name: str) -> bool:
     )
 
 
-def _validate_macro_test_ctes(
+def _validate_macro_test_bodies(
     *,
-    authored_ctes: tuple[CompileSqlTestCte, ...],
-    macro_actual_cte: CompileSqlTestCte | None,
-    macro_expected_cte: CompileSqlTestCte | None,
+    helper_ctes: tuple[CompileSqlTestCte, ...],
+    expected_cte: CompileSqlTestCte,
     file_label: str,
-) -> CompileDirectLogicSqlTestCtes:
-    if macro_actual_cte is None or macro_expected_cte is None:
-        raise CompileInputError(
-            f"SQL test '{file_label}' mode 'macro' must define exactly one "
-            f"{MACRO_ACTUAL_TEST_CTE_NAME} CTE and exactly one "
-            f"{MACRO_EXPECTED_TEST_CTE_NAME} CTE"
-        )
+) -> None:
     helper_cte: CompileSqlTestCte
-    for helper_cte in authored_ctes:
+    for helper_cte in helper_ctes:
         macro_names: tuple[str, ...] = find_macro_call_names(helper_cte.sql_body)
         if macro_names:
             raise CompileInputError(
                 f"SQL test '{file_label}' mode 'macro' helper CTE '{helper_cte.name}' "
                 "must not call macros; call macros only in __macro_actual__"
             )
-    expected_macro_names: tuple[str, ...] = find_macro_call_names(macro_expected_cte.sql_body)
+    expected_macro_names: tuple[str, ...] = find_macro_call_names(expected_cte.sql_body)
     if expected_macro_names:
         raise CompileInputError(
             f"SQL test '{file_label}' mode 'macro' CTE {MACRO_EXPECTED_TEST_CTE_NAME} "
             "must not call macros"
         )
-    return CompileDirectLogicSqlTestCtes(
-        mode=SqlTestMode.MACRO,
-        helper_ctes=authored_ctes,
-        actual_cte=macro_actual_cte,
-        expected_cte=macro_expected_cte,
-    )
 
 
-def _validate_udf_test_ctes(
+def _validate_call_free_direct_logic_bodies(
     *,
-    authored_ctes: tuple[CompileSqlTestCte, ...],
-    udf_actual_cte: CompileSqlTestCte | None,
-    udf_expected_cte: CompileSqlTestCte | None,
+    helper_ctes: tuple[CompileSqlTestCte, ...],
+    expected_cte: CompileSqlTestCte,
     file_label: str,
-) -> CompileDirectLogicSqlTestCtes:
-    if udf_actual_cte is None or udf_expected_cte is None:
-        raise CompileInputError(
-            f"SQL test '{file_label}' mode 'udf' must define exactly one "
-            f"{UDF_ACTUAL_TEST_CTE_NAME} CTE and exactly one "
-            f"{UDF_EXPECTED_TEST_CTE_NAME} CTE"
-        )
+    mode: SqlTestMode,
+    actual_cte_name: str,
+) -> None:
     helper_cte: CompileSqlTestCte
-    for helper_cte in authored_ctes:
+    for helper_cte in helper_ctes:
         _validate_no_direct_logic_calls(
             sql=helper_cte.sql_body,
             file_label=file_label,
-            mode=SqlTestMode.UDF,
+            mode=mode,
             cte_label=f"helper CTE '{helper_cte.name}'",
-            allowed_location=UDF_ACTUAL_TEST_CTE_NAME,
+            allowed_location=actual_cte_name,
         )
     _validate_no_direct_logic_calls(
-        sql=udf_expected_cte.sql_body,
+        sql=expected_cte.sql_body,
         file_label=file_label,
-        mode=SqlTestMode.UDF,
-        cte_label=f"CTE {UDF_EXPECTED_TEST_CTE_NAME}",
-        allowed_location=UDF_ACTUAL_TEST_CTE_NAME,
-    )
-    return CompileDirectLogicSqlTestCtes(
-        mode=SqlTestMode.UDF,
-        helper_ctes=authored_ctes,
-        actual_cte=udf_actual_cte,
-        expected_cte=udf_expected_cte,
-    )
-
-
-def _validate_table_fn_test_ctes(
-    *,
-    authored_ctes: tuple[CompileSqlTestCte, ...],
-    table_fn_actual_cte: CompileSqlTestCte | None,
-    table_fn_expected_cte: CompileSqlTestCte | None,
-    file_label: str,
-) -> CompileDirectLogicSqlTestCtes:
-    if table_fn_actual_cte is None or table_fn_expected_cte is None:
-        raise CompileInputError(
-            f"SQL test '{file_label}' mode 'table_fn' must define exactly one "
-            f"{TABLE_FN_ACTUAL_TEST_CTE_NAME} CTE and exactly one "
-            f"{TABLE_FN_EXPECTED_TEST_CTE_NAME} CTE"
-        )
-    helper_cte: CompileSqlTestCte
-    for helper_cte in authored_ctes:
-        _validate_no_direct_logic_calls(
-            sql=helper_cte.sql_body,
-            file_label=file_label,
-            mode=SqlTestMode.TABLE_FN,
-            cte_label=f"helper CTE '{helper_cte.name}'",
-            allowed_location=TABLE_FN_ACTUAL_TEST_CTE_NAME,
-        )
-    _validate_no_direct_logic_calls(
-        sql=table_fn_expected_cte.sql_body,
-        file_label=file_label,
-        mode=SqlTestMode.TABLE_FN,
-        cte_label=f"CTE {TABLE_FN_EXPECTED_TEST_CTE_NAME}",
-        allowed_location=TABLE_FN_ACTUAL_TEST_CTE_NAME,
-    )
-    return CompileDirectLogicSqlTestCtes(
-        mode=SqlTestMode.TABLE_FN,
-        helper_ctes=authored_ctes,
-        actual_cte=table_fn_actual_cte,
-        expected_cte=table_fn_expected_cte,
+        mode=mode,
+        cte_label=f"CTE {expected_cte.name}",
+        allowed_location=actual_cte_name,
     )
 
 
@@ -754,29 +679,32 @@ def _validate_expected_cte_query(
     branch_column_names: tuple[tuple[str, ...], ...] = _extract_expected_branch_column_names(
         sql=cte.sql_body,
         file_label=file_label,
+        label=label,
     )
     first_branch_column_names: tuple[str, ...] = branch_column_names[0]
     branch_index: int
     for branch_index, column_names in enumerate(branch_column_names[1:], start=2):
         if column_names != first_branch_column_names:
             raise CompileInputError(
-                f"SQL test '{file_label}' must use the same __expected__<model> "
+                f"SQL test '{file_label}' must use the same {label} "
                 f"projection names and order in every set-operation branch; branch {branch_index} "
                 "does not match branch 1"
             )
 
 
 def _extract_expected_branch_column_names(
-    *, sql: str, file_label: str
+    *, sql: str, file_label: str, label: str
 ) -> tuple[tuple[str, ...], ...]:
     sql_analysis_column_names: tuple[tuple[str, ...], ...] | None = (
-        extract_expected_branch_column_names_with_sql_analysis(sql=sql, file_label=file_label)
+        extract_expected_branch_column_names_with_sql_analysis(
+            sql=sql, file_label=file_label, label=label
+        )
     )
     if sql_analysis_column_names is not None:
         return sql_analysis_column_names
     branches: tuple[str, ...] = _split_set_operation_branches(sql)
     return tuple(
-        _extract_expected_select_column_names(branch_sql=branch, file_label=file_label)
+        _extract_expected_select_column_names(branch_sql=branch, file_label=file_label, label=label)
         for branch in branches
     )
 
@@ -784,38 +712,25 @@ def _extract_expected_branch_column_names(
 def _split_set_operation_branches(sql: str) -> tuple[str, ...]:
     branches: list[str] = []
     branch_start: int = 0
-    index: int = 0
-    depth: int = 0
-    while index < len(sql):
-        if sql.startswith("--", index):
-            index = skip_line_comment(sql=sql, start=index)
-            continue
-        if sql.startswith("/*", index):
-            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
-            continue
-        if sql[index] in SQL_QUOTE_TOKENS:
-            index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
-            continue
-        if sql[index] == SQL_OPEN_PAREN_TOKEN:
-            depth += 1
-            index += 1
-            continue
-        if sql[index] == SQL_CLOSE_PAREN_TOKEN:
-            depth -= 1
-            index += 1
+    resume: int = 0
+    index: int
+    depth: int
+    for index, depth in iter_code_positions(sql=sql, context=_CONTEXT):
+        if index < resume or depth != 0:
             continue
         union_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="UNION")
-        if depth == 0 and union_end is not None:
-            branch_sql: str = sql[branch_start:index].strip()
-            if branch_sql:
-                branches.append(branch_sql)
-            index = _skip_ignorable(sql=sql, start=union_end)
-            all_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="ALL")
-            if all_end is not None:
-                index = _skip_ignorable(sql=sql, start=all_end)
-            branch_start = index
+        if union_end is None:
             continue
-        index += 1
+        branch_sql: str = sql[branch_start:index].strip()
+        if branch_sql:
+            branches.append(branch_sql)
+        resume = _skip_ignorable(sql=sql, start=union_end)
+        quantifier_end: int | None = _try_consume_keyword(
+            sql=sql, start=resume, keyword="ALL"
+        ) or _try_consume_keyword(sql=sql, start=resume, keyword="DISTINCT")
+        if quantifier_end is not None:
+            resume = _skip_ignorable(sql=sql, start=quantifier_end)
+        branch_start = resume
 
     final_branch_sql: str = sql[branch_start:].strip()
     if final_branch_sql:
@@ -823,12 +738,14 @@ def _split_set_operation_branches(sql: str) -> tuple[str, ...]:
     return tuple(branches)
 
 
-def _extract_expected_select_column_names(*, branch_sql: str, file_label: str) -> tuple[str, ...]:
+def _extract_expected_select_column_names(
+    *, branch_sql: str, file_label: str, label: str
+) -> tuple[str, ...]:
     index: int = _skip_ignorable(sql=branch_sql, start=0)
     select_end: int | None = _try_consume_keyword(sql=branch_sql, start=index, keyword="SELECT")
     if select_end is None:
         raise CompileInputError(
-            f"SQL test '{file_label}' must define each __expected__<model> set-operation "
+            f"SQL test '{file_label}' must define each {label} set-operation "
             "branch as a SELECT query"
         )
     select_list_end: int = _find_select_list_end(sql=branch_sql, start=select_end)
@@ -836,66 +753,37 @@ def _extract_expected_select_column_names(*, branch_sql: str, file_label: str) -
     expressions: tuple[str, ...] = _split_top_level_commas(raw_select_list)
     if not expressions:
         raise CompileInputError(
-            f"SQL test '{file_label}' must project at least one column in __expected__<model>"
+            f"SQL test '{file_label}' must project at least one column in {label}"
         )
     return tuple(
-        _extract_expected_projection_name(expression=expression, file_label=file_label)
+        _extract_expected_projection_name(expression=expression, file_label=file_label, label=label)
         for expression in expressions
     )
 
 
 def _find_select_list_end(*, sql: str, start: int) -> int:
-    index: int = start
-    depth: int = 0
-    while index < len(sql):
-        if sql.startswith("--", index):
-            index = skip_line_comment(sql=sql, start=index)
-            continue
-        if sql.startswith("/*", index):
-            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
-            continue
-        if sql[index] in SQL_QUOTE_TOKENS:
-            index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
-            continue
-        if sql[index] == SQL_OPEN_PAREN_TOKEN:
-            depth += 1
-            index += 1
-            continue
-        if sql[index] == SQL_CLOSE_PAREN_TOKEN:
-            depth -= 1
-            index += 1
-            continue
-        if depth == 0 and _try_consume_keyword(sql=sql, start=index, keyword="FROM") is not None:
-            return index
-        index += 1
+    index: int
+    depth: int
+    for index, depth in iter_code_positions(sql=sql[start:], context=_CONTEXT):
+        if (
+            depth == 0
+            and _try_consume_keyword(sql=sql, start=start + index, keyword="FROM") is not None
+        ):
+            return start + index
     return len(sql)
 
 
 def _split_top_level_commas(raw_value: str) -> tuple[str, ...]:
     values: list[str] = []
     value_start: int = 0
-    index: int = 0
-    depth: int = 0
-    while index < len(raw_value):
-        if raw_value.startswith("--", index):
-            index = skip_line_comment(sql=raw_value, start=index)
-            continue
-        if raw_value.startswith("/*", index):
-            index = skip_block_comment(sql=raw_value, start=index, context=_CONTEXT)
-            continue
-        if raw_value[index] in SQL_QUOTE_TOKENS:
-            index = skip_quoted_text(sql=raw_value, start=index, context=_CONTEXT)
-            continue
-        if raw_value[index] == SQL_OPEN_PAREN_TOKEN:
-            depth += 1
-        elif raw_value[index] == SQL_CLOSE_PAREN_TOKEN:
-            depth -= 1
-        elif raw_value[index] == SQL_ARGUMENT_SEPARATOR_TOKEN and depth == 0:
+    index: int
+    depth: int
+    for index, depth in iter_code_positions(sql=raw_value, context=_CONTEXT):
+        if depth == 0 and raw_value[index] == SQL_ARGUMENT_SEPARATOR_TOKEN:
             item: str = raw_value[value_start:index].strip()
             if item:
                 values.append(item)
             value_start = index + 1
-        index += 1
 
     final_item: str = raw_value[value_start:].strip()
     if final_item:
@@ -903,7 +791,7 @@ def _split_top_level_commas(raw_value: str) -> tuple[str, ...]:
     return tuple(values)
 
 
-def _extract_expected_projection_name(*, expression: str, file_label: str) -> str:
+def _extract_expected_projection_name(*, expression: str, file_label: str, label: str) -> str:
     alias_name: str | None = _extract_as_alias(expression)
     if alias_name is not None:
         return alias_name
@@ -911,46 +799,29 @@ def _extract_expected_projection_name(*, expression: str, file_label: str) -> st
     if _is_simple_identifier(stripped_expression):
         return stripped_expression
     raise CompileInputError(
-        f"SQL test '{file_label}' must alias every non-trivial __expected__<model> projection"
+        f"SQL test '{file_label}' must alias every non-trivial {label} projection"
     )
 
 
 def _extract_as_alias(expression: str) -> str | None:
-    index: int = 0
-    depth: int = 0
     last_alias_name: str | None = None
-    while index < len(expression):
-        if expression.startswith("--", index):
-            index = skip_line_comment(sql=expression, start=index)
-            continue
-        if expression.startswith("/*", index):
-            index = skip_block_comment(sql=expression, start=index, context=_CONTEXT)
-            continue
-        if expression[index] in SQL_QUOTE_TOKENS:
-            index = skip_quoted_text(sql=expression, start=index, context=_CONTEXT)
-            continue
-        if expression[index] == SQL_OPEN_PAREN_TOKEN:
-            depth += 1
-            index += 1
-            continue
-        if expression[index] == SQL_CLOSE_PAREN_TOKEN:
-            depth -= 1
-            index += 1
+    index: int
+    depth: int
+    for index, depth in iter_code_positions(sql=expression, context=_CONTEXT):
+        if depth != 0:
             continue
         as_end: int | None = _try_consume_keyword(sql=expression, start=index, keyword="AS")
-        if depth == 0 and as_end is not None:
-            alias_index: int = _skip_ignorable(sql=expression, start=as_end)
-            if alias_index < len(expression) and is_identifier_start(expression[alias_index]):
-                alias_name, alias_end = _read_identifier(
-                    sql=expression,
-                    start=alias_index,
-                    file_label="projection",
-                )
-                if not expression[alias_end:].strip():
-                    last_alias_name = alias_name
-            index = as_end
+        if as_end is None:
             continue
-        index += 1
+        alias_index: int = _skip_ignorable(sql=expression, start=as_end)
+        if alias_index < len(expression) and is_identifier_start(expression[alias_index]):
+            alias_name, alias_end = _read_identifier(
+                sql=expression,
+                start=alias_index,
+                file_label="projection",
+            )
+            if not expression[alias_end:].strip():
+                last_alias_name = alias_name
     return last_alias_name
 
 
@@ -961,33 +832,24 @@ def _is_simple_identifier(value: str) -> bool:
 
 
 def _contains_select_star(sql: str) -> bool:
-    index: int = 0
-    while index < len(sql):
-        if sql.startswith("--", index):
-            index = skip_line_comment(sql=sql, start=index)
-            continue
-        if sql.startswith("/*", index):
-            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
-            continue
-        if sql[index] in SQL_QUOTE_TOKENS:
-            index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
-            continue
+    index: int
+    for index, _depth in iter_code_positions(sql=sql, context=_CONTEXT):
         select_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="SELECT")
-        if select_end is not None:
-            value_index: int = _skip_ignorable(sql=sql, start=select_end)
-            if value_index < len(sql) and sql[value_index] == SQL_WILDCARD_TOKEN:
-                return True
-            index = select_end
+        if select_end is None:
             continue
-        index += 1
+        value_index: int = _skip_ignorable(sql=sql, start=select_end)
+        if value_index < len(sql) and sql[value_index] == SQL_WILDCARD_TOKEN:
+            return True
     return False
 
 
-def _require_prefixed_name(*, cte_name: str, prefix: str, label: str, file_label: str) -> str:
+def _require_prefixed_name(
+    *, cte_name: str, prefix: str, label: str, file_label: str, context_label: str = _CONTEXT
+) -> str:
     extracted_name: str = cte_name.removeprefix(prefix)
     if extracted_name:
         return extracted_name
-    raise CompileInputError(f"SQL test '{file_label}' must use {label} to identify a target")
+    raise CompileInputError(f"{context_label} '{file_label}' must use {label} to identify a target")
 
 
 def _validate_ceremonial_select(
@@ -995,33 +857,33 @@ def _validate_ceremonial_select(
     sql: str,
     start: int,
     file_label: str,
+    context_label: str = _CONTEXT,
 ) -> None:
-    if _is_ceremonial_select_statement(sql=sql, start=start):
+    if _is_ceremonial_select_statement(sql=sql, start=start, context_label=context_label):
         return
-    raise CompileInputError(_ceremonial_select_error(file_label))
+    raise CompileInputError(
+        f"{context_label} '{file_label}' must end with a ceremonial top-level `SELECT 1` "
+        "after its CTEs"
+    )
 
 
-def _is_ceremonial_select_statement(*, sql: str, start: int) -> bool:
-    index: int = _skip_ignorable(sql=sql, start=start)
+def _is_ceremonial_select_statement(*, sql: str, start: int, context_label: str = _CONTEXT) -> bool:
+    index: int = _skip_ignorable(sql=sql, start=start, context_label=context_label)
     select_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="SELECT")
     if select_end is None:
         return False
-    index = _skip_ignorable(sql=sql, start=select_end)
+    index = _skip_ignorable(sql=sql, start=select_end, context_label=context_label)
     if index >= len(sql) or sql[index] != SQL_CEREMONIAL_SELECT_VALUE:
         return False
-    index = _skip_ignorable(sql=sql, start=index + 1)
-    return _is_statement_end(sql=sql, start=index)
+    index = _skip_ignorable(sql=sql, start=index + 1, context_label=context_label)
+    return _is_statement_end(sql=sql, start=index, context_label=context_label)
 
 
-def _is_statement_end(*, sql: str, start: int) -> bool:
+def _is_statement_end(*, sql: str, start: int, context_label: str = _CONTEXT) -> bool:
     index: int = start
     if index < len(sql) and sql[index] == SQL_STATEMENT_TERMINATOR_TOKEN:
-        index = _skip_ignorable(sql=sql, start=index + 1)
+        index = _skip_ignorable(sql=sql, start=index + 1, context_label=context_label)
     return index == len(sql)
-
-
-def _ceremonial_select_error(file_label: str) -> str:
-    return f"SQL test '{file_label}' must end with a ceremonial top-level `SELECT 1` after its CTEs"
 
 
 def validate_independent_expected_and_assertion_ctes(
@@ -1206,16 +1068,13 @@ def _dependency_path(
     return None
 
 
-def _consume_keyword(*, sql: str, start: int, keyword: str, file_label: str) -> int:
+def _consume_keyword(
+    *, sql: str, start: int, keyword: str, file_label: str, context_label: str = _CONTEXT
+) -> int:
     keyword_end: int | None = _try_consume_keyword(sql=sql, start=start, keyword=keyword)
     if keyword_end is not None:
         return keyword_end
-    if keyword == SQL_WITH_KEYWORD:
-        raise CompileInputError(
-            f"SQL test '{file_label}' must declare mock CTEs and one __expected__<model> "
-            "CTE before `SELECT 1`"
-        )
-    raise CompileInputError(f"SQL test '{file_label}' expected keyword {keyword}")
+    raise CompileInputError(f"{context_label} '{file_label}' expected keyword {keyword}")
 
 
 def _try_consume_keyword(*, sql: str, start: int, keyword: str) -> int | None:
@@ -1229,16 +1088,18 @@ def _try_consume_keyword(*, sql: str, start: int, keyword: str) -> int | None:
     return keyword_end
 
 
-def _read_identifier(*, sql: str, start: int, file_label: str) -> tuple[str, int]:
+def _read_identifier(
+    *, sql: str, start: int, file_label: str, context_label: str = _CONTEXT
+) -> tuple[str, int]:
     if start >= len(sql) or not is_identifier_start(sql[start]):
-        raise CompileInputError(f"SQL test '{file_label}' expected a CTE name")
+        raise CompileInputError(f"{context_label} '{file_label}' expected a CTE name")
     index: int = start + 1
     while index < len(sql) and is_identifier_character(sql[index]):
         index += 1
     return sql[start:index], index
 
 
-def _skip_ignorable(*, sql: str, start: int) -> int:
+def _skip_ignorable(*, sql: str, start: int, context_label: str = _CONTEXT) -> int:
     index: int = start
     while index < len(sql):
         if sql[index].isspace():
@@ -1248,7 +1109,7 @@ def _skip_ignorable(*, sql: str, start: int) -> int:
             index = skip_line_comment(sql=sql, start=index)
             continue
         if sql.startswith("/*", index):
-            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
+            index = skip_block_comment(sql=sql, start=index, context=context_label)
             continue
         return index
     return index

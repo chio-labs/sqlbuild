@@ -109,3 +109,19 @@ class InvalidMeasuredValueTestCase:
     description: str
     measured_value: float
     expected_error_message: str
+
+
+@dataclass(frozen=True)
+class ParseAuditInstancesTestCase:
+    description: str
+    raw_audits: object | None
+    null_as_empty: bool
+    expected_definition_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ParseAuditInstancesErrorTestCase:
+    description: str
+    raw_audits: object | None
+    null_as_empty: bool
+    expected_message: str

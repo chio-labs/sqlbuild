@@ -20,9 +20,14 @@ def build_retention_request(*, desired_days: int) -> RetentionRequest:
 
 
 class FakeDatabricksMetadataCursor:
-    def __init__(self, *, rows: list[tuple[object, ...]] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        rows: list[tuple[object, ...]] | None = None,
+        description: tuple[tuple[str], ...] = (("format",), ("properties",)),
+    ) -> None:
         self.rows: list[tuple[object, ...]] = rows or []
-        self.description: tuple[tuple[str], ...] = (("format",), ("properties",))
+        self.description: tuple[tuple[str], ...] = description
         self.executed_sql: str | None = None
         self.closed: bool = False
 

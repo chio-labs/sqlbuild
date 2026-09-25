@@ -784,6 +784,7 @@ class JanitorSettings:
 
     retention_days: int
     direct_state_history_versions: int
+    archive_retention_days: int = 14
 
 
 @dataclass(frozen=True)

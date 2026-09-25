@@ -429,6 +429,57 @@ fn given_snowflake_expression_when_evaluating_rules_then_uses_project_dialect() 
 }
 
 #[test]
+fn given_dialect_quoting_around_table_functions_when_evaluating_rules_then_model_parses()
+-> Result<(), String> {
+    let project_dir = TempDir::new().map_err(|error| error.to_string())?;
+    let test_cases = [
+        test_types::DialectEvaluationTestCase {
+            description: "Snowflake backslash-escaped quote before a table function",
+            dialect: "snowflake",
+            query_sql: concat!(
+                "SELECT 'it\\'s (' AS label, item_id ",
+                "FROM __table_fn(\"inventory_items\")(42)"
+            ),
+            expected_code: "SQBRCONTRACT101",
+        },
+        test_types::DialectEvaluationTestCase {
+            description: "BigQuery backslash-escaped quote inside table function arguments",
+            dialect: "bigquery",
+            query_sql: concat!(
+                "SELECT item_id ",
+                "FROM __table_fn(\"inventory_items\", 'a\\')')(42)"
+            ),
+            expected_code: "SQBRCONTRACT101",
+        },
+        test_types::DialectEvaluationTestCase {
+            description: "BigQuery backtick identifier containing a parenthesis in arguments",
+            dialect: "bigquery",
+            query_sql: concat!(
+                "SELECT item_id ",
+                "FROM __table_fn(\"inventory_items\", `batch)size`)(42)"
+            ),
+            expected_code: "SQBRCONTRACT101",
+        },
+    ];
+
+    for test_case in test_cases {
+        let config = json!({"select": ["SQBRCONTRACT101"], "cache": {"enabled": false}});
+        let mut request: Value = serde_json::from_str(&helpers::request(&project_dir, &config))
+            .map_err(|error| error.to_string())?;
+        request["dialect"] = json!(test_case.dialect);
+        request["models"][0]["query_sql"] = json!(test_case.query_sql);
+        let result: Value = serde_json::from_str(&evaluate_json(&request.to_string())?)
+            .map_err(|error| error.to_string())?;
+        assert_eq!(
+            result["faults"][0]["code"], test_case.expected_code,
+            "{}: {result}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn given_enforced_contract_outputs_when_evaluating_explicit_type_rule_then_returns_expected_faults()
 -> Result<(), String> {
     let test_cases = [

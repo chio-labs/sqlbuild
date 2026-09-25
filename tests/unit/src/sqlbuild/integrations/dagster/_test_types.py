@@ -289,3 +289,10 @@ class DagsterProjectPrepareFailureTestCase:
 class DagsterProjectDecoratorTestCase:
     description: str
     expected_asset_keys: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class DagsterAssetSelectionErrorTestCase:
+    description: str
+    select: str
+    expected_error_fragment: str

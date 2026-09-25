@@ -83,3 +83,18 @@ class LineageFingerprintAvailabilityTestCase:
     relative_path: str
     config: str
     expected_available: bool
+
+
+@dataclass(frozen=True)
+class LineagePathSelectorTestCase:
+    description: str
+    select: tuple[str, ...]
+    expected_node_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LineagePathSelectorErrorTestCase:
+    description: str
+    select: tuple[str, ...]
+    expected_error_code: str
+    expected_error_fragment: str

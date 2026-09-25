@@ -12,6 +12,7 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.executor.janitor.main.resolve_retention_days import resolve_janitor_retention_days
 from sqlbuild.presentation.main.supports_color import supports_color
 
 
@@ -36,10 +37,10 @@ def resolve_janitor_settings(
 ) -> JanitorSettings:
     """Resolve and validate effective janitor settings."""
 
-    retention_days: int = (
-        request.retention_days
-        if request.retention_days is not None
-        else invocation.discovered_inputs.project_config.janitor.retention_days
+    retention_days: int = resolve_janitor_retention_days(
+        override=request.retention_days,
+        configured=invocation.discovered_inputs.project_config.janitor.retention_days,
+        virtual_environments=invocation.discovered_inputs.project_config.settings.virtual_environments,
     )
     if retention_days < 0:
         raise CliUserError("janitor --retention-days must be >= 0", code="C501")
@@ -53,4 +54,7 @@ def resolve_janitor_settings(
     return JanitorSettings(
         retention_days=retention_days,
         direct_state_history_versions=direct_state_history_versions,
+        archive_retention_days=(
+            invocation.discovered_inputs.project_config.janitor.archive_retention_days
+        ),
     )

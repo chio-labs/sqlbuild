@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 
 
 def downstream_blocked_keys(
@@ -13,17 +14,4 @@ def downstream_blocked_keys(
 ) -> frozenset[CompiledObjectKey]:
     """Return all selected transitive downstream keys to block."""
 
-    blocked: set[CompiledObjectKey] = set()
-    stack: list[CompiledObjectKey] = [failed_key]
-    visited: set[CompiledObjectKey] = set()
-    while stack:
-        current: CompiledObjectKey = stack.pop()
-        neighbor: CompiledObjectKey
-        for neighbor in downstream_deps.get(current, ()):
-            if neighbor in visited:
-                continue
-            visited.add(neighbor)
-            if neighbor in selected_keys:
-                blocked.add(neighbor)
-            stack.append(neighbor)
-    return frozenset(blocked)
+    return transitive_closure(start=failed_key, edges=downstream_deps) & selected_keys

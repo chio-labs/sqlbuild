@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from collections import deque
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from sqlbuild.compiler.graph.main.path_nodes import path_nodes
+from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.planner.types import SelectorKind
@@ -116,18 +117,25 @@ def _resolve_atomic(
     if isinstance(parsed, PathSelector):
         start_id: str = _node_id_for_name(nodes_by_id=nodes_by_id, name=parsed.start_name)
         end_id: str = _node_id_for_name(nodes_by_id=nodes_by_id, name=parsed.end_name)
-        matched: set[str] = _shortest_path(start_id=start_id, end_id=end_id, downstream=downstream)
+        matched: set[str] = _path_node_ids(start_id=start_id, end_id=end_id, downstream=downstream)
         if parsed.upstream:
-            matched.update(_expand(start_ids={start_id}, adjacency=upstream))
+            matched.update(
+                transitive_closure_many(starts=(start_id,), edges=upstream, include_starts=True)
+            )
         if parsed.downstream:
-            matched.update(_expand(start_ids={end_id}, adjacency=downstream))
+            matched.update(
+                transitive_closure_many(starts=(end_id,), edges=downstream, include_starts=True)
+            )
         return matched
 
     matched = _match_parsed_selector(parsed=parsed, dag=dag, nodes_by_id=nodes_by_id)
+    anchors: frozenset[str] = frozenset(matched)
     if parsed.upstream:
-        matched.update(_expand(start_ids=matched, adjacency=upstream))
+        matched.update(transitive_closure_many(starts=anchors, edges=upstream, include_starts=True))
     if parsed.downstream:
-        matched.update(_expand(start_ids=matched, adjacency=downstream))
+        matched.update(
+            transitive_closure_many(starts=anchors, edges=downstream, include_starts=True)
+        )
     return matched
 
 
@@ -199,19 +207,6 @@ def _dependency_indexes(
     return upstream, downstream
 
 
-def _expand(*, start_ids: set[str], adjacency: Mapping[str, set[str]]) -> set[str]:
-    expanded: set[str] = set(start_ids)
-    pending: list[str] = list(start_ids)
-    while pending:
-        node_id: str = pending.pop()
-        for adjacent_id in adjacency.get(node_id, set()):
-            if adjacent_id in expanded:
-                continue
-            expanded.add(adjacent_id)
-            pending.append(adjacent_id)
-    return expanded
-
-
 def _node_id_for_name(*, nodes_by_id: Mapping[str, Mapping[str, Any]], name: str) -> str:
     matching_ids: list[str] = [
         node_id for node_id, node in nodes_by_id.items() if str(node.get("name")) == name
@@ -223,16 +218,14 @@ def _node_id_for_name(*, nodes_by_id: Mapping[str, Mapping[str, Any]], name: str
     return matching_ids[0]
 
 
-def _shortest_path(*, start_id: str, end_id: str, downstream: Mapping[str, set[str]]) -> set[str]:
-    pending: deque[tuple[str, tuple[str, ...]]] = deque([(start_id, (start_id,))])
-    visited: set[str] = {start_id}
-    while pending:
-        node_id, path = pending.popleft()
-        if node_id == end_id:
-            return set(path)
-        for adjacent_id in downstream.get(node_id, set()):
-            if adjacent_id in visited:
-                continue
-            visited.add(adjacent_id)
-            pending.append((adjacent_id, (*path, adjacent_id)))
-    raise DagsterDagInputError(f"no SQLBuild DAG path exists between {start_id!r} and {end_id!r}")
+def _path_node_ids(*, start_id: str, end_id: str, downstream: Mapping[str, set[str]]) -> set[str]:
+    on_path: frozenset[str] | None = path_nodes(
+        start=start_id,
+        end=end_id,
+        downstream={node_id: tuple(sorted(targets)) for node_id, targets in downstream.items()},
+    )
+    if on_path is None:
+        raise DagsterDagInputError(
+            f"no SQLBuild DAG path exists between {start_id!r} and {end_id!r}"
+        )
+    return set(on_path)

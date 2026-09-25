@@ -1427,7 +1427,10 @@ def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:
         payload=payload, label="janitor", file_path=file_path
     )
     enabled: bool = _optional_bool(mapping=mapping, key="enabled", default=False)
-    retention_days: int = _optional_int(mapping=mapping, key="retention_days", default=30)
+    retention_days: int | None = _optional_nullable_int(mapping=mapping, key="retention_days")
+    archive_retention_days: int = _optional_int(
+        mapping=mapping, key="archive_retention_days", default=14
+    )
     max_checkpoints: int = _optional_int(mapping=mapping, key="max_checkpoints", default=20)
     direct_state_history_versions: int = _optional_int(
         mapping=mapping,
@@ -1446,8 +1449,10 @@ def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:
             file_path=file_path,
         )
     )
-    if retention_days < 0:
+    if retention_days is not None and retention_days < 0:
         raise ProjectConfigError(f"{file_path} janitor.retention_days must be >= 0")
+    if archive_retention_days < 0:
+        raise ProjectConfigError(f"{file_path} janitor.archive_retention_days must be >= 0")
     if max_checkpoints < 1:
         raise ProjectConfigError(f"{file_path} janitor.max_checkpoints must be >= 1")
     if direct_state_history_versions < 0:
@@ -1455,6 +1460,7 @@ def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:
     return JanitorConfig(
         enabled=enabled,
         retention_days=retention_days,
+        archive_retention_days=archive_retention_days,
         max_checkpoints=max_checkpoints,
         direct_state_history_versions=direct_state_history_versions,
         delete_tracked_only=delete_tracked_only,

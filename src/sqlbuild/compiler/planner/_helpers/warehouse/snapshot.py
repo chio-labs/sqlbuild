@@ -32,6 +32,7 @@ from sqlbuild.compiler.fingerprints.constants import (
 )
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
+from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.planner._helpers.graph.buildability import check_buildability
 from sqlbuild.compiler.planner._helpers.graph.core import build_execution_upstream_deps
 from sqlbuild.compiler.planner._helpers.graph.loader_dag import (
@@ -338,16 +339,7 @@ def _relevant_state_keys(
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
         build_execution_upstream_deps(project)
     )
-    closure: set[CompiledObjectKey] = set(selected_keys)
-    pending: list[CompiledObjectKey] = list(selected_keys)
-    while pending:
-        key: CompiledObjectKey = pending.pop()
-        upstream_key: CompiledObjectKey
-        for upstream_key in upstream_deps.get(key, ()):
-            if upstream_key not in closure:
-                closure.add(upstream_key)
-                pending.append(upstream_key)
-    return frozenset(closure)
+    return transitive_closure_many(starts=selected_keys, edges=upstream_deps, include_starts=True)
 
 
 def _resolve_database(

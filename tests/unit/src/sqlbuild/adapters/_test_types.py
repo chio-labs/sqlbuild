@@ -78,3 +78,10 @@ class AdapterReplaceWithCloneTestCase:
     origin_is_transient: bool
     expected_statement: str | None
     expected_error_fragment: str | None = None
+
+
+@dataclass(frozen=True)
+class AdapterRelationAgeMetadataCapabilityTestCase:
+    description: str
+    adapter: StrictAdapter
+    expected_supported: bool

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import base64
 from collections.abc import Callable
+from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
@@ -30,6 +32,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
+from sqlbuild.executor.janitor_events.constants import JANITOR_EVENTS_TABLE_NAME
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 from sqlbuild.spec.contracts.models import SchemaSeedEntry, SeedCsvSettings, SourceEntry
 
@@ -43,10 +46,14 @@ class FakeJanitorAdapter(BaseAdapter):
         relation_infos: tuple[RelationInfo, ...],
         supports_age_metadata: bool = True,
         tracked_relations: tuple[tuple[str | None, str | None, str], ...] = (),
+        identifier_limit: int = 255,
     ) -> None:
         self.relation_infos: tuple[RelationInfo, ...] = relation_infos
         self.age_metadata_supported: bool = supports_age_metadata
+        self.identifier_limit: int = identifier_limit
         self.dropped_targets: list[str] = []
+        self.dropped_view_targets: list[str] = []
+        self.renamed_targets: list[tuple[str, str]] = []
         self.executed_sql: list[str] = []
         self.tracked_relations: tuple[tuple[str | None, str | None, str], ...] = tracked_relations
         self._tracked_rows: tuple[tuple[Any, ...], ...] = tuple(
@@ -101,6 +108,9 @@ class FakeJanitorAdapter(BaseAdapter):
     def supports_relation_age_metadata(self) -> bool:
         return self.age_metadata_supported
 
+    def maximum_identifier_length(self) -> int:
+        return self.identifier_limit
+
     def default_schema(self) -> str | None:
         return "analytics"
 
@@ -126,7 +136,9 @@ class FakeJanitorAdapter(BaseAdapter):
             True: (),
             False: self._tracked_rows,
         }
-        return _FakeResult(rows=rows_by_query_kind["LIMIT 0" in sql])
+        return _FakeResult(
+            rows=rows_by_query_kind["LIMIT 0" in sql or JANITOR_EVENTS_TABLE_NAME in sql]
+        )
 
     def list_relations(
         self,
@@ -212,6 +224,17 @@ class FakeJanitorAdapter(BaseAdapter):
     ) -> None:
         del connection, if_exists, statement_recorder
         self.dropped_targets.append(destination)
+
+    def drop_view(
+        self,
+        connection: Any,
+        *,
+        destination: str,
+        if_exists: bool = True,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        del connection, if_exists, statement_recorder
+        self.dropped_view_targets.append(destination)
 
     def create_table_as(
         self,
@@ -336,7 +359,8 @@ class FakeJanitorAdapter(BaseAdapter):
         destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        raise NotImplementedError
+        del connection, statement_recorder
+        self.renamed_targets.append((origin, destination))
 
     def swap(
         self,
@@ -438,6 +462,92 @@ class FailingDropAdapter(FakeJanitorAdapter):
         raise RuntimeError(self.message)
 
 
+class FoldingJanitorAdapter(FakeJanitorAdapter):
+    """Warehouse double that filters case-insensitively and lists lowercase identifiers."""
+
+    def list_relations(
+        self,
+        connection: Any,
+        *,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[RelationInfo, ...]:
+        requested_schemas: frozenset[str] = frozenset(schema.lower() for schema in schemas or ())
+        requested_names: frozenset[str] = frozenset(name.lower() for name in names or ())
+        matching: tuple[RelationInfo, ...] = tuple(
+            filter(
+                lambda relation: (
+                    (relation.database or "").lower() == (database or "").lower()
+                    and (
+                        not requested_schemas
+                        or (relation.schema or "").lower() in requested_schemas
+                    )
+                    and (not requested_names or relation.name.lower() in requested_names)
+                ),
+                self._available_relations,
+            )
+        )
+        return tuple(
+            replace(
+                relation,
+                database=database,
+                schema=(relation.schema or "").lower(),
+                name=relation.name.lower(),
+            )
+            for relation in matching
+        )
+
+
+class SeparateAgeMetadataJanitorAdapter(FakeJanitorAdapter):
+    """Warehouse double that lists without timestamps and supplies ages separately."""
+
+    def __init__(
+        self,
+        *,
+        relation_infos: tuple[RelationInfo, ...],
+        relation_ages: dict[str, datetime],
+        tracked_relations: tuple[tuple[str | None, str | None, str], ...] = (),
+    ) -> None:
+        super().__init__(relation_infos=relation_infos, tracked_relations=tracked_relations)
+        self.relation_ages: dict[str, datetime] = relation_ages
+        self.age_metadata_requests: list[tuple[str, ...]] = []
+
+    def with_relation_age_metadata(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+    ) -> tuple[RelationInfo, ...]:
+        self.age_metadata_requests.append(tuple(relation.name for relation in relations))
+        return tuple(
+            replace(relation, last_altered_at=self.relation_ages.get(relation.name))
+            for relation in relations
+        )
+
+
+class FailingJanitorEventAdapter(FakeJanitorAdapter):
+    def _execute(self, connection: Any, sql: str) -> Any:
+        is_event_insert: bool = sql.startswith("INSERT INTO") and JANITOR_EVENTS_TABLE_NAME in sql
+        _EVENT_WRITE_GUARDS[is_event_insert](sql)
+        return super()._execute(connection=connection, sql=sql)
+
+
+def _allow_statement(sql: str) -> None:
+    del sql
+
+
+def _fail_event_write(sql: str) -> None:
+    del sql
+    raise RuntimeError("simulated janitor event write failure")
+
+
+_EVENT_WRITE_GUARDS: dict[bool, Callable[[str], None]] = {
+    False: _allow_statement,
+    True: _fail_event_write,
+}
+
+
 class _FakeResult:
     def __init__(self, *, rows: tuple[tuple[Any, ...], ...]) -> None:
         self.rows: tuple[tuple[Any, ...], ...] = rows
@@ -446,7 +556,13 @@ class _FakeResult:
         return list(self.rows)
 
 
-def build_project(*, source_schema: str | None = None) -> CompiledProject:
+def build_project(
+    *,
+    source_schema: str | None = None,
+    source_database: str | None = None,
+    destination_database: str | None = None,
+    destination_schema: str = "analytics",
+) -> CompiledProject:
     source: CompiledSource = CompiledSource(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.SOURCE,
@@ -454,7 +570,12 @@ def build_project(*, source_schema: str | None = None) -> CompiledProject:
         ),
         deps=(),
         name="raw_orders",
-        source_entry=SourceEntry(name="raw_orders", schema=source_schema or "", table="orders"),
+        source_entry=SourceEntry(
+            name="raw_orders",
+            database=source_database,
+            schema=source_schema or "",
+            table="orders",
+        ),
         source_file=cast(Any, object()),
     )
     sources: tuple[CompiledSource, ...] = {True: (), False: (source,)}[source_schema is None]
@@ -472,10 +593,10 @@ def build_project(*, source_schema: str | None = None) -> CompiledProject:
                 query_sql="select 1",
                 config=CompileModelConfig(),
                 destination=CompiledRelationLocation(
-                    database=None,
-                    schema="analytics",
+                    database=destination_database,
+                    schema=destination_schema,
                     name="orders",
-                    qualified_name="analytics.orders",
+                    qualified_name=f"{destination_schema}.orders",
                 ),
             ),
         ),
@@ -488,10 +609,10 @@ def build_project(*, source_schema: str | None = None) -> CompiledProject:
                 schema_entry=SchemaSeedEntry(name="countries"),
                 schema_file=cast(Any, object()),
                 destination=CompiledRelationLocation(
-                    database=None,
-                    schema="analytics",
+                    database=destination_database,
+                    schema=destination_schema,
                     name="countries",
-                    qualified_name="analytics.countries",
+                    qualified_name=f"{destination_schema}.countries",
                 ),
             ),
         ),

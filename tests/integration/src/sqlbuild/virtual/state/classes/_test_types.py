@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     ConditionalPublicationPayload,
+    StateRefContractObservation,
 )
 
 
@@ -252,3 +254,21 @@ class MicrobatchStateRoundTripTestCase:
 
     description: str
     expected_event_count: int
+
+
+@dataclass(frozen=True)
+class StateReadContractTestCase:
+    description: str
+    schema: str
+    sqlbuild_version: str
+    expected_environments: tuple[tuple[str, VirtualEnvironmentStatus], ...]
+    expected_active_lock_keys: tuple[str, ...]
+    expected_expired_lock_keys: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DuckDbStateBackendRefContractTestCase:
+    description: str
+    expected_observation: StateRefContractObservation
+    schema: str
+    sqlbuild_version: str

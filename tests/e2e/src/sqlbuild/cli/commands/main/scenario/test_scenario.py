@@ -45,6 +45,36 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 @pytest.mark.parametrize(
     "test_case",
     (
+        ScenarioCliE2ETestCase(
+            description="unclosed scenario comment names the scenario",
+            command=("--no-color", "scenario", "test"),
+            expected_exit_code=1,
+            expected_stderr_fragments=("SQL scenario contains an unclosed block comment",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_unclosed_scenario_comment_when_running_cli_then_error_names_scenario(
+    test_case: ScenarioCliE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    repo_files: dict[str, str] = build_scenario_project_files()
+    repo_files["tests/scenarios/order_totals_pass.sql"] = "SCENARIO ();\nWITH /* unfinished"
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path, project_name="scenario_comment", repo_files=repo_files
+    )
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command, project_dir=project_dir
+    )
+
+    assert result.returncode == test_case.expected_exit_code
+    for fragment in test_case.expected_stderr_fragments:
+        assert fragment in result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
         ScenarioPartialFixtureE2ETestCase(
             description="required typed source column with unspecified nullability gets a null",
             repo_files=build_partial_fixture_scenario_project_files(),

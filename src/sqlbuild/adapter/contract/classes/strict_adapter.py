@@ -313,6 +313,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_rename_view(self, *, origin: str, destination: str) -> tuple[str, ...]:
+        """Render SQL statements that rename a view relation."""
+        ...
+
+    @abstractmethod
     def render_swap(self, *, left: str, right: str) -> tuple[str, ...]:
         """Render SQL statements that swap two relations."""
         ...
@@ -880,6 +885,11 @@ class StrictAdapter(
         self, *, database: str | None, schema: str
     ) -> tuple[str, ...]:
         """Render optional audit result table index DDL statements."""
+        ...
+
+    @abstractmethod
+    def render_create_janitor_event_table_sql(self, *, database: str | None, schema: str) -> str:
+        """Render DDL that creates the janitor audit event table when it is missing."""
         ...
 
     @abstractmethod

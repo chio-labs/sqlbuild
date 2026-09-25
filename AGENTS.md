@@ -120,6 +120,7 @@
 - Treat a genuine duplicate as evidence of possible wider drift, not only a cleanup task: a missing shared owner, parallel implementations of one concept, logic on the wrong side of a boundary, or copies that have already diverged (use `--diff`; a fix present in only one copy may be a bug in the others). Diagnose and record that wider smell before consolidating, because removing the copies erases the only deterministic signal of it.
 - Consolidate genuine duplication the change introduces or touches. Report unrelated findings as follow-ups instead of refactoring them opportunistically.
 - Members marked `[forced]` are adapter contract overrides required by `test_strict_adapter.py`. Record other intentional mirrors in `[dupes]` in `fensu.toml` with a reason.
+- Public adapter contract methods are duplicated per adapter on purpose: `test_strict_adapter.py` requires every first-class adapter to define them, and `[dupes]` exempts them. The private helpers behind them must not be copied. Keep them in shared builders, such as the snapshot SQL builders in `src/sqlbuild/adapter/contract/classes/`, and let each contract method delegate. Express real dialect differences as explicit parameters, such as a `SnapshotSqlDialect` field, not as a forked copy of the helper.
 
 ## Bounded Review Process
 
