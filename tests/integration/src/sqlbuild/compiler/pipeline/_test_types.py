@@ -47,6 +47,21 @@ class SemanticTriageCase:
 
 
 @dataclass(frozen=True)
+class SnowflakeSemanticReleaseCase:
+    description: str
+    sql: str
+    expected_codes: tuple[str, ...] = ()
+    expected_exit_code: int = 0
+
+
+@dataclass(frozen=True)
+class SnowflakeOutputInferenceCase:
+    description: str
+    sql: str
+    expected_type: str | None = None
+
+
+@dataclass(frozen=True)
 class RulesPipelineIntegrationTestCase:
     """One configured Rules failure in the shared planning compiler."""
 

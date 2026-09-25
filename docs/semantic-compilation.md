@@ -132,6 +132,17 @@ The setting participates in the analysis-cache identity. Identifier folding is t
 does not alter string literals, comments, or authored SQL. Diagnostic offset mapping is lazy and
 uses a bounded cache of token alignments, shared by all diagnostics on the same normalized query.
 
+Snowflake set-operation checks are directional: each branch is compared with the accumulated
+result type, following the query's operator precedence (`INTERSECT` binds more tightly than
+`UNION` and `EXCEPT`). Proven incompatibilities produce B215; supported conversions whose success
+depends on runtime values produce non-blocking W214 warnings. For example, combining a VARCHAR
+branch with a numeric branch can require a value-dependent numeric conversion.
+
+An unmodelled Snowflake function has an unknown result type rather than inheriting its first
+argument's type. SQLBuild retains the output name and lineage, reports partial type coverage, and
+uses explicit declared function signatures where available. This prevents a guessed return type
+from creating downstream type errors.
+
 The single human partial-check notice groups model names by reason, gives the relevant repair or
 rerun command, and truncates long lists. `sqb compile --json` contains the full selected-model
 reason map. Unknown output types and unresolved stars are reported as explicitly as open sources;
