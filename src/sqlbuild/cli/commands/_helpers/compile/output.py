@@ -9,13 +9,15 @@ from pathlib import Path
 
 import orjson
 
-from sqlbuild.cli.commands._helpers.compile.semantic_notice import semantic_coverage_notice
+from sqlbuild.cli.commands._helpers.compile.semantic_notice import (
+    selected_semantic_coverage,
+    semantic_coverage_notice,
+)
 from sqlbuild.cli.commands.constants import TARGET_DIRECTORY_NAME
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.output.models import (
     WrittenTarget,
 )
-from sqlbuild.compiler.compile.main.semantic_coverage import get_semantic_coverage
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
@@ -97,7 +99,9 @@ def format_compile_text(
         )
         lines.append("  " + style.muted("Use --json for the full compile report."))
     lines.append("")
-    notice: str | None = semantic_coverage_notice(graph.project)
+    notice: str | None = semantic_coverage_notice(
+        project=graph.project, selected_keys=selected_keys
+    )
     if notice:
         lines.append(notice)
         lines.append("")
@@ -105,7 +109,17 @@ def format_compile_text(
         lines.append(
             _format_diagnostics_text(
                 diagnostics=diagnostics,
-                source_texts=_model_source_texts(graph.project.models),
+                source_texts={
+                    **_model_source_texts(graph.project.models),
+                    **{
+                        source.source_file.relative_path: source.source_file.contents
+                        for source in graph.project.sources
+                    },
+                    **{
+                        test.test_file.relative_path: test.test_file.contents
+                        for test in graph.project.sql_tests
+                    },
+                },
                 style=style,
             )
         )
@@ -180,7 +194,9 @@ def format_compile_json(
             selected_keys=selected_keys,
         ),
         "diagnostics": [_diagnostic_to_json(diagnostic) for diagnostic in diagnostics],
-        "semantic_checks_partial": get_semantic_coverage(graph.project),
+        "semantic_checks_partial": selected_semantic_coverage(
+            project=graph.project, selected_keys=selected_keys
+        ),
         "compile_timings": timings_ms,
         "lineage_mode": lineage_mode.value,
         "resources": _resources(graph=graph, lineage=lineage),
@@ -511,6 +527,8 @@ def _diagnostic_to_json(diagnostic: CompilerDiagnostic) -> dict[str, object]:
         ]
     if diagnostic.help is not None:
         payload["help"] = diagnostic.help
+    if diagnostic.notes:
+        payload["notes"] = list(diagnostic.notes)
     return payload
 
 
@@ -570,8 +588,7 @@ def _format_diagnostic_text(
             diagnostic.resource_type is not None
             and str(diagnostic.resource_type) != CompiledResourceType.MODEL
         ):
-            label = "resource"
-            resource = f"{diagnostic.resource_type}: {resource}"
+            label = str(diagnostic.resource_type).replace("_", " ")
         lines.append(f"  {label}: {style.object_name(resource)}")
     if diagnostic.location is not None:
         lines.extend(
@@ -592,6 +609,7 @@ def _format_diagnostic_text(
                 source_texts=source_texts,
             )
         )
+    lines.extend(f"  {style.muted('= note:')} {note}" for note in diagnostic.notes)
     if diagnostic.help is not None:
         lines.append(f"  {style.muted('= help:')} {diagnostic.help}")
     return lines

@@ -40,7 +40,7 @@ from sqlbuild.compiler.compile._helpers.analysis.validation import (
     validate_sql_syntax,
 )
 from sqlbuild.compiler.compile._helpers.assembly.binding_positions import (
-    get_authored_binding_position,
+    get_authored_binding_location,
 )
 from sqlbuild.compiler.compile._helpers.assembly.metadata_validation import (
     get_semantic_metadata_diagnostics,
@@ -66,6 +66,8 @@ from sqlbuild.compiler.compile._helpers.deps.dependencies import (
     model_build_deps,
     sql_test_scope_deps,
 )
+from sqlbuild.compiler.compile._helpers.diagnostics.details import explain_diagnostics
+from sqlbuild.compiler.compile._helpers.diagnostics.recovery import recover_diagnostics
 from sqlbuild.compiler.compile._helpers.render.context_templates import (
     resolve_early_model_templates,
 )
@@ -167,6 +169,7 @@ from sqlbuild.spec.contracts.models import (
     SchemaDynamicColumnFamily,
     SourceColumnEntry,
     SourceEntry,
+    SourceLocation,
     TargetConfig,
 )
 
@@ -427,12 +430,16 @@ def assemble_compiled_project(
         external_sql_reference_resolver=inputs.external_sql_reference_resolver,
         scope_index=scope_index,
     )
-    return replace(
-        project,
-        diagnostics=(
-            *project.diagnostics,
-            *get_semantic_metadata_diagnostics(project=project, profile=profile),
-        ),
+    return explain_diagnostics(
+        recover_diagnostics(
+            replace(
+                project,
+                diagnostics=(
+                    *project.diagnostics,
+                    *get_semantic_metadata_diagnostics(project=project, profile=profile),
+                ),
+            )
+        )
     )
 
 
@@ -1071,9 +1078,6 @@ def _complete_inferred_bindings(
         required_names: frozenset[str] | None = _binding_required_names(request.model_input)
         if required_names is None:
             continue
-        nullability: dict[str, dict[str, InferredNullability]] = {}
-        for table, columns in complete_schemas.items():
-            nullability[table] = {column: InferredNullability.UNKNOWN for column in columns}
         analysis: PolyglotAnalysisResult = results[index].polyglot_analysis
         if (
             not results[index].cached
@@ -1088,11 +1092,20 @@ def _complete_inferred_bindings(
             )
             and not re.search(r"\b(?:UNION|INTERSECT|EXCEPT)\b", request.query_sql, re.IGNORECASE)
         ):
+            input_schemas: dict[str, dict[str, str]] = {
+                table: complete_schemas[table]
+                for table in required_names
+                if table in complete_schemas
+            }
+            nullability: dict[str, dict[str, InferredNullability]] = {
+                table: dict.fromkeys(columns, InferredNullability.UNKNOWN)
+                for table, columns in input_schemas.items()
+            }
             enriched: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
                 query_sql=request.query_sql,
                 references=request.model_input.references,
                 placeholders=request.placeholders,
-                column_types_by_table=complete_schemas,
+                column_types_by_table=input_schemas,
                 column_nullability_by_table=nullability,
                 inference_profile=inference_profile,
                 allow_compact_analysis=True,
@@ -1441,7 +1454,8 @@ def _binding_compiler_diagnostics(
             continue
         line: int | None
         column: int | None
-        line, column = get_authored_binding_position(
+        location: SourceLocation | None = get_authored_binding_location(
+            path=model_input.model_file.relative_path,
             authored_sql=model_input.model_file.contents,
             authored_query_sql=model_input.model_file.query_sql,
             cleaned_sql=get_complete_schema_binding_request(
@@ -1456,6 +1470,7 @@ def _binding_compiler_diagnostics(
             expansion=model_input.sql_expansion,
             diagnostic=diagnostic,
         )
+        line, column = (location.line, location.column) if location is not None else (None, None)
         if line is None:
             line = (
                 diagnostic.line + query_line_offset
@@ -1483,7 +1498,7 @@ def _binding_compiler_diagnostics(
                 path=model_input.model_file.relative_path,
                 line=line,
                 column=column,
-                help="review the SQL expression, input types, and authoritative schema",
+                location=location,
             )
         )
     return tuple(result)

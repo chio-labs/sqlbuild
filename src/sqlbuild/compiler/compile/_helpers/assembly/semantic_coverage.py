@@ -14,6 +14,23 @@ def semantic_coverage(project: CompiledProject) -> dict[str, tuple[str, ...]]:
     if not project.settings.sql_analysis:
         return {}
     shapes: dict[str, dict[str, str]] = semantic_shapes(project=project)
+    invalid: set[str] = set()
+    for model in project.models:
+        if any(item.is_error for item in model.binding_diagnostics):
+            invalid.add(model.name)
+    blocked_by: dict[str, set[str]] = {name: {name} for name in invalid}
+    if invalid:
+        for _ in project.models:
+            changed: bool = False
+            for model in project.models:
+                causes: set[str] = set(blocked_by.get(model.name, ()))
+                for reference in model.references:
+                    causes.update(blocked_by.get(reference.ref_name, ()))
+                if causes and causes != blocked_by.get(model.name):
+                    blocked_by[model.name] = causes
+                    changed = True
+            if not changed:
+                break
     reasons: dict[str, tuple[str, ...]] = {}
     for model in project.models:
         if model.config.values.get("sql_analysis") is False:
@@ -28,6 +45,10 @@ def semantic_coverage(project: CompiledProject) -> dict[str, tuple[str, ...]]:
             in {SqlReferenceKind.SOURCE, SqlReferenceKind.REF, SqlReferenceKind.DBT_REF}
             and reference.ref_name not in shapes
         ]
+        partial.extend(
+            f"depends on invalid model {name}"
+            for name in sorted(blocked_by.get(model.name, set()) - {model.name})
+        )
         if not model.inferred_columns:
             partial.append("output shape could not be inferred")
         elif model.fast_lineage_has_star and model.name not in shapes:

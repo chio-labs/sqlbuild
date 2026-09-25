@@ -18,6 +18,24 @@ class SemanticCompileCase:
 
 
 @dataclass(frozen=True)
+class DiagnosticUxCase:
+    description: str
+    edits: tuple[tuple[str, str, str], ...]
+    extra_files: tuple[tuple[str, str], ...] = ()
+    expected_errors: int = 1
+    expected_fragments: tuple[str, ...] = ()
+    expected_partial: bool = True
+
+
+@dataclass(frozen=True)
+class ColumnSuggestionCase:
+    description: str
+    name: str
+    columns: tuple[str, ...]
+    expected_match: str | None
+
+
+@dataclass(frozen=True)
 class RulesPipelineIntegrationTestCase:
     """One configured Rules failure in the shared planning compiler."""
 

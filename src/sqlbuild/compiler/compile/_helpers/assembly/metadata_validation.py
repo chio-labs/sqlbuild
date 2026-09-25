@@ -37,7 +37,7 @@ from sqlbuild.compiler.sql_analysis.constants import BINDING_UNKNOWN_TABLE_INTER
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.compiler.sql_analysis.models import SqlBindingResult, SqlSchemaValidationRequest
-from sqlbuild.spec.contracts.models import SchemaAuditInstance
+from sqlbuild.spec.contracts.models import SchemaAuditInstance, SourceLocation
 
 _UNKNOWN_TYPE: str = "UNKNOWN"
 _EXPRESSION_AUDIT: str = "expression_is_true"
@@ -294,6 +294,7 @@ def _sql_test_errors(
     profile: ExpressionInferenceProfile,
 ) -> tuple[CompilerDiagnostic, ...]:
     diagnostics: list[CompilerDiagnostic] = []
+    columns_by_sql: dict[str, tuple[str, ...]] = {}
     for test in project.sql_tests:
         if not isinstance(test.payload, CompiledModelSqlTestPayload):
             continue
@@ -304,19 +305,24 @@ def _sql_test_errors(
             shape: dict[str, str] | None = shapes.get(match.group(1)) if match else None
             if shape is None:
                 continue
-            analysis: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
-                query_sql=cte.sql_body,
-                references=(),
-                inference_profile=profile,
-                allow_compact_analysis=True,
-            )
-            for column in analysis.columns or ():
-                if column.name.casefold() not in {name.casefold() for name in shape}:
+            if cte.sql_body not in columns_by_sql:
+                analysis: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+                    query_sql=cte.sql_body,
+                    references=(),
+                    inference_profile=profile,
+                    allow_compact_analysis=True,
+                )
+                columns_by_sql[cte.sql_body] = tuple(
+                    column.name for column in analysis.columns or ()
+                )
+            available: set[str] = {name.casefold() for name in shape}
+            for column_name in columns_by_sql[cte.sql_body]:
+                if column_name.casefold() not in available:
                     line: int
                     column_position: int
                     line, column_position = _text_position(
                         text=test.test_file.contents,
-                        name=column.name,
+                        name=column_name,
                         offset=max(test.test_file.contents.find(cte.name), 0),
                     )
                     diagnostics.append(
@@ -324,12 +330,19 @@ def _sql_test_errors(
                             phase=DiagnosticPhase.COMPILE,
                             severity=DiagnosticSeverity.ERROR,
                             code="B302",
-                            message=f"SQL test '{cte.name}' names unknown column '{column.name}'",
+                            message=f"SQL test '{cte.name}' names unknown column '{column_name}'",
                             resource_type=CompiledResourceType.SQL_TEST,
                             resource_name=test.name,
                             path=test.test_file.relative_path,
                             line=line,
                             column=column_position,
+                            location=SourceLocation(
+                                path=test.test_file.relative_path,
+                                line=line,
+                                column=column_position,
+                                end_line=line,
+                                end_column=column_position + len(column_name),
+                            ),
                         )
                     )
     return tuple(diagnostics)

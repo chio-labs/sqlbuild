@@ -40,7 +40,7 @@ _GIB: int = 1024 * 1024 * 1024
             1000,
             14.0,
             3 * _GIB // 2,
-            "99f2f5c698cca3c7f0d5a2defbd31935d98813843c899286a23a8e7d4441a736",
+            "1a9ce1bec2ca35aaffc3fdfa1d5fe321147637dc6eec5e1ef6db6da488078a49",
         ),
         DenseCompileGuardTestCase(
             "dense_models_3000_all_rules",
