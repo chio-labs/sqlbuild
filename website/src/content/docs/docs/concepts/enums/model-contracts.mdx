@@ -1,0 +1,47 @@
+---
+title: "Enum Model Contracts"
+description: "Use an enum as a portable model-column domain with generated accepted-value validation."
+---
+
+An enum can describe the allowed domain of a model column as well as provide individual SQL
+literals.
+
+These are separate uses:
+
+- `@enum("fulfillment_method").DELIVERY` inserts one validated value into SQL.
+- `type fulfillment_method` declares that a model column uses the complete enum domain.
+
+## Declare an enum-typed column
+
+Use the enum name as the column type:
+
+```sql
+MODEL (
+  contract enforced,
+  columns (
+    fulfillment_method (type fulfillment_method),
+  ),
+);
+```
+
+SQLBuild does not send `fulfillment_method` to the warehouse as a physical type and does not create a
+warehouse-native enum. It translates the enum into portable column metadata:
+
+| Enum values | Physical column type | Generated validation |
+|-------------|----------------------|----------------------|
+| Strings such as `DELIVERY` and `PICKUP` | `VARCHAR` | `accepted_values` for the enum strings |
+| Integers such as `1` and `3` | `INTEGER` | `accepted_values` for the enum integers |
+
+## Contract behavior
+
+With `contract enforced`, SQLBuild runs the generated `accepted_values` audit with the model's other
+audits. Its severity and timing follow the model's ordinary audit and materialization settings.
+
+With `contract none`, SQLBuild still resolves the enum to its portable scalar column type but does
+not generate the domain audit.
+
+This behavior is the same on adapters with and without native enum support. The physical warehouse
+column remains an ordinary string or integer column.
+
+Changing the members of an enum-typed contract changes the model's contract identity and generated
+validation.

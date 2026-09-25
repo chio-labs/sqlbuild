@@ -1,0 +1,352 @@
+---
+title: "Snapshots (SCD Type 2)"
+description: "Preserve row history over time using SCD Type 2 semantics with timestamp or check-based change detection."
+---
+
+Snapshot models maintain historical row versions with validity windows. They answer questions like: what does this entity look like now, what did it look like before, when did it change, and was it absent during a period.
+
+## How snapshots work
+
+SQLBuild adds two generated columns to the target table:
+
+| Column | Meaning |
+|--------|---------|
+| `valid_from` | When this version became valid (inclusive) |
+| `valid_to` | When this version stopped being valid (exclusive). `NULL` means currently active. |
+
+A point-in-time query uses the interval `valid_from <= point_in_time < valid_to`.
+
+## Change detection strategies
+
+### Timestamp strategy
+
+Use when your source has a reliable column recording when the entity changed.
+
+```sql
+MODEL (
+  materialized snapshot,
+  unique_key [customer_id],
+  snapshot_strategy timestamp,
+  updated_at updated_at,
+);
+
+SELECT
+  customer_id,
+  name,
+  plan,
+  status,
+  updated_at
+FROM __source("customers")
+```
+
+If the source `updated_at` is newer than the active target row's `updated_at`, SQLBuild closes the old version and inserts the new one. If `updated_at` is unchanged or older, nothing happens.
+
+### Check strategy
+
+Use when the source does not have a reliable update timestamp.
+
+```sql
+MODEL (
+  materialized snapshot,
+  unique_key [customer_id],
+  snapshot_strategy check,
+  check_columns [name, plan, status],
+);
+
+SELECT
+  customer_id,
+  name,
+  plan,
+  status
+FROM __source("customers")
+```
+
+SQLBuild compares `check_columns` between source and active target rows. If any checked value differs, a new version is created. Changes to unchecked columns are ignored.
+
+`check_columns [*]` checks all output columns except `unique_key` and the generated validity columns. Explicit columns are recommended for important models to avoid noisy history from volatile metadata columns.
+
+## Historical input
+
+By default, SQLBuild treats the model query as returning the current state of each entity (one row per `unique_key`). When your source contains historical observations over time, add `observed_at` to switch to historical mode.
+
+### Historical check snapshot
+
+Use for daily full exports or periodic snapshots without a business update timestamp.
+
+```sql
+MODEL (
+  materialized snapshot,
+  unique_key [customer_id],
+  snapshot_strategy check,
+  check_columns [plan, status],
+  observed_at snapshot_date,
+);
+
+SELECT
+  customer_id,
+  plan,
+  status,
+  snapshot_date
+FROM __source("customers_daily_snapshot")
+```
+
+Each `observed_at` group is treated as a complete picture of the source at that time. Consecutive unchanged observations are collapsed into a single version.
+
+### Historical timestamp snapshot
+
+Use for historical observations that include a business update timestamp.
+
+```sql
+MODEL (
+  materialized snapshot,
+  unique_key [customer_id],
+  snapshot_strategy timestamp,
+  updated_at updated_at,
+  observed_at extract_date,
+  historical_input snapshot,
+);
+
+SELECT
+  customer_id,
+  plan,
+  status,
+  updated_at,
+  extract_date
+FROM __source("customers_historical_extracts")
+```
+
+Each row means: "at `extract_date`, the source's current state for this key had this `updated_at`." Validity windows use `updated_at`, not `observed_at`.
+
+### Historical change records
+
+Use for CDC tables, audit logs, or historical backfills where rows are individual version records.
+
+```sql
+MODEL (
+  materialized snapshot,
+  unique_key [customer_id],
+  snapshot_strategy timestamp,
+  updated_at updated_at,
+  observed_at loaded_at,
+  historical_input changes,
+);
+
+SELECT
+  customer_id,
+  plan,
+  status,
+  updated_at,
+  loaded_at
+FROM __source("customers_cdc")
+```
+
+Multiple changes for the same key in one batch are allowed. `updated_at` determines version ordering. `observed_at` is arrival/load time, not validity time.
+
+### Historical input rules
+
+| Strategy | `historical_input` | Source shape | Uniqueness | Hard deletes |
+|----------|-------------------|-------------|-----------|-------------|
+| `check` | `snapshot` (default) | Complete observations over time | `unique_key + observed_at` | Allowed |
+| `timestamp` | `snapshot` | Complete observations with update timestamp | `unique_key + observed_at` | Allowed |
+| `timestamp` | `changes` | Individual change/version records | `unique_key + updated_at` | Not allowed |
+| `check` | `changes` | Not supported | - | - |
+
+Timestamp snapshots with `observed_at` require `historical_input` to be set explicitly.
+
+## Hard deletes
+
+```sql
+invalidate_hard_deletes true,
+```
+
+When enabled, active target rows whose keys are missing from the source are closed:
+
+- **Current-state input**: closed at execution time
+- **Historical input** (`historical_input snapshot`): closed at the `observed_at` time of the group where the key is missing
+
+Hard deletes are not allowed with `historical_input changes` because change-record batches are not complete source snapshots - a missing key just means no change, not deletion.
+
+Reappearing keys create a new active version.
+
+## Configuration reference
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `materialized snapshot` | Yes | Enables snapshot lifecycle |
+| `unique_key` | Yes | Column(s) identifying one entity |
+| `snapshot_strategy` | Yes | `timestamp` or `check` |
+| `updated_at` | Timestamp only | Source column with business update time |
+| `check_columns` | Check only | Columns compared to detect changes. Use `[*]` for all non-key columns. |
+| `observed_at` | No | Source column with observation/extract time. Presence enables historical mode. |
+| `historical_input` | Conditional | `snapshot` or `changes`. Required for timestamp with `observed_at`. Defaults to `snapshot` for check with `observed_at`. |
+| `invalidate_hard_deletes` | No | Close active rows missing from source. Default `false`. |
+| `valid_from_column` | No | Override generated column name. Default `valid_from`. |
+| `valid_to_column` | No | Override generated column name. Default `valid_to`. |
+| `initial_valid_from` | No | First-version start time: `updated_at`, `observed_at`, or `execution_time`. See defaults below. |
+| `snapshot_full_refresh` | No | Model-level full-refresh safety: `deny`, `require_confirmation`, or `allow`. |
+
+### Initial valid_from defaults
+
+| Case | Default |
+|------|---------|
+| Timestamp, no `observed_at` | `updated_at` |
+| Timestamp, with `observed_at` | `updated_at` |
+| Check, no `observed_at` | `execution_time` |
+| Check, with `observed_at` | `observed_at` |
+
+## Full refresh safety
+
+Snapshot full refresh can permanently discard history that cannot be reconstructed from the source. SQLBuild guards against this with configurable safety policies.
+
+### Project config
+
+```toml
+[snapshots]
+current_state_full_refresh = "deny"
+historical_full_refresh = "require_confirmation"
+```
+
+| Policy | Behavior |
+|--------|----------|
+| `deny` | Full refresh is blocked regardless of CLI flags |
+| `require_confirmation` | Requires `--allow-snapshot-full-refresh` flag or interactive confirmation |
+| `allow` | No snapshot-specific confirmation required |
+
+### Defaults
+
+| Snapshot type | Default policy | Reason |
+|--------------|---------------|--------|
+| Current-state (no `observed_at`) | `deny` | Cannot reconstruct older history from current-state source |
+| Historical (with `observed_at`) | `require_confirmation` | Can reconstruct if query returns full history, but SQLBuild cannot prove that |
+
+### Model override
+
+The model `snapshot_full_refresh` field can only make the policy **stricter** than the project setting. A model cannot weaken `deny` to `allow`.
+
+```sql
+MODEL (
+  materialized snapshot,
+  ...
+  snapshot_full_refresh deny,
+);
+```
+
+### CLI usage
+
+```bash
+# Fails if any selected snapshot has effective policy 'deny'
+sqb build --full-refresh
+
+# Satisfies 'require_confirmation' policy (cannot override 'deny')
+sqb build --full-refresh --allow-snapshot-full-refresh
+```
+
+## Audits
+
+Snapshot models support the same audit system as other materializations. Audits with `delta_and_final` run scope execute against the snapshot delta relation before target mutation, blocking promotion if an error-severity audit fails. Final audits run after target mutation.
+
+```sql
+MODEL (
+  materialized snapshot,
+  unique_key [customer_id],
+  snapshot_strategy timestamp,
+  updated_at updated_at,
+  columns (
+    customer_id (audits [not_null (run_scope delta_and_final)]),
+  ),
+);
+```
+
+## Duplicate handling
+
+SQLBuild fails with an actionable error if the source query produces duplicate rows at the snapshot identity grain:
+
+- Current-state: duplicate `unique_key`
+- Historical snapshot: duplicate `unique_key + observed_at`
+- Historical changes: duplicate `unique_key + updated_at`
+
+Deduplicate in your model SQL:
+
+```sql
+WITH ranked AS (
+  SELECT
+    *,
+    ROW_NUMBER() OVER (
+      PARTITION BY customer_id, snapshot_date
+      ORDER BY loaded_at DESC
+    ) AS rn
+  FROM __source("customer_daily")
+)
+
+SELECT customer_id, plan, status, snapshot_date
+FROM ranked
+WHERE rn = 1
+```
+
+## Querying snapshots
+
+### Current rows
+
+```sql
+SELECT * FROM customer_snapshot WHERE valid_to IS NULL
+```
+
+### Point-in-time
+
+```sql
+SELECT *
+FROM customer_snapshot
+WHERE customer_id = 1
+  AND TIMESTAMP '2026-02-15' >= valid_from
+  AND (valid_to IS NULL OR TIMESTAMP '2026-02-15' < valid_to)
+```
+
+### Fact-to-dimension historical join
+
+```sql
+SELECT
+  o.order_id,
+  o.ordered_at,
+  c.plan
+FROM orders o
+JOIN customer_snapshot c
+  ON o.customer_id = c.customer_id
+ AND o.ordered_at >= c.valid_from
+ AND (c.valid_to IS NULL OR o.ordered_at < c.valid_to)
+```
+
+## Examples
+
+### Composite key
+
+```sql
+MODEL (
+  materialized snapshot,
+  unique_key [user_id, role_id],
+  snapshot_strategy check,
+  check_columns [role_name, role_status],
+  observed_at snapshot_date,
+  invalidate_hard_deletes true,
+);
+
+SELECT
+  user_id, role_id, role_name, role_status, snapshot_date
+FROM __source("user_role_daily")
+```
+
+### Custom validity column names
+
+```sql
+MODEL (
+  materialized snapshot,
+  unique_key [product_id],
+  snapshot_strategy timestamp,
+  updated_at modified_at,
+  valid_from_column effective_from,
+  valid_to_column effective_to,
+);
+
+SELECT
+  product_id, name, price, modified_at
+FROM __source("products")
+```

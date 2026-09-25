@@ -24,7 +24,7 @@ All state is persisted as append-only tables in the warehouse alongside your dat
 - **Cursor-based incremental processing.** Automatic gap detection and resume, with microbatch mode for large ranges. No external checkpoint to maintain.
 - **Ingestion and Python nodes.** Load external data with Python `@loader` functions, and run `@task`, `@asset`, and `@check` nodes as first-class members of the same DAG as your SQL models.
 
-See the [documentation](https://docs.sqlbuild.com) for the full feature set, including providers, lifecycle hooks, Python macros, UDFs, custom materializations, data diffs, zero-copy cloning, and virtual environments. This repository also includes focused guides to [target execution limits](docs/execution-limits.md) and [model and raw-query diffs](docs/query-diffs.md). To coordinate dbt and SQLBuild projects, see the [dbt compatibility guide](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
+See the [documentation](https://docs.sqlbuild.com) for the full feature set, including providers, lifecycle hooks, Python macros, UDFs, custom materializations, data diffs, zero-copy cloning, and virtual environments. To coordinate dbt and SQLBuild projects, see the [dbt compatibility guide](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
 
 ## Quick start
 
@@ -198,7 +198,7 @@ Family selectors automatically include new built-in rules on upgrade. Exact-code
 their current membership and must be updated manually. In particular, selecting `SQBRSQL` enables
 `SQBRSQL040` (plain JOIN predicates) and `SQBRSQL041` (terminal CTE naming); existing projects may
 need to extract computed join keys into input CTEs and rename their last CTE to `final`.
-See the [SQL rule conventions](docs/native-lint-rule-matrix.md#join-keys-and-final-cte-names)
+See the [SQL rule conventions](https://sqlbuild.com/docs/concepts/rules/configuration-and-selection/#join-keys-and-final-cte-names)
 for their exact scope and relationship to `SQBRSQL035`.
 
 `sqb format` reports a file-specific `format-unsafe` fault whenever a SQL body cannot be safely
@@ -307,12 +307,6 @@ digest, not SQL text. Executed SQL artifacts are stored separately under the sen
 ## Documentation
 
 Full documentation is available at [docs.sqlbuild.com](https://docs.sqlbuild.com).
-
-Runtime operator and extension contracts:
-
-- [Execution observability and local troubleshooting](docs/execution-observability.md)
-- [SQLite and PostgreSQL execution history](docs/execution-history.md)
-- [Typed lifecycle and command-output sinks](docs/sinks.md)
 
 ## Contributing
 

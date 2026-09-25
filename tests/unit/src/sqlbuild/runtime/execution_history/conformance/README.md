@@ -1,7 +1,7 @@
 # Execution history backend conformance
 
 Every test in this directory receives storage factories through the parametrized `backend_case`
-fixture. `BACKEND_CASES` in `conftest.py` is the single backend registry. CHI-177 and CHI-178 can run
+fixture. `BACKEND_CASES` in `conftest.py` is the single backend registry. Additional backends can run
 the exact same test functions by adding one `BackendCase` containing SQLite or PostgreSQL factories
 and their deterministic failure-injection factories; test bodies must not be copied or subclassed.
 

@@ -1,0 +1,71 @@
+---
+title: "RuleContext and compiler facts"
+description: "Inspect stable compiler-owned facts and opt into lazy SQL AST access."
+---
+
+`RuleContext` exposes typed, read-only views over the compiled project:
+
+- `ctx.sql`: authored and expanded SQL
+- `ctx.graph`: compiler-resolved dependencies and dependents
+- `ctx.columns`: declared and inferred output columns
+- `ctx.contracts`: enforcement and grain facts
+- `ctx.tests` and `ctx.audits`: checks associated with a model
+- `ctx.declarations`: public and model-scoped enums and constants
+- `ctx.project`: compiled resources and deterministic project-tree observations
+
+## Authored and expanded SQL
+
+Choose the SQL representation that matches the requirement:
+
+```python
+sql = ctx.sql.for_model(model)
+
+authored_text = sql.authored.source
+expanded_text = sql.expanded.source
+```
+
+An authoring convention may inspect what a developer wrote. A compiler-output convention may need
+the expanded SQL after interpolation, declarations, and macros.
+
+## Common SQL structures
+
+Common structures are available through typed source nodes:
+
+```python
+for cte in sql.expanded.ctes():
+    ...
+
+for star in sql.authored.star_projections():
+    ...
+```
+
+## Lazy Polyglot access
+
+Use the full Polyglot AST only when common projections are insufficient:
+
+```python
+ast = sql.expanded.polyglot_ast()
+for node in ast.walk():
+    ...
+```
+
+AST construction is lazy. A path or contract Rule does not pay for SQL parsing merely because AST
+access exists elsewhere.
+
+## Project structure
+
+Use the compiler-owned tree rather than direct filesystem calls:
+
+```python
+parts = ctx.project.tree.relative_parts(path=model.path, under="models")
+models = ctx.project.tree.resources_under("models/orders")
+config = ctx.project.tree.read_text("rules/requirements.yaml")
+```
+
+Paths remain project-relative, and observations participate in cache invalidation.
+
+## Choose the subject deliberately
+
+A model-subject Rule is evaluated and cached per model. A project-subject Rule runs once and can
+iterate `ctx.project.models`. Use a project subject only when the invariant genuinely needs a
+project-wide view; its cache invalidation is intentionally broader.

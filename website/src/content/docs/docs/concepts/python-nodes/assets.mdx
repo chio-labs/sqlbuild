@@ -1,0 +1,137 @@
+---
+title: "Assets"
+description: "Produce or observe external artifacts as nodes in the SQLBuild graph."
+---
+
+Assets are Python nodes that produce or observe an external artifact - an exported file, a published dataset, a dashboard refresh, an ML model. They behave like [tasks](/docs/concepts/python-nodes/tasks) but add dataset-like metadata (columns, column lineage) and a materialization flag. See [Python Nodes](/docs/concepts/python-nodes/overview) for the shared model and the SQL boundary rules.
+
+## Defining an asset
+
+Place Python files under `assets/` and decorate functions with `@asset`:
+
+```python
+# assets/exports.py
+from sqlbuild.assets import asset, AssetContext
+
+
+@asset
+def orders_export(ctx: AssetContext):
+    path = write_orders_csv()
+    return ctx.result(metadata={"path": path, "rows": 1200}, materialized=True)
+```
+
+The asset receives an `AssetContext` and returns through `ctx.result(...)`.
+
+## Materialization
+
+Assets record whether they actually produced an artifact via `materialized`:
+
+```python
+@asset
+def orders_export(ctx: AssetContext):
+    if nothing_changed():
+        return ctx.result(metadata={"status": "unchanged"}, materialized=False)
+    return ctx.result(metadata={"path": export()}, materialized=True)
+```
+
+- `materialized=True` - the artifact was produced this run.
+- `materialized=False` - the asset ran but produced nothing (e.g. it only observed state). This is **not** a skip; the node still succeeded.
+
+Only assets have `materialized`; tasks do not.
+
+## Dependencies
+
+Assets declare dependencies with `depends_on` (a single function, tuple, or list), and may depend on tasks, assets, and loaders:
+
+```python
+from sqlbuild.assets import asset
+from tasks.orders import export_orders
+
+
+@asset(depends_on=export_orders)
+def orders_dashboard(ctx):
+    result = ctx.result_of(export_orders)
+    return ctx.result(metadata={"rows": result.payload["rows"]}, materialized=True)
+```
+
+To read a SQL model or source, declare a typed reference and resolve it at runtime - see [SQL references](/docs/concepts/python-nodes/sql-references):
+
+```python
+from sqlbuild.assets import asset
+from sqlbuild.refs import model
+
+
+@asset(depends_on=model("fact_orders"))
+def orders_extract(ctx):
+    relation = ctx.relation(model("fact_orders"))
+    rows = ctx.query(f"SELECT count(*) FROM {relation}").fetchone()[0]
+    return ctx.result(metadata={"rows": rows}, materialized=True)
+```
+
+## Columns and column lineage
+
+Assets can declare a schema for catalog and lineage purposes. This does not enforce anything at runtime; it describes the artifact:
+
+```python
+@asset(
+    columns=[
+        {"name": "order_id", "type": "INTEGER"},
+        {"name": "total_cents", "type": "INTEGER", "nullable": False},
+    ],
+    column_lineage={
+        "order_id": [{"node": "fact_orders", "column": "order_id"}],
+        "total_cents": [{"node": "fact_orders", "column": "total_cents"}],
+    },
+)
+def orders_export(ctx):
+    ...
+```
+
+- `columns` - column declarations with `name`, optional `type`, `nullable`, `description`, and `meta`.
+- `column_lineage` - maps each asset column to upstream `{node, column}` references, surfaced in the DAG artifact and integrations.
+
+Tasks and checks do not support `columns` or `column_lineage`.
+
+## Skipping and retries
+
+Assets support the same `ctx.skip(...)` and `retry` behavior as tasks:
+
+```python
+from sqlbuild.assets import asset, SkipMode
+from sqlbuild.retries import RetryPolicy
+
+
+@asset(retry=RetryPolicy(max_attempts=3, retry_on=(IOError,)))
+def export(ctx):
+    if not ready():
+        return ctx.skip("upstream not ready", mode="soft")  # or SkipMode.SOFT
+    return ctx.result(metadata={"path": do_export()}, materialized=True)
+```
+
+See [Tasks](/docs/concepts/python-nodes/tasks#retries) for the full retry policy fields.
+
+## Decorator parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `name` | Override the node name (defaults to the function name) |
+| `depends_on` | Upstream nodes (function, tuple, or list); `model()`/`source()` for read-only SQL refs |
+| `columns` | Column declarations for the produced artifact |
+| `column_lineage` | Map of asset column to upstream `{node, column}` references |
+| `tags` | Labels for selection and grouping |
+| `group` | Display/catalog grouping |
+| `description` | Docs (defaults to docstring) |
+| `meta` | Freeform JSON metadata |
+| `retry` | A `RetryPolicy` |
+
+## Running assets
+
+```bash
+# Run an asset and its required graph
+sqb build --select orders_export --no-tests --no-audits
+
+# Include in a full build with its upstreams
+sqb build --select +orders_export
+```
+
+Assets run during `sqb build`. Use `--no-python` to suppress read-side assets while still loading sources.

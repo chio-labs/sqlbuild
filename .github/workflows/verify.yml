@@ -16,6 +16,7 @@ jobs:
     name: Classify verification scope
     runs-on: ubuntu-24.04
     outputs:
+      checks: ${{ steps.scope.outputs.checks }}
       duckdb: ${{ steps.scope.outputs.duckdb }}
       postgres: ${{ steps.scope.outputs.postgres }}
       performance: ${{ steps.scope.outputs.performance }}
@@ -39,11 +40,12 @@ jobs:
               echo "performance=$3"
               echo "format_performance=$4"
               echo "rules_performance=$5"
+              echo "checks=$6"
             } >> "${GITHUB_OUTPUT}"
           }
 
           if [[ "${EVENT_NAME}" != "pull_request" ]]; then
-            write_scope true true true true true
+            write_scope true true true true true true
             exit 0
           fi
 
@@ -54,8 +56,15 @@ jobs:
           rules_performance=false
           broad=false
           changed=false
+          # The website builds and deploys in its own workflow, so a change that only touches it
+          # skips the Python checks and test suites.
+          website_only=true
           while IFS= read -r -d '' path; do
             changed=true
+            case "${path}" in
+              website/*|.github/workflows/website.yml) ;;
+              *) website_only=false ;;
+            esac
             case "${path}" in
               crates/*|Cargo.toml|Cargo.lock|pyproject.toml|uv.lock)
                 broad=true
@@ -94,7 +103,7 @@ jobs:
                 format_performance=true
                 rules_performance=true
                 ;;
-              .github/*|docs/*|*.md|.gitignore|LICENSE)
+              .github/*|docs/*|website/*|*.md|.gitignore|LICENSE)
                 ;;
               *)
                 broad=true
@@ -103,8 +112,13 @@ jobs:
           done < <(git diff --name-only -z "${BASE_SHA}" "${HEAD_SHA}")
 
           if [[ "${changed}" != "true" ]]; then
-            write_scope true true true true true
+            write_scope true true true true true true
             exit 0
+          fi
+
+          checks=true
+          if [[ "${website_only}" == "true" ]]; then
+            checks=false
           fi
 
           if [[ "${broad}" == "true" ]]; then
@@ -117,7 +131,8 @@ jobs:
             "${postgres}" \
             "${performance}" \
             "${format_performance}" \
-            "${rules_performance}"
+            "${rules_performance}" \
+            "${checks}"
 
   lockfile:
     name: Lockfile consistency
@@ -137,7 +152,8 @@ jobs:
 
   checks:
     name: Static checks and unit + integration tests
-    needs: lockfile
+    needs: [changes, lockfile]
+    if: needs.changes.outputs.checks == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -542,6 +558,7 @@ jobs:
       - name: Confirm all required verification jobs passed
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
+          CHECKS_SELECTED: ${{ needs.changes.outputs.checks }}
           LOCKFILE_RESULT: ${{ needs.lockfile.result }}
           CHECKS_RESULT: ${{ needs.checks.result }}
           E2E_SHARDS_RESULT: ${{ needs.e2e_shards.result }}
@@ -553,10 +570,13 @@ jobs:
           RULES_PERFORMANCE_RESULT: ${{ needs.rules_performance.result }}
           POSTGRES_RESULT: ${{ needs.postgres.result }}
         run: |
-          if [[ "${CHANGES_RESULT}" != "success" || \
-                "${LOCKFILE_RESULT}" != "success" || \
-                "${CHECKS_RESULT}" != "success" ]]; then
-            echo "Required classification, lockfile, or static checks did not pass" >&2
+          if [[ "${CHANGES_RESULT}" != "success" || "${LOCKFILE_RESULT}" != "success" ]]; then
+            echo "Required classification or lockfile checks did not pass" >&2
+            exit 1
+          fi
+          if [[ "${CHECKS_RESULT}" != "success" ]] && \
+             ! [[ "${CHECKS_SELECTED}" == "false" && "${CHECKS_RESULT}" == "skipped" ]]; then
+            echo "Required static checks did not pass: ${CHECKS_RESULT}" >&2
             exit 1
           fi
           for result in \

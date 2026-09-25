@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>SQLBuild · The refactorable warehouse</title>
+		<meta
+			name="description"
+			content="SQLBuild makes your data warehouse refactorable. Catch errors before anything runs, test the logic, diff real data against production, and rename models without rebuilding their history. Free and open source."
+		/>
+		<meta property="og:title" content="SQLBuild · The refactorable warehouse" />
+		<meta
+			property="og:description"
+			content="Verify early, test properly, and refactor safely. Free and open source."
+		/>
+		<meta property="og:type" content="website" />
+		<meta property="og:url" content="https://sqlbuild.com/" />
+		<meta property="og:image" content="https://sqlbuild.com/assets/og-icon.png" />
+		<link rel="icon" type="image/png" href="assets/icon.png" />
+		<link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+		<link rel="stylesheet" href="styles.css" />
+		<script>
+			(function () {
+				var stored = localStorage.getItem('sqlbuild-theme');
+				var dark = stored ? stored === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+				document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+			})();
+		</script>
+	</head>
+	<body>
+		<header class="site-header">
+			<div class="wrap">
+				<a class="brand" href="/" aria-label="SQLBuild home">
+					<img class="logo-for-light" src="assets/logo-light.png" alt="SQLBuild" width="111" height="30" />
+					<img class="logo-for-dark" src="assets/logo-dark.png" alt="SQLBuild" width="111" height="30" />
+				</a>
+				<nav class="nav" aria-label="Main">
+					<a class="hide-sm" href="#how">How it works</a>
+					<a href="/docs/">Docs</a>
+					<a class="hide-sm" href="/docs/quickstart/">Quickstart</a>
+					<a class="nav-icon" href="https://github.com/chio-labs/sqlbuild" aria-label="SQLBuild on GitHub">
+						<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" /></svg>
+					</a>
+					<button class="theme-toggle" type="button" aria-label="Toggle dark mode" data-theme-toggle>
+						<svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>
+						<svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
+					</button>
+				</nav>
+			</div>
+		</header>
+
+		<main>
+			<div class="hero wrap">
+				<div class="hero-text">
+				<p class="eyebrow">Free and open source · Apache-2.0</p>
+				<h1>The refactorable warehouse</h1>
+				<p class="tagline">Verify early, test properly, and refactor safely.</p>
+				<p class="lede">
+					Change your warehouse as often as your code. SQLBuild brings compile-time checks, tests and diffs to
+					your SQL, so change is safe.
+				</p>
+				<div class="actions">
+					<div class="install">
+						<span><span class="prompt">$</span> pip install sqlbuild</span>
+						<button class="copy" type="button" data-copy="pip install sqlbuild">Copy</button>
+					</div>
+					<a class="button primary" href="/docs/quickstart/">Read the docs</a>
+					<a class="button" href="https://github.com/chio-labs/sqlbuild">View on GitHub</a>
+				</div>
+				</div>
+				<div
+					class="terminal hero-visual"
+					role="img"
+					aria-label="A model file is moved and renamed, and sqb plan shows a migration of the existing table instead of a rebuild."
+				><span class="hv-stack"><span class="hv-a"><span class="tree"><span class="dim">models</span>
+<span class="dim">└──</span> marts
+    <span class="dim">└──</span> revenue.sql</span></span><span class="hv-b"><span class="tree"><span class="dim">models</span>
+<span class="dim">└──</span> finance
+    <span class="dim">└──</span> <span class="info">daily_revenue.sql</span></span></span></span>
+<span class="hv-l hv-l1"><span class="cmd">sqb plan</span></span><span class="hv-l hv-l2">Migrations (1)</span><span class="hv-l hv-l3"><span class="tree"><span class="dim">└──</span></span> daily_revenue  migrate  prod.revenue -&gt; prod.daily_revenue</span><span class="hv-l hv-l4"><span class="tree">    <span class="dim">├──</span></span> compatibility  compatible</span><span class="hv-l hv-l5"><span class="tree">    <span class="dim">├──</span></span> transfer  physical copy, promote by staged rename</span><span class="hv-l hv-l6"><span class="tree">    <span class="dim">└──</span></span> discovery  automatic</span></div>
+			</div>
+
+			<section>
+				<div class="wrap">
+					<div class="section-head">
+						<h2>Why warehouses resist change</h2>
+					</div>
+					<div class="problem">
+						<div class="card">
+							<h3>Valid isn't the same as correct</h3>
+							<p>SQL can run cleanly and still return the wrong number.</p>
+						</div>
+						<div class="card">
+							<h3>Lessons get forgotten</h3>
+							<p>Hard-won rules live in review comments, until someone misses one.</p>
+						</div>
+						<div class="card">
+							<h3>Code review can't see the data</h3>
+							<p>A pull request shows what the SQL changed, not what the numbers did.</p>
+						</div>
+						<div class="card">
+							<h3>Names are tied to data</h3>
+							<p>Rename an incremental model and you rebuild its history from scratch.</p>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<section id="how">
+				<div class="wrap">
+					<div class="section-head">
+						<h2>One refactor, start to finish</h2>
+						<p>
+							Rewrite a few models, rename an incremental rollup and move a model between folders. Each step
+							catches something the one before it can't.
+						</p>
+					</div>
+
+					<div class="steps">
+						<p class="step-group">Before anything runs</p>
+						<div class="step">
+							<div class="step-text">
+								<span class="num">01 · Verify early</span>
+								<h3>Catch errors before anything runs</h3>
+								<p>
+									
+									Every column and type is checked offline against your declared contracts. A missing column fails in seconds, pointing at the line.
+								</p>
+							</div>
+<pre class="terminal"><span class="cmd">sqb compile</span>
+<span class="bad">error[B002]: Unknown column 'qty' in table 'stg_orders' (context: SELECT)</span>
+  model: fact_orders
+  --&gt; models/marts/fact_orders.sql:16:5
+     |
+  16 |   o.qty,
+     |     ^
+  <span class="dim">= help:</span> review the SQL expression, input types, and authoritative schema
+
+<span class="bad">error[B217]: Incompatible comparison between timestamp and integer</span>
+  model: fact_orders
+  --&gt; models/marts/fact_orders.sql:27:7
+     |
+  27 | WHERE o.ordered_at &gt; 5
+     |       ^
+  <span class="dim">= help:</span> review the SQL expression, input types, and authoritative schema
+
+<span class="bad">✗</span> <span class="bad strong">Project compiled</span>  <span class="dim">12 models, 1 seed, 2 functions, 4 errors, 0 warnings</span></pre>
+						</div>
+
+						<div class="step">
+							<div class="step-text">
+								<span class="num">02 · Make lessons permanent</span>
+								<h3>Turn review comments into compile errors</h3>
+								<p>
+									
+									A few lines of Python turn a review comment into a compile error, for people and agents alike. Here a mart reads a raw source directly.
+								</p>
+							</div>
+<pre class="terminal"><span class="cm"># rules/layers.py</span>
+<span class="fn">@</span><span class="fn">rule</span>(
+    <span class="arg">code</span>=<span class="str">&quot;XSQBRARCH001&quot;</span>,
+    <span class="arg">message</span>=<span class="str">&quot;Marts must read sources through staging&quot;</span>,
+    <span class="arg">remediation</span>=<span class="str">&quot;Reference a staging model with __ref() instead.&quot;</span>,
+)
+<span class="kw">def</span> <span class="fn">marts_use_staging</span>(*, model: <span class="ty">Model</span>, ctx: <span class="ty">RuleContext</span>) -&gt; <span class="ty">list</span>[<span class="ty">Finding</span>]:
+    layer = ctx.project.tree.relative_parts(<span class="arg">path</span>=model.path, <span class="arg">under</span>=<span class="str">&quot;models&quot;</span>)[<span class="num">0</span>]
+    <span class="arg">sql</span> = ctx.sql.for_model(model).authored.source
+    <span class="kw">if</span> layer != <span class="str">&quot;marts&quot;</span> <span class="kw">or</span> <span class="str">&quot;__source(&quot;</span> <span class="kw">not</span> <span class="kw">in</span> sql:
+        <span class="kw">return</span> []
+    line = sql[: sql.index(<span class="str">&quot;__source(&quot;</span>)].count(<span class="str">&quot;\n&quot;</span>) + <span class="num">1</span>
+    <span class="kw">return</span> [ctx.finding(<span class="arg">subject</span>=model, <span class="arg">line</span>=line)]
+
+<span class="cmd">sqb compile</span>
+<span class="bad">error[XSQBRARCH001]</span>: Marts must read sources through staging
+  --&gt; models/marts/daily_revenue.sql:24:1
+     |
+  24 | INNER JOIN __source("raw__payments") p ON o.order_id = p.order_id AND p.status = 'success'
+     | <span class="bad">^</span>
+  = help: Reference a staging model with __ref() instead.</pre>
+						</div>
+
+						<div class="step">
+							<div class="step-text">
+								<span class="num">03 · Move models safely</span>
+								<h3>Reorganise without breaking anything</h3>
+								<p>
+									
+									Declarations live next to the models that use them, and the compiler enforces who can see them. <code>sqb scope</code> shows what a move would break.
+								</p>
+							</div>
+<pre class="terminal"><span class="tree">models/marts/
+├── _sqlbuild/
+│   ├── _enums/                <span class="cm"># "_" = visible only to models directly in marts/</span>
+│   │   └── payment_status.sql
+│   └── _macros/
+│       ├── currency.py        <span class="cm"># cents_to_dollars</span>
+│       └── datetime.py        <span class="cm"># timestamp_trunc</span>
+└── daily_revenue.sql          <span class="cm"># uses payment_status and cents_to_dollars</span></span>
+<span class="cmd">sqb scope model:daily_revenue --as-path models/intermediate/daily_revenue.sql</span>
+Move preview
+  Resource: model:daily_revenue
+  Destination: models/intermediate/daily_revenue.sql
+  Lost (3)
+    ├─ <span class="bad">●</span> enum:payment_status     models/marts/_sqlbuild/_enums/payment_status.sql:1:1
+    ├─ <span class="bad">●</span> macro:cents_to_dollars  models/marts/_sqlbuild/_macros/currency.py:4:1
+    └─ ○ macro:timestamp_trunc   models/marts/_sqlbuild/_macros/datetime.py:4:1
+  Invalidated usages (2)
+    <span class="bad">- enum:payment_status</span>
+    <span class="bad">- macro:cents_to_dollars</span></pre>
+						</div>
+
+						<p class="step-group">Before production changes</p>
+						<div class="step">
+							<div class="step-text">
+								<span class="num">04 · Test properly</span>
+								<h3>Test the logic, not just the columns</h3>
+								<p>
+									
+									Tests mock the sources and check the result across every model in between. A dropped filter fails, so the table is left alone.
+								</p>
+							</div>
+<pre class="terminal"><span class="cm">-- tests/unit/test_daily_revenue_chain.sql (trimmed)</span>
+<span class="fn">TEST</span>();
+
+<span class="kw">WITH</span>
+<span class="ty">__source__raw__payments</span> <span class="kw">AS</span> (
+  <span class="kw">SELECT</span> <span class="num">10</span> <span class="kw">AS</span> id, <span class="num">1</span> <span class="kw">AS</span> order_id, <span class="num">2850</span> <span class="kw">AS</span> amount_cents, <span class="str">&#x27;success&#x27;</span> <span class="kw">AS</span> status
+  <span class="kw">UNION</span> <span class="kw">ALL</span>
+  <span class="kw">SELECT</span> <span class="num">11</span> <span class="kw">AS</span> id, <span class="num">2</span> <span class="kw">AS</span> order_id, <span class="num">850</span> <span class="kw">AS</span> amount_cents, <span class="str">&#x27;failed&#x27;</span> <span class="kw">AS</span> status
+),
+<span class="ty">__expected__daily_revenue</span> <span class="kw">AS</span> (
+  <span class="kw">SELECT</span>
+    <span class="kw">CAST</span>(<span class="str">&#x27;2026-04-01&#x27;</span> <span class="kw">AS</span> <span class="kw">DATE</span>) <span class="kw">AS</span> revenue_date,
+    <span class="num">1</span> <span class="kw">AS</span> order_count,
+    <span class="num">2850</span> <span class="kw">AS</span> total_revenue_cents
+),
+<span class="ty">__assert__daily_revenue_is_non_negative</span> <span class="kw">AS</span> (
+  <span class="kw">SELECT</span> * <span class="kw">FROM</span> <span class="fn">__ref</span>(<span class="str">&quot;daily_revenue&quot;</span>) <span class="kw">WHERE</span> total_revenue_cents &lt; <span class="num">0</span>
+)
+<span class="kw">SELECT</span> <span class="num">1</span>
+
+<span class="cmd">sqb build --select daily_revenue</span>
+test  test_daily_revenue_chain           <span class="bad">FAIL</span>
+├── expect  expected daily_revenue    <span class="bad">FAIL</span>  unexpected=1; missing=1
+│     differing column total_revenue_cents: actual=3700, expected=2850
+└── error   [T003] test 'test_daily_revenue_chain' failed
+<span class="bad">✗ Completed with errors</span>  PASS=0  FAIL=1  SKIP=1</pre>
+						</div>
+
+						<div class="step">
+							<div class="step-text">
+								<span class="num">05 · Plan every change</span>
+								<h3>Know what will rebuild, and why</h3>
+								<p>
+									
+									<code>sqb plan</code> shows why each model will run and how much it will rebuild. You choose per model how far a change replays: forward only, a set window like 14 days, or the full history.
+								</p>
+							</div>
+<pre class="terminal"><span class="cmd">sqb plan --select daily_order_rollup+</span>
+Query changed (1)
+└── daily_order_rollup                 <span class="note">rebuild last 14d, add column</span>
+    ├── policy  replay_on_change=bounded-14d
+    ├── schema diff:
+      <span class="ok">+ avg_order_cents   (added)</span>
+    └── query diff:
+      <span class="dim">@@ -2,6 +2,7 @@</span>
+         SUM(waffles_ordered) AS waffles_ordered,
+      <span class="bad">-  SUM(revenue_cents) AS revenue_cents</span>
+      <span class="ok">+  SUM(revenue_cents) AS revenue_cents,</span>
+      <span class="ok">+  SUM(revenue_cents) / NULLIF(SUM(orders_placed), 0) AS avg_order_cents</span>
+       FROM __ref("hourly_order_activity")
+
+Upstream changed (1)
+└── hourly_activity_with_daily_context <span class="note">rebuild last 14d</span>
+    └── cause  daily_order_rollup (query changed)</pre>
+						</div>
+
+						<div class="step">
+							<div class="step-text">
+								<span class="num">06 · Compare real data</span>
+								<h3>See what the tests missed</h3>
+								<p>
+									
+									Tests only cover the cases someone wrote down. Here a tidy-up passed its build, but a customer disappeared and two lost an order.
+								</p>
+							</div>
+<pre class="terminal"><span class="cmd">sqb diff prod:dev --select dim_customers --full</span>
+Rows
+prod count             dev count
+    5       <span class="bad">(-20.00%)</span>      4
+
+<span class="boxes">┏━┯━┯━┯━┯━┓              ╭──┬──────────┬─────────╮
+┃-│-│-│-│-┃              │ 1│ <span class="bad">prod only</span>│ (20.00%)│
+┠─┼─┼─┼─┼─┨╌╌╌┏━┯━┯━┯━┯━┓├──┼──────────┼─────────┤╌╮
+┃ │ │ │ │ ┃ = ┃ │ │ │ │ ┃│ 2│ equal    │ (50.00%)│ │
+┠─┼─┼─┼─┼─┨╌╌╌┠─┼─┼─┼─┼─┨├──┼──────────┼─────────┤╌├╴  4  joined
+┃ │ │ │ │ ┃ ≠ ┃ │ │ │ │ ┃│ 2│ <span class="warn">unequal</span>  │ (50.00%)│ │
+┗━┷━┷━┷━┷━┛╌╌╌┗━┷━┷━┷━┷━┛├──┼──────────┼─────────┤╌╯
+                         │ 0│ dev only │  (0.00%)│
+                         ╰──┴──────────┴─────────╯</span>
+Changed Columns
+<span class="boxes">┌─────────────────┬──────────────┬──────────────┐
+│ lifetime_orders │ mismatches=2 │ match=60.00% │
+└─────────────────┴──────────────┴──────────────┘</span>
+lifetime_orders
+  - customer_id=2 | <span class="warn">2 -&gt; 1</span>
+  - customer_id=3 | <span class="warn">2 -&gt; 1</span>
+
+<span class="bad">prod only</span>
+  - customer_id=5</pre>
+						</div>
+
+						<p class="step-group">When production changes</p>
+						<div class="step">
+							<div class="step-text">
+								<span class="num">07 · Refactor safely</span>
+								<h3>Rename models without rebuilding history</h3>
+								<p>
+									
+									A renamed incremental model keeps its table instead of starting again. If the logic changed too, declare <code>migrate_from</code>.
+								</p>
+							</div>
+<pre class="terminal"><span class="cmd">sqb plan</span>
+Migrations (1)
+<span class="dim">└──</span> daily_order_rollup  migrate  dev.daily_activity_rollup -&gt; dev.daily_order_rollup
+    <span class="dim">├──</span> compatibility  compatible
+    <span class="dim">├──</span> transfer  physical copy, promote by staged rename
+    <span class="dim">└──</span> discovery  automatic</pre>
+						</div>
+						<div class="step">
+							<div class="step-text">
+								<span class="num">08 · Tidy up safely</span>
+								<h3>Archive old tables before deleting them</h3>
+								<p>
+									The janitor renames tables your project no longer builds, and only drops them once the archive expires, 14 days later by default.
+								</p>
+							</div>
+<pre class="terminal"><span class="cmd">sqb janitor</span>
+<span class="info strong">Janitor preview</span>  prod
+  relations to archive   <span class="warn">1</span>
+  archives to delete     <span class="info">0</span>
+  archive retention      <span class="info">14 days</span>
+
+<span class="ok">Relations to archive</span>
+  prod.weekly_revenue  -&gt;  prod._sqb_archive__20260925t155417z__weekly_revenue  <span class="dim">…</span></pre>
+						</div>
+					</div>
+					<p class="caption">
+						Real output from SQLBuild's example project, trimmed to the relevant lines. During a migration the old
+						table is never modified, archives can be renamed back until they expire, and every move is recorded.
+						<a href="/docs/concepts/models/migrations/">How migrations work</a> ·
+						<a href="/docs/cli/janitor/">How the janitor works</a>
+					</p>
+				</div>
+			</section>
+
+			<section>
+				<div class="wrap">
+					<div class="section-head">
+						<h2>Built for safe change</h2>
+						<p>The rest of what it takes to change a warehouse with confidence.</p>
+					</div>
+					<div class="grid">
+						<div class="item">
+							<h3>Audits that block bad data</h3>
+							<p>Failing audits stop bad data before it reaches production, for full builds and incremental batches alike.</p>
+						</div>
+						<div class="item">
+							<h3>Data contracts</h3>
+							<p>Declared columns and types, checked at compile time and again before the table replaces production.</p>
+						</div>
+						<div class="item">
+							<h3>Column lineage</h3>
+							<p>See where every column comes from and which models use it, worked out at compile time.</p>
+						</div>
+						<div class="item">
+							<h3>End-to-end scenarios</h3>
+							<p>Run the real model graph against test data, then replay it locally on DuckDB in CI.</p>
+						</div>
+						<div class="item">
+							<h3>Python macros</h3>
+							<p>Logic lives in plain, testable Python functions, not Jinja blocks in your SQL.</p>
+						</div>
+						<div class="item">
+							<h3>Python in the same graph</h3>
+							<p>Loaders, tasks, assets and checks run in the same build as your SQL.</p>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<section id="start">
+				<div class="wrap start">
+					<div>
+						<h2>Start simple</h2>
+						<p class="lede">
+							SQLBuild runs as a normal build tool. Its state lives in append-only tables in your warehouse,
+							next to your data.
+						</p>
+						<ul>
+							<li>No external state service, manifest files or account.</li>
+							<li>Try it locally on DuckDB, with no warehouse credentials.</li>
+							<li>Free and open source, with no paid tier.</li>
+							<li>Virtual environments for isolated previews and rollback, when you need them (alpha).</li>
+						</ul>
+						<div class="adapters" aria-label="Supported warehouses">
+							<span>DuckDB</span>
+							<span>MotherDuck</span>
+							<span>Snowflake</span>
+							<span>BigQuery</span>
+							<span>Databricks</span>
+							<span>PostgreSQL</span>
+							<span>SQL Server</span>
+						</div>
+					</div>
+<pre class="terminal"><span class="cmd">pip install sqlbuild</span>
+<span class="cmd">sqb playground waffle-shop</span>
+<span class="cmd">cd waffle-shop</span>
+<span class="cmd">sqb build</span>
+<span class="ok">✓ Completed successfully</span>  PASS=95  FAIL=0
+<span class="cmd">sqb test</span></pre>
+				</div>
+			</section>
+
+			<section class="closing">
+				<div class="wrap">
+					<h2>Change your warehouse like you change code</h2>
+					<p>The docs cover models, testing, diffs, migrations and every command.</p>
+					<div class="actions">
+						<a class="button primary" href="/docs/">Read the docs</a>
+						<a class="button" href="/docs/quickstart/">Quickstart</a>
+					</div>
+				</div>
+			</section>
+		</main>
+
+		<footer>
+			<div class="wrap">
+				<span>SQLBuild · Apache-2.0</span>
+				<span>
+					<a href="/docs/">Docs</a> ·
+					<a href="https://github.com/chio-labs/sqlbuild">GitHub</a> ·
+					<a href="https://pypi.org/project/sqlbuild/">PyPI</a>
+				</span>
+			</div>
+		</footer>
+
+		<script>
+			document.querySelector('[data-theme-toggle]').addEventListener('click', function () {
+				var next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+				document.documentElement.dataset.theme = next;
+				localStorage.setItem('sqlbuild-theme', next);
+			});
+			document.querySelectorAll('[data-copy]').forEach(function (button) {
+				button.addEventListener('click', function () {
+					navigator.clipboard.writeText(button.dataset.copy).then(function () {
+						button.textContent = 'Copied';
+						setTimeout(function () {
+							button.textContent = 'Copy';
+						}, 1500);
+					});
+				});
+			});
+		</script>
+	</body>
+</html>

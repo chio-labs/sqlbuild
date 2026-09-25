@@ -1,0 +1,110 @@
+---
+title: "sqb janitor"
+description: "Archive and then delete stale warehouse relations."
+sidebar:
+  label: "janitor"
+---
+
+Finds stale warehouse relations that are no longer part of the project, archives them, and deletes archives once they expire. Requires `janitor.enabled = true` in `sqlbuild_project.toml`.
+
+## Usage
+
+```bash
+sqb --project-dir <path> janitor [flags]
+```
+
+## Flags
+
+| Flag | Description |
+|------|-------------|
+| `--auto-approve` | Skip the confirmation prompt and run the planned actions immediately |
+| `--retention-days` | Override the configured retention period (days) before a stale relation is archived |
+| `--direct-state-history-versions` | Override how many state-history versions are kept per identity |
+
+## Lifecycle
+
+The janitor never drops a live relation directly. Each stale relation goes through two stages:
+
+1. **Archive.** Once a relation has been stale for `retention_days`, the janitor renames it in place, in the same schema, to:
+
+   ```
+   _SQB_ARCHIVE__<UTC timestamp>__<original name>
+   ```
+
+   For example, `stg_orders` becomes `_SQB_ARCHIVE__20260924T101500Z__stg_orders`. A rename copies no data, and keeps the relation's table type, grants and time travel.
+2. **Delete.** Once an archive is older than `archive_retention_days`, the janitor drops it.
+
+Stale relations are identified exactly as before. A relation is a candidate only if it is in a schema the project writes to, it is not produced by the current complete project, it was tracked by SQLBuild (when `delete_tracked_only = true`), it matches no exclude pattern, and it is older than the retention period.
+
+The age of an archive comes from the timestamp in its name, so deletion needs no other state. The janitor only deletes relations whose names **strictly** match the archive format and that are in a schema the project writes to. Names that only look similar are reported and never touched. The janitor also only acts on relations whose names are plain lowercase identifiers (letters, digits and underscores), and that don't collide case-insensitively with another relation in the same schema. Anything else is reported and left alone.
+
+Archive names are written as unquoted lowercase identifiers, so warehouses that fold unquoted names show them in their own case. On Snowflake, for example, the archive appears as `_SQB_ARCHIVE__20260924T101500Z__STG_ORDERS`.
+
+Long names are shortened with a short hash so they fit the adapter's identifier limit. The prefix and timestamp are never shortened.
+
+Setting both `retention_days` and `archive_retention_days` to `0` archives and deletes stale relations in the same run.
+
+## Relation age
+
+`retention_days` is measured from the last time a relation was written, as reported by the warehouse. For a relation the project no longer builds, that is roughly when it stopped being built.
+
+| Adapter | Age source |
+|---------|------------|
+| Snowflake | `INFORMATION_SCHEMA.TABLES` `CREATED` and `LAST_ALTERED`, which change on every write |
+| Databricks | `DESCRIBE DETAIL` `lastModified` for tables, and `INFORMATION_SCHEMA.TABLES` for views |
+| BigQuery | `__TABLES__` `creation_time` and `last_modified_time` |
+| PostgreSQL, SQL Server, DuckDB, MotherDuck | Not available |
+
+When the warehouse can't report a relation's age, the janitor skips that relation whenever `retention_days` is greater than `0`. SQL Server is in this group because its modification date ignores inserts and updates, so a recently written table could look old.
+
+Ages are only looked up for relations that are otherwise candidates, and not at all when `retention_days` is `0`.
+
+## Audit record
+
+Every archive and every delete is recorded in an append-only `_sqlbuild_janitor_events` table in the affected schema. It records the original name, the archive name, the time and the invocation. The janitor never reads this table to decide what to do. It exists for auditing, and for restoring archives whose names were shortened.
+
+## Restoring an archive
+
+Rename the archive back to its original name before it expires, using your warehouse's rename statement. For example, on Snowflake:
+
+```sql
+ALTER TABLE analytics._SQB_ARCHIVE__20260924T101500Z__stg_orders RENAME TO analytics.stg_orders;
+```
+
+If the archive's name was shortened, look up the original name in `_sqlbuild_janitor_events`. After an archive has been deleted, your warehouse's own time travel or undrop feature may still be able to recover it within its retention window.
+
+## Configuration
+
+Configure janitor behavior in `sqlbuild_project.toml`:
+
+```toml
+[janitor]
+enabled = true
+retention_days = 14
+archive_retention_days = 14
+delete_tracked_only = true
+exclude_patterns = ["audit_*", "tmp_*"]
+```
+
+When `retention_days` is not set, it defaults to `14`. See [Project Configuration](/docs/concepts/project-configuration#janitor) for every janitor setting.
+
+## Examples
+
+```bash
+# Interactive mode (shows the plan and prompts for confirmation)
+sqb janitor
+
+# Run the planned archives and deletes without prompting
+sqb janitor --auto-approve
+
+# Override retention to 7 days
+sqb janitor --retention-days 7
+```
+
+## State history pruning
+
+In addition to archiving stale relations, the janitor prunes old rows from `_sqlbuild_fingerprints` and `_sqlbuild_source_freshness`, keeping the latest `direct_state_history_versions` rows per identity (default `20`). This is configured separately from relation retention.
+
+## Safety
+
+The janitor shows every planned archive and delete, with exact names, ages and expiry, then asks you to type an exact confirmation phrase. Relations whose names differ only by case from another relation in the same schema are reported and never dropped, and exclude patterns match regardless of case. Use `--auto-approve` only in automation, or when you're certain.

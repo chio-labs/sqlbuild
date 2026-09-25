@@ -1,0 +1,71 @@
+---
+title: "Type Enforcement"
+description: "Understand declared model types, static checks, and runtime casting."
+---
+
+Type enforcement makes authored column types operational. It is a model feature as well as a related source feature, and it is separate from whether a model uses an exact contract.
+
+## Enabling it
+
+For a SQL model, declaring a type on any inline or reusable-schema column enables type enforcement automatically:
+
+```sql
+MODEL (
+  materialized table,
+  columns (
+    order_id (type INTEGER),
+    ordered_at (type TIMESTAMP),
+    source_system (),
+  ),
+);
+```
+
+There is no `MODEL(type_enforcement ...)` switch. In this example, `order_id` and `ordered_at` are typed; `source_system` remains untyped and passes through unchanged.
+
+Sources have related behavior but different configuration. A source can explicitly set `type_enforcement: false`; see [Sources](/docs/concepts/sources#type-enforcement).
+
+## Compile-time checks
+
+When SQL analysis can infer an output type, SQLBuild compares it with the declared type using adapter-aware normalization. A proven mismatch is a compile error when type enforcement is active. If SQLBuild identifies an output column but cannot prove its expression type, it reports an unproven-type warning rather than guessing. If the entire output shape cannot be inferred, static type checks and warnings cannot run.
+
+Static analysis does not rewrite the authored query. It determines whether the inferred output is compatible before warehouse execution.
+
+## Runtime casting
+
+Runtime enforcement inspects a staged relation. If a typed output column does not already have its declared type, SQLBuild rebuilds the staging or delta relation with an explicit cast:
+
+```sql
+CAST(order_id AS INTEGER) AS order_id
+```
+
+Only columns with declared types are cast. Untyped output columns are preserved. If a cast fails, the model fails during the type-enforcement phase before the staged table is promoted or the incremental delta is applied.
+
+Runtime cast support currently depends on materialization:
+
+| Materialization path | Framework runtime casts |
+|----------------------|-------------------------|
+| Full table with staged promotion | Yes, on the staging table |
+| Non-microbatch incremental | Yes, on the staged delta |
+| Microbatch incremental | Yes, on each staged batch |
+| View | No; the view query defines the warehouse output type |
+| Snapshot | No framework cast reconstruction |
+| Custom materialization | Owned by the custom materialization |
+| Full table with immediate promotion | Rejected when type enforcement is required |
+
+Staged promotion is the default table mode. If a project selects immediate table promotion, a typed model fails with guidance to use staged promotion because SQLBuild cannot inspect and reconstruct output before mutating the destination.
+
+## Type enforcement versus contracts
+
+These controls answer different questions:
+
+| Feature | Question |
+|---------|----------|
+| Type enforcement | Should typed columns be checked and, on supported paths, cast to their declared physical types? |
+| `contract none` | Which declared columns can SQLBuild verify statically while still allowing additional output columns? |
+| `contract enforced` | Must the output have exactly the complete declared shape? |
+
+Type enforcement can be active with `contract none`. Conversely, an enforced contract may contain untyped columns: exact shape validation still checks their names, but there is no declared physical type to cast or compare.
+
+## Schema changes
+
+Declared types are used in schema-change detection. With type enforcement active, the declared type is authoritative for typed columns when SQLBuild compares a planned model with the warehouse relation.

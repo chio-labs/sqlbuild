@@ -1,0 +1,135 @@
+---
+import MobileMenuToggle from '@astrojs/starlight/components/MobileMenuToggle.astro';
+
+const { hasSidebar } = Astro.locals.starlightRoute;
+---
+
+<div class="page">
+	<header class="site-header"><div class="frame"><slot name="header" /></div></header>
+	<div class="frame body">
+		{
+			hasSidebar && (
+				<nav class="sidebar print:hidden" aria-label={Astro.locals.t('sidebarNav.accessibleLabel')}>
+					<MobileMenuToggle />
+					<script>
+						// Starlight's mobile menu: a popover on small screens, a plain column on desktop.
+						class StarlightSidebarPane extends HTMLElement {
+							constructor() {
+								super();
+								const desktop = matchMedia('(min-width: 50em)');
+								const reset = () => {
+									this.popover = desktop.matches ? null : 'auto';
+								};
+								reset();
+								desktop.addEventListener('change', reset);
+								this.addEventListener('toggle', ({ newState }) => {
+									document.querySelectorAll<HTMLElement>('.main-frame, .sl-skip-link').forEach((el) => {
+										el.toggleAttribute('inert', newState === 'open');
+									});
+								});
+							}
+						}
+						customElements.define('sl-sidebar-pane', StarlightSidebarPane);
+
+						// Bring the current page into view, unless Starlight is restoring an earlier scroll position.
+						const pane = document.getElementById('starlight__sidebar');
+						const current = pane?.querySelector<HTMLElement>('a[aria-current="page"]');
+						if (pane && current && (window as { _starlightScrollRestore?: number })._starlightScrollRestore === undefined) {
+							const offset = current.getBoundingClientRect().top - pane.getBoundingClientRect().top;
+							if (offset > pane.clientHeight * 0.8) pane.scrollTop = offset - pane.clientHeight / 3;
+						}
+					</script>
+					<sl-sidebar-pane popover="" id="starlight__sidebar" class="sidebar-pane">
+						<div class="sidebar-content sl-flex">
+							<slot name="sidebar" />
+						</div>
+					</sl-sidebar-pane>
+				</nav>
+			)
+		}
+		<div class="main-frame"><slot /></div>
+	</div>
+</div>
+
+<style>
+	.frame {
+		width: min(var(--sqb-frame-width), 100%);
+		padding-inline: max(0px, min(1rem, (100vw - 72rem) / 2));
+		margin-inline: auto;
+	}
+
+	.site-header {
+		position: fixed;
+		inset: 0 0 auto;
+		z-index: var(--sl-z-index-navbar);
+		height: var(--sl-nav-height);
+		border-bottom: 1px solid var(--sqb-line);
+		background: var(--sqb-bg);
+	}
+
+	.site-header .frame {
+		height: 100%;
+		padding-inline: calc(var(--sl-nav-pad-x) + max(0px, min(1rem, (100vw - 72rem) / 2)));
+	}
+
+	:global([data-has-sidebar]) .site-header .frame {
+		padding-inline-end: calc(var(--sl-nav-gap) + var(--sl-nav-pad-x) + var(--sl-menu-button-size));
+	}
+
+	.main-frame {
+		min-width: 0;
+		padding-top: calc(var(--sl-nav-height) + var(--sl-mobile-toc-height));
+	}
+
+	/* Mobile: the sidebar is a full-screen popover. */
+	.sidebar-pane {
+		position: fixed;
+		inset-block: var(--sl-nav-height) 0;
+		inset-inline-start: 0;
+		z-index: var(--sl-z-index-menu);
+		width: 100%;
+		height: unset;
+		padding: unset;
+		border: unset;
+		color: unset;
+		background: var(--sqb-bg);
+		overflow-y: auto;
+	}
+
+	.sidebar-content {
+		flex-direction: column;
+		gap: 1rem;
+		min-height: max-content;
+		padding: 1.25rem var(--sl-sidebar-pad-x) 2rem;
+	}
+
+	@media (min-width: 50rem) {
+		:global([data-has-sidebar]) .site-header .frame {
+			padding-inline-end: calc(var(--sl-nav-pad-x) + max(0px, min(1rem, (100vw - 72rem) / 2)));
+		}
+
+		.body {
+			display: grid;
+			grid-template-columns: var(--sl-sidebar-width) minmax(0, 1fr);
+		}
+
+		.sidebar {
+			position: sticky;
+			top: var(--sl-nav-height);
+			height: calc(100vh - var(--sl-nav-height));
+			margin-top: var(--sl-nav-height);
+		}
+
+		.sidebar-pane {
+			display: block;
+			position: static;
+			width: auto;
+			height: 100%;
+			background: transparent;
+		}
+
+		.sidebar-content {
+			padding-inline-start: var(--sl-nav-pad-x);
+		}
+	}
+</style>

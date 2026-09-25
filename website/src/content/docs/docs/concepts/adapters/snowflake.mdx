@@ -1,0 +1,65 @@
+---
+title: "Snowflake"
+description: "Snowflake adapter configuration for SQLBuild."
+---
+
+Snowflake requires the optional `snowflake-connector-python` dependency:
+
+```bash
+pip install 'sqlbuild[snowflake]'
+# or
+uv pip install 'sqlbuild[snowflake]'
+```
+
+## Connection config
+
+```toml
+adapter = "snowflake"
+default_target = "dev"
+
+[connections.warehouse]
+account = "my_org-my_account"
+user = "my_user"
+password = "my_password"
+role = "TRANSFORM_ROLE"
+warehouse = "TRANSFORM_WH"
+
+[targets.dev]
+connection = "warehouse"
+database = "ANALYTICS"
+schema = "RAW"
+```
+
+Connection fields are passed directly to `snowflake.connector.connect()`. See the [Snowflake Connector documentation](https://docs.snowflake.com/en/developer-guide/python-connector/python-connector-connect) for all available options, including key-pair authentication, OAuth, and SSO. Put the authoritative database and schema on the target.
+
+## Session initialization
+
+On connect, SQLBuild applies the connection's role and warehouse, then applies the active
+target's authoritative database and schema. These ensure the session context is set correctly
+regardless of the user's default settings.
+
+## Shared connections across targets
+
+Use multiple targets to reuse one Snowflake connection while selecting different authoritative
+databases and schemas:
+
+```toml
+adapter = "snowflake"
+
+[connections.warehouse]
+account = "my_org-my_account"
+user = "my_user"
+password = "my_password"
+role = "TRANSFORM_ROLE"
+warehouse = "TRANSFORM_WH"
+
+[targets.prod]
+connection = "warehouse"
+database = "PROD_DB"
+schema = "prod"
+
+[targets.dev]
+connection = "warehouse"
+database = "DEV_DB"
+schema = "dev"
+```

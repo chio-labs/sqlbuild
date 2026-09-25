@@ -121,5 +121,5 @@ check metadata, full SQL, raw process output, arbitrary user output, and unbound
 never copied into the integration stream. They remain available through final aggregate output and
 compute logs after process exit.
 
-The complete operator contract, path ownership, migration mapping, and failure matrix are in
-[`docs/execution-observability.md`](../../../../docs/execution-observability.md).
+Operator documentation is at
+[docs.sqlbuild.com/concepts/observability](https://docs.sqlbuild.com/concepts/observability).

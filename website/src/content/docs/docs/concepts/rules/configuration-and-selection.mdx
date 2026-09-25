@@ -1,0 +1,108 @@
+---
+title: "Configuration and selection"
+description: "Select built-in and custom Rules by exact code or family prefix."
+---
+
+import Card from '../../../../../components/mintlify/Card.astro';
+
+Configure built-in and custom Rules together:
+
+```toml
+[rules]
+select = ["SQBRSQL", "SQBRGRAPH", "XSQBRARCH"]
+ignore = ["SQBRSQL004"]
+```
+
+An empty `select` disables configurable Rules. It does not disable mandatory compiler correctness.
+
+## Codes and families
+
+Built-in codes use `SQBR<FAMILY><three digits>`, such as `SQBRSQL004`, `SQBRMODEL101`, and
+`SQBRGRAPH101`. Custom codes use `XSQBR<optional uppercase family><three digits>`, such as
+`XSQBRARCH001`.
+
+A family is always the code with its final three digits removed:
+
+```text
+SQBRSQL004    → SQBRSQL
+XSQBRARCH001  → XSQBRARCH
+XSQBR001      → XSQBR
+```
+
+Exact codes select one Rule. Prefixes select every matching Rule. `ignore` uses the same matching
+semantics and takes precedence over `select`.
+
+Use the catalogue to inspect available codes and metadata:
+
+```bash
+sqb rules list
+sqb rules show SQBRSQL004
+```
+
+## Rule options
+
+Built-in and Custom Rules can declare typed options. Configure them by exact code:
+
+```toml
+[rules.rule_options.XSQBRNAME001]
+required_prefix = "order"
+
+[rules.rule_options.SQBRTEST203]
+allowed_tests = ["customers__reviewed_empty_input"]
+```
+
+`SQBRTEST203` (`empty-input-only-test`) accepts `allowed_tests`, a list of SQL test names that are
+reviewed exceptions. Listed tests are not flagged and still count toward `SQBRTEST202`'s
+`min_tests_per_model`. Entries that name no existing test are reported as stale. See
+[Empty-input tests](/docs/concepts/testing#empty-input-tests).
+
+Unknown Rule codes, option names, and invalid option values fail configuration.
+
+## Focused selection
+
+Run one exact Rule or family while developing or adopting it:
+
+```bash
+sqb rules run SQBRSQL004
+sqb rules run SQBRSQL
+sqb rules run XSQBRARCH --select customer_orders
+```
+
+Focused execution constructs the compiler facts needed by the selected Rules. It does not replace
+the complete configured enforcement performed by `sqb compile`.
+
+<Card title="CLI reference" icon="terminal" href="/docs/cli/rules">
+  See every `sqb rules` command and exit code.
+</Card>
+
+## Join keys and final CTE names
+
+`SQBRSQL040` checks every `JOIN ... ON` in the SQL covered by SQL Rules, including joins inside CTEs
+and subqueries. `USING (...)` is accepted. Allowed predicates are:
+
+- Plain column comparisons, including equality, inequality, range and null-safe comparisons.
+- A plain column compared with a literal, including a signed numeric literal.
+- Literal-only predicates such as `ON TRUE`, `ON FALSE` and `ON 1 = 1`, including
+  `LEFT JOIN LATERAL FLATTEN(...) AS f ON TRUE`. Functions or casts applied to literals are still
+  computed expressions.
+- `BETWEEN` / `NOT BETWEEN` on a plain column with plain-column or literal bounds.
+- `IN` / `NOT IN` on a plain column with a literal list.
+- `IS NULL` / `IS NOT NULL` on a plain column.
+- Parenthesized predicates, and `AND` or `OR` combinations in which every branch is allowed.
+
+Functions, casts (including `::`), arithmetic, concatenation, `CASE`, subqueries and other computed
+operands are findings. For example, replace `ON LOWER(o.category) = c.category_key` with a CTE that
+projects `LOWER(category) AS category_key`, then join `ON o.category_key = c.category_key`. Snowflake
+variant path access such as `ON a.data:key = b.id` is also computed: project the value as a named
+column before joining.
+
+`SQBRSQL041` checks CTE naming: the last top-level CTE must be named `final` (compared
+case-insensitively, including quoted identifiers), and no other CTE, including a nested one, may use
+that name. Queries without CTEs are unaffected, and SQL-test fixture CTEs are exempt. `SQBRSQL035`
+owns the terminal `SELECT`'s plain projection from that last CTE, so select both, normally through
+the `SQBRSQL` family, for the complete convention. Parentheses around the entire query do not create
+a nested CTE scope.
+
+Family selectors such as `select = ["SQBRSQL", "SQBRMODEL", "SQBRGRAPH"]` pick up new built-in Rules
+on upgrade, so a release that adds `SQBRSQL040` and `SQBRSQL041` can expose computed join keys or
+differently named final CTEs that were accepted before.

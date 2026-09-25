@@ -1,0 +1,62 @@
+---
+title: "Testing and deterministic Rules"
+description: "Test custom findings and keep implementations safe for dependency-aware caching."
+---
+
+## Test Rules
+
+Use the public harness to exercise discovery, compilation, and Rules evaluation:
+
+```python
+from sqlbuild.rules.testing import RuleCase, evaluate_rule
+from rules.final_outputs import final_order_identifier
+
+
+def test_given_missing_order_id_when_evaluating_then_reports_finding() -> None:
+    result = evaluate_rule(
+        rule=final_order_identifier,
+        test_case=RuleCase(
+            description="missing order identifier",
+            source='MODEL (description "Orders");\nSELECT 1 AS customer_id\n',
+            path="models/final/customer_orders.sql",
+            expected_finding_count=1,
+        ),
+    )
+
+    assert result.finding_count == 1
+```
+
+`RuleCase.files` adds supporting project files. `RuleCase.config` supplies option values. Include
+passing cases, failing cases, near misses, and exact source-position assertions.
+
+Repository pytest files remain outside the SQLBuild project's SQL `tests/` directory.
+
+## Helpers
+
+Custom Rules can import repository-owned helpers under `rules/` and supported pure Python modules.
+Changing an imported helper invalidates the Rules that depend on it.
+
+Only decorated functions register. Ordinary functions, constants, dataclasses, and classes remain
+helpers.
+
+## Deterministic inputs
+
+Direct filesystem, environment, clock, randomness, network, and subprocess access is rejected.
+Those inputs cannot be reproduced safely by the Rules cache.
+
+Read supported project text and structure through `ctx.project.tree`:
+
+```python
+text = ctx.project.tree.read_text("rules/requirements.yaml")
+matches = ctx.project.tree.glob("models/*/interface/*.sql")
+```
+
+Both positive and negative observations are tracked. If `glob` returns no paths, adding a matching
+path invalidates the cached result.
+
+## Cache granularity
+
+Cache identity incorporates the Rule implementation, imported helper closure, configured options,
+subject, accessed compiler facts, tracked project observations, dialect, and compatibility
+versions. Prefer model subjects for independent per-model checks and project subjects for genuine
+cross-project invariants.

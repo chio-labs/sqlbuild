@@ -1,0 +1,43 @@
+---
+const { toc } = Astro.locals.starlightRoute;
+---
+
+<div class:list={['columns', { 'has-toc': toc }]}>
+	<div class="main-pane"><slot /></div>
+	{
+		toc && (
+			<aside class="right-sidebar-container print:hidden">
+				<div class="right-sidebar">
+					<slot name="right-sidebar" />
+				</div>
+			</aside>
+		)
+	}
+</div>
+
+<style>
+	.main-pane {
+		isolation: isolate;
+		min-width: 0;
+		--sl-content-margin-inline: 0;
+	}
+
+	@media (min-width: 72rem) {
+		.right-sidebar :global(.right-sidebar-panel .sl-container) {
+			width: auto;
+		}
+
+		.columns.has-toc {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) var(--sqb-toc-width);
+		}
+
+		.right-sidebar {
+			position: sticky;
+			top: var(--sl-nav-height);
+			max-height: calc(100vh - var(--sl-nav-height));
+			overflow-y: auto;
+			scrollbar-width: none;
+		}
+	}
+</style>

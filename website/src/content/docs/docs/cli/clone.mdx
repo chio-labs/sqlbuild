@@ -1,0 +1,88 @@
+---
+title: "sqb clone"
+description: "Copy model relations between configured targets."
+sidebar:
+  label: "clone"
+---
+
+Copies selected relations from one target to another. It uses adapter-native cloning where supported and physical copies where required; `--hard-copy` forces a physical copy on adapters that support both.
+
+No `manifest.json` generation or artifact management is required. Clone works directly against live targets.
+
+When `--to` is omitted, the destination is the active target selected by `--target`,
+`sqlbuild_local.toml`, or `default_target`, in that order.
+
+`--from` selects only the origin namespace and its clone-origin policy. `--to`, or the active
+target when it is omitted, selects the sole physical connection used by the operation. The
+origin namespace must therefore be visible and readable through the destination connection.
+SQLBuild never resolves or opens the origin target's connection, including for direct and
+deferred clone. Clone cannot perform a cross-account, cross-server, or cross-file
+transfer by opening a second connection.
+
+## Usage
+
+```bash
+sqb --project-dir <path> clone --from <target> [--to <target>] [flags]
+```
+
+## Flags
+
+| Flag | Description |
+|------|-------------|
+| `--from` | Source target (required) |
+| `--to` | Destination target; defaults to the active target |
+| `--hard-copy` | Force physical table copies instead of zero-copy cloning |
+| `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
+| `--select`, `-s` | Select specific models to clone |
+| `--exclude` | Exclude specific models from cloning |
+
+## Examples
+
+```bash
+# Clone all models from prod to dev
+sqb clone --from prod --to dev
+
+# Equivalent when dev is the active target
+sqb clone --from prod
+
+# Clone only marts to dev
+sqb clone --from prod --to dev --select path:models/marts
+
+# Force physical copies
+sqb clone --from prod --to dev --hard-copy
+```
+
+## Managed sources
+
+Clone includes selected managed physical sources when the destination target reads its own
+loader namespace. Sources are copied before seeds and models so views can be recreated in a
+destination that has never been built.
+
+Source locations respect target configuration:
+
+- The origin relation comes from the target that the origin uses for managed source reads.
+- The destination relation uses the destination target's `loader_schema`, falling back to
+  its model `schema`.
+- If the destination defers source reads to another target, clone reuses that target's source
+  relation and does not copy or overwrite it.
+- Expression sources and unmanaged external sources are not cloned.
+
+`--hard-copy` controls how included relations are copied. It does not change which managed
+sources are selected.
+
+## Clone policies
+
+Targets deny cloning by default. Enable the origin and destination explicitly in `sqlbuild_project.toml`:
+
+```toml
+[targets.prod.clone]
+allow_as_clone_origin = true
+
+[targets.dev.clone]
+allow_as_clone_destination = true
+```
+
+The origin target must already contain the built relations being cloned. The destination
+connection's credentials must be able to read the origin namespace and create relations in the
+destination. Managed physical sources may bootstrap a destination that has not been built. See
+[Project Configuration](/docs/concepts/project-configuration) for details.

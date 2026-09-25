@@ -1,0 +1,42 @@
+@font-face {
+	font-family: 'Inter';
+	font-style: normal;
+	font-weight: 100 900;
+	font-display: swap;
+	src: url('/fonts/inter-latin-wght-normal.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'IBM Plex Mono';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/fonts/ibm-plex-mono-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+	font-family: 'IBM Plex Mono';
+	font-style: normal;
+	font-weight: 500;
+	font-display: swap;
+	src: url('/fonts/ibm-plex-mono-latin-500-normal.woff2') format('woff2');
+}
+
+/* IBM Plex Mono has no box-drawing glyphs. DejaVu Sans Mono fills them in, and draws whole
+   diagrams so every cell has the same advance width. */
+@font-face {
+	font-family: 'SQLBuild Box Drawing';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/fonts/dejavu-sans-mono-diagram.woff2') format('woff2');
+	unicode-range: U+2500-259F, U+2260;
+}
+
+@font-face {
+	font-family: 'SQLBuild Diagram';
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url('/fonts/dejavu-sans-mono-diagram.woff2') format('woff2');
+}

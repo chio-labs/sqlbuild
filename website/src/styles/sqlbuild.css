@@ -1,0 +1,446 @@
+/* Starlight theme mapped onto the SQLBuild UI tokens, matching sqlbuild.com. */
+:root {
+	--sl-font: 'Inter', system-ui, sans-serif;
+	--sl-font-mono: 'IBM Plex Mono', 'SQLBuild Box Drawing', ui-monospace, monospace;
+	--sl-nav-height: 60px;
+	--sl-content-width: 50rem;
+	--sl-sidebar-width: 18rem;
+	--sqb-toc-width: 16rem;
+	--sqb-frame-width: 1440px;
+	--sl-text-h1: 2rem;
+	--sl-text-h2: 1.45rem;
+	--sl-text-h3: 1.15rem;
+	--sl-text-h4: 1rem;
+	--sl-line-height-headings: 1.25;
+
+	/* Dark (Starlight's default) */
+	--sqb-bg: #0d0f12;
+	--sqb-panel: #171a1f;
+	--sqb-fg: #e9ebef;
+	--sqb-muted: #9ba1ac;
+	--sqb-faint: #626975;
+	--sqb-line: rgba(176, 184, 198, 0.1);
+	--sqb-line-strong: rgba(176, 184, 198, 0.18);
+	--sqb-primary: #3788e8;
+	--sqb-accent-soft: rgba(55, 136, 232, 0.12);
+	--sqb-code-bg: #111418;
+	--sqb-warning: #f0c267;
+
+	--sl-color-accent-low: #0f2440;
+	--sl-color-accent: #3788e8;
+	--sl-color-accent-high: #a9cdf6;
+	--sl-color-white: #e9ebef;
+	--sl-color-gray-1: #d4d7dd;
+	--sl-color-gray-2: #b4b9c2;
+	--sl-color-gray-3: #9ba1ac;
+	--sl-color-gray-4: #626975;
+	--sl-color-gray-5: #2a2f37;
+	--sl-color-gray-6: #171a1f;
+	--sl-color-black: #0d0f12;
+}
+
+:root[data-theme='light'] {
+	--sqb-bg: #ffffff;
+	--sqb-panel: #ffffff;
+	--sqb-fg: #171a1f;
+	--sqb-muted: #626a76;
+	--sqb-faint: #98a0ad;
+	--sqb-line: rgba(28, 32, 38, 0.08);
+	--sqb-line-strong: rgba(28, 32, 38, 0.16);
+	--sqb-primary: #2677d9;
+	--sqb-accent-soft: rgba(38, 119, 217, 0.08);
+	--sqb-code-bg: #fbfcfe;
+	--sqb-warning: #aa6c16;
+
+	--sl-color-accent-low: #e3eefb;
+	--sl-color-accent: #2677d9;
+	--sl-color-accent-high: #174a8a;
+	--sl-color-white: #171a1f;
+	--sl-color-gray-1: #2b3038;
+	--sl-color-gray-2: #434a55;
+	--sl-color-gray-3: #626a76;
+	--sl-color-gray-4: #98a0ad;
+	--sl-color-gray-5: #dfe3e8;
+	--sl-color-gray-6: #f4f6f8;
+	--sl-color-gray-7: #fafbfc;
+	--sl-color-black: #ffffff;
+}
+
+:root {
+	--sl-color-bg: var(--sqb-bg);
+	--sl-color-bg-nav: var(--sqb-bg);
+	--sl-color-bg-sidebar: var(--sqb-bg);
+	--sl-color-bg-inline-code: var(--sqb-accent-soft);
+	--sl-color-hairline: var(--sqb-line);
+	--sl-color-hairline-light: var(--sqb-line);
+	--sl-color-hairline-shade: var(--sqb-line);
+	--sl-color-text: var(--sqb-fg);
+	--sl-color-text-accent: var(--sqb-primary);
+}
+
+body {
+	-webkit-font-smoothing: antialiased;
+}
+
+/* Header */
+site-search button[data-open-modal] {
+	border-radius: 2px;
+	border-color: var(--sqb-line-strong);
+	background: transparent;
+	color: var(--sqb-muted);
+}
+
+site-search button[data-open-modal]:hover {
+	border-color: var(--sqb-primary);
+	color: var(--sqb-fg);
+}
+
+/* Sidebar: bold top-level headings, nested groups styled like links (as on Mintlify). */
+.sidebar-content ul ul li {
+	margin-inline-start: 0;
+	padding-inline-start: 0;
+	border-inline-start: 0;
+}
+
+.sidebar-content .top-level > li + li {
+	margin-top: 1.1rem;
+}
+
+.sidebar-content .top-level > li > details > summary {
+	padding: 0.2rem 0.5rem 0.35rem;
+	pointer-events: none;
+}
+
+.sidebar-content .top-level > li > details > summary .caret {
+	display: none;
+}
+
+.sidebar-content .top-level > li > details > summary .large {
+	color: var(--sqb-fg);
+	font-size: 14px;
+	font-weight: 600;
+}
+
+.sidebar-content ul ul summary {
+	padding: 0.3rem 0.5rem;
+	border-radius: 2px;
+}
+
+.sidebar-content ul ul summary:hover {
+	background: var(--sqb-accent-soft);
+}
+
+.sidebar-content ul ul summary .large {
+	color: var(--sqb-muted);
+	font-size: 14px;
+	font-weight: 400;
+	line-height: 1.4;
+}
+
+.sidebar-content ul ul summary:hover .large {
+	color: var(--sqb-fg);
+}
+
+.sidebar-content ul ul summary .caret {
+	width: 1rem;
+	height: 1rem;
+	color: var(--sqb-faint);
+}
+
+.sidebar-content ul ul ul {
+	margin-inline-start: 0.75rem;
+}
+
+.sidebar-content a {
+	padding: 0.3rem 0.5rem;
+	border-radius: 2px;
+	font-size: 14px;
+	line-height: 1.4;
+	color: var(--sqb-muted);
+}
+
+.sidebar-content a:hover {
+	background: var(--sqb-accent-soft);
+	color: var(--sqb-fg);
+}
+
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover {
+	background: var(--sqb-accent-soft);
+	color: var(--sqb-primary);
+	font-weight: 500;
+}
+
+/* Page title and on-this-page */
+.content-panel {
+	border-top-color: var(--sqb-line);
+}
+
+h1#_top {
+	font-weight: 650;
+	letter-spacing: -0.02em;
+}
+
+.sl-markdown-content :is(h2, h3, h4) {
+	font-weight: 620;
+	letter-spacing: -0.01em;
+	color: var(--sqb-fg);
+}
+
+.sl-markdown-content .sl-heading-wrapper.level-h2 {
+	margin-top: 2.75rem;
+}
+
+/* Title and body share one panel, with no dividing line. */
+.content-panel + .content-panel {
+	border-top: 0;
+	padding-top: 0;
+}
+
+.content-panel:first-of-type {
+	padding-bottom: 2.25rem;
+}
+
+.sl-markdown-content p,
+.sl-markdown-content li {
+	color: var(--sqb-muted);
+}
+
+.sl-markdown-content strong {
+	color: var(--sqb-fg);
+	font-weight: 600;
+}
+
+starlight-toc h2 {
+	margin-bottom: 0.5rem;
+	color: var(--sqb-fg);
+	font-size: 13px;
+	font-weight: 600;
+}
+
+starlight-toc li:has(> a[href='#_top']) {
+	display: none;
+}
+
+starlight-toc a,
+mobile-starlight-toc a {
+	padding-block: 0.3rem;
+	font-size: 13.5px;
+	line-height: 1.4;
+	color: var(--sqb-muted);
+}
+
+starlight-toc a:hover {
+	color: var(--sqb-fg);
+}
+
+starlight-toc a[aria-current='true'],
+starlight-toc a[aria-current='true']:hover {
+	color: var(--sqb-primary);
+	font-weight: 500;
+}
+
+/* Links */
+.sl-markdown-content a:not(.sqb-card) {
+	color: var(--sqb-fg);
+	font-weight: 500;
+	text-decoration: underline;
+	text-decoration-color: var(--sqb-primary);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 3px;
+}
+
+.sl-markdown-content a:not(.sqb-card):hover {
+	color: var(--sqb-primary);
+	text-decoration-thickness: 2px;
+}
+
+/* Code blocks: a quiet copy icon that is always visible, as on Mintlify. */
+.expressive-code .copy button {
+	opacity: 0.6 !important;
+}
+
+.expressive-code .copy button:hover {
+	opacity: 1 !important;
+}
+
+/* Inline code */
+.sl-markdown-content :not(pre) > code {
+	border: 0;
+	border-radius: 2px;
+	padding: 0.1em 0.35em;
+	font-size: 0.86em;
+	color: var(--sqb-fg);
+}
+
+/* Tables */
+.sl-markdown-content table {
+	display: table;
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 14px;
+	line-height: 1.5;
+}
+
+@media (max-width: 50rem) {
+	.sl-markdown-content table {
+		display: block;
+		overflow-x: auto;
+	}
+}
+
+.sl-markdown-content :is(th, td) {
+	border: 0;
+	border-bottom: 1px solid var(--sqb-line);
+	padding: 0.55rem 0.9rem 0.55rem 0;
+	vertical-align: top;
+}
+
+.sl-markdown-content th {
+	background: transparent;
+	color: var(--sqb-fg);
+	font-weight: 600;
+	white-space: nowrap;
+	border-bottom-color: var(--sqb-line-strong);
+}
+
+.sl-markdown-content tr:nth-child(2n) {
+	background: transparent;
+}
+
+.sl-markdown-content td {
+	color: var(--sqb-muted);
+}
+
+.sl-markdown-content td:first-child code {
+	white-space: nowrap;
+}
+
+/* Search */
+site-search {
+	--pagefind-ui-border-radius: 2px;
+}
+
+site-search dialog {
+	border-radius: 2px;
+}
+
+/* Callouts */
+.sqb-callout {
+	display: flex;
+	gap: 12px;
+	padding: 14px 16px;
+	border: 1px solid color-mix(in srgb, var(--sqb-callout) 30%, transparent);
+	border-radius: 2px;
+	background: color-mix(in srgb, var(--sqb-callout) 8%, transparent);
+	font-size: 14px;
+	line-height: 1.6;
+}
+
+.sqb-callout.note {
+	--sqb-callout: var(--sqb-primary);
+}
+
+.sqb-callout.warning {
+	--sqb-callout: var(--sqb-warning);
+}
+
+.sl-markdown-content .sqb-callout-icon {
+	width: 16px;
+	height: 16px;
+}
+
+.sl-markdown-content .sqb-callout > .sqb-callout-body {
+	margin: 0;
+}
+
+.sqb-callout-icon {
+	flex: none;
+	margin-top: 4px;
+	color: var(--sqb-callout);
+}
+
+.sl-markdown-content .sqb-callout-body > * {
+	margin: 0;
+	color: var(--sqb-fg);
+}
+
+.sl-markdown-content .sqb-callout-body > * + * {
+	margin-top: 0.6rem;
+}
+
+/* Mintlify-compatible components */
+.sqb-card-group {
+	display: grid;
+	grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr));
+	gap: 12px;
+	margin-top: 1.25rem;
+}
+
+@media (max-width: 50rem) {
+	.sqb-card-group {
+		grid-template-columns: 1fr;
+	}
+}
+
+.sl-markdown-content .sqb-card {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: 18px 20px;
+	border: 1px solid var(--sqb-line-strong);
+	border-radius: 2px;
+	background: var(--sqb-panel);
+	color: var(--sqb-muted);
+	text-decoration: none;
+	font-size: 14px;
+	line-height: 1.5;
+}
+
+.sl-markdown-content a.sqb-card:hover {
+	border-color: var(--sqb-primary);
+}
+
+.sqb-card-icon {
+	margin-bottom: 12px;
+	color: var(--sqb-primary);
+}
+
+.sqb-card-title {
+	color: var(--sqb-fg);
+	font-weight: 600;
+	font-size: 15px;
+}
+
+.sqb-card-body {
+	margin-top: 4px;
+}
+
+.sqb-card-body > * {
+	margin: 0;
+}
+
+.sqb-frame {
+	margin: 1rem 0;
+	padding: 0;
+	border: 1px solid var(--sqb-line);
+}
+
+.sqb-frame img {
+	display: block;
+	width: 100%;
+}
+
+/* Mobile controls */
+.sl-menu-button {
+	border: 1px solid var(--sqb-line-strong) !important;
+	border-radius: 2px !important;
+	background: var(--sqb-bg) !important;
+	color: var(--sqb-muted) !important;
+	box-shadow: none !important;
+}
+
+mobile-starlight-toc summary .toggle {
+	border-radius: 2px;
+	border-color: var(--sqb-line-strong);
+}

@@ -74,5 +74,5 @@ declarations without discovering providers. If those modules contain only helper
 not import project providers or construct exporter queue, dispatcher, or notification threads.
 Normal command-owned project discovery remains responsible for providers needed by nodes and hooks.
 
-The project declaration, configuration, delivery, security, and failure contract is documented in
-[`docs/sinks.md`](../../../../docs/sinks.md).
+The project declaration, configuration, delivery, security, and failure contract is documented at
+[docs.sqlbuild.com/concepts/observability/sinks](https://docs.sqlbuild.com/concepts/observability/sinks).
