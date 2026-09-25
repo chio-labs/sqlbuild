@@ -13,6 +13,7 @@ import pytest
 
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    prepare_inline_project,
     prepare_source_loader_strategies,
     prepare_waffle_shop,
     stringify_warehouse_rows,
@@ -631,3 +632,133 @@ def append_postgres_dbt_seed_change_order(*, project_dir: Path, order_id: int, a
         seed_path.read_text(encoding="utf-8") + f"{order_id},{amount}\n",
         encoding="utf-8",
     )
+
+
+ORIGIN_MODEL: str = "stg_orders"
+DESTINATION_MODEL: str = "stg_customer_orders"
+_JANITOR_CONFIG: str = "\n[janitor]\nenabled = true\narchive_retention_days = 0\n"
+_MIGRATION_TEXT_COLUMNS: tuple[str, ...] = (
+    "event_id",
+    "target_name",
+    "origin_model",
+    "origin_database",
+    "origin_schema",
+    "origin_name",
+    "destination_model",
+    "destination_database",
+    "destination_schema",
+    "destination_name",
+    "origin_version_hash",
+    "discovery",
+    "decision",
+    "run_id",
+)
+
+
+def orders_sql(*, migrate_from: str = "", where: str = "") -> str:
+    """Return an incremental orders model with an optional forced migration header."""
+
+    migration: str = {"": ""}.get(
+        migrate_from, f'  migrate_from "{migrate_from}",\n  migrate_force true,\n'
+    )
+    return (
+        "MODEL (\n"
+        "  materialized incremental,\n"
+        "  incremental_strategy delete_insert,\n"
+        "  unique_key order_id,\n"
+        "  cursor order_date,\n"
+        "  cursor_type timestamp,\n"
+        "  cursor_grain day,\n"
+        '  cursor_start "2026-01-01",\n'
+        f"{migration}"
+        ");\n\n"
+        f'SELECT order_id, order_date, amount_cents FROM __source("raw_orders"){where}\n'
+    )
+
+
+def report_view_sql() -> str:
+    """Return a project view that reads the destination by name."""
+
+    return f'MODEL (materialized view);\n\nSELECT order_id FROM __ref("{DESTINATION_MODEL}")\n'
+
+
+def write_migration_project(
+    *,
+    tmp_path: Path,
+    schema_name: str,
+    raw_schema_name: str,
+    config: dict[str, object],
+    models: dict[str, str],
+) -> Path:
+    """Write a Postgres project whose sources live outside the managed schema."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": build_postgres_project_toml(
+            project_name="postgres_model_migrations", schema_name=schema_name, config=config
+        )
+        + _JANITOR_CONFIG,
+        "sources/raw.yml": (
+            f"sources:\n  - name: raw_orders\n    schema: {raw_schema_name}\n"
+            "    table: raw_orders\n"
+        ),
+    }
+    project_dir: Path = tmp_path / "postgres_model_migrations"
+    models_dir: Path = project_dir / "models"
+    stale: Path
+    for stale in models_dir.glob("*.sql"):
+        stale.unlink()
+    files.update({f"models/{name}.sql": sql for name, sql in models.items()})
+    return prepare_inline_project(
+        tmp_path=tmp_path, project_name="postgres_model_migrations", repo_files=files
+    )
+
+
+def load_raw_orders(*, raw_schema_name: str, config: dict[str, object]) -> None:
+    """Create five raw orders, one per January day, in the source schema."""
+
+    execute_postgres_sql(sql=f"CREATE SCHEMA IF NOT EXISTS {raw_schema_name}", config=config)
+    execute_postgres_sql(
+        sql=(
+            f"CREATE TABLE {raw_schema_name}.raw_orders AS SELECT i AS order_id, "
+            "TIMESTAMP '2026-01-01' + (i - 1) * INTERVAL '1 day' AS order_date, "
+            "100 + i AS amount_cents FROM generate_series(1, 5) AS t(i)"
+        ),
+        config=config,
+    )
+
+
+def create_unwritable_migration_table(*, schema_name: str, config: dict[str, object]) -> None:
+    """Occupy the migration state name with a read-only view so the event insert fails."""
+
+    columns: str = ", ".join(
+        f"CAST(NULL AS TEXT) AS {column}" for column in _MIGRATION_TEXT_COLUMNS
+    )
+    execute_postgres_sql(
+        sql=(
+            f"CREATE VIEW {schema_name}._sqlbuild_migrations AS SELECT {columns}, "
+            "CAST(NULL AS TIMESTAMP) AS created_at WHERE false"
+        ),
+        config=config,
+    )
+
+
+def archive_names(
+    *, schema_name: str, kind: str, config: dict[str, object]
+) -> tuple[tuple[object, ...], ...]:
+    """Return every migration archive of one kind in the managed schema."""
+
+    return fetch_postgres_rows(
+        sql=(
+            "SELECT table_name FROM information_schema.tables "
+            f"WHERE table_schema = '{schema_name}' "
+            "AND table_name LIKE '\\_sqb\\_archive\\_\\_%' "
+            f"AND position('__{kind}__' IN table_name) > 0 ORDER BY 1"
+        ),
+        config=config,
+    )
+
+
+def ordered_ids(*, relation: str, config: dict[str, object]) -> tuple[tuple[object, ...], ...]:
+    """Return the sorted order IDs readable through one relation."""
+
+    return fetch_postgres_rows(sql=f"SELECT order_id FROM {relation} ORDER BY 1", config=config)
