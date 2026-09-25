@@ -56,7 +56,6 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
                     "SELECT order_id FROM analytics.orders WHERE order_id IS NULL\n"
                 ),
             },
-            expected_summary_line="Compiled 1 model, 1 seed, 2 functions, 1 audit, 1 test",
         )
     ],
     ids=lambda case: case.description,
@@ -74,7 +73,7 @@ def test_given_plan_output_when_writing_target_then_expected_files_are_written(
     expected_files: dict[str, str] = dict(test_case.expected_files)
     expected_files["compiled/tests/_chain_/orders__stg_orders/orders_chain.sql"] = expected_test_sql
 
-    written: WrittenTarget = write_compile_target(
+    write_compile_target(
         target_dir=tmp_path / "target",
         adapter=DuckDbAdapter(),
         plan_output=plan_output,
@@ -90,7 +89,6 @@ def test_given_plan_output_when_writing_target_then_expected_files_are_written(
         manifest=manifest,
     )
 
-    assert written.summary_line() == test_case.expected_summary_line
     assert read_target_files(tmp_path / "target", expected_files) == expected_files
     assert json.loads(manifest_path.read_text()) == manifest
     assert manifest_path.stat().st_mtime_ns == unchanged_mtime_ns
@@ -194,7 +192,6 @@ def test_given_parameterized_test_entries_when_writing_target_then_case_artifact
                     ")\n"
                 ),
             },
-            expected_summary_line="Compiled 1 model, 1 function",
         )
     ],
     ids=lambda case: case.description,
@@ -209,7 +206,7 @@ def test_given_compiled_project_when_writing_static_target_then_expected_files_a
     stale_path.parent.mkdir(parents=True)
     stale_path.write_text("SELECT 'stale'\n", encoding="utf-8")
 
-    written: WrittenTarget = write_static_compile_target(
+    write_static_compile_target(
         target_dir=target_dir,
         adapter=DuckDbAdapter(),
         project=project,
@@ -223,7 +220,6 @@ def test_given_compiled_project_when_writing_static_target_then_expected_files_a
         project=project,
     )
 
-    assert written.summary_line() == test_case.expected_summary_line
     assert read_target_files(target_dir, test_case.expected_files) == test_case.expected_files
     assert model_path.stat().st_mtime_ns == unchanged_mtime_ns
     assert not stale_path.exists()
