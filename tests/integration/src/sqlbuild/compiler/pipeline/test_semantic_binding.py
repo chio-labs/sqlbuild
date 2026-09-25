@@ -170,13 +170,13 @@ def test_given_two_complete_contracts_when_unqualified_column_is_ambiguous_then_
     "test_case",
     [
         SemanticBindingIntegrationTestCase(
-            description="given partial upstream when column absence is unproven then compile succeeds",
-            expected_exit_code=0,
+            description="explicit projection closes output names over an open input",
+            expected_exit_code=1,
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_partial_upstream_when_column_absence_is_unproven_then_compile_succeeds(
+def test_given_explicit_projection_when_output_column_is_missing_then_compile_fails(
     test_case: SemanticBindingIntegrationTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -193,7 +193,7 @@ def test_given_partial_upstream_when_column_absence_is_unproven_then_compile_suc
 
     output: str = capsys.readouterr().out
     assert exit_code == test_case.expected_exit_code
-    assert "error[B" not in output
+    assert "error[B002]" in output
 
 
 @pytest.mark.parametrize(

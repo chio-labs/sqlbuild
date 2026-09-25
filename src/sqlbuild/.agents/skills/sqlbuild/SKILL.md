@@ -17,8 +17,13 @@ plan, and ships tools for proving a change is correct. Use those tools; do not s
 - Macros are plain Python functions called as `@macro_name("arg")`. Constants and enums are
   `@const("name")` and `@enum("name").MEMBER`.
 - Config, column schemas, contracts and audits live in the `MODEL()` header, not YAML.
-- `sqb compile` is offline and strict: syntax, binding, types, contracts, column lineage and Rules
-  all run before anything touches the warehouse. Fix compile errors; do not bypass them.
+- `sqb compile` is offline: syntax, per-input binding, grouping semantics, contracts, metadata,
+  column lineage and Rules run before warehouse execution. Explicit projections close output names
+  even over open inputs. General expression type checks await the dialect coercion catalogue.
+  Open table sources need an enforced contract or plan/build warehouse inspection for complete
+  column checking. `--json` reports partial-check reasons. Intentional escape hatches are
+  `MODEL (sql_analysis false)`, path defaults, and `--no-sql-analysis` (also disabling inference
+  and lineage).
 - Declarations are scoped by folder. A macro, enum or constant must live in the narrowest folder
   that contains every use, or compile rejects it. See `sqb scope` below.
 - Plans record why each model runs (first run, query change, config change, upstream change).

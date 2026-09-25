@@ -7,7 +7,6 @@ from dataclasses import asdict
 from enum import StrEnum
 
 from sqlbuild.compiler.auditing.types import AuditSeverity
-from sqlbuild.compiler.compile.main.function_node_type import function_node_type
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
@@ -37,6 +36,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
+from sqlbuild.compiler.resource_names.main.function_node_type import function_node_type
 from sqlbuild.python_nodes.models import ColumnLineageRef, SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
 from sqlbuild.spec.contracts.main.loader_destination_parts import loader_destination_parts

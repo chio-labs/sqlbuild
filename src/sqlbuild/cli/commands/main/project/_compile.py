@@ -18,6 +18,7 @@ from sqlbuild.cli.commands._helpers.compile.pipeline import (
     write_compile_artifacts,
     write_compile_dag_artifact,
 )
+from sqlbuild.cli.commands._helpers.compile.semantic_notice import semantic_coverage_notice
 from sqlbuild.cli.commands._helpers.compile.status import elapsed_ms, start_compile_status
 from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
 from sqlbuild.cli.commands.types import CompileLineageMode
@@ -152,6 +153,9 @@ def _run_compile_with_status(
         print(f"note: {skipped_rules_note}", file=sys.stderr)
 
     if json_output:
+        notice: str | None = semantic_coverage_notice(analysis.graph.project)
+        if notice:
+            print(notice, file=sys.stderr)
         print(
             format_compile_json(
                 graph=analysis.graph,

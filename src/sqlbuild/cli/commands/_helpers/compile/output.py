@@ -8,11 +8,13 @@ from pathlib import Path
 
 import orjson
 
+from sqlbuild.cli.commands._helpers.compile.semantic_notice import semantic_coverage_notice
 from sqlbuild.cli.commands.constants import TARGET_DIRECTORY_NAME
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.output.models import (
     WrittenTarget,
 )
+from sqlbuild.compiler.compile.main.semantic_coverage import get_semantic_coverage
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
@@ -94,6 +96,10 @@ def format_compile_text(
         )
         lines.append("  " + style.muted("Use --json for the full compile report."))
     lines.append("")
+    notice: str | None = semantic_coverage_notice(graph.project)
+    if notice:
+        lines.append(notice)
+        lines.append("")
     if diagnostics:
         lines.append(
             _format_diagnostics_text(
@@ -173,6 +179,7 @@ def format_compile_json(
             selected_keys=selected_keys,
         ),
         "diagnostics": [_diagnostic_to_json(diagnostic) for diagnostic in diagnostics],
+        "semantic_checks_partial": get_semantic_coverage(graph.project),
         "compile_timings": timings_ms,
         "lineage_mode": lineage_mode.value,
         "resources": _resources(graph=graph, lineage=lineage),

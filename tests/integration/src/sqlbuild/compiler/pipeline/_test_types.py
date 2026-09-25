@@ -7,6 +7,15 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 
 
 @dataclass(frozen=True)
+class SemanticCompileCase:
+    description: str
+    upstream: str
+    downstream: str
+    expected_code: str | None
+    header: str = "MODEL (materialized view);\n"
+
+
+@dataclass(frozen=True)
 class RulesPipelineIntegrationTestCase:
     """One configured Rules failure in the shared planning compiler."""
 

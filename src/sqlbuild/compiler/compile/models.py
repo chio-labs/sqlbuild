@@ -1000,6 +1000,7 @@ class CompiledProject:
     effective_vars: dict[str, object]
     effective_target_database: str | None = None
     effective_target_schema: str | None = None
+    sql_analysis_dialect: str | None = None
     compile_cache_dir: Path | None = None
     settings: SettingsConfig = field(default_factory=SettingsConfig)
     scenario: ScenarioConfig = field(default_factory=ScenarioConfig)

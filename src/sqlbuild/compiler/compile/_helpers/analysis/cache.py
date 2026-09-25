@@ -43,10 +43,11 @@ from sqlbuild.compiler.lineage.types import (
 from sqlbuild.compiler.profiling.main._metric import record_compile_metric
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.sql_analysis.constants import TYPE_CHECKED_DIALECTS
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 
-_ANALYSIS_CACHE_VERSION: int = 10
-_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v13-bound-lineage-type-recovery"
+_ANALYSIS_CACHE_VERSION: int = 11
+_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v14-semantic-binding"
 _LINEAGE_COLUMN_VALUE_COUNT: int = 4
 _LINEAGE_SOURCE_VALUE_COUNT: int = 3
 _COMPACT_TRANSFORM_CODES: dict[str, int] = {
@@ -126,6 +127,7 @@ def build_analysis_cache_context(
         "python_version": platform.python_version_tuple()[:2],
         "allow_compact_analysis": allow_compact_analysis,
         "rich_type_inference": rich_type_inference,
+        "type_checked_dialects": sorted(TYPE_CHECKED_DIALECTS),
         "inference_profile": profile_payload,
     }
     try:
