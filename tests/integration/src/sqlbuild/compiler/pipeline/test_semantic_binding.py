@@ -123,7 +123,7 @@ def test_given_complete_contract_when_clause_references_missing_column_then_comp
     assert exit_code == test_case.expected_exit_code
     assert f"error[{test_case.expected_error_code}]" in output
     assert f"'{test_case.missing_column}'" in output
-    assert "(context:" in output
+    assert "(context:" not in output
     assert "model: downstream" in output
     assert (
         f"--> models/downstream.sql:2:{test_case.query_sql.index(test_case.missing_column) + 1}"
@@ -204,7 +204,7 @@ def test_given_explicit_projection_when_output_column_is_missing_then_compile_fa
             description="given default enforced source contract when column is missing then compile fails",
             source_contract_yaml="",
             expected_exit_code=1,
-            expected_output_fragment="error[B002]: Unknown column 'missing' in table 'raw_orders'",
+            expected_output_fragment="error[B002]: Unknown column 'missing' in raw_orders",
             expected_absent_output_fragment="0 errors, 0 warnings",
         ),
         SourceContractDefaultIntegrationTestCase(

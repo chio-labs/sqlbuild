@@ -147,7 +147,9 @@ def _run_compile_with_status(
         status.close()
 
     if json_output:
-        notice: str | None = semantic_coverage_notice(analysis.graph.project)
+        notice: str | None = semantic_coverage_notice(
+            project=analysis.graph.project, selected_keys=analysis.selected_keys
+        )
         if notice:
             print(notice, file=sys.stderr)
         print(

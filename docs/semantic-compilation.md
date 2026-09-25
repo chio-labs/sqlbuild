@@ -69,6 +69,47 @@ diagnostic warning count.
 Escape hatches are `MODEL (sql_analysis false)`, the corresponding path default, and
 `--no-sql-analysis`. Disabling SQL analysis also disables inference and lineage for that model.
 
+## Reading diagnostics
+
+Diagnostics use one layout: headline, resource and location, source snippet with a span underline,
+notes, then code-specific help. SQL-test diagnostics include their authored fixture snippet and
+use `sql test: name`, just as model diagnostics use `model: name`. JSON retains the location's
+exclusive `end_line`/`end_column` boundary, notes, and help.
+
+An unknown column identifies its input and authored alias. Suggestions use edit distance with a
+bounded typo cutoff and recognize short abbreviations such as `qty`. No suggestion is printed when
+none is close. The available-column note puts the closest names first and shows at most ten names.
+
+```text
+error[B002]: Unknown column 'qty' in stg_orders (as o)
+  model: fact_orders
+  --> models/marts/fact_orders.sql:16:5
+     |
+  16 |   o.qty,
+     |     ^^^
+  = note: stg_orders has: quantity, status, waffle_type_id, customer_id, order_id, ordered_at
+  = note: 2 downstream uses of fact_orders.quantity were not checked because of this error
+  = help: did you mean 'quantity'?
+```
+
+Type errors report uppercase types and available operand evidence, for example
+`o.ordered_at is TIMESTAMP, 5 is INTEGER`. Comparison help recommends a literal appropriate to the
+type family and dialect. Native spans are mapped back through normalization and macro expansion;
+simple binary expressions are underlined in full. Diagnostics without usable spans keep the
+authored query-start fallback. Per-operand labels and per-code documentation links are separate
+follow-ups.
+
+Error recovery treats poisoned output names and their downstream lineage as provisional. A
+downstream error traceable only to that root is suppressed and counted in a root-error note;
+independent errors on other columns and other inputs remain errors. Recovery does not silence a
+whole dependent query or make its unchecked uses valid. Affected models remain in
+`semantic_checks_partial`, including on warm/cache-hit runs.
+
+The single human partial-check notice groups model names by reason, gives the relevant repair or
+rerun command, and truncates long lists. `sqb compile --json` contains the full selected-model
+reason map. Unknown output types and unresolved stars are reported as explicitly as open sources;
+the notice never reduces them to a count alone.
+
 ## Diagnostic codes
 
 | SQLBuild | Native | Meaning |

@@ -3,11 +3,50 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from difflib import SequenceMatcher
+from pathlib import Path
 
 from sqlbuild.compiler.compile.main.map_expanded_offset import map_expanded_offset
 from sqlbuild.compiler.compile.models import CompiledSqlExpansion, MappedOffset
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
+from sqlbuild.spec.contracts.models import SourceLocation
+
+
+def get_authored_binding_location(
+    *,
+    path: Path,
+    authored_sql: str,
+    authored_query_sql: str,
+    cleaned_sql: str,
+    diagnostic: SqlBindingDiagnostic,
+    expansion: CompiledSqlExpansion | None = None,
+) -> SourceLocation | None:
+    """Map both native span boundaries through normalization and expansion."""
+    line, column = get_authored_binding_position(
+        authored_sql=authored_sql,
+        authored_query_sql=authored_query_sql,
+        cleaned_sql=cleaned_sql,
+        diagnostic=diagnostic,
+        expansion=expansion,
+    )
+    if line is None or column is None:
+        return None
+    end_line: int | None = None
+    end_column: int | None = None
+    if diagnostic.end is not None:
+        end_line, end_column = get_authored_binding_position(
+            authored_sql=authored_sql,
+            authored_query_sql=authored_query_sql,
+            cleaned_sql=cleaned_sql,
+            expansion=expansion,
+            diagnostic=replace(
+                diagnostic, message="", start=diagnostic.end, line=None, column=None
+            ),
+        )
+    return SourceLocation(
+        path=path, line=line, column=column, end_line=end_line, end_column=end_column
+    )
 
 
 def get_authored_binding_position(
