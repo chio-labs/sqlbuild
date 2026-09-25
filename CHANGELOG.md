@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.118.3](https://github.com/chio-labs/sqlbuild/compare/v0.118.2...v0.118.3) (2026-09-25)
+
+
+### Bug Fixes
+
+* use the current declaration layout in the playground ([#820](https://github.com/chio-labs/sqlbuild/issues/820)) ([6701700](https://github.com/chio-labs/sqlbuild/commit/67017002edcf21c03e97071083105d9ea677d070))
+
 ## [0.118.2](https://github.com/chio-labs/sqlbuild/compare/v0.118.1...v0.118.2) (2026-09-25)
 
 
