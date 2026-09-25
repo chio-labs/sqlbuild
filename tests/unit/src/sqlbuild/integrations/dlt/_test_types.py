@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sqlbuild.adapter.contract.types import BuiltinAdapter
-
 
 @dataclass(frozen=True)
 class DltLoaderDiscoveryTestCase:
@@ -36,12 +34,6 @@ class DltDestinationErrorTestCase:
     dataset_name: str | None
     expected_error_fragment: str
     destination_config: dict[str, object] | None = None
-
-
-@dataclass(frozen=True)
-class DltDestinationCoverageTestCase:
-    description: str
-    expected_adapters: frozenset[BuiltinAdapter]
 
 
 @dataclass(frozen=True)
