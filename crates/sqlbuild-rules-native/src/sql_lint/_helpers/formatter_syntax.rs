@@ -145,15 +145,14 @@ pub(super) fn protect_syntax(
             })
         {
             (index + 1, format!(".{sentinel}"))
-        } else if is_typed_literal(tokens, index) {
-            (index + 1, sentinel)
-        } else if matches!(token.token_type, TokenType::Var | TokenType::Identifier)
-            && tokens.get(index + 1).is_some_and(|next| {
-                matches!(next.token_type, TokenType::Var | TokenType::Identifier)
-            })
-            && tokens
-                .get(index + 2)
-                .is_some_and(|next| next.token_type == TokenType::Arrow)
+        } else if is_typed_literal(tokens, index)
+            || (matches!(token.token_type, TokenType::Var | TokenType::Identifier)
+                && tokens.get(index + 1).is_some_and(|next| {
+                    matches!(next.token_type, TokenType::Var | TokenType::Identifier)
+                })
+                && tokens
+                    .get(index + 2)
+                    .is_some_and(|next| next.token_type == TokenType::Arrow))
         {
             (index + 1, sentinel)
         } else if matches!(token.text.to_ascii_uppercase().as_str(), "MOD" | "POSITION")
