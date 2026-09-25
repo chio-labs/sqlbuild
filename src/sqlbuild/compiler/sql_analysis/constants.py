@@ -162,5 +162,10 @@ POLYGLOT_ANALYSIS_TRANSFORM_CONSTANT: str = "constant"
 POLYGLOT_ANALYSIS_TRANSFORM_DIRECT: str = "direct"
 POLYGLOT_ANALYSIS_TRANSFORM_STAR: str = "star"
 POLYGLOT_ANALYSIS_UNSAFE_TRANSFORMS: frozenset[str] = frozenset()
-TYPE_CHECKED_DIALECTS: frozenset[str] = frozenset()
-NATIVE_DIALECT_ALIASES: dict[str, str] = {"postgres": "postgresql", "sqlserver": "tsql"}
+TYPE_CHECKED_DIALECTS: frozenset[str] = frozenset({"duckdb", "snowflake", "postgresql", "bigquery"})
+BINDING_SEVERITIES: frozenset[str] = frozenset({"error", "warning"})
+NATIVE_DIALECT_ALIASES: dict[str, str] = {
+    "postgres": "postgresql",
+    "motherduck": "duckdb",
+    "sqlserver": "tsql",
+}

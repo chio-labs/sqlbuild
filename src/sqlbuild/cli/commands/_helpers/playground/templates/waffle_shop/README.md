@@ -36,6 +36,21 @@ sqb lineage fact_orders
 
 ## What This Shows
 
+### Try semantic compilation
+
+`sqb compile` checks the enforced source schemas offline. Change `o.quantity` to `o.qty` in
+`models/marts/fact_orders.sql` to see an unknown-column error (B002). Add
+`WHERE ordered_at > 5` to `models/staging/stg_orders.sql` to see DuckDB's timestamp/integer
+comparison error (B217). Restore each edit after trying it; downstream models and SQL tests may
+also report the consequences of a changed output column.
+
+Proven bind-time failures are errors. Accepted conversions that may fail on data produce W21x
+warnings and do not fail compilation. Unknown types remain unchecked. Type checks are enabled for
+DuckDB/MotherDuck, PostgreSQL, Snowflake, and BigQuery using each dialect's coercion rules.
+Use `MODEL (sql_analysis false)`, a path default, or `--no-sql-analysis` to opt out.
+
+### Project features
+
 - DuckDB-backed local execution
 - SQL models across staging, intermediate, and mart layers
 - Seeds, expression-backed sources, and Python source loaders

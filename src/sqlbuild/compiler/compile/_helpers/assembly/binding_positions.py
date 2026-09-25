@@ -20,7 +20,8 @@ def get_authored_binding_position(
 ) -> tuple[int | None, int | None]:
     """Prefer authored identifier evidence; anchor span-less errors at the query."""
     match: re.Match[str] | None = re.search(
-        r"(?:Unknown column|Ambiguous column reference) '([^']+)'", diagnostic.message
+        r"(?:Unknown column|Ambiguous column reference|JOIN USING column) '([^']+)'",
+        diagnostic.message,
     )
     if match is not None:
         identifier: str = match.group(1).rsplit(".", maxsplit=1)[-1]

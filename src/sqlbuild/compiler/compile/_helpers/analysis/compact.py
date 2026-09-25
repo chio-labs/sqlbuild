@@ -1033,6 +1033,8 @@ def get_complete_schema_binding_request(
     placeholders: dict[str, str] | None,
     dialect: str | None,
     binding_schema: dict[str, dict[str, str]],
+    known_functions: tuple[str, ...] = (),
+    known_types: tuple[str, ...] = (),
 ) -> SqlSchemaValidationRequest:
     """Build one stable native schema-validation request."""
 
@@ -1046,6 +1048,8 @@ def get_complete_schema_binding_request(
         sql=cleaned_sql,
         dialect=dialect,
         schema=binding_schema,
+        known_functions=known_functions,
+        known_types=known_types,
     )
 
 

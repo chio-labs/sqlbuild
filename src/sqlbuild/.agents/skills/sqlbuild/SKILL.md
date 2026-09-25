@@ -19,7 +19,9 @@ plan, and ships tools for proving a change is correct. Use those tools; do not s
 - Config, column schemas, contracts and audits live in the `MODEL()` header, not YAML.
 - `sqb compile` is offline: syntax, per-input binding, grouping semantics, contracts, metadata,
   column lineage and Rules run before warehouse execution. Explicit projections close output names
-  even over open inputs. General expression type checks await the dialect coercion catalogue.
+  even over open inputs. DuckDB/MotherDuck, PostgreSQL, Snowflake, and BigQuery enable expression
+  type checks: proven bind-time rejections are errors; runtime-conversion risks are W21x warnings.
+  Unknown types do not block compilation; catalogue coverage is partial.
   Open table sources need an enforced contract or plan/build warehouse inspection for complete
   column checking. `--json` reports partial-check reasons. Intentional escape hatches are
   `MODEL (sql_analysis false)`, path defaults, and `--no-sql-analysis` (also disabling inference

@@ -42,11 +42,12 @@ from sqlbuild.compiler.compile._helpers.analysis.validation import (
 from sqlbuild.compiler.compile._helpers.assembly.binding_positions import (
     get_authored_binding_position,
 )
-from sqlbuild.compiler.compile._helpers.assembly.function_diagnostics import (
-    is_declared_function_diagnostic,
-)
 from sqlbuild.compiler.compile._helpers.assembly.metadata_validation import (
     get_semantic_metadata_diagnostics,
+)
+from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
+    known_declared_types,
+    known_function_names,
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     build_complete_binding_schemas,
@@ -277,6 +278,10 @@ def assemble_compiled_project(
             allow_compact_analysis=allow_compact_analysis,
             rich_type_inference=rich_type_inference,
             signature_namespace={
+                "known_functions": known_function_names(inputs.sql_function_inputs),
+                "known_types": known_declared_types(
+                    functions=inputs.sql_function_inputs, column_types=column_types_by_table
+                ),
                 "target": inputs.effective_target_name,
                 "vars": inputs.effective_vars,
             },
@@ -288,6 +293,10 @@ def assemble_compiled_project(
     if sql_analysis_enabled:
         with record_compile_timing("model_analysis_ms"):
             model_sql_analysis_by_name = _analyze_model_sql_in_parallel(
+                known_functions=known_function_names(inputs.sql_function_inputs),
+                known_types=known_declared_types(
+                    functions=inputs.sql_function_inputs, column_types=column_types_by_table
+                ),
                 model_inputs=tuple(
                     model_input
                     for model_input in inputs.model_inputs
@@ -579,6 +588,8 @@ def _assemble_compiled_model(
 
 def _analyze_model_sql_in_parallel(
     *,
+    known_functions: tuple[str, ...],
+    known_types: tuple[str, ...],
     model_inputs: tuple[CompileModelInput, ...],
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     column_types_by_table: dict[str, dict[str, str]],
@@ -691,6 +702,8 @@ def _analyze_model_sql_in_parallel(
                     bypasses=0,
                 )
                 compact_analyses = _complete_inferred_bindings(
+                    known_functions=known_functions,
+                    known_types=known_types,
                     requests=requests,
                     analyses=compact_analyses,
                     complete_binding_schemas=complete_binding_schemas,
@@ -775,6 +788,8 @@ def _analyze_model_sql_in_parallel(
         ),
     )
     analyses = _complete_inferred_bindings(
+        known_functions=known_functions,
+        known_types=known_types,
         requests=requests,
         analyses=analyses,
         complete_binding_schemas=complete_binding_schemas,
@@ -852,6 +867,8 @@ def _analyze_model_sql_in_parallel(
             for request, analysis in zip(requests, analyses, strict=True)
         )
         analyses = _complete_inferred_bindings(
+            known_functions=known_functions,
+            known_types=known_types,
             requests=requests,
             analyses=analyses,
             complete_binding_schemas=complete_binding_schemas,
@@ -1024,6 +1041,8 @@ def _analyze_model_sql_requests(
 
 def _complete_inferred_bindings(
     *,
+    known_functions: tuple[str, ...],
+    known_types: tuple[str, ...],
     requests: tuple[_ModelSqlAnalysisRequest, ...],
     analyses: tuple[_ModelSqlAnalysis, ...],
     complete_binding_schemas: dict[str, dict[str, str]],
@@ -1110,6 +1129,8 @@ def _complete_inferred_bindings(
         deferred_validation_requests.append(
             get_complete_schema_binding_request(
                 query_sql=request.query_sql,
+                known_functions=known_functions,
+                known_types=known_types,
                 placeholders=request.placeholders,
                 dialect=inference_profile.sql_analysis_dialect,
                 binding_schema={name: complete_schemas.get(name, {}) for name in required_names},
@@ -1418,15 +1439,6 @@ def _binding_compiler_diagnostics(
     for diagnostic in diagnostics:
         if diagnostic.code == BINDING_UNKNOWN_TABLE_INTERNAL_CODE:
             continue
-        if is_declared_function_diagnostic(
-            diagnostic=diagnostic,
-            names=frozenset(
-                reference.ref_name
-                for reference in model_input.references
-                if reference.ref_kind in {SqlReferenceKind.UDF, SqlReferenceKind.TABLE_FUNCTION}
-            ),
-        ):
-            continue
         line: int | None
         column: int | None
         line, column = get_authored_binding_position(
@@ -1463,7 +1475,7 @@ def _binding_compiler_diagnostics(
         result.append(
             CompilerDiagnostic(
                 phase=DiagnosticPhase.COMPILE,
-                severity=DiagnosticSeverity.ERROR,
+                severity=DiagnosticSeverity(diagnostic.severity),
                 code=diagnostic.code,
                 message=diagnostic.message,
                 resource_type=CompiledResourceType.MODEL,
@@ -1471,7 +1483,7 @@ def _binding_compiler_diagnostics(
                 path=model_input.model_file.relative_path,
                 line=line,
                 column=column,
-                help="correct the column reference or the authoritative upstream contract",
+                help="review the SQL expression, input types, and authoritative schema",
             )
         )
     return tuple(result)
