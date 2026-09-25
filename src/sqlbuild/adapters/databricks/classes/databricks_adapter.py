@@ -672,33 +672,6 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             )
         return results
 
-    def _get_table_type(
-        self,
-        *,
-        connection: Any,
-        database: str,
-        schema: str,
-        name: str,
-    ) -> str:
-        query: str = (
-            f"SELECT table_type FROM {self._information_schema(database)}.tables "
-            f"WHERE table_schema = {self._string_literal(schema)} "
-            f"AND table_name = {self._string_literal(name)}"
-        )
-        cursor: Any = connection.cursor()
-        try:
-            cursor.execute(query)
-            row: tuple[Any, ...] | None = cursor.fetchone()
-        finally:
-            cursor.close()
-        if row is None:
-            raise AdapterUserError(
-                message=(
-                    f"Databricks table freshness metadata not found for {database}.{schema}.{name}"
-                )
-            )
-        return str(row[0])
-
     def maximum_identifier_length(self) -> int:
         """Return the maximum unqualified identifier length supported by the adapter."""
 
