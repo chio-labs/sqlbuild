@@ -487,6 +487,9 @@ def _serialize_model_migrations(plan: PlanOutput) -> list[dict[str, object]]:
             "target": entry.target_name,
             "origin_version_hash": entry.origin_version_hash,
             "transfer": entry.transfer.value if entry.transfer is not None else None,
+            "transfer_fallback": (
+                entry.transfer_fallback.value if entry.transfer_fallback is not None else None
+            ),
             "storage_transition": entry.storage_transition,
             "promotion": entry.promotion.value if entry.promotion is not None else None,
             "completed_at": (

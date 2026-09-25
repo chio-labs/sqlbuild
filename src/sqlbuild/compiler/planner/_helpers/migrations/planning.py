@@ -7,7 +7,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 
 from sqlbuild.adapter.contract.models import ColumnInfo, MigrationStagePlan, RelationInfo
-from sqlbuild.adapter.contract.types import BuiltinAdapter
+from sqlbuild.adapter.contract.types import BuiltinAdapter, MigrationTransfer
 from sqlbuild.compiler.compile.constants import MIGRATE_FORCE_CONFIG_KEY, MIGRATE_FROM_CONFIG_KEY
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -533,6 +533,7 @@ def _with_execution(
         entry,
         stage_is_transient=stage_is_transient,
         transfer=stage.transfer,
+        transfer_fallback=MigrationTransfer.COPY if stage.fallback_statements else None,
         promotion=_promotion(runtime=runtime, decision=entry.decision),
     )
 

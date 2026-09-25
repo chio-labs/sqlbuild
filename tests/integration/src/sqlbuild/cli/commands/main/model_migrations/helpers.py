@@ -393,6 +393,21 @@ def fail_clone(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def refuse_clone_then_copy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Plan a clone with a copy fallback, as BigQuery does, and refuse the clone."""
+
+    monkeypatch.setattr(
+        DuckDbAdapter,
+        "render_migration_stage",
+        lambda self, *, origin, stage, **_: MigrationStagePlan(
+            transfer=MigrationTransfer.CLONE,
+            statements=("SELECT error('simulated clone refusal')",),
+            fallback_statements=(f"CREATE TABLE {stage} AS SELECT * FROM {origin}",),
+            is_clone_refusal=lambda error: "simulated clone refusal" in str(error),
+        ),
+    )
+
+
 def fail_partial_stage(monkeypatch: pytest.MonkeyPatch) -> None:
     """Leave an empty, incomplete stage behind and then fail the copy."""
 

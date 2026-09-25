@@ -31,6 +31,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.model_migrations.helpers i
     order_ids,
     plan_json,
     prepare_forced_replace,
+    refuse_clone_then_copy,
     run_sqb,
     state_tables,
 )
@@ -121,30 +122,56 @@ def test_given_forced_replace_when_interrupted_then_retry_converges_without_losi
     [
         StagedPlanOutputTestCase(
             description="duckdb plans a physical copy promoted in one transaction",
+            install_stage=no_failure,
+            expected_transfer_fallback=None,
+            expected_build_fragment="by physical copy. (",
             expected_transfer="copy",
             expected_promotion="transactional_rename",
             expected_storage_transition=None,
             expected_text_fragment="└── transfer  physical copy, promote by transactional rename",
-        )
+        ),
+        StagedPlanOutputTestCase(
+            description="refused clone plans its copy fallback and builds by copy",
+            install_stage=refuse_clone_then_copy,
+            expected_transfer_fallback="copy",
+            expected_build_fragment="by physical copy (clone refused).",
+            expected_transfer="clone",
+            expected_promotion="transactional_rename",
+            expected_storage_transition=None,
+            expected_text_fragment=(
+                "└── transfer  zero-copy clone (physical copy if refused), "
+                "promote by transactional rename"
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
 def test_given_forced_replace_when_planning_then_reports_transfer_and_promotion(
-    test_case: StagedPlanOutputTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    test_case: StagedPlanOutputTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Plan text and JSON state how the migration is staged and promoted."""
+    """Plan text and JSON state the planned transfer; build output reports the one used."""
 
     prepare_forced_replace(project_dir=tmp_path, capsys=capsys)
+    test_case.install_stage(monkeypatch)
 
     plan: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)
     text: CliRun = run_sqb(project_dir=tmp_path, args=("plan",), capsys=capsys)
+    built: CliRun = build_ok(project_dir=tmp_path, capsys=capsys)
 
     migration: dict[str, Any] = plan["migrations"][0]
     assert migration["transfer"] == test_case.expected_transfer
+    assert migration["transfer_fallback"] == test_case.expected_transfer_fallback
     assert migration["promotion"] == test_case.expected_promotion
     assert migration["storage_transition"] == test_case.expected_storage_transition
     assert "statement" not in migration
     assert test_case.expected_text_fragment in text.output
+    assert test_case.expected_build_fragment in built.output
+    assert order_ids(project_dir=tmp_path, relation=f"main.{DESTINATION_MODEL}") == tuple(
+        range(1, 6)
+    )
 
 
 @pytest.mark.parametrize(

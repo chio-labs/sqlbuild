@@ -96,6 +96,9 @@ class StagedReplaceTestCase:
 @dataclass(frozen=True)
 class StagedPlanOutputTestCase:
     description: str
+    install_stage: Callable[[pytest.MonkeyPatch], None]
+    expected_transfer_fallback: str | None
+    expected_build_fragment: str
     expected_transfer: str
     expected_promotion: str
     expected_storage_transition: str | None

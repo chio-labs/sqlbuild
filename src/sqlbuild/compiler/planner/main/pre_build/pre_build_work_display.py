@@ -97,7 +97,12 @@ def _migration_lines(entry: ModelMigrationPlanEntry) -> list[str]:
         rows.append(f"    compatibility  {entry.compatibility.value}")
     if entry.transfer is not None:
         details: tuple[str | None, ...] = (
-            entry.transfer.label,
+            entry.transfer.label
+            + (
+                ""
+                if entry.transfer_fallback is None
+                else f" ({entry.transfer_fallback.label} if refused)"
+            ),
             entry.storage_transition,
             None if entry.promotion is None else f"promote by {entry.promotion.label}",
         )

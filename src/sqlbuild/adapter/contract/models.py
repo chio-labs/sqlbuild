@@ -187,11 +187,12 @@ class RenderedRetentionChange:
 
 @dataclass(frozen=True)
 class MigrationStagePlan:
-    """Statements that create a fresh migration stage, plus a copy fallback if clone is refused."""
+    """Fresh migration stage statements, plus a copy used only for recognized clone refusals."""
 
     transfer: MigrationTransfer
     statements: tuple[str, ...]
     fallback_statements: tuple[str, ...] = ()
+    is_clone_refusal: Callable[[BaseException], bool] | None = None
 
 
 @dataclass(frozen=True)

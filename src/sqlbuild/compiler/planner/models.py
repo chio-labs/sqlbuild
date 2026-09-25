@@ -982,6 +982,7 @@ class ModelMigrationPlanEntry:
     origin_is_transient: bool = False
     stage_is_transient: bool | None = None
     transfer: MigrationTransfer | None = None
+    transfer_fallback: MigrationTransfer | None = None
     promotion: MigrationPromotion | None = None
     completed_at: datetime | None = None
     compatibility_findings: tuple[str, ...] = ()

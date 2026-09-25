@@ -14,3 +14,21 @@ class ArtifactNamingTestCase:
     expected_stage_name: str
     expected_displaced_name: str
     expected_destination_exists: bool
+
+
+@dataclass(frozen=True)
+class CloneFallbackTestCase:
+    description: str
+    clone_statements: tuple[str, ...]
+    refused_messages: tuple[str, ...]
+    expected_transfer: str
+    expected_stage_rows: int
+
+
+@dataclass(frozen=True)
+class CloneFailureTestCase:
+    description: str
+    clone_statements: tuple[str, ...]
+    refused_messages: tuple[str, ...]
+    expected_error_fragment: str
+    expected_stage_exists: bool

@@ -31,8 +31,17 @@ def create_stage(
     try:
         _execute_all(adapter=adapter, connection=connection, statements=plan.statements)
     except Exception as error:
-        if not plan.fallback_statements:
+        if (
+            not plan.fallback_statements
+            or plan.is_clone_refusal is None
+            or not plan.is_clone_refusal(error)
+        ):
             raise
+        if _stage_exists(adapter=adapter, connection=connection, entry=entry, names=names):
+            raise ExecutorInputError(
+                f"migration clone into {names.stage_qualified} was refused but the stage now "
+                "exists; refusing to adopt a stage of unknown completeness"
+            ) from error
         logging.getLogger("sqlbuild.migrations").warning(
             "migration clone into '%s' was refused; copying instead: %s",
             names.stage_name,
@@ -103,6 +112,22 @@ def verify_stage(
             f"migration stage {names.stage_qualified} holds {stage_rows} rows but the origin "
             f"holds {origin_rows}; refusing to promote an incomplete copy"
         )
+
+
+def _stage_exists(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    entry: ModelMigrationPlanEntry,
+    names: MigrationArtifactNames,
+) -> bool:
+    listed: tuple[RelationInfo, ...] = adapter.list_relations(
+        connection=connection,
+        database=entry.destination.database,
+        schemas=(entry.destination.schema,) if entry.destination.schema is not None else None,
+        names=(names.stage_name,),
+    )
+    return any(relation.name.lower() == names.stage_name.lower() for relation in listed)
 
 
 def _execute_all(*, adapter: BaseAdapter, connection: Any, statements: tuple[str, ...]) -> None:

@@ -72,7 +72,7 @@ def _apply_one(
         on_progress(f"Migrating {origin_label} -> {destination_label} ({entry.decision.value})...")
     started: float = time.monotonic()
     try:
-        _ = _stage_promote_and_record(
+        transfer: MigrationTransfer = _stage_promote_and_record(
             entry=entry, adapter=adapter, connection=connection, run_id=run_id
         )
     except Exception as error:
@@ -86,13 +86,15 @@ def _apply_one(
         ) from error
     if on_progress is not None:
         on_progress(
-            f"Migrated {origin_label} -> {destination_label}. ({time.monotonic() - started:.2f}s)"
+            f"Migrated {origin_label} -> {destination_label} by {transfer.label}"
+            f"{' (clone refused)' if transfer != entry.transfer else ''}. "
+            f"({time.monotonic() - started:.2f}s)"
         )
 
 
 def _stage_promote_and_record(
     *, entry: ModelMigrationPlanEntry, adapter: BaseAdapter, connection: Any, run_id: str
-) -> None:
+) -> MigrationTransfer:
     adapter.ensure_schema(
         connection=connection,
         database=entry.destination.database,
@@ -115,3 +117,4 @@ def _stage_promote_and_record(
         names=names,
         event=migration_event(entry=entry, run_id=run_id),
     )
+    return transfer

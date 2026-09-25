@@ -95,6 +95,7 @@ from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
 from sqlbuild.adapter.type_system.main.first_arg_nullability import first_arg_nullability
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
+from sqlbuild.adapters.bigquery._helpers.clone_refusal import is_bigquery_clone_refusal
 from sqlbuild.adapters.bigquery._helpers.statement_telemetry import affected_rows
 from sqlbuild.adapters.bigquery.classes.bigquery_connection import _BigQueryConnection
 from sqlbuild.adapters.bigquery.classes.bigquery_cursor import _BigQueryCursor
@@ -1741,6 +1742,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             transfer=MigrationTransfer.CLONE,
             statements=(f"CREATE TABLE {quoted_stage} CLONE {quoted_origin}",),
             fallback_statements=(f"CREATE TABLE {quoted_stage} COPY {quoted_origin}",),
+            is_clone_refusal=is_bigquery_clone_refusal,
         )
 
     def capture_dependent_view_rebinds(
