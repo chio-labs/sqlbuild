@@ -1,7 +1,5 @@
 from dataclasses import dataclass
 
-from sqlbuild.compiler.planner.types import MaterializationType, PlanAction
-
 
 @dataclass(frozen=True)
 class HydrationLifecycleTestCase:
@@ -42,35 +40,6 @@ class RewriteProjectTargetsTestCase:
     description: str
     selected_model_version_hashes: dict[str, str]
     expected_rewritten_name: str
-
-
-@dataclass(frozen=True)
-class SeededPlanAdaptationTestCase:
-    description: str
-    incremental_strategy: str
-    expected_action: PlanAction
-    expected_sql_fragment: str
-
-
-@dataclass(frozen=True)
-class SeededPlanNoAdaptationTestCase:
-    description: str
-    incremental_strategy: str
-    bound_version_hash: str | None
-    expected_version_hash: str
-    materialization_type: MaterializationType
-    action: PlanAction
-    cursor_bounds_enabled: bool
-    expected_action: PlanAction
-    unexpected_sql_fragment: str
-
-
-@dataclass(frozen=True)
-class SeededPlanBoundsPrecedenceTestCase:
-    description: str
-    entry_bounds_enabled: bool
-    expected_sql_fragment: str
-    unexpected_sql_fragment: str
 
 
 @dataclass(frozen=True)

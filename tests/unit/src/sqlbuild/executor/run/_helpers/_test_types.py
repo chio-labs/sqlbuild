@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from datetime import datetime
 
 from sqlbuild.adapter.contract.models import ColumnInfo, LifeCycleEvent
 from sqlbuild.executor.run.types import AuditGateReuseReason, AuditGateStatus, ExecutionPhase
@@ -169,26 +168,6 @@ class ReportedRowsAffectedTestCase:
 
 
 @dataclass(frozen=True)
-class MicrobatchCursorDiscoveryTestCase:
-    description: str
-    warehouse_column_type: str
-    cursor_min: object
-    cursor_max: object
-    cursor_type: str
-    expected_start: str
-    expected_end: str
-
-
-@dataclass(frozen=True)
-class MicrobatchCursorDiscoveryFailureTestCase:
-    description: str
-    warehouse_column_type: str
-    cursor_min: object
-    cursor_max: object
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
 class RuntimeTargetMaxTestCase:
     description: str
     target_rows: tuple[object, ...]
@@ -330,43 +309,6 @@ class PythonHookInvocationTestCase:
     expected_destination_schema: str
     expected_adapter_name: str
     expected_recorded_events: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class PermanentRequirementTestCase:
-    description: str
-    source_created_at: datetime
-    expected_operation_kind: str
-    expected_retention_days: int
-
-
-@dataclass(frozen=True)
-class PermanentPromotionTestCase:
-    description: str
-    initial_state: str
-    operation_identity: str
-    expected_timeline: tuple[str, ...]
-    expected_completion_time: datetime | None
-
-
-@dataclass(frozen=True)
-class PermanentArchiveConflictTestCase:
-    description: str
-    archive_generation_offset_seconds: int
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
-class PermanentPersistedConflictTestCase:
-    description: str
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
-class PermanentIdentifierFitTestCase:
-    description: str
-    identifier_limit: int
-    expected_prefix: str
 
 
 @dataclass(frozen=True)

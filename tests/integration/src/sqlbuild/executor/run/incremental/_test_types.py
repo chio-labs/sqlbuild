@@ -95,16 +95,3 @@ class IncrementalFailureTestCase:
     future_cursor_config: FutureCursorsConfig | None = None
     invocation_time: datetime | None = None
     expected_has_future_cursor_safety: bool = False
-
-
-@dataclass(frozen=True)
-class IncrementalSeedReuseFailureTestCase:
-    description: str
-    origin_sql: str
-    input_sql: str
-    model_sql: str
-    fingerprint_version_hash: str
-    expected_status: ExecutionStatus
-    expected_failed_phase: ExecutionPhase
-    expected_error_fragments: tuple[str, ...]
-    expected_target_exists: bool
