@@ -34,3 +34,11 @@ pub(crate) struct ExpectedColumnsTestCase {
     pub(crate) sql: &'static str,
     pub(crate) expected_columns: Option<&'static [&'static str]>,
 }
+
+pub(crate) struct TopLevelScanTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_unions: Result<Vec<&'static str>, String>,
+    pub(crate) expected_commas: Result<Vec<&'static str>, String>,
+    pub(crate) expected_from: Result<Option<usize>, String>,
+}
