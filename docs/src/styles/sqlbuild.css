@@ -287,6 +287,13 @@ starlight-toc a[aria-current='true']:hover {
 	line-height: 1.5;
 }
 
+@media (max-width: 50rem) {
+	.sl-markdown-content table {
+		display: block;
+		overflow-x: auto;
+	}
+}
+
 .sl-markdown-content :is(th, td) {
 	border: 0;
 	border-bottom: 1px solid var(--sqb-line);
