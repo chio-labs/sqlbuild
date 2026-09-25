@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+from sqlbuild.compiler.migrations.constants import MIGRATION_TABLE_NAME
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.executor.audit_results.constants import AUDIT_RESULTS_TABLE_NAME
 from sqlbuild.executor.janitor_events.constants import JANITOR_EVENTS_TABLE_NAME
@@ -16,6 +17,7 @@ BUILT_IN_EXCLUDE_PATTERNS: tuple[str, ...] = (
     NODE_RESULTS_TABLE_NAME,
     AUDIT_RESULTS_TABLE_NAME,
     JANITOR_EVENTS_TABLE_NAME,
+    MIGRATION_TABLE_NAME,
 )
 
 DIRECT_DEFAULT_RETENTION_DAYS: int = 14

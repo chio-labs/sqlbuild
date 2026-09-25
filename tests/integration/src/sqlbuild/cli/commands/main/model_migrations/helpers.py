@@ -84,6 +84,7 @@ JANITOR_PROJECT_TOML: str = dedent(
     [janitor]
     enabled = true
     archive_retention_days = 0
+    delete_tracked_only = false
     """
 ).lstrip()
 RAW_SOURCES_YML: str = dedent(
@@ -710,3 +711,19 @@ def fail_nothing_in_build(*, monkeypatch: pytest.MonkeyPatch, model_name: str) -
     """Install no build failure."""
 
     del monkeypatch, model_name
+
+
+def state_tables(*, project_dir: Path, schema: str) -> tuple[str, ...]:
+    """Return the SQLBuild state tables present in one schema."""
+
+    return tuple(
+        str(row[0])
+        for row in query(
+            project_dir=project_dir,
+            sql=(
+                "SELECT table_name FROM information_schema.tables "
+                f"WHERE table_schema = '{schema}' AND starts_with(table_name, '_sqlbuild_') "
+                "ORDER BY 1"
+            ),
+        )
+    )

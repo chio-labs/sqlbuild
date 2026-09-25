@@ -105,8 +105,10 @@ class StagedPlanOutputTestCase:
 @dataclass(frozen=True)
 class MigrationArchiveExpiryTestCase:
     description: str
+    janitor_retention_days: str
     expected_archives_before: int
     expected_relations_after: tuple[str, ...]
+    expected_migration_state_kept: bool
 
 
 @dataclass(frozen=True)

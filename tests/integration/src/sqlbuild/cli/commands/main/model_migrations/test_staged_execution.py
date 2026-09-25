@@ -32,6 +32,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.model_migrations.helpers i
     plan_json,
     prepare_forced_replace,
     run_sqb,
+    state_tables,
 )
 
 _STAGE: str = "migration_stage"
@@ -151,9 +152,18 @@ def test_given_forced_replace_when_planning_then_reports_transfer_and_promotion(
     [
         MigrationArchiveExpiryTestCase(
             description="janitor expires abandoned stages and displaced destinations only",
+            janitor_retention_days="30",
             expected_archives_before=2,
             expected_relations_after=("stg_customer_orders", "stg_orders"),
-        )
+            expected_migration_state_kept=True,
+        ),
+        MigrationArchiveExpiryTestCase(
+            description="janitor removing stale relations still keeps the migration state table",
+            janitor_retention_days="0",
+            expected_archives_before=2,
+            expected_relations_after=("stg_customer_orders",),
+            expected_migration_state_kept=True,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -176,7 +186,7 @@ def test_given_migration_archives_when_janitor_runs_then_expires_them_by_name(
 
     janitor: CliRun = run_sqb(
         project_dir=tmp_path,
-        args=("janitor", "--auto-approve", "--retention-days", "30"),
+        args=("janitor", "--auto-approve", "--retention-days", test_case.janitor_retention_days),
         capsys=capsys,
     )
 
@@ -191,6 +201,9 @@ def test_given_migration_archives_when_janitor_runs_then_expires_them_by_name(
     )
     assert order_ids(project_dir=tmp_path, relation=f"dev.{DESTINATION_MODEL}") == tuple(
         range(1, 6)
+    )
+    assert ("_sqlbuild_migrations" in state_tables(project_dir=tmp_path, schema="dev")) is (
+        test_case.expected_migration_state_kept
     )
 
 
