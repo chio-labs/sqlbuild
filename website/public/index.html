@@ -49,6 +49,7 @@
 
 		<main>
 			<div class="hero wrap">
+				<div class="hero-text">
 				<p class="eyebrow">Free and open source · Apache-2.0</p>
 				<h1>The refactorable warehouse</h1>
 				<p class="tagline">Verify early, test properly, and refactor safely.</p>
@@ -64,6 +65,17 @@
 					<a class="button primary" href="/docs/quickstart/">Read the docs</a>
 					<a class="button" href="https://github.com/chio-labs/sqlbuild">View on GitHub</a>
 				</div>
+				</div>
+				<div
+					class="terminal hero-visual"
+					role="img"
+					aria-label="A model file is moved and renamed, and sqb plan shows a migration of the existing table instead of a rebuild."
+				><span class="hv-stack"><span class="hv-a"><span class="tree"><span class="dim">models</span>
+<span class="dim">└──</span> marts
+    <span class="dim">└──</span> revenue.sql</span></span><span class="hv-b"><span class="tree"><span class="dim">models</span>
+<span class="dim">└──</span> finance
+    <span class="dim">└──</span> <span class="info">daily_revenue.sql</span></span></span></span>
+<span class="hv-l hv-l1"><span class="cmd">sqb plan</span></span><span class="hv-l hv-l2">Migrations (1)</span><span class="hv-l hv-l3"><span class="tree"><span class="dim">└──</span></span> daily_revenue  migrate  prod.revenue -&gt; prod.daily_revenue</span><span class="hv-l hv-l4"><span class="tree">    <span class="dim">├──</span></span> compatibility  compatible</span><span class="hv-l hv-l5"><span class="tree">    <span class="dim">├──</span></span> transfer  physical copy, promote by transactional rename</span><span class="hv-l hv-l6"><span class="tree">    <span class="dim">└──</span></span> discovery  automatic</span></div>
 			</div>
 
 			<section>

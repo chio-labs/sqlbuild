@@ -703,3 +703,234 @@ footer a {
 .step-group:first-child {
 	margin-top: 0;
 }
+
+/* Hero visual: a model is moved and renamed, then sqb plan shows the migration. */
+.hero {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 48px;
+	align-items: center;
+}
+
+.hero-visual {
+	border: 1px solid var(--panel-border);
+	border-left: 1px solid var(--inner-line);
+	border-radius: var(--radius);
+	min-height: 236px;
+}
+
+.hero-visual .hv-stack {
+	display: grid;
+}
+
+.hero-visual .hv-stack > * {
+	grid-area: 1 / 1;
+}
+
+.hero-visual .hv-l {
+	display: block;
+}
+
+.hero-visual .hv-l1 {
+	margin-top: 16px;
+}
+
+.hero-visual .hv-a,
+.hero-visual .hv-b,
+.hero-visual .hv-l {
+	animation-duration: 10s;
+	animation-iteration-count: infinite;
+	animation-fill-mode: both;
+	animation-timing-function: ease-out;
+}
+
+.hero-visual .hv-a {
+	animation-name: hv-a;
+}
+
+.hero-visual .hv-b {
+	animation-name: hv-b;
+}
+
+@keyframes hv-a {
+	0%,
+	15% {
+		opacity: 1;
+	}
+	18%,
+	96% {
+		opacity: 0;
+	}
+	100% {
+		opacity: 1;
+	}
+}
+
+@keyframes hv-b {
+	0%,
+	15% {
+		opacity: 0;
+	}
+	18%,
+	92% {
+		opacity: 1;
+	}
+	96%,
+	100% {
+		opacity: 0;
+	}
+}
+
+@keyframes hv-l1 {
+	0%,
+	24% {
+		opacity: 0;
+		transform: translateY(3px);
+	}
+	27%,
+	92% {
+		opacity: 1;
+		transform: none;
+	}
+	96%,
+	100% {
+		opacity: 0;
+	}
+}
+
+.hv-l1 {
+	animation-name: hv-l1;
+}
+
+@keyframes hv-l2 {
+	0%,
+	30% {
+		opacity: 0;
+		transform: translateY(3px);
+	}
+	33%,
+	92% {
+		opacity: 1;
+		transform: none;
+	}
+	96%,
+	100% {
+		opacity: 0;
+	}
+}
+
+.hv-l2 {
+	animation-name: hv-l2;
+}
+
+@keyframes hv-l3 {
+	0%,
+	33% {
+		opacity: 0;
+		transform: translateY(3px);
+	}
+	36%,
+	92% {
+		opacity: 1;
+		transform: none;
+	}
+	96%,
+	100% {
+		opacity: 0;
+	}
+}
+
+.hv-l3 {
+	animation-name: hv-l3;
+}
+
+@keyframes hv-l4 {
+	0%,
+	36% {
+		opacity: 0;
+		transform: translateY(3px);
+	}
+	39%,
+	92% {
+		opacity: 1;
+		transform: none;
+	}
+	96%,
+	100% {
+		opacity: 0;
+	}
+}
+
+.hv-l4 {
+	animation-name: hv-l4;
+}
+
+@keyframes hv-l5 {
+	0%,
+	39% {
+		opacity: 0;
+		transform: translateY(3px);
+	}
+	42%,
+	92% {
+		opacity: 1;
+		transform: none;
+	}
+	96%,
+	100% {
+		opacity: 0;
+	}
+}
+
+.hv-l5 {
+	animation-name: hv-l5;
+}
+
+@keyframes hv-l6 {
+	0%,
+	42% {
+		opacity: 0;
+		transform: translateY(3px);
+	}
+	45%,
+	92% {
+		opacity: 1;
+		transform: none;
+	}
+	96%,
+	100% {
+		opacity: 0;
+	}
+}
+
+.hv-l6 {
+	animation-name: hv-l6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.hero-visual .hv-a,
+	.hero-visual .hv-b,
+	.hero-visual .hv-l {
+		animation: none;
+	}
+
+	.hero-visual .hv-a {
+		opacity: 0;
+	}
+}
+
+@media (max-width: 1060px) {
+	.hero {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.hero-visual {
+		justify-self: start;
+	}
+}
+
+@media (max-width: 620px) {
+	.hero-visual {
+		display: none;
+	}
+}
