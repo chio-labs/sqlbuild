@@ -15,7 +15,12 @@
 		/>
 		<meta property="og:type" content="website" />
 		<meta property="og:url" content="https://sqlbuild.com/" />
-		<meta property="og:image" content="https://sqlbuild.com/assets/og-icon.png" />
+		<meta property="og:image" content="https://sqlbuild.com/assets/og-home.png" />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
+		<meta property="og:image:alt" content="SQLBuild: the refactorable warehouse. A model is moved and renamed, and sqb plan migrates the existing table." />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:image" content="https://sqlbuild.com/assets/og-home.png" />
 		<link rel="icon" type="image/png" href="assets/icon.png" />
 		<link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
 		<link rel="stylesheet" href="styles.css" />
@@ -77,7 +82,7 @@
     <span class="dim">└──</span> revenue.sql</span></span><span class="hv-b"><span class="tree"><span class="dim">models</span>
 <span class="dim">└──</span> finance
     <span class="dim">└──</span> <span class="info">daily_revenue.sql</span></span></span></span>
-<span class="hv-l hv-l1"><span class="cmd">sqb plan</span></span><span class="hv-l hv-l2">Migrations (1)</span><span class="hv-l hv-l3"><span class="tree"><span class="dim">└──</span></span> daily_revenue  migrate  prod.revenue -&gt; prod.daily_revenue</span><span class="hv-l hv-l4"><span class="tree">    <span class="dim">├──</span></span> compatibility  compatible</span><span class="hv-l hv-l5"><span class="tree">    <span class="dim">├──</span></span> transfer  physical copy, promote by staged rename</span><span class="hv-l hv-l6"><span class="tree">    <span class="dim">└──</span></span> discovery  automatic</span></div>
+<span class="hv-l hv-l1"><span class="cmd">sqb plan</span></span><span class="hv-l hv-l2">Migrations (1)</span><span class="hv-l hv-l3"><span class="tree"><span class="dim">└──</span></span> daily_revenue  migrate<span class="hv-wide">  prod.revenue -&gt; prod.daily_revenue</span></span><span class="hv-l hv-l4"><span class="tree">    <span class="dim">├──</span></span> compatibility  compatible</span><span class="hv-l hv-l5"><span class="tree">    <span class="dim">├──</span></span> transfer  physical copy<span class="hv-wide">, promote by staged rename</span></span><span class="hv-l hv-l6"><span class="tree">    <span class="dim">└──</span></span> discovery  automatic</span></div>
 			</div>
 
 			<section>

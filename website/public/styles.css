@@ -960,6 +960,10 @@ footer a {
 
 @media (max-width: 620px) {
 	.hero-visual {
+		justify-self: stretch;
+	}
+
+	.hero-visual .hv-wide {
 		display: none;
 	}
 }
