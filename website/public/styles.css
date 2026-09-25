@@ -465,6 +465,14 @@ h3 {
 	color: var(--stale);
 }
 
+.terminal .info {
+	color: var(--primary);
+}
+
+.terminal .strong {
+	font-weight: 500;
+}
+
 .step-text code,
 .grid code,
 .caption code {
