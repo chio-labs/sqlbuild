@@ -175,3 +175,12 @@ class RestoreFailureTestCase:
     body: str
     fixed_neutralized: str
     expected_message_fragment: str
+
+
+@dataclass(frozen=True)
+class UnicodePreparationTestCase:
+    """A Unicode prefix followed by formatter-sensitive SQLBuild intrinsics."""
+
+    description: str
+    prefix: str
+    expected_lint_calls: tuple[str, ...]

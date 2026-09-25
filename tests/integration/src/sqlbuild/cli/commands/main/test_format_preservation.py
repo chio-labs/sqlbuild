@@ -239,5 +239,62 @@ def test_given_cte_macros_and_comments_when_formatting_then_layout_and_rules_sta
     assert payload["findings"] == []
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FormatterSyntaxTestCase(
+            f"Unicode restoration after {prefix}",
+            f"WITH orders AS (SELECT '{prefix}' AS label, order_id, payload FROM __ref(\"raw_orders\")),\n"
+            "values_input AS (SELECT column1 AS order_flag FROM VALUES (1)),\n"
+            f'-- Stage {prefix} orders.\n@copy_orders("staged_orders", "orders"),\n'
+            "final AS (SELECT label, "
+            f"CAST(order_id AS NUMERIC(/* type {prefix} */ 10, 2)) AS order_id, "
+            "payload:customer.name::VARCHAR AS customer_name, __cursor_start() AS start_at, "
+            "__cursor_end() AS end_at, FIRST_VALUE(order_id IGNORE NULLS) OVER (ORDER BY order_id) AS first_id, "
+            f"POSITION('{prefix}' IN label) AS label_position FROM staged_orders s CROSS JOIN values_input) SELECT * FROM final",
+            (
+                f"'{prefix}'",
+                f"-- Stage {prefix} orders.",
+                f"/* type {prefix} */",
+                "NUMERIC(",
+                "payload:customer.name::VARCHAR",
+                '__ref("raw_orders")',
+                "__cursor_start()",
+                "__cursor_end()",
+                "FROM VALUES (1)",
+                "FIRST_VALUE(order_id IGNORE NULLS)",
+                f"POSITION('{prefix}' IN label)",
+                '\n@copy_orders("staged_orders", "orders"),\n',
+                "\nfinal AS (",
+            ),
+        )
+        for prefix in ("é", "€", "😀", "é € 😀")
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_multibyte_text_before_restorations_when_formatting_then_output_is_preserved(
+    test_case: FormatterSyntaxTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "snowflake"\n')
+    macros: Path = tmp_path / "models" / "_macros"
+    macros.mkdir(parents=True)
+    (macros / "orders.py").write_text(
+        "def copy_orders(name: str, source: str) -> str:\n"
+        '    return f"{name} AS (SELECT * FROM {source})"\n'
+    )
+    model: Path = tmp_path / "models" / "order_summary.sql"
+    model.write_text(
+        'MODEL (description "Orders é € 😀");\n' + test_case.sql + "\n", encoding="utf-8"
+    )
+    assert main(["--project-dir", str(tmp_path), "format", "--json"]) == 0
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    assert payload["faults"] == 0
+    formatted: str = model.read_text(encoding="utf-8")
+    assert all(fragment in formatted for fragment in test_case.expected_fragments)
+    assert 'description "Orders é € 😀"' in formatted
+    assert main(["--project-dir", str(tmp_path), "format", "--check", "--json"]) == 0
+    assert model.read_text(encoding="utf-8") == formatted
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-vv"])
