@@ -13,6 +13,7 @@ from sqlbuild.lint._helpers.sqlbuild_tokens import (
 from sqlbuild.lint.exceptions import InterpolationRestorationError
 from sqlbuild.lint.models import InterpolationSite
 from tests.unit.src.sqlbuild.lint._helpers._test_types import (
+    DialectNeutralizeInterpolationTestCase,
     MapOffsetTestCase,
     NeutralizeInterpolationTestCase,
     RestoreFailureTestCase,
@@ -147,11 +148,75 @@ def test_given_body_when_neutralizing_then_sentinels_replace_interpolation(
 ) -> None:
     neutralized: str
     sites: tuple[InterpolationSite, ...]
-    neutralized, sites = neutralize_interpolation(body=test_case.body)
+    neutralized, sites = neutralize_interpolation(body=test_case.body, dialect="generic")
     assert neutralized == test_case.expected_neutralized
     assert tuple(site.original_text for site in sites) == test_case.expected_original_texts
     native: tuple[str, list[tuple[str, int, int, int, int, str]], list[str]] | None = (
-        _native.prepare_lint_sql(test_case.body, test_case.body, [])
+        _native.prepare_lint_sql(
+            {
+                "expanded": test_case.body,
+                "before_expansion": test_case.body,
+                "prior_sites": [],
+                "dialect": "generic",
+            }
+        )
+    )
+    assert native is not None
+    assert native[0] == test_case.expected_neutralized
+    assert tuple(InterpolationSite(*site) for site in native[1]) == sites
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DialectNeutralizeInterpolationTestCase(
+            description="databricks backtick keeps a close paren inside a macro call",
+            dialect="databricks",
+            body="SELECT @m(`a)b` x) AS y",
+            expected_neutralized="SELECT __sqb_lint_0__ AS y",
+            expected_original_texts=("@m(`a)b` x)",),
+        ),
+        DialectNeutralizeInterpolationTestCase(
+            description="bigquery backtick apostrophe does not hide a later macro",
+            dialect="bigquery",
+            body='SELECT `customer\'s id` AS customer_id, @label("order_id") AS order_id',
+            expected_neutralized="SELECT `customer's id` AS customer_id, __sqb_lint_0__ AS order_id",
+            expected_original_texts=('@label("order_id")',),
+        ),
+        DialectNeutralizeInterpolationTestCase(
+            description="postgres backtick remains ordinary code",
+            dialect="postgres",
+            body="SELECT @m(`a)b` x) AS y",
+            expected_neutralized="SELECT __sqb_lint_0__b` x) AS y",
+            expected_original_texts=("@m(`a)",),
+        ),
+        DialectNeutralizeInterpolationTestCase(
+            description="sqlserver backtick remains ordinary code",
+            dialect="tsql",
+            body="SELECT @m(`a)b` x) AS y",
+            expected_neutralized="SELECT __sqb_lint_0__b` x) AS y",
+            expected_original_texts=("@m(`a)",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_dialect_quoting_when_neutralizing_then_python_and_native_sites_agree(
+    test_case: DialectNeutralizeInterpolationTestCase,
+) -> None:
+    neutralized: str
+    sites: tuple[InterpolationSite, ...]
+    neutralized, sites = neutralize_interpolation(body=test_case.body, dialect=test_case.dialect)
+    assert neutralized == test_case.expected_neutralized
+    assert tuple(site.original_text for site in sites) == test_case.expected_original_texts
+    native: tuple[str, list[tuple[str, int, int, int, int, str]], list[str]] | None = (
+        _native.prepare_lint_sql(
+            {
+                "expanded": test_case.body,
+                "before_expansion": test_case.body,
+                "prior_sites": [],
+                "dialect": test_case.dialect,
+            }
+        )
     )
     assert native is not None
     assert native[0] == test_case.expected_neutralized
@@ -177,7 +242,7 @@ def test_given_many_sites_when_neutralizing_then_every_sentinel_is_distinct(
 ) -> None:
     neutralized: str
     sites: tuple[InterpolationSite, ...]
-    neutralized, sites = neutralize_interpolation(body=test_case.body)
+    neutralized, sites = neutralize_interpolation(body=test_case.body, dialect="generic")
     assert neutralized == test_case.expected_neutralized
     sentinels: tuple[str, ...] = tuple(site.sentinel for site in sites)
     assert len(set(sentinels)) == len(test_case.expected_original_texts)
@@ -223,7 +288,7 @@ def test_given_neutralized_offset_when_mapping_then_authored_offset_matches(
     test_case: MapOffsetTestCase,
 ) -> None:
     sites: tuple[InterpolationSite, ...]
-    _neutralized, sites = neutralize_interpolation(body=test_case.body)
+    _neutralized, sites = neutralize_interpolation(body=test_case.body, dialect="generic")
     mapped: int = map_neutralized_offset(offset=test_case.neutralized_offset, sites=sites)
     assert mapped == test_case.expected_original_offset
 
@@ -283,7 +348,7 @@ def test_given_fixed_text_when_restoring_then_original_interpolation_returns(
     test_case: RestoreInterpolationTestCase,
 ) -> None:
     sites: tuple[InterpolationSite, ...]
-    _neutralized, sites = neutralize_interpolation(body=test_case.body)
+    _neutralized, sites = neutralize_interpolation(body=test_case.body, dialect="generic")
     restored: str = restore_interpolation(fixed=test_case.fixed_neutralized, sites=sites)
     assert restored == test_case.expected_restored
 
@@ -310,7 +375,7 @@ def test_given_mangled_sentinels_when_restoring_then_error_is_raised(
     test_case: RestoreFailureTestCase,
 ) -> None:
     sites: tuple[InterpolationSite, ...]
-    _neutralized, sites = neutralize_interpolation(body=test_case.body)
+    _neutralized, sites = neutralize_interpolation(body=test_case.body, dialect="generic")
     with pytest.raises(InterpolationRestorationError) as error:
         _ = restore_interpolation(fixed=test_case.fixed_neutralized, sites=sites)
     assert test_case.expected_message_fragment in str(error.value)

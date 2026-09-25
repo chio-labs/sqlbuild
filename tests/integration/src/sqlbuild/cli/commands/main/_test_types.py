@@ -150,6 +150,15 @@ class FormatCompileIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class BacktickDialectFormatIntegrationTestCase:
+    """One backtick-identifier adapter whose macro call must survive formatting."""
+
+    description: str
+    adapter: str
+    expected_literal: str
+
+
+@dataclass(frozen=True)
 class DescriptionFormatIntegrationTestCase:
     """One description wrapping expectation through the real CLI and compiler."""
 

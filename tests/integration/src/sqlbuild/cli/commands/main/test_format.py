@@ -10,6 +10,7 @@ from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    BacktickDialectFormatIntegrationTestCase,
     CanonicalFixtureFormatIntegrationTestCase,
     DescriptionFormatIntegrationTestCase,
     FormatCompileIntegrationTestCase,
@@ -926,3 +927,50 @@ def test_given_leading_cte_comment_when_formatting_then_comment_rule_still_passe
     assert test_case.expected_fragment in formatted_sql
     assert model_path.read_text(encoding="utf-8") == formatted_sql
     assert "SQBRSQL033" not in output.out + output.err
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BacktickDialectFormatIntegrationTestCase(
+            description="databricks apostrophe inside a backtick identifier keeps the macro",
+            adapter="databricks",
+            expected_literal='@label("order_id") AS order_id',
+        ),
+        BacktickDialectFormatIntegrationTestCase(
+            description="bigquery apostrophe inside a backtick identifier keeps the macro",
+            adapter="bigquery",
+            expected_literal='@label("order_id") AS order_id',
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_backtick_identifier_apostrophe_when_formatting_then_macro_call_still_compiles(
+    test_case: BacktickDialectFormatIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "orders"\nadapter = "{test_case.adapter}"\n', encoding="utf-8"
+    )
+    macros: Path = tmp_path / "models" / "_macros"
+    macros.mkdir(parents=True)
+    (macros / "labels.py").write_text(
+        'def label(expression: str) -> str:\n    """Return one column expression."""\n'
+        "    return expression\n",
+        encoding="utf-8",
+    )
+    model_path: Path = tmp_path / "models" / "orders.sql"
+    model_path.write_text(
+        'MODEL (description "Orders", database warehouse, schema analytics);\n\n'
+        'select   `customer\'s id` as customer_id, @label("order_id") as order_id '
+        "from raw_orders\n",
+        encoding="utf-8",
+    )
+
+    format_exit: int = main(["--project-dir", str(tmp_path), "--no-color", "format"])
+    compile_exit: int = main(["--project-dir", str(tmp_path), "--no-color", "compile"])
+    output: CaptureResult[str] = capsys.readouterr()
+
+    assert (format_exit, compile_exit) == (0, 0), output.out + output.err
+    assert test_case.expected_literal in model_path.read_text(encoding="utf-8")

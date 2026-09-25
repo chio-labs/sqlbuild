@@ -1,5 +1,5 @@
 use crate::compiler::_helpers::sql_references::extraction::extract;
-use crate::engine::tests::test_types::SqlScannerTestCase;
+use crate::engine::tests::test_types::{LintDialectSiteTestCase, SqlScannerTestCase};
 use crate::rules::_helpers::evaluation::{normalize_rules_sql, rules_quote_policy};
 use crate::rules::_helpers::numeric_decisions::compact_sql;
 use crate::sql_lint::_helpers::preparation::prepare;
@@ -282,7 +282,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             test_case.description
         );
         let lint_sql = format!("SELECT @m({fragment} x) AS y");
-        let lint_site = prepare(&lint_sql, &lint_sql, &[])?.map(|prepared| {
+        let lint_site = prepare(&lint_sql, &lint_sql, &[], "postgres")?.map(|prepared| {
             prepared
                 .1
                 .first()
@@ -299,6 +299,61 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             extract(&format!("SELECT {fragment} __ref('b')")).is_some(),
             test_case.expected_reference_fast_path,
             "SQL reference fast path: {}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn given_lint_dialect_when_preparing_macro_sites_then_backticks_follow_rules_quoting()
+-> Result<(), String> {
+    let test_cases = [
+        LintDialectSiteTestCase {
+            description: "databricks backtick containing close paren",
+            dialect: "databricks",
+            fragment: "`a)b`",
+            expected_lint_site: "@m(`a)b` x)",
+        },
+        LintDialectSiteTestCase {
+            description: "bigquery doubled backtick",
+            dialect: "bigquery",
+            fragment: "`a``)b`",
+            expected_lint_site: "@m(`a``)b` x)",
+        },
+        LintDialectSiteTestCase {
+            description: "databricks single quote inside backticks",
+            dialect: "databricks",
+            fragment: "`it's)`",
+            expected_lint_site: "@m(`it's)` x)",
+        },
+        LintDialectSiteTestCase {
+            description: "databricks backslash in single quote still escapes",
+            dialect: "databricks",
+            fragment: "'a\\')'",
+            expected_lint_site: "@m('a\\')' x)",
+        },
+        LintDialectSiteTestCase {
+            description: "postgres backtick remains code",
+            dialect: "postgres",
+            fragment: "`a)b`",
+            expected_lint_site: "@m(`a)",
+        },
+        LintDialectSiteTestCase {
+            description: "sqlserver backtick remains code",
+            dialect: "tsql",
+            fragment: "`a)b`",
+            expected_lint_site: "@m(`a)",
+        },
+    ];
+    for test_case in test_cases {
+        let lint_sql = format!("SELECT @m({} x) AS y", test_case.fragment);
+        let lint_site = prepare(&lint_sql, &lint_sql, &[], test_case.dialect)?
+            .and_then(|prepared| prepared.1.first().map(|site| site.5.clone()))
+            .unwrap_or_default();
+        assert_eq!(
+            lint_site, test_case.expected_lint_site,
+            "SQL lint macro site: {}",
             test_case.description
         );
     }
