@@ -260,13 +260,6 @@ class StateBackend(ABC):
         ...
 
     @abstractmethod
-    def get_physical_relation_ancestry(
-        self, *, connection: Any, schema: str, model_name: str, version_hash: str
-    ) -> PhysicalRelationAncestryRecord | None:
-        """Return physical relation ancestry if it exists."""
-        ...
-
-    @abstractmethod
     def upsert_virtual_environment(
         self, *, connection: Any, schema: str, record: VirtualEnvironmentRecord
     ) -> None:
@@ -391,34 +384,10 @@ class StateBackend(ABC):
         ...
 
     @abstractmethod
-    def replace_virtual_environment_function_refs(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        virtual_environment_name: str,
-        refs: tuple[VirtualEnvironmentFunctionRefRecord, ...],
-    ) -> None:
-        """Replace all function refs for a virtual environment."""
-        ...
-
-    @abstractmethod
     def get_virtual_environment_function_refs(
         self, *, connection: Any, schema: str, virtual_environment_name: str
     ) -> tuple[VirtualEnvironmentFunctionRefRecord, ...]:
         """Return function refs for a virtual environment."""
-        ...
-
-    @abstractmethod
-    def replace_virtual_environment_seed_refs(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        virtual_environment_name: str,
-        refs: tuple[VirtualEnvironmentSeedRefRecord, ...],
-    ) -> None:
-        """Replace all seed refs for a virtual environment."""
         ...
 
     @abstractmethod

@@ -303,11 +303,6 @@ class FakeStateBackend(StateBackend):
     ) -> None:
         return None
 
-    def get_physical_relation_ancestry(
-        self, connection: Any, *, schema: str, model_name: str, version_hash: str
-    ) -> PhysicalRelationAncestryRecord | None:
-        return None
-
     def upsert_virtual_environment(
         self, connection: Any, *, schema: str, record: VirtualEnvironmentRecord
     ) -> None:
@@ -431,30 +426,10 @@ class FakeStateBackend(StateBackend):
     ) -> tuple[SourceFreshnessRecord, ...]:
         return ()
 
-    def replace_virtual_environment_function_refs(
-        self,
-        connection: Any,
-        *,
-        schema: str,
-        virtual_environment_name: str,
-        refs: tuple[VirtualEnvironmentFunctionRefRecord, ...],
-    ) -> None:
-        return None
-
     def get_virtual_environment_function_refs(
         self, connection: Any, *, schema: str, virtual_environment_name: str
     ) -> tuple[VirtualEnvironmentFunctionRefRecord, ...]:
         return ()
-
-    def replace_virtual_environment_seed_refs(
-        self,
-        connection: Any,
-        *,
-        schema: str,
-        virtual_environment_name: str,
-        refs: tuple[VirtualEnvironmentSeedRefRecord, ...],
-    ) -> None:
-        return None
 
     def get_virtual_environment_seed_refs(
         self, connection: Any, *, schema: str, virtual_environment_name: str

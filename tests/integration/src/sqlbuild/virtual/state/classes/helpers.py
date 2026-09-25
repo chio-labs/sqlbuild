@@ -348,14 +348,16 @@ def exercise_state_ref_contract(
             connection=connection, schema=schema, virtual_environment_name="dev", node_type="seed"
         )
     )
-    backend.replace_virtual_environment_function_refs(
+    backend.replace_virtual_environment_node_ref_groups(
         connection=connection,
         schema=schema,
         virtual_environment_name="dev",
-        refs=(
-            VirtualEnvironmentFunctionRefRecord("dev", "table_fn", "customer_orders", "fn-v1"),
-            VirtualEnvironmentFunctionRefRecord("dev", "udf", "normalize_email", "fn-v2"),
-        ),
+        refs_by_node_type={
+            "table_fn": (
+                VirtualEnvironmentNodeRefRecord("dev", "table_fn", "customer_orders", "fn-v1"),
+            ),
+            "udf": (VirtualEnvironmentNodeRefRecord("dev", "udf", "normalize_email", "fn-v2"),),
+        },
     )
     function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = (
         backend.get_virtual_environment_function_refs(

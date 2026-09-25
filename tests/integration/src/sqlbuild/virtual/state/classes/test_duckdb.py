@@ -45,7 +45,6 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
     PythonNodeVersionRecord,
     ReconcileEventRecord,
-    SeedVersionRecord,
     SourceFreshnessRecord,
     StateLockLease,
     StateLockRecord,
@@ -55,7 +54,6 @@ from sqlbuild.virtual.state.models import (
     VirtualEnvironmentCheckpointFunctionRefRecord,
     VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
-    VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentFunctionRefRecord,
     VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentNodeRefRecord,
@@ -92,7 +90,6 @@ from tests.integration.src.sqlbuild.virtual.state.classes._test_types import (
     DuckDbStateBackendPythonNodeIdentityTestCase,
     DuckDbStateBackendRefContractTestCase,
     DuckDbStateBackendRollbackTestCase,
-    DuckDbStateBackendSeedRefTestCase,
     DuckDbStateBackendSourceFreshnessTestCase,
     DuckDbStateBackendTableCreationTestCase,
     DuckDbStateBackendTransactionRollbackTestCase,
@@ -1066,14 +1063,16 @@ def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips
                 ),
             ),
         )
-        backend.replace_virtual_environment_seed_refs(
+        backend.replace_virtual_environment_node_refs(
             connection=connection,
             schema=test_case.schema,
             virtual_environment_name=test_case.expected_virtual_environment_name,
+            node_type="seed",
             refs=(
-                VirtualEnvironmentSeedRefRecord(
+                VirtualEnvironmentNodeRefRecord(
                     virtual_environment_name=test_case.expected_virtual_environment_name,
-                    seed_name=test_case.expected_model_name,
+                    node_type="seed",
+                    node_name=test_case.expected_model_name,
                     version_hash="seed123",
                 ),
             ),
@@ -1106,15 +1105,6 @@ def test_given_duckdb_state_backend_when_upserting_core_records_then_round_trips
                 version_hash=test_case.expected_version_hash,
             )
             == replaced_relation_record
-        )
-        assert (
-            backend.get_physical_relation_ancestry(
-                connection=connection,
-                schema=test_case.schema,
-                model_name=test_case.expected_model_name,
-                version_hash=test_case.expected_version_hash,
-            )
-            == ancestry_record
         )
         assert (
             backend.get_virtual_environment(
@@ -1231,14 +1221,16 @@ def test_given_duckdb_state_backend_when_atomic_vde_ref_update_fails_then_rolls_
                 ),
             ),
         )
-        backend.replace_virtual_environment_seed_refs(
+        backend.replace_virtual_environment_node_refs(
             connection=connection,
             schema=test_case.schema,
             virtual_environment_name=test_case.virtual_environment_name,
+            node_type="seed",
             refs=(
-                VirtualEnvironmentSeedRefRecord(
+                VirtualEnvironmentNodeRefRecord(
                     virtual_environment_name=test_case.virtual_environment_name,
-                    seed_name=test_case.seed_name,
+                    node_type="seed",
+                    node_name=test_case.seed_name,
                     version_hash=test_case.expected_original_seed_hash,
                 ),
             ),
@@ -1683,172 +1675,6 @@ def test_given_duckdb_state_backend_when_replacing_source_freshness_then_round_t
 @pytest.mark.parametrize(
     "test_case",
     [
-        DuckDbStateBackendSeedRefTestCase(
-            description="persists seed versions and replaces seed refs",
-            schema="sqlbuild_state",
-            sqlbuild_version="0.0.test",
-            virtual_environment_name="dev",
-            seed_name="country_codes",
-            version_hash="seed123",
-            identity_metadata_hash="meta123",
-            identity_metadata_json_b64="e30=",
-            replacement_version_hash="seed456",
-            expected_ref_count_after_replace=0,
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_duckdb_state_backend_when_replacing_seed_refs_then_round_trips_records(
-    test_case: DuckDbStateBackendSeedRefTestCase,
-    tmp_path: Path,
-) -> None:
-    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
-    try:
-        backend.initialize(
-            connection=connection,
-            schema=test_case.schema,
-            sqlbuild_version=test_case.sqlbuild_version,
-        )
-        seed_version: SeedVersionRecord = SeedVersionRecord(
-            seed_name=test_case.seed_name,
-            version_hash=test_case.version_hash,
-            identity_metadata_hash=test_case.identity_metadata_hash,
-            identity_metadata_json_b64=test_case.identity_metadata_json_b64,
-            status=ModelVersionStatus.READY,
-        )
-        backend.upsert_seed_version(
-            connection=connection, schema=test_case.schema, record=seed_version
-        )
-        backend.replace_virtual_environment_seed_refs(
-            connection=connection,
-            schema=test_case.schema,
-            virtual_environment_name=test_case.virtual_environment_name,
-            refs=(
-                VirtualEnvironmentSeedRefRecord(
-                    virtual_environment_name=test_case.virtual_environment_name,
-                    seed_name=test_case.seed_name,
-                    version_hash=test_case.version_hash,
-                ),
-            ),
-        )
-
-        assert (
-            backend.get_seed_version(
-                connection=connection,
-                schema=test_case.schema,
-                seed_name=test_case.seed_name,
-                version_hash=test_case.version_hash,
-            )
-            == seed_version
-        )
-        refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
-            backend.get_virtual_environment_seed_refs(
-                connection=connection,
-                schema=test_case.schema,
-                virtual_environment_name=test_case.virtual_environment_name,
-            )
-        )
-        assert refs == (
-            VirtualEnvironmentSeedRefRecord(
-                virtual_environment_name=test_case.virtual_environment_name,
-                seed_name=test_case.seed_name,
-                version_hash=test_case.version_hash,
-            ),
-        )
-
-        backend.replace_virtual_environment_seed_refs(
-            connection=connection,
-            schema=test_case.schema,
-            virtual_environment_name=test_case.virtual_environment_name,
-            refs=(),
-        )
-        assert (
-            len(
-                backend.get_virtual_environment_seed_refs(
-                    connection=connection,
-                    schema=test_case.schema,
-                    virtual_environment_name=test_case.virtual_environment_name,
-                )
-            )
-            == test_case.expected_ref_count_after_replace
-        )
-        backend.replace_virtual_environment_seed_refs(
-            connection=connection,
-            schema=test_case.schema,
-            virtual_environment_name=test_case.virtual_environment_name,
-            refs=(
-                VirtualEnvironmentSeedRefRecord(
-                    virtual_environment_name=test_case.virtual_environment_name,
-                    seed_name=test_case.seed_name,
-                    version_hash=test_case.version_hash,
-                ),
-            ),
-        )
-        backend.delete_virtual_environment(
-            connection=connection,
-            schema=test_case.schema,
-            virtual_environment_name=test_case.virtual_environment_name,
-        )
-        assert (
-            backend.get_virtual_environment_seed_refs(
-                connection=connection,
-                schema=test_case.schema,
-                virtual_environment_name=test_case.virtual_environment_name,
-            )
-            == ()
-        )
-
-        checkpoint: VirtualEnvironmentCheckpointRecord = VirtualEnvironmentCheckpointRecord(
-            checkpoint_id="chk_seed",
-            virtual_environment_name=test_case.virtual_environment_name,
-        )
-        backend.create_virtual_environment_checkpoint(
-            connection=connection,
-            schema=test_case.schema,
-            checkpoint=checkpoint,
-            refs=(),
-            seed_refs=(
-                VirtualEnvironmentCheckpointSeedRefRecord(
-                    checkpoint_id=checkpoint.checkpoint_id,
-                    seed_name=test_case.seed_name,
-                    version_hash=test_case.version_hash,
-                ),
-            ),
-        )
-        checkpoint_seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (
-            backend.get_virtual_environment_checkpoint_seed_refs(
-                connection=connection,
-                schema=test_case.schema,
-                checkpoint_id=checkpoint.checkpoint_id,
-            )
-        )
-        assert checkpoint_seed_refs == (
-            VirtualEnvironmentCheckpointSeedRefRecord(
-                checkpoint_id=checkpoint.checkpoint_id,
-                seed_name=test_case.seed_name,
-                version_hash=test_case.version_hash,
-            ),
-        )
-        backend.delete_virtual_environment_checkpoint(
-            connection=connection,
-            schema=test_case.schema,
-            checkpoint_id=checkpoint.checkpoint_id,
-        )
-        assert (
-            backend.get_virtual_environment_checkpoint_seed_refs(
-                connection=connection,
-                schema=test_case.schema,
-                checkpoint_id=checkpoint.checkpoint_id,
-            )
-            == ()
-        )
-    finally:
-        backend.close(connection)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
         DuckDbStateBackendErrorTestCase(
             description="blocks mismatched source freshness virtual environment",
             schema="sqlbuild_state",
@@ -2165,18 +1991,21 @@ def test_given_duckdb_state_backend_when_upserting_function_records_then_round_t
             )
             == function_record
         )
-        backend.replace_virtual_environment_function_refs(
+        backend.replace_virtual_environment_node_ref_groups(
             connection=connection,
             schema=test_case.schema,
             virtual_environment_name=test_case.expected_virtual_environment_name,
-            refs=(
-                VirtualEnvironmentFunctionRefRecord(
-                    virtual_environment_name=test_case.expected_virtual_environment_name,
-                    node_type="udf",
-                    function_name=test_case.expected_model_name,
-                    version_hash=test_case.expected_version_hash,
+            refs_by_node_type={
+                "udf": (
+                    VirtualEnvironmentNodeRefRecord(
+                        virtual_environment_name=test_case.expected_virtual_environment_name,
+                        node_type="udf",
+                        node_name=test_case.expected_model_name,
+                        version_hash=test_case.expected_version_hash,
+                    ),
                 ),
-            ),
+                "table_fn": (),
+            },
         )
         function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = (
             backend.get_virtual_environment_function_refs(
