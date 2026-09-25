@@ -85,23 +85,3 @@ def validate_compile_dbt_model_reference(
         package_name=reference.ref_package,
         name=reference.ref_name,
     )
-
-
-def resolve_compile_dbt_ref_references(
-    *, query_sql: str, dbt_manifest: DbtManifestIndex | None
-) -> str:
-    """Replace model __dbt_ref() calls with dbt manifest relation names."""
-
-    if dbt_manifest is None:
-        return query_sql
-
-    def _replace_dbt_ref(match: re.Match[str]) -> str:
-        first_arg: str = match.group(1)
-        second_arg: str | None = match.group(2)
-        return resolve_dbt_manifest_model(
-            manifest=dbt_manifest,
-            package_name=first_arg if second_arg is not None else None,
-            name=second_arg if second_arg is not None else first_arg,
-        ).relation_name
-
-    return _DBT_REF_PATTERN.sub(_replace_dbt_ref, query_sql)

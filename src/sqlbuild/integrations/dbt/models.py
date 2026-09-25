@@ -103,15 +103,6 @@ class DbtCliConfigOverrides:
     target: str | None = None
     target_path: str | None = None
 
-    @property
-    def has_any(self) -> bool:
-        """Return whether any dbt CLI config flag was supplied."""
-
-        return any(
-            value is not None
-            for value in (self.project_dir, self.profiles_dir, self.target, self.target_path)
-        )
-
 
 @dataclass(frozen=True)
 class ResolvedDbtConfig:
