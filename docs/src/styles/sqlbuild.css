@@ -258,10 +258,8 @@ site-search dialog {
 .sqb-card-group {
 	display: grid;
 	grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr));
-	gap: 1px;
-	margin-top: 1rem;
-	background: var(--sqb-line);
-	border: 1px solid var(--sqb-line);
+	gap: 12px;
+	margin-top: 1.25rem;
 }
 
 @media (max-width: 50rem) {
@@ -273,10 +271,11 @@ site-search dialog {
 .sl-markdown-content .sqb-card {
 	display: flex;
 	flex-direction: column;
-	gap: 0.3rem;
 	margin: 0;
-	padding: 1.1rem 1.2rem;
-	background: var(--sqb-bg);
+	padding: 18px 20px;
+	border: 1px solid var(--sqb-line-strong);
+	border-radius: 2px;
+	background: var(--sqb-panel);
 	color: var(--sqb-muted);
 	text-decoration: none;
 	font-size: 14px;
@@ -284,7 +283,12 @@ site-search dialog {
 }
 
 .sl-markdown-content a.sqb-card:hover {
-	background: var(--sqb-accent-soft);
+	border-color: var(--sqb-primary);
+}
+
+.sqb-card-icon {
+	margin-bottom: 12px;
+	color: var(--sqb-primary);
 }
 
 .sqb-card-title {
@@ -293,11 +297,11 @@ site-search dialog {
 	font-size: 15px;
 }
 
-.sl-markdown-content a.sqb-card:hover .sqb-card-title {
-	color: var(--sqb-primary);
+.sqb-card-body {
+	margin-top: 4px;
 }
 
-.sqb-card-body > :is(p, *) {
+.sqb-card-body > * {
 	margin: 0;
 }
 
@@ -310,17 +314,6 @@ site-search dialog {
 .sqb-frame img {
 	display: block;
 	width: 100%;
-}
-
-/* Pagination and footer */
-.pagination-links a {
-	border-radius: 2px;
-	border-color: var(--sqb-line);
-	box-shadow: none;
-}
-
-.pagination-links a:hover {
-	border-color: var(--sqb-primary);
 }
 
 /* Mobile controls */

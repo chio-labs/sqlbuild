@@ -1,14 +1,65 @@
 ---
+import ArrowRight from '@lucide/astro/icons/arrow-right';
+import BookOpen from '@lucide/astro/icons/book-open';
+import Code from '@lucide/astro/icons/code';
+import Compass from '@lucide/astro/icons/compass';
+import Eye from '@lucide/astro/icons/eye';
+import FlaskConical from '@lucide/astro/icons/flask-conical';
+import FolderTree from '@lucide/astro/icons/folder-tree';
+import Gauge from '@lucide/astro/icons/gauge';
+import GitBranch from '@lucide/astro/icons/git-branch';
+import Hash from '@lucide/astro/icons/hash';
+import Layers from '@lucide/astro/icons/layers';
+import List from '@lucide/astro/icons/list';
+import Lock from '@lucide/astro/icons/lock';
+import MapPin from '@lucide/astro/icons/map-pin';
+import Network from '@lucide/astro/icons/network';
+import Rocket from '@lucide/astro/icons/rocket';
+import ShieldCheck from '@lucide/astro/icons/shield-check';
+import SlidersHorizontal from '@lucide/astro/icons/sliders-horizontal';
+import Terminal from '@lucide/astro/icons/terminal';
+import TestTube from '@lucide/astro/icons/test-tube';
+import TriangleAlert from '@lucide/astro/icons/triangle-alert';
+
 interface Props {
 	title: string;
 	href?: string;
 	icon?: string;
 }
-const { title, href } = Astro.props;
+
+// Mintlify card icon names (Font Awesome) mapped to the Lucide icons the SQLBuild UI uses.
+const icons = {
+	'arrow-right': ArrowRight,
+	book: BookOpen,
+	code: Code,
+	'code-branch': GitBranch,
+	compass: Compass,
+	'diagram-project': Network,
+	eye: Eye,
+	flask: FlaskConical,
+	'flask-vial': TestTube,
+	'folder-tree': FolderTree,
+	'gauge-high': Gauge,
+	hashtag: Hash,
+	'layer-group': Layers,
+	list: List,
+	'location-dot': MapPin,
+	lock: Lock,
+	rocket: Rocket,
+	'shield-check': ShieldCheck,
+	sliders: SlidersHorizontal,
+	terminal: Terminal,
+	'triangle-exclamation': TriangleAlert,
+} as const;
+
+const { title, href, icon } = Astro.props;
+const Icon = icon ? icons[icon as keyof typeof icons] : undefined;
+if (icon && !Icon) throw new Error(`Unknown card icon: ${icon}`);
 const Tag = href ? 'a' : 'div';
 ---
 
 <Tag class="sqb-card" href={href}>
+	{Icon && <Icon class="sqb-card-icon" size={18} stroke-width={1.75} aria-hidden="true" />}
 	<span class="sqb-card-title">{title}</span>
 	<span class="sqb-card-body"><slot /></span>
 </Tag>

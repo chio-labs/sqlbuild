@@ -24,6 +24,8 @@ export default defineConfig({
 				TwoColumnContent: './src/components/TwoColumnContent.astro',
 				Header: './src/components/Header.astro',
 				PageTitle: './src/components/PageTitle.astro',
+				SiteTitle: './src/components/SiteTitle.astro',
+				Pagination: './src/components/Pagination.astro',
 				ThemeSelect: './src/components/ThemeSelect.astro',
 			},
 			customCss: ['./src/styles/fonts.css', './src/styles/sqlbuild.css'],

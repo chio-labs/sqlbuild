@@ -1,6 +1,6 @@
 ---
 import Search from '@astrojs/starlight/components/Search.astro';
-import SiteTitle from '@astrojs/starlight/components/SiteTitle.astro';
+import SiteTitle from './SiteTitle.astro';
 import SocialIcons from '@astrojs/starlight/components/SocialIcons.astro';
 import ThemeSelect from './ThemeSelect.astro';
 ---
@@ -9,7 +9,6 @@ import ThemeSelect from './ThemeSelect.astro';
 	<SiteTitle />
 	<div class="search print:hidden"><Search /></div>
 	<div class="right-group sl-hidden md:sl-flex print:hidden">
-		<a class="home-link" href="https://sqlbuild.com">sqlbuild.com</a>
 		<div class="sl-flex social-icons"><SocialIcons /></div>
 		<ThemeSelect />
 	</div>

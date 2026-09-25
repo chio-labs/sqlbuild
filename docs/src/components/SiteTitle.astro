@@ -1,0 +1,58 @@
+---
+import logoDark from '../assets/logo-dark.png';
+import logoLight from '../assets/logo-light.png';
+---
+
+<div class="site-title">
+	<a class="logo" href="https://sqlbuild.com" aria-label="SQLBuild home">
+		<img class="logo-for-light" src={logoLight.src} alt="SQLBuild" width={89} height={24} />
+		<img class="logo-for-dark" src={logoDark.src} alt="SQLBuild" width={89} height={24} />
+	</a>
+	<span class="divider" aria-hidden="true"></span>
+	<a class="docs" href="/">Docs</a>
+</div>
+
+<style>
+	.site-title {
+		display: flex;
+		flex-shrink: 0;
+		align-items: center;
+		gap: 12px;
+		min-width: 0;
+	}
+
+	.logo {
+		display: flex;
+	}
+
+	img {
+		width: auto;
+		height: 24px;
+	}
+
+	.logo-for-dark,
+	:global(:root[data-theme='dark']) .logo-for-light {
+		display: none;
+	}
+
+	:global(:root[data-theme='dark']) .logo-for-dark {
+		display: block;
+	}
+
+	.divider {
+		width: 1px;
+		height: 18px;
+		background: var(--sqb-line-strong);
+	}
+
+	.docs {
+		color: var(--sqb-fg);
+		font-size: 15px;
+		font-weight: 550;
+		text-decoration: none;
+	}
+
+	.docs:hover {
+		color: var(--sqb-primary);
+	}
+</style>
