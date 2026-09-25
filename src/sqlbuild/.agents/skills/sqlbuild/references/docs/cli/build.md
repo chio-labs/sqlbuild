@@ -20,9 +20,7 @@ Online: https://docs.sqlbuild.com/cli/build
 
 # sqb build
 
-Compiles, plans, and executes the selected build lifecycle. Direct mode runs the full selected
-scope. [Virtual environments](../concepts/virtual-environments.md) can additionally use
-`--changes-only` to build work not already represented by the target VDE's bound versions. Use
+Compiles, plans, and executes the selected build lifecycle, running the full selected scope. Use
 `--no-tests` and `--no-audits` to skip validation for fast iteration.
 
 ## Usage
@@ -36,7 +34,6 @@ sqb --project-dir <path> build [flags]
 | Flag | Description |
 |------|-------------|
 | `--target` | Build against a configured target instead of the active/default target |
-| `--changes-only` | Virtual mode only: build work not already bound to its expected VDE version |
 | `--no-tests` | Skip SQL unit tests |
 | `--no-audits` | Skip audits |
 | `--no-python` | Skip read-side Python tasks and assets (loader-side Python still runs for selected sources) |
@@ -76,7 +73,7 @@ This replaces the former `sqb run` command. The full lifecycle (tests + audits) 
 2. Seeds are loaded (if changed)
 3. Source audits run before their dependent models (unless `--no-audits`)
 4. SQL unit tests run before their target model (unless `--no-tests`)
-5. Models are materialized in DAG topological order (virtual `--changes-only` limits this to stale work)
+5. Models are materialized in DAG topological order
 6. Error-severity audits run against the staging table before promotion to the target (unless `--no-audits`)
 
 ## Output

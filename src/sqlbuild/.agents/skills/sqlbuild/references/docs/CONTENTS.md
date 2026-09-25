@@ -65,7 +65,7 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [Scenarios](concepts/scenarios.md) (`concepts/scenarios`) - End-to-end tests that build real project graphs against coherent fixture data.
 - [Selectors](concepts/selectors.md) (`concepts/selectors`) - Target specific models, paths, tags, or DAG subsets with select and exclude flags.
 - [Column Lineage](concepts/column-lineage.md) (`concepts/column-lineage`) - Trace individual columns through your SQL pipeline - understand where data comes from and where it goes.
-- [Data Diffs](concepts/diff.md) (`concepts/diff`) - Compare schemas and data between targets or virtual environments to validate changes before promotion.
+- [Data Diffs](concepts/diff.md) (`concepts/diff`) - Compare schemas and data between targets to validate changes before they reach production.
 
 ## Advanced Concepts
 
@@ -89,21 +89,6 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [Factories](concepts/python-nodes/factories.md) (`concepts/python-nodes/factories`) - Generate Python nodes programmatically with @factory.
 - [Providers](concepts/python-nodes/providers.md) (`concepts/python-nodes/providers`) - Shared runtime services for Python nodes and hooks.
 - [SQL References](concepts/python-nodes/sql-references.md) (`concepts/python-nodes/sql-references`) - Read SQL models and sources from Python nodes without creating SQL dependencies.
-
-## Virtual Environments (Alpha)
-
-- [Overview](concepts/virtual-environments.md) (`concepts/virtual-environments`) - Version-controlled SQL pipeline environments with instant promotion and rollback.
-- [Setup](concepts/virtual-environments/setup.md) (`concepts/virtual-environments/setup`) - Configure virtual environments and initialize the state store.
-- [Building](concepts/virtual-environments/building.md) (`concepts/virtual-environments/building`) - Virtual builds, VDE creation, partial builds, and seeded incrementals.
-- [Promotion](concepts/virtual-environments/promotion.md) (`concepts/virtual-environments/promotion`) - Promote VDE refs and diff virtual environments.
-- [Rollback](concepts/virtual-environments/rollback.md) (`concepts/virtual-environments/rollback`) - Checkpoints and rollback for virtual environments.
-- [Adopt and Detach](concepts/virtual-environments/adopt-detach.md) (`concepts/virtual-environments/adopt-detach`) - Migrate existing projects to and from virtual mode.
-- [Clone](concepts/virtual-environments/clone.md) (`concepts/virtual-environments/clone`) - Hydrate physical versions from a source warehouse.
-- [Diff](concepts/virtual-environments/diff.md) (`concepts/virtual-environments/diff`) - Compare virtual data environments.
-- [Reconcile](concepts/virtual-environments/reconcile.md) (`concepts/virtual-environments/reconcile`) - Diagnose and repair drift between state and warehouse.
-- [Locks](concepts/virtual-environments/locks.md) (`concepts/virtual-environments/locks`) - Advisory locks for concurrent access control.
-- [Janitor](concepts/virtual-environments/janitor.md) (`concepts/virtual-environments/janitor`) - Cleanup of virtual environment artifacts and retention policies.
-- [Recovery](concepts/virtual-environments/recovery.md) (`concepts/virtual-environments/recovery`) - Diagnosing and recovering from failures in virtual mode.
 
 ## Integrations
 
@@ -133,7 +118,7 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [freshness](cli/freshness.md) (`cli/freshness`) - Observe source freshness without writing state.
 - [check](cli/check.md) (`cli/check`) - Run Python checks against tasks, assets, and loaders.
 - [clone](cli/clone.md) (`cli/clone`) - Copy model relations between configured targets.
-- [diff](cli/diff.md) (`cli/diff`) - Compare schemas and data between targets or virtual environments.
+- [diff](cli/diff.md) (`cli/diff`) - Compare schemas and data between targets.
 - [lineage](cli/lineage.md) (`cli/lineage`) - Explore model and column-level dependency graphs from the command line.
 - [dag](cli/dag.md) (`cli/dag`) - Generate the static DAG artifact for Dagster and other integrations.
 - [query](cli/query.md) (`cli/query`) - Run ad hoc SQL queries against the project database.
@@ -141,10 +126,6 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [janitor](cli/janitor.md) (`cli/janitor`) - Archive and then delete stale warehouse relations.
 - [clean](cli/clean.md) (`cli/clean`) - Remove compiled artifacts from the target directory.
 - [dbt](cli/dbt.md) (`cli/dbt`) - Coordinate dbt and SQLBuild projects.
-- [state](cli/state.md) (`cli/state`) - Manage the virtual mode state store.
-- [promote](cli/promote.md) (`cli/promote`) - Promote VDE refs from one virtual environment to another.
-- [rollback](cli/rollback.md) (`cli/rollback`) - Roll back a VDE to a prior finalized checkpoint.
-- [reconcile](cli/reconcile.md) (`cli/reconcile`) - Diagnose and repair drift between virtual state and warehouse.
 
 ## Other pages
 

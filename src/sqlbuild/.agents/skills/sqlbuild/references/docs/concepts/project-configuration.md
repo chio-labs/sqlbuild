@@ -300,6 +300,11 @@ disables an inherited sample for a path or model. CLI `--sample-rows`, `--sample
 
 ## Settings
 
+SQLBuild projects run in direct mode. `virtual_environments` (including `false`),
+`changes_only`, `[targets.<name>.state]`, and `janitor.max_checkpoints` have been removed.
+Remove these keys from project and local configuration files. The `prepare_version`
+custom materialization hook has also been removed; materializations defining it fail to load.
+
 Global feature toggles:
 
 ```toml
@@ -318,8 +323,6 @@ default_audit_run_scope = "final"
 | Field | Default | Description |
 |-------|---------|-------------|
 | `sql_analysis` | `true` | Enable SQL syntax analysis, column binding, type inference, output inference, and semantic validation at compile time |
-| `changes_only` | `false` | In virtual mode, limit `plan` and `build` to [stale-driven execution](virtual-environments/building.md#stale-driven-execution) without passing `--changes-only`. Rejected in direct mode. Can also be set per target under `[targets.<name>]`. The CLI flag takes precedence, then the selected target, local settings, and this project setting. |
-| `virtual_environments` | `false` | Enable [virtual environments](virtual-environments.md) (versioned model outputs, promotion, rollback, state management). When `false`, the project runs in direct mode. |
 | `query_change_tracking` | `true` | Track query fingerprints for change detection |
 | `column_contract_mode` | `implicit` | Controls whether column declarations on models without a `contract` declaration activate static shape/nullability validation. `implicit` preserves that validation; `explicit` treats columns as metadata and audit attachment unless the model declares `contract enforced`. Model-level `contract enforced` and `contract none` override this setting. Explicit type enforcement remains independent. See [Contracts](models/contracts.md). |
 | `concurrency` | `1` | Maximum parallel model execution (currently serial only) |
@@ -386,12 +389,11 @@ exclude_patterns = ["audit_*", "tmp_*"]
 | Field | Default | Description |
 |-------|---------|-------------|
 | `enabled` | `false` | Whether janitor is active |
-| `retention_days` | `14` in direct mode, `30` in virtual-environment mode | How many days a relation must be stale before it is archived (direct mode) or cleaned up (virtual-environment mode) |
-| `archive_retention_days` | `14` | Direct mode only: how many days an archive is kept before it is deleted. `0` deletes it in the same run. |
+| `retention_days` | `14` | How many days a relation must be stale before it is archived |
+| `archive_retention_days` | `14` | How many days an archive is kept before it is deleted. `0` deletes it in the same run. |
 | `delete_tracked_only` | `true` | Only clean relations that appear in fingerprint tracking |
 | `exclude_patterns` | `[]` | Glob patterns for relations to skip |
 | `direct_state_history_versions` | `20` | How many state-history rows to keep per identity in `_sqlbuild_fingerprints` and `_sqlbuild_source_freshness` |
-| `max_checkpoints` | `20` | Virtual-environment mode: how many checkpoints to keep |
 
 See [janitor](../cli/janitor.md) for the archive and delete lifecycle.
 

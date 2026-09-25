@@ -2,7 +2,7 @@
 
 # Data Diffs
 
-> Compare schemas and data between targets or virtual environments to validate changes before promotion.
+> Compare schemas and data between targets to validate changes before they reach production.
 
 Online: https://docs.sqlbuild.com/concepts/diff
 
@@ -20,16 +20,11 @@ Online: https://docs.sqlbuild.com/concepts/diff
 - Selectors
 - Exit codes
 
-SQLBuild can compare schemas and row-level data between two build contexts. This lets you validate that changes produce the expected results before promoting them.
+SQLBuild can compare schemas and row-level data between two targets. This lets you validate that changes produce the expected results before they reach production.
 
-`sqb diff FROM:TO` compares:
+`sqb diff FROM:TO` compares two targets, for example `prod:dev`.
 
-- **two targets** (e.g. `prod:dev`) in direct mode, or
-- **two virtual environments** (VDEs) when [virtual environments](virtual-environments.md) are enabled.
-
-The mechanics below are identical for both; only what `FROM` and `TO` refer to changes.
-
-In direct mode, `FROM` and `TO` resolve the authoritative database/schema namespaces to compare.
+`FROM` and `TO` resolve the authoritative database/schema namespaces to compare.
 SQLBuild uses the `TO` target's named connection for the complete comparison and accesses both
 namespaces through fully qualified relations. It does not resolve or open the `FROM` target's
 connection. The `TO` connection must therefore be able to read both namespaces; missing credentials

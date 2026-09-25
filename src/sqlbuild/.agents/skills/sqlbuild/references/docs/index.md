@@ -11,7 +11,6 @@ Online: https://docs.sqlbuild.com/index
 - Test properly
 - Verify early
 - Plans that explain every build
-- Deploy reversibly (opt-in)
 - Supported adapters
 - More in SQLBuild
 - What's next
@@ -77,9 +76,6 @@ to explain query and configuration changes, propagate upstream changes, choose i
 actions, and protect scoped builds from stale dependencies. Direct mode still runs the selected
 scope; change detection makes that plan explicit rather than silently changing what was selected.
 
-[Virtual environments](concepts/virtual-environments.md) add version reuse and optional stale-driven
-execution when a project needs isolated previews, promotion, and rollback.
-
 The planner carries that evidence across the whole graph:
 
 - **Models and functions:** query, configuration, and dependency identities explain local and cascaded changes.
@@ -89,18 +85,8 @@ The planner carries that evidence across the whole graph:
 - **Cascade propagation:** when a model does change, the signal propagates downstream, with configurable replay windows (`replay_on_change`).
 - **Python nodes:** source and dependency identities appear in plans; skip/run remains user-controlled through `ctx.skip()`.
 
-In direct mode, this evidence is stored as append-only rows in your warehouse. Virtual environments
-use their configured state backend for environment-scoped version bindings.
-
-## Deploy reversibly (opt-in)
-
-By default, SQLBuild runs in direct mode with state as append-only rows in your warehouse. When you want more, [virtual environments](concepts/virtual-environments.md) add a reversibility layer on top:
-
-- **Instant branching, promotion, and rollback** as low-copy pointer operations.
-- **Partial promotion.** Promote the models that are ready without re-running everything downstream of them - you don't have to rebuild the whole closure to ship one fix.
-- **Checkpoints and reconciliation** so a bad change is something you undo, not an incident.
-
-Virtual environments are opt-in, not a tax you pay upfront - direct mode stays the default, so the floor stays low and you reach for them only when a workflow needs them.
+This evidence is stored as append-only rows in your warehouse. SQLBuild runs in direct mode.
+Build branch trials into a separate target schema and compare their results with `sqb diff`.
 
 ## Supported adapters
 
@@ -218,7 +204,7 @@ SQL models never depend on Python nodes - the only path from Python into SQL is 
 
 ### Multi-target workflows
 
-- **Data diffs:** Compare schemas and row-level data between targets (or virtual environments) with `sqb diff prod:dev`.
+- **Data diffs:** Compare schemas and row-level data between targets with `sqb diff prod:dev`.
 
 - **Zero-copy cloning:** Branch targets instantly with `sqb clone` without duplicating data.
 - **Deferred references:** Resolve a production namespace with `--defer-to` through the active target's connection while building in dev.

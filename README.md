@@ -3,14 +3,14 @@
 </p>
 
 <p align="center">
-  Verify early. Test properly. Deploy reversibly. SQL pipelines with the rigor of real software.
+  Verify early. Test properly. SQL pipelines with the rigor of real software.
 </p>
 
 **Valid isn't the same as correct.** Your SQL compiles, runs, and returns rows; none of that means the number is right, and a silently-wrong number a stakeholder already trusted is the bug that actually hurts.
 
-SQLBuild brings software-engineering rigor to SQL pipelines: catch errors before the warehouse runs them, test your logic locally, and opt into change-aware execution when you need it. It is a standalone, open-source framework for building SQL and Python data pipelines.
+SQLBuild brings software-engineering rigor to SQL pipelines: catch errors before the warehouse runs them, test your logic locally, and inspect change-aware plans. It is a standalone, open-source framework for building SQL and Python data pipelines.
 
-All state is persisted as append-only tables in the warehouse alongside your data: no external state database, no manifest files, no paid add-on. Start with straightforward SQL models, then add ingestion, Python nodes, and opt-in virtual environments as your project grows.
+All state is persisted as append-only tables in the warehouse alongside your data: no external state database, no manifest files, no paid add-on. Start with straightforward SQL models, then add ingestion and Python nodes as your project grows. Projects run in direct mode.
 
 ## Key features
 
@@ -25,13 +25,21 @@ and BigQuery reject proven bind-time errors and warn about runtime-conversion ri
 [semantic compilation](docs/semantic-compilation.md) for
 guarantees, diagnostics, and escape hatches.
 - **Audits that block bad data.** Audits run before data reaches the target table. Full table builds materialize into a staging table and only promote if audits pass; incremental models validate each batch before DML.
-- **Deploy reversibly (opt-in).** Virtual environments add instant low-copy branching, partial promotion, rollback, checkpoints, and reconciliation. Opt-in, not a tax you pay upfront.
-- **Opt-in change-aware execution.** Models, seeds, UDFs, and Python nodes are fingerprinted, and source freshness is tracked. In virtual environments, pass `--changes-only` or set `changes_only = true` to skip work that is already current; commands otherwise run the full selected scope.
+- **Change-aware planning.** Models, seeds, UDFs, and Python nodes are fingerprinted, and source freshness is tracked. Plans explain changes and incremental replay actions; builds run the full selected scope.
 - **Warehouse-native state.** All change-tracking state lives in append-only tables (`_sqlbuild_fingerprints`, `_sqlbuild_source_freshness`, `_sqlbuild_node_results`) in your warehouse schemas. No external state machine, no corruption risk.
 - **Cursor-based incremental processing.** Automatic gap detection and resume, with microbatch mode for large ranges. No external checkpoint to maintain.
 - **Ingestion and Python nodes.** Load external data with Python `@loader` functions, and run `@task`, `@asset`, and `@check` nodes as first-class members of the same DAG as your SQL models.
 
-See the [documentation](https://docs.sqlbuild.com) for the full feature set, including providers, lifecycle hooks, Python macros, UDFs, custom materializations, data diffs, zero-copy cloning, and virtual environments. To coordinate dbt and SQLBuild projects, see the [dbt compatibility guide](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
+See the [documentation](https://docs.sqlbuild.com) for the full feature set, including providers, lifecycle hooks, Python macros, UDFs, custom materializations, data diffs, and zero-copy cloning. To coordinate dbt and SQLBuild projects, see the [dbt compatibility guide](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
+
+### Upgrading after virtual-environment removal
+
+Virtual environments and their commands, flags, state backends, and `prepare_version` hook have
+been removed. Remove `virtual_environments` (even `false`), `changes_only`, target `state`
+blocks, and `janitor.max_checkpoints` from configuration. Branch trials can use separate schemas.
+
+Concurrent microbatch event IDs changed. Drop existing `_sqlbuild_microbatches` tables written
+by earlier versions before the next concurrent run. Sequential runs never use this table.
 
 ## Quick start
 

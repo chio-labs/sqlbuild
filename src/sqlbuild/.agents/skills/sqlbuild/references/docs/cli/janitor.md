@@ -10,14 +10,13 @@ Online: https://docs.sqlbuild.com/cli/janitor
 
 - Usage
 - Flags
-- Direct-mode lifecycle
+- Lifecycle
 - Relation age
 - Audit record
 - Restoring an archive
 - Configuration
 - Examples
 - State history pruning
-- Virtual environments
 - Safety
 
 # sqb janitor
@@ -38,9 +37,9 @@ sqb --project-dir <path> janitor [flags]
 | `--retention-days` | Override the configured retention period (days) before a stale relation is archived |
 | `--direct-state-history-versions` | Override how many state-history versions are kept per identity |
 
-## Direct-mode lifecycle
+## Lifecycle
 
-In direct mode, the janitor never drops a live relation directly. Each stale relation goes through two stages:
+The janitor never drops a live relation directly. Each stale relation goes through two stages:
 
 1. **Archive.** Once a relation has been stale for `retention_days`, the janitor renames it in place, in the same schema, to:
 
@@ -103,7 +102,7 @@ delete_tracked_only = true
 exclude_patterns = ["audit_*", "tmp_*"]
 ```
 
-When `retention_days` is not set, direct mode uses `14` and virtual-environment mode uses `30`. See [Project Configuration](../concepts/project-configuration.md#janitor) for every janitor setting.
+When `retention_days` is not set, it defaults to `14`. See [Project Configuration](../concepts/project-configuration.md#janitor) for every janitor setting.
 
 ## Examples
 
@@ -122,10 +121,6 @@ sqb janitor --retention-days 7
 
 In addition to archiving stale relations, the janitor prunes old rows from `_sqlbuild_fingerprints` and `_sqlbuild_source_freshness`, keeping the latest `direct_state_history_versions` rows per identity (default `20`). This is configured separately from relation retention.
 
-## Virtual environments
-
-In virtual-environment mode, the janitor also cleans up expired environments, old checkpoints and unreferenced physical versions. See [Virtual environments: janitor](../concepts/virtual-environments/janitor.md). Direct-mode archiving doesn't apply there. In both modes, relations whose names differ only by case from another relation in the same schema are reported and never dropped, and exclude patterns match regardless of case.
-
 ## Safety
 
-The janitor shows every planned archive and delete, with exact names, ages and expiry, then asks you to type an exact confirmation phrase. Use `--auto-approve` only in automation, or when you're certain.
+The janitor shows every planned archive and delete, with exact names, ages and expiry, then asks you to type an exact confirmation phrase. Relations whose names differ only by case from another relation in the same schema are reported and never dropped, and exclude patterns match regardless of case. Use `--auto-approve` only in automation, or when you're certain.

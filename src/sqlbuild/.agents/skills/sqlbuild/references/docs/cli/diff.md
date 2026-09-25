@@ -2,11 +2,11 @@
 
 # diff
 
-> Compare schemas and data between targets or virtual environments.
+> Compare schemas and data between targets.
 
 Online: https://docs.sqlbuild.com/cli/diff
 
-Compares schemas and optionally row-level data between two build contexts: two targets (e.g. `prod:dev`) in direct mode, or two virtual environments when virtual mode is enabled. See [Data Diffs](../concepts/diff.md) for detailed usage.
+Compares schemas and optionally row-level data between two targets (e.g. `prod:dev`). See [Data Diffs](../concepts/diff.md) for detailed usage.
 
 ## Usage
 
@@ -16,7 +16,7 @@ sqb diff <FROM>:<TO> <mode> [flags]
 
 The first argument is a positional `FROM:TO` range. Exactly one mode is required: `--full`, `--schema-only`, or `--bounded <duration>`.
 
-In direct mode, `FROM` and `TO` are configured target names. Their database/schema namespaces remain
+`FROM` and `TO` are configured target names. Their database/schema namespaces remain
 authoritative, while the `TO` target's named connection executes the complete comparison and must
 be able to read both namespaces.
 

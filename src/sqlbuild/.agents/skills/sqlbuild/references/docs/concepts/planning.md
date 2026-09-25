@@ -27,14 +27,9 @@ Planning and selection are separate concerns:
   resource needs work, chooses the correct action for incremental models, propagates upstream
   changes, and warns when a partial selection would be incoherent.
 
-In the default **direct mode**, a build runs its selected scope. Change detection still matters: the
-plan can show query and configuration differences, calculate replay or full-refresh actions, and
-identify stale upstreams. It does not filter a direct build to stale models.
-
-[Virtual environments](virtual-environments.md) additionally bind each model to a versioned
-physical relation. Virtual builds can use those bindings to reuse existing versions or limit an
-invocation to stale work. That virtual execution behavior is documented under
-[Building in a virtual environment](virtual-environments/building.md#stale-driven-execution).
+A build runs its selected scope. Change detection still matters: the plan can show query and
+configuration differences, calculate replay or full-refresh actions, and identify stale upstreams.
+It does not filter a build to stale models.
 
 ## Reading a plan
 
@@ -103,16 +98,15 @@ The plan assigns reasons to explain detected work:
 | Upstream changed | A dependency change propagated to this model |
 | Run despite unchanged | A table's explicit policy requires another run despite an unchanged identity |
 
-These reasons explain the plan; they are not a promise that direct mode will skip entries labelled
-current. Direct builds execute the selected scope. Virtual mode can compare expected identities with
-the versions already bound to a VDE and avoid unnecessary version creation.
+These reasons explain the plan; they are not a promise that a build will skip entries labelled
+current. Builds execute the selected scope.
 
 ## Cascades and incremental actions
 
 Changes propagate through the DAG in dependency order. The resulting action depends on the
 materialization:
 
-- views are recreated when selected for a direct build;
+- views are recreated when selected;
 - tables rebuild when selected;
 - incremental models use their cursor state, backfill policy, and `replay_on_change` setting to
   determine the affected range; and
@@ -132,19 +126,16 @@ stale-upstream handling.
 
 ## Recorded state
 
-Direct mode records append-only planning evidence in the warehouse:
+SQLBuild records append-only planning evidence in the warehouse:
 
 - `_sqlbuild_fingerprints` stores resource identities;
 - `_sqlbuild_source_freshness` stores source observations; and
 - `_sqlbuild_node_results` stores Python node outcomes.
 
-The planner reads the latest applicable facts and appends new facts after successful work. Virtual
-mode stores version bindings and environment-scoped planning state in its configured state backend;
-see [Virtual environment setup](virtual-environments/setup.md).
+The planner reads the latest applicable facts and appends new facts after successful work.
 
 ## Related topics
 
 - [Cascade propagation](planning/cascade-propagation.md)
 - [Source freshness](planning/source-freshness.md)
 - [Selection and staleness](planning/selection-and-staleness.md)
-- [Building in a virtual environment](virtual-environments/building.md)

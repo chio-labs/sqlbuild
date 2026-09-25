@@ -25,7 +25,6 @@ The positional argument is the directory to create (default `sqlbuild-playground
 | `waffle_shop` | Default. DuckDB-backed project with models, tests, scenarios, and macros. |
 | `dagster` | Waffle shop project plus a `dagster/` directory with a ready-to-run `definitions.py`. |
 | `rivers` | Waffle shop project plus a `rivers_pipeline/` directory with a Rivers repository definition. |
-| `virtual` | Waffle shop with virtual environments enabled, a local DuckDB state store, loaders, and the full virtual lifecycle (build, promote, rollback). |
 | `python_nodes` | A small DuckDB project demonstrating [Python nodes](../concepts/python-nodes/overview.md): a task feeding a loader, a model read by a Python asset through `ctx.relation(model(...))`, a soft-skip fan-in, `materialized=False`, and a Python check. |
 
 ## What it creates
@@ -71,14 +70,6 @@ sqb playground --template rivers
 cd sqlbuild-playground
 uv pip install 'sqlbuild[rivers]'
 uv run rivers dev rivers_pipeline.definitions
-
-# With virtual environments
-sqb playground --template virtual
-cd sqlbuild-playground
-sqb state init
-sqb build
-sqb build --virtual-env pr
-sqb promote --from pr --to dev
 
 # With Python nodes
 sqb playground --template python_nodes

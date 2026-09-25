@@ -22,7 +22,6 @@ sqb --project-dir <path> plan [flags]
 |------|-------------|
 | `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 | `--no-cache` | Bypass the reusable compile-analysis cache for this invocation |
-| `--changes-only` | Virtual mode only: show work not already bound to its expected VDE version |
 | `--no-python` | Exclude read-side Python tasks and assets from the plan |
 | `--defer-to` | Resolve unselected model references against another target |
 | `--as` | Compile for another target and show its plan, including [model migration](../concepts/models/migrations.md) decisions, using the current connection. Inspection only. |

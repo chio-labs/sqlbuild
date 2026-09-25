@@ -3,7 +3,7 @@
 A model that compiles, builds and passes tests can still return the wrong numbers. `sqb diff`
 proves what changed. It has two modes:
 
-- **Model diff** compares built models between two targets (or two virtual environments).
+- **Model diff** compares built models between two targets.
 - **Query diff** compares any two SQL queries on one connection. No build is required.
 
 ## Contents
@@ -30,7 +30,7 @@ proves what changed. It has two modes:
 sqb diff <FROM>:<TO> (--full | --schema-only | --bounded <window>) --select <selector> [flags]
 ```
 
-- `FROM` and `TO` are configured target names (virtual environment names in virtual mode). The
+- `FROM` and `TO` are configured target names. The
   `TO` target's connection runs the comparison and must be able to read both namespaces.
 - `--select` is required. Exactly one mode is required.
 - `--full` and `--bounded` join rows on the model's `unique_key`; models without one support only
