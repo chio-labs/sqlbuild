@@ -237,6 +237,7 @@ def test_given_discovered_python_functions_when_building_graph_then_indexes_node
             description="identity decorator config keeps each kind's authored field set",
             expected_decorator_config_keys_by_selector={
                 "loader:load_events": (
+                    "columns",
                     "contract",
                     "cursor_column",
                     "destination",

@@ -1109,3 +1109,15 @@ class SqlHookIdentityBuildE2ETestCase:
     added_hook_path: str
     added_hook_contents: str
     expected_reason: str
+
+
+@dataclass(frozen=True)
+class PythonNodeIdentityBuildE2ETestCase:
+    """Test case for Python node version identity after one decorator-input edit."""
+
+    description: str
+    edited_path: str
+    original_text: str
+    edited_text: str
+    expected_asset_identity_status: str
+    expected_loader_version_count: int
