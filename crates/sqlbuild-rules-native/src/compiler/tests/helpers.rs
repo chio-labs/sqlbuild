@@ -657,6 +657,70 @@ pub(crate) fn plan_without_rendering_returns_executable_steps() -> bool {
     true
 }
 
+pub(crate) fn textual_assertion_with_clause_merges_lifted_ctes() -> bool {
+    let response: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+            &json!({
+                "models": [
+                    {
+                        "name": "stg_orders",
+                        "querySql": "SELECT * FROM __source(\"raw_orders\")",
+                        "modelDependencies": []
+                    },
+                    {
+                        "name": "orders",
+                        "querySql": "SELECT * FROM __ref(\"stg_orders\")",
+                        "modelDependencies": ["stg_orders"]
+                    }
+                ],
+                "tests": [{
+                    "name": "orders_case",
+                    "fileLabel": "tests/orders.sql",
+                    "payload": {
+                        "kind": "model",
+                        "authoredCtes": [{
+                            "name": "__source__raw_orders",
+                            "sqlBody": "SELECT 1 AS order_id"
+                        }],
+                        "expectedCtes": [],
+                        "expectedModelNames": [],
+                        "assertionCtes": [{
+                            "name": "__assert__no_negative_orders",
+                            "sqlBody": "WITH negative_orders AS (SELECT * FROM __ref(\"orders\") WHERE order_id < 0) SELECT * FROM negative_orders"
+                        }]
+                    }
+                }],
+                "sqlAnalysisEnabled": false,
+                "sqlAnalysisDialect": "duckdb",
+                "renderSql": false
+            })
+            .to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+
+    let resolved_sql = response["artifacts"][0]["assertions"][0]["resolvedSql"]
+        .as_str()
+        .expect("resolved assertion SQL");
+    assert_eq!(
+        resolved_sql,
+        concat!(
+            "WITH __ref__stg_orders AS (SELECT * FROM (SELECT 1 AS order_id)), ",
+            "__ref__orders AS (SELECT * FROM __ref__stg_orders), ",
+            "negative_orders AS (SELECT * FROM __ref__orders WHERE order_id < 0) ",
+            "SELECT * FROM negative_orders"
+        )
+    );
+    assert!(
+        polyglot_sql::Dialect::get(polyglot_sql::DialectType::DuckDB)
+            .parse(resolved_sql)
+            .is_ok(),
+        "{resolved_sql}"
+    );
+    true
+}
+
 pub(crate) fn upstream_fallback_resolves() -> bool {
     let request = json!({
         "models": [
