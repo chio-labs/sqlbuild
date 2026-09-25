@@ -11,7 +11,9 @@ from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.constants import PATH_SELECTOR_EXPLICIT_ROOT_ERROR
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.selection.build_resources import expand_build_resource_selection
+from sqlbuild.compiler.planner.main.selection._build_resources import (
+    expand_build_resource_selection,
+)
 from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector

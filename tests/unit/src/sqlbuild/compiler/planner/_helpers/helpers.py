@@ -63,7 +63,6 @@ from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     GraphIdentityNode,
     GraphNodeKey,
-    PlannerScope,
     PlanOutput,
     ScenarioArtifactIdentity,
     ScenarioRelationMap,
@@ -74,11 +73,6 @@ from sqlbuild.compiler.planner.types import (
     GraphResourceKind,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.compiler.source_freshness.models import (
-    DirectSourceFreshnessPlanningResult,
-    SourceFreshnessIdentity,
-    SourceFreshnessRecord,
-)
 from sqlbuild.spec.contracts.models import (
     SchemaColumn,
     SchemaModelEntry,
@@ -88,7 +82,6 @@ from sqlbuild.spec.contracts.models import (
     SourceEntry,
 )
 from sqlbuild.spec.contracts.types import (
-    SourceFreshnessStrategy,
     SourceWriteStrategy,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
@@ -220,49 +213,6 @@ def model_key(name: str) -> CompiledObjectKey:
     return CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name)
 
 
-def build_run_despite_unchanged_scope(
-    *, run_despite_unchanged: object, materialized: str
-) -> PlannerScope:
-    """Build a source -> rolling table -> mart planner scope."""
-
-    source_key: CompiledObjectKey = CompiledObjectKey(
-        resource_type=CompiledResourceType.SOURCE,
-        name="raw_orders",
-    )
-    rolling_key: CompiledObjectKey = model_key("rolling_orders")
-    mart_key: CompiledObjectKey = model_key("orders_mart")
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {
-        rolling_key: (source_key,),
-        mart_key: (rolling_key,),
-        source_key: (),
-    }
-    return PlannerScope(
-        upstream_deps=upstream_deps,
-        downstream_deps=build_downstream_deps(upstream_deps),
-        all_keys={
-            "raw_orders": source_key,
-            "rolling_orders": rolling_key,
-            "orders_mart": mart_key,
-        },
-        models_by_name={
-            "rolling_orders": build_run_despite_unchanged_model(
-                key=rolling_key,
-                name="rolling_orders",
-                materialized=materialized,
-                run_despite_unchanged=run_despite_unchanged,
-            ),
-            "orders_mart": build_run_despite_unchanged_model(
-                key=mart_key,
-                name="orders_mart",
-                materialized="table",
-                run_despite_unchanged=None,
-            ),
-        },
-        selected_keys=frozenset({rolling_key, mart_key}),
-        execution_order=(source_key, rolling_key, mart_key),
-    )
-
-
 def build_run_despite_unchanged_model(
     *,
     key: CompiledObjectKey,
@@ -290,39 +240,6 @@ def build_run_despite_unchanged_model(
             qualified_name=f"main.{name}",
         ),
     )
-
-
-def build_run_despite_unchanged_source_freshness(
-    *, data_version: str | None, value_kind: str, observed_at: datetime
-) -> DirectSourceFreshnessPlanningResult:
-    """Build source freshness state for run_despite_unchanged helper tests."""
-
-    record: SourceFreshnessRecord = SourceFreshnessRecord(
-        source_name="raw_orders",
-        target_database=None,
-        target_schema=None,
-        target_name=None,
-        run_id="run-1",
-        strategy=SourceFreshnessStrategy.SQL.value,
-        value_kind=value_kind,
-        data_version=data_version or "",
-        data_version_hash="hash",
-        observed_at=observed_at,
-    )
-    populated_result: DirectSourceFreshnessPlanningResult = DirectSourceFreshnessPlanningResult(
-        observed_records=(record,),
-        unchanged_identities=frozenset(
-            {
-                SourceFreshnessIdentity(
-                    source_name="raw_orders",
-                    target_database=None,
-                    target_schema=None,
-                    target_name=None,
-                )
-            }
-        ),
-    )
-    return (DirectSourceFreshnessPlanningResult(), populated_result)[data_version is not None]
 
 
 def source_key(name: str) -> CompiledObjectKey:
@@ -1497,8 +1414,6 @@ def build_scheduling_graph(
     dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ]:
     """Build upstream and downstream dep dicts from simple name-based edges."""
-
-    from sqlbuild.compiler.planner._helpers.graph.core import build_downstream_deps
 
     upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {}
     name: str

@@ -1,4 +1,4 @@
-"""Public required-build-resource expansion entrypoint."""
+"""Compiler-internal required-build-resource expansion entrypoint."""
 
 from __future__ import annotations
 
