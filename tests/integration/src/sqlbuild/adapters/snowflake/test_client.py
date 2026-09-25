@@ -22,9 +22,13 @@ from sqlbuild.adapter.contract.models import (
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.spec.contracts.types import SourceFreshnessStrategy, SourceFreshnessValueKind
-from sqlbuild.virtual.freshness.main._state_record import source_freshness_record_from_observation
-from sqlbuild.virtual.freshness.models import SourceFreshnessObservation
+from sqlbuild.compiler.source_freshness.main.data_version_hash import (
+    source_freshness_data_version_hash,
+)
+from sqlbuild.compiler.source_freshness.main.normalization import (
+    normalize_source_freshness_data_version,
+)
+from sqlbuild.spec.contracts.types import SourceFreshnessValueKind
 from tests.integration.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeBuildFlowTestCase,
     SnowflakeExpressionNullabilityRuleTestCase,
@@ -359,36 +363,33 @@ def test_given_table_dml_when_getting_freshness_metadata_then_last_altered_advan
     assert isinstance(changed_metadata.data_version, test_case.expected_data_version_type)
     assert isinstance(batch_metadata.data_version, test_case.expected_data_version_type)
     assert changed_metadata.data_version > initial_metadata.data_version
-    initial_hash: str = source_freshness_record_from_observation(
-        observation=SourceFreshnessObservation(
-            source_name="raw_orders",
-            strategy=SourceFreshnessStrategy.ADAPTER,
-            data_version=initial_metadata.data_version,
+    initial_hash: str = source_freshness_data_version_hash(
+        source_name="raw_orders",
+        strategy="adapter",
+        data_version=normalize_source_freshness_data_version(
+            value=initial_metadata.data_version,
             value_kind=SourceFreshnessValueKind(initial_metadata.value_kind),
-            observed_at=datetime.now(),
         ),
-        virtual_environment_name="dev",
-    ).data_version_hash
-    repeated_initial_hash: str = source_freshness_record_from_observation(
-        observation=SourceFreshnessObservation(
-            source_name="raw_orders",
-            strategy=SourceFreshnessStrategy.ADAPTER,
-            data_version=initial_metadata.data_version,
+        value_kind=SourceFreshnessValueKind(initial_metadata.value_kind),
+    )
+    repeated_initial_hash: str = source_freshness_data_version_hash(
+        source_name="raw_orders",
+        strategy="adapter",
+        data_version=normalize_source_freshness_data_version(
+            value=initial_metadata.data_version,
             value_kind=SourceFreshnessValueKind(initial_metadata.value_kind),
-            observed_at=datetime.now(),
         ),
-        virtual_environment_name="dev",
-    ).data_version_hash
-    changed_hash: str = source_freshness_record_from_observation(
-        observation=SourceFreshnessObservation(
-            source_name="raw_orders",
-            strategy=SourceFreshnessStrategy.ADAPTER,
-            data_version=changed_metadata.data_version,
+        value_kind=SourceFreshnessValueKind(initial_metadata.value_kind),
+    )
+    changed_hash: str = source_freshness_data_version_hash(
+        source_name="raw_orders",
+        strategy="adapter",
+        data_version=normalize_source_freshness_data_version(
+            value=changed_metadata.data_version,
             value_kind=SourceFreshnessValueKind(changed_metadata.value_kind),
-            observed_at=datetime.now(),
         ),
-        virtual_environment_name="dev",
-    ).data_version_hash
+        value_kind=SourceFreshnessValueKind(changed_metadata.value_kind),
+    )
     assert repeated_initial_hash == initial_hash
     assert changed_hash != initial_hash
 

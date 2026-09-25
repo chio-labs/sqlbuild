@@ -109,14 +109,6 @@ LONG_ORDERS_NAME: str = "orders_" + "x" * 60
                 "_sqb_archive__20200101t000000z__old_products",
             ),
         ),
-        JanitorArchivePlanTestCase(
-            description="virtual mode neither archives nor expires archive-named relations",
-            relation_infos=(
-                relation_info("old_orders", created_at=OLD_TIME),
-                relation_info("_sqb_archive__20200101t000000z__old_products", created_at=OLD_TIME),
-            ),
-            direct_mode=False,
-        ),
     ],
     ids=lambda case: case.description,
 )
@@ -255,12 +247,6 @@ def test_given_long_relation_name_when_planning_archive_then_fits_name_with_time
                 ("_sqb_archive__20200101t000000z__old_invoices", CASE_COLLISION_REASON),
                 ("_SQB_ARCHIVE__20200101T000000Z__OLD_INVOICES", UNQUOTED_ADDRESSING_REASON),
             ),
-        ),
-        JanitorAddressingPlanTestCase(
-            description="virtual mode keeps deleting mixed-case relations as before",
-            relation_infos=(relation_info("LegacyCustomers", created_at=OLD_TIME),),
-            direct_mode=False,
-            expected_candidate_names=("LegacyCustomers",),
         ),
     ],
     ids=lambda case: case.description,

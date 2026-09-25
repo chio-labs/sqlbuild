@@ -15,7 +15,6 @@ class CheckCommandTestCase:
     expected_stdout_fragments: tuple[str, ...]
     expected_absent_fragments: tuple[str, ...] = ()
     project_kind: str = "direct"
-    initialize_state: bool = False
     expected_file_fragments: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 

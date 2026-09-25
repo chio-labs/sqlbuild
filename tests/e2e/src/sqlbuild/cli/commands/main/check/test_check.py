@@ -13,7 +13,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.check._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.check.helpers import (
     assert_expected_file_fragments,
-    initialize_state_when_requested,
     prepare_check_project_by_kind,
     prepare_python_check_project,
     resolve_check_command,
@@ -179,31 +178,6 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb, run
             project_kind="terminal_loader",
         ),
         CheckCommandTestCase(
-            description="virtual build executes relevant Python checks",
-            command=("--no-color", "build"),
-            expected_returncode=0,
-            expected_stdout_fragments=(
-                "Python checks",
-                "check_virtual_orders",
-                "PASS",
-            ),
-            project_kind="virtual",
-            initialize_state=True,
-        ),
-        CheckCommandTestCase(
-            description="virtual build fails on error Python check",
-            command=("--no-color", "build"),
-            expected_returncode=1,
-            expected_stdout_fragments=(
-                "Python checks",
-                "fail_virtual_orders",
-                "FAIL",
-                "virtual orders failed",
-            ),
-            project_kind="virtual_failure",
-            initialize_state=True,
-        ),
-        CheckCommandTestCase(
             description="build without tests or audits still executes Python checks",
             command=(
                 "--no-color",
@@ -259,7 +233,6 @@ def test_given_python_checks_when_running_check_then_reports_expected_results(
         tmp_path=tmp_path,
         project_kind=test_case.project_kind,
     )
-    initialize_state_when_requested(project_dir=project_dir, test_case=test_case)
 
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=resolve_check_command(project_dir=project_dir, command=test_case.command),

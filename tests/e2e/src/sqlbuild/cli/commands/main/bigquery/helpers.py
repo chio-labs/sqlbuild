@@ -53,56 +53,6 @@ def build_bigquery_project_toml(*, project_name: str, dataset_name: str) -> str:
     )
 
 
-def build_bigquery_virtual_seed_project_toml(
-    *, project_name: str, dataset_name: str, unsuffixed_virtual_env: str | None = None
-) -> str:
-    project_id: str = str(build_bigquery_connection_config(schema=dataset_name)["project"])
-    location: str = str(build_bigquery_connection_config(schema=dataset_name)["location"])
-    unsuffixed_line: str = {None: ""}.get(
-        unsuffixed_virtual_env,
-        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n',
-    )
-    return (
-        f'name = "{project_name}"\n'
-        'adapter = "bigquery"\n'
-        'default_target = "dev"\n\n'
-        "[settings]\n"
-        "virtual_environments = true\n"
-        "\n"
-        "[connection]\n"
-        'project = "${ENV:SQB_TEST_BIGQUERY_PROJECT}"\n'
-        f'location = "{location}"\n\n'
-        "[targets.dev]\n"
-        f'database = "{project_id}"\n'
-        f'schema = "{dataset_name}"\n\n'
-        "[targets.dev.state]\n"
-        'backend = "duckdb"\n'
-        'schema = "sqlbuild_state"\n'
-        f"{unsuffixed_line}\n"
-        "[targets.dev.state.connection]\n"
-        'database = "state.duckdb"\n'
-    )
-
-
-def virtual_seed_source_yml(*, dataset_name: str) -> str:
-    return f"sources:\n  - name: raw_orders\n    schema: {dataset_name}\n    table: raw_orders\n"
-
-
-def virtual_seed_orders_model(*, amount_expression: str) -> str:
-    return (
-        "MODEL (\n"
-        "  materialized incremental,\n"
-        "  incremental_strategy delete_insert,\n"
-        "  cursor ordered_at,\n"
-        "  cursor_type timestamp,\n"
-        "  cursor_grain day,\n"
-        "  replay_on_change bounded-7d\n"
-        ");\n\n"
-        f"SELECT id, ordered_at, {amount_expression} AS amount_cents\n"
-        'FROM __source("raw_orders")\n'
-    )
-
-
 def build_bigquery_source_deferral_project_toml(
     *, project_name: str, dev_dataset_name: str, prod_dataset_name: str
 ) -> str:

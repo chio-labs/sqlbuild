@@ -63,16 +63,6 @@ from tests.unit.scripts.fensu_policy.rules._test_types import CustomRuleTestCase
             expected_fault_count=0,
         ),
         CustomRuleTestCase(
-            description="source connection terminology passes in virtual source logic",
-            path="src/sqlbuild/virtual/planner/main/plan.py",
-            source=(
-                "def resolve(connection: object) -> object:\n"
-                "    source_connection = connection\n"
-                "    return source_connection\n"
-            ),
-            expected_fault_count=0,
-        ),
-        CustomRuleTestCase(
             description="source relation terminology passes outside reuse code",
             path="src/sqlbuild/example/main/build.py",
             source="def render(source_relation: str) -> str:\n    return source_relation\n",

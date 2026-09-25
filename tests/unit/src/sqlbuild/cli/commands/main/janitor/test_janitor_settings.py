@@ -22,22 +22,6 @@ from tests.unit.src.sqlbuild.cli.commands.main.janitor._test_types import (
 DIRECT_PROJECT_TOML: str = (
     'name = "orders_direct"\nadapter = "duckdb"\n\n[connection]\ndatabase = "orders.duckdb"\n'
 )
-VIRTUAL_PROJECT_TOML: str = (
-    'name = "orders_virtual"\n'
-    'adapter = "duckdb"\n'
-    'default_target = "dev"\n\n'
-    "[settings]\n"
-    "virtual_environments = true\n\n"
-    "[connection]\n"
-    'database = "warehouse.duckdb"\n\n'
-    "[targets.dev]\n"
-    'schema = "dev"\n\n'
-    "[targets.dev.state]\n"
-    'backend = "duckdb"\n'
-    'schema = "sqlbuild_state"\n\n'
-    "[targets.dev.state.connection]\n"
-    'database = "state.duckdb"\n'
-)
 
 
 @pytest.mark.parametrize(
@@ -51,33 +35,12 @@ VIRTUAL_PROJECT_TOML: str = (
             expected_archive_retention_days=14,
         ),
         JanitorSettingsResolutionTestCase(
-            description="virtual mode without explicit retention resolves 30",
-            project_toml=VIRTUAL_PROJECT_TOML + "\n[janitor]\nenabled = true\n",
-            cli_retention_days=None,
-            expected_retention_days=30,
-            expected_archive_retention_days=14,
-        ),
-        JanitorSettingsResolutionTestCase(
             description="explicit retention applies to direct mode",
             project_toml=DIRECT_PROJECT_TOML
             + "\n[janitor]\nenabled = true\nretention_days = 9\narchive_retention_days = 2\n",
             cli_retention_days=None,
             expected_retention_days=9,
             expected_archive_retention_days=2,
-        ),
-        JanitorSettingsResolutionTestCase(
-            description="explicit retention applies to virtual mode",
-            project_toml=VIRTUAL_PROJECT_TOML + "\n[janitor]\nenabled = true\nretention_days = 9\n",
-            cli_retention_days=None,
-            expected_retention_days=9,
-            expected_archive_retention_days=14,
-        ),
-        JanitorSettingsResolutionTestCase(
-            description="cli retention override wins in virtual mode",
-            project_toml=VIRTUAL_PROJECT_TOML + "\n[janitor]\nenabled = true\nretention_days = 9\n",
-            cli_retention_days=4,
-            expected_retention_days=4,
-            expected_archive_retention_days=14,
         ),
     ],
     ids=lambda case: case.description,

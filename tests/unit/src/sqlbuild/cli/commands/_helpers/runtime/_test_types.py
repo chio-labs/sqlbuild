@@ -2,17 +2,6 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class ModeGuardTestCase:
-    description: str
-    virtual_environments: bool
-    command_name: str
-    expected_error_fragment: str | None
-    defer_to: str | None = None
-    virtual_env: str | None = None
-    include_stale_upstreams: bool = False
-
-
-@dataclass(frozen=True)
 class ResolveProjectConnectionConfigTestCase:
     description: str
     project_dir_name: str

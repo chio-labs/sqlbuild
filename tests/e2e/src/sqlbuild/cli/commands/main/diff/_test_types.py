@@ -45,16 +45,6 @@ class DiffKeyFailureE2ETestCase:
 
 
 @dataclass(frozen=True)
-class VirtualDiffE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    expected_exit_code: int
-    expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
-    expected_stderr_fragments: tuple[str, ...] = field(default_factory=tuple)
-    unexpected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
 class DiffSamplingPrecedenceE2ETestCase:
     description: str
     project_limit: int

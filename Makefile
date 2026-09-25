@@ -2,8 +2,8 @@ SHELL := /bin/bash
 
 .PHONY: verify verify-quick verify-pg coverage cli-preview rust-check \
 	check-e2e-shards test-e2e-duckdb test-e2e-duckdb-build-core \
-	test-e2e-duckdb-build-incremental test-e2e-duckdb-build-virtual \
-	test-e2e-duckdb-cli-data test-e2e-duckdb-cli test-e2e-duckdb-virtual \
+	test-e2e-duckdb-build-incremental \
+	test-e2e-duckdb-cli-data test-e2e-duckdb-cli test-e2e-duckdb-inspection \
 	test-e2e-duckdb-integrations test-e2e-performance \
 	test-e2e-cold-compile-performance test-e2e-cache-compile-performance \
 	test-e2e-dense-compile-performance test-e2e-varied-cache-performance
@@ -102,16 +102,6 @@ E2E_DUCKDB_BUILD_INCREMENTAL_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_seed_watermark_build.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_snapshot_build.py
 
-E2E_DUCKDB_BUILD_VIRTUAL_PATHS := \
-	tests/e2e/src/sqlbuild/cli/commands/main/build/test_virtual_build_state.py \
-	tests/e2e/src/sqlbuild/cli/commands/main/build/test_virtual_incremental_build.py \
-	tests/e2e/src/sqlbuild/cli/commands/main/build/test_virtual_microbatch_lifecycle.py \
-	tests/e2e/src/sqlbuild/cli/commands/main/build/test_virtual_mode_guard.py \
-	tests/e2e/src/sqlbuild/cli/commands/main/build/test_virtual_promote.py \
-	tests/e2e/src/sqlbuild/cli/commands/main/build/test_virtual_python_build.py \
-	tests/e2e/src/sqlbuild/cli/commands/main/build/test_virtual_rollback.py \
-	tests/e2e/src/sqlbuild/cli/commands/main/build/test_virtual_seed_build.py \
-	tests/e2e/src/sqlbuild/cli/commands/main/build/test_virtual_source_freshness_build.py
 
 E2E_DUCKDB_CLI_DATA_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/load \
@@ -144,23 +134,20 @@ E2E_DUCKDB_CLI_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/sqlserver \
 	tests/e2e/src/sqlbuild/cli/commands/main/test
 
-E2E_DUCKDB_VIRTUAL_PATHS := \
+E2E_DUCKDB_INSPECTION_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/clone \
 	tests/e2e/src/sqlbuild/cli/commands/main/diff \
 	tests/e2e/src/sqlbuild/cli/commands/main/janitor \
-	tests/e2e/src/sqlbuild/cli/commands/main/plan \
-	tests/e2e/src/sqlbuild/cli/commands/main/reconcile \
-	tests/e2e/src/sqlbuild/cli/commands/main/state
+	tests/e2e/src/sqlbuild/cli/commands/main/plan
 
 E2E_DUCKDB_INTEGRATIONS_PATHS := tests/e2e/src/sqlbuild/integrations
 
 E2E_DUCKDB_PATHS := \
 	$(E2E_DUCKDB_BUILD_CORE_PATHS) \
 	$(E2E_DUCKDB_BUILD_INCREMENTAL_PATHS) \
-	$(E2E_DUCKDB_BUILD_VIRTUAL_PATHS) \
 	$(E2E_DUCKDB_CLI_DATA_PATHS) \
 	$(E2E_DUCKDB_CLI_PATHS) \
-	$(E2E_DUCKDB_VIRTUAL_PATHS) \
+	$(E2E_DUCKDB_INSPECTION_PATHS) \
 	$(E2E_DUCKDB_INTEGRATIONS_PATHS)
 
 define run_e2e_duckdb
@@ -199,8 +186,6 @@ test-e2e-duckdb-build-core:
 test-e2e-duckdb-build-incremental:
 	$(call run_e2e_duckdb,$@,$(E2E_DUCKDB_BUILD_INCREMENTAL_PATHS))
 
-test-e2e-duckdb-build-virtual:
-	$(call run_e2e_duckdb,$@,$(E2E_DUCKDB_BUILD_VIRTUAL_PATHS))
 
 test-e2e-duckdb-cli-data:
 	$(call run_e2e_duckdb,$@,$(E2E_DUCKDB_CLI_DATA_PATHS))
@@ -208,8 +193,8 @@ test-e2e-duckdb-cli-data:
 test-e2e-duckdb-cli:
 	$(call run_e2e_duckdb,$@,$(E2E_DUCKDB_CLI_PATHS))
 
-test-e2e-duckdb-virtual:
-	$(call run_e2e_duckdb,$@,$(E2E_DUCKDB_VIRTUAL_PATHS))
+test-e2e-duckdb-inspection:
+	$(call run_e2e_duckdb,$@,$(E2E_DUCKDB_INSPECTION_PATHS))
 
 test-e2e-duckdb-integrations:
 	$(call run_e2e_duckdb,$@,$(E2E_DUCKDB_INTEGRATIONS_PATHS))
@@ -218,10 +203,9 @@ check-e2e-shards:
 	bash scripts/check_e2e_shards.sh \
 		--shard build-core $(E2E_DUCKDB_BUILD_CORE_PATHS) \
 		--shard build-incremental $(E2E_DUCKDB_BUILD_INCREMENTAL_PATHS) \
-		--shard build-virtual $(E2E_DUCKDB_BUILD_VIRTUAL_PATHS) \
 		--shard cli-data $(E2E_DUCKDB_CLI_DATA_PATHS) \
 		--shard cli $(E2E_DUCKDB_CLI_PATHS) \
-		--shard virtual $(E2E_DUCKDB_VIRTUAL_PATHS) \
+		--shard inspection $(E2E_DUCKDB_INSPECTION_PATHS) \
 		--shard integrations $(E2E_DUCKDB_INTEGRATIONS_PATHS)
 
 
@@ -273,17 +257,6 @@ test-e2e-varied-cache-performance:
 		-n auto --dist loadfile -m cache_compile_performance \
 		-vv -rP --log-level=INFO --log-cli-level=INFO --color=yes
 
-test-virtual:
-	@mkdir -p /tmp/opencode
-	@log="/tmp/opencode/test-virtual-$$(date +%Y%m%d-%H%M%S).log"; \
-	echo "Logging to $$log"; \
-	env PYTHONUNBUFFERED=1 TESTCONTAINERS_RYUK_DISABLED=true SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest \
-		$(VIRTUAL_TEST_ROOTS) \
-		-k "$(VIRTUAL_TEST_KEYWORD)" \
-		-m "not dbt and not performance" -vv --color=yes -n auto --dist loadfile 2>&1 | tee "$$log"; \
-	status=$${PIPESTATUS[0]}; \
-	echo "TEST_VIRTUAL_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
-	exit $$status
 
 
 skills:
@@ -297,8 +270,6 @@ export DBT_EXECUTABLE
 
 SQLBUILD_CONCURRENCY ?= 8
 
-VIRTUAL_TEST_ROOTS ?= tests/e2e/src/sqlbuild/cli/commands/main tests/e2e/src/sqlbuild/integrations/dagster
-VIRTUAL_TEST_KEYWORD ?= virtual or reconcile or diff or janitor or snapshot or dagster
 
 
 test-dbt:

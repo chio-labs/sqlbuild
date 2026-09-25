@@ -45,29 +45,6 @@ TARGETS_PROJECT_TOML: str = dedent(
     schema = "prod"
     """
 ).lstrip()
-VIRTUAL_PROJECT_TOML: str = dedent(
-    f"""
-    name = "orders_project"
-    adapter = "duckdb"
-    default_target = "dev"
-
-    [settings]
-    virtual_environments = true
-
-    [connection]
-    database = "{DATABASE_FILE}"
-
-    [targets.dev]
-    schema = "dev"
-
-    [targets.dev.state]
-    backend = "duckdb"
-    schema = "sqlbuild_state"
-
-    [targets.dev.state.connection]
-    database = "state.duckdb"
-    """
-).lstrip()
 JANITOR_PROJECT_TOML: str = dedent(
     f"""
     name = "orders_project"
