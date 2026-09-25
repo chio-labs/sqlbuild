@@ -919,14 +919,6 @@ class SchemaBackfillBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
-class DirectReuseFromBuildE2ETestCase:
-    description: str
-    project_name: str
-    expected_prod_build_exit_code: int
-    expected_dev_build_exit_code: int
-
-
-@dataclass(frozen=True)
 class MixedTimestampGrainBuildE2ETestCase:
     """Test case for mixed timestamp grain replay behavior."""
 
@@ -1109,3 +1101,15 @@ class SqlHookIdentityBuildE2ETestCase:
     added_hook_path: str
     added_hook_contents: str
     expected_reason: str
+
+
+@dataclass(frozen=True)
+class PythonNodeIdentityBuildE2ETestCase:
+    """Test case for Python node version identity after one decorator-input edit."""
+
+    description: str
+    edited_path: str
+    original_text: str
+    edited_text: str
+    expected_asset_identity_status: str
+    expected_loader_version_count: int

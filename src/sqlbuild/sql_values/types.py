@@ -41,4 +41,3 @@ class StateSqlValueType(StrEnum):
 
 type SqlScalar = str | int | bool | float | Decimal | None
 type SqlValuePayload = SqlScalar | tuple[object, ...]
-type SqlCollectionRendering = CollectionRendering

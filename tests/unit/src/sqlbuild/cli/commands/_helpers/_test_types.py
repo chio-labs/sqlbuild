@@ -11,10 +11,3 @@ class SourceFreshnessAppendEligibilityTestCase:
     model_statuses: dict[str, ExecutionStatus]
     expected_insert_count: int
     expected_lifecycle_order: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DbtSqlbuildWorkOutputTestCase:
-    description: str
-    expected_fragments: tuple[str, ...]
-    unexpected_fragments: tuple[str, ...]

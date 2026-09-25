@@ -10,7 +10,6 @@ import pytest
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
-    CursorValue,
     ExpressionInferenceProfile,
     QueryResult,
     RowDiffColumnResult,
@@ -21,7 +20,7 @@ from sqlbuild.adapter.contract.models import (
     RowDiffTolerances,
     SchemaDiffResult,
 )
-from sqlbuild.adapter.contract.types import CursorKind, FunctionNullabilityRule
+from sqlbuild.adapter.contract.types import FunctionNullabilityRule
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.contracts.models import SeedCsvSettings
@@ -29,7 +28,6 @@ from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     CompositeRowDiffSamplingTestCase,
     ConnectSettingsTestCase,
     ConnectTestCase,
-    CountRowsTestCase,
     DeleteInsertTestCase,
     DiffRowsErrorTestCase,
     DiffRowsTestCase,
@@ -50,6 +48,7 @@ from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     SwapTestCase,
     TransactionalAtomicityTestCase,
 )
+from tests.integration.src.sqlbuild.adapters.duckdb.helpers import count_relation_rows
 
 
 @pytest.mark.parametrize(
@@ -442,7 +441,7 @@ def test_given_sql_when_creating_table_as_then_table_is_writable(
         statement_recorder=StatementRecorder(),
     )
     connection.execute("INSERT INTO result VALUES (4)")
-    count: int = adapter.count_rows(connection=connection, relation="result")
+    count: int = count_relation_rows(adapter=adapter, connection=connection, relation="result")
 
     assert count == test_case.expected_row_count
 
@@ -561,7 +560,7 @@ def test_given_source_table_when_creating_view_then_view_reflects_source(
         sql="SELECT id FROM source",
         statement_recorder=StatementRecorder(),
     )
-    count: int = adapter.count_rows(connection=connection, relation="result_view")
+    count: int = count_relation_rows(adapter=adapter, connection=connection, relation="result_view")
 
     assert count == test_case.expected_row_count
 
@@ -750,7 +749,7 @@ def test_given_source_table_when_cloning_then_target_has_same_rows(
         destination="cloned_t",
         statement_recorder=StatementRecorder(),
     )
-    count: int = adapter.count_rows(connection=connection, relation="cloned_t")
+    count: int = count_relation_rows(adapter=adapter, connection=connection, relation="cloned_t")
 
     assert count == test_case.expected_row_count
 
@@ -783,7 +782,7 @@ def test_given_existing_table_when_appending_then_row_count_increases(
         sql="SELECT * FROM (VALUES (2), (3)) AS t(id)",
         statement_recorder=StatementRecorder(),
     )
-    count: int = adapter.count_rows(connection=connection, relation="append_t")
+    count: int = count_relation_rows(adapter=adapter, connection=connection, relation="append_t")
 
     assert count == test_case.expected_row_count
 
@@ -831,7 +830,7 @@ def test_given_target_when_delete_inserting_then_matching_rows_replaced(
         unique_key=test_case.unique_key,
         statement_recorder=StatementRecorder(),
     )
-    count: int = adapter.count_rows(connection=connection, relation="di_target")
+    count: int = count_relation_rows(adapter=adapter, connection=connection, relation="di_target")
     updated_val: Any = connection.execute("SELECT val FROM di_target WHERE id = 1").fetchone()
 
     assert count == test_case.expected_row_count
@@ -881,7 +880,9 @@ def test_given_target_and_source_when_merging_then_upserts_correctly(
         unique_key=test_case.unique_key,
         statement_recorder=StatementRecorder(),
     )
-    count: int = adapter.count_rows(connection=connection, relation="merge_target")
+    count: int = count_relation_rows(
+        adapter=adapter, connection=connection, relation="merge_target"
+    )
     rows: list[tuple[Any, ...]] = connection.execute(
         "SELECT id, name FROM merge_target ORDER BY id, name"
     ).fetchall()
@@ -956,7 +957,7 @@ def test_given_csv_file_when_loading_seed_twice_then_table_is_replaced(
         infer_types=test_case.infer_types,
         statement_recorder=StatementRecorder(),
     )
-    count: int = adapter.count_rows(connection=connection, relation="seed_table")
+    count: int = count_relation_rows(adapter=adapter, connection=connection, relation="seed_table")
     first_row: tuple[Any, ...] = connection.execute(
         "SELECT * FROM seed_table ORDER BY id LIMIT 1"
     ).fetchone()
@@ -1415,53 +1416,6 @@ def test_given_invalid_tolerance_when_diffing_rows_then_raises_clear_error(
             unique_key=test_case.unique_key,
             tolerances=test_case.tolerances,
         )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        CountRowsTestCase(
-            description="counts all rows without cursor filter",
-            setup_sql=(
-                "CREATE TABLE count_t (id INTEGER)",
-                "INSERT INTO count_t VALUES (1), (2), (3)",
-            ),
-            relation="count_t",
-            expected_count=3,
-        ),
-        CountRowsTestCase(
-            description="counts rows bounded by integer cursor",
-            setup_sql=(
-                "CREATE TABLE count_bounded (id INTEGER)",
-                "INSERT INTO count_bounded VALUES (1), (2), (3), (4), (5)",
-            ),
-            relation="count_bounded",
-            cursor_column="id",
-            start_cursor=CursorValue(kind=CursorKind.INTEGER, value=2),
-            end_cursor=CursorValue(kind=CursorKind.INTEGER, value=4),
-            expected_count=2,
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_table_when_counting_rows_then_returns_expected_count(
-    test_case: CountRowsTestCase,
-    adapter: DuckDbAdapter,
-    connection: Any,
-) -> None:
-    statement: str
-    for statement in test_case.setup_sql:
-        connection.execute(statement)
-
-    count: int = adapter.count_rows(
-        connection=connection,
-        relation=test_case.relation,
-        cursor_column=test_case.cursor_column,
-        start_cursor=test_case.start_cursor,
-        end_cursor=test_case.end_cursor,
-    )
-
-    assert count == test_case.expected_count
 
 
 @pytest.mark.parametrize(

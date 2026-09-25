@@ -123,8 +123,6 @@ def build_python_node_dependency_edges(
                 PythonNodeDependencyEdge(
                     upstream_name=upstream_node.name,
                     downstream_name=node.name,
-                    upstream_function=upstream_node.function,
-                    downstream_function=node.function,
                 )
             )
     return tuple(edges)
@@ -216,6 +214,7 @@ def _build_loader_node(
             discovered=loader,
             provider_by_name=provider_by_name,
             decorator_config={
+                "columns": loader.columns,
                 "contract": loader.contract,
                 "cursor_column": loader.cursor_column,
                 "destination": loader.destination,

@@ -167,12 +167,6 @@ class StateBackend(ABC):
         """Read runtime node result rows for one virtual environment identity."""
         ...
 
-    def append_microbatch_event(
-        self, *, connection: Any, schema: str, event: MicrobatchEvent
-    ) -> None:
-        """Append one logical microbatch event to virtual state."""
-        raise MicrobatchStateError("virtual state backend does not support microbatch events")
-
     def append_microbatch_events(
         self, *, connection: Any, schema: str, events: tuple[MicrobatchEvent, ...]
     ) -> MicrobatchWriteResult:
@@ -257,13 +251,6 @@ class StateBackend(ABC):
         self, *, connection: Any, schema: str, record: PhysicalRelationAncestryRecord
     ) -> None:
         """Insert or replace physical relation ancestry."""
-        ...
-
-    @abstractmethod
-    def get_physical_relation_ancestry(
-        self, *, connection: Any, schema: str, model_name: str, version_hash: str
-    ) -> PhysicalRelationAncestryRecord | None:
-        """Return physical relation ancestry if it exists."""
         ...
 
     @abstractmethod
@@ -391,34 +378,10 @@ class StateBackend(ABC):
         ...
 
     @abstractmethod
-    def replace_virtual_environment_function_refs(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        virtual_environment_name: str,
-        refs: tuple[VirtualEnvironmentFunctionRefRecord, ...],
-    ) -> None:
-        """Replace all function refs for a virtual environment."""
-        ...
-
-    @abstractmethod
     def get_virtual_environment_function_refs(
         self, *, connection: Any, schema: str, virtual_environment_name: str
     ) -> tuple[VirtualEnvironmentFunctionRefRecord, ...]:
         """Return function refs for a virtual environment."""
-        ...
-
-    @abstractmethod
-    def replace_virtual_environment_seed_refs(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        virtual_environment_name: str,
-        refs: tuple[VirtualEnvironmentSeedRefRecord, ...],
-    ) -> None:
-        """Replace all seed refs for a virtual environment."""
         ...
 
     @abstractmethod

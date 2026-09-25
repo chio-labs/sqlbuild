@@ -29,26 +29,6 @@ def build_compiled_function_fingerprint_sql(function: CompiledFunction) -> str:
     )
 
 
-def detect_function_backfill(
-    *,
-    function: CompiledFunction,
-    fingerprint_sql: str,
-    snapshot: WarehouseSnapshot,
-    query_change_tracking: bool,
-    full_refresh: bool,
-) -> BackfillResult:
-    """Resolve a function definition change into a cascadeable backfill."""
-
-    result: tuple[PlanReason, BackfillResult] = detect_function_change(
-        function=function,
-        fingerprint_sql=fingerprint_sql,
-        snapshot=snapshot,
-        query_change_tracking=query_change_tracking,
-        full_refresh=full_refresh,
-    )
-    return result[1]
-
-
 def detect_function_change(
     *,
     function: CompiledFunction,

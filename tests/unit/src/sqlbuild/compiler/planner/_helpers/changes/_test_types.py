@@ -65,11 +65,3 @@ class ResolveBackfillTestCase:
     description: str
     raw_value: str | None
     expected_result: BackfillResult
-
-
-@dataclass(frozen=True)
-class ResolveSchemaBackfillTestCase:
-    description: str
-    replay_on_change: dict[str, str]
-    findings: tuple[SchemaFinding, ...]
-    expected_result: BackfillResult

@@ -63,6 +63,9 @@ from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_com
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import (
     skip_quoted_text,
 )
+from sqlbuild.compiler.sql_analysis.main._split_set_operation_branches import (
+    split_set_operation_branches,
+)
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 
 _CONTEXT: str = "SQL test"
@@ -479,6 +482,7 @@ def _classify_model_sql_test_ctes(
             _validate_expected_cte_query(
                 cte=cte,
                 file_label=file_label,
+                label=cte.name,
                 allow_empty_fixture=True,
             )
             expected_ctes.append(cte)
@@ -702,40 +706,11 @@ def _extract_expected_branch_column_names(
     )
     if sql_analysis_column_names is not None:
         return sql_analysis_column_names
-    branches: tuple[str, ...] = _split_set_operation_branches(sql)
+    branches: tuple[str, ...] = split_set_operation_branches(sql=sql, context=_CONTEXT)
     return tuple(
         _extract_expected_select_column_names(branch_sql=branch, file_label=file_label, label=label)
         for branch in branches
     )
-
-
-def _split_set_operation_branches(sql: str) -> tuple[str, ...]:
-    branches: list[str] = []
-    branch_start: int = 0
-    resume: int = 0
-    index: int
-    depth: int
-    for index, depth in iter_code_positions(sql=sql, context=_CONTEXT):
-        if index < resume or depth != 0:
-            continue
-        union_end: int | None = _try_consume_keyword(sql=sql, start=index, keyword="UNION")
-        if union_end is None:
-            continue
-        branch_sql: str = sql[branch_start:index].strip()
-        if branch_sql:
-            branches.append(branch_sql)
-        resume = _skip_ignorable(sql=sql, start=union_end)
-        quantifier_end: int | None = _try_consume_keyword(
-            sql=sql, start=resume, keyword="ALL"
-        ) or _try_consume_keyword(sql=sql, start=resume, keyword="DISTINCT")
-        if quantifier_end is not None:
-            resume = _skip_ignorable(sql=sql, start=quantifier_end)
-        branch_start = resume
-
-    final_branch_sql: str = sql[branch_start:].strip()
-    if final_branch_sql:
-        branches.append(final_branch_sql)
-    return tuple(branches)
 
 
 def _extract_expected_select_column_names(

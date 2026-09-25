@@ -87,7 +87,6 @@ def execute_ingress_python_loader_nodes(
                 for name in selected_python_names
                 if python_graph.nodes_by_name[name].kind == PythonNodeKind.LOADER
             ),
-            read_side_sql_keys=frozenset(),
             read_side_python_node_names=frozenset(),
         ),
         python_graph=python_graph,

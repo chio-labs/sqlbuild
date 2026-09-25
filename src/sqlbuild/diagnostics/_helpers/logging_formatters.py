@@ -11,12 +11,6 @@ _INLINE_SQL_TRANSACTION_STATEMENTS: tuple[str, ...] = ("BEGIN", "COMMIT", "ROLLB
 _SQL_EVENT_FIELD: str = "sqlbuild_sql"
 
 
-def _format_prefix(*, record: logging.LogRecord, date_text: str) -> str:
-    return (
-        f"{date_text}.{int(record.msecs):03d} {record.levelname} {_short_logger_name(record.name)}"
-    )
-
-
 def _short_logger_name(name: str) -> str:
     prefix: str = f"{_LOGGER_ROOT_NAME}."
     if name.startswith(prefix):

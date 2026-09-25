@@ -47,17 +47,6 @@ def name_value(value: object) -> str:
     return ""
 
 
-def table_parts(node: Any) -> tuple[str, str, str]:
-    """Return catalog, schema, and name for one table node."""
-
-    data: dict[str, object] = payload(node)
-    return (
-        name_value(data.get("catalog")),
-        name_value(data.get("schema")),
-        name_value(data.get("name")),
-    )
-
-
 def cte_name(node: Any) -> str:
     if isinstance(node, tuple) and len(node) == NAMED_CTE_TUPLE_SIZE:
         return str(node[0])

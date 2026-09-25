@@ -179,7 +179,6 @@ class ModelExecutionResult:
     microbatch_accounting_intervals: tuple[MicrobatchAccountingInterval, ...] = field(
         default_factory=tuple
     )
-    microbatch_applied_intervals: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     microbatch_limit: int | None = None
     microbatch_limit_count: int | None = None
     microbatch_limit_action: MicrobatchLimitAction | None = None
@@ -554,7 +553,6 @@ class MicrobatchPhaseOutcome:
     failure: ModelExecutionResult | None = None
     completed_batches: int = 0
     rows_affected: int | None = None
-    applied_intervals: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

@@ -32,9 +32,6 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseModelSqlErrorTestCase,
     ParseModelSqlHeaderTestCase,
 )
-from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
-    assert_generated_model_header_corpus_parity,
-)
 
 
 @pytest.mark.parametrize(
@@ -136,17 +133,6 @@ def test_given_cached_model_header_when_parsing_twice_then_top_level_dictionarie
 
 @pytest.mark.parametrize(
     "test_case",
-    [ExpectedBooleanTestCase(description="generated header corpus matches", expected_result=True)],
-    ids=lambda case: case.description,
-)
-def test_given_generated_header_corpus_when_native_parsing_then_parent_behavior_is_exact(
-    test_case: ExpectedBooleanTestCase,
-) -> None:
-    assert assert_generated_model_header_corpus_parity() is test_case.expected_result
-
-
-@pytest.mark.parametrize(
-    "test_case",
     [ExpectedCountTestCase(description="invalid faults preserve order", expected_count=2)],
     ids=lambda case: case.description,
 )
@@ -204,7 +190,6 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
     )[0]
 
     assert model_file.output_column_locations == {}
-    assert model_file.output_column_locations_extracted is False
     assert (
         model_file.extract_implicit_alias_columns
         is test_case.expected_extract_implicit_alias_columns

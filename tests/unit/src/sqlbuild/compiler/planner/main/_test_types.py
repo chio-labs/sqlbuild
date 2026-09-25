@@ -88,28 +88,6 @@ class ExternalBlockedPlanOutputTestCase:
 
 
 @dataclass(frozen=True)
-class DirectInputBaselineTestCase:
-    description: str
-    models_by_name: dict[str, str]
-    origin_model_names: tuple[str, ...]
-    selected_model_name: str
-    expected_baseline_names: tuple[str, ...]
-    unexpected_baseline_names: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class LocalNodePlanningTestCase:
-    description: str
-    fingerprint_exists: bool
-    relation_exists: bool
-    full_refresh: bool
-    local_hash: str | None
-    previous_hash: str | None
-    expected_action: str
-    expected_reason: str
-
-
-@dataclass(frozen=True)
 class SelectorExpansionTestCase:
     description: str
     raw: str

@@ -69,17 +69,6 @@ class PostgresRowDiffErrorTestCase:
 
 
 @dataclass(frozen=True)
-class PostgresCountRowsTestCase:
-    description: str
-    table_name: str
-    values_sql: str
-    cursor_column: str | None = None
-    start_cursor: CursorValue | None = None
-    end_cursor: CursorValue | None = None
-    expected_count: int = 0
-
-
-@dataclass(frozen=True)
 class PostgresRowDiffSampleTestCase:
     description: str
     left_sql: str

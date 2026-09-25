@@ -1,4 +1,4 @@
-"""Typed public execution history API with a deprecated ``EventLogStorage`` alias."""
+"""Typed public execution history API."""
 
 from collections.abc import Iterable
 
@@ -44,8 +44,6 @@ from sqlbuild.runtime.execution_history.types import (
     RunStorage,
 )
 
-EventLogStorage: type[LifecycleEventLogStorage] = LifecycleEventLogStorage
-
 __all__ = (
     "DEFAULT_PAGE_LIMIT",
     "MAX_PAGE_LIMIT",
@@ -53,7 +51,6 @@ __all__ = (
     "EventCursor",
     "EventFamily",
     "EventFilter",
-    "EventLogStorage",
     "LifecycleEventLogStorage",
     "EventPage",
     "ExecutionHistoryStorageError",

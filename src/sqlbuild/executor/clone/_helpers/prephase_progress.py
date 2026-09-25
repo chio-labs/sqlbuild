@@ -123,24 +123,6 @@ def write_prephase_header(*, stream: TextIO, title: str, use_color: bool) -> Non
     stream.flush()
 
 
-def write_prephase_rows(
-    *, stream: TextIO, rows: tuple[PrephaseProgressRow, ...], use_color: bool
-) -> None:
-    if not rows:
-        return
-    total: int = len(rows)
-    row: PrephaseProgressRow
-    for index, row in enumerate(rows, start=1):
-        write_prephase_row(
-            stream=stream,
-            row=row,
-            index=index,
-            total=total,
-            use_color=use_color,
-        )
-    stream.flush()
-
-
 def write_prephase_row(
     *, stream: TextIO, row: PrephaseProgressRow, index: int, total: int, use_color: bool
 ) -> None:

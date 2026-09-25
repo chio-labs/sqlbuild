@@ -5,7 +5,7 @@ use pyo3::prelude::{
     Bound, IntoPyObject, Py, PyAny, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyTuple};
-use pyo3::{pyfunction, wrap_pyfunction};
+use pyo3::{FromPyObject, pyfunction, wrap_pyfunction};
 
 use crate::configuration::main::load;
 use crate::constants::API_VERSION;
@@ -38,17 +38,35 @@ fn finalize_rule_findings_json(py: Python<'_>, request_json: &str) -> PyResult<S
         .map_err(value_error)
 }
 
+/// One SQL lint preparation request, read from a Python mapping.
+#[derive(FromPyObject)]
+#[pyo3(from_item_all)]
+struct LintPreparationRequest {
+    expanded: String,
+    before_expansion: String,
+    prior_sites: Vec<usize>,
+    dialect: String,
+}
+
 #[pyfunction]
 fn prepare_lint_sql(
     py: Python<'_>,
-    expanded: &str,
-    before_expansion: &str,
-    prior_sites: Vec<usize>,
+    request: LintPreparationRequest,
 ) -> PyResult<Option<crate::sql_lint::types::PreparedSql>> {
     py.detach(|| {
-        crate::sql_lint::main::preparation::prepare(expanded, before_expansion, &prior_sites)
+        crate::sql_lint::main::preparation::prepare(
+            &request.expanded,
+            &request.before_expansion,
+            &request.prior_sites,
+            &request.dialect,
+        )
     })
     .map_err(value_error)
+}
+
+#[pyfunction]
+fn lint_backtick_identifiers(dialect: &str) -> bool {
+    crate::sql_lint::main::backtick_identifiers::backtick_identifiers(dialect)
 }
 
 #[pyfunction]
@@ -325,6 +343,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(finalize_rule_findings_json, module)?)?;
     module.add_function(wrap_pyfunction!(lint_sql_json, module)?)?;
     module.add_function(wrap_pyfunction!(prepare_lint_sql, module)?)?;
+    module.add_function(wrap_pyfunction!(lint_backtick_identifiers, module)?)?;
     module.add_function(wrap_pyfunction!(lint_sql_batch_json, module)?)?;
     module.add_function(wrap_pyfunction!(format_sql_json, module)?)?;
     module.add_function(wrap_pyfunction!(format_sql_batch_json, module)?)?;

@@ -155,10 +155,6 @@ class EventExporterDispatcher:
     def notification_thread(self) -> threading.Thread | None:
         return self._notification_thread
 
-    @property
-    def health_thread(self) -> threading.Thread | None:
-        return self._health_thread
-
     def enqueue(self, event: LifecycleEvent) -> None:
         """Filter and enqueue eligible exporter attempts without waiting."""
 

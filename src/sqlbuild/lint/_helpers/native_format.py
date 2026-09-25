@@ -31,12 +31,6 @@ class _PreparedBody:
     interpolation_sites: tuple[InterpolationSite, ...]
 
 
-def newline_style(*, contents: str) -> str:
-    """Return the newline convention used by the authored contents."""
-
-    return CARRIAGE_RETURN_LINE_FEED if CARRIAGE_RETURN_LINE_FEED in contents else LINE_FEED
-
-
 def with_newline_style(*, contents: str, newline: str) -> str:
     """Normalize generated contents back to the authored newline convention."""
 
@@ -66,7 +60,7 @@ def format_native_sql_bodies(
             body: str = contents[body_start:body_end]
             trailing: str = body[len(body.rstrip()) :]
             core: str = body[: len(body) - len(trailing)] if trailing else body
-            neutralized, sites = neutralize_interpolation(body=core)
+            neutralized, sites = neutralize_interpolation(body=core, dialect=config.dialect)
             cache_key: tuple[str, str] = (neutralized, config.dialect)
             requests_by_key.setdefault(
                 cache_key,

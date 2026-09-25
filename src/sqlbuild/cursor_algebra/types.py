@@ -2,10 +2,8 @@
 
 from enum import StrEnum
 
-from sqlbuild.compiler.planner.types import CursorGrain
 from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue
 
-type Grain = CursorGrain
 type CursorScalar = TimestampValue | DateValue | IntegerValue
 
 

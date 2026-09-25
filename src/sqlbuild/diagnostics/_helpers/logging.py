@@ -34,14 +34,6 @@ def _current_identity_context() -> dict[str, object]:
     return {f"sqlbuild_{key}": value for key, value in execution_identity_to_dict(identity).items()}
 
 
-def get_diagnostics_logger(name: str | None = None) -> logging.Logger:
-    """Return a SQLBuild diagnostics logger."""
-
-    if name is None:
-        return logging.getLogger(_LOGGER_ROOT_NAME)
-    return logging.getLogger(f"{_LOGGER_ROOT_NAME}.{name}")
-
-
 def log_sql(
     *,
     logger: logging.Logger,

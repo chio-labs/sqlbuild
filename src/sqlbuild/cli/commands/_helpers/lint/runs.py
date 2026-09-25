@@ -13,19 +13,14 @@ from sqlbuild.lint.constants import (
     ADAPTER_DIALECT_TRANSLATIONS,
     DEFAULT_LINE_WIDTH,
     DEFAULT_MAX_DESCRIPTION_LINES,
-    FIX_STATUS_APPLIED,
-    FIX_STATUS_SKIPPED,
     FORMAT_SECTION_KEY,
     LINE_WIDTH_KEY,
     MAX_DESCRIPTION_LINES_KEY,
     PROJECT_CONFIG_FILENAME_KEY,
 )
 from sqlbuild.lint.models import (
-    FixRunResult,
     LintConfig,
-    LintFixRecord,
     LintRunResult,
-    LintViolation,
 )
 from sqlbuild.presentation.classes.cli_style import CliStyle
 
@@ -131,90 +126,6 @@ def render_lint_result_json(*, result: LintRunResult) -> None:
             separators=(",", ":"),
         )
     )
-
-
-def render_fix_result(*, result: FixRunResult, root: Path, use_color: bool, preview: bool) -> None:
-    """Render applied/skipped repairs followed by remaining diagnostics."""
-
-    style: CliStyle = CliStyle(use_color=use_color)
-    for record in result.fixes:
-        label: str = f"{record.status}[{record.code}]"
-        styled: str = (
-            style.success_strong(label)
-            if record.status == FIX_STATUS_APPLIED
-            else style.warning_strong(label)
-        )
-        location: str = _relative_path(path=record.file_path, root=root)
-        suffix: str = f": {record.reason}" if record.reason is not None else ""
-        print(f"{styled}: {location}:{record.line}:{record.column}{suffix}")
-    if result.fixes:
-        print()
-    if result.violations:
-        print("\n\n".join(format_lint_diagnostics(result=result, root=root, use_color=use_color)))
-        print()
-    fixed_count: int = sum(record.status == FIX_STATUS_APPLIED for record in result.fixes)
-    skipped_count: int = sum(record.status == FIX_STATUS_SKIPPED for record in result.fixes)
-    action: str = "WOULD_FIX" if preview else "FIXED"
-    summary: str = (
-        f"Completed.  {action}={fixed_count}  SKIPPED={skipped_count}  "
-        f"REMAINING={len(result.violations)}  FILES={result.files_checked}"
-    )
-    if result.violations or (preview and result.changed_files):
-        print(style.warning_strong(summary))
-    else:
-        print(style.success_strong(summary))
-
-
-def render_fix_result_json(*, result: FixRunResult, preview: bool) -> None:
-    """Render a stable machine-readable fix result."""
-
-    print(
-        json.dumps(
-            {
-                "changed_files": [str(path) for path in result.changed_files],
-                "files_checked": result.files_checked,
-                "fixes": [_fix_record_json(record=record) for record in result.fixes],
-                "mode": "check" if preview else "write",
-                "remaining": [_violation_json(violation=entry) for entry in result.violations],
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-    )
-
-
-def _fix_record_json(*, record: LintFixRecord) -> dict[str, object]:
-    return {
-        "code": record.code,
-        "column": record.column,
-        "file": str(record.file_path),
-        "line": record.line,
-        "reason": record.reason,
-        "status": record.status,
-    }
-
-
-def _violation_json(*, violation: LintViolation) -> dict[str, object]:
-    return {
-        "code": violation.code,
-        "column": violation.column,
-        "end_column": violation.end_column,
-        "end_line": violation.end_line,
-        "engine": violation.engine,
-        "file": str(violation.file_path),
-        "fix_unavailable_reason": violation.fix_unavailable_reason,
-        "line": violation.line,
-        "message": violation.message,
-        "remediation": violation.remediation,
-        "severity": violation.severity,
-    }
-
-
-def _relative_path(*, path: Path, root: Path) -> str:
-    try:
-        return path.relative_to(root).as_posix()
-    except ValueError:
-        return path.as_posix()
 
 
 def _styled_summary(*, summary: str, result: LintRunResult, use_color: bool) -> str:

@@ -22,6 +22,7 @@ from sqlbuild.lint.constants import (
     HEADER_KIND_MODEL,
     IDENTIFIER_SEPARATOR_CHARACTER,
     LINE_FEED,
+    LINT_ENGINE_SQLBUILD,
     RULE_DESCRIPTION_LENGTH,
     RULE_DESCRIPTION_PRESENT,
     RULE_HEADER_PARSE,
@@ -214,7 +215,7 @@ def _lint_header_values(
                 code=RULE_HEADER_PARSE,
                 message=f"{header.kind}() header could not be parsed: {error}",
                 severity=VIOLATION_SEVERITY_FAULT,
-                engine="sqlbuild",
+                engine=LINT_ENGINE_SQLBUILD,
                 remediation=f"Correct the {header.kind}() header syntax.",
             ),
         )
@@ -317,7 +318,7 @@ def _lint_header_whitespace(
             code=RULE_HEADER_WHITESPACE,
             message=f"{header.kind}() header contains trailing whitespace",
             severity=VIOLATION_SEVERITY_WARNING,
-            engine="sqlbuild",
+            engine=LINT_ENGINE_SQLBUILD,
             remediation="Run sqb format to remove trailing header whitespace.",
         ),
     )
@@ -568,7 +569,7 @@ def _relocate_leading_comment(
                 code=RULE_LEADING_COMMENT_DESCRIPTION,
                 message=(f"Relocated leading comment exceeds {config.max_description_lines} lines"),
                 severity=VIOLATION_SEVERITY_FAULT,
-                engine="sqlbuild",
+                engine=LINT_ENGINE_SQLBUILD,
                 remediation=(
                     f"Shorten the relocated description to {config.max_description_lines} lines."
                 ),
@@ -675,7 +676,7 @@ def _violation_for_header_start(
         code=code,
         message=message,
         severity=severity,
-        engine="sqlbuild",
+        engine=LINT_ENGINE_SQLBUILD,
         remediation=remediation,
     )
 

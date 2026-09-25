@@ -25,6 +25,9 @@ from sqlbuild.virtual.planner.models import VirtualPlanSemantics
 from sqlbuild.virtual.state.main.checkpoints._checkpoints import (
     create_finalized_virtual_environment_checkpoint,
 )
+from sqlbuild.virtual.state.main.environments._ref_model_versions import (
+    read_ref_model_versions,
+)
 from sqlbuild.virtual.state.models import (
     FunctionVersionRecord,
     ModelVersionRecord,
@@ -152,13 +155,13 @@ def build_promote_semantics(
 ) -> PromoteSemantics:
     """Build source and target virtual plan semantics from bound refs."""
 
-    source_versions: dict[str, ModelVersionRecord | None] = _read_model_versions(
+    source_versions: dict[str, ModelVersionRecord | None] = read_ref_model_versions(
         backend=backend,
         state_connection=state_connection,
         schema=schema,
         refs=environment_state.source_refs,
     )
-    target_versions: dict[str, ModelVersionRecord | None] = _read_model_versions(
+    target_versions: dict[str, ModelVersionRecord | None] = read_ref_model_versions(
         backend=backend,
         state_connection=state_connection,
         schema=schema,
@@ -508,24 +511,6 @@ def _stale_models_after_promotion(
         for model in graph.project.models
         if final_version_hashes.get(model.name) != expected_version_hashes.get(model.name)
     )
-
-
-def _read_model_versions(
-    *,
-    backend: Any,
-    state_connection: Any,
-    schema: str,
-    refs: tuple[VirtualEnvironmentModelRefRecord, ...],
-) -> dict[str, ModelVersionRecord | None]:
-    return {
-        ref.model_name: backend.get_model_version(
-            connection=state_connection,
-            schema=schema,
-            model_name=ref.model_name,
-            version_hash=ref.version_hash,
-        )
-        for ref in refs
-    }
 
 
 def _read_physical_relations(

@@ -625,15 +625,6 @@ def _build_projection_is_partial(
     )
 
 
-def _projected_asset_summary(*, assets: tuple[dict[str, object], ...]) -> dict[str, int]:
-    return {
-        "success_count": sum(1 for asset in assets if asset.get("status") == _SUCCESS_STATUS),
-        "failure_count": sum(1 for asset in assets if asset.get("status") == _FAILED_STATUS),
-        "skipped_count": sum(1 for asset in assets if asset.get("status") == _SKIPPED_STATUS),
-        "warning_count": sum(1 for asset in assets if asset.get("status") == _WARNING_STATUS),
-    }
-
-
 def _format_model_assets(
     *, results: tuple[ModelExecutionResult, ...], plan: PlanOutput | None
 ) -> tuple[dict[str, object], ...]:

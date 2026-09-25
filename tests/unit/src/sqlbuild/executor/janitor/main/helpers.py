@@ -408,30 +408,8 @@ class FakeJanitorAdapter(BaseAdapter):
     ) -> RowDiffResult:
         raise NotImplementedError
 
-    def count_rows(
-        self,
-        connection: Any,
-        *,
-        relation: str,
-        cursor_column: str | None = None,
-        start_cursor: CursorValue | None = None,
-        end_cursor: CursorValue | None = None,
-    ) -> int:
-        raise NotImplementedError
-
     def relation_names_match(self, left: str, right: str) -> bool:
         return left == right
-
-    def render_query_with_cursor_bounds(
-        self,
-        *,
-        sql: str,
-        cursor_column: str,
-        cursor_start: str,
-        cursor_end: str | None,
-        cursor_type: object,
-    ) -> str:
-        raise NotImplementedError
 
     def render_seed_select_before_cursor(
         self,

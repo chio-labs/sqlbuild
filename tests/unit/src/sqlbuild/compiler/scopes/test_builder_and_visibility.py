@@ -23,9 +23,9 @@ from sqlbuild.compiler.discovery.models import (
     EnumDeclaration,
     EnumMember,
 )
+from sqlbuild.compiler.scopes._helpers.visibility import query_target
 from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
 from sqlbuild.compiler.scopes.main._build_scope_index import build_scope_index
-from sqlbuild.compiler.scopes.main._query_scope_target import query_scope_target
 from sqlbuild.compiler.scopes.main._resolve_scope_visibility import resolve_scope_visibility
 from sqlbuild.compiler.scopes.main._validate_scope_index import validate_scope_index
 from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
@@ -293,7 +293,7 @@ def test_given_unknown_qualified_target_when_querying_then_distinguishes_unknown
 ) -> None:
     lookup: ScopeLookup = build_scope_lookup(index=ScopeIndex())
 
-    query: ScopeTargetQuery = query_scope_target(lookup=lookup, target="model:missing")
+    query: ScopeTargetQuery = query_target(lookup=lookup, target="model:missing")
     resolution: VisibilityResolution = resolve_scope_visibility(
         lookup=lookup, target="model:missing"
     )
@@ -319,7 +319,7 @@ def test_given_declaration_qualified_target_when_querying_then_returns_declarati
     )
     lookup: ScopeLookup = build_scope_lookup(index=ScopeIndex(declarations=(declaration,)))
 
-    query: ScopeTargetQuery = query_scope_target(
+    query: ScopeTargetQuery = query_target(
         lookup=lookup,
         target="constant:minimum_value",
     )

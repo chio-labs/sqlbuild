@@ -67,15 +67,6 @@ class PostgresLoaderWaffleShopE2ETestCase:
 
 
 @dataclass(frozen=True)
-class PostgresDiffE2ETestCase:
-    description: str
-    mutation_sql: tuple[str, ...]
-    command: tuple[str, ...]
-    expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
-    expected_return_code: int = 0
-
-
-@dataclass(frozen=True)
 class PostgresSnapshotE2ETestCase:
     description: str
     expected_current_rows_after_initial_build: tuple[tuple[object, ...], ...]

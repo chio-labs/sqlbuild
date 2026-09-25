@@ -27,12 +27,20 @@ impl QuotePolicy {
         double_quote_backslash_escapes: false,
     };
 
-    /// SQL lint policy, mirroring its site lexer: backslashes escape, backticks are code.
+    /// SQL lint base policy: backslashes escape; lint enables backticks per dialect.
     pub(crate) const SQL_LINT: Self = Self {
         backtick_identifiers: false,
         single_quote_backslash_escapes: true,
         double_quote_backslash_escapes: true,
     };
+
+    /// Return this policy with backtick-delimited identifiers enabled or disabled.
+    pub(crate) const fn with_backtick_identifiers(self, backtick_identifiers: bool) -> Self {
+        Self {
+            backtick_identifiers,
+            ..self
+        }
+    }
 
     /// Return whether `byte` opens quoted text under this policy.
     pub(crate) fn is_quote(self, byte: u8) -> bool {

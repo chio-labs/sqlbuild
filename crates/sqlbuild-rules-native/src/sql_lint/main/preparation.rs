@@ -6,6 +6,12 @@ pub(crate) fn prepare(
     expanded: &str,
     before_expansion: &str,
     prior_sites: &[usize],
+    dialect: &str,
 ) -> Result<Option<PreparedSql>, String> {
-    crate::sql_lint::_helpers::preparation::prepare(expanded, before_expansion, prior_sites)
+    crate::sql_lint::_helpers::preparation::prepare(
+        expanded,
+        before_expansion,
+        prior_sites,
+        dialect,
+    )
 }

@@ -18,7 +18,6 @@ from sqlbuild.compiler.lineage.types import (
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.scopes.models import UsageRecord
-from sqlbuild.compiler.scopes.types import ScopeKind
 from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention
 from sqlbuild.sql_values.models import SqlValue
 
@@ -65,12 +64,6 @@ class AuditFactoryAttachmentTestCase:
 class AnalysisCacheTestCase:
     description: str
     expected_count: int
-
-
-@dataclass(frozen=True)
-class SqlTestCteCacheTestCase:
-    description: str
-    expected_scanner_calls: int
 
 
 @dataclass(frozen=True)
@@ -186,23 +179,6 @@ class ExpandSqlMacrosErrorTestCase:
     sql: str
     expected_error_fragment: str
     macro_overrides: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class ScopedMacroExpansionTestCase:
-    description: str
-    definitions: dict[str, tuple[str, ScopeKind, str | None, str]]
-    expected_sql: str
-    expected_dependencies: tuple[str, ...]
-    expected_usages: tuple[tuple[str, str], ...]
-
-
-@dataclass(frozen=True)
-class ScopedMacroExpansionErrorTestCase:
-    description: str
-    definitions: dict[str, tuple[str, ScopeKind, str | None, str]]
-    sql: str
-    expected_error_fragment: str
 
 
 @dataclass(frozen=True)
@@ -453,7 +429,7 @@ class BuildScenarioInputsErrorTestCase:
 class ExtractSqlAnalysisExpectedBranchesTestCase:
     description: str
     sql: str
-    expected_branch_column_names: tuple[tuple[str, ...], ...]
+    expected_branch_column_names: tuple[tuple[str, ...], ...] | None
 
 
 @dataclass(frozen=True)
@@ -626,13 +602,6 @@ class IncrementalConfigErrorTestCase:
 
 
 @dataclass(frozen=True)
-class CursorAliasWarningTestCase:
-    description: str
-    config_values: tuple[dict[str, object], ...]
-    expected_warning_count: int
-
-
-@dataclass(frozen=True)
 class ContractConfigValidTestCase:
     description: str
     config_values: dict[str, object]
@@ -689,15 +658,6 @@ class ExpandTemplateDataErrorTestCase:
     preserve_context_tokens: bool
     preserve_unknown_context: bool
     expected_error_fragment: str
-
-
-@dataclass(frozen=True)
-class VarMacroCollisionTestCase:
-    description: str
-    var_names: tuple[str, ...]
-    macro_names: tuple[str, ...]
-    expected_valid: bool
-    expected_error_fragment: str | None = None
 
 
 @dataclass(frozen=True)
@@ -910,3 +870,25 @@ class ExpectedProjectionScanTestCase:
     expected_commas: tuple[str, ...]
     expected_alias: str | None
     expected_contains_select_star: bool
+
+
+@dataclass(frozen=True)
+class SetOperationExpectedKind:
+    """One SQL-test kind whose expected CTE accepts set operations."""
+
+    description: str
+    mode: SqlTestMode
+    support_ctes: tuple[tuple[str, str], ...]
+    expected_cte_name: str
+    payload_type: str
+
+
+@dataclass(frozen=True)
+class SetOperationExpectedTestCase:
+    """One expected-CTE set operation in one SQL-test kind."""
+
+    description: str
+    kind: SetOperationExpectedKind
+    sql: str
+    expected_payload_type: str = ""
+    expected_error_template: str = ""

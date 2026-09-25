@@ -99,68 +99,6 @@ def model_fingerprint_metadata_with_migration_fingerprint(
     return json.dumps(metadata, sort_keys=True, separators=(",", ":"), default=str)
 
 
-def same_target_audit_gate_reuse_decision(
-    *, metadata_json: str | None, model_audits: tuple[AuditPlanEntry, ...]
-) -> AuditGateReuseDecision:
-    """Return whether prior same-target audit gate proof covers planned audits."""
-
-    if not model_audits:
-        return AuditGateReuseDecision(
-            reusable=True,
-            reason=AuditGateReuseReason.REUSABLE,
-        )
-    if any(audit.always_run for audit in model_audits):
-        return AuditGateReuseDecision(
-            reusable=False,
-            reason=AuditGateReuseReason.ALWAYS_RUN,
-        )
-    audit_gate: AuditGateMetadata | AuditGateMetadataParseFailureDetail = _read_audit_gate(
-        metadata_json
-    )
-    if isinstance(audit_gate, AuditGateMetadataParseFailureDetail):
-        _log_parse_failure(audit_gate)
-        return AuditGateReuseDecision(
-            reusable=False, reason=_parse_failure_reuse_reason(audit_gate)
-        )
-    if audit_gate.status != AuditGateStatus.PASSED.value:
-        return AuditGateReuseDecision(reusable=False, reason=AuditGateReuseReason.NON_PASSING)
-    identity: AuditGateIdentity = build_audit_gate_identity(audits=model_audits)
-    if audit_gate.binding_set_hash != identity.binding_set_hash:
-        return AuditGateReuseDecision(
-            reusable=False,
-            reason=AuditGateReuseReason.BINDING_SET_CHANGED,
-            missing_binding_keys=tuple(audit.binding_key for audit in identity.audits),
-        )
-    prior_results: dict[str, AuditGateResultMetadata] = {
-        result.binding_key: result for result in audit_gate.results
-    }
-
-    reusable_binding_keys: list[str] = []
-    missing_binding_keys: list[str] = []
-    audit: AuditIdentity
-    for audit in identity.audits:
-        prior_result: AuditGateResultMetadata | None = prior_results.get(audit.binding_key)
-        if (
-            prior_result is None
-            or prior_result.execution_fingerprint != audit.execution_fingerprint
-        ):
-            missing_binding_keys.append(audit.binding_key)
-            continue
-        reusable_binding_keys.append(audit.binding_key)
-    if missing_binding_keys:
-        return AuditGateReuseDecision(
-            reusable=False,
-            reason=AuditGateReuseReason.AUDIT_CHANGED,
-            reusable_binding_keys=tuple(reusable_binding_keys),
-            missing_binding_keys=tuple(missing_binding_keys),
-        )
-    return AuditGateReuseDecision(
-        reusable=True,
-        reason=AuditGateReuseReason.REUSABLE,
-        reusable_binding_keys=tuple(reusable_binding_keys),
-    )
-
-
 def reuse_from_audit_gate_reuse_decision(
     *, metadata_json: str | None, model_audits: tuple[AuditPlanEntry, ...]
 ) -> AuditGateReuseDecision:

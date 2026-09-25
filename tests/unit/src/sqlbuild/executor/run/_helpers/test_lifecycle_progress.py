@@ -181,7 +181,7 @@ def test_given_existing_destination_when_promoting_then_terminal_records_actual_
     (
         PromotionProgressTestCase(
             description="unsupported catalogued strategy fails honestly",
-            strategy="create_new",
+            strategy="build_aside",
             expected_method="relation_exists",
             expected_event_types=("operation_started", "operation_failed"),
         ),
@@ -196,7 +196,7 @@ def test_given_unsupported_strategy_when_promoting_then_failed_terminal_records_
     dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
     adapter: Mock = Mock(adapter_name="snowflake")
     adapter.relation_exists.return_value = True
-    adapter.default_promotion_strategy.return_value = PromotionStrategy(test_case.strategy)
+    adapter.default_promotion_strategy.return_value = test_case.strategy
 
     with dispatcher_scope(dispatcher), pytest.raises(ExecutorInputError, match="Unsupported"):
         promote_relation_to_destination(

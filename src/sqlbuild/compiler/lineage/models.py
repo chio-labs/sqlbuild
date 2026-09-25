@@ -62,31 +62,6 @@ class ColumnLineageSource:
 
 
 @dataclass(frozen=True)
-class ColumnLineageNode:
-    """One internal SQL analysis lineage graph node."""
-
-    id: str
-    name: str
-    expression_sql: str | None = None
-    source_sql: str | None = None
-    resource_type: CompiledResourceType | str | None = None
-    resource_name: str | None = None
-    scope_name: str | None = None
-
-    def __post_init__(self) -> None:
-        if self.resource_type is not None:
-            object.__setattr__(self, "resource_type", CompiledResourceType(self.resource_type))
-
-
-@dataclass(frozen=True)
-class InternalColumnLineageEdge:
-    """One edge in the internal SQL analysis lineage graph."""
-
-    upstream_node_id: str
-    downstream_node_id: str
-
-
-@dataclass(frozen=True)
 class ColumnLineageEdge:
     """One collapsed SQLBuild lineage graph edge."""
 
@@ -118,8 +93,6 @@ class ColumnLineage:
     expression_sql: str | None
     upstream_columns: tuple[ColumnLineageSource, ...]
     nullability: InferredNullability = InferredNullability.UNKNOWN
-    nodes: tuple[ColumnLineageNode, ...] = field(default_factory=tuple)
-    edges: tuple[InternalColumnLineageEdge, ...] = field(default_factory=tuple)
     confidence: ColumnLineageConfidence = ColumnLineageConfidence.UNKNOWN
 
 
@@ -406,18 +379,6 @@ class ProjectColumnLineage:
             for record in self._edge_records_by_target_model.get(model_name, ())
         )
 
-    def producing_edge(
-        self,
-        *,
-        model_name: str,
-        column_name: str,
-    ) -> ColumnLineageEdge | None:
-        """Return the first edge that produces `model_name.column_name`."""
-
-        self._ensure_indexes()
-        record: object | None = self._edge_record_by_target_column.get((model_name, column_name))
-        return self._materialize_edge(record) if record is not None else None
-
     def edges_sourced_from(self, resource_name: str) -> tuple[ColumnLineageEdge, ...]:
         """Return edges whose source resource is `resource_name`."""
 
@@ -440,54 +401,6 @@ class ProjectColumnLineage:
             for edge in self.edges_sourced_from(resource_name)
             if edge.source.column_name == column_name
         )
-
-    def trace_column(
-        self,
-        *,
-        model_name: str,
-        column_name: str,
-    ) -> tuple[ColumnLineageEdge, ...]:
-        """Trace a model column upstream through project lineage edges."""
-
-        result: list[ColumnLineageEdge] = []
-        stack: list[tuple[str, str]] = [(model_name, column_name)]
-        visited: set[tuple[str, str]] = set()
-
-        while stack:
-            current_model, current_column = stack.pop()
-            if (current_model, current_column) in visited:
-                continue
-            visited.add((current_model, current_column))
-            for edge in self.edges_targeting(current_model):
-                if edge.target.column_name == current_column:
-                    result.append(edge)
-                    stack.append((edge.source.resource_name, edge.source.column_name))
-
-        return tuple(result)
-
-    def trace_column_downstream(
-        self,
-        *,
-        resource_name: str,
-        column_name: str,
-    ) -> tuple[ColumnLineageEdge, ...]:
-        """Trace a resource column downstream through project lineage edges."""
-
-        result: list[ColumnLineageEdge] = []
-        stack: list[tuple[str, str]] = [(resource_name, column_name)]
-        visited: set[tuple[str, str]] = set()
-
-        while stack:
-            current_resource, current_column = stack.pop()
-            if (current_resource, current_column) in visited:
-                continue
-            visited.add((current_resource, current_column))
-            for edge in self.edges_sourced_from(current_resource):
-                if edge.source.column_name == current_column:
-                    result.append(edge)
-                    stack.append((edge.target.resource_name, edge.target.column_name))
-
-        return tuple(result)
 
     @staticmethod
     def _edge_record_identity(record: object) -> tuple[str, str, str]:

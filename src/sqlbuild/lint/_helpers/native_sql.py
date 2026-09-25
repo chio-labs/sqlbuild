@@ -132,6 +132,7 @@ def run_native_sql_lint(
                 raw_diagnostic=raw_diagnostic,
                 body=body,
                 contents=contents_by_path[body.file_path],
+                dialect=config.dialect,
             )
             if violation is not None:
                 violations_by_file.setdefault(body.file_path, []).append(violation)
@@ -220,7 +221,7 @@ def _parse_failure_violation(
 
 
 def _authored_violation(
-    *, raw_diagnostic: object, body: LintBody, contents: str
+    *, raw_diagnostic: object, body: LintBody, contents: str, dialect: str
 ) -> LintViolation | None:
     if not isinstance(raw_diagnostic, dict):
         raise NativeLintError("native lint diagnostic must be an object")
@@ -263,6 +264,7 @@ def _authored_violation(
         body=body,
         contents=contents,
         line_starts=starts,
+        dialect=dialect,
     )
     fix: LintEdit | None = _authored_fix(
         raw_fix=raw_fix,
@@ -282,6 +284,7 @@ def _authored_violation(
             mapped=mapped,
             contents=contents,
             absolute_offset=absolute_offset,
+            dialect=dialect,
         ),
         severity=VIOLATION_SEVERITY_WARNING,
         engine=LINT_ENGINE_NATIVE,
@@ -341,11 +344,14 @@ def _authored_end_position(
     body: LintBody,
     contents: str,
     line_starts: tuple[int, ...],
+    dialect: str,
 ) -> tuple[int, int] | None:
     """Map a native exclusive end offset only when authored continuity is provable."""
 
     if mapped_start.generated:
-        token: str | None = interpolation_text_at(body=contents, start=absolute_start)
+        token: str | None = interpolation_text_at(
+            body=contents, start=absolute_start, dialect=dialect
+        )
         if token is None:
             return None
         return _offset_position(offset=absolute_start + len(token), line_starts=line_starts)
@@ -359,11 +365,11 @@ def _authored_end_position(
 
 
 def _violation_message(
-    *, message: str, mapped: MappedOffset, contents: str, absolute_offset: int
+    *, message: str, mapped: MappedOffset, contents: str, absolute_offset: int, dialect: str
 ) -> str:
     if not mapped.generated:
         return message
-    token: str | None = interpolation_text_at(body=contents, start=absolute_offset)
+    token: str | None = interpolation_text_at(body=contents, start=absolute_offset, dialect=dialect)
     if token is None:
         return f"{message} {GENERATED_SQL_MESSAGE_SUFFIX}"
     return f"{message} {GENERATED_SQL_MESSAGE_TEMPLATE.format(token=token)}"

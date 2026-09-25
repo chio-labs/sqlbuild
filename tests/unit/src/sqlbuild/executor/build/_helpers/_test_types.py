@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.contract.types import RetentionChangePhase
@@ -10,11 +10,9 @@ from sqlbuild.compiler.planner.types import (
     RetentionDirection,
     RetentionPlanPhase,
 )
-from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
-from tests.unit.src.sqlbuild.executor.build._helpers.helpers import ModelPlanOverride
 
 
 @dataclass(frozen=True)
@@ -28,22 +26,6 @@ class AuditExecutionIndexTestCase:
 class LifecycleProgressTestCase:
     description: str
     expected_event_types: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class BuildOutputTestCase:
-    """Test case for build output formatting."""
-
-    description: str
-    result: BuildExecutionResult
-    expected_output_fragments: tuple[str, ...]
-    expected_absent_fragments: tuple[str, ...] = field(default_factory=tuple)
-    model_plan_overrides: tuple[ModelPlanOverride, ...] = field(default_factory=tuple)
-    target: str | None = None
-    concurrency: int = 1
-    elapsed_seconds: float = 1.5
-    verbose: bool = False
-    use_color: bool = False
 
 
 @dataclass(frozen=True)
@@ -149,28 +131,6 @@ class ExternalBuildSourceLoadTestCase:
     expected_status: ExecutionStatus
     expected_completed_key_count: int
     expected_lifecycle_message: str
-
-
-@dataclass(frozen=True)
-class AbbreviatedRowCountTestCase:
-    description: str
-    count: int
-    expected_output: str
-
-
-@dataclass(frozen=True)
-class BatchSummaryTestCase:
-    description: str
-    batch_count: int | None
-    rows_affected: int | None
-    cursor_range_start: str | None
-    cursor_range_end: str | None
-    cursor_type: str | None
-    cursor_grain: str | None
-    expected_fragments: tuple[str, ...]
-    batch_size: str | None = None
-    expected_absent_fragments: tuple[str, ...] = field(default_factory=tuple)
-    expected_none: bool = False
 
 
 @dataclass(frozen=True)

@@ -204,17 +204,6 @@ class DiffRowsErrorTestCase:
 
 
 @dataclass(frozen=True)
-class CountRowsTestCase:
-    description: str
-    setup_sql: tuple[str, ...]
-    relation: str
-    cursor_column: str | None = None
-    start_cursor: CursorValue | None = None
-    end_cursor: CursorValue | None = None
-    expected_count: int = 0
-
-
-@dataclass(frozen=True)
 class RecorderWriteTestCase:
     description: str
     setup_sql: tuple[str, ...]

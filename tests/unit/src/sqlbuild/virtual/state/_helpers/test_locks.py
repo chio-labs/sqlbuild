@@ -6,7 +6,6 @@ import pytest
 
 from sqlbuild.virtual.state._helpers.state_storage.locks import (
     acquire_model_version_lock,
-    acquire_state_migration_lock,
     acquire_virtual_environment_lock,
     release_state_lock,
 )
@@ -28,7 +27,6 @@ from tests.unit.src.sqlbuild.virtual.state._helpers.helpers import FakeStateBack
             ttl=timedelta(minutes=15),
             expected_virtual_environment_lock_key="virtual_env:dev",
             expected_model_version_lock_key="model_version:fact_orders:abc123",
-            expected_state_migration_lock_key="state_migration",
         )
     ],
     ids=lambda case: case.description,
@@ -58,26 +56,15 @@ def test_given_state_lock_service_when_acquiring_scoped_locks_then_uses_expected
         ttl=test_case.ttl,
         now=test_case.now,
     )
-    state_migration_lease: StateLockLease | None = acquire_state_migration_lock(
-        backend=backend,
-        connection=connection,
-        schema=test_case.schema,
-        owner_id=test_case.owner_id,
-        ttl=test_case.ttl,
-        now=test_case.now,
-    )
 
     assert virtual_environment_lease is not None
     assert model_version_lease is not None
-    assert state_migration_lease is not None
     assert virtual_environment_lease.lock_key == test_case.expected_virtual_environment_lock_key
     assert model_version_lease.lock_key == test_case.expected_model_version_lock_key
-    assert state_migration_lease.lock_key == test_case.expected_state_migration_lock_key
     assert virtual_environment_lease.expires_at == test_case.now + test_case.ttl
     assert tuple(call[0] for call in backend.acquire_calls) == (
         test_case.expected_virtual_environment_lock_key,
         test_case.expected_model_version_lock_key,
-        test_case.expected_state_migration_lock_key,
     )
     assert release_state_lock(
         backend=backend,
@@ -101,7 +88,6 @@ def test_given_state_lock_service_when_acquiring_scoped_locks_then_uses_expected
             ttl=timedelta(minutes=15),
             expected_virtual_environment_lock_key="virtual_env:dev",
             expected_model_version_lock_key="model_version:fact_orders:abc123",
-            expected_state_migration_lock_key="state_migration",
         )
     ],
     ids=lambda case: case.description,

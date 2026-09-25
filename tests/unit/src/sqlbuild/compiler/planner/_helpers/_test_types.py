@@ -2,7 +2,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
@@ -22,7 +21,6 @@ from sqlbuild.compiler.planner.models import (
     MissingUpstream,
     ParsedSelector,
     PathSelector,
-    PlannerScope,
     ScenarioArtifactIdentity,
     ScenarioGraphPlan,
     ScenarioRelationMap,
@@ -183,34 +181,6 @@ class SeedIdentityCsvConfigTestCase:
     description: str
     seed_contents: str
     expected_same_identity: bool
-
-
-@dataclass(frozen=True)
-class MarkVersionIdentityStaleActionsTestCase:
-    description: str
-    model_key: CompiledObjectKey
-    change_kind: ChangeKind
-    previous_version_hash: str
-    expected_version_hash: str
-    expected_cascade_present: bool
-
-
-@dataclass(frozen=True)
-class DirectParentRunActionTestCase:
-    description: str
-    parent_key: CompiledObjectKey
-    child_key: CompiledObjectKey
-    expected_cascade_present: bool
-    expected_root_cause: str | None = None
-    expected_root_reason: PlanReason | None = None
-
-
-@dataclass(frozen=True)
-class DirectIdentityStaleModelNamesTestCase:
-    description: str
-    expected_version_hashes: dict[str, str]
-    built_version_hashes: dict[str, str | None]
-    expected_stale_model_names: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -442,13 +412,6 @@ class FindPathKeysErrorTestCase:
 
 
 @dataclass(frozen=True)
-class PruneUnchangedScopeTestCase:
-    description: str
-    scope: PlannerScope
-    expected_selected_keys: frozenset[CompiledObjectKey]
-
-
-@dataclass(frozen=True)
 class ParseSelectorTestCase:
     description: str
     raw: str
@@ -521,19 +484,6 @@ class ResolveSchemaActionsTestCase:
     schema_findings: tuple[SchemaFinding, ...]
     on_schema_change: OnSchemaChange | None
     expected_actions: tuple[SchemaAction, ...]
-
-
-@dataclass(frozen=True)
-class BuildLogicalDdlTestCase:
-    description: str
-    action: PlanAction
-    resolved_sql: str
-    qualified_name: str | None
-    unique_key: tuple[str, ...]
-    warehouse_columns: tuple[ColumnInfo, ...]
-    expected_ddl_fragment: str
-    merge_exclude_columns: tuple[str, ...] = ()
-    unexpected_ddl_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -974,13 +924,6 @@ class RunDespiteUnchangedPlanningTestCase:
     expected_root_model_names: frozenset[str]
     expected_stale_model_names: frozenset[str]
     expected_error_fragment: str | None = None
-
-
-@dataclass(frozen=True)
-class ReuseSatisfiedStalenessTestCase:
-    description: str
-    reuse_satisfied_model_names: frozenset[str]
-    expected_warns: bool
 
 
 @dataclass(frozen=True)

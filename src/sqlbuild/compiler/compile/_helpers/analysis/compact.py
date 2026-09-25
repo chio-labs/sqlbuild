@@ -221,32 +221,6 @@ def infer_columns_with_sql_analysis(
     return None
 
 
-def analyze_columns_with_polyglot(
-    *,
-    query_sql: str,
-    placeholders: dict[str, str] | None = None,
-    column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
-    inference_profile: ExpressionInferenceProfile | None = None,
-) -> tuple[InferredColumn, ...] | None | bool:
-    """Infer columns with one Polyglot parse, returning False when unavailable."""
-
-    profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
-    cleaned_sql: str = _replace_refs_with_stubs(
-        query_sql=query_sql,
-        dialect=profile.sql_analysis_dialect,
-    )
-    if placeholders:
-        cleaned_sql = substitute_placeholder_defaults(
-            query_sql=cleaned_sql, placeholders=placeholders
-        )
-    return _infer_columns_with_polyglot(
-        cleaned_sql=cleaned_sql,
-        dialect=profile.sql_analysis_dialect,
-        column_nullability_by_table=column_nullability_by_table or {},
-        inference_profile=profile,
-    )
-
-
 def analyze_columns_and_lineage_with_polyglot(
     *,
     query_sql: str,

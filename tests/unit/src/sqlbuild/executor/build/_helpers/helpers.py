@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
@@ -32,49 +30,9 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.compiler.source_freshness.models import SourceFreshnessRecord
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.run.types import ExecutionPhase
-from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.spec.contracts.models import SeedCsvSettings, SourceColumnEntry, SourceEntry
 from sqlbuild.spec.contracts.types import SourceWriteStrategy
-
-
-@dataclass(frozen=True)
-class ModelPlanOverride:
-    """Override for a model plan entry in output tests."""
-
-    name: str
-    materialization_type: MaterializationType = MaterializationType.TABLE
-    action: PlanAction = PlanAction.CREATE_TABLE
-    snapshot_strategy: str | None = None
-    observed_at_column: str | None = None
-    historical_input: str | None = None
-
-
-def build_model_result_fields(
-    *,
-    name: str,
-    status: ExecutionStatus,
-    duration_ms: int = 100,
-    failed_phase: ExecutionPhase | None = None,
-    staging_relation: str | None = None,
-    promoted_relation: str | None = None,
-    error_message: str | None = None,
-    audit_results: tuple[AuditExecutionResult, ...] = (),
-    warning_messages: tuple[str, ...] = (),
-) -> dict[str, object]:
-    return {
-        "model_name": name,
-        "status": status,
-        "duration_ms": duration_ms,
-        "failed_phase": failed_phase,
-        "staging_relation": staging_relation,
-        "promoted_relation": promoted_relation,
-        "error_message": error_message,
-        "audit_results": audit_results,
-        "warning_messages": warning_messages,
-    }
 
 
 def build_audit_result(
@@ -132,26 +90,6 @@ def build_model_plan_entry(
         snapshot_strategy=snapshot_strategy,
         observed_at_column=observed_at_column,
         historical_input=historical_input,
-    )
-
-
-def build_source_freshness_record(
-    *,
-    source_name: str,
-    data_hash: str,
-    data_version: str = "2026-06-30T12:00:00",
-) -> SourceFreshnessRecord:
-    return SourceFreshnessRecord(
-        source_name=source_name,
-        target_database=None,
-        target_schema="main",
-        target_name=source_name,
-        run_id="run-1",
-        strategy="adapter",
-        value_kind="timestamp",
-        data_version=data_version,
-        data_version_hash=data_hash,
-        observed_at=datetime(2026, 6, 30, 12, 1, tzinfo=UTC),
     )
 
 

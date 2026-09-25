@@ -21,14 +21,6 @@ class BuildCreateTableSqlTestCase:
 
 
 @dataclass(frozen=True)
-class BuildReadAllSqlTestCase:
-    description: str
-    database: str | None
-    schema: str
-    expected_contains: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class BuildInsertSqlTestCase:
     description: str
     database: str | None

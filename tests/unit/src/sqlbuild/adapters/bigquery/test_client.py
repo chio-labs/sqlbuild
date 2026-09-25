@@ -7,7 +7,6 @@ import pytest
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
-    CursorValue,
     ExpressionInferenceProfile,
     QueryResult,
     RelationInfo,
@@ -37,7 +36,6 @@ from sqlbuild.observability import (
 )
 from tests.unit.src.sqlbuild.adapters.bigquery._test_types import (
     BigQueryConnectErrorTestCase,
-    BigQueryCountRowsTestCase,
     BigQueryDmlLifecycleTestCase,
     BigQueryExecutionErrorTestCase,
     BigQueryExpressionInferenceProfileTestCase,
@@ -65,7 +63,6 @@ from tests.unit.src.sqlbuild.adapters.bigquery.helpers import (
     FakeBigQueryClient,
     FakeBigQueryFailingClient,
     FakeBigQueryRows,
-    build_count_rows_execute,
     build_fake_bigquery_schema_client,
     build_row_diff_execute,
     build_sample_rows_execute,
@@ -1070,42 +1067,6 @@ def test_given_bigquery_relations_when_sampling_rows_then_returns_expected_examp
 
     assert unequal_samples == test_case.expected_unequal_samples
     assert side_only_samples == test_case.expected_side_only_samples
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        BigQueryCountRowsTestCase(
-            description="uses typed timestamp cursor filter",
-            expected_count=2,
-            expected_sql=(
-                "SELECT COUNT(*) FROM left_relation WHERE updated_at >= "
-                "TIMESTAMP '2026-04-01 00:00:00' AND updated_at < "
-                "TIMESTAMP '2026-04-02 00:00:00'"
-            ),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_timestamp_cursor_when_counting_rows_then_bigquery_uses_typed_filter(
-    test_case: BigQueryCountRowsTestCase,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    adapter: BigQueryAdapter = BigQueryAdapter()
-    executed_sql: list[str] = []
-
-    monkeypatch.setattr(adapter, "execute", build_count_rows_execute(executed_sql))
-
-    result: int = adapter.count_rows(
-        connection=object(),
-        relation="left_relation",
-        cursor_column="updated_at",
-        start_cursor=CursorValue(kind=CursorKind.TIMESTAMP, value=datetime(2026, 4, 1, 0, 0, 0)),
-        end_cursor=CursorValue(kind=CursorKind.TIMESTAMP, value=datetime(2026, 4, 2, 0, 0, 0)),
-    )
-
-    assert result == test_case.expected_count
-    assert executed_sql == [test_case.expected_sql]
 
 
 @pytest.mark.parametrize(

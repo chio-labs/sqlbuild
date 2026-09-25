@@ -119,7 +119,9 @@ def detect_schema_changes(
                         kind=SchemaChangeKind.COLUMN_REMOVED,
                         column_name=col_name,
                         source=(
-                            SchemaColumnSource.YML if yml_columns else SchemaColumnSource.SQLGLOT
+                            SchemaColumnSource.YML
+                            if yml_columns
+                            else SchemaColumnSource.SQL_ANALYSIS
                         ),
                         actual_type=col_type,
                     )
@@ -216,7 +218,7 @@ def _compare_inferred_columns(
                 SchemaFinding(
                     kind=SchemaChangeKind.COLUMN_ADDED,
                     column_name=col.name,
-                    source=SchemaColumnSource.SQLGLOT,
+                    source=SchemaColumnSource.SQL_ANALYSIS,
                     expected_type=col.type,
                 )
             )
@@ -227,7 +229,7 @@ def _compare_inferred_columns(
                 SchemaFinding(
                     kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
                     column_name=col.name,
-                    source=SchemaColumnSource.SQLGLOT,
+                    source=SchemaColumnSource.SQL_ANALYSIS,
                     expected_type=col.type,
                     actual_type=warehouse_map[col.name],
                 )

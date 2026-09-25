@@ -110,10 +110,6 @@ def normalize_skill_targets(*, targets: tuple[str, ...], source: str) -> tuple[s
     return tuple(normalized_targets)
 
 
-def load_project_skill_targets(*, project_dir: Path) -> tuple[str, ...]:
-    return load_project_skill_settings(project_dir=project_dir).targets
-
-
 def load_project_skill_settings(*, project_dir: Path) -> SkillSettings:
     config_path: Path = project_dir / PROJECT_CONFIG_FILENAME
     if not config_path.exists():

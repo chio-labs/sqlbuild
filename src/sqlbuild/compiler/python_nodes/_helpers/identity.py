@@ -79,8 +79,6 @@ def build_python_identity(
     return PythonNodeIdentity(
         node_type=node_type,
         node_name=node_name,
-        object_module=function.__module__,
-        object_qualname=_object_qualname(function),
         source_path=_display_path(source_path=source_path, roots=allowed_roots),
         source_hash=source_hash,
         definition_hash=definition_hash,
