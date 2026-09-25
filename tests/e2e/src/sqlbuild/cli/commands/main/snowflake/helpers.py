@@ -62,59 +62,6 @@ def build_snowflake_project_toml(*, project_name: str, schema_name: str) -> str:
     )
 
 
-def build_snowflake_virtual_seed_project_toml(
-    *, database_name: str, schema_name: str, unsuffixed_virtual_env: str | None = None
-) -> str:
-    unsuffixed_line: str = {None: ""}.get(
-        unsuffixed_virtual_env,
-        f'unsuffixed_virtual_env = "{unsuffixed_virtual_env}"\n',
-    )
-    return (
-        'name = "snowflake_virtual_seed"\n'
-        'adapter = "snowflake"\n'
-        'default_target = "dev"\n\n'
-        "[settings]\n"
-        "virtual_environments = true\n"
-        "\n"
-        "[connection]\n"
-        'account = "${ENV:SQB_TEST_SNOWFLAKE_ACCOUNT}"\n'
-        'user = "${ENV:SQB_TEST_SNOWFLAKE_USER}"\n'
-        'authenticator = "${ENV:SQB_TEST_SNOWFLAKE_AUTHENTICATOR}"\n'
-        'token = "${ENV:SQB_TEST_SNOWFLAKE_PAT}"\n'
-        'role = "${ENV:SQB_TEST_SNOWFLAKE_ROLE}"\n'
-        'warehouse = "${ENV:SQB_TEST_SNOWFLAKE_WAREHOUSE}"\n'
-        'database = "${ENV:SQB_TEST_SNOWFLAKE_DATABASE}"\n\n'
-        "[targets.dev]\n"
-        f'database = "{database_name}"\n'
-        f'schema = "{schema_name}"\n\n'
-        "[targets.dev.state]\n"
-        'backend = "duckdb"\n'
-        'schema = "sqlbuild_state"\n'
-        f"{unsuffixed_line}\n"
-        "[targets.dev.state.connection]\n"
-        'database = "state.duckdb"\n'
-    )
-
-
-def virtual_seed_source_yml(*, schema_name: str) -> str:
-    return f"sources:\n  - name: raw_orders\n    schema: {schema_name}\n    table: raw_orders\n"
-
-
-def virtual_seed_orders_model(*, amount_expression: str) -> str:
-    return (
-        "MODEL (\n"
-        "  materialized incremental,\n"
-        "  incremental_strategy delete_insert,\n"
-        "  cursor ordered_at,\n"
-        "  cursor_type timestamp,\n"
-        "  cursor_grain day,\n"
-        "  replay_on_change bounded-7d\n"
-        ");\n\n"
-        f"SELECT id, ordered_at, {amount_expression} AS amount_cents\n"
-        'FROM __source("raw_orders")\n'
-    )
-
-
 def build_snowflake_source_deferral_project_toml(
     *, project_name: str, dev_schema_name: str, prod_schema_name: str
 ) -> str:

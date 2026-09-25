@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
 from tests.e2e.src.sqlbuild.cli.commands.main.check._test_types import CheckCommandTestCase
-from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project
 
 
 def prepare_python_check_project(*, tmp_path: Path) -> Path:
@@ -136,172 +135,14 @@ def check_raw_orders_loader(ctx):
     )
 
 
-def prepare_read_side_python_check_project(*, tmp_path: Path) -> Path:
-    """Create a project whose check depends on a SQL-reading Python asset."""
-
-    return prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="read_side_python_check_project",
-        repo_files={
-            "sqlbuild_project.toml": """
-name = "read_side_python_check_project"
-adapter = "duckdb"
-
-[connection]
-database = "read_side_python_check_project.duckdb"
-""",
-            "models/fact_orders.sql": """
-MODEL (materialized table);
-
-SELECT 1 AS order_id
-""",
-            "assets/orders.py": """
-from sqlbuild.assets import asset
-from sqlbuild.refs import model
-
-
-@asset(depends_on=model("fact_orders"))
-def orders_export(ctx):
-    relation = ctx.relation(model("fact_orders"))
-    row = ctx.query(f"SELECT COUNT(*) AS order_count FROM {relation}").fetchone()
-    return ctx.result(payload={"order_count": row[0]}, materialized=False)
-""",
-            "checks/orders.py": """
-from sqlbuild.checks import check
-from assets.orders import orders_export
-
-
-@check(depends_on=orders_export)
-def check_orders_export(ctx):
-    return ctx.result_of(node_function=orders_export).payload["order_count"] == 1
-""",
-        },
-    )
-
-
-def prepare_virtual_python_check_project(*, tmp_path: Path) -> Path:
-    """Create a virtual-mode project with a task-backed Python check."""
-
-    return prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="virtual_python_check_project",
-        repo_files={
-            "sqlbuild_project.toml": """
-name = "virtual_python_check_project"
-adapter = "duckdb"
-default_target = "dev"
-
-[settings]
-virtual_environments = true
-
-[connection]
-database = "warehouse.duckdb"
-
-[targets.dev]
-schema = "dev"
-
-[targets.dev.state]
-backend = "duckdb"
-schema = "sqlbuild_state"
-
-[targets.dev.state.connection]
-database = "state.duckdb"
-""",
-            "models/stg_orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
-            "tasks/export.py": """
-from sqlbuild.refs import model
-from sqlbuild.tasks import task
-
-
-@task(depends_on=model("stg_orders"))
-def export_virtual_orders(ctx):
-    return ctx.result(metadata={"rows": 1})
-""",
-            "checks/export.py": """
-from sqlbuild.checks import check
-from tasks.export import export_virtual_orders
-
-
-@check(depends_on=export_virtual_orders)
-def check_virtual_orders(ctx):
-    return ctx.pass_(message="virtual orders exported")
-""",
-        },
-    )
-
-
-def prepare_virtual_failing_python_check_project(*, tmp_path: Path) -> Path:
-    """Create a virtual-mode project with an error-severity Python check."""
-
-    return prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="virtual_failing_python_check_project",
-        repo_files={
-            "sqlbuild_project.toml": """
-name = "virtual_failing_python_check_project"
-adapter = "duckdb"
-default_target = "dev"
-
-[settings]
-virtual_environments = true
-
-[connection]
-database = "warehouse.duckdb"
-
-[targets.dev]
-schema = "dev"
-
-[targets.dev.state]
-backend = "duckdb"
-schema = "sqlbuild_state"
-
-[targets.dev.state.connection]
-database = "state.duckdb"
-""",
-            "models/stg_orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
-            "tasks/export.py": """
-from sqlbuild.refs import model
-from sqlbuild.tasks import task
-
-
-@task(depends_on=model("stg_orders"))
-def export_virtual_orders(ctx):
-    return ctx.result(metadata={"rows": 1})
-""",
-            "checks/export.py": """
-from sqlbuild.checks import check
-from tasks.export import export_virtual_orders
-
-
-@check(depends_on=export_virtual_orders)
-def fail_virtual_orders(ctx):
-    return ctx.fail(message="virtual orders failed")
-""",
-        },
-    )
-
-
 def prepare_check_project_by_kind(*, tmp_path: Path, project_kind: str) -> Path:
     """Create the project fixture for a check command test case."""
 
     project_factories: dict[str, Callable[..., Path]] = {
         "direct": prepare_python_check_project,
         "terminal_loader": prepare_terminal_loader_check_project,
-        "virtual": prepare_virtual_python_check_project,
-        "virtual_failure": prepare_virtual_failing_python_check_project,
     }
     return project_factories[project_kind](tmp_path=tmp_path)
-
-
-def initialize_state_when_requested(*, project_dir: Path, test_case: CheckCommandTestCase) -> None:
-    """Initialize virtual state for test cases that need it."""
-
-    for _ in range(int(test_case.initialize_state)):
-        init_result: subprocess.CompletedProcess[str] = run_sqb(
-            command=("state", "init"),
-            project_dir=project_dir,
-        )
-        assert init_result.returncode == 0, init_result.stdout + init_result.stderr
 
 
 def resolve_check_command(*, project_dir: Path, command: tuple[str, ...]) -> tuple[str, ...]:

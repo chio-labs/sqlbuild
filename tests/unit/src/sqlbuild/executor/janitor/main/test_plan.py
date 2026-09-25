@@ -12,12 +12,8 @@ from sqlbuild.executor.janitor.models import (
     JanitorDirectModeSettings,
     JanitorExecutionResult,
     JanitorPlan,
-    JanitorRelationKey,
     JanitorRelationScope,
-    JanitorStateCandidates,
-    JanitorVirtualStatePruneCandidate,
 )
-from sqlbuild.virtual.state.constants import PYTHON_NODE_VERSION_TABLE
 from tests.unit.src.sqlbuild.executor.janitor.main._test_types import (
     JanitorExecuteTestCase,
     JanitorPlanTestCase,
@@ -58,14 +54,6 @@ NEW_TIME: datetime = datetime.now(UTC) - timedelta(days=1)
             expected_candidate_names=(),
             expected_blocked_schema_sources=("raw_orders",),
             expected_suppressed_candidate_names=("old_orders",),
-        ),
-        JanitorPlanTestCase(
-            description="virtual schema with active source remains skipped",
-            relation_infos=(relation_info("old_orders", created_at=OLD_TIME),),
-            source_schema="analytics",
-            direct_mode=False,
-            expected_candidate_names=(),
-            expected_skipped_schema_sources=("raw_orders",),
         ),
         JanitorPlanTestCase(
             description="new relation is skipped by retention",
@@ -153,27 +141,6 @@ NEW_TIME: datetime = datetime.now(UTC) - timedelta(days=1)
             expected_skipped_relation_reasons=("relation is not tracked by SQLBuild",),
         ),
         JanitorPlanTestCase(
-            description="checkpoint protected relation is skipped",
-            relation_infos=(
-                relation_info(
-                    "orders__v_old", schema="analytics__sqb_physical", created_at=OLD_TIME
-                ),
-            ),
-            protected_relation_keys=frozenset(
-                (
-                    JanitorRelationKey(
-                        database=None,
-                        schema="analytics__sqb_physical",
-                        name="orders__v_old",
-                    ),
-                )
-            ),
-            expected_candidate_names=(),
-            expected_skipped_relation_reasons=(
-                "relation is referenced by a retained virtual checkpoint",
-            ),
-        ),
-        JanitorPlanTestCase(
             description="existing direct state tables are eligible for history pruning",
             relation_infos=(
                 relation_info(FINGERPRINT_TABLE_NAME, created_at=OLD_TIME),
@@ -200,18 +167,6 @@ NEW_TIME: datetime = datetime.now(UTC) - timedelta(days=1)
                 "relation matches exclude pattern '_sqlbuild_fingerprints'",
             ),
         ),
-        JanitorPlanTestCase(
-            description="virtual state pruning candidates are preserved",
-            relation_infos=(),
-            expected_virtual_state_table_names=(PYTHON_NODE_VERSION_TABLE,),
-            virtual_state_prune_candidates=(
-                JanitorVirtualStatePruneCandidate(
-                    schema="sqlbuild_state",
-                    table_name=PYTHON_NODE_VERSION_TABLE,
-                    reason="1 unreferenced Python identity version(s)",
-                ),
-            ),
-        ),
     ],
     ids=lambda case: case.description,
 )
@@ -234,9 +189,6 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
         relation_scope=JanitorRelationScope(
             protected_relation_keys=test_case.protected_relation_keys,
         ),
-        state_candidates=JanitorStateCandidates(
-            virtual_state_prune_candidates=test_case.virtual_state_prune_candidates,
-        ),
         direct_settings=JanitorDirectModeSettings(
             enabled=test_case.direct_mode,
             state_history_versions=test_case.direct_state_history_versions,
@@ -251,9 +203,6 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
     )
     assert tuple(candidate.table_name for candidate in plan.direct_state_prune_candidates) == (
         test_case.expected_direct_state_table_names
-    )
-    assert tuple(candidate.table_name for candidate in plan.virtual_state_prune_candidates) == (
-        test_case.expected_virtual_state_table_names
     )
     skipped_schema_sources: list[str] = []
     for skipped_schema in plan.skipped_schemas:
@@ -275,11 +224,6 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
     "test_case",
     [
         JanitorExecuteTestCase(
-            description="drops all eligible candidates",
-            relation_infos=(relation_info("old_orders", created_at=OLD_TIME),),
-            expected_dropped_targets=("analytics.old_orders",),
-        ),
-        JanitorExecuteTestCase(
             description="direct mode archives eligible candidates instead of dropping them",
             relation_infos=(relation_info("old_orders", created_at=OLD_TIME),),
             expected_dropped_targets=(),
@@ -290,19 +234,6 @@ def test_given_project_and_warehouse_when_building_janitor_plan_then_returns_exp
             relation_infos=(relation_info(FINGERPRINT_TABLE_NAME, created_at=OLD_TIME),),
             expected_dropped_targets=(),
             expected_pruned_table_names=(FINGERPRINT_TABLE_NAME,),
-        ),
-        JanitorExecuteTestCase(
-            description="prunes virtual state orphan tables",
-            relation_infos=(),
-            expected_dropped_targets=(),
-            expected_pruned_virtual_table_names=(PYTHON_NODE_VERSION_TABLE,),
-            virtual_state_prune_candidates=(
-                JanitorVirtualStatePruneCandidate(
-                    schema="sqlbuild_state",
-                    table_name=PYTHON_NODE_VERSION_TABLE,
-                    reason="1 unreferenced Python identity version(s)",
-                ),
-            ),
         ),
     ],
     ids=lambda case: case.description,
@@ -317,20 +248,13 @@ def test_given_janitor_plan_when_executing_then_drops_expected_relations(
         connection=object(),
         retention_days=7,
         delete_tracked_only=False,
-        state_candidates=JanitorStateCandidates(
-            virtual_state_prune_candidates=test_case.virtual_state_prune_candidates,
-        ),
         direct_settings=JanitorDirectModeSettings(enabled=test_case.direct_mode),
     )
-    pruned_virtual_table_names: list[str] = []
 
     result: JanitorExecutionResult = execute_janitor_plan(
         plan=plan,
         adapter=adapter,
         connection=object(),
-        prune_virtual_state=lambda candidate: pruned_virtual_table_names.append(
-            candidate.table_name
-        ),
     )
 
     assert tuple(adapter.dropped_targets) == test_case.expected_dropped_targets
@@ -340,7 +264,3 @@ def test_given_janitor_plan_when_executing_then_drops_expected_relations(
     assert tuple(candidate.table_name for candidate in result.pruned_direct_state) == (
         test_case.expected_pruned_table_names
     )
-    assert tuple(candidate.table_name for candidate in result.pruned_virtual_state) == (
-        test_case.expected_pruned_virtual_table_names
-    )
-    assert tuple(pruned_virtual_table_names) == test_case.expected_pruned_virtual_table_names

@@ -29,7 +29,6 @@ ALLOWED_SOURCE_FRESHNESS_INSERT_PREFIXES: tuple[str, ...] = (
     "scripts/fensu_policy/",
     "src/sqlbuild/adapter/",
     "src/sqlbuild/adapters/",
-    "src/sqlbuild/virtual/state/classes/",
 )
 ALLOWED_DBT_REF_SCAN_PATHS: frozenset[str] = frozenset(
     {
@@ -47,7 +46,6 @@ ALLOWED_METADATA_LOOP_PATHS: frozenset[str] = frozenset(
         "src/sqlbuild/executor/run/_helpers/materializations/microbatch.py",
         "src/sqlbuild/integrations/dbt/_helpers/lineage/columns.py",
         "src/sqlbuild/integrations/dbt/_helpers/planning/model_planning.py",
-        "src/sqlbuild/virtual/executor/_helpers/clone.py",
     }
 )
 ALLOWED_SELECTOR_PARSE_PATH: str = (
@@ -100,12 +98,6 @@ REUSE_PATH_MARKERS: tuple[str, ...] = (
 REUSE_TERM_ALLOWED_PATHS: dict[str, frozenset[str]] = {
     "source_target_name": frozenset(
         {"src/sqlbuild/compiler/planner/_helpers/warehouse/source_deferral.py"}
-    ),
-    "source_connection": frozenset(
-        {
-            "src/sqlbuild/virtual/executor/_helpers/build.py",
-            "src/sqlbuild/virtual/planner/main/plan.py",
-        }
     ),
 }
 SELECTOR_STRING_METHOD_NAMES: frozenset[str] = frozenset(

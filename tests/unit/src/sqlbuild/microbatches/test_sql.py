@@ -46,7 +46,7 @@ from tests.unit.src.sqlbuild.microbatches.helpers import (
             description="stored aware offsets retain deterministic identity",
             partition_start="2026-01-01T08:00:00+08:00",
             partition_end="2026-01-01T09:00:00+08:00",
-            expected_event_id="d15ad5651a6a2461e611a3ac97c708fa74c3dab481e9feacbd976c0b34a85ed4",
+            expected_event_id="781f0c13965b66aba3b4db7cfe8cb58d50e983bc5ac41b659048072de849f572",
         ),
     ),
     ids=lambda case: case.description,
@@ -190,7 +190,7 @@ def test_given_completion_when_building_insert_then_provenance_and_numeric_rows_
     assert sql == (
         "INSERT INTO analytics._sqlbuild_microbatches (event_id, record_type, scope_kind, "
         "scope_key, model_name, target_database, target_schema, target_name, "
-        "physical_generation_id, virtual_environment_name, virtual_model_version_hash, "
+        "physical_generation_id, "
         "origin_run_id, origin_run_started_at, execution_run_id, execution_run_started_at, "
         "run_type, completion_type, run_start, run_end, partition_start, partition_end, "
         "batch_size, cursor_column, cursor_type, cursor_grain, model_version_hash, "
@@ -199,7 +199,7 @@ def test_given_completion_when_building_insert_then_provenance_and_numeric_rows_
         "rows_affected, completed_at, coverage_source, observed_row_count, observed_at, "
         "synthetic_reason, unaccounted_policy, created_at) SELECT 'event-1', "
         "'partition_completion', 'direct_logical', 'duckdb:analytics.orders', 'orders', NULL, "
-        "'analytics', 'orders', '*', NULL, NULL, 'origin-run', CAST(NULL AS TIMESTAMP), "
+        "'analytics', 'orders', '*', 'origin-run', CAST(NULL AS TIMESTAMP), "
         "'execution-run', CAST(NULL AS TIMESTAMP), 'replay_on_change', 'recovery', '0', '1', "
         "'0', '1', '1', 'batch_id', 'integer', NULL, 'F2', 'fingerprint''definition', "
         "'known', NULL, NULL, NULL, NULL, CAST(0 AS BIGINT), CAST(NULL AS TIMESTAMP), NULL, "

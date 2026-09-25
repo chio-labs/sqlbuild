@@ -23,15 +23,6 @@ class ClonePolicyErrorTestCase:
 
 
 @dataclass(frozen=True)
-class VirtualCloneE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    expected_exit_code: int
-    expected_stdout_fragments: tuple[str, ...]
-    expected_registered_artifacts: tuple[tuple[str, str], ...] = ()
-
-
-@dataclass(frozen=True)
 class CloneFunctionGraphE2ETestCase:
     description: str
     expected_stdout_fragments: tuple[str, ...]

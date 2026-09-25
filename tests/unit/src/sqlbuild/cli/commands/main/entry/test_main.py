@@ -24,8 +24,6 @@ from sqlbuild.cli.commands.models import (
     LoadCommandRequest,
     PlanCommandRequest,
     PlaygroundCommandRequest,
-    PromoteCommandRequest,
-    RollbackCommandRequest,
     RulesCommandRequest,
     ScenarioCaptureCommandRequest,
     ScenarioTestCommandRequest,
@@ -248,7 +246,7 @@ def test_given_compile_command_arguments_when_running_with_dependencies_then_it_
 def test_given_dbt_plan_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, tuple[str, ...], bool]] = []
+    received_args: list[tuple[object, ...]] = []
 
     def run_dbt_plan(
         project_dir: Path | None,
@@ -508,7 +506,7 @@ def test_given_dbt_command_without_sqlbuild_project_when_dispatching_then_does_n
 def test_given_dbt_execution_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, tuple[str, ...], bool]] = []
+    received_args: list[tuple[object, ...]] = []
 
     def run_dbt_execution(
         project_dir: Path | None,
@@ -648,8 +646,6 @@ def test_given_dbt_without_subcommand_when_running_with_dependencies_then_it_ret
                 "dev",
                 "--select",
                 "orders",
-                "--virtual-env",
-                "preview",
                 "--skip-locked",
                 "--verbose",
             ],
@@ -681,7 +677,6 @@ def test_given_clone_command_arguments_when_running_with_dependencies_then_it_di
             origin_target_name="prod",
             destination_target_name="dev",
             hard_copy=False,
-            virtual_env="preview",
             skip_locked=True,
             select=("orders",),
             exclude=(),
@@ -702,7 +697,6 @@ def test_given_clone_command_arguments_when_running_with_dependencies_then_it_di
                 "--full",
                 "--select",
                 "orders",
-                "--allow-partial-diff",
             ],
             expected_exit_code=6,
         )
@@ -740,144 +734,7 @@ def test_given_diff_command_arguments_when_running_with_dependencies_then_it_dis
             exclude=(),
             verbose=False,
             cli_vars={},
-            allow_partial_diff=True,
         )
-    ]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        MainTestCase(
-            description="dispatches promote command through injected handler",
-            argv=[
-                "promote",
-                "--from",
-                "pr",
-                "--to",
-                "dev",
-                "--select",
-                "fact_orders",
-                "--include-stale-upstreams",
-                "--allow-partial-promotion",
-                "--verbose",
-            ],
-            expected_exit_code=7,
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_promote_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
-    test_case: MainTestCase,
-) -> None:
-    received_args: list[
-        tuple[
-            Path | None,
-            bool,
-            bool,
-            str,
-            str,
-            tuple[str, ...],
-            tuple[str, ...],
-            bool,
-            bool,
-            bool,
-        ]
-    ] = []
-
-    def run_promote(request: PromoteCommandRequest) -> int:
-        received_args.append(
-            (
-                request.project_dir,
-                request.no_color,
-                request.no_sql_validation,
-                request.from_virtual_environment,
-                request.to_virtual_environment,
-                request.select,
-                request.exclude,
-                request.allow_partial_promotion,
-                request.include_stale_upstreams,
-                request.verbose,
-            )
-        )
-        return test_case.expected_exit_code
-
-    exit_code: int = _main_with_dependencies(
-        argv=test_case.argv,
-        handlers=build_handlers(run_promote=run_promote),
-    )
-
-    assert exit_code == test_case.expected_exit_code
-    assert received_args == [
-        (None, False, False, "pr", "dev", ("fact_orders",), (), True, True, True)
-    ]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        MainTestCase(
-            description="dispatches rollback command through injected handler",
-            argv=[
-                "rollback",
-                "--virtual-env",
-                "dev",
-                "--checkpoint-id",
-                "chk_1",
-                "--select",
-                "fact_orders",
-                "--allow-partial-rollback",
-                "--include-stale-upstreams",
-                "--verbose",
-            ],
-            expected_exit_code=7,
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_rollback_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
-    test_case: MainTestCase,
-) -> None:
-    received_args: list[
-        tuple[
-            Path | None,
-            bool,
-            bool,
-            str | None,
-            bool,
-            str | None,
-            tuple[str, ...],
-            tuple[str, ...],
-            bool,
-            bool,
-        ]
-    ] = []
-
-    def run_rollback(request: RollbackCommandRequest) -> int:
-        received_args.append(
-            (
-                request.project_dir,
-                request.no_color,
-                request.no_sql_validation,
-                request.virtual_environment,
-                request.verbose,
-                request.checkpoint_id,
-                request.select,
-                request.exclude,
-                request.allow_partial_rollback,
-                request.include_stale_upstreams,
-            )
-        )
-        return test_case.expected_exit_code
-
-    exit_code: int = _main_with_dependencies(
-        argv=test_case.argv,
-        handlers=build_handlers(run_rollback=run_rollback),
-    )
-
-    assert exit_code == test_case.expected_exit_code
-    assert received_args == [
-        (None, False, False, "dev", True, "chk_1", ("fact_orders",), (), True, True)
     ]
 
 
@@ -910,27 +767,7 @@ def test_given_rollback_command_arguments_when_running_with_dependencies_then_it
 def test_given_scenario_test_arguments_when_running_with_dependencies_then_dispatches_selectors(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[
-        tuple[
-            Path | None,
-            bool,
-            bool,
-            tuple[str, ...],
-            tuple[str, ...],
-            bool,
-            bool,
-            bool,
-            bool,
-            bool,
-            bool,
-            int | None,
-            int | None,
-            int | None,
-            int | None,
-            bool,
-            Path | None,
-        ]
-    ] = []
+    received_args: list[tuple[object, ...]] = []
 
     def run_scenario(request: ScenarioTestCommandRequest) -> int:
         received_args.append(
@@ -1081,8 +918,6 @@ def test_given_execution_command_json_flag_when_running_then_dispatches_json_out
                 '{"tenant":"acme"}',
                 "--fail-on-error",
                 "--state",
-                "--virtual-env",
-                "dev",
                 "--fail-on-stale",
             ],
             expected_exit_code=8,
@@ -1092,7 +927,6 @@ def test_given_execution_command_json_flag_when_running_then_dispatches_json_out
             expected_fail_on_error=True,
             expected_state=True,
             expected_fail_on_stale=True,
-            expected_virtual_env="dev",
         )
     ],
     ids=lambda case: case.description,
@@ -1100,18 +934,7 @@ def test_given_execution_command_json_flag_when_running_then_dispatches_json_out
 def test_given_freshness_arguments_when_running_then_dispatches_expected_arguments(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[
-        tuple[
-            bool,
-            tuple[str, ...],
-            tuple[str, ...],
-            dict[str, object] | None,
-            bool,
-            bool,
-            bool,
-            str | None,
-        ]
-    ] = []
+    received_args: list[tuple[object, ...]] = []
 
     def run_freshness(request: FreshnessCommandRequest) -> int:
         received_args.append(
@@ -1123,7 +946,6 @@ def test_given_freshness_arguments_when_running_then_dispatches_expected_argumen
                 request.fail_on_error,
                 request.compare_state,
                 request.fail_on_stale,
-                request.virtual_environment_name,
             )
         )
         return test_case.expected_exit_code
@@ -1143,7 +965,6 @@ def test_given_freshness_arguments_when_running_then_dispatches_expected_argumen
             test_case.expected_fail_on_error,
             test_case.expected_state,
             test_case.expected_fail_on_stale,
-            test_case.expected_virtual_env,
         )
     ]
 
@@ -1169,7 +990,7 @@ def test_given_freshness_arguments_when_running_then_dispatches_expected_argumen
 def test_given_freshness_json_arguments_when_running_then_dispatches_expected_arguments(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[bool, Path | None]] = []
+    received_args: list[tuple[object, ...]] = []
 
     def run_freshness(request: FreshnessCommandRequest) -> int:
         received_args.append((request.json_output, request.json_output_path))
@@ -1325,21 +1146,7 @@ def test_given_scenario_command_when_no_sql_validation_flag_passed_then_parser_r
 def test_given_scenario_capture_arguments_when_running_with_dependencies_then_dispatches_selectors(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[
-        tuple[
-            Path | None,
-            bool,
-            bool,
-            tuple[str, ...],
-            tuple[str, ...],
-            bool,
-            bool,
-            int | None,
-            int | None,
-            int | None,
-            int | None,
-        ]
-    ] = []
+    received_args: list[tuple[object, ...]] = []
 
     def run_scenario_capture(request: ScenarioCaptureCommandRequest) -> int:
         received_args.append(
@@ -1403,7 +1210,7 @@ def test_given_scenario_capture_arguments_when_running_with_dependencies_then_di
 def test_given_query_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, str | None, Path | None, str, int | None]] = []
+    received_args: list[tuple[object, ...]] = []
 
     def run_query(
         project_dir: Path | None,
@@ -1440,7 +1247,7 @@ def test_given_query_command_arguments_when_running_with_dependencies_then_it_di
 def test_given_query_file_argument_when_running_with_dependencies_then_dispatches_path(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[str | None, Path | None, int | None]] = []
+    received_args: list[tuple[object, ...]] = []
 
     def run_query(
         project_dir: Path | None,
@@ -1478,7 +1285,7 @@ def test_given_query_file_argument_when_running_with_dependencies_then_dispatche
 def test_given_debug_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, bool, bool, bool]] = []
+    received_args: list[tuple[object, ...]] = []
 
     def run_debug(
         project_dir: Path | None,
@@ -1679,125 +1486,6 @@ def test_given_janitor_command_arguments_when_running_with_dependencies_then_it_
     "test_case",
     [
         MainTestCase(
-            description="dispatches state rollback command through injected handler",
-            argv=[
-                "--project-dir",
-                "/tmp/demo",
-                "--no-color",
-                "state",
-                "rollback",
-                "--backup-id",
-                "b1",
-            ],
-            expected_exit_code=11,
-            expected_project_dir=Path("/tmp/demo"),
-            expected_no_color=True,
-            expected_state_command="rollback",
-            expected_state_backup_id="b1",
-        ),
-        MainTestCase(
-            description="dispatches state reset approval through injected handler",
-            argv=["state", "reset", "--auto-approve"],
-            expected_exit_code=12,
-            expected_state_command="reset",
-            expected_auto_approve=True,
-        ),
-        MainTestCase(
-            description="dispatches state checkpoints list through injected handler",
-            argv=["state", "checkpoints", "list", "--virtual-env", "dev"],
-            expected_exit_code=13,
-            expected_state_command="checkpoints",
-            expected_state_checkpoint_command="list",
-            expected_virtual_env="dev",
-        ),
-        MainTestCase(
-            description="dispatches state checkpoints show through injected handler",
-            argv=["state", "checkpoints", "show", "chk_1"],
-            expected_exit_code=14,
-            expected_state_command="checkpoints",
-            expected_state_checkpoint_command="show",
-            expected_state_checkpoint_id="chk_1",
-        ),
-        MainTestCase(
-            description="dispatches state checkpoints diff through injected handler",
-            argv=["state", "checkpoints", "diff", "chk_2", "--virtual-env", "dev"],
-            expected_exit_code=15,
-            expected_state_command="checkpoints",
-            expected_state_checkpoint_command="diff",
-            expected_state_checkpoint_id="chk_2",
-            expected_virtual_env="dev",
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_state_command_arguments_when_running_with_dependencies_then_it_dispatches_handler(
-    test_case: MainTestCase,
-) -> None:
-    received_args: list[
-        tuple[
-            Path | None,
-            str,
-            str | None,
-            bool,
-            bool,
-            str | None,
-            str | None,
-            str | None,
-            bool,
-        ]
-    ] = []
-
-    def run_state(
-        project_dir: Path | None,
-        state_command: str,
-        backup_id: str | None,
-        auto_approve: bool,
-        no_color: bool,
-        checkpoint_command: str | None,
-        checkpoint_id: str | None,
-        virtual_environment: str | None,
-        allow_copy: bool,
-    ) -> int:
-        received_args.append(
-            (
-                project_dir,
-                state_command,
-                backup_id,
-                auto_approve,
-                no_color,
-                checkpoint_command,
-                checkpoint_id,
-                virtual_environment,
-                allow_copy,
-            )
-        )
-        return test_case.expected_exit_code
-
-    exit_code: int = _main_with_dependencies(
-        argv=test_case.argv,
-        handlers=build_handlers(run_state=run_state),
-    )
-
-    assert exit_code == test_case.expected_exit_code
-    assert received_args == [
-        (
-            test_case.expected_project_dir,
-            str(test_case.expected_state_command),
-            test_case.expected_state_backup_id,
-            test_case.expected_auto_approve,
-            test_case.expected_no_color,
-            test_case.expected_state_checkpoint_command,
-            test_case.expected_state_checkpoint_id,
-            test_case.expected_virtual_env,
-            False,
-        )
-    ]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        MainTestCase(
             description="dispatches playground command through injected handler",
             argv=["--project-dir", "/tmp/demo", "playground", "shop", "--template", "dagster"],
             expected_exit_code=5,
@@ -1810,7 +1498,7 @@ def test_given_state_command_arguments_when_running_with_dependencies_then_it_di
 def test_given_playground_command_when_running_then_it_dispatches_handler(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, str, str]] = []
+    received_args: list[tuple[object, ...]] = []
 
     def run_playground(request: PlaygroundCommandRequest) -> int:
         received_args.append((request.project_dir, request.target_path, request.template))
@@ -1855,7 +1543,7 @@ def test_given_playground_command_when_running_then_it_dispatches_handler(
 def test_given_skills_command_when_running_then_it_dispatches_handler(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, bool, tuple[str, ...], bool]] = []
+    received_args: list[tuple[object, ...]] = []
 
     def run_skills_update(
         project_dir: Path | None,
@@ -2000,24 +1688,7 @@ def test_given_stale_configured_skills_when_command_starts_then_notice_precedes_
 def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_flag(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[
-        tuple[
-            Path | None,
-            bool,
-            bool,
-            str | None,
-            bool,
-            bool,
-            str | None,
-            bool,
-            CompileLineageMode,
-            dict[str, object] | None,
-            bool,
-            bool,
-            bool,
-            bool,
-        ]
-    ] = []
+    received_args: list[tuple[object, ...]] = []
 
     def run_compile(request: CompileCommandRequest) -> int:
         received_args.append(
@@ -2088,7 +1759,7 @@ def test_given_compile_no_sql_validation_when_running_then_dispatches_expected_f
 def test_given_dag_command_arguments_when_running_then_dispatches_expected_handler(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[tuple[Path | None, bool, bool, dict[str, object]]] = []
+    received_args: list[tuple[object, ...]] = []
 
     def run_dag(
         project_dir: Path | None,
@@ -2174,12 +1845,6 @@ def test_given_dag_command_arguments_when_running_then_dispatches_expected_handl
             expected_run_audits=False,
         ),
         MainTestCase(
-            description="passes changes-only to build handler",
-            argv=["build", "--changes-only"],
-            expected_exit_code=5,
-            expected_changes_only=True,
-        ),
-        MainTestCase(
             description="passes selection diagnostics to build handler",
             argv=["build", "--selection-diagnostics"],
             expected_exit_code=5,
@@ -2197,25 +1862,7 @@ def test_given_dag_command_arguments_when_running_then_dispatches_expected_handl
 def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[
-        tuple[
-            bool,
-            bool,
-            bool,
-            str | None,
-            bool | None,
-            bool,
-            bool,
-            bool,
-            bool,
-            bool,
-            bool,
-            bool,
-            bool,
-            bool,
-            bool,
-        ]
-    ] = []
+    received_args: list[tuple[object, ...]] = []
 
     def run_build(request: BuildCommandRequest) -> int:
         received_args.append(
@@ -2223,7 +1870,6 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
                 request.no_color,
                 request.fail_fast,
                 request.full_refresh,
-                request.virtual_env,
                 request.load_sources,
                 request.reload_sources,
                 request.allow_snapshot_full_refresh,
@@ -2232,7 +1878,6 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
                 request.run_audits,
                 request.debug,
                 request.verbose,
-                request.changes_only,
                 request.no_cache,
                 request.selection_diagnostics,
             )
@@ -2250,7 +1895,6 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
             test_case.expected_no_color,
             False,
             test_case.expected_full_refresh,
-            test_case.expected_virtual_env,
             test_case.expected_load_sources,
             test_case.expected_reload,
             test_case.expected_allow_snapshot_full_refresh,
@@ -2259,7 +1903,6 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
             test_case.expected_run_audits,
             test_case.expected_debug,
             test_case.expected_verbose,
-            test_case.expected_changes_only,
             test_case.expected_no_cache,
             test_case.expected_selection_diagnostics,
         )
@@ -2276,12 +1919,6 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
             expected_no_color=True,
             expected_select=("orders",),
             expected_exclude=("customers",),
-        ),
-        MainTestCase(
-            description="passes changes-only to plan handler",
-            argv=["plan", "--changes-only"],
-            expected_exit_code=4,
-            expected_changes_only=True,
         ),
         MainTestCase(
             description="passes selection diagnostics to plan handler",
@@ -2301,27 +1938,7 @@ def test_given_build_full_refresh_when_running_then_dispatches_expected_flag(
 def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
     test_case: MainTestCase,
 ) -> None:
-    received_args: list[
-        tuple[
-            Path | None,
-            bool,
-            str | None,
-            str | None,
-            object,
-            bool,
-            bool,
-            str | None,
-            bool | None,
-            bool,
-            tuple[str, ...],
-            tuple[str, ...],
-            bool,
-            dict[str, object] | None,
-            bool,
-            bool,
-            bool,
-        ]
-    ] = []
+    received_args: list[tuple[object, ...]] = []
 
     def run_plan(request: PlanCommandRequest) -> int:
         received_args.append(
@@ -2333,14 +1950,12 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
                 request.cursor_overrides,
                 request.json_output,
                 request.full_refresh,
-                request.virtual_env,
                 request.load_sources,
                 request.no_color,
                 request.select,
                 request.exclude,
                 request.verbose,
                 request.cli_vars,
-                request.changes_only,
                 request.no_cache,
                 request.selection_diagnostics,
             )
@@ -2358,13 +1973,11 @@ def test_given_plan_flags_when_running_then_dispatches_expected_arguments(
         False,
         False,
         None,
-        None,
         test_case.expected_no_color,
         test_case.expected_select,
         test_case.expected_exclude,
         False,
         {},
-        test_case.expected_changes_only,
         test_case.expected_no_cache,
         test_case.expected_selection_diagnostics,
     )

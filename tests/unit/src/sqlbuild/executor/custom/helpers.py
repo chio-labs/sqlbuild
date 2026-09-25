@@ -6,7 +6,7 @@ from typing import Any, ClassVar
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.custom.models import MaterializationContext, PrepareVersionContext
+from sqlbuild.executor.custom.models import MaterializationContext
 
 
 class RecordingCustomAdapter(BaseAdapter):
@@ -76,30 +76,5 @@ def build_materialization_context(
         run_audits=_empty_audit_results,
         on_progress=None,
         logger=logging.getLogger(__name__),
-        statement_recorder=statement_recorder,
-    )
-
-
-def build_prepare_version_context(
-    *,
-    adapter: BaseAdapter,
-    connection: object,
-    statement_recorder: StatementRecorder,
-) -> PrepareVersionContext:
-    return PrepareVersionContext(
-        adapter=adapter,
-        connection=connection,
-        origin_relation="warehouse.analytics.orders_origin",
-        destination="warehouse.analytics.orders",
-        destination_database="warehouse",
-        destination_schema="analytics",
-        destination_name="orders",
-        config={},
-        placeholders={},
-        run_id="test-run",
-        environment="dev",
-        vars={},
-        unique_key=(),
-        declared_columns=(),
         statement_recorder=statement_recorder,
     )

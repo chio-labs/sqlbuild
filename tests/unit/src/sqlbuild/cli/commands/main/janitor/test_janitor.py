@@ -7,14 +7,11 @@ from io import StringIO
 
 import pytest
 
-from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.cli.commands._helpers.janitor_output.output import write_disabled, write_plan
 from sqlbuild.cli.commands._helpers.janitor_output.outputs import confirm_janitor_plan
 from sqlbuild.cli.commands.models import JanitorPlanningResult
 from sqlbuild.executor.janitor.models import (
-    JanitorDeleteCandidate,
     JanitorPlan,
-    JanitorRelationKey,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.janitor._test_types import (
     JanitorConfirmationInterruptTestCase,
@@ -35,8 +32,8 @@ from tests.unit.src.sqlbuild.cli.commands.main.janitor.helpers import (
             description="treats keyboard interrupt at confirmation as cancellation",
             expected_result=False,
             expected_output_fragments=(
-                "Janitor will delete 1 objects from dev.",
-                "Type `delete 1 objects from dev` to continue: ",
+                "Janitor will archive 1 and delete 1 objects from dev.",
+                "Type `archive 1 and delete 1 objects from dev` to continue: ",
             ),
             unexpected_output_fragments=("KeyboardInterrupt", "Traceback"),
         )
@@ -48,22 +45,7 @@ def test_given_janitor_confirmation_when_keyboard_interrupt_then_returns_cancell
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    plan: JanitorPlan = JanitorPlan(
-        target_name="dev",
-        retention_days=30,
-        candidates=(
-            JanitorDeleteCandidate(
-                key=JanitorRelationKey(database=None, schema="dev", name="stale_model"),
-                relation=RelationInfo(
-                    database=None,
-                    schema="dev",
-                    name="stale_model",
-                    relation_type="table",
-                ),
-                age_timestamp=None,
-            ),
-        ),
-    )
+    plan: JanitorPlan = build_direct_archive_plan()
 
     def interrupting_input() -> str:
         raise KeyboardInterrupt
@@ -144,21 +126,20 @@ def test_given_disabled_janitor_when_writing_with_color_then_styles_title(
             expected_output_fragments=(
                 "Janitor preview  dev",
                 "  retention              30 days",
-                "  eligible for deletion  1",
+                "  relations to archive   0",
                 "Janitor blocked\n  Managed target schemas contain active configured sources.",
                 "blocked  active sources: raw.events",
-                "suppressed deletion: blocked.old_model",
+                "suppressed archive: blocked.old_model",
                 "No janitor actions will be performed.",
                 "Skipped schemas\n  dev  contains active source raw.orders",
-                "Eligible objects\n  dev.stale_model",
-                "Eligible checkpoints\n  cp_1  dev",
-                "Eligible detached VDEs\n  branch_old  detached virtual environment",
-                "Eligible expired VDEs\n  branch_expired  expired virtual environment",
-                "Eligible state backups\n  backup_1  sqlbuild_state",
-                "Eligible expired locks\n  lock_1  worker_1",
                 "Skipped objects\n  dev.source_table  source relation",
             ),
-            unexpected_output_fragments=("\033[",),
+            unexpected_output_fragments=(
+                "\033[",
+                "checkpoints pruned",
+                "VDEs pruned",
+                "virtual state pruned",
+            ),
         )
     ],
     ids=lambda case: case.description,
@@ -188,10 +169,8 @@ def test_given_janitor_plan_when_writing_without_color_then_preserves_output_fra
                 "\033[34m\033[1mJanitor preview\033[0m",
                 "dev",
                 "\033[34m30 days\033[0m",
-                "eligible for deletion  \033[33m1\033[0m",
+                "relations to archive   \033[34m0\033[0m",
                 "Janitor blocked",
-                "\033[32mEligible objects\033[0m",
-                "dev.stale_model",
                 "\033[2msource relation\033[0m",
             ),
         )
@@ -226,7 +205,7 @@ def test_given_janitor_plan_when_writing_with_color_then_uses_semantic_colors(
             ),
         ),
         JanitorDirectArchiveConfirmationTestCase(
-            description="direct archive plan rejects the virtual-mode phrase",
+            description="direct archive plan requires the archive count in confirmation",
             typed_response="delete 1 objects from dev",
             expected_result=False,
             expected_output_fragments=("Janitor will archive 1 and delete 1 objects from dev.",),

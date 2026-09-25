@@ -59,7 +59,7 @@ def test_given_cursor_event_when_encoding_then_preserves_state_table_string_form
 
     values: tuple[object | None, ...] = MicrobatchEventCodec.values(event)
 
-    assert values[17:21] == test_case.expected_values
+    assert values[15:19] == test_case.expected_values
 
 
 @pytest.mark.parametrize(

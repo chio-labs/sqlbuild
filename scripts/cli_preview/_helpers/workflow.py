@@ -16,15 +16,11 @@ from scripts.cli_preview.models import PreviewScene
 from sqlbuild.presentation.main.supports_color import supports_color
 
 _PAYMENTS_MODEL_PATH: Path = Path("models/staging/stg_payments.sql")
-_VIRTUAL_MODEL_PATH: Path = Path("models/fact_waffle_orders.sql")
 _QUERY_MARKER: str = "  amount_cents,\n"
 _CHANGED_QUERY_MARKER: str = (
     "  CAST(CASE WHEN payment_method = 'card' THEN 'preview'"
     " ELSE CAST(amount_cents AS VARCHAR) END AS INTEGER) AS amount_cents,\n"
 )
-_VIRTUAL_QUERY_FILTER: str = "WHERE o.order_id IS NOT NULL"
-_JANITOR_SECTION_MARKER: str = "[janitor]"
-_JANITOR_CONFIG: str = "\n[janitor]\nenabled = true\nretention_days = 0\n"
 
 type _SignalHandler = Callable[[int, FrameType | None], object] | int | None
 
@@ -92,100 +88,6 @@ def preview_scenes() -> tuple[PreviewScene, ...]:
             description="model lineage tree",
             command=("lineage", "fact_orders", "--direction", "both"),
         ),
-        *_virtual_preview_scenes(),
-    )
-
-
-def _virtual_preview_scenes() -> tuple[PreviewScene, ...]:
-    return (
-        PreviewScene(
-            name="virtual-plan",
-            description="virtual first-run plan and state summary",
-            template="virtual",
-            setup_commands=(("state", "init"),),
-            command=("plan",),
-        ),
-        PreviewScene(
-            name="virtual-build",
-            description="local DuckDB-backed virtual build",
-            template="virtual",
-            setup_commands=(("state", "init"),),
-            command=("build",),
-        ),
-        PreviewScene(
-            name="virtual-plan-changed",
-            description="changed virtual plan with direct and downstream impact",
-            template="virtual",
-            setup_commands=(("state", "init"), ("build",)),
-            mutate_virtual_model=True,
-            command=("plan", "--changes-only"),
-        ),
-        PreviewScene(
-            name="virtual-branch-build",
-            description="branch-like virtual environment build",
-            template="virtual",
-            setup_commands=(("state", "init"), ("build",)),
-            mutate_virtual_model=True,
-            command=("build", "--virtual-env", "pr"),
-        ),
-        PreviewScene(
-            name="virtual-diff",
-            description="schema comparison between finalized virtual environments",
-            template="virtual",
-            setup_commands=(("state", "init"), ("build",)),
-            mutate_virtual_model=True,
-            post_mutation_commands=(("build", "--virtual-env", "pr"),),
-            command=("diff", "dev:pr", "--schema-only"),
-        ),
-        PreviewScene(
-            name="virtual-promote",
-            description="promote a branch virtual environment into dev",
-            template="virtual",
-            setup_commands=(("state", "init"), ("build",)),
-            mutate_virtual_model=True,
-            post_mutation_commands=(("build", "--virtual-env", "pr"),),
-            command=("promote", "--from", "pr", "--to", "dev"),
-        ),
-        PreviewScene(
-            name="virtual-rollback",
-            description="restore the previous finalized virtual checkpoint",
-            template="virtual",
-            setup_commands=(("state", "init"), ("build",)),
-            mutate_virtual_model=True,
-            post_mutation_commands=(("build",),),
-            command=("rollback",),
-        ),
-        PreviewScene(
-            name="virtual-checkpoints",
-            description="list virtual environment build checkpoints",
-            template="virtual",
-            setup_commands=(("state", "init"), ("build",)),
-            mutate_virtual_model=True,
-            post_mutation_commands=(("build",),),
-            command=("state", "checkpoints", "list", "--virtual-env", "dev"),
-        ),
-        PreviewScene(
-            name="virtual-reconcile",
-            description="inspect virtual state and warehouse consistency",
-            template="virtual",
-            setup_commands=(("state", "init"), ("build",)),
-            command=("reconcile", "--virtual-env", "dev"),
-        ),
-        PreviewScene(
-            name="virtual-freshness",
-            description="inspect persisted virtual source freshness",
-            template="virtual",
-            setup_commands=(("state", "init"), ("build",)),
-            command=("freshness", "--state", "--virtual-env", "dev"),
-        ),
-        PreviewScene(
-            name="virtual-janitor",
-            description="virtual state and warehouse cleanup summary",
-            template="virtual",
-            setup_commands=(("state", "init"), ("build",)),
-            enable_janitor=True,
-            command=("janitor", "--auto-approve"),
-        ),
     )
 
 
@@ -239,8 +141,6 @@ def _prepare_project(
     )
     if scaffold_return_code != 0:
         raise PreviewSetupError(f"failed to create {scene.template} playground")
-    if scene.enable_janitor:
-        _enable_janitor(project_dir=project_dir)
     setup_command: tuple[str, ...]
     for setup_command in scene.setup_commands:
         return_code: int = _run_sqb(
@@ -255,19 +155,6 @@ def _prepare_project(
             raise PreviewSetupError(f"preview setup command failed: sqb {' '.join(setup_command)}")
     if scene.mutate_payments:
         _mutate_payments_model(project_dir=project_dir)
-    if scene.mutate_virtual_model:
-        _mutate_virtual_model(project_dir=project_dir)
-    for setup_command in scene.post_mutation_commands:
-        return_code = _run_sqb(
-            sqb=sqb,
-            project_dir=project_dir,
-            command=setup_command,
-            environment=environment,
-            no_color=True,
-            quiet=True,
-        )
-        if return_code != 0:
-            raise PreviewSetupError(f"preview setup command failed: sqb {' '.join(setup_command)}")
 
 
 def _run_sqb(
@@ -320,22 +207,6 @@ def _mutate_payments_model(*, project_dir: Path) -> None:
     if changed == source:
         raise PreviewSetupError(f"could not mutate playground model: {model_path}")
     model_path.write_text(changed, encoding="utf-8")
-
-
-def _mutate_virtual_model(*, project_dir: Path) -> None:
-    model_path: Path = project_dir / _VIRTUAL_MODEL_PATH
-    source: str = model_path.read_text(encoding="utf-8")
-    if _VIRTUAL_QUERY_FILTER in source:
-        raise PreviewSetupError(f"virtual playground model is already mutated: {model_path}")
-    model_path.write_text(f"{source.rstrip()}\n{_VIRTUAL_QUERY_FILTER}\n", encoding="utf-8")
-
-
-def _enable_janitor(*, project_dir: Path) -> None:
-    project_path: Path = project_dir / "sqlbuild_project.toml"
-    source: str = project_path.read_text(encoding="utf-8")
-    if _JANITOR_SECTION_MARKER in source:
-        raise PreviewSetupError(f"virtual playground already configures janitor: {project_path}")
-    project_path.write_text(f"{source.rstrip()}\n{_JANITOR_CONFIG}", encoding="utf-8")
 
 
 def _resolve_sqb_executable() -> str:

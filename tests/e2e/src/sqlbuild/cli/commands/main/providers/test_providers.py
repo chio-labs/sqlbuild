@@ -11,9 +11,6 @@ from typing import cast
 
 import pytest
 
-from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
-    build_virtual_plan_project_toml,
-)
 from tests.e2e.src.sqlbuild.cli.commands.main.providers._test_types import (
     ProviderCommandConcurrencyE2ETestCase,
     ProviderCommandDiagnosticE2ETestCase,
@@ -666,64 +663,6 @@ def test_given_alias_imported_provider_annotation_when_running_command_then_cli_
 
     assert result.returncode != 0, result.stdout + result.stderr
     assert test_case.expected_error_fragment in result.stdout + result.stderr
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        ProviderCommandFailureE2ETestCase(
-            description="virtual build provider tears down when command fails after setup",
-            command=("--no-color", "build", "--select", "+fact_orders"),
-            repo_files={
-                "sqlbuild_project.toml": build_virtual_plan_project_toml(),
-                "providers/marker.py": PROVIDER_MARKER_FILE,
-                "tasks/failing_task.py": dedent(
-                    """
-                    from sqlbuild.refs import model
-                    from providers.marker import MarkerProvider
-                    from sqlbuild.tasks import task
-
-
-                    @task(depends_on=model("fact_orders"))
-                    def failing_task(ctx, marker_provider: MarkerProvider):
-                        marker_provider.mark("virtual_task")
-                        raise RuntimeError("intentional provider failure")
-                    """
-                ).strip()
-                + "\n",
-                "models/fact_orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
-            },
-            expected_marker_entries=("setup", "virtual_task", "teardown"),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_virtual_build_provider_failure_when_provider_was_setup_then_provider_tears_down(
-    test_case: ProviderCommandFailureE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    marker_path: Path = tmp_path / "provider-virtual-marker.log"
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="provider_virtual_project",
-        repo_files=test_case.repo_files,
-    )
-    init_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("state", "init"),
-        project_dir=project_dir,
-        env={"MARKER_PATH": str(marker_path)},
-    )
-    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=test_case.command,
-        project_dir=project_dir,
-        env={"MARKER_PATH": str(marker_path)},
-    )
-
-    assert result.returncode != 0, result.stdout + result.stderr
-    marker_entries: tuple[str, ...] = tuple(marker_path.read_text(encoding="utf-8").splitlines())
-    assert marker_entries == test_case.expected_marker_entries
 
 
 @pytest.mark.parametrize(

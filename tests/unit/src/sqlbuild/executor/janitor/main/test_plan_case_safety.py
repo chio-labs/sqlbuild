@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.executor.janitor.constants import CASE_COLLISION_REASON
 from sqlbuild.executor.janitor.main.execute import execute_janitor_plan
 from sqlbuild.executor.janitor.main.plan import build_janitor_plan
 from sqlbuild.executor.janitor.models import JanitorDirectModeSettings, JanitorPlan
@@ -21,50 +20,6 @@ from tests.unit.src.sqlbuild.executor.janitor.main.helpers import (
 @pytest.mark.parametrize(
     "test_case",
     [
-        JanitorCaseSafetyTestCase(
-            description="virtual mode never drops an excluded table through a quoted twin",
-            relation_names=("orders__v0", "Orders__v0"),
-            direct_mode=False,
-            tracked_names=("orders__v0",),
-            exclude_patterns=("orders__v0",),
-            expected_skipped_relations=(
-                ("analytics.orders__v0", "relation matches exclude pattern 'orders__v0'"),
-                ("analytics.Orders__v0", "relation matches exclude pattern 'orders__v0'"),
-            ),
-            expected_dropped_targets=(),
-        ),
-        JanitorCaseSafetyTestCase(
-            description="virtual mode skips relations whose folded names collide",
-            relation_names=("orders__v0", "Orders__v0"),
-            direct_mode=False,
-            tracked_names=("orders__v0",),
-            exclude_patterns=(),
-            expected_skipped_relations=(
-                ("analytics.orders__v0", CASE_COLLISION_REASON),
-                ("analytics.Orders__v0", CASE_COLLISION_REASON),
-            ),
-            expected_dropped_targets=(),
-        ),
-        JanitorCaseSafetyTestCase(
-            description="virtual mode still drops a non-colliding tracked relation",
-            relation_names=("orders__v0",),
-            direct_mode=False,
-            tracked_names=("orders__v0",),
-            exclude_patterns=(),
-            expected_skipped_relations=(),
-            expected_dropped_targets=("analytics.orders__v0",),
-        ),
-        JanitorCaseSafetyTestCase(
-            description="virtual exclude patterns match regardless of case",
-            relation_names=("orders__v0",),
-            direct_mode=False,
-            tracked_names=("orders__v0",),
-            exclude_patterns=("ORDERS__*",),
-            expected_skipped_relations=(
-                ("analytics.orders__v0", "relation matches exclude pattern 'ORDERS__*'"),
-            ),
-            expected_dropped_targets=(),
-        ),
         JanitorCaseSafetyTestCase(
             description="direct exclude patterns match regardless of case",
             relation_names=("old_orders",),

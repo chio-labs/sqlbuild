@@ -10,7 +10,6 @@ from sqlbuild.executor.janitor.main.plan import build_janitor_plan
 from sqlbuild.executor.janitor.models import (
     JanitorDirectModeSettings,
     JanitorPlan,
-    JanitorRelationKey,
     JanitorRelationScope,
 )
 from tests.unit.src.sqlbuild.executor.janitor.main._test_types import (
@@ -101,23 +100,6 @@ def test_given_adapter_reading_ages_separately_when_planning_janitor_then_uses_t
             exclude_patterns=("tmp_*",),
             protected_relation_keys=frozenset(),
             expected_age_requests=(("old_orders",),),
-        ),
-        JanitorAgeReadScopeTestCase(
-            description="virtual mode reads ages only for unprotected stale relations",
-            relation_infos=(
-                relation_info("orders"),
-                relation_info("orders__v0"),
-                relation_info("orders__v1"),
-                relation_info("tmp_orders"),
-            ),
-            direct_mode=False,
-            delete_tracked_only=False,
-            tracked_relations=(),
-            exclude_patterns=("tmp_*",),
-            protected_relation_keys=frozenset(
-                (JanitorRelationKey(database=None, schema="analytics", name="orders__v1"),)
-            ),
-            expected_age_requests=(("orders__v0",),),
         ),
         JanitorAgeReadScopeTestCase(
             description="no age read happens when nothing survives the filters",

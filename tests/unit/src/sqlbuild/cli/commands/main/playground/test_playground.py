@@ -150,63 +150,6 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
             ),
         ),
         CreatePlaygroundProjectTestCase(
-            description="creates virtual environments playground from loader template",
-            target_relative_path=Path("virtual_playground"),
-            template="virtual",
-            expected_files=(
-                Path("README.md"),
-                Path("sqlbuild_project.toml"),
-                Path("models/fact_waffle_orders.sql"),
-                Path("models/customer_revenue.sql"),
-                Path("seeds/lookups.yml"),
-                Path("seeds/waffle_price_tiers.csv"),
-                Path("sources/raw.yml"),
-                Path("loaders/waffle_loaders.py"),
-                Path("tests/unit/test_fact_waffle_orders.sql"),
-                Path("tests/scenarios/customer_revenue_minimal.sql"),
-            ),
-            unexpected_paths=(Path("target"), Path("sqlbuild_local.toml")),
-            expected_file_fragments=(
-                (
-                    Path("sqlbuild_project.toml"),
-                    (
-                        "[connections.developer]",
-                        "[settings]",
-                        "virtual_environments = true",
-                        "[targets.dev.state]",
-                        'backend = "duckdb"',
-                        'unsuffixed_virtual_env = "dev"',
-                        'database = "loader_waffle_shop_state.duckdb"',
-                    ),
-                ),
-                (
-                    Path("models/fact_waffle_orders.sql"),
-                    (
-                        '__seed("waffle_price_tiers")',
-                        "waffle_category",
-                    ),
-                ),
-                (
-                    Path("README.md"),
-                    (
-                        "sqb state init",
-                        "sqb build --virtual-env pr",
-                        "sqb scenario test",
-                        "sqb diff dev:pr --schema-only",
-                        "sqb promote --from pr --to dev",
-                    ),
-                ),
-                (
-                    Path("tests/unit/test_fact_waffle_orders.sql"),
-                    ("__expected__fact_waffle_orders", "__seed__waffle_price_tiers"),
-                ),
-                (
-                    Path("tests/scenarios/customer_revenue_minimal.sql"),
-                    ("SCENARIO", "__expected__customer_revenue"),
-                ),
-            ),
-        ),
-        CreatePlaygroundProjectTestCase(
             description="creates Python nodes playground from generated template",
             target_relative_path=Path("python_nodes_playground"),
             template="python_nodes",
@@ -361,23 +304,6 @@ def test_given_existing_target_when_creating_playground_then_it_raises_user_erro
                 "Project: demo_loader_shop",
                 "Example: loader-focused waffle shop",
                 "sqb build",
-            ),
-        ),
-        RunPlaygroundTestCase(
-            description="prints virtual environments next steps",
-            target_path="demo_virtual_shop",
-            template="virtual",
-            expected_stdout_fragments=(
-                "SQLBuild playground created",
-                "Project: demo_virtual_shop",
-                "Example: virtual environments waffle shop",
-                "sqb state init",
-                "sqb build --virtual-env pr",
-                "sqb test",
-                "sqb audit",
-                "sqb scenario test",
-                "sqb diff dev:pr --schema-only",
-                "sqb promote --from pr --to dev",
             ),
         ),
         RunPlaygroundTestCase(

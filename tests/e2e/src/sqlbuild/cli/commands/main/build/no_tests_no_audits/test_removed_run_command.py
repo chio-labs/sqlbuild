@@ -23,19 +23,16 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
     ],
     ids=lambda case: case.description,
 )
-def test_given_virtual_mode_project_when_running_top_level_run_then_cli_rejects_command(
+def test_given_project_when_running_top_level_run_then_cli_rejects_command(
     test_case: RunE2ETestCase,
     tmp_path: Path,
 ) -> None:
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
-        project_name="virtual_run_project",
+        project_name="removed_run_project",
         repo_files={
             "sqlbuild_project.toml": (
-                'name = "virtual_run_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[settings]\n"
-                "virtual_environments = true\n"
+                'name = "removed_run_project"\nadapter = "duckdb"\n\n[settings]\n\n'
             )
         },
     )

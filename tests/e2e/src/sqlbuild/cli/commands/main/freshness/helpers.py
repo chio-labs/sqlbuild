@@ -2,11 +2,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from textwrap import dedent
 
-from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
-    build_virtual_plan_project_toml,
-)
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
 
@@ -73,50 +69,6 @@ def prepare_multi_schema_freshness_project(*, tmp_path: Path) -> Path:
             ),
         },
     )
-
-
-def prepare_virtual_freshness_project(
-    *, tmp_path: Path, raw_orders_freshness: str | None = None
-) -> Path:
-    freshness: str = raw_orders_freshness or (
-        "                    freshness:\n"
-        "                      strategy: column\n"
-        "                      column: data_version\n"
-        "                      type: integer\n"
-    )
-    return prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="virtual_freshness_command",
-        repo_files={
-            "sqlbuild_project.toml": build_virtual_plan_project_toml(),
-            "sources/raw.yml": dedent(
-                f"""
-                sources:
-                  - name: raw_orders
-                    schema: raw
-                    table: raw_orders
-{freshness.rstrip()}
-                """
-            ).strip()
-            + "\n",
-            "models/fact_orders.sql": (
-                'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")\n'
-            ),
-        },
-    )
-
-
-def persist_virtual_source_freshness(*, project_dir: Path) -> None:
-    init_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("state", "init"),
-        project_dir=project_dir,
-    )
-    assert init_result.returncode == 0, init_result.stdout + init_result.stderr
-    build_result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"),
-        project_dir=project_dir,
-    )
-    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
 
 
 def freshness_sources_yml(

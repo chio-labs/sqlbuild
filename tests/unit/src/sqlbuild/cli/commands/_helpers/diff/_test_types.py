@@ -18,22 +18,6 @@ class RenderDiffOutputTestCase:
 
 
 @dataclass(frozen=True)
-class RenderVirtualDiffHeaderTestCase:
-    description: str
-    selected_names: tuple[str, ...]
-    skipped_names: tuple[str, ...]
-    from_stale: tuple[str, ...]
-    to_stale: tuple[str, ...]
-    from_working: bool
-    to_working: bool
-    allow_partial_diff: bool
-    verbose: bool
-    expected_fragments: tuple[str, ...]
-    expected_color_fragments: tuple[str, ...] = ()
-    unexpected_fragments: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
 class RenderDiffEvidenceTestCase:
     description: str
     left_value: object

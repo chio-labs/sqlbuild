@@ -13,7 +13,6 @@ from sqlbuild.executor.janitor.models import (
     JanitorDeleteCandidate,
     JanitorDirectModeSettings,
     JanitorPlan,
-    JanitorRelationKey,
     JanitorRelationScope,
 )
 from tests.unit.src.sqlbuild.executor.janitor.main._test_types import (
@@ -105,40 +104,6 @@ ARCHIVE_TIMESTAMP_RE: re.Pattern[str] = re.compile(r"__[0-9]{8}t[0-9]{6}z__")
             ),
             expected_archive_deletion_display_names=(
                 "ANALYTICS.DEV_ORDERS._sqb_archive__20200101t000000z__old_products",
-            ),
-        ),
-        JanitorFoldedIdentifierPlanTestCase(
-            description="virtual protection matches physical relations across identifier case",
-            relation_infos=(
-                relation_info(
-                    "orders__v1",
-                    database="ANALYTICS",
-                    schema="DEV_ORDERS__SQB_PHYSICAL",
-                    created_at=OLD_TIME,
-                ),
-                relation_info(
-                    "orders__v0",
-                    database="ANALYTICS",
-                    schema="DEV_ORDERS__SQB_PHYSICAL",
-                    created_at=OLD_TIME,
-                ),
-            ),
-            direct_mode=False,
-            protected_relation_keys=frozenset(
-                (
-                    JanitorRelationKey(
-                        database="ANALYTICS",
-                        schema="DEV_ORDERS__SQB_PHYSICAL",
-                        name="ORDERS__V1",
-                    ),
-                )
-            ),
-            expected_candidate_display_names=("ANALYTICS.DEV_ORDERS__SQB_PHYSICAL.orders__v0",),
-            expected_skipped_relations=(
-                (
-                    "ANALYTICS.DEV_ORDERS__SQB_PHYSICAL.orders__v1",
-                    "relation is referenced by a retained virtual checkpoint",
-                ),
             ),
         ),
     ],
