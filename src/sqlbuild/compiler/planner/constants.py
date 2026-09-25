@@ -37,7 +37,6 @@ MODEL_CUSTOM_CONFIG_KEY: str = "config"
 MODEL_PLACEHOLDERS_CONFIG_KEY: str = "placeholders"
 MODEL_PRE_HOOKS_CONFIG_KEY: str = "pre_hooks"
 MODEL_POST_HOOKS_CONFIG_KEY: str = "post_hooks"
-MODEL_CONTRACT_CONFIG_KEY: str = "contract"
 MICROBATCH_START_SENTINEL: str = sentinel_to_token(sentinel=BoundSentinel.START)
 MICROBATCH_END_SENTINEL: str = sentinel_to_token(sentinel=BoundSentinel.END)
 METADATA_NAME_FILTER_LIMIT: int = 250

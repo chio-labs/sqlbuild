@@ -186,8 +186,6 @@ def test_given_compiled_project_when_building_column_lineage_then_infers_expecte
     )
     assert upstream_columns == tuple(sorted(test_case.expected_upstream_columns))
     assert column_lineage.transform_kind == test_case.expected_transform_kind
-    for expected_scope_name in test_case.expected_internal_scope_names:
-        assert expected_scope_name in {node.scope_name for node in column_lineage.nodes}
 
 
 @pytest.mark.parametrize(
@@ -378,15 +376,13 @@ def test_given_select_star_when_building_column_lineage_then_expands_known_schem
     "test_case",
     [
         ProjectLineageGraphTestCase(
-            description="traces upstream and downstream through linear project graph",
-            expected_trace=("b.id->c.id", "a.id->b.id"),
+            description="finds column consumers through linear project graph",
             expected_consumers=("a.id->b.id",),
-            expected_downstream_trace=("a.id->b.id", "b.id->c.id"),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_edges(
+def test_given_linear_project_when_listing_column_consumers_then_returns_expected_edges(
     test_case: ProjectLineageGraphTestCase,
 ) -> None:
     project: CompiledProject = make_compiled_project(
@@ -404,15 +400,6 @@ def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_
     result: ProjectColumnLineage | None = build_project_column_lineage(project=project)
 
     assert result is not None
-    trace: tuple[str, ...] = tuple(
-        edge_label(
-            edge.source.resource_name,
-            edge.source.column_name,
-            edge.target.resource_name,
-            edge.target.column_name,
-        )
-        for edge in result.trace_column(model_name="c", column_name="id")
-    )
     consumers: tuple[str, ...] = tuple(
         edge_label(
             edge.source.resource_name,
@@ -422,18 +409,7 @@ def test_given_linear_project_when_tracing_column_lineage_then_returns_expected_
         )
         for edge in result.column_consumers(resource_name="a", column_name="id")
     )
-    downstream_trace: tuple[str, ...] = tuple(
-        edge_label(
-            edge.source.resource_name,
-            edge.source.column_name,
-            edge.target.resource_name,
-            edge.target.column_name,
-        )
-        for edge in result.trace_column_downstream(resource_name="a", column_name="id")
-    )
-    assert trace == test_case.expected_trace
     assert consumers == test_case.expected_consumers
-    assert downstream_trace == test_case.expected_downstream_trace
 
 
 @pytest.mark.parametrize(

@@ -55,51 +55,6 @@ _NATIVE_FALLBACK: int = 2
 _NATIVE_RESULT_LENGTH: int = 2
 
 
-def validate_var_macro_collision(
-    *,
-    effective_vars: dict[str, object],
-    loaded_macros: dict[str, LoadedMacro],
-) -> None:
-    """Raise if any project var name collides with a macro name."""
-
-    collisions: set[str] = set(effective_vars) & set(loaded_macros)
-    if collisions:
-        names: str = ", ".join(sorted(collisions))
-        raise CompileInputError(
-            f"project variable names collide with macro names: {names}. "
-            f"Rename the variable or macro to avoid ambiguity."
-        )
-
-
-def expand_authored_sql(  # noqa: PLR0913
-    *,
-    sql: str,
-    file_path: Path,
-    effective_vars: dict[str, object],
-    loaded_macros: dict[str, LoadedMacro],
-    macro_context: MacroContext,
-    value_renderer: TypedSqlValueRenderer,
-    collection_rendering: CollectionRendering,
-    context_values: Mapping[str, str | None] | None = None,
-    declarations: DeclarationResolutionContext | None = None,
-    declaration_resolver: DeclarationScopeResolver | None = None,
-) -> str:
-    """Apply SQL interpolation and macro expansion to authored SQL text."""
-
-    return expand_authored_sql_result(
-        sql=sql,
-        file_path=file_path,
-        effective_vars=effective_vars,
-        loaded_macros=loaded_macros,
-        macro_context=macro_context,
-        value_renderer=value_renderer,
-        collection_rendering=collection_rendering,
-        context_values=context_values,
-        declarations=declarations,
-        declaration_resolver=declaration_resolver,
-    ).sql
-
-
 def expand_authored_sql_result(  # noqa: PLR0913
     *,
     sql: str,

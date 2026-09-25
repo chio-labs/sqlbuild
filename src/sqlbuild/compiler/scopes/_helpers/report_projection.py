@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from typing import cast
 
 from sqlbuild.compiler.scopes._helpers.lookup import identity_key
@@ -376,27 +375,6 @@ def diagnostic_projection(*, diagnostic: ScopeDiagnostic) -> dict[str, object]:
         "declaration": _identity_text(identity=diagnostic.declaration),
         "resource": _identity_text(identity=diagnostic.resource),
     }
-
-
-def records_for_identities(
-    *, lookup: ScopeLookup, identities: Iterable[DeclarationIdentity]
-) -> tuple[DeclarationRecord, ...]:
-    """Return every known duplicate match in stable identity/location order."""
-
-    records: list[DeclarationRecord] = []
-    for identity in identities:
-        records.extend(lookup.declarations.get(identity, ()))
-    return tuple(
-        sorted(
-            records,
-            key=lambda item: (
-                identity_key(item.identity),
-                item.path,
-                item.line,
-                item.column,
-            ),
-        )
-    )
 
 
 def safe_scope_path(*, path: str) -> str:

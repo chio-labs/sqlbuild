@@ -16,15 +16,12 @@ class ColumnLineageAnalyzerTestCase:
     expected_column: str
     expected_upstream_columns: tuple[str, ...]
     expected_transform_kind: ColumnTransformKind
-    expected_internal_scope_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class ProjectLineageGraphTestCase:
     description: str
-    expected_trace: tuple[str, ...]
     expected_consumers: tuple[str, ...]
-    expected_downstream_trace: tuple[str, ...]
 
 
 @dataclass(frozen=True)

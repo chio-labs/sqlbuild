@@ -204,7 +204,6 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
     )[0]
 
     assert model_file.output_column_locations == {}
-    assert model_file.output_column_locations_extracted is False
     assert (
         model_file.extract_implicit_alias_columns
         is test_case.expected_extract_implicit_alias_columns

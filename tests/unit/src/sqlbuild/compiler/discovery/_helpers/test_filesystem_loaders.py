@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery._helpers.filesystem.core import discover_loader_functions
+from sqlbuild.compiler.discovery._helpers.filesystem.core import discover_python_node_functions
 from sqlbuild.compiler.discovery.exceptions import LoaderDiscoveryError
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
@@ -170,7 +170,9 @@ def test_given_project_dir_when_discovering_loaders_then_returns_expected(
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(contents, encoding="utf-8")
 
-    result: tuple[DiscoveredLoaderFunction, ...] = discover_loader_functions(project_dir=tmp_path)
+    result: tuple[DiscoveredLoaderFunction, ...] = tuple(
+        discover_python_node_functions(project_dir=tmp_path).loaders
+    )
 
     assert tuple(loader.name for loader in result) == test_case.expected_names
     assert tuple(loader.destination for loader in result) == test_case.expected_targets
@@ -224,4 +226,4 @@ def test_given_loader_import_error_when_discovering_loaders_then_raises_clear_er
         file_path.write_text(contents, encoding="utf-8")
 
     with pytest.raises(LoaderDiscoveryError, match=test_case.expected_error_fragment):
-        discover_loader_functions(project_dir=tmp_path)
+        discover_python_node_functions(project_dir=tmp_path)

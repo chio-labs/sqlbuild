@@ -851,10 +851,6 @@ def plan_model_from_change(
             if plan_config.incremental_mode == IncrementalMode.MICROBATCH
             else get_config_str(values=model.config.values, key="lookback")
         ),
-        lookback_is_default=(
-            plan_config.incremental_mode == IncrementalMode.MICROBATCH
-            and get_config_str(values=model.config.values, key="lookback") is None
-        ),
         cursor_bounds=cursor_bounds,
         cursor_input_relations=cursor_input_relations,
         batch_size=plan_config.batch_size,

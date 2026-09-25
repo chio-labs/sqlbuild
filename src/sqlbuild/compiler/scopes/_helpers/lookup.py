@@ -116,16 +116,6 @@ def build_lookup(*, index: ScopeIndex) -> ScopeLookup:
             key=lambda item: item.resource,
             sort_key=grant_sort_key,
         ),
-        visibility_by_resource=group_records(
-            records=canonical_index.visibility,
-            key=lambda item: item.resource,
-            sort_key=visibility_sort_key,
-        ),
-        inaccessible_by_resource=group_records(
-            records=canonical_index.inaccessible,
-            key=lambda item: item.resource,
-            sort_key=inaccessible_sort_key,
-        ),
     )
 
 
