@@ -174,7 +174,7 @@ def test_given_redundant_typed_fixture_null_when_formatting_then_safe_fix_uses_c
 
 @pytest.mark.parametrize(
     "test_case",
-    [FormatCliTestCase("all-null empty fixture", (), 0, "__EMPTY_FIXTURE()")],
+    [FormatCliTestCase("all-null empty fixture", (), 0, "__empty_fixture()")],
     ids=lambda case: case.description,
 )
 def test_given_all_null_empty_fixture_when_formatting_then_uses_empty_fixture_marker(
@@ -219,7 +219,7 @@ def test_given_all_null_empty_fixture_when_formatting_then_uses_empty_fixture_ma
     assert "Formatted files:" in capsys.readouterr().out
     formatted: str = test_file.read_text(encoding="utf-8")
     assert test_case.expected_fragment in formatted
-    assert "__ref__orders AS (\n  SELECT\n    *\n  FROM __EMPTY_FIXTURE()\n)" in formatted
+    assert "__ref__orders AS (\n  SELECT\n    *\n  FROM __empty_fixture()\n)" in formatted
     assert "CAST(NULL" not in formatted.split("__expected__orders", maxsplit=1)[0]
 
 

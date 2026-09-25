@@ -123,6 +123,8 @@ pub(crate) struct FormatRequest {
     pub version: u32,
     pub sql: String,
     pub dialect: String,
+    #[serde(default)]
+    pub max_function_call_depth: Option<usize>,
 }
 
 #[derive(Debug, Serialize)]
@@ -132,5 +134,5 @@ pub(crate) struct FormatResponse {
     pub changed: bool,
     pub formatted: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub reason: Option<&'static str>,
+    pub reason: Option<String>,
 }

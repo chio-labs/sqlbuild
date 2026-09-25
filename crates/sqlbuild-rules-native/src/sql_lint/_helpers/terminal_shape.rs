@@ -2,6 +2,129 @@ use polyglot_sql::tokens::{Span, Token, TokenType};
 
 const CEREMONIAL_SELECT_LITERAL: &str = "1";
 
+pub(super) fn final_cte_name_spans(tokens: &[Token], depths: &[usize]) -> Vec<Span> {
+    let roots = root_with_indices(tokens, depths);
+    let mut names: Vec<(usize, bool)> = Vec::new();
+    for (index, token) in tokens.iter().enumerate() {
+        if token.token_type != TokenType::With {
+            continue;
+        }
+        let depth = depths[index];
+        let first = names.len();
+        let mut next = index + 1;
+        if tokens
+            .get(next)
+            .is_some_and(|token| token.text.eq_ignore_ascii_case("recursive"))
+        {
+            next += 1;
+        }
+        loop {
+            let name = next;
+            let Some(open) = cte_body_open(tokens, depths, name) else {
+                break;
+            };
+            let Some(close) = (open + 1..tokens.len()).find(|&position| {
+                depths[position] == depth + 1 && tokens[position].token_type == TokenType::RParen
+            }) else {
+                break;
+            };
+            names.push((name, false));
+            if tokens
+                .get(close + 1)
+                .is_none_or(|token| token.token_type != TokenType::Comma)
+            {
+                break;
+            }
+            next = close + 2;
+        }
+        if roots.contains(&index)
+            && names.len() > first
+            && let Some((_, terminal)) = names.last_mut()
+        {
+            *terminal = true;
+        }
+    }
+    names
+        .into_iter()
+        .filter_map(|(index, terminal)| {
+            let is_final = tokens[index].text.eq_ignore_ascii_case("final");
+            (terminal != is_final).then_some(tokens[index].span)
+        })
+        .collect()
+}
+
+pub(super) fn root_with_indices(tokens: &[Token], depths: &[usize]) -> Vec<usize> {
+    let significant: Vec<usize> = (0..tokens.len())
+        .filter(|&index| {
+            !matches!(
+                tokens[index].token_type,
+                TokenType::Space
+                    | TokenType::Break
+                    | TokenType::LineComment
+                    | TokenType::BlockComment
+            )
+        })
+        .collect();
+    significant
+        .split(|&index| tokens[index].token_type == TokenType::Semicolon)
+        .filter_map(|statement| {
+            root_query_tokens(tokens, depths, statement)
+                .first()
+                .copied()
+        })
+        .filter(|&index| tokens[index].token_type == TokenType::With)
+        .collect()
+}
+
+fn root_query_tokens<'a>(
+    tokens: &[Token],
+    depths: &[usize],
+    mut significant: &'a [usize],
+) -> &'a [usize] {
+    while significant
+        .last()
+        .is_some_and(|&index| tokens[index].token_type == TokenType::Semicolon)
+    {
+        significant = &significant[..significant.len() - 1];
+    }
+    while let Some((&first, rest)) = significant.split_first() {
+        if tokens[first].token_type != TokenType::LParen
+            || rest
+                .last()
+                .is_none_or(|&index| tokens[index].token_type != TokenType::RParen)
+            || rest.iter().any(|&index| depths[index] <= depths[first])
+        {
+            break;
+        }
+        significant = &rest[..rest.len() - 1];
+    }
+    significant
+}
+
+fn cte_body_open(tokens: &[Token], depths: &[usize], name: usize) -> Option<usize> {
+    let mut position = name + 1;
+    if tokens.get(position)?.token_type == TokenType::LParen {
+        position = (position + 1..tokens.len()).find(|&index| {
+            depths[index] == depths[name] + 1 && tokens[index].token_type == TokenType::RParen
+        })? + 1;
+    }
+    if tokens.get(position)?.token_type != TokenType::As {
+        return None;
+    }
+    position += 1;
+    if tokens.get(position)?.token_type == TokenType::Not {
+        position += 1;
+    }
+    if tokens
+        .get(position)?
+        .text
+        .eq_ignore_ascii_case("materialized")
+    {
+        position += 1;
+    }
+    (tokens.get(position)?.token_type == TokenType::LParen).then_some(position)
+}
+
 pub(super) fn collect_terminal_shape_facts(
     tokens: &[Token],
     depths: &[usize],
@@ -10,11 +133,16 @@ pub(super) fn collect_terminal_shape_facts(
 ) -> (Vec<Span>, Vec<Span>) {
     let mut cte_only_bodies: Vec<Span> = Vec::new();
     let mut terminal_selects: Vec<Span> = Vec::new();
-    let has_top_level_with = significant
-        .iter()
-        .any(|&index| depths[index] == 0 && tokens[index].text.eq_ignore_ascii_case("with"));
+    let significant = root_query_tokens(tokens, depths, significant);
+    let Some(&first) = significant.first() else {
+        return (cte_only_bodies, terminal_selects);
+    };
+    let root_depth = depths[first];
+    let has_top_level_with = significant.iter().any(|&index| {
+        depths[index] == root_depth && tokens[index].text.eq_ignore_ascii_case("with")
+    });
     let terminal_set_operator = significant.iter().find(|&&index| {
-        depths[index] == 0
+        depths[index] == root_depth
             && matches!(
                 tokens[index].token_type,
                 TokenType::Union | TokenType::Intersect | TokenType::Except
@@ -27,10 +155,9 @@ pub(super) fn collect_terminal_shape_facts(
         }
         return (cte_only_bodies, terminal_selects);
     }
-    let Some(root_select_position) = significant
-        .iter()
-        .position(|&index| depths[index] == 0 && tokens[index].token_type == TokenType::Select)
-    else {
+    let Some(root_select_position) = significant.iter().position(|&index| {
+        depths[index] == root_depth && tokens[index].token_type == TokenType::Select
+    }) else {
         return (cte_only_bodies, terminal_selects);
     };
     let root_select = significant[root_select_position];
@@ -38,7 +165,7 @@ pub(super) fn collect_terminal_shape_facts(
         .iter()
         .copied()
         .take_while(|&index| tokens[index].token_type != TokenType::Semicolon)
-        .filter(|&index| depths[index] == 0)
+        .filter(|&index| depths[index] == root_depth)
         .collect();
     let has_terminal_logic = tail.iter().any(|&index| {
         matches!(
@@ -66,7 +193,7 @@ pub(super) fn collect_terminal_shape_facts(
     let final_cte = (0..root_select_position)
         .filter(|&position| {
             let index = significant[position];
-            depths[index] == 0
+            depths[index] == root_depth
                 && tokens[index].token_type == TokenType::As
                 && significant
                     .get(position + 1)

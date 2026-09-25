@@ -139,6 +139,50 @@ SQLBuild has one canonical formatter and does not expose capitalization rule con
 | `SQBRSQL037` | Optional rule | never | Recursive CTEs require an explicit alternative design. |
 | `SQBRSQL038` | Optional rule | never | Explicit cartesian products require a reasoned suppression. |
 | `SQBRSQL039` | Core compiler | never | Non-lateral derived relations are named as top-level CTEs instead of being hidden inside `FROM` or `JOIN`. |
+| `SQBRSQL040` | Optional rule | never | JOIN predicates compare plain columns and literals; computed keys belong in input CTEs. |
+| `SQBRSQL041` | Optional rule | never | The last top-level CTE is named `final`; no other CTE at any nesting level uses that name. |
+
+## Join keys and final CTE names
+
+`SQBRSQL040` checks every `JOIN ... ON` in the authored SQL resources covered by SQL Rules,
+including joins inside CTEs and subqueries. `USING (...)` is accepted. Allowed predicates are:
+
+- Plain column comparisons, including equality, inequality, range and null-safe comparisons.
+- A plain column compared with a literal, including a signed numeric literal.
+- Literal-only predicates such as `ON TRUE`, `ON FALSE`, and `ON 1 = 1`, including
+  `LEFT JOIN LATERAL FLATTEN(...) AS f ON TRUE`. Functions or casts applied to literals are
+  still computed expressions. Other rules, such as `SQBRSQL003`, independently govern
+  placeholder join conditions; this allowance is specific to `SQBRSQL040`.
+- `BETWEEN` / `NOT BETWEEN` on a plain column with plain-column or literal bounds.
+- `IN` / `NOT IN` on a plain column with a literal list.
+- `IS NULL` / `IS NOT NULL` on a plain column.
+- Parenthesized predicates and `AND` or `OR` combinations whose **every branch** is allowed.
+
+Functions, casts (including `::`), arithmetic, concatenation, CASE, subqueries and other computed
+operands are findings. For example, replace `ON LOWER(o.category) = c.category_key` with a CTE
+that projects `LOWER(category) AS category_key`, then `ON o.category_key = c.category_key`.
+An `OR` with only plain predicates passes; an `OR` containing a computed branch fails.
+Snowflake variant path access is a computed operand: `ON a.data:key = b.id` is flagged.
+Project that value as a named input column before joining.
+
+`SQBRSQL041` checks naming, while `SQBRSQL035` owns the terminal SELECT's plain projection and
+reference to the last top-level CTE. Select both (normally via `SQBRSQL`) for the complete
+convention. The last top-level CTE must be named `final`, compared case-insensitively as in the
+existing SQL rules, including quoted identifiers. Every other CTE, including a nested one, must
+use a different name. Queries without CTEs are unaffected. SQL-test fixture CTEs and their
+ceremonial `SELECT 1` remain exempt from this model naming convention.
+Parentheses enclosing the entire query, including multiple wrapper pairs, do not create a nested
+CTE scope. CTEs inside scalar subqueries or CTE bodies remain nested. `SQBRSQL035` and
+`SQBRSQL036` use the same root-wrapper distinction.
+
+Prefer `[rules] select = ["SQBRSQL", "SQBRMODEL", "SQBRGRAPH"]` to exact-code lists. New rules
+in those families apply automatically after an upgrade, so adopting this release can expose
+computed join keys or noncanonical CTE names previously accepted by a family selection.
+
+The formatter preserves authored implicit aliases when comments require token-aligned attachment.
+This avoids a silent decline when canonical generation inserts an optional `AS`, including for
+`LATERAL FLATTEN(...) f`. Every safety decline is surfaced as a `format-unsafe` fault rather
+than being treated as already formatted.
 
 Schema-dependent nullable `NOT IN`, inferred join cardinality, denominator safety, integer division,
 timezone comparison, persisted-output rules, and incremental cursor/replay checks remain compiler or
@@ -147,9 +191,9 @@ generic guesses.
 
 ## Current native totals
 
-- 39 SQLBuild-owned generic native rule codes (`SQBRSQL001`–`SQBRSQL039`)
+- 41 SQLBuild-owned generic native rule codes (`SQBRSQL001`–`SQBRSQL041`)
 - 13 core defaults
-- 26 optional rules selectable by exact code or prefix under `[rules].select`
+- 28 optional rules selectable by exact code or family under `[rules].select`
 - 14 always-or-conditionally formatter-rewritable native analysis types
 - `SQBRSQL000` suppression validation, with stale standalone directives formatter-rewritable
 - five SQLBuild header diagnostics, with whitespace and leading-comment promotion handled when safe

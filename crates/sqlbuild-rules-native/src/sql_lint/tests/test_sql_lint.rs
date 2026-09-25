@@ -1896,7 +1896,7 @@ fn given_format_cases_when_formatting_then_output_matches() -> Result<(), String
         test_types::FormatTestCase {
             description: "unparenthesized values relation remains unparenthesized",
             sql: "select column1::varchar as customer_key, column2::integer as order_count from values ('c1', 1), ('c2', 2)",
-            expected_sql: "SELECT\n  CAST(column1 AS VARCHAR) AS customer_key,\n  CAST(column2 AS INT) AS order_count\nFROM VALUES ('c1', 1), ('c2', 2)",
+            expected_sql: "SELECT\n  column1::varchar AS customer_key,\n  column2::integer AS order_count\nFROM VALUES ('c1', 1), ('c2', 2)",
             expected_changed: true,
         },
     ];

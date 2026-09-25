@@ -182,17 +182,38 @@ physical line width in `sqlbuild_project.toml` (the default is `100`):
 line_width = 100
 ```
 
-Select rules in `sqlbuild_project.toml` by exact code or derived family prefix:
+Prefer family selection in `sqlbuild_project.toml` over hand-maintained lists of exact codes:
 
 ```toml
 [rules]
-select = ["SQBRSQL", "XSQBRARCH"]
+select = ["SQBRSQL", "SQBRMODEL", "SQBRGRAPH", "XSQBRARCH"]
 ignore = ["SQBRSQL004"]
 ```
 
 Built-in codes use `SQBR<FAMILY><three digits>`, such as `SQBRSQL001` and
 `SQBRGRAPH101`. Custom codes use `XSQBR<optional family><three digits>`, such as
 `XSQBRARCH001`. A family is always the code with its final three digits removed.
+
+Family selectors automatically include new built-in rules on upgrade. Exact-code lists retain
+their current membership and must be updated manually. In particular, selecting `SQBRSQL` enables
+`SQBRSQL040` (plain JOIN predicates) and `SQBRSQL041` (terminal CTE naming); existing projects may
+need to extract computed join keys into input CTEs and rename their last CTE to `final`.
+See the [SQL rule conventions](docs/native-lint-rule-matrix.md#join-keys-and-final-cte-names)
+for their exact scope and relationship to `SQBRSQL035`.
+
+`sqb format` reports a file-specific `format-unsafe` fault whenever a SQL body cannot be safely
+formatted, including parser, comment-attachment, interpolation-restoration, and idempotence
+failures. The entire original file is retained (including its headers and fixtures), the reason
+appears in human and JSON output, and both
+formatting and `sqb format --check` exit nonzero. A declined body is never counted as canonical.
+
+Formatting preserves authored cast types, postfix casts, quoted literals, variant paths, typed
+lambda parameters, and supported SQL function spellings while applying canonical layout. It uses
+the compiler's trusted-SQL function-depth budget and does not impose the separate browser-oriented
+UNION-chain limit from Polyglot's convenience formatting API. SQLBuild calls retain their authored
+spelling, including zero-argument cursor and empty-fixture intrinsics. CTE-producing macros remain
+authored calls rather than expanded project SQL, with each call on its own CTE-list line and
+leading comments attached to the node they describe.
 
 Custom rules are ordinary Python beneath `rules/**/*.py`. Only `@rule` functions register; helper
 functions, constants, dataclasses, classes, and nested packages remain ordinary Python. Typed,

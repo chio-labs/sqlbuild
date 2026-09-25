@@ -111,6 +111,14 @@ def render_skills(*, config: RulesConfig, project_dir: Path) -> tuple[str, str]:
 
 def _rule_example(*, rule: Rule) -> str:
     examples: dict[str, str] = {
+        "SQBRSQL040": (
+            "Compute category_key in an input CTE, then JOIN categories AS c "
+            "ON o.category_key = c.category_key."
+        ),
+        "SQBRSQL041": (
+            "WITH orders AS (...), final AS (SELECT order_id FROM orders) "
+            "SELECT order_id FROM final."
+        ),
         "SQBRMODEL101": 'WITH upstream AS (SELECT * FROM __ref("domain__stg__entity")), ...',
         "SQBRMODEL102": "SELECT id, status FROM final; use a lone SELECT * only when allowed.",
         "SQBRMODEL103": "A view uses stg_v, int_v, or mart_v; a table uses a non-v layer.",

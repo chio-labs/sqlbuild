@@ -31,6 +31,9 @@ from sqlbuild.lint.exceptions import InterpolationRestorationError
 from sqlbuild.lint.models import InterpolationSite
 
 _SQLBUILD_FUNCTION_NAMES: tuple[str, ...] = (
+    "__cursor_start",
+    "__cursor_end",
+    "__empty_fixture",
     "__dbt_ref",
     "__table_fn",
     "__source",
@@ -55,10 +58,10 @@ _NON_CODE_SCAN_PATTERN: str = (
 _BACKTICK_SCAN_PATTERN: str = r"|`(?:``|[^`])*(?:`|\Z)"
 _SITE_SCAN_PATTERN: str = rf"|(?P<site>@@|\$\{{|@|(?:{_SQLBUILD_FUNCTION_PATTERN})\s*\()"
 _INTERPOLATION_SCAN_PATTERN: re.Pattern[str] = re.compile(
-    _NON_CODE_SCAN_PATTERN + _SITE_SCAN_PATTERN
+    _NON_CODE_SCAN_PATTERN + _SITE_SCAN_PATTERN, re.IGNORECASE
 )
 _BACKTICK_INTERPOLATION_SCAN_PATTERN: re.Pattern[str] = re.compile(
-    _NON_CODE_SCAN_PATTERN + _BACKTICK_SCAN_PATTERN + _SITE_SCAN_PATTERN
+    _NON_CODE_SCAN_PATTERN + _BACKTICK_SCAN_PATTERN + _SITE_SCAN_PATTERN, re.IGNORECASE
 )
 
 
@@ -190,7 +193,7 @@ def _contains_interpolation_candidate(*, body: str) -> bool:
     return (
         MACRO_TOKEN in body
         or TEMPLATE_INTERPOLATION_START in body
-        or any(name in body for name in _SQLBUILD_FUNCTION_NAMES)
+        or any(name in body.lower() for name in _SQLBUILD_FUNCTION_NAMES)
     )
 
 
@@ -251,7 +254,11 @@ def _interpolation_site_end(*, body: str, start: int, backtick_identifiers: bool
         return _macro_site_end(body=body, start=start, backtick_identifiers=backtick_identifiers)
     if character == TEMPLATE_INTERPOLATION_START[0]:
         return _template_site_end(body=body, start=start)
-    if character == IDENTIFIER_EXTRA_CHARACTER and body.startswith(_SQLBUILD_FUNCTION_NAMES, start):
+    if (
+        character == IDENTIFIER_EXTRA_CHARACTER
+        and body[start : _identifier_end(body=body, start=start)].lower()
+        in _SQLBUILD_FUNCTION_NAMES
+    ):
         return _sqlbuild_function_site_end(
             body=body, start=start, backtick_identifiers=backtick_identifiers
         )
@@ -260,6 +267,8 @@ def _interpolation_site_end(*, body: str, start: int, backtick_identifiers: bool
 
 def _sqlbuild_function_site_end(*, body: str, start: int, backtick_identifiers: bool) -> int | None:
     name_end: int = _identifier_end(body=body, start=start)
+    while name_end < len(body) and body[name_end].isspace():
+        name_end += 1
     if name_end >= len(body) or body[name_end] != OPENING_PAREN_CHARACTER:
         return None
     call_end: int | None = _matching_paren_end(
