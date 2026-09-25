@@ -1056,15 +1056,7 @@ fn resolve_assertion_textual_sql(
     );
     let body_sql = resolution.sql;
     let reached = resolution.reached;
-    let resolved_sql = if lifted_ctes.is_empty() {
-        body_sql.clone()
-    } else {
-        let cte_parts: Vec<String> = lifted_ctes
-            .iter()
-            .map(|(name, body)| cte_definition_sql(name, body))
-            .collect();
-        format!("WITH {} {body_sql}", cte_parts.join(", "))
-    };
+    let resolved_sql = with_leading_ctes(&lifted_ctes, &body_sql);
     Ok((
         TextualStep {
             resolved_sql,
