@@ -18,6 +18,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.model_migrations.helpers i
     daily_totals_sql,
     execute,
     fail_clone_into,
+    fail_model_build,
     incremental_orders_sql,
     load_raw_orders,
     migration_events,
@@ -378,6 +379,74 @@ def test_given_one_orphan_matching_two_new_models_when_selecting_one_then_warns_
     )
     assert built.exit_code == 0, built.output
     assert "_sqlbuild_migrations" not in relation_names(project_dir=tmp_path, schema="main")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AutomaticMigrationTestCase(
+            description="downstream failed after its clone while the upstream was rebuilt",
+            expected_migrations=(
+                ("daily_order_totals", "customer_daily_order_totals", "automatic", "done"),
+            ),
+            expected_events=(
+                ("daily_order_totals", "customer_daily_order_totals", "migrate"),
+                ("stg_orders", "stg_customer_orders", "migrate"),
+            ),
+            expected_reason="normal_incremental",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_fingerprinted_upstream_when_retrying_failed_downstream_then_history_is_kept(
+    test_case: AutomaticMigrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    replay_full: str = "  replay_on_change full,\n"
+    write_project(
+        project_dir=tmp_path,
+        models={
+            "stg_orders": incremental_orders_sql(),
+            "daily_order_totals": daily_totals_sql(
+                upstream="stg_orders", cte="stg_orders", extra_config=replay_full
+            ),
+        },
+    )
+    load_raw_orders(project_dir=tmp_path, first_day=1, last_day=5)
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+    load_raw_orders(project_dir=tmp_path, first_day=3, last_day=8)
+    write_project(
+        project_dir=tmp_path,
+        models={
+            "stg_customer_orders": incremental_orders_sql(),
+            "customer_daily_order_totals": daily_totals_sql(
+                upstream="stg_customer_orders",
+                cte="stg_customer_orders",
+                extra_config=replay_full,
+            ),
+        },
+    )
+
+    with monkeypatch.context() as patch:
+        fail_model_build(monkeypatch=patch, model_name="customer_daily_order_totals")
+        interrupted: CliRun = build(project_dir=tmp_path, capsys=capsys)
+    upstream_fingerprinted: dict[str, Any] = plan_json(
+        project_dir=tmp_path, capsys=capsys, args=("--select", "stg_customer_orders")
+    )
+    retry_plan: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+
+    assert interrupted.exit_code == 1, interrupted.output
+    assert planned_migrations(upstream_fingerprinted) == ()
+    assert planned_migrations(retry_plan) == test_case.expected_migrations
+    assert model_entry(plan=retry_plan, name="stg_customer_orders")["reason"] != _FIRST_RUN
+    assert model_entry(plan=retry_plan, name="customer_daily_order_totals")["reason"] == (
+        test_case.expected_reason
+    )
+    assert row_count(project_dir=tmp_path, relation="main.customer_daily_order_totals") == 8
+    assert tuple(sorted(migration_events(project_dir=tmp_path))) == test_case.expected_events
 
 
 if __name__ == "__main__":

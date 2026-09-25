@@ -19,7 +19,7 @@ class MigrationFingerprintTestCase:
 
 
 @dataclass(frozen=True)
-class UnparseableFingerprintTestCase:
+class IneligibleFingerprintTestCase:
     description: str
     query_sql: str
     expected_fingerprint: str | None

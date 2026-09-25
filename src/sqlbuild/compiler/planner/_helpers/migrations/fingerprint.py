@@ -32,6 +32,8 @@ _COMMENTS_SUFFIX: str = "comments"
 _CONFIG_KEY: str = "config"
 _GENERIC_DIALECT: str = "generic"
 _TABLE_KEY: str = "table"
+_RECURSIVE_KEY: str = "recursive"
+_CTE_BODY_KEY: str = "this"
 _ALIASED_RELATION_KEYS: frozenset[str] = frozenset({_TABLE_KEY, "subquery"})
 _QUALIFIED_REFERENCE_KEYS: frozenset[str] = frozenset({"column", "star"})
 _RELATION_QUALIFIER_KEYS: tuple[str, ...] = ("schema", "catalog")
@@ -109,6 +111,8 @@ def _normalized_query_sql(
     except polyglot.PolyglotError:
         return None
     stripped: Any = _strip_formatting(parsed)
+    if not _has_unambiguous_local_scopes(stripped):
+        return None
     definitions: list[tuple[str, bool]] = _local_names(stripped)
     ordered_names: list[str] = list(dict.fromkeys(name for name, _ in definitions))
     local_names: dict[str, str] = {
@@ -136,6 +140,74 @@ def _strip_formatting(node: Any) -> Any:
     if isinstance(node, list):
         return [_strip_formatting(value) for value in node]
     return node
+
+
+def _has_unambiguous_local_scopes(root: Any) -> bool:
+    """Accept one top-level WITH whose names never shadow physical relations."""
+
+    statements: list[Any] = list(root.values()) if isinstance(root, dict) else []
+    top_level: Any = statements[0].get(_WITH_KEY) if len(statements) == 1 else None
+    clauses: list[Any] = _with_clauses(root)
+    if clauses and (not isinstance(top_level, dict) or len(clauses) > 1):
+        return False
+    if isinstance(top_level, dict) and top_level.get(_RECURSIVE_KEY):
+        return False
+    ctes: list[Any] = [
+        cte for cte in (top_level or {}).get(_CTES_KEY) or () if isinstance(cte, dict)
+    ]
+    cte_names: list[str] = _identifier_names([cte.get(_ALIAS_KEY) for cte in ctes])
+    if len(cte_names) != len(ctes) or len(set(cte_names)) != len(cte_names):
+        return False
+    index: int
+    cte: Any
+    for index, cte in enumerate(ctes):
+        if set(_relation_names(cte.get(_CTE_BODY_KEY))) & set(cte_names[index:]):
+            return False
+    physical: set[str] = set(_relation_names(root)) - set(cte_names)
+    aliases: set[str] = {name for name, is_cte in _local_names(root) if not is_cte}
+    return not physical & aliases
+
+
+def _with_clauses(node: Any) -> list[Any]:
+    found: list[Any] = []
+    if isinstance(node, list):
+        item: Any
+        for item in node:
+            found.extend(_with_clauses(item))
+        return found
+    if not isinstance(node, dict):
+        return found
+    key: str
+    value: Any
+    for key, value in node.items():
+        if key == _WITH_KEY and isinstance(value, dict):
+            found.append(value)
+        found.extend(_with_clauses(value))
+    return found
+
+
+def _relation_names(node: Any) -> list[str]:
+    """Return lower-cased unqualified relation names referenced under a node."""
+
+    found: list[str] = []
+    if isinstance(node, list):
+        item: Any
+        for item in node:
+            found.extend(_relation_names(item))
+        return found
+    if not isinstance(node, dict):
+        return found
+    key: str
+    value: Any
+    for key, value in node.items():
+        if key == _TABLE_KEY and _is_relation(value) and _unqualified(value):
+            found.extend(_identifier_names([value.get(_IDENTIFIER_NAME_KEY)]))
+        found.extend(_relation_names(value))
+    return found
+
+
+def _unqualified(relation: dict[str, Any]) -> bool:
+    return all(relation.get(key) is None for key in _RELATION_QUALIFIER_KEYS)
 
 
 def _local_names(node: Any) -> list[tuple[str, bool]]:
@@ -215,9 +287,8 @@ def _canonical_local_names(
 def _cte_reference(*, relation: dict[str, Any], cte_names: Mapping[str, str]) -> dict[str, Any]:
     """Rename an unqualified relation name that refers to a CTE."""
 
-    qualifiers: tuple[Any, ...] = tuple(relation.get(key) for key in _RELATION_QUALIFIER_KEYS)
     name: Any = relation.get(_IDENTIFIER_NAME_KEY)
-    if any(qualifier is not None for qualifier in qualifiers) or not _is_identifier(name):
+    if not _unqualified(relation) or not _is_identifier(name):
         return {}
     return {_IDENTIFIER_NAME_KEY: _renamed(identifier=name, names=cte_names)}
 

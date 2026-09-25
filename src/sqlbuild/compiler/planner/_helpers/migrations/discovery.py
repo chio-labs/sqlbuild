@@ -71,17 +71,23 @@ def discover_model_migrations(
         return ModelMigrationDiscovery()
     metadata_jsons: dict[str, str] = _metadata_jsons(runtime=runtime, models=models)
     dialect: str | None = runtime.adapter.sql_analysis_dialect()
+    state.inspect_schemas(schemas=project_schemas)
+    declared_renames: dict[str, str] = _declared_renames(declarations=declarations, state=state)
+    event_renames: dict[str, str] = _event_renames(runtime=runtime, models=models, state=state)
+    seed_variants: tuple[dict[str, str], ...] = (
+        {**event_renames, **declared_renames},
+        dict(declared_renames),
+    )
     if not triggered:
         return ModelMigrationDiscovery(
             requests=manual_requests,
             destination_fingerprints=_destination_fingerprints(
                 requests=manual_requests,
-                renames=_declared_renames(declarations=declarations, state=state),
+                variants=seed_variants,
                 metadata_jsons=metadata_jsons,
                 dialect=dialect,
             ),
         )
-    state.inspect_schemas(schemas=project_schemas)
     unbuilt: frozenset[str] = frozenset(
         model.name
         for model in models
@@ -90,23 +96,19 @@ def discover_model_migrations(
     resumed: dict[str, MigrationEvent] = _resumed_events(
         runtime=runtime, models=models, unbuilt=unbuilt, state=state
     )
-    seed_renames: dict[str, str] = _declared_renames(declarations=declarations, state=state)
-    seed_renames.update(
-        {name: event.origin_model for name, event in resumed.items() if event.origin_model}
-    )
     candidates: tuple[Fingerprint, ...] = _origin_candidates(
         runtime=runtime,
         state=state,
         models=models,
         excluded=_claimed_origins(declarations=declarations, resumed=resumed),
     )
-    renames: dict[str, str]
+    variants: tuple[dict[str, str], ...]
     matches: dict[str, Fingerprint]
     ambiguous: dict[str, str]
-    renames, matches, ambiguous = _match(
+    variants, matches, ambiguous = _match(
         models=models,
         new_names=unbuilt - frozenset(resumed),
-        seed_renames=seed_renames,
+        seed_variants=seed_variants,
         candidates=candidates,
         metadata_jsons=metadata_jsons,
         dialect=dialect,
@@ -121,7 +123,7 @@ def discover_model_migrations(
         requests=requests,
         warnings=_ambiguity_warnings(models=models, scope=scope, ambiguous=ambiguous),
         destination_fingerprints=_destination_fingerprints(
-            requests=requests, renames=renames, metadata_jsons=metadata_jsons, dialect=dialect
+            requests=requests, variants=variants, metadata_jsons=metadata_jsons, dialect=dialect
         ),
     )
 
@@ -143,6 +145,27 @@ def _declared_renames(
         if origin_model is not None:
             renames[declaration.model_name] = origin_model
     return renames
+
+
+def _event_renames(
+    *, runtime: PlannerRuntime, models: tuple[CompiledModel, ...], state: MigrationStateInspection
+) -> dict[str, str]:
+    """Map project models to the removed model their latest recorded move came from."""
+
+    project_names: frozenset[str] = frozenset(model.name for model in models)
+    target_name: str | None = runtime.project.effective_target_name
+    latest: dict[str, MigrationEvent] = {}
+    event: MigrationEvent
+    for event in sorted(state.events, key=lambda item: (item.created_at, item.event_id)):
+        if event.target_name in (None, target_name):
+            latest[event.destination_model] = event
+    return {
+        name: event.origin_model
+        for name, event in latest.items()
+        if name in project_names
+        and event.origin_model is not None
+        and event.origin_model not in project_names
+    }
 
 
 def _resumed_events(
@@ -369,11 +392,13 @@ def _match(
     *,
     models: tuple[CompiledModel, ...],
     new_names: frozenset[str],
-    seed_renames: dict[str, str],
+    seed_variants: tuple[dict[str, str], ...],
     candidates: tuple[Fingerprint, ...],
     metadata_jsons: dict[str, str],
     dialect: str | None,
-) -> tuple[dict[str, str], dict[str, Fingerprint], dict[str, str]]:
+) -> tuple[tuple[dict[str, str], ...], dict[str, Fingerprint], dict[str, str]]:
+    """Match unbuilt models to candidates under every rename-map variant."""
+
     by_fingerprint: dict[str, list[Fingerprint]] = defaultdict(list)
     candidate: Fingerprint
     for candidate in candidates:
@@ -381,24 +406,23 @@ def _match(
     blocked: set[str] = set()
     ambiguous: dict[str, str] = {}
     for _ in range(len(candidates) + 1):
-        renames: dict[str, str] = dict(seed_renames)
+        variants: tuple[dict[str, str], ...] = tuple(dict(seed) for seed in seed_variants)
         matches: dict[str, Fingerprint] = {}
         claims: dict[str, list[str]] = defaultdict(list)
         model: CompiledModel
         for model in models:
             if model.name not in new_names:
                 continue
-            fingerprint: str | None = build_migration_fingerprint(
-                query_sql=model.query_sql,
-                metadata_json=metadata_jsons[model.name],
-                ref_identities=renames,
-                dialect=dialect,
+            options: list[Fingerprint] = _match_options(
+                fingerprints=_variant_fingerprints(
+                    model=model,
+                    metadata_json=metadata_jsons[model.name],
+                    variants=variants,
+                    dialect=dialect,
+                ),
+                by_fingerprint=by_fingerprint,
+                blocked=blocked,
             )
-            options: list[Fingerprint] = [
-                option
-                for option in by_fingerprint.get(fingerprint or "", [])
-                if option.node_name not in blocked
-            ]
             if len(options) > 1:
                 ambiguous[model.name] = (
                     "several earlier models "
@@ -406,17 +430,59 @@ def _match(
                 )
                 continue
             if len(options) == 1:
-                renames[model.name] = options[0].node_name
+                variant: dict[str, str]
+                for variant in variants:
+                    variant[model.name] = options[0].node_name
                 matches[model.name] = options[0]
                 claims[options[0].node_name].append(model.name)
         contested: dict[str, list[str]] = {
             origin: names for origin, names in claims.items() if len(names) > 1
         }
         if not contested:
-            return renames, matches, ambiguous
+            return variants, matches, ambiguous
         blocked.update(contested)
         ambiguous.update(_contested_details(contested))
-    return dict(seed_renames), {}, ambiguous
+    return tuple(dict(seed) for seed in seed_variants), {}, ambiguous
+
+
+def _variant_fingerprints(
+    *,
+    model: CompiledModel,
+    metadata_json: str,
+    variants: tuple[dict[str, str], ...],
+    dialect: str | None,
+) -> tuple[str, ...]:
+    """Return the distinct migration fingerprints of one model under each rename map."""
+
+    fingerprints: list[str | None] = [
+        build_migration_fingerprint(
+            query_sql=model.query_sql,
+            metadata_json=metadata_json,
+            ref_identities=variant,
+            dialect=dialect,
+        )
+        for variant in variants
+    ]
+    return tuple(dict.fromkeys(item for item in fingerprints if item is not None))
+
+
+def _match_options(
+    *,
+    fingerprints: tuple[str, ...],
+    by_fingerprint: dict[str, list[Fingerprint]],
+    blocked: set[str],
+) -> list[Fingerprint]:
+    options: dict[str, Fingerprint] = {}
+    fingerprint: str
+    for fingerprint in fingerprints:
+        options.update(
+            {
+                option.node_name: option
+                for option in by_fingerprint.get(fingerprint, [])
+                if option.node_name not in blocked
+            }
+        )
+    return list(options.values())
 
 
 def _contested_details(contested: dict[str, list[str]]) -> dict[str, str]:
@@ -436,24 +502,19 @@ def _contested_details(contested: dict[str, list[str]]) -> dict[str, str]:
 def _destination_fingerprints(
     *,
     requests: tuple[ModelMigrationRequest, ...],
-    renames: dict[str, str],
+    variants: tuple[dict[str, str], ...],
     metadata_jsons: dict[str, str],
     dialect: str | None,
-) -> dict[str, str]:
-    fingerprints: dict[str, str] = {}
+) -> dict[str, tuple[str, ...]]:
+    fingerprints: dict[str, tuple[str, ...]] = {}
     request: ModelMigrationRequest
     for request in requests:
         metadata_json: str | None = metadata_jsons.get(request.model.name)
         if metadata_json is None:
             continue
-        fingerprint: str | None = build_migration_fingerprint(
-            query_sql=request.model.query_sql,
-            metadata_json=metadata_json,
-            ref_identities=renames,
-            dialect=dialect,
+        fingerprints[request.model.name] = _variant_fingerprints(
+            model=request.model, metadata_json=metadata_json, variants=variants, dialect=dialect
         )
-        if fingerprint is not None:
-            fingerprints[request.model.name] = fingerprint
     return fingerprints
 
 

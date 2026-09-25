@@ -15,6 +15,7 @@ from _pytest.capture import CaptureResult
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild.executor.build._helpers import scheduler as scheduler_module
 
 DATABASE_FILE: str = "orders.duckdb"
 PROJECT_TOML: str = dedent(
@@ -85,6 +86,7 @@ _DAILY_TOTALS_HEADER: str = (
     "  cursor_type timestamp,\n"
     "  cursor_grain day,\n"
     '  cursor_start "2026-01-01",\n'
+    "{extra_config}"
     ");\n\n"
 )
 _SNAPSHOT_SQL: str = (
@@ -389,6 +391,24 @@ def fail_clone_into(*, monkeypatch: pytest.MonkeyPatch, destination: str) -> Non
     )
 
 
+def fail_model_build(*, monkeypatch: pytest.MonkeyPatch, model_name: str) -> None:
+    """Make one incremental model's build raise after migrations have run."""
+
+    failing: dict[str, Callable[..., Any]] = {model_name: _raise_interruption}
+    incremental: Callable[..., Any] = scheduler_module.execute_incremental_entry
+    table: Callable[..., Any] = scheduler_module.execute_table_entry
+    monkeypatch.setattr(
+        scheduler_module,
+        "execute_incremental_entry",
+        lambda **kwargs: failing.get(kwargs["context"].entry.name, incremental)(**kwargs),
+    )
+    monkeypatch.setattr(
+        scheduler_module,
+        "execute_table_entry",
+        lambda **kwargs: failing.get(kwargs["context"].entry.name, table)(**kwargs),
+    )
+
+
 def fail_record(monkeypatch: pytest.MonkeyPatch) -> None:
     """Crash after the clone but before the migration event is recorded."""
 
@@ -416,11 +436,11 @@ def enriched_view_sql(*, upstream: str, alias: str) -> str:
     )
 
 
-def daily_totals_sql(*, upstream: str, cte: str, comment: str = "") -> str:
+def daily_totals_sql(*, upstream: str, cte: str, comment: str = "", extra_config: str = "") -> str:
     """Return an incremental daily revenue model that imports its upstream through a CTE."""
 
     return (
-        f"{_DAILY_TOTALS_HEADER}"
+        f"{_DAILY_TOTALS_HEADER.format(extra_config=extra_config)}"
         f"{comment}"
         f'WITH {cte} AS (SELECT * FROM __ref("{upstream}"))\n'
         f"SELECT\n    {cte}.order_date,\n    SUM({cte}.amount_cents) AS total_cents\n"
@@ -457,7 +477,10 @@ def renamed_order_models() -> dict[str, str]:
 def build_original_order_models(*, project_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """Build the connected models over five days of raw orders."""
 
-    write_project(project_dir=project_dir, models=original_order_models())
+    write_project(
+        project_dir=project_dir,
+        models=original_order_models(),
+    )
     load_raw_orders(project_dir=project_dir, first_day=1, last_day=5)
     _ = build_ok(project_dir=project_dir, capsys=capsys)
 

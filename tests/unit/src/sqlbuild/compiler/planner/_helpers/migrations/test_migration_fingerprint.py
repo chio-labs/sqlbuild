@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 
 from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations._test_types import (
+    IneligibleFingerprintTestCase,
     MigrationFingerprintTestCase,
-    UnparseableFingerprintTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations.helpers import (
     BASE_CONFIG,
@@ -36,6 +36,18 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations.helpers import
                 'WITH customer_orders AS (SELECT orders FROM __ref("stg_orders")) '
                 "SELECT customer_orders.orders, sums.total FROM customer_orders "
                 "JOIN (SELECT 1 AS total) AS sums ON TRUE"
+            ),
+        ),
+        MigrationFingerprintTestCase(
+            expected_match=True,
+            description="later cte reading an earlier renamed cte still matches",
+            origin_sql=(
+                'WITH src AS (SELECT * FROM __ref("stg_orders")), totals AS '
+                "(SELECT src.order_id FROM src) SELECT totals.order_id FROM totals"
+            ),
+            destination_sql=(
+                'WITH base AS (SELECT * FROM __ref("stg_orders")), sums AS '
+                "(SELECT base.order_id FROM base) SELECT sums.order_id FROM sums"
             ),
         ),
         MigrationFingerprintTestCase(
@@ -161,16 +173,52 @@ def test_given_renamed_definition_when_fingerprinting_then_matches_only_equivale
 @pytest.mark.parametrize(
     "test_case",
     [
-        UnparseableFingerprintTestCase(
+        IneligibleFingerprintTestCase(
             description="unparseable query has no fingerprint",
             query_sql="SELECT FROM WHERE (",
             expected_fingerprint=None,
-        )
+        ),
+        IneligibleFingerprintTestCase(
+            description="nested with shadows an outer physical relation",
+            query_sql=(
+                "WITH wrapper AS (WITH a AS (SELECT 1 AS value) SELECT value FROM a) "
+                "SELECT value FROM a"
+            ),
+            expected_fingerprint=None,
+        ),
+        IneligibleFingerprintTestCase(
+            description="with nested in a subquery",
+            query_sql="SELECT x FROM (WITH q AS (SELECT 1 AS x) SELECT x FROM q) AS s",
+            expected_fingerprint=None,
+        ),
+        IneligibleFingerprintTestCase(
+            description="cte body reads the physical relation it shadows",
+            query_sql="WITH orders AS (SELECT * FROM orders) SELECT * FROM orders",
+            expected_fingerprint=None,
+        ),
+        IneligibleFingerprintTestCase(
+            description="cte body reads a later cte name",
+            query_sql=(
+                "WITH totals AS (SELECT * FROM orders), orders AS (SELECT 1 AS x) "
+                "SELECT * FROM totals"
+            ),
+            expected_fingerprint=None,
+        ),
+        IneligibleFingerprintTestCase(
+            description="recursive with",
+            query_sql="WITH RECURSIVE n AS (SELECT 1 AS x) SELECT x FROM n",
+            expected_fingerprint=None,
+        ),
+        IneligibleFingerprintTestCase(
+            description="alias reuses a physical relation name",
+            query_sql="SELECT o.x FROM orders AS o JOIN o ON TRUE",
+            expected_fingerprint=None,
+        ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_unparseable_sql_when_fingerprinting_then_returns_none(
-    test_case: UnparseableFingerprintTestCase,
+def test_given_unparseable_or_ambiguous_sql_when_fingerprinting_then_returns_none(
+    test_case: IneligibleFingerprintTestCase,
 ) -> None:
     fingerprint: str | None = model_fingerprint(
         model_name="stg_orders",

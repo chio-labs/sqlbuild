@@ -186,7 +186,9 @@ def plan_model_migrations(
             handovers[request.model.name] = _equivalent_definition(
                 model=request.model,
                 handover=handover,
-                destination_fingerprint=discovery.destination_fingerprints.get(request.model.name),
+                destination_fingerprints=discovery.destination_fingerprints.get(
+                    request.model.name, ()
+                ),
             )
     return ModelMigrationPlanning(
         snapshot=_overlay_snapshot(
@@ -208,13 +210,9 @@ def plan_model_migrations(
 
 
 def _equivalent_definition(
-    *, model: CompiledModel, handover: Fingerprint | None, destination_fingerprint: str | None
+    *, model: CompiledModel, handover: Fingerprint | None, destination_fingerprints: tuple[str, ...]
 ) -> Fingerprint | None:
-    if (
-        handover is None
-        or destination_fingerprint is None
-        or stored_migration_fingerprint(handover) != destination_fingerprint
-    ):
+    if handover is None or stored_migration_fingerprint(handover) not in destination_fingerprints:
         return handover
     return replace(
         handover,

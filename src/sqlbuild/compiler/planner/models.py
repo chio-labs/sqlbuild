@@ -1517,7 +1517,7 @@ class ModelMigrationDiscovery:
 
     requests: tuple[ModelMigrationRequest, ...] = ()
     warnings: tuple[PlanWarning, ...] = ()
-    destination_fingerprints: dict[str, str] = field(default_factory=dict)
+    destination_fingerprints: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
