@@ -216,6 +216,7 @@ def _build_loader_node(
             discovered=loader,
             provider_by_name=provider_by_name,
             decorator_config={
+                "columns": loader.columns,
                 "contract": loader.contract,
                 "cursor_column": loader.cursor_column,
                 "destination": loader.destination,
