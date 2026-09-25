@@ -89,6 +89,24 @@ _UPSTREAM: str = "SELECT 1 AS id, 'placed' AS status"
             "SELECT 1 AS id WHERE TIMESTAMP '2026-01-02' > 5",
             "B217",
         ),
+        SemanticCompileCase(
+            "excess derived relation aliases",
+            _UPSTREAM,
+            "SELECT * FROM (SELECT 1 AS id) AS orders(first_id, second_id)",
+            "B005",
+        ),
+        SemanticCompileCase(
+            "fewer derived relation aliases remain valid",
+            _UPSTREAM,
+            "SELECT first_id, quantity FROM (SELECT 1 AS id, 2 AS quantity) AS orders(first_id)",
+            None,
+        ),
+        SemanticCompileCase(
+            "unknown unpivot input",
+            _UPSTREAM,
+            "SELECT * FROM (SELECT 1 AS id, 2 AS books) orders UNPIVOT (amount FOR category IN (missing))",
+            "B002",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -128,7 +146,15 @@ def test_given_semantic_scope_when_compiling_then_closed_shapes_are_checked(
             "SELECT 1 AS id",
             'SELECT id FROM __ref("upstream") WHERE SUM(id) > 0',
             "B231",
-        )
+            expected_column=44,
+        ),
+        SemanticCompileCase(
+            "count star after macro",
+            "SELECT 1 AS id",
+            'SELECT id FROM __ref("upstream") WHERE COUNT(*) > 0',
+            "B231",
+            expected_column=40,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -143,7 +169,7 @@ def test_given_macro_before_invalid_aggregate_when_compiling_then_reports_author
     exit_code: int = main(["--no-color", "--project-dir", str(tmp_path), "compile", "--no-cache"])
     output: CaptureResult[str] = capsys.readouterr()
     assert exit_code == 1
-    assert "downstream.sql:2:44" in output.out + output.err
+    assert f"downstream.sql:2:{test_case.expected_column}" in output.out + output.err
     assert test_case.expected_code is not None
     assert test_case.expected_code in output.out + output.err
 

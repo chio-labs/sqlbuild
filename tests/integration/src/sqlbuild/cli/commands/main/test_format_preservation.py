@@ -99,14 +99,14 @@ def test_given_authored_syntax_when_formatting_then_spelling_and_idempotence_are
     "test_case",
     [
         FormatterSyntaxTestCase(
-            "computed variant key needs source-preserving parser support",
+            "computed variant key retains source-preserving parser support",
             "SELECT payload:customers[TO_VARCHAR(order_id)] AS customer FROM orders",
-            ("format-unsafe", "Expected RBracket"),
+            ("payload:customers[TO_VARCHAR(order_id)]",),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_unsupported_variant_key_when_formatting_then_compilable_file_stays_untouched(
+def test_given_computed_variant_key_when_formatting_then_preserves_syntax_and_compiles(
     test_case: FormatterSyntaxTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "snowflake"\n')
@@ -120,13 +120,14 @@ def test_given_unsupported_variant_key_when_formatting_then_compilable_file_stay
     model.write_text(original)
     assert main(["--project-dir", str(tmp_path), "compile", "--no-cache"]) == 0
     capsys.readouterr()
-    assert main(["--project-dir", str(tmp_path), "format", "--json"]) == 1
+    assert main(["--project-dir", str(tmp_path), "format", "--json"]) == 0
     payload: dict[str, object] = json.loads(capsys.readouterr().out)
-    assert all(fragment in json.dumps(payload) for fragment in test_case.expected_fragments)
-    assert payload["formatted_files"] == []
-    assert model.read_text() == original
-    assert main(["--project-dir", str(tmp_path), "format", "--check", "--json"]) == 1
-    assert model.read_text() == original
+    assert payload["formatted_files"]
+    formatted: str = model.read_text()
+    assert all(fragment in formatted for fragment in test_case.expected_fragments)
+    assert main(["--project-dir", str(tmp_path), "format", "--check", "--json"]) == 0
+    assert model.read_text() == formatted
+    assert main(["--project-dir", str(tmp_path), "compile", "--no-cache"]) == 0
 
 
 @pytest.mark.parametrize(

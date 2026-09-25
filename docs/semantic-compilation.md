@@ -53,14 +53,14 @@ Snowflake's function catalogue is partial and deliberately does not reject unkno
 Function signatures and overload coverage remain partial; compilation is not a replacement for
 executing SQL unit tests.
 
-The current native validator still rejects some valid derived-table column aliases, UNPIVOT
-queries, and Snowflake GROUPING SETS. These are known upstream limitations; use the model-level
-escape hatch for an affected query. Project function registration prevents unknown-function
-errors but does not declare return types to the validator: some expressions consuming a project
-function result remain unchecked. Raw external relations and scope-ordering cases also remain
+Derived-table column aliases, UNPIVOT, and Snowflake GROUPING SETS are checked. DuckDB and Snowflake
+reject excess relation aliases; fewer aliases than output columns remain valid. Missing UNPIVOT
+input columns are errors.
+
+Project function registration prevents unknown-function errors but does not declare return types to
+the validator: some expressions consuming a project function result remain unchecked. Raw external
+relations and scope-ordering cases also remain
 partially checked. An unknown cast type is a warning because extensions may install that type.
-Wide queries with many repeated UNION branches and CTE layers can also incur severe native
-type-validation cost.
 
 One notice summarizes partial semantic checks. `sqb compile --json` includes per-model reasons in
 `semantic_checks_partial`; progress and notices go to stderr. The notice does not increment the
