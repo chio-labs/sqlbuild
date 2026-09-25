@@ -18,6 +18,25 @@
   explicitly requests it; rely on CI for those suites.
 - Before pushing, run the exact static CI target with all optional dependencies available: `uv sync --all-extras` followed by `make check-ci`.
 
+## Real-Project Verification and Performance Guards
+
+- Synthetic fixtures and clean benchmark projects do not exercise every path. Before releasing
+  changes to compilation, SQL analysis, diagnostics, formatting, Rules, or planning, run the built
+  branch against at least one large real project available locally outside this repository, and
+  compare it with the latest release. Compare diagnostic counts by code, cold compile wall time and
+  peak memory, and, for formatter changes, that formatting preserves compiled dependencies, lineage,
+  and query semantics.
+- Treat every new diagnostic on a real project as a false positive until warehouse evidence proves
+  otherwise, for example a model that has built successfully since its SQL last changed.
+- A material slowdown or new false positive is a release blocker, not a follow-up.
+- Real-project names, SQL, identifiers, file paths, and results never enter this repository, commits,
+  pull requests, or CI output. Record only neutral aggregate conclusions, and rebuild every
+  reproduction synthetically.
+- Performance guards must cover worst-case paths, not only clean projects: very large models,
+  diagnostic-heavy compiles with many errors and warnings, wide queries, and deep macro expansion.
+  Any per-diagnostic, per-reference, or per-token work must be bounded by a test with a strict time
+  limit. A path that is only slow when something is wrong is still a regression.
+
 ## Public Repository Hygiene
 
 - Treat every tracked file, generated artifact, fixture, benchmark, filename, commit, branch, pull
