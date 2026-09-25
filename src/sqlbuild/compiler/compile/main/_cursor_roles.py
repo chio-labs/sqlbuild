@@ -45,8 +45,6 @@ def resolve_cursor_input_roles(*, model: CompiledModel) -> CursorInputRoles:
     return CursorInputRoles(
         filter_inputs=filter_inputs,
         watermark_inputs=watermark_inputs,
-        filter_field=CURSOR_INPUTS_CONFIG_KEY,
-        watermark_field=CURSOR_INPUTS_CONFIG_KEY,
     )
 
 

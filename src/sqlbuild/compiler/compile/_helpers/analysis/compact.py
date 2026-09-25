@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from collections.abc import Sequence
 from dataclasses import replace
 from typing import Any, cast
@@ -61,13 +60,6 @@ from sqlbuild.compiler.lineage.types import (
     InferredNullability,
 )
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
-from sqlbuild.compiler.references.main._quoted_reference_call_pattern import (
-    quoted_reference_call_pattern,
-)
-from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import (
-    reference_call_prefix_pattern_text,
-)
-from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_ANALYSIS_BASE_TABLES as _POLYGLOT_ANALYSIS_BASE_TABLES,
 )
@@ -175,19 +167,6 @@ _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
 _LARGE_COMPACT_PROJECT_MODELS: int = 10_000
 _LARGE_COMPACT_SQL_BYTES: int = 48 * 1024 * 1024
 _NATIVE_LEGACY_FALLBACK: str = "native project type recovery requires legacy fallback"
-_REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
-_SEED_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SEED)
-_SOURCE_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SOURCE)
-_DBT_REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.DBT_REF)
-_UDF_PATTERN: re.Pattern[str] = re.compile(
-    rf"{reference_call_prefix_pattern_text(SqlReferenceKind.UDF)}"
-    r'"([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()'
-)
-_TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
-    rf"{reference_call_prefix_pattern_text(SqlReferenceKind.TABLE_FUNCTION)}"
-    r'"([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()'
-)
-_PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(r"@@@(\w+)")
 
 
 def infer_columns_with_sql_analysis(

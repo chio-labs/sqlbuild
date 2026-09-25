@@ -27,8 +27,6 @@ from sqlbuild.compiler.planner.types import (
 )
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
-_DDL_MERGE_SOURCE_ALIAS: str = "__source"
-_DDL_MERGE_TARGET_ALIAS: str = "target"
 
 
 def resolve_model_plan_action(

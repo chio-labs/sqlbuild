@@ -52,10 +52,8 @@ from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_compari
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 _COMPILED_DIR: str = "compiled"
-_RUN_DIR: str = "run"
 _MODELS_DIR: str = "models"
 _FUNCTIONS_DIR: str = "functions"
-_SQL_FUNCTIONS_DIR: str = "sql"
 _AUDITS_DIR: str = "audits"
 _GENERIC_DIR: str = "generic"
 _SINGULAR_DIR: str = "singular"

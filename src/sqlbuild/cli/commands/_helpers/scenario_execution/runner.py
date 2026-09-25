@@ -83,8 +83,6 @@ from sqlbuild.spec.contracts.main.resolve_effective_scenario_config import (
 )
 
 _SCENARIO_NAME_WIDTH: int = 64
-_EXPECTATION_LABEL_WIDTH: int = 10
-_EXPECTATION_NAME_WIDTH: int = 50
 _CAPTURE_RELATION_KIND_WIDTH: int = 8
 _CAPTURE_RELATION_NAME_WIDTH: int = _SCENARIO_NAME_WIDTH - 4 - _CAPTURE_RELATION_KIND_WIDTH - 1
 
