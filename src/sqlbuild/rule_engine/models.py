@@ -352,15 +352,6 @@ class ResolvedRuleset:
 
 
 @dataclass(frozen=True)
-class ModelNameParts:
-    domain: str
-    layer: str
-    entity: str
-    source: str | None
-    is_view: bool
-
-
-@dataclass(frozen=True)
 class RuleFile:
     path: str
     source: str
