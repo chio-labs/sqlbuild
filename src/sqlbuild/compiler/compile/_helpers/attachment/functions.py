@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -77,13 +76,6 @@ class _PythonFunctionBuildContext:
     target_schema: str | None
     target_config: TargetConfig | None
     python_functions_inherit_default_namespace: bool
-
-
-_HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
-_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
-_HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
-    {"ctx", "context", "_ctx", "hook_context"}
-)
 
 
 def build_sql_function_inputs(

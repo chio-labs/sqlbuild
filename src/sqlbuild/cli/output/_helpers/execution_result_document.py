@@ -67,11 +67,6 @@ from sqlbuild.virtual.executor.constants import (
 from sqlbuild.virtual.executor.models import VirtualCloneResult
 
 _JSON_VERSION: int = 1
-_SUCCESS_STATUS: str = "success"
-_FAILED_STATUS: str = "failed"
-_SKIPPED_STATUS: str = "skipped"
-_WARNING_STATUS: str = "warning"
-_WARN_STATUS: str = "warn"
 _SCENARIO_RESOURCE_NAMESPACE: ContextVar[str | None] = ContextVar(
     "sqlbuild_scenario_resource_namespace", default=None
 )

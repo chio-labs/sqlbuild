@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import replace
 from pathlib import Path
 from typing import cast
@@ -36,12 +35,6 @@ from sqlbuild.spec.contracts.models import (
     SettingsConfig,
     SourceColumnEntry,
     SourceEntry,
-)
-
-_HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
-_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
-_HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
-    {"ctx", "context", "_ctx", "hook_context"}
 )
 
 

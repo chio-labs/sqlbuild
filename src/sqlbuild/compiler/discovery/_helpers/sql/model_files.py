@@ -21,7 +21,6 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
     SqlHookEntry,
 )
-from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SourceLocation
 from sqlbuild.sql_values.models import AuthoredSqlSet, AuthoredSqlValueCall
 
@@ -29,43 +28,15 @@ _MODEL_HEADER_END_TOKEN: str = "end"
 _MODEL_HEADER_WORD_TOKEN: str = "word"
 _MODEL_HEADER_STRING_TOKEN: str = "string"
 _MODEL_HEADER_SYMBOL_TOKEN: str = "symbol"
-_MODEL_HEADER_SYMBOLS: frozenset[str] = frozenset({"(", ")", "[", "]", "{", "}", ","})
 _MODEL_HEADER_OPEN_PAREN: str = "("
 _MODEL_HEADER_CLOSE_PAREN: str = ")"
-_MODEL_HEADER_OPEN_BRACKET: str = "["
-_MODEL_HEADER_CLOSE_BRACKET: str = "]"
-_MODEL_HEADER_OPEN_BRACE: str = "{"
-_MODEL_HEADER_CLOSE_BRACE: str = "}"
 _MODEL_HEADER_COMMA: str = ","
-_MODEL_HEADER_KEY_VALUE_SEPARATOR: str = ":"
 _MODEL_HEADER_QUOTE_NAMES: dict[str, str] = {"'": "single", '"': "double"}
 _MODEL_HEADER_ESCAPE_CHARACTER: str = "\\"
 _MODEL_HEADER_COLUMNS_KEY: str = "columns"
-_MODEL_HEADER_TYPE_KEY: str = "type"
-_MODEL_HEADER_RELATION_CALL_NAMES: frozenset[str] = frozenset(
-    {
-        SqlReferenceKind.REF.function_name,
-        SqlReferenceKind.SEED.function_name,
-        SqlReferenceKind.SOURCE.function_name,
-    }
-)
-_MODEL_HEADER_INLINE_SQL_HOOK_CALL: str = "inline_sql"
-_MODEL_HEADER_NAMED_SQL_HOOK_CALL: str = "sql"
-_MODEL_HEADER_PYTHON_HOOK_CALL: str = "python"
-_MODEL_HEADER_HOOK_CALL_NAMES: frozenset[str] = frozenset(
-    {
-        _MODEL_HEADER_INLINE_SQL_HOOK_CALL,
-        _MODEL_HEADER_NAMED_SQL_HOOK_CALL,
-        _MODEL_HEADER_PYTHON_HOOK_CALL,
-    }
-)
-_MODEL_HEADER_HOOK_FIELD_NAMES: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
 _MODEL_HEADER_TRUE_VALUE: str = "true"
 _MODEL_HEADER_FALSE_VALUE: str = "false"
 _MODEL_HEADER_NULL_VALUE: str = "null"
-_MODEL_HEADER_TYPED_CONSTANT_CALL: str = "constant"
-_MODEL_HEADER_THRESHOLDS_KEY: str = "thresholds"
-_MODEL_HEADER_THRESHOLD_BOUND_KEYS: frozenset[str] = frozenset({"warn", "error"})
 _SQL_IDENTIFIER_SEPARATOR: str = "_"
 _SQL_SELECT_KEYWORD: str = "SELECT"
 _SQL_UNION_KEYWORD: str = "UNION"

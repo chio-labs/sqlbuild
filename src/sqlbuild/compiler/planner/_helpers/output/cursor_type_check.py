@@ -14,23 +14,6 @@ from sqlbuild.compiler.sql_analysis.main.import_polyglot import import_polyglot
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
-_TIMESTAMP_SUBSTRINGS: frozenset[str] = frozenset(
-    {
-        "TIMESTAMP",
-        "DATETIME",
-        "DATE",
-    }
-)
-
-_INTEGER_SUBSTRINGS: frozenset[str] = frozenset(
-    {
-        "BIGINT",
-        "SMALLINT",
-        "TINYINT",
-        "MEDIUMINT",
-        "INT",
-    }
-)
 
 _POLYGLOT_TIMESTAMP_TYPE_NAMES: frozenset[str] = frozenset(
     {

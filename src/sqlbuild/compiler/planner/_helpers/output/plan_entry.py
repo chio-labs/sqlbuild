@@ -9,6 +9,7 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
+from sqlbuild.compiler.compile.constants import CURSOR_INPUTS_CONFIG_KEY
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.models import (
@@ -143,7 +144,6 @@ from sqlbuild.spec.contracts.models import (
 )
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction, TableType
 
-_MODELS_DIR_PREFIX: str = "models/"
 _IDEMPOTENT_MICROBATCH_STRATEGIES: frozenset[IncrementalStrategy] = frozenset(
     (IncrementalStrategy.DELETE_INSERT, IncrementalStrategy.MERGE)
 )
@@ -1684,17 +1684,12 @@ def validate_source_cursor_input_columns(
     cursor_roles: CursorInputRoles = resolve_cursor_input_roles(model=model)
     effective_models_by_name: dict[str, CompiledModel] = models_by_name or {}
     effective_source_map: dict[str, SourceEntry] = source_map or {}
-    authored_inputs: tuple[tuple[str, str, str], ...] = tuple(
-        (cursor_roles.filter_field, name, column)
-        for name, column in cursor_roles.filter_inputs.items()
-    ) + tuple(
-        (cursor_roles.watermark_field, name, column)
-        for name, column in cursor_roles.watermark_inputs.items()
-    )
-    config_field: str
+    authored_inputs: tuple[tuple[str, str], ...] = tuple(
+        cursor_roles.filter_inputs.items()
+    ) + tuple(cursor_roles.watermark_inputs.items())
     input_name: str
     input_cursor_column: str
-    for config_field, input_name, input_cursor_column in authored_inputs:
+    for input_name, input_cursor_column in authored_inputs:
         ref: CompileSqlReference = resolve_lineage_reference(
             model=model,
             input_name=input_name,
@@ -1715,7 +1710,8 @@ def validate_source_cursor_input_columns(
                 continue
             declared_display: str = ", ".join(declared_names) or "none"
             raise PlannerInputError(
-                f"model '{model.name}': {config_field} references model '{ref.ref_name}' "
+                f"model '{model.name}': {CURSOR_INPUTS_CONFIG_KEY} "
+                f"references model '{ref.ref_name}' "
                 f"column '{input_cursor_column}', but that model contract does not expose "
                 f"the column. Known output columns: {declared_display}",
                 code="S302",
@@ -1729,7 +1725,8 @@ def validate_source_cursor_input_columns(
                 continue
             declared_display = ", ".join(declared_names) or "none"
             raise PlannerInputError(
-                f"model '{model.name}': {config_field} references source '{ref.ref_name}' "
+                f"model '{model.name}': {CURSOR_INPUTS_CONFIG_KEY} "
+                f"references source '{ref.ref_name}' "
                 f"column '{input_cursor_column}', but that source contract does not expose "
                 f"the column. Declared contract columns: {declared_display}",
                 code="S302",
@@ -1742,7 +1739,7 @@ def validate_source_cursor_input_columns(
             continue
         known_display: str = ", ".join(col.name for col in known_columns) or "none"
         raise PlannerInputError(
-            f"model '{model.name}': {config_field} references source '{ref.ref_name}' "
+            f"model '{model.name}': {CURSOR_INPUTS_CONFIG_KEY} references source '{ref.ref_name}' "
             f"column '{input_cursor_column}', but that source does not expose the column. "
             f"Known source columns: {known_display}",
             code="S302",
