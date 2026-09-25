@@ -17,10 +17,9 @@ NOT_NULL_AUDIT_NAME: str = "not_null"
 MODEL_AUDIT_OVERRIDE_KEYS: frozenset[str] = frozenset({"by_type", "by_column"})
 MODEL_FULL_REFRESH_CONFIG_KEY: str = "full_refresh"
 CURSOR_INPUTS_CONFIG_KEY: str = "cursor_inputs"
-CURSOR_FILTER_INPUTS_CONFIG_KEY: str = "cursor_filter_inputs"
-CURSOR_WATERMARK_INPUTS_CONFIG_KEY: str = "cursor_watermark_inputs"
+MIGRATE_FROM_CONFIG_KEY: str = "migrate_from"
+MIGRATE_FORCE_CONFIG_KEY: str = "migrate_force"
 MAX_MICROBATCHES_CONFIG_KEY: str = "max_microbatches"
-MICROBATCH_LIMIT_CONFIG_KEY: str = "microbatch_limit"
 MICROBATCH_LIMIT_MAX_BATCHES_KEY: str = "max_batches"
 MICROBATCH_LIMIT_ACTION_KEY: str = "action"
 WATERMARK_CURSOR_INPUT_BLOCK_KEYS: frozenset[str] = frozenset({"column", "roles"})
@@ -47,19 +46,15 @@ SQL_QUOTE_TOKENS: frozenset[str] = frozenset({"'", '"', "`"})
 SQL_QUALIFIER_SEPARATOR_TOKEN: str = "."
 SQL_REFERENCE_NAME_QUOTE_TOKENS: frozenset[str] = frozenset({"'", '"'})
 SQL_IDENTIFIER_EXTRA_TOKEN: str = "_"
-SQL_UNION_KEYWORD: str = "UNION"
-SQL_UNION_ALL_KEYWORD: str = "ALL"
-SQL_SET_OPERATION_KEYWORDS: tuple[str, ...] = ("UNION", "INTERSECT", "EXCEPT")
 SQL_WITH_KEYWORD: str = "WITH"
 SQL_CEREMONIAL_SELECT_VALUE: str = "1"
 UNKNOWN_SQL_TYPE_NAME: str = "UNKNOWN"
 DECIMAL_SQL_TYPE_NAME: str = "DECIMAL"
 RESOLVED_SOURCE_CONFIDENCE: str = "resolved"
-LEFT_JOIN_SIDE: str = "LEFT"
-RIGHT_JOIN_SIDE: str = "RIGHT"
-FULL_JOIN_SIDE: str = "FULL"
 
-POLYGLOT_UNION_EXPRESSION_NAME: str = "Union"
+POLYGLOT_SET_OPERATION_EXPRESSION_NAMES: frozenset[str] = frozenset(
+    {"Union", "Intersect", "Except"}
+)
 POLYGLOT_SELECT_EXPRESSION_NAME: str = "Select"
 POLYGLOT_COLUMN_EXPRESSION_NAME: str = "Column"
 POLYGLOT_WRAPPER_EXPRESSION_NAMES: frozenset[str] = frozenset({"Subquery", "Paren"})

@@ -23,7 +23,6 @@ from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from tests.integration.src.sqlbuild.adapters.postgres._test_types import (
     PostgresBuildFlowTestCase,
-    PostgresCountRowsTestCase,
     PostgresMergeTestCase,
     PostgresQueryTestCase,
     PostgresRowDiffErrorTestCase,
@@ -402,50 +401,6 @@ def test_given_invalid_diff_when_diffing_rows_then_postgres_raises_clear_error(
             unique_key=test_case.unique_key,
             tolerances=test_case.tolerances,
         )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        PostgresCountRowsTestCase(
-            description="counts all rows without cursor filter",
-            table_name="count_t",
-            values_sql="(1), (2), (3)",
-            expected_count=3,
-        ),
-        PostgresCountRowsTestCase(
-            description="counts rows bounded by integer cursor",
-            table_name="count_bounded",
-            values_sql="(1), (2), (3), (4), (5)",
-            cursor_column="id",
-            start_cursor=CursorValue(kind=CursorKind.INTEGER, value=2),
-            end_cursor=CursorValue(kind=CursorKind.INTEGER, value=4),
-            expected_count=2,
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_table_when_counting_rows_then_postgres_returns_expected_count(
-    test_case: PostgresCountRowsTestCase,
-    adapter: PostgresAdapter,
-    connection: Any,
-    postgres_schema: str,
-) -> None:
-    target: str = qualified_name(schema=postgres_schema, name=test_case.table_name)
-    adapter.execute(connection=connection, sql=f"CREATE TABLE {target} (id INTEGER)")
-    adapter.execute(
-        connection=connection, sql=f"INSERT INTO {target} VALUES {test_case.values_sql}"
-    )
-
-    count: int = adapter.count_rows(
-        connection=connection,
-        relation=target,
-        cursor_column=test_case.cursor_column,
-        start_cursor=test_case.start_cursor,
-        end_cursor=test_case.end_cursor,
-    )
-
-    assert count == test_case.expected_count
 
 
 @pytest.mark.parametrize(

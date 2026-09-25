@@ -31,13 +31,17 @@ def archive_timestamp(value: datetime) -> datetime:
     return aware.replace(microsecond=0)
 
 
-def build_archive_name(*, original_name: str, archived_at: datetime, identifier_limit: int) -> str:
-    """Build the fitted, case-folded archive name, keeping the prefix and timestamp intact."""
+def build_archive_name(
+    *, original_name: str, archived_at: datetime, identifier_limit: int, kind: str | None = None
+) -> str:
+    """Build the fitted, case-folded archive name, keeping prefix, timestamp, and kind intact."""
 
+    kind_segment: str = "" if kind is None else f"{kind}{ARCHIVE_NAME_SEPARATOR}"
     fixed_prefix: str = (
         f"{ARCHIVE_NAME_PREFIX}"
         f"{archive_timestamp(archived_at).strftime(ARCHIVE_TIMESTAMP_FORMAT)}"
         f"{ARCHIVE_NAME_SEPARATOR}"
+        f"{kind_segment}"
     )
     logical_part: str = fit_artifact_logical_name(
         logical_name=original_name,

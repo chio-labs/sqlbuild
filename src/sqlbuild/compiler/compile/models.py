@@ -218,9 +218,6 @@ class CursorInputRoles:
 
     filter_inputs: dict[str, str]
     watermark_inputs: dict[str, str]
-    filter_field: str
-    watermark_field: str
-    uses_legacy_alias: bool
 
 
 @dataclass(frozen=True)

@@ -24,7 +24,6 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile._helpers.render.arguments import (
     render_parameterized_sql,
-    render_sql_argument_value,
 )
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
 from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_expansion
@@ -92,13 +91,6 @@ class _AuditAttachmentContext:
         """Retain one resolved audit scope for reuse in this compile invocation."""
 
         self.scoped_declarations[key] = declarations
-
-
-_LEGACY_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hook", "post_hook"})
-_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
-_HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
-    {"ctx", "context", "_ctx", "hook_context"}
-)
 
 
 def build_audit_inputs(
@@ -673,43 +665,6 @@ def render_generic_audit_sql(
         arguments=arguments,
         owner_label=str(owner_file),
         definition_label=f"generic audit '{definition_name}'",
-    )
-
-
-def render_generic_audit_argument(
-    *,
-    argument_name: str,
-    arguments: dict[str, object],
-    owner_file: Path,
-    definition_name: str,
-    quoted: bool,
-) -> str:
-    """Render one generic attached-audit parameter value into SQL text."""
-
-    return render_parameterized_sql(
-        sql=f"@'{argument_name}'" if quoted else f"@{argument_name}",
-        arguments=arguments,
-        owner_label=str(owner_file),
-        definition_label=f"generic audit '{definition_name}'",
-    )
-
-
-def render_generic_audit_argument_value(
-    *,
-    argument_value: object,
-    owner_file: Path,
-    definition_name: str,
-    argument_name: str,
-    quoted: bool,
-) -> str:
-    """Render one generic attached-audit argument value using raw or literal SQL rules."""
-
-    return render_sql_argument_value(
-        argument_value=argument_value,
-        owner_label=str(owner_file),
-        definition_label=f"audit '{definition_name}'",
-        argument_name=argument_name,
-        quoted=quoted,
     )
 
 

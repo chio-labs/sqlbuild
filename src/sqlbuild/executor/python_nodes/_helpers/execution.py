@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -28,29 +27,21 @@ from sqlbuild.executor.python_nodes._helpers.results import (
 from sqlbuild.executor.python_nodes.models import (
     AssetContext,
     PythonNodeExecutionResult,
-    PythonNodeExecutorResult,
     PythonNodeFanInDecision,
     PythonNodeRunState,
     PythonNodeRuntime,
     TaskContext,
 )
 from sqlbuild.executor.python_nodes.types import ExecutablePythonNode, OwnedResultCallback
-from sqlbuild.executor.scheduling.main._build_in_degree import build_python_node_in_degree
-from sqlbuild.executor.scheduling.main._build_ready_queue import build_python_node_ready_queue
-from sqlbuild.executor.scheduling.main._unlock_downstream import unlock_downstream_python_nodes
 from sqlbuild.provider.main.runtime import (
     ProviderContainer,
     _empty_provider_container,
     invoke_with_providers,
 )
 from sqlbuild.python_nodes.main.calculate_retry_delay import calculate_retry_delay
-from sqlbuild.python_nodes.main.read_asset_definition import read_asset_definition
-from sqlbuild.python_nodes.main.read_task_definition import read_task_definition
 from sqlbuild.python_nodes.models import (
-    AssetDefinition,
     RetryPolicy,
     SqlResourceRef,
-    TaskDefinition,
 )
 from sqlbuild.runtime.observability.classes.operation_lifecycle import (
     OperationLifecycle,
@@ -59,101 +50,6 @@ from sqlbuild.runtime.observability.classes.operation_lifecycle import (
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,
 )
-
-
-@dataclass
-class _SerialResultAccumulator:
-    run_state: PythonNodeRunState
-    results_by_name: dict[str, PythonNodeExecutionResult] = field(default_factory=dict)
-    ordered_results: list[PythonNodeExecutionResult] = field(default_factory=list)
-
-    def record(self, *, node: ExecutablePythonNode, result: PythonNodeExecutionResult) -> None:
-        self.run_state.record_result(node_function=node.function, result=result)
-        self.results_by_name[node.name] = result
-        self.ordered_results.append(result)
-
-
-def execute_python_nodes(
-    *,
-    nodes: tuple[ExecutablePythonNode, ...],
-    runtime: PythonNodeRuntime,
-    statement_recorder: StatementRecorder,
-    logger: logging.Logger | None = None,
-    run_state: PythonNodeRunState | None = None,
-    sleep: Callable[[float], None] = time.sleep,
-    monotonic: Callable[[], float] = time.monotonic,
-) -> PythonNodeExecutorResult:
-    """Execute task/asset nodes in dependency order within the current process."""
-
-    resolved_run_state: PythonNodeRunState = (
-        run_state if run_state is not None else PythonNodeRunState()
-    )
-    result_store: Any | None = (
-        build_direct_node_result_store(
-            adapter=runtime.adapter,
-            connection=runtime.connection,
-            database=runtime.default_database,
-            schema=runtime.default_schema,
-        )
-        if runtime.persist_node_results
-        else None
-    )
-    node_by_name: dict[str, ExecutablePythonNode] = {node.name: node for node in nodes}
-    node_by_dependency_key: dict[object | tuple[str, str], ExecutablePythonNode] = {
-        node.function: node for node in nodes
-    }
-    for node in nodes:
-        node_by_dependency_key[("name", node.name)] = node
-    upstream_names: dict[str, tuple[str, ...]] = _build_upstream_names(
-        nodes=nodes,
-        node_by_dependency_key=node_by_dependency_key,
-    )
-    downstream_names: dict[str, tuple[str, ...]] = _build_downstream_names(
-        node_names=tuple(node.name for node in nodes),
-        upstream_names=upstream_names,
-    )
-    in_degree: dict[str, int] = build_python_node_in_degree(
-        node_names=tuple(node.name for node in nodes),
-        upstream_names=upstream_names,
-    )
-    ready: list[str] = build_python_node_ready_queue(
-        node_names=tuple(node.name for node in nodes),
-        in_degree=in_degree,
-    )
-    accumulator: _SerialResultAccumulator = _SerialResultAccumulator(resolved_run_state)
-
-    while ready:
-        node_name: str = ready.pop(0)
-        node: ExecutablePythonNode = node_by_name[node_name]
-
-        _ = _execute_ready_node(
-            node=node,
-            upstream_results=tuple(
-                accumulator.results_by_name[name] for name in upstream_names[node.name]
-            ),
-            runtime=runtime,
-            statement_recorder=statement_recorder,
-            logger=logger,
-            run_state=resolved_run_state,
-            result_store=result_store,
-            sleep=sleep,
-            monotonic=monotonic,
-            on_result=accumulator.record,
-        )
-        newly_ready: tuple[str, ...]
-        in_degree, newly_ready = unlock_downstream_python_nodes(
-            completed_node_name=node.name,
-            in_degree=in_degree,
-            downstream_names=downstream_names,
-        )
-        ready.extend(newly_ready)
-
-    if len(accumulator.ordered_results) != len(nodes):
-        raise ExecutorInputError("Python node executor could not resolve all dependencies")
-    return PythonNodeExecutorResult(
-        results=tuple(accumulator.ordered_results),
-        run_state=resolved_run_state,
-    )
 
 
 def execute_ready_python_node(
@@ -487,57 +383,6 @@ def _build_context(
         start_cursor_int=runtime.start_cursor_int,
         end_cursor_int=runtime.end_cursor_int,
     )
-
-
-def _build_upstream_names(
-    *,
-    nodes: tuple[ExecutablePythonNode, ...],
-    node_by_dependency_key: dict[object | tuple[str, str], ExecutablePythonNode],
-) -> dict[str, tuple[str, ...]]:
-    upstream_names: dict[str, tuple[str, ...]] = {}
-    for node in nodes:
-        names: list[str] = []
-        dependency: Callable[..., object] | SqlResourceRef
-        for dependency in node.depends_on:
-            if isinstance(dependency, SqlResourceRef):
-                continue
-            upstream_node: ExecutablePythonNode | None = node_by_dependency_key.get(
-                _python_node_dependency_key(dependency)
-            )
-            if upstream_node is None:
-                raise ExecutorInputError(
-                    f"Python node '{node.name}' depends on a node outside the executor selection"
-                )
-            names.append(upstream_node.name)
-        upstream_names[node.name] = tuple(names)
-    return upstream_names
-
-
-def _python_node_dependency_key(dependency: object) -> object | tuple[str, str]:
-    task_definition: TaskDefinition | None = (
-        read_task_definition(dependency) if callable(dependency) else None
-    )
-    if task_definition is not None:
-        return ("name", task_definition.name)
-    asset_definition: AssetDefinition | None = (
-        read_asset_definition(dependency) if callable(dependency) else None
-    )
-    if asset_definition is not None:
-        return ("name", asset_definition.name)
-    return dependency
-
-
-def _build_downstream_names(
-    *, node_names: tuple[str, ...], upstream_names: dict[str, tuple[str, ...]]
-) -> dict[str, tuple[str, ...]]:
-    downstream: dict[str, list[str]] = {node_name: [] for node_name in node_names}
-    node_name: str
-    upstreams: tuple[str, ...]
-    for node_name, upstreams in upstream_names.items():
-        upstream_name: str
-        for upstream_name in upstreams:
-            downstream[upstream_name].append(node_name)
-    return {node_name: tuple(names) for node_name, names in downstream.items()}
 
 
 def _node_kind(node: ExecutablePythonNode) -> PythonNodeKind:

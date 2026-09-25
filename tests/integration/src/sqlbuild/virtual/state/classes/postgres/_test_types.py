@@ -2,11 +2,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.microbatches.types import MicrobatchRecordType
 from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     ConditionalPublicationPayload,
     StateRefContractObservation,
 )
+
+
+@dataclass(frozen=True)
+class MicrobatchBulkAppendTestCase:
+    """One production-shaped event batch and its idempotent write counts."""
+
+    description: str
+    record_type: MicrobatchRecordType
+    expected_write_counts: tuple[int, int] = (1, 1)
 
 
 @dataclass(frozen=True)

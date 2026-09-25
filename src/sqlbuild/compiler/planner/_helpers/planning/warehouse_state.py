@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 
+from sqlbuild.compiler.planner._helpers.migrations.planning import plan_model_migrations
 from sqlbuild.compiler.planner._helpers.output.plan_entry import build_planner_relations_context
 from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
     effectively_full_refreshed_model_names,
@@ -12,6 +13,7 @@ from sqlbuild.compiler.planner._helpers.warehouse.snapshot import gather_warehou
 from sqlbuild.compiler.planner.models import (
     CursorSnapshotScope,
     DeferralInputs,
+    ModelMigrationPlanning,
     PlannerOverrides,
     PlannerRelationsContext,
     PlannerRuntime,
@@ -55,6 +57,13 @@ def gather_planner_warehouse_state(
             cursor_overrides=overrides.cursor_overrides,
         ),
     )
+    migrations: ModelMigrationPlanning = plan_model_migrations(
+        runtime=runtime,
+        scope=scopes.selected_scope,
+        snapshot=snapshot,
+        overrides=overrides,
+        deferral=deferral,
+    )
     inspection_relations: PlannerRelationsContext = build_planner_relations_context(
         project=runtime.project,
         adapter=runtime.adapter,
@@ -69,4 +78,9 @@ def gather_planner_warehouse_state(
             f"Inspected warehouse state. ({time.monotonic() - warehouse_start:.2f}s)"
         )
         runtime.on_progress("Generating plan...")
-    return PlannerWarehouseState(snapshot=snapshot, inspection_relations=inspection_relations)
+    return PlannerWarehouseState(
+        snapshot=migrations.snapshot,
+        inspection_relations=inspection_relations,
+        migration_entries=migrations.entries,
+        migration_warnings=migrations.warnings,
+    )

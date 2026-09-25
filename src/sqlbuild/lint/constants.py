@@ -78,6 +78,7 @@ ADAPTER_DIALECT_TRANSLATIONS: dict[str, str] = {
 ADAPTER_CONFIG_KEY: str = "adapter"
 
 SQL_QUOTE_CHARACTERS: frozenset[str] = frozenset({"'", '"'})
+BACKTICK_CHARACTER: str = "`"
 SQL_ESCAPE_CHARACTER: str = "\\"
 SINGLE_QUOTE_CHARACTER: str = "'"
 OPENING_PAREN_CHARACTER: str = "("
@@ -95,6 +96,3 @@ GENERATED_SQL_MESSAGE_SUFFIX: str = "(in generated SQL)"
 LINE_FEED: str = "\n"
 CARRIAGE_RETURN_LINE_FEED: str = "\r\n"
 TAB_CHARACTER: str = "\t"
-FIX_STATUS_APPLIED: str = "fixed"
-FIX_STATUS_SKIPPED: str = "skipped"
-MAX_FIX_PASSES: int = 8

@@ -8,7 +8,6 @@ from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import Any, ClassVar, cast
 
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.node_results.main.decode_json import decode_node_result_json
 from sqlbuild.executor.node_results.main.encode_json import encode_node_result_json
 from sqlbuild.executor.node_results.models import (
@@ -440,66 +439,6 @@ class SqlStateBackend(StateBackend):
                     virtual_environment_name=ref.virtual_environment_name,
                     node_type="model",
                     node_name=ref.model_name,
-                    version_hash=ref.version_hash,
-                )
-                for ref in refs
-            ),
-        )
-
-    def replace_virtual_environment_function_refs(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        virtual_environment_name: str,
-        refs: tuple[VirtualEnvironmentFunctionRefRecord, ...],
-    ) -> None:
-        ref: VirtualEnvironmentFunctionRefRecord
-        for ref in refs:
-            if ref.node_type not in {
-                CompiledResourceType.UDF,
-                CompiledResourceType.TABLE_FN,
-            }:
-                raise StateBackendConfigError("Function ref node_type must be 'udf' or 'table_fn'")
-        refs_by_node_type: dict[str, tuple[VirtualEnvironmentNodeRefRecord, ...]] = {}
-        for node_type in ("udf", "table_fn"):
-            node_refs: list[VirtualEnvironmentNodeRefRecord] = []
-            for ref in refs:
-                if ref.node_type == node_type:
-                    node_refs.append(
-                        VirtualEnvironmentNodeRefRecord(
-                            virtual_environment_name=ref.virtual_environment_name,
-                            node_type=ref.node_type,
-                            node_name=ref.function_name,
-                            version_hash=ref.version_hash,
-                        )
-                    )
-            refs_by_node_type[node_type] = tuple(node_refs)
-        self.replace_virtual_environment_node_ref_groups(
-            connection=connection,
-            schema=schema,
-            virtual_environment_name=virtual_environment_name,
-            refs_by_node_type=refs_by_node_type,
-        )
-
-    def replace_virtual_environment_seed_refs(
-        self,
-        *,
-        connection: Any,
-        schema: str,
-        virtual_environment_name: str,
-        refs: tuple[VirtualEnvironmentSeedRefRecord, ...],
-    ) -> None:
-        self.replace_virtual_environment_node_refs(
-            connection=connection,
-            schema=schema,
-            virtual_environment_name=virtual_environment_name,
-            node_type="seed",
-            refs=tuple(
-                VirtualEnvironmentNodeRefRecord(
-                    virtual_environment_name=ref.virtual_environment_name,
-                    node_type="seed",
-                    node_name=ref.seed_name,
                     version_hash=ref.version_hash,
                 )
                 for ref in refs
@@ -1419,28 +1358,6 @@ class SqlStateBackend(StateBackend):
                 relation_type=row[6],
             )
             for row in rows
-        )
-
-    def get_physical_relation_ancestry(
-        self, *, connection: Any, schema: str, model_name: str, version_hash: str
-    ) -> PhysicalRelationAncestryRecord | None:
-        p: str = self._placeholder
-        row: tuple[Any, ...] | None = self._fetch_one(
-            connection=connection,
-            sql="SELECT model_name, version_hash, parent_model_name, parent_version_hash, "
-            "seed_strategy "
-            f"FROM {self._qualified_name(schema=schema, table=PHYSICAL_RELATION_ANCESTRY_TABLE)} "
-            f"WHERE model_name = {p} AND version_hash = {p}",
-            params=[model_name, version_hash],
-        )
-        if row is None:
-            return None
-        return PhysicalRelationAncestryRecord(
-            model_name=row[0],
-            version_hash=row[1],
-            parent_model_name=row[2],
-            parent_version_hash=row[3],
-            seed_strategy=row[4],
         )
 
     def get_virtual_environment(

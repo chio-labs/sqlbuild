@@ -41,6 +41,7 @@ from sqlbuild.adapter.contract.models import (
     ExpressionInferenceProfile,
     FunctionDefinition,
     FunctionInfo,
+    MigrationStagePlan,
     QueryResult,
     RelationInfo,
     RowDiffColumnResult,
@@ -61,6 +62,7 @@ from sqlbuild.adapter.contract.types import (
     CursorKind,
     FrameworkType,
     LoaderLogicalType,
+    MigrationTransfer,
     PromotionStrategy,
     TablePromotionMode,
 )
@@ -851,6 +853,18 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
             render_framework_type=self.render_framework_type,
         )
 
+    def render_create_migration_state_table_sql(self, *, database: str | None, schema: str) -> str:
+        from sqlbuild.compiler.migrations.main.create_table_sql import (
+            build_migration_state_create_table_sql,
+        )
+
+        return build_migration_state_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        )
+
     def render_prune_fingerprint_history_sql(
         self,
         *,
@@ -923,21 +937,6 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
             return f"TIMESTAMP '{value}'"
         return f"'{value}'"
 
-    def render_seed_select_after_cursor(
-        self,
-        *,
-        origin: str,
-        cursor_column: str,
-        cursor_start_exclusive: str,
-        cursor_type: str | None,
-    ) -> str:
-        return self._render_seed_select_after_cursor_impl(
-            origin=origin,
-            cursor_column=cursor_column,
-            cursor_start_exclusive=cursor_start_exclusive,
-            cursor_type=cursor_type,
-        )
-
     def connect(self, config: dict[str, Any]) -> Any:
         """Open a DuckDB connection from the resolved connection config."""
 
@@ -1005,24 +1004,6 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
 
         cursor: Any = self.execute(connection=connection, sql=f"DESCRIBE {sql}")
         return tuple(str(row[0]) for row in cursor.fetchall())
-
-    def get_relation_max_cursor(
-        self,
-        *,
-        connection: Any,
-        relation: str,
-        cursor_column: str,
-    ) -> object | None:
-        """Return the maximum cursor value currently present in a relation."""
-
-        quoted_cursor: str = self.render_identifier(cursor_column)
-        cursor: Any = self.execute(
-            connection=connection, sql=f"SELECT max({quoted_cursor}) FROM {relation}"
-        )
-        row: Any | None = cursor.fetchone()
-        if row is None:
-            return None
-        return row[0]
 
     def render_max_cursor_at_or_before(
         self,
@@ -1524,22 +1505,28 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         del origin_is_transient
         return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
-    def render_query_with_cursor_bounds(
+    def render_migration_stage(
         self,
         *,
-        sql: str,
-        cursor_column: str,
-        cursor_start: str,
-        cursor_end: str,
-        cursor_type: str | None,
-    ) -> str:
-        return self._render_query_with_cursor_bounds_impl(
-            sql=sql,
-            cursor_column=cursor_column,
-            cursor_start=cursor_start,
-            cursor_end=cursor_end,
-            cursor_type=cursor_type,
+        origin: str,
+        stage: str,
+        origin_is_transient: bool = False,
+        stage_is_transient: bool | None = None,
+    ) -> MigrationStagePlan:
+        del origin_is_transient, stage_is_transient
+        return MigrationStagePlan(
+            transfer=MigrationTransfer.COPY,
+            statements=(f"CREATE TABLE {stage} AS SELECT * FROM {origin}",),
         )
+
+    def capture_dependent_view_rebinds(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        del connection, database, schema, name
+        return ()
+
+    def supports_transactional_ddl(self) -> bool:
+        return True
 
     def render_seed_select_before_cursor(
         self,
@@ -2040,26 +2027,6 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
             compared_count=int(row[2]),
             sampling=sampling,
         )
-
-    def count_rows(
-        self,
-        *,
-        connection: Any,
-        relation: str,
-        cursor_column: str | None = None,
-        start_cursor: CursorValue | None = None,
-        end_cursor: CursorValue | None = None,
-    ) -> int:
-        cursor_filter: str = self.build_cursor_filter(
-            cursor_column=cursor_column,
-            start_cursor=start_cursor,
-            end_cursor=end_cursor,
-        )
-        query: str = f"SELECT COUNT(*) FROM {relation}"
-        if cursor_filter:
-            query += f" WHERE {cursor_filter}"
-        result: Any = self.execute(connection=connection, sql=query).fetchone()
-        return int(result[0])
 
     def sample_unequal_rows(
         self,

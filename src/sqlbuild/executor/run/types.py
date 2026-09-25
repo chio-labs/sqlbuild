@@ -85,7 +85,6 @@ class AuditGateReuseReason(StrEnum):
     MISSING = "missing"
     MALFORMED = "malformed"
     NON_PASSING = "non_passing"
-    BINDING_SET_CHANGED = "binding_set_changed"
     AUDIT_CHANGED = "audit_changed"
     ALWAYS_RUN = "always_run"
 

@@ -14,23 +14,6 @@ from sqlbuild.compiler.sql_analysis.main.import_polyglot import import_polyglot
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.planner")
-_TIMESTAMP_SUBSTRINGS: frozenset[str] = frozenset(
-    {
-        "TIMESTAMP",
-        "DATETIME",
-        "DATE",
-    }
-)
-
-_INTEGER_SUBSTRINGS: frozenset[str] = frozenset(
-    {
-        "BIGINT",
-        "SMALLINT",
-        "TINYINT",
-        "MEDIUMINT",
-        "INT",
-    }
-)
 
 _POLYGLOT_TIMESTAMP_TYPE_NAMES: frozenset[str] = frozenset(
     {
@@ -186,23 +169,6 @@ def _check_with_heuristic(
                 f"which appears to be {detected.value}, but cursor_type is '{declared.value}'"
             ),
         )
-
-    return None
-
-
-def _classify_type_heuristic(warehouse_type: str) -> CursorType | None:
-    """Classify a warehouse type string as timestamp or integer via substrings."""
-
-    upper: str = warehouse_type.upper()
-
-    substring: str
-    for substring in _TIMESTAMP_SUBSTRINGS:
-        if substring in upper:
-            return CursorType.TIMESTAMP
-
-    for substring in _INTEGER_SUBSTRINGS:
-        if substring in upper:
-            return CursorType.INTEGER
 
     return None
 

@@ -335,18 +335,6 @@ def _collect_upstream_requirements(
     return requirements
 
 
-def _dedupe_names(names: tuple[str, ...]) -> tuple[str, ...]:
-    deduped: list[str] = []
-    seen: set[str] = set()
-    name: str
-    for name in names:
-        if name in seen:
-            continue
-        seen.add(name)
-        deduped.append(name)
-    return tuple(deduped)
-
-
 def _fixture_name_for(name: str) -> str:
     return name.replace(".", "__")
 

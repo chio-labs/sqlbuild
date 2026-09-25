@@ -23,8 +23,10 @@ from sqlbuild.virtual.executor.main._rewrite import rewrite_virtual_project_mode
 from sqlbuild.virtual.planner.main._semantics import build_virtual_plan_semantics
 from sqlbuild.virtual.planner.main._targets import build_virtual_destination_from_physical_relation
 from sqlbuild.virtual.planner.models import VirtualPlanSemantics
+from sqlbuild.virtual.state.main.environments._ref_model_versions import (
+    read_ref_model_versions,
+)
 from sqlbuild.virtual.state.models import (
-    ModelVersionRecord,
     PhysicalRelationRecord,
     VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentRecord,
@@ -177,7 +179,7 @@ def read_virtual_diff_state(
     from_semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
         graph=graph,
         bound_refs=from_refs,
-        bound_model_versions=_read_model_versions(
+        bound_model_versions=read_ref_model_versions(
             backend=backend,
             state_connection=state_connection,
             schema=schema,
@@ -192,7 +194,7 @@ def read_virtual_diff_state(
     to_semantics: VirtualPlanSemantics = build_virtual_plan_semantics(
         graph=graph,
         bound_refs=to_refs,
-        bound_model_versions=_read_model_versions(
+        bound_model_versions=read_ref_model_versions(
             backend=backend,
             state_connection=state_connection,
             schema=schema,
@@ -238,24 +240,6 @@ def read_virtual_diff_state(
             refs=to_refs,
         ),
     )
-
-
-def _read_model_versions(
-    *,
-    backend: Any,
-    state_connection: Any,
-    schema: str,
-    refs: tuple[VirtualEnvironmentModelRefRecord, ...],
-) -> dict[str, ModelVersionRecord | None]:
-    return {
-        ref.model_name: backend.get_model_version(
-            connection=state_connection,
-            schema=schema,
-            model_name=ref.model_name,
-            version_hash=ref.version_hash,
-        )
-        for ref in refs
-    }
 
 
 def execute_virtual_diff_between_relations(

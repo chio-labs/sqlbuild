@@ -474,34 +474,6 @@ def _validate_no_inherited_column_overrides(
         )
 
 
-def expand_declaration_references(
-    *,
-    sql: str,
-    file_path: Path,
-    enums: dict[str, EnumDeclaration],
-    constants: dict[str, ConstantDeclaration],
-    value_renderer: TypedSqlValueRenderer,
-    collection_rendering: CollectionRendering,
-    inaccessible_enums: dict[str, DeclarationRecord] | None = None,
-    inaccessible_constants: dict[str, DeclarationRecord] | None = None,
-) -> str:
-    """Resolve enum-member and constant references to SQL scalar literals."""
-
-    result: DeclarationExpansionResult = expand_declaration_references_result(
-        sql=sql,
-        file_path=file_path,
-        value_renderer=value_renderer,
-        collection_rendering=collection_rendering,
-        declarations=DeclarationResolutionContext(
-            enums=enums,
-            constants=constants,
-            inaccessible_enums=inaccessible_enums or {},
-            inaccessible_constants=inaccessible_constants or {},
-        ),
-    )
-    return result.sql
-
-
 def expand_declaration_references_with_spans(
     *,
     sql: str,

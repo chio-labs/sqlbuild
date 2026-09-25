@@ -5,6 +5,13 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, NamedTuple
 
+from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
+from sqlbuild.microbatches.types import (
+    MicrobatchCompletionType,
+    MicrobatchFingerprintStatus,
+    MicrobatchRecordType,
+    MicrobatchRunType,
+)
 from sqlbuild.virtual.state.classes.duckdb import DuckDbStateBackend
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
 from sqlbuild.virtual.state.models import (
@@ -348,14 +355,16 @@ def exercise_state_ref_contract(
             connection=connection, schema=schema, virtual_environment_name="dev", node_type="seed"
         )
     )
-    backend.replace_virtual_environment_function_refs(
+    backend.replace_virtual_environment_node_ref_groups(
         connection=connection,
         schema=schema,
         virtual_environment_name="dev",
-        refs=(
-            VirtualEnvironmentFunctionRefRecord("dev", "table_fn", "customer_orders", "fn-v1"),
-            VirtualEnvironmentFunctionRefRecord("dev", "udf", "normalize_email", "fn-v2"),
-        ),
+        refs_by_node_type={
+            "table_fn": (
+                VirtualEnvironmentNodeRefRecord("dev", "table_fn", "customer_orders", "fn-v1"),
+            ),
+            "udf": (VirtualEnvironmentNodeRefRecord("dev", "udf", "normalize_email", "fn-v2"),),
+        },
     )
     function_refs: tuple[VirtualEnvironmentFunctionRefRecord, ...] = (
         backend.get_virtual_environment_function_refs(
@@ -449,3 +458,54 @@ EXPECTED_STATE_REF_CONTRACT_OBSERVATION: StateRefContractObservation = StateRefC
     deleted_model_refs=(),
     surviving_model_refs=(VirtualEnvironmentNodeRefRecord("qa", "model", "orders", "orders-v3"),),
 )
+
+
+def build_production_shaped_microbatch_event(
+    *, scope: MicrobatchScope, record_type: MicrobatchRecordType
+) -> MicrobatchEvent:
+    """Build one event with the nullable columns the executor leaves unset for its kind.
+
+    Replay requirements carry no completion or observation facts, and executed partition
+    completions carry no observation facts, so each single-event batch has timestamp and
+    integer columns that are NULL in every row.
+    """
+
+    run_started_at: datetime = datetime(2026, 1, 1, 9, 0, 0)
+    common: dict[str, Any] = {
+        "scope": scope,
+        "origin_run_id": "run-1",
+        "execution_run_id": "run-1",
+        "run_type": MicrobatchRunType.NORMAL,
+        "run_start": "0",
+        "run_end": "2",
+        "batch_size": "1",
+        "cursor_column": "batch_id",
+        "cursor_type": "integer",
+        "model_version_hash": "F2",
+        "definition_hash": "definition",
+        "fingerprint_status": MicrobatchFingerprintStatus.KNOWN,
+        "origin_run_started_at": run_started_at,
+        "execution_run_started_at": run_started_at,
+        "created_at": datetime(2026, 1, 1, 9, 0, 1),
+    }
+    events: dict[MicrobatchRecordType, MicrobatchEvent] = {
+        MicrobatchRecordType.REPLAY_REQUIREMENT: MicrobatchEvent(
+            event_id="requirement-1",
+            record_type=record_type,
+            replay_requirement_id="requirement-1",
+            required_model_version_hash="F2",
+            replay_policy="full",
+            **common,
+        ),
+        MicrobatchRecordType.PARTITION_COMPLETION: MicrobatchEvent(
+            event_id="completion-1",
+            record_type=record_type,
+            completion_type=MicrobatchCompletionType.INITIAL,
+            partition_start="0",
+            partition_end="1",
+            rows_affected=3,
+            completed_at=datetime(2026, 1, 1, 9, 0, 2),
+            **common,
+        ),
+    }
+    return events[record_type]

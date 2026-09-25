@@ -13,7 +13,6 @@ from sqlbuild.virtual.state._helpers.state_storage.datetime import (
     to_naive_utc_wall_clock,
 )
 from sqlbuild.virtual.state._helpers.state_storage.microbatch_events import (
-    append_duckdb_microbatch_event,
     append_duckdb_microbatch_events,
     read_duckdb_microbatch_model_history,
     read_duckdb_microbatch_retention_history,
@@ -138,15 +137,6 @@ class DuckDbStateBackend(SqlStateBackend):
             type_matches=self._state_type_matches,
             expected_indexes=STATE_TABLE_INDEXES,
             existing_indexes_by_table=indexes_by_table,
-        )
-
-    def append_microbatch_event(
-        self, *, connection: Any, schema: str, event: MicrobatchEvent
-    ) -> None:
-        append_duckdb_microbatch_event(
-            connection=connection,
-            qualified_table=self._qualified_name(schema=schema, table=MICROBATCH_EVENT_TABLE),
-            event=event,
         )
 
     def append_microbatch_events(

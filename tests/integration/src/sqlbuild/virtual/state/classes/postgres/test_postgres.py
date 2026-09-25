@@ -14,7 +14,7 @@ from sqlbuild.executor.node_results.models import (
     NodeResultRecord,
 )
 from sqlbuild.executor.node_results.types import NodeResultStatus
-from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
+from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope, MicrobatchWriteResult
 from sqlbuild.microbatches.types import (
     MicrobatchCompletionType,
     MicrobatchFingerprintStatus,
@@ -34,7 +34,6 @@ from sqlbuild.virtual.state.models import (
     PhysicalRelationRecord,
     PythonNodeVersionRecord,
     ReconcileEventRecord,
-    SeedVersionRecord,
     SourceFreshnessRecord,
     StateLockLease,
     StateLockRecord,
@@ -43,12 +42,10 @@ from sqlbuild.virtual.state.models import (
     StateSchemaValidationResult,
     VirtualEnvironmentCheckpointModelRefRecord,
     VirtualEnvironmentCheckpointRecord,
-    VirtualEnvironmentCheckpointSeedRefRecord,
     VirtualEnvironmentModelRefRecord,
     VirtualEnvironmentNodeRefRecord,
     VirtualEnvironmentPythonNodeRefRecord,
     VirtualEnvironmentRecord,
-    VirtualEnvironmentSeedRefRecord,
 )
 from sqlbuild.virtual.state.types import (
     ModelVersionStatus,
@@ -83,10 +80,12 @@ from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     VALID_PAYLOAD,
     StateReadContractObservation,
     StateRefContractObservation,
+    build_production_shaped_microbatch_event,
     exercise_state_read_contract,
     exercise_state_ref_contract,
 )
 from tests.integration.src.sqlbuild.virtual.state.classes.postgres._test_types import (
+    MicrobatchBulkAppendTestCase,
     PostgresAtomicFinalizedVirtualPublishTestCase,
     PostgresConditionalPublicationPayloadContractTestCase,
     PostgresConditionalVirtualRefPublishTestCase,
@@ -104,7 +103,6 @@ from tests.integration.src.sqlbuild.virtual.state.classes.postgres._test_types i
     PostgresStateBackendOperationEventTestCase,
     PostgresStateBackendPythonNodeIdentityTestCase,
     PostgresStateBackendRefContractTestCase,
-    PostgresStateBackendSeedRefTestCase,
     PostgresStateBackendSourceFreshnessTestCase,
     PostgresStateBackendTableCreationTestCase,
     PostgresStateBackendTransactionRollbackTestCase,
@@ -150,10 +148,10 @@ def test_given_retired_postgres_rows_when_reading_history_then_only_active_event
     )
     scope: MicrobatchScope = postgres_microbatch_scope()
     event: MicrobatchEvent = postgres_microbatch_event(scope=scope, event_id="active-event")
-    postgres_state_backend.append_microbatch_event(
+    postgres_state_backend.append_microbatch_events(
         connection=postgres_state_connection,
         schema=postgres_state_schema,
-        event=event,
+        events=(event,),
     )
     insert_raw_postgres_microbatch_record(
         connection=postgres_state_connection,
@@ -368,6 +366,60 @@ def test_given_invalid_conditional_payload_when_postgres_publishes_then_contract
 @pytest.mark.parametrize(
     "test_case",
     [
+        MicrobatchBulkAppendTestCase(
+            description="replay requirement with no completion or observation facts",
+            record_type=MicrobatchRecordType.REPLAY_REQUIREMENT,
+        ),
+        MicrobatchBulkAppendTestCase(
+            description="executed partition completion with no observation facts",
+            record_type=MicrobatchRecordType.PARTITION_COMPLETION,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_all_null_nullable_columns_when_bulk_appending_then_postgres_persists_idempotently(
+    test_case: MicrobatchBulkAppendTestCase,
+    postgres_state_backend: PostgresStateBackend,
+    postgres_state_connection: Any,
+    postgres_state_schema: str,
+) -> None:
+    postgres_state_backend.initialize(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        sqlbuild_version="test",
+    )
+    scope: MicrobatchScope = MicrobatchScope(
+        scope_kind="virtual_physical",
+        scope_key="postgres:state:orders:F2:analytics.orders__F2",
+        model_name="orders",
+        target_database="warehouse",
+        target_schema="analytics",
+        target_name="orders__F2",
+        physical_generation_id="F2:analytics.orders__F2",
+        virtual_environment_name="dev",
+        virtual_model_version_hash="F2",
+    )
+    event: MicrobatchEvent = build_production_shaped_microbatch_event(
+        scope=scope, record_type=test_case.record_type
+    )
+
+    first: MicrobatchWriteResult = postgres_state_backend.append_microbatch_events(
+        connection=postgres_state_connection, schema=postgres_state_schema, events=(event,)
+    )
+    second: MicrobatchWriteResult = postgres_state_backend.append_microbatch_events(
+        connection=postgres_state_connection, schema=postgres_state_schema, events=(event,)
+    )
+
+    history: tuple[MicrobatchEvent, ...] = postgres_state_backend.read_microbatch_scope_history(
+        connection=postgres_state_connection, schema=postgres_state_schema, scope=scope
+    )
+    assert (first.inserted, second.already_existing) == test_case.expected_write_counts
+    assert history == (event,)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         PostgresMicrobatchStateRoundTripTestCase(
             description="postgres events are idempotent",
             expected_event_count=1,
@@ -419,15 +471,15 @@ def test_given_postgres_microbatch_event_when_appending_then_scope_history_round
         created_at=datetime(2026, 1, 1),
     )
 
-    postgres_state_backend.append_microbatch_event(
+    postgres_state_backend.append_microbatch_events(
         connection=postgres_state_connection,
         schema=postgres_state_schema,
-        event=event,
+        events=(event,),
     )
-    postgres_state_backend.append_microbatch_event(
+    postgres_state_backend.append_microbatch_events(
         connection=postgres_state_connection,
         schema=postgres_state_schema,
-        event=event,
+        events=(event,),
     )
 
     history: tuple[MicrobatchEvent, ...] = postgres_state_backend.read_microbatch_scope_history(
@@ -977,15 +1029,6 @@ def test_given_postgres_state_backend_when_upserting_core_records_then_round_tri
         == replaced_relation_record
     )
     assert (
-        postgres_state_backend.get_physical_relation_ancestry(
-            connection=postgres_state_connection,
-            schema=postgres_state_schema,
-            model_name=test_case.expected_model_name,
-            version_hash=test_case.expected_version_hash,
-        )
-        == ancestry_record
-    )
-    assert (
         postgres_state_backend.get_virtual_environment(
             connection=postgres_state_connection,
             schema=postgres_state_schema,
@@ -1138,170 +1181,6 @@ def test_given_postgres_backend_when_replacing_source_freshness_then_round_trips
             connection=postgres_state_connection,
             schema=postgres_state_schema,
             virtual_environment_name=test_case.virtual_environment_name,
-        )
-        == ()
-    )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        PostgresStateBackendSeedRefTestCase(
-            description="persists seed versions and replaces seed refs",
-            sqlbuild_version="0.0.test",
-            virtual_environment_name="dev",
-            seed_name="country_codes",
-            version_hash="seed123",
-            identity_metadata_hash="meta123",
-            identity_metadata_json_b64="e30=",
-            expected_ref_count_after_replace=0,
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_postgres_backend_when_replacing_seed_refs_then_round_trips_records(
-    test_case: PostgresStateBackendSeedRefTestCase,
-    postgres_state_backend: PostgresStateBackend,
-    postgres_state_connection: Any,
-    postgres_state_schema: str,
-) -> None:
-    postgres_state_backend.initialize(
-        connection=postgres_state_connection,
-        schema=postgres_state_schema,
-        sqlbuild_version=test_case.sqlbuild_version,
-    )
-    seed_version: SeedVersionRecord = SeedVersionRecord(
-        seed_name=test_case.seed_name,
-        version_hash=test_case.version_hash,
-        identity_metadata_hash=test_case.identity_metadata_hash,
-        identity_metadata_json_b64=test_case.identity_metadata_json_b64,
-        status=ModelVersionStatus.READY,
-    )
-    postgres_state_backend.upsert_seed_version(
-        connection=postgres_state_connection,
-        schema=postgres_state_schema,
-        record=seed_version,
-    )
-    postgres_state_backend.replace_virtual_environment_seed_refs(
-        connection=postgres_state_connection,
-        schema=postgres_state_schema,
-        virtual_environment_name=test_case.virtual_environment_name,
-        refs=(
-            VirtualEnvironmentSeedRefRecord(
-                virtual_environment_name=test_case.virtual_environment_name,
-                seed_name=test_case.seed_name,
-                version_hash=test_case.version_hash,
-            ),
-        ),
-    )
-
-    assert (
-        postgres_state_backend.get_seed_version(
-            connection=postgres_state_connection,
-            schema=postgres_state_schema,
-            seed_name=test_case.seed_name,
-            version_hash=test_case.version_hash,
-        )
-        == seed_version
-    )
-    refs: tuple[VirtualEnvironmentSeedRefRecord, ...] = (
-        postgres_state_backend.get_virtual_environment_seed_refs(
-            connection=postgres_state_connection,
-            schema=postgres_state_schema,
-            virtual_environment_name=test_case.virtual_environment_name,
-        )
-    )
-    assert refs == (
-        VirtualEnvironmentSeedRefRecord(
-            virtual_environment_name=test_case.virtual_environment_name,
-            seed_name=test_case.seed_name,
-            version_hash=test_case.version_hash,
-        ),
-    )
-
-    postgres_state_backend.replace_virtual_environment_seed_refs(
-        connection=postgres_state_connection,
-        schema=postgres_state_schema,
-        virtual_environment_name=test_case.virtual_environment_name,
-        refs=(),
-    )
-    assert (
-        len(
-            postgres_state_backend.get_virtual_environment_seed_refs(
-                connection=postgres_state_connection,
-                schema=postgres_state_schema,
-                virtual_environment_name=test_case.virtual_environment_name,
-            )
-        )
-        == test_case.expected_ref_count_after_replace
-    )
-    postgres_state_backend.replace_virtual_environment_seed_refs(
-        connection=postgres_state_connection,
-        schema=postgres_state_schema,
-        virtual_environment_name=test_case.virtual_environment_name,
-        refs=(
-            VirtualEnvironmentSeedRefRecord(
-                virtual_environment_name=test_case.virtual_environment_name,
-                seed_name=test_case.seed_name,
-                version_hash=test_case.version_hash,
-            ),
-        ),
-    )
-    postgres_state_backend.delete_virtual_environment(
-        connection=postgres_state_connection,
-        schema=postgres_state_schema,
-        virtual_environment_name=test_case.virtual_environment_name,
-    )
-    assert (
-        postgres_state_backend.get_virtual_environment_seed_refs(
-            connection=postgres_state_connection,
-            schema=postgres_state_schema,
-            virtual_environment_name=test_case.virtual_environment_name,
-        )
-        == ()
-    )
-
-    checkpoint: VirtualEnvironmentCheckpointRecord = VirtualEnvironmentCheckpointRecord(
-        checkpoint_id="chk_seed",
-        virtual_environment_name=test_case.virtual_environment_name,
-    )
-    postgres_state_backend.create_virtual_environment_checkpoint(
-        connection=postgres_state_connection,
-        schema=postgres_state_schema,
-        checkpoint=checkpoint,
-        refs=(),
-        seed_refs=(
-            VirtualEnvironmentCheckpointSeedRefRecord(
-                checkpoint_id=checkpoint.checkpoint_id,
-                seed_name=test_case.seed_name,
-                version_hash=test_case.version_hash,
-            ),
-        ),
-    )
-    checkpoint_seed_refs: tuple[VirtualEnvironmentCheckpointSeedRefRecord, ...] = (
-        postgres_state_backend.get_virtual_environment_checkpoint_seed_refs(
-            connection=postgres_state_connection,
-            schema=postgres_state_schema,
-            checkpoint_id=checkpoint.checkpoint_id,
-        )
-    )
-    assert checkpoint_seed_refs == (
-        VirtualEnvironmentCheckpointSeedRefRecord(
-            checkpoint_id=checkpoint.checkpoint_id,
-            seed_name=test_case.seed_name,
-            version_hash=test_case.version_hash,
-        ),
-    )
-    postgres_state_backend.delete_virtual_environment_checkpoint(
-        connection=postgres_state_connection,
-        schema=postgres_state_schema,
-        checkpoint_id=checkpoint.checkpoint_id,
-    )
-    assert (
-        postgres_state_backend.get_virtual_environment_checkpoint_seed_refs(
-            connection=postgres_state_connection,
-            schema=postgres_state_schema,
-            checkpoint_id=checkpoint.checkpoint_id,
         )
         == ()
     )

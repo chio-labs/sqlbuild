@@ -271,9 +271,9 @@ def test_given_generic_audit_argument_when_mapping_then_generated_region_is_not_
         project_dir=tmp_path,
         file_path=audit,
         contents=contents,
-        body_start=10,
-        body_end=len(contents),
+        body_range=(10, len(contents)),
         context=context,
+        dialect="duckdb",
     )
     sentinel_offset: int = body.lint_text.index("__sqlbuild_audit_parameter_0__")
     mapped: MappedOffset = map_expanded_offset(offset=sentinel_offset, passes=body.passes)

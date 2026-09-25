@@ -67,11 +67,6 @@ from sqlbuild.virtual.executor.constants import (
 from sqlbuild.virtual.executor.models import VirtualCloneResult
 
 _JSON_VERSION: int = 1
-_SUCCESS_STATUS: str = "success"
-_FAILED_STATUS: str = "failed"
-_SKIPPED_STATUS: str = "skipped"
-_WARNING_STATUS: str = "warning"
-_WARN_STATUS: str = "warn"
 _SCENARIO_RESOURCE_NAMESPACE: ContextVar[str | None] = ContextVar(
     "sqlbuild_scenario_resource_namespace", default=None
 )
@@ -623,15 +618,6 @@ def _build_projection_is_partial(
             len(end_audit_results) != len(result.end_audit_results),
         )
     )
-
-
-def _projected_asset_summary(*, assets: tuple[dict[str, object], ...]) -> dict[str, int]:
-    return {
-        "success_count": sum(1 for asset in assets if asset.get("status") == _SUCCESS_STATUS),
-        "failure_count": sum(1 for asset in assets if asset.get("status") == _FAILED_STATUS),
-        "skipped_count": sum(1 for asset in assets if asset.get("status") == _SKIPPED_STATUS),
-        "warning_count": sum(1 for asset in assets if asset.get("status") == _WARNING_STATUS),
-    }
 
 
 def _format_model_assets(

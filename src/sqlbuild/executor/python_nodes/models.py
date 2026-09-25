@@ -123,14 +123,6 @@ from sqlbuild.executor.python_nodes.classes.run_state import PythonNodeRunState 
 
 
 @dataclass(frozen=True)
-class PythonNodeExecutorResult:
-    """Result bundle for one in-process Python-node executor run."""
-
-    results: tuple[PythonNodeExecutionResult, ...]
-    run_state: PythonNodeRunState
-
-
-@dataclass(frozen=True)
 class PythonIngressLoaderExecutorResult:
     """Result bundle for pre-SQL Python/loader lifecycle execution."""
 

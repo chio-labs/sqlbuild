@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-type PathDefaultsMap = dict[str, dict[str, object]]
-
 
 class EventExportSeverity(StrEnum):
     """Severity used to filter exported lifecycle events."""

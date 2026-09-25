@@ -14,12 +14,6 @@ from sqlbuild.executor.load.models import LoaderRowsSchema
 from sqlbuild.spec.contracts.models import SourceColumnEntry
 
 
-def normalize_loader_rows(value: object) -> tuple[dict[str, object], ...]:
-    """Validate and normalize a loader return value to dict rows."""
-
-    return tuple(iter_normalized_loader_rows(value))
-
-
 def iter_loader_row_batches(
     *, value: object, batch_size: int
 ) -> Iterator[tuple[dict[str, object], ...]]:

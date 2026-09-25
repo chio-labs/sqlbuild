@@ -518,39 +518,6 @@ def _polyglot_column_table_name(column: Any) -> str:
     return raw_name if isinstance(raw_name, str) else ""
 
 
-def _polyglot_columns_in_expression(expression: Any) -> tuple[Any, ...]:
-    if str(getattr(expression, "kind", "")) == POLYGLOT_KIND_COLUMN:
-        return (expression,)
-    columns: list[Any] = []
-    seen: set[int] = set()
-
-    def visit(*, node: Any, visited: set[int], found: list[Any]) -> tuple[set[int], list[Any]]:
-        node_id: int = id(node)
-        if node_id in visited:
-            return visited, found
-        visited = visited | {node_id}
-        if str(getattr(node, "kind", "")) == POLYGLOT_KIND_COLUMN:
-            return visited, [*found, node]
-        for child in _polyglot_child_expressions(node):
-            visited, found = visit(node=child, visited=visited, found=found)
-        return visited, found
-
-    seen, columns = visit(node=expression, visited=seen, found=columns)
-    return tuple(columns)
-
-
-def _polyglot_child_expressions(expression: Any) -> tuple[Any, ...]:
-    children: list[Any] = []
-    for attr_name in ("this", "expression", "left", "right"):
-        child: Any | None = getattr(expression, attr_name, None)
-        if child is not None and str(getattr(child, "kind", "")):
-            children.append(child)
-    for child in getattr(expression, "expressions", ()) or ():
-        if str(getattr(child, "kind", "")):
-            children.append(child)
-    return tuple(children)
-
-
 def _polyglot_classify_transform(
     *,
     expression: Any,

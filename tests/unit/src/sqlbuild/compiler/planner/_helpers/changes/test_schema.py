@@ -95,7 +95,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types impor
                 SchemaFinding(
                     kind=SchemaChangeKind.COLUMN_ADDED,
                     column_name="new_col",
-                    source=SchemaColumnSource.SQLGLOT,
+                    source=SchemaColumnSource.SQL_ANALYSIS,
                 ),
             ),
         ),
@@ -109,7 +109,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types impor
                 SchemaFinding(
                     kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
                     column_name="amount",
-                    source=SchemaColumnSource.SQLGLOT,
+                    source=SchemaColumnSource.SQL_ANALYSIS,
                     expected_type="DECIMAL(10, 2)",
                     actual_type="INTEGER",
                 ),
@@ -149,7 +149,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types impor
                 SchemaFinding(
                     kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
                     column_name="amount",
-                    source=SchemaColumnSource.SQLGLOT,
+                    source=SchemaColumnSource.SQL_ANALYSIS,
                     expected_type="DECIMAL(10, 2)",
                     actual_type="decimal(10,3)",
                 ),
@@ -189,7 +189,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types impor
                 SchemaFinding(
                     kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
                     column_name="amount",
-                    source=SchemaColumnSource.SQLGLOT,
+                    source=SchemaColumnSource.SQL_ANALYSIS,
                     expected_type="FLOAT",
                     actual_type="INTEGER",
                 ),
@@ -234,7 +234,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types impor
                 SchemaFinding(
                     kind=SchemaChangeKind.COLUMN_REMOVED,
                     column_name="old_col",
-                    source=SchemaColumnSource.SQLGLOT,
+                    source=SchemaColumnSource.SQL_ANALYSIS,
                     actual_type="BOOLEAN",
                 ),
             ),
@@ -256,14 +256,14 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types impor
                 SchemaFinding(
                     kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
                     column_name="amount",
-                    source=SchemaColumnSource.SQLGLOT,
+                    source=SchemaColumnSource.SQL_ANALYSIS,
                     expected_type="FLOAT",
                     actual_type="INTEGER",
                 ),
                 SchemaFinding(
                     kind=SchemaChangeKind.COLUMN_ADDED,
                     column_name="loaded_at",
-                    source=SchemaColumnSource.SQLGLOT,
+                    source=SchemaColumnSource.SQL_ANALYSIS,
                     expected_type="TIMESTAMP",
                 ),
             ),

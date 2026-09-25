@@ -25,3 +25,12 @@ class InsertFaultDuckDbAdapter(DuckDbAdapter):
     def _raise_insert_failure(self, *, connection: Any, sql: str) -> Any:
         del connection, sql
         raise RuntimeError("injected snapshot insert failure")
+
+
+def count_relation_rows(*, adapter: DuckDbAdapter, connection: Any, relation: str) -> int:
+    """Return ``COUNT(*)`` for one relation through the adapter connection."""
+
+    result: Any = adapter.execute(
+        connection=connection, sql=f"SELECT COUNT(*) FROM {relation}"
+    ).fetchone()
+    return int(result[0])

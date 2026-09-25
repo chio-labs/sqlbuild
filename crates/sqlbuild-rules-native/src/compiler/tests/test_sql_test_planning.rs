@@ -5,7 +5,7 @@ use crate::compiler::tests::helpers::{
     mock_read_through_helper_brings_its_mock_dependencies_into_scope,
     model_test_batch_returns_ordered_artifact, plan_without_rendering_returns_executable_steps,
     scoped_helper_named_like_generated_cte_is_rejected,
-    shared_textual_chain_renders_each_model_once,
+    shared_textual_chain_renders_each_model_once, textual_assertion_with_clause_merges_lifted_ctes,
     unicode_cte_after_leading_with_preserves_identifier,
     unresolved_reference_fast_rejection_preserves_warning, upstream_fallback_resolves,
 };
@@ -89,6 +89,11 @@ fn given_sql_test_planning_cases_when_exercising_native_planner_then_expected_be
         SqlTestPlanningTestCase {
             description: "scoped helper named like a generated CTE is rejected",
             run: scoped_helper_named_like_generated_cte_is_rejected,
+            expected_success: true,
+        },
+        SqlTestPlanningTestCase {
+            description: "textual assertion WITH clause merges lifted CTEs",
+            run: textual_assertion_with_clause_merges_lifted_ctes,
             expected_success: true,
         },
     ];

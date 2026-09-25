@@ -20,9 +20,6 @@ from sqlbuild.compiler.compile._helpers.analysis.cte_facts import (
 )
 from sqlbuild.compiler.compile.constants import (
     DECIMAL_SQL_TYPE_NAME,
-    FULL_JOIN_SIDE,
-    LEFT_JOIN_SIDE,
-    RIGHT_JOIN_SIDE,
     SQL_QUALIFIER_SEPARATOR_TOKEN,
     SQL_WILDCARD_TOKEN,
 )
@@ -447,61 +444,6 @@ def _analyze_columns_and_lineage_from_polyglot_ast(
     return tuple(columns), tuple(lineage_columns), has_star
 
 
-def _extract_polyglot_lineage_facts(
-    *,
-    parsed: Any,
-    references: tuple[CompileSqlReference, ...],
-) -> tuple[tuple[CompiledLineageColumnFact, ...], bool]:
-    if str(getattr(parsed, "kind", "")) != _POLYGLOT_KIND_SELECT:
-        return (), False
-    alias_map: dict[str, tuple[CompiledResourceType, str]] = _polyglot_reference_alias_map(
-        parsed=parsed,
-        references=references,
-    )
-    unqualified_resource: tuple[CompiledResourceType, str] | None = _single_alias_resource(
-        alias_map
-    )
-    lineage_columns: list[CompiledLineageColumnFact] = []
-    has_star: bool = False
-    projection: Any
-    for projection in getattr(parsed, "expressions", ()):
-        projection = _unwrap_polyglot_annotations(projection)
-        if bool(getattr(projection, "is_star", False)):
-            has_star = True
-            continue
-        inner: Any = (
-            projection.this
-            if str(getattr(projection, "kind", "")) == _POLYGLOT_KIND_ALIAS
-            else projection
-        )
-        if bool(getattr(inner, "is_star", False)):
-            has_star = True
-            continue
-        output_column: str = str(getattr(projection, "output_name", "") or "")
-        if not output_column or output_column == SQL_WILDCARD_TOKEN:
-            continue
-        upstream_columns, confidence = _polyglot_lineage_upstream_columns(
-            projection=projection,
-            alias_map=alias_map,
-            unqualified_resource=unqualified_resource,
-        )
-        transform_kind: ColumnTransformKind = _polyglot_lineage_transform_kind(
-            expression=inner,
-            has_upstream=bool(upstream_columns),
-        )
-        lineage_columns.append(
-            CompiledLineageColumnFact(
-                output_column=output_column,
-                upstream_columns=upstream_columns,
-                transform_kind=transform_kind,
-                confidence=confidence
-                if upstream_columns or transform_kind == ColumnTransformKind.CONSTANT
-                else ColumnLineageConfidence.UNKNOWN,
-            )
-        )
-    return tuple(lineage_columns), has_star
-
-
 def _polyglot_reference_alias_map(
     *, parsed: Any, references: tuple[CompileSqlReference, ...]
 ) -> dict[str, tuple[CompiledResourceType, str]]:
@@ -893,27 +835,6 @@ def _infer_polyglot_column_nullability(
     return InferredNullability.UNKNOWN
 
 
-def _polyglot_columns_in_expression(expression: Any) -> tuple[Any, ...]:
-    if str(getattr(expression, "kind", "")) == _POLYGLOT_KIND_COLUMN:
-        return (expression,)
-    columns: list[Any] = []
-    seen: set[int] = set()
-
-    def visit(*, node: Any, visited: set[int], found: list[Any]) -> tuple[set[int], list[Any]]:
-        node_id: int = id(node)
-        if node_id in visited:
-            return visited, found
-        visited = visited | {node_id}
-        if str(getattr(node, "kind", "")) == _POLYGLOT_KIND_COLUMN:
-            return visited, [*found, node]
-        for child in _polyglot_child_expressions(node):
-            visited, found = visit(node=child, visited=visited, found=found)
-        return visited, found
-
-    seen, columns = visit(node=expression, visited=seen, found=columns)
-    return tuple(columns)
-
-
 def _polyglot_column_table_name(column: Any) -> str:
     payload: object = column.to_dict().get(_POLYGLOT_PAYLOAD_COLUMN, {})
     if not isinstance(payload, dict):
@@ -923,18 +844,6 @@ def _polyglot_column_table_name(column: Any) -> str:
         return ""
     raw_name: object = table_payload.get(_POLYGLOT_PAYLOAD_NAME)
     return raw_name if isinstance(raw_name, str) else ""
-
-
-def _polyglot_child_expressions(expression: Any) -> tuple[Any, ...]:
-    children: list[Any] = []
-    for attr_name in ("this", "expression", "left", "right"):
-        child: Any | None = getattr(expression, attr_name, None)
-        if child is not None and str(getattr(child, "kind", "")):
-            children.append(child)
-    for child in getattr(expression, "expressions", ()) or ():
-        if str(getattr(child, "kind", "")):
-            children.append(child)
-    return tuple(children)
 
 
 def _polyglot_expression_args(expression: Any) -> tuple[Any, ...]:
@@ -1010,13 +919,6 @@ def _polyglot_alias_nullability_from_select(
             column_nullability_by_table=column_nullability_by_table,
         )
     return alias_nullability
-
-
-def _polyglot_table_alias_or_name(table: Any) -> str:
-    alias_or_name: str = str(getattr(table, "alias_or_name", "") or "")
-    if alias_or_name:
-        return alias_or_name
-    return str(getattr(table, "name", "") or "")
 
 
 def _polyglot_table_payload_alias_and_name(table_payload: dict[str, object]) -> tuple[str, str]:
@@ -1109,102 +1011,6 @@ def _replace_table_function_calls_with_stubs(
         last_index = call_end + 1
     parts.append(query_sql[last_index:])
     return "".join(parts)
-
-
-def _find_outermost_select(*, parsed: Any, expressions_module: Any) -> Any | None:
-    """Find the outermost SELECT statement from a parsed expression."""
-
-    union_type: type[Any] = expressions_module.Union
-    select_type: type[Any] = expressions_module.Select
-    intersect_type: type[Any] = expressions_module.Intersect
-    except_type: type[Any] = expressions_module.Except
-
-    if isinstance(parsed, (union_type, intersect_type, except_type)):
-        return parsed.find(select_type)
-    if isinstance(parsed, select_type):
-        return parsed
-
-    body: Any | None = getattr(parsed, "this", None)
-    if body is None:
-        return None
-    if isinstance(body, (union_type, intersect_type, except_type)):
-        return body.find(select_type)
-    if isinstance(body, select_type):
-        return body
-    return parsed.find(select_type)
-
-
-def _is_set_operation(*, parsed: Any, expressions_module: Any) -> bool:
-    union_type: type[Any] = expressions_module.Union
-    intersect_type: type[Any] = expressions_module.Intersect
-    except_type: type[Any] = expressions_module.Except
-    if isinstance(parsed, (union_type, intersect_type, except_type)):
-        return True
-    body: Any | None = getattr(parsed, "this", None)
-    return isinstance(body, (union_type, intersect_type, except_type))
-
-
-def _extract_columns_from_select(
-    *,
-    select: Any,
-    expressions_module: Any,
-    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
-    infer_nullability: bool,
-    inference_profile: ExpressionInferenceProfile,
-) -> tuple[InferredColumn, ...]:
-    """Extract output column names and types from a SELECT's projection list."""
-
-    column_nullability_by_table = dict(column_nullability_by_table)
-    star_type: type[Any] = expressions_module.Star
-    annotated_type: type[Any] = expressions_module.Annotated
-    alias_type: type[Any] = expressions_module.Alias
-    column_type: type[Any] = expressions_module.Column
-    cast_type: type[Any] = expressions_module.Cast
-    try_cast_type: type[Any] = expressions_module.TryCast
-    alias_nullability: dict[str, InferredNullability] = _alias_nullability_from_select(
-        select=select,
-        expressions_module=expressions_module,
-        column_nullability_by_table=column_nullability_by_table,
-    )
-
-    projection_list: list[Any] = select.args.get("expressions", [])
-    columns: list[InferredColumn] = []
-
-    expression: Any
-    for expression in projection_list:
-        while isinstance(expression, annotated_type):
-            expression = expression.this
-        if isinstance(expression, star_type):
-            continue
-
-        name: str
-        inner: Any
-        if isinstance(expression, alias_type):
-            name = expression.alias
-            inner = expression.this
-        elif isinstance(expression, column_type):
-            name = expression.name
-            inner = expression
-        else:
-            continue
-
-        col_type: str | None = None
-        if isinstance(inner, (cast_type, try_cast_type)):
-            col_type = inner.to.sql()
-
-        nullability: InferredNullability = InferredNullability.UNKNOWN
-        if infer_nullability:
-            nullability = _infer_expression_nullability(
-                expression=inner,
-                expressions_module=expressions_module,
-                alias_nullability=alias_nullability,
-                column_nullability_by_table=column_nullability_by_table,
-                inference_profile=inference_profile,
-            )
-
-        columns.append(InferredColumn(name=name, type=col_type, nullability=nullability))
-
-    return tuple(columns)
 
 
 def _infer_expression_nullability(
@@ -1344,59 +1150,6 @@ def _expression_function_args(expression: Any) -> tuple[Any, ...]:
         args.append(primary_arg)
     args.extend(expression.expressions)
     return tuple(args)
-
-
-def _alias_nullability_from_select(
-    *,
-    select: Any,
-    expressions_module: Any,
-    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
-) -> dict[str, InferredNullability]:
-    table_type: type[Any] = expressions_module.Table
-    alias_nullability: dict[str, InferredNullability] = {}
-    current_aliases: set[str] = set()
-
-    from_expression: Any | None = select.args.get("from_")
-    from_table: Any | None = getattr(from_expression, "this", None)
-    if isinstance(from_table, table_type):
-        alias: str = _table_alias_or_name(from_table)
-        current_aliases.add(alias)
-        alias_nullability[alias] = InferredNullability.UNKNOWN
-        _copy_table_facts_to_alias(
-            alias=alias,
-            table_name=from_table.name,
-            column_nullability_by_table=column_nullability_by_table,
-        )
-
-    for join in select.args.get("joins") or []:
-        joined_table: Any | None = join.this
-        if not isinstance(joined_table, table_type):
-            continue
-        joined_alias: str = _table_alias_or_name(joined_table)
-        side: str = str(join.args.get("side") or "").upper()
-        if side == LEFT_JOIN_SIDE:
-            alias_nullability[joined_alias] = InferredNullability.NULLABLE
-        elif side == RIGHT_JOIN_SIDE:
-            for alias in current_aliases:
-                alias_nullability[alias] = InferredNullability.NULLABLE
-            alias_nullability[joined_alias] = InferredNullability.UNKNOWN
-        elif side == FULL_JOIN_SIDE:
-            for alias in current_aliases:
-                alias_nullability[alias] = InferredNullability.NULLABLE
-            alias_nullability[joined_alias] = InferredNullability.NULLABLE
-        else:
-            alias_nullability[joined_alias] = InferredNullability.UNKNOWN
-        current_aliases.add(joined_alias)
-        _copy_table_facts_to_alias(
-            alias=joined_alias,
-            table_name=joined_table.name,
-            column_nullability_by_table=column_nullability_by_table,
-        )
-    return alias_nullability
-
-
-def _table_alias_or_name(table: Any) -> str:
-    return str(table.alias_or_name or table.name)
 
 
 def _copy_table_facts_to_alias(

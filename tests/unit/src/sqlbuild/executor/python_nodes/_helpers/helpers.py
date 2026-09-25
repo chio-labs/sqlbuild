@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable, Iterator
+from dataclasses import replace
 from datetime import UTC, datetime
 from itertools import chain, repeat
 from pathlib import Path
@@ -34,9 +36,17 @@ from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.node_results.main._direct_store import build_direct_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultEnvelope, NodeResultRecord
+from sqlbuild.executor.python_nodes._helpers.execution import execute_ready_python_node
 from sqlbuild.executor.python_nodes.constants import MISSING_DEFAULT
-from sqlbuild.executor.python_nodes.models import BasePythonNodeContext, PythonNodeRunState
+from sqlbuild.executor.python_nodes.models import (
+    BasePythonNodeContext,
+    PythonNodeExecutionResult,
+    PythonNodeRunState,
+    PythonNodeRuntime,
+)
+from sqlbuild.executor.python_nodes.types import ExecutablePythonNode
 from sqlbuild.executor.scheduling.main._unlock_downstream import unlock_downstream_python_nodes
 from sqlbuild.executor.scheduling.models import LifecycleExecutionNode
 from sqlbuild.observability import LifecycleEvent
@@ -49,6 +59,43 @@ from tests.unit.src.sqlbuild.compiler.python_nodes._helpers.helpers import (
     build_intermediate_loader_asset_dependency_python_node_graph,
     build_orders_python_node_graph,
 )
+
+
+def execute_ordered_test_nodes(
+    *,
+    nodes: tuple[ExecutablePythonNode, ...],
+    runtime: PythonNodeRuntime,
+    statement_recorder: StatementRecorder,
+    sleep: Callable[[float], None] = time.sleep,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> tuple[PythonNodeExecutionResult, ...]:
+    """Exercise the live ready-node entry point in fixture order, without a second scheduler."""
+
+    run_state: PythonNodeRunState = PythonNodeRunState()
+    runtime = replace(
+        runtime,
+        result_store=build_direct_node_result_store(
+            adapter=runtime.adapter,
+            connection=runtime.connection,
+            database=runtime.default_database,
+            schema=runtime.default_schema,
+        ),
+    )
+    results: dict[object, PythonNodeExecutionResult] = {}
+    node: ExecutablePythonNode
+    for node in nodes:
+        result: PythonNodeExecutionResult = execute_ready_python_node(
+            node=node,
+            upstream_results=tuple(results[dependency] for dependency in node.depends_on),
+            runtime=runtime,
+            statement_recorder=statement_recorder,
+            run_state=run_state,
+            sleep=sleep,
+            monotonic=monotonic,
+        )
+        run_state.record_result(node_function=node.function, result=result)
+        results[node.function] = result
+    return tuple(results.values())
 
 
 class ExecutionSlackProvider(Provider):

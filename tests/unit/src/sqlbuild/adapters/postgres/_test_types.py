@@ -118,3 +118,10 @@ class PostgresRenderSourceFreshnessQueryTestCase:
     source_is_subquery: bool
     where_sql: str
     expected_sql: str
+
+
+@dataclass(frozen=True)
+class PostgresDependentViewRebindTestCase:
+    description: str
+    catalog_rows: tuple[tuple[object, ...], ...]
+    expected_statements: tuple[str, ...]

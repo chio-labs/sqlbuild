@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
+from sqlbuild.adapter.contract.types import MigrationTransfer
 
 
 @dataclass(frozen=True)
@@ -25,35 +26,12 @@ class AdapterCloneModeTestCase:
 
 
 @dataclass(frozen=True)
-class AdapterRelationMaxCursorTestCase:
-    description: str
-    adapter: StrictAdapter
-    connection: object
-    relation: str
-    cursor_column: str
-    expected_value: object | None
-    expected_sql: tuple[str, ...]
-    expected_closed_cursor_count: int
-
-
-@dataclass(frozen=True)
 class AdapterEligibleMaxCursorSqlTestCase:
     description: str
     adapter: StrictAdapter
     cursor_column: str
     maximum_allowed: str
     is_date: bool
-    expected_sql: str
-
-
-@dataclass(frozen=True)
-class AdapterSeedSelectAfterCursorTestCase:
-    description: str
-    adapter: StrictAdapter
-    origin: str
-    cursor_column: str
-    cursor_start_exclusive: str
-    cursor_type: str | None
     expected_sql: str
 
 
@@ -76,3 +54,21 @@ class AdapterRelationAgeMetadataCapabilityTestCase:
     description: str
     adapter: StrictAdapter
     expected_supported: bool
+
+
+@dataclass(frozen=True)
+class AdapterMigrationStageTestCase:
+    description: str
+    adapter: BaseAdapter
+    origin_is_transient: bool
+    stage_is_transient: bool | None
+    expected_transfer: MigrationTransfer
+    expected_statements: tuple[str, ...]
+    expected_fallback_statements: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class AdapterTransactionalDdlTestCase:
+    description: str
+    adapter: BaseAdapter
+    expected_transactional: bool

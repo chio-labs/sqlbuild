@@ -13,20 +13,6 @@ from sqlbuild.microbatches.constants import (
 from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope, MicrobatchWriteResult
 
 
-def append_duckdb_microbatch_event(
-    *, connection: Any, qualified_table: str, event: MicrobatchEvent
-) -> None:
-    """Append one idempotent logical event to DuckDB state."""
-
-    placeholders: str = ", ".join("?" for _ in MICROBATCH_COLUMNS)
-    connection.execute(
-        f"INSERT INTO {qualified_table} ({', '.join(MICROBATCH_COLUMNS)}) "
-        f"SELECT {placeholders} WHERE NOT EXISTS "
-        f"(SELECT 1 FROM {qualified_table} WHERE event_id = ?)",
-        [*MicrobatchEventCodec.values(event), event.event_id],
-    )
-
-
 def append_duckdb_microbatch_events(
     *, connection: Any, qualified_table: str, events: tuple[MicrobatchEvent, ...]
 ) -> MicrobatchWriteResult:

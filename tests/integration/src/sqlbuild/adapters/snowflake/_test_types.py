@@ -117,14 +117,6 @@ class SnowflakeTableTypeConversionTestCase:
 
 
 @dataclass(frozen=True)
-class SnowflakeE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    expected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
-    expected_return_code: int = 0
-
-
-@dataclass(frozen=True)
 class SnowflakeCostTestCase:
     description: str
     expected_statuses: frozenset[CostStatus]

@@ -15,12 +15,10 @@ from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.executor.node_results.classes.direct_store import DirectNodeResultStore
 from sqlbuild.executor.node_results.main._direct_store import build_direct_node_result_store
 from sqlbuild.executor.python_nodes._helpers.execution import (
-    execute_python_nodes,
     execute_ready_python_node,
 )
 from sqlbuild.executor.python_nodes.models import (
     PythonNodeExecutionResult,
-    PythonNodeExecutorResult,
     PythonNodeResult,
     PythonNodeRunState,
     PythonNodeRuntime,
@@ -50,6 +48,7 @@ from tests.unit.src.sqlbuild.executor.python_nodes._helpers.helpers import (
     context_provider_asset,
     context_provider_task,
     cursor_window,
+    execute_ordered_test_nodes,
     export_after_failure,
     export_after_mixed_skip,
     export_after_skip,
@@ -90,7 +89,7 @@ def test_given_malformed_task_return_when_executing_then_operation_fails_once(
         return PythonNodeResult(payload={"invalid": True}, materialized=True)
 
     with invocation_scope("inv-malformed-task"), dispatcher_scope(dispatcher):
-        result: PythonNodeExecutorResult = execute_python_nodes(
+        result: tuple[PythonNodeExecutionResult, ...] = execute_ordered_test_nodes(
             nodes=(
                 DiscoveredTaskFunction(
                     file_path=Path("/project/tasks/bad.py"),
@@ -113,8 +112,8 @@ def test_given_malformed_task_return_when_executing_then_operation_fails_once(
         )
 
     operation_events: tuple[LifecycleEvent, ...] = python_operation_events(events)
-    assert result.results[0].status == PythonNodeStatus.FAILED
-    assert test_case.expected_error_fragment in (result.results[0].error_message or "")
+    assert result[0].status == PythonNodeStatus.FAILED
+    assert test_case.expected_error_fragment in (result[0].error_message or "")
     assert tuple(event.event_type for event in operation_events) == (
         "operation_started",
         "operation_failed",
@@ -273,7 +272,7 @@ def test_given_task_asset_chain_when_executing_python_nodes_then_records_results
         ),
     )
 
-    result: PythonNodeExecutorResult = execute_python_nodes(
+    result: tuple[PythonNodeExecutionResult, ...] = execute_ordered_test_nodes(
         nodes=nodes,
         statement_recorder=StatementRecorder(),
         runtime=PythonNodeRuntime(
@@ -288,19 +287,13 @@ def test_given_task_asset_chain_when_executing_python_nodes_then_records_results
         ),
     )
 
-    assert (
-        tuple(node_result.node_name for node_result in result.results) == test_case.expected_names
-    )
-    assert (
-        tuple(node_result.status for node_result in result.results) == test_case.expected_statuses
-    )
-    assert (
-        tuple(node_result.payload for node_result in result.results) == test_case.expected_payloads
-    )
-    assert tuple(node_result.materialized for node_result in result.results) == (
+    assert tuple(node_result.node_name for node_result in result) == test_case.expected_names
+    assert tuple(node_result.status for node_result in result) == test_case.expected_statuses
+    assert tuple(node_result.payload for node_result in result) == test_case.expected_payloads
+    assert tuple(node_result.materialized for node_result in result) == (
         test_case.expected_materialized
     )
-    assert tuple(node_result.error_message for node_result in result.results) == (
+    assert tuple(node_result.error_message for node_result in result) == (
         test_case.expected_error_fragments
     )
 
@@ -343,7 +336,7 @@ def test_given_provider_parameters_when_executing_python_nodes_then_providers_ar
         {"slack_provider": ExecutionSlackProvider(label="slack")}
     ).providers
 
-    result: PythonNodeExecutorResult = execute_python_nodes(
+    result: tuple[PythonNodeExecutionResult, ...] = execute_ordered_test_nodes(
         nodes=nodes,
         statement_recorder=StatementRecorder(),
         runtime=PythonNodeRuntime(
@@ -358,9 +351,9 @@ def test_given_provider_parameters_when_executing_python_nodes_then_providers_ar
         ),
     )
 
-    assert tuple(item.node_name for item in result.results) == test_case.expected_names
-    assert tuple(item.status for item in result.results) == test_case.expected_statuses
-    assert tuple(item.payload for item in result.results) == test_case.expected_payloads
+    assert tuple(item.node_name for item in result) == test_case.expected_names
+    assert tuple(item.status for item in result) == test_case.expected_statuses
+    assert tuple(item.payload for item in result) == test_case.expected_payloads
 
 
 @pytest.mark.parametrize(
@@ -401,7 +394,7 @@ def test_given_provider_container_when_executing_python_nodes_then_context_expos
         {"slack_provider": ExecutionSlackProvider(label="slack")}
     ).providers
 
-    result: PythonNodeExecutorResult = execute_python_nodes(
+    result: tuple[PythonNodeExecutionResult, ...] = execute_ordered_test_nodes(
         nodes=nodes,
         statement_recorder=StatementRecorder(),
         runtime=PythonNodeRuntime(
@@ -416,9 +409,9 @@ def test_given_provider_container_when_executing_python_nodes_then_context_expos
         ),
     )
 
-    assert tuple(item.node_name for item in result.results) == test_case.expected_names
-    assert tuple(item.status for item in result.results) == test_case.expected_statuses
-    assert tuple(item.payload for item in result.results) == test_case.expected_payloads
+    assert tuple(item.node_name for item in result) == test_case.expected_names
+    assert tuple(item.status for item in result) == test_case.expected_statuses
+    assert tuple(item.payload for item in result) == test_case.expected_payloads
 
 
 @pytest.mark.parametrize(
@@ -458,7 +451,7 @@ def test_given_missing_provider_container_when_executing_python_nodes_then_failu
         ),
     )
 
-    result: PythonNodeExecutorResult = execute_python_nodes(
+    result: tuple[PythonNodeExecutionResult, ...] = execute_ordered_test_nodes(
         nodes=nodes,
         statement_recorder=StatementRecorder(),
         runtime=PythonNodeRuntime(
@@ -472,11 +465,11 @@ def test_given_missing_provider_container_when_executing_python_nodes_then_failu
         ),
     )
 
-    assert tuple(item.node_name for item in result.results) == test_case.expected_names
-    assert tuple(item.status for item in result.results) == test_case.expected_statuses
-    assert tuple(item.payload for item in result.results) == test_case.expected_payloads
-    assert tuple(item.materialized for item in result.results) == test_case.expected_materialized
-    for item, expected in zip(result.results, test_case.expected_error_fragments, strict=True):
+    assert tuple(item.node_name for item in result) == test_case.expected_names
+    assert tuple(item.status for item in result) == test_case.expected_statuses
+    assert tuple(item.payload for item in result) == test_case.expected_payloads
+    assert tuple(item.materialized for item in result) == test_case.expected_materialized
+    for item, expected in zip(result, test_case.expected_error_fragments, strict=True):
         assert expected is not None
         assert expected in (item.error_message or "")
 
@@ -500,7 +493,7 @@ def test_given_missing_provider_container_when_executing_python_nodes_then_failu
 def test_given_missing_context_provider_when_executing_python_node_then_failure_is_recorded(
     test_case: PythonNodeExecutorTestCase,
 ) -> None:
-    result: PythonNodeExecutorResult = execute_python_nodes(
+    result: tuple[PythonNodeExecutionResult, ...] = execute_ordered_test_nodes(
         nodes=(
             DiscoveredTaskFunction(
                 file_path=Path("/project/tasks/provider.py"),
@@ -521,12 +514,12 @@ def test_given_missing_context_provider_when_executing_python_node_then_failure_
         ),
     )
 
-    assert tuple(item.node_name for item in result.results) == test_case.expected_names
-    assert tuple(item.status for item in result.results) == test_case.expected_statuses
-    assert tuple(item.payload for item in result.results) == test_case.expected_payloads
+    assert tuple(item.node_name for item in result) == test_case.expected_names
+    assert tuple(item.status for item in result) == test_case.expected_statuses
+    assert tuple(item.payload for item in result) == test_case.expected_payloads
     expected_error_fragment: str | None = test_case.expected_error_fragments[0]
     assert expected_error_fragment is not None
-    assert expected_error_fragment in (result.results[0].error_message or "")
+    assert expected_error_fragment in (result[0].error_message or "")
 
 
 @pytest.mark.parametrize(
@@ -649,7 +642,7 @@ def test_given_cursor_overrides_when_executing_python_nodes_then_context_receive
         ),
     )
 
-    result: PythonNodeExecutorResult = execute_python_nodes(
+    result: tuple[PythonNodeExecutionResult, ...] = execute_ordered_test_nodes(
         nodes=nodes,
         statement_recorder=StatementRecorder(),
         runtime=PythonNodeRuntime(
@@ -667,16 +660,10 @@ def test_given_cursor_overrides_when_executing_python_nodes_then_context_receive
         ),
     )
 
-    assert (
-        tuple(node_result.node_name for node_result in result.results) == test_case.expected_names
-    )
-    assert (
-        tuple(node_result.status for node_result in result.results) == test_case.expected_statuses
-    )
-    assert (
-        tuple(node_result.payload for node_result in result.results) == test_case.expected_payloads
-    )
-    assert tuple(node_result.materialized for node_result in result.results) == (
+    assert tuple(node_result.node_name for node_result in result) == test_case.expected_names
+    assert tuple(node_result.status for node_result in result) == test_case.expected_statuses
+    assert tuple(node_result.payload for node_result in result) == test_case.expected_payloads
+    assert tuple(node_result.materialized for node_result in result) == (
         test_case.expected_materialized
     )
 
@@ -714,7 +701,7 @@ def test_given_hard_skipped_upstream_when_executing_python_nodes_then_skips_down
         ),
     )
 
-    result: PythonNodeExecutorResult = execute_python_nodes(
+    result: tuple[PythonNodeExecutionResult, ...] = execute_ordered_test_nodes(
         nodes=nodes,
         statement_recorder=StatementRecorder(),
         runtime=PythonNodeRuntime(
@@ -728,16 +715,10 @@ def test_given_hard_skipped_upstream_when_executing_python_nodes_then_skips_down
         ),
     )
 
-    assert (
-        tuple(node_result.node_name for node_result in result.results) == test_case.expected_names
-    )
-    assert (
-        tuple(node_result.status for node_result in result.results) == test_case.expected_statuses
-    )
-    assert (
-        tuple(node_result.payload for node_result in result.results) == test_case.expected_payloads
-    )
-    assert tuple(node_result.materialized for node_result in result.results) == (
+    assert tuple(node_result.node_name for node_result in result) == test_case.expected_names
+    assert tuple(node_result.status for node_result in result) == test_case.expected_statuses
+    assert tuple(node_result.payload for node_result in result) == test_case.expected_payloads
+    assert tuple(node_result.materialized for node_result in result) == (
         test_case.expected_materialized
     )
 
@@ -825,7 +806,7 @@ def test_given_mixed_python_skips_when_executing_nodes_then_fan_in_matches_mode(
         ),
     )
 
-    result: PythonNodeExecutorResult = execute_python_nodes(
+    result: tuple[PythonNodeExecutionResult, ...] = execute_ordered_test_nodes(
         nodes=nodes,
         statement_recorder=StatementRecorder(),
         runtime=PythonNodeRuntime(
@@ -839,16 +820,10 @@ def test_given_mixed_python_skips_when_executing_nodes_then_fan_in_matches_mode(
         ),
     )
 
-    assert (
-        tuple(node_result.node_name for node_result in result.results) == test_case.expected_names
-    )
-    assert (
-        tuple(node_result.status for node_result in result.results) == test_case.expected_statuses
-    )
-    assert (
-        tuple(node_result.payload for node_result in result.results) == test_case.expected_payloads
-    )
-    assert tuple(node_result.materialized for node_result in result.results) == (
+    assert tuple(node_result.node_name for node_result in result) == test_case.expected_names
+    assert tuple(node_result.status for node_result in result) == test_case.expected_statuses
+    assert tuple(node_result.payload for node_result in result) == test_case.expected_payloads
+    assert tuple(node_result.materialized for node_result in result) == (
         test_case.expected_materialized
     )
 
@@ -886,7 +861,7 @@ def test_given_failed_upstream_when_executing_python_nodes_then_blocks_downstrea
         ),
     )
 
-    result: PythonNodeExecutorResult = execute_python_nodes(
+    result: tuple[PythonNodeExecutionResult, ...] = execute_ordered_test_nodes(
         nodes=nodes,
         statement_recorder=StatementRecorder(),
         runtime=PythonNodeRuntime(
@@ -900,23 +875,17 @@ def test_given_failed_upstream_when_executing_python_nodes_then_blocks_downstrea
         ),
     )
 
-    assert (
-        tuple(node_result.node_name for node_result in result.results) == test_case.expected_names
-    )
-    assert (
-        tuple(node_result.status for node_result in result.results) == test_case.expected_statuses
-    )
-    assert (
-        tuple(node_result.payload for node_result in result.results) == test_case.expected_payloads
-    )
-    assert tuple(node_result.materialized for node_result in result.results) == (
+    assert tuple(node_result.node_name for node_result in result) == test_case.expected_names
+    assert tuple(node_result.status for node_result in result) == test_case.expected_statuses
+    assert tuple(node_result.payload for node_result in result) == test_case.expected_payloads
+    assert tuple(node_result.materialized for node_result in result) == (
         test_case.expected_materialized
     )
-    assert result.results[0].error_message == test_case.expected_error_fragments[0]
-    assert result.results[1].error_message is not None
+    assert result[0].error_message == test_case.expected_error_fragments[0]
+    assert result[1].error_message is not None
     expected_error_fragment: str | None = test_case.expected_error_fragments[1]
     assert expected_error_fragment is not None
-    assert expected_error_fragment in result.results[1].error_message
+    assert expected_error_fragment in result[1].error_message
 
 
 @pytest.mark.parametrize(
@@ -971,7 +940,7 @@ def test_given_retry_policy_when_transient_failures_then_retries_and_succeeds(
             phase="build",
         ),
     ):
-        result: PythonNodeExecutorResult = execute_python_nodes(
+        result: tuple[PythonNodeExecutionResult, ...] = execute_ordered_test_nodes(
             nodes=nodes,
             statement_recorder=StatementRecorder(),
             sleep=record_sleep,
@@ -986,9 +955,9 @@ def test_given_retry_policy_when_transient_failures_then_retries_and_succeeds(
             ),
         )
 
-    assert result.results[0].status == test_case.expected_status
-    assert result.results[0].payload == test_case.expected_payload
-    assert result.results[0].error_message == test_case.expected_error_fragment
+    assert result[0].status == test_case.expected_status
+    assert result[0].payload == test_case.expected_payload
+    assert result[0].error_message == test_case.expected_error_fragment
     assert flaky_task.attempts == test_case.expected_attempts
     assert tuple(sleeps) == test_case.expected_sleeps
     assert tuple(flaky_task.cost_contexts) == tuple(
@@ -1078,7 +1047,7 @@ def test_given_retry_policy_when_attempts_exhausted_then_records_final_exception
         ),
     )
 
-    result: PythonNodeExecutorResult = execute_python_nodes(
+    result: tuple[PythonNodeExecutionResult, ...] = execute_ordered_test_nodes(
         nodes=nodes,
         statement_recorder=StatementRecorder(),
         sleep=sleeps.append,
@@ -1093,12 +1062,12 @@ def test_given_retry_policy_when_attempts_exhausted_then_records_final_exception
         ),
     )
 
-    assert result.results[0].status == test_case.expected_status
-    assert result.results[0].payload == test_case.expected_payload
-    assert result.results[0].error_message is not None
+    assert result[0].status == test_case.expected_status
+    assert result[0].payload == test_case.expected_payload
+    assert result[0].error_message is not None
     expected_error_fragment: str | None = test_case.expected_error_fragment
     assert expected_error_fragment is not None
-    assert expected_error_fragment in result.results[0].error_message
+    assert expected_error_fragment in result[0].error_message
     assert flaky_task.attempts == test_case.expected_attempts
     assert tuple(sleeps) == test_case.expected_sleeps
 
@@ -1132,7 +1101,7 @@ def test_given_retry_policy_when_exception_is_not_selected_then_does_not_retry(
         ),
     )
 
-    result: PythonNodeExecutorResult = execute_python_nodes(
+    result: tuple[PythonNodeExecutionResult, ...] = execute_ordered_test_nodes(
         nodes=nodes,
         statement_recorder=StatementRecorder(),
         sleep=sleeps.append,
@@ -1147,12 +1116,12 @@ def test_given_retry_policy_when_exception_is_not_selected_then_does_not_retry(
         ),
     )
 
-    assert result.results[0].status == test_case.expected_status
-    assert result.results[0].payload == test_case.expected_payload
-    assert result.results[0].error_message is not None
+    assert result[0].status == test_case.expected_status
+    assert result[0].payload == test_case.expected_payload
+    assert result[0].error_message is not None
     expected_error_fragment: str | None = test_case.expected_error_fragment
     assert expected_error_fragment is not None
-    assert expected_error_fragment in result.results[0].error_message
+    assert expected_error_fragment in result[0].error_message
     assert flaky_task.attempts == test_case.expected_attempts
     assert tuple(sleeps) == test_case.expected_sleeps
 
@@ -1193,7 +1162,7 @@ def test_given_retry_policy_when_backoff_exceeds_cap_then_sleep_is_capped(
         ),
     )
 
-    result: PythonNodeExecutorResult = execute_python_nodes(
+    result: tuple[PythonNodeExecutionResult, ...] = execute_ordered_test_nodes(
         nodes=nodes,
         statement_recorder=StatementRecorder(),
         sleep=sleeps.append,
@@ -1208,8 +1177,8 @@ def test_given_retry_policy_when_backoff_exceeds_cap_then_sleep_is_capped(
         ),
     )
 
-    assert result.results[0].status == test_case.expected_status
-    assert result.results[0].payload == test_case.expected_payload
-    assert result.results[0].error_message == test_case.expected_error_fragment
+    assert result[0].status == test_case.expected_status
+    assert result[0].payload == test_case.expected_payload
+    assert result[0].error_message == test_case.expected_error_fragment
     assert flaky_task.attempts == test_case.expected_attempts
     assert tuple(sleeps) == test_case.expected_sleeps

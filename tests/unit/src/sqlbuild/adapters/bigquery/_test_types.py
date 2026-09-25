@@ -174,13 +174,6 @@ class BigQuerySampleRowsTestCase:
 
 
 @dataclass(frozen=True)
-class BigQueryCountRowsTestCase:
-    description: str
-    expected_count: int
-    expected_sql: str
-
-
-@dataclass(frozen=True)
 class BigQueryPruneSqlTestCase:
     description: str
     database: str | None
@@ -210,3 +203,10 @@ class BigQueryRelationAgeMetadataTestCase:
     metadata_rows: tuple[tuple[object, ...], ...]
     expected_timestamps: tuple[tuple[str, str], ...]
     relation_names: tuple[str, ...] = ("old_orders", "old_orders_view")
+
+
+@dataclass(frozen=True)
+class BigQueryCloneRefusalTestCase:
+    description: str
+    driver_error: Exception
+    expected_refusal: bool

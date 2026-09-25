@@ -110,6 +110,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 defer_to=args.defer_to,
                 defer_sources_to=args.defer_sources_to,
                 selected_target=args.target,
+                as_target=args.as_target,
                 cursor_overrides=CursorOverrides(
                     start_ts=args.start_cursor_ts,
                     end_ts=args.end_cursor_ts,

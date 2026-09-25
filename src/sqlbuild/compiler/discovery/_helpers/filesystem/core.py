@@ -450,7 +450,6 @@ def _discover_model_file(
             model_name=file_path.stem,
             relative_path=relative_path,
         ),
-        output_column_locations_extracted=extract_output_column_locations,
         extract_implicit_alias_columns=extract_implicit_alias_columns,
     )
 
@@ -892,46 +891,6 @@ def discover_materialization_files(
             )
         )
     return tuple(discovered_files)
-
-
-def discover_loader_functions(
-    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] = ()
-) -> tuple[DiscoveredLoaderFunction, ...]:
-    """Discover decorated source loader functions under loaders/."""
-
-    return tuple(
-        _discover_python_node_functions(project_dir=project_dir, providers=providers).loaders
-    )
-
-
-def discover_task_functions(
-    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] = ()
-) -> tuple[DiscoveredTaskFunction, ...]:
-    """Discover decorated task functions under tasks/."""
-
-    return tuple(
-        _discover_python_node_functions(project_dir=project_dir, providers=providers).tasks
-    )
-
-
-def discover_asset_functions(
-    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] = ()
-) -> tuple[DiscoveredAssetFunction, ...]:
-    """Discover decorated asset functions under assets/."""
-
-    return tuple(
-        _discover_python_node_functions(project_dir=project_dir, providers=providers).assets
-    )
-
-
-def discover_check_functions(
-    *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] = ()
-) -> tuple[DiscoveredCheckFunction, ...]:
-    """Discover decorated check functions under checks/."""
-
-    return tuple(
-        _discover_python_node_functions(project_dir=project_dir, providers=providers).checks
-    )
 
 
 def discover_python_node_functions(

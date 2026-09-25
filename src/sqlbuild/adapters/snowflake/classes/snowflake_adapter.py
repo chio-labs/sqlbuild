@@ -41,6 +41,7 @@ from sqlbuild.adapter.contract.models import (
     ExpressionInferenceProfile,
     FunctionDefinition,
     FunctionInfo,
+    MigrationStagePlan,
     QueryResult,
     RelationInfo,
     RenderedRetentionChange,
@@ -68,6 +69,7 @@ from sqlbuild.adapter.contract.types import (
     HistoricalSnapshotCloseStyle,
     HistoricalSnapshotInsertStyle,
     LoaderLogicalType,
+    MigrationTransfer,
     PromotionStrategy,
     RetentionChangePhase,
     RetentionScope,
@@ -490,6 +492,19 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
 
         return build_janitor_events_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+            transient=self.state_tables_transient,
+        )
+
+    def render_create_migration_state_table_sql(self, *, database: str | None, schema: str) -> str:
+        from sqlbuild.compiler.migrations.main.create_table_sql import (
+            build_migration_state_create_table_sql,
+        )
+
+        return build_migration_state_create_table_sql(
             database=database,
             schema=schema,
             render_qualified_name=self.render_qualified_name,
@@ -2230,22 +2245,37 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         table_kind: str = "TRANSIENT TABLE" if origin_is_transient else "TABLE"
         return (f"CREATE OR REPLACE {table_kind} {destination} CLONE {origin}",)
 
-    def render_query_with_cursor_bounds(
+    def render_migration_stage(
         self,
         *,
-        sql: str,
-        cursor_column: str,
-        cursor_start: str,
-        cursor_end: str,
-        cursor_type: str | None,
-    ) -> str:
-        return self._render_query_with_cursor_bounds_impl(
-            sql=sql,
-            cursor_column=cursor_column,
-            cursor_start=cursor_start,
-            cursor_end=cursor_end,
-            cursor_type=cursor_type,
+        origin: str,
+        stage: str,
+        origin_is_transient: bool = False,
+        stage_is_transient: bool | None = None,
+    ) -> MigrationStagePlan:
+        transient: bool = origin_is_transient if stage_is_transient is None else stage_is_transient
+        if origin_is_transient and not transient:
+            return MigrationStagePlan(
+                transfer=MigrationTransfer.COPY,
+                statements=(
+                    f"CREATE TABLE {stage} LIKE {origin} COPY GRANTS",
+                    f"INSERT INTO {stage} SELECT * FROM {origin}",
+                ),
+            )
+        table_kind: str = "TRANSIENT TABLE" if transient else "TABLE"
+        return MigrationStagePlan(
+            transfer=MigrationTransfer.CLONE,
+            statements=(f"CREATE {table_kind} {stage} CLONE {origin} COPY GRANTS",),
         )
+
+    def capture_dependent_view_rebinds(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        del connection, database, schema, name
+        return ()
+
+    def supports_transactional_ddl(self) -> bool:
+        return False
 
     def render_seed_select_before_cursor(
         self,
@@ -2259,21 +2289,6 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             origin=origin,
             cursor_column=cursor_column,
             cursor_end_exclusive=cursor_end_exclusive,
-            cursor_type=cursor_type,
-        )
-
-    def render_seed_select_after_cursor(
-        self,
-        *,
-        origin: str,
-        cursor_column: str,
-        cursor_start_exclusive: str,
-        cursor_type: str | None,
-    ) -> str:
-        return self._render_seed_select_after_cursor_impl(
-            origin=origin,
-            cursor_column=cursor_column,
-            cursor_start_exclusive=cursor_start_exclusive,
             cursor_type=cursor_type,
         )
 
@@ -2401,26 +2416,6 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             if description is None:
                 return ()
             return tuple(str(column[0]) for column in description)
-        finally:
-            cursor.close()
-
-    def get_relation_max_cursor(
-        self,
-        *,
-        connection: Any,
-        relation: str,
-        cursor_column: str,
-    ) -> object | None:
-        """Return the maximum cursor value currently present in a relation."""
-
-        quoted_cursor: str = self.render_identifier(cursor_column)
-        cursor: Any = connection.cursor()
-        try:
-            cursor.execute(f"SELECT max({quoted_cursor}) FROM {relation}")
-            row: Any | None = cursor.fetchone()
-            if row is None:
-                return None
-            return row[0]
         finally:
             cursor.close()
 
@@ -2675,26 +2670,6 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             compared_count=int(row[2]),
             sampling=sampling,
         )
-
-    def count_rows(
-        self,
-        *,
-        connection: Any,
-        relation: str,
-        cursor_column: str | None = None,
-        start_cursor: Any | None = None,
-        end_cursor: Any | None = None,
-    ) -> int:
-        cursor_filter: str = self.build_cursor_filter(
-            cursor_column=cursor_column,
-            start_cursor=start_cursor,
-            end_cursor=end_cursor,
-        )
-        query: str = f"SELECT COUNT(*) FROM {relation}"
-        if cursor_filter:
-            query += f" WHERE {cursor_filter}"
-        result: Any = self.execute(connection=connection, sql=query).fetchone()
-        return int(result[0])
 
     def sample_unequal_rows(
         self,

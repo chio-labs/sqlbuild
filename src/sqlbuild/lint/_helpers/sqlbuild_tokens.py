@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
+from functools import cache
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.constants import (
     MACRO_TOKEN,
     SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN,
@@ -12,6 +14,7 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.models import ExpansionSpan
 from sqlbuild.lint.constants import (
+    BACKTICK_CHARACTER,
     CLOSING_PAREN_CHARACTER,
     EXPECTED_SENTINEL_OCCURRENCES,
     IDENTIFIER_EXTRA_CHARACTER,
@@ -43,13 +46,27 @@ _BLOCK_COMMENT_END: str = "*/"
 _SQLBUILD_FUNCTION_PATTERN: str = "|".join(
     re.escape(name) for name in sorted(_SQLBUILD_FUNCTION_NAMES)
 )
-_INTERPOLATION_SCAN_PATTERN: re.Pattern[str] = re.compile(
-    rf"--[^\n]*(?:\n|\Z)"
-    rf"|/\*[\s\S]*?(?:\*/|\Z)"
-    rf"|'(?:\\.|''|[^'\\])*(?:'|\Z)"
-    rf'|"(?:\\.|""|[^"\\])*(?:"|\Z)'
-    rf"|(?P<site>@@|\$\{{|@|(?:{_SQLBUILD_FUNCTION_PATTERN})\s*\()"
+_NON_CODE_SCAN_PATTERN: str = (
+    r"--[^\n]*(?:\n|\Z)"
+    r"|/\*[\s\S]*?(?:\*/|\Z)"
+    r"|'(?:\\.|''|[^'\\])*(?:'|\Z)"
+    r'|"(?:\\.|""|[^"\\])*(?:"|\Z)'
 )
+_BACKTICK_SCAN_PATTERN: str = r"|`(?:``|[^`])*(?:`|\Z)"
+_SITE_SCAN_PATTERN: str = rf"|(?P<site>@@|\$\{{|@|(?:{_SQLBUILD_FUNCTION_PATTERN})\s*\()"
+_INTERPOLATION_SCAN_PATTERN: re.Pattern[str] = re.compile(
+    _NON_CODE_SCAN_PATTERN + _SITE_SCAN_PATTERN
+)
+_BACKTICK_INTERPOLATION_SCAN_PATTERN: re.Pattern[str] = re.compile(
+    _NON_CODE_SCAN_PATTERN + _BACKTICK_SCAN_PATTERN + _SITE_SCAN_PATTERN
+)
+
+
+@cache
+def _backtick_identifiers(dialect: str) -> bool:
+    """Return whether lint treats backticks as identifier quotes, matching the native lexer."""
+
+    return _native.lint_backtick_identifiers(dialect)
 
 
 def neutralize_context_interpolation(*, body: str) -> tuple[str, tuple[InterpolationSite, ...]]:
@@ -64,9 +81,7 @@ def neutralize_context_interpolation(*, body: str) -> tuple[str, tuple[Interpola
         start: int = body.find(token, copied_to)
         if start < 0:
             break
-        end: int | None = _interpolation_site_end(body=body, start=start)
-        if end is None:
-            break
+        end: int = _interpolation_name_end(body=body, start=start + len(SQL_INTERPOLATION_TOKEN))
         literal: str = body[copied_to:start]
         sentinel: str = _CONTEXT_SENTINEL_TEMPLATE.format(index=len(sites))
         pieces.extend((literal, sentinel))
@@ -123,21 +138,31 @@ def neutralize_generic_audit_parameters(*, body: str) -> tuple[str, tuple[Interp
     return "".join(pieces), tuple(sites)
 
 
-def neutralize_interpolation(*, body: str) -> tuple[str, tuple[InterpolationSite, ...]]:
+def neutralize_interpolation(
+    *, body: str, dialect: str
+) -> tuple[str, tuple[InterpolationSite, ...]]:
     """Replace every interpolation site with a unique sentinel identifier."""
 
     if not _contains_interpolation_candidate(body=body):
         return body, ()
+    backtick_identifiers: bool = _backtick_identifiers(dialect)
+    scan_pattern: re.Pattern[str] = (
+        _BACKTICK_INTERPOLATION_SCAN_PATTERN
+        if backtick_identifiers
+        else _INTERPOLATION_SCAN_PATTERN
+    )
     sites: list[InterpolationSite] = []
     pieces: list[str] = []
     neutralized_length: int = 0
     copied_to: int = 0
     match: re.Match[str]
-    for match in _INTERPOLATION_SCAN_PATTERN.finditer(body):
+    for match in scan_pattern.finditer(body):
         if match.group("site") is None or match.start() < copied_to:
             continue
         site_start: int = match.start()
-        site_end: int | None = _interpolation_site_end(body=body, start=site_start)
+        site_end: int | None = _interpolation_site_end(
+            body=body, start=site_start, backtick_identifiers=backtick_identifiers
+        )
         if site_end is None:
             continue
         literal: str = body[copied_to:site_start]
@@ -190,10 +215,12 @@ def restore_interpolation(*, fixed: str, sites: tuple[InterpolationSite, ...]) -
     return restored
 
 
-def interpolation_text_at(*, body: str, start: int) -> str | None:
+def interpolation_text_at(*, body: str, start: int, dialect: str) -> str | None:
     """Return the interpolation token beginning at an offset, if there is one."""
 
-    site_end: int | None = _interpolation_site_end(body=body, start=start)
+    site_end: int | None = _interpolation_site_end(
+        body=body, start=start, backtick_identifiers=_backtick_identifiers(dialect)
+    )
     if site_end is None:
         return None
     return body[start:site_end]
@@ -216,40 +243,28 @@ def sentinel_spans(*, sites: tuple[InterpolationSite, ...]) -> tuple[ExpansionSp
     return tuple(spans)
 
 
-def map_neutralized_offset(*, offset: int, sites: tuple[InterpolationSite, ...]) -> int:
-    """Map an offset in neutralized text back onto the authored body."""
-
-    mapped: int = offset
-    site: InterpolationSite
-    for site in sites:
-        if offset < site.neutralized_start:
-            break
-        if offset < site.neutralized_end:
-            return site.original_start
-        mapped += (site.original_end - site.original_start) - (
-            site.neutralized_end - site.neutralized_start
-        )
-    return mapped
-
-
-def _interpolation_site_end(*, body: str, start: int) -> int | None:
+def _interpolation_site_end(*, body: str, start: int, backtick_identifiers: bool) -> int | None:
     character: str = body[start]
     if character == MACRO_TOKEN:
         if body.startswith(SQL_INTERPOLATION_TOKEN, start):
             return _interpolation_name_end(body=body, start=start + len(SQL_INTERPOLATION_TOKEN))
-        return _macro_site_end(body=body, start=start)
+        return _macro_site_end(body=body, start=start, backtick_identifiers=backtick_identifiers)
     if character == TEMPLATE_INTERPOLATION_START[0]:
         return _template_site_end(body=body, start=start)
     if character == IDENTIFIER_EXTRA_CHARACTER and body.startswith(_SQLBUILD_FUNCTION_NAMES, start):
-        return _sqlbuild_function_site_end(body=body, start=start)
+        return _sqlbuild_function_site_end(
+            body=body, start=start, backtick_identifiers=backtick_identifiers
+        )
     return None
 
 
-def _sqlbuild_function_site_end(*, body: str, start: int) -> int | None:
+def _sqlbuild_function_site_end(*, body: str, start: int, backtick_identifiers: bool) -> int | None:
     name_end: int = _identifier_end(body=body, start=start)
     if name_end >= len(body) or body[name_end] != OPENING_PAREN_CHARACTER:
         return None
-    call_end: int | None = _matching_paren_end(body=body, opening_index=name_end)
+    call_end: int | None = _matching_paren_end(
+        body=body, opening_index=name_end, backtick_identifiers=backtick_identifiers
+    )
     return call_end
 
 
@@ -262,7 +277,7 @@ def _template_site_end(*, body: str, start: int) -> int | None:
     return end_index + len(TEMPLATE_INTERPOLATION_END)
 
 
-def _macro_site_end(*, body: str, start: int) -> int | None:
+def _macro_site_end(*, body: str, start: int, backtick_identifiers: bool) -> int | None:
     name_start: int = start + len(MACRO_TOKEN)
     if name_start >= len(body):
         return None
@@ -276,10 +291,12 @@ def _macro_site_end(*, body: str, start: int) -> int | None:
     name_end: int = _identifier_end(body=body, start=name_start)
     if name_end >= len(body) or body[name_end] != OPENING_PAREN_CHARACTER:
         return name_end
-    return _matching_paren_end(body=body, opening_index=name_end)
+    return _matching_paren_end(
+        body=body, opening_index=name_end, backtick_identifiers=backtick_identifiers
+    )
 
 
-def _matching_paren_end(*, body: str, opening_index: int) -> int | None:
+def _matching_paren_end(*, body: str, opening_index: int, backtick_identifiers: bool) -> int | None:
     depth: int = 0
     index: int = opening_index
     length: int = len(body)
@@ -295,7 +312,11 @@ def _matching_paren_end(*, body: str, opening_index: int) -> int | None:
             continue
         character: str = body[index]
         if quote_character is not None:
-            if character == SQL_ESCAPE_CHARACTER and index + 1 < length:
+            if (
+                character == SQL_ESCAPE_CHARACTER
+                and quote_character in SQL_QUOTE_CHARACTERS
+                and index + 1 < length
+            ):
                 index += 2
                 continue
             if character == quote_character:
@@ -305,7 +326,9 @@ def _matching_paren_end(*, body: str, opening_index: int) -> int | None:
                 quote_character = None
             index += 1
             continue
-        if character in SQL_QUOTE_CHARACTERS:
+        if character in SQL_QUOTE_CHARACTERS or (
+            backtick_identifiers and character == BACKTICK_CHARACTER
+        ):
             quote_character = character
             index += 1
             continue

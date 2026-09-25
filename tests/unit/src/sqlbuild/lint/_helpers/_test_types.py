@@ -147,13 +147,14 @@ class NeutralizeInterpolationTestCase:
 
 
 @dataclass(frozen=True)
-class MapOffsetTestCase:
-    """Test case for neutralized-to-original offset mapping."""
+class DialectNeutralizeInterpolationTestCase:
+    """Test case for interpolation neutralization under one lint dialect."""
 
     description: str
+    dialect: str
     body: str
-    neutralized_offset: int
-    expected_original_offset: int
+    expected_neutralized: str
+    expected_original_texts: tuple[str, ...]
 
 
 @dataclass(frozen=True)

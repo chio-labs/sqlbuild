@@ -46,6 +46,7 @@ from sqlbuild.adapter.contract.models import (
     ExpressionInferenceProfile,
     FunctionDefinition,
     FunctionInfo,
+    MigrationStagePlan,
     QueryResult,
     RelationInfo,
     RowDiffColumnResult,
@@ -70,6 +71,7 @@ from sqlbuild.adapter.contract.types import (
     HistoricalSnapshotCloseStyle,
     HistoricalSnapshotInsertStyle,
     LoaderLogicalType,
+    MigrationTransfer,
     PromotionStrategy,
     SnapshotLatestVersionStyle,
     SnapshotUpdateStyle,
@@ -83,6 +85,7 @@ from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql 
 )
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
+from sqlbuild.adapters.postgres._helpers.view_rebind import render_postgres_view_rebind
 from sqlbuild.adapters.postgres.classes.postgres_connection import _PostgresConnection
 from sqlbuild.adapters.postgres.constants import TABLE_FUNCTION_RETURN_TYPE
 from sqlbuild.compiler.compile.types import FunctionLanguage
@@ -189,24 +192,6 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         if description is None:
             return ()
         return tuple(str(column[0]) for column in description)
-
-    def get_relation_max_cursor(
-        self,
-        *,
-        connection: Any,
-        relation: str,
-        cursor_column: str,
-    ) -> object | None:
-        """Return the maximum cursor value currently present in a relation."""
-
-        quoted_cursor: str = self.render_identifier(cursor_column)
-        cursor: Any = self.execute(
-            connection=connection, sql=f"SELECT max({quoted_cursor}) FROM {relation}"
-        )
-        row: Any | None = cursor.fetchone()
-        if row is None:
-            return None
-        return row[0]
 
     def render_max_cursor_at_or_before(
         self,
@@ -577,22 +562,56 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         del origin_is_transient
         return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
-    def render_query_with_cursor_bounds(
+    def render_migration_stage(
         self,
         *,
-        sql: str,
-        cursor_column: str,
-        cursor_start: str,
-        cursor_end: str,
-        cursor_type: str | None,
-    ) -> str:
-        return self._render_query_with_cursor_bounds_impl(
-            sql=sql,
-            cursor_column=cursor_column,
-            cursor_start=cursor_start,
-            cursor_end=cursor_end,
-            cursor_type=cursor_type,
+        origin: str,
+        stage: str,
+        origin_is_transient: bool = False,
+        stage_is_transient: bool | None = None,
+    ) -> MigrationStagePlan:
+        del origin_is_transient, stage_is_transient
+        return MigrationStagePlan(
+            transfer=MigrationTransfer.COPY,
+            statements=(f"CREATE TABLE {stage} AS SELECT * FROM {origin}",),
         )
+
+    def capture_dependent_view_rebinds(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        del database
+        query: str = (
+            "SELECT DISTINCT dependent_namespace.nspname, dependent.relname, "
+            "pg_get_viewdef(dependent.oid), "
+            "array_to_string(dependent.reloptions, chr(31)) "
+            "FROM pg_depend AS dependency "
+            "JOIN pg_rewrite AS rewrite ON rewrite.oid = dependency.objid "
+            "JOIN pg_class AS dependent ON dependent.oid = rewrite.ev_class "
+            "JOIN pg_namespace AS dependent_namespace "
+            "ON dependent_namespace.oid = dependent.relnamespace "
+            "JOIN pg_class AS referenced ON referenced.oid = dependency.refobjid "
+            "JOIN pg_namespace AS referenced_namespace "
+            "ON referenced_namespace.oid = referenced.relnamespace "
+            "WHERE dependency.classid = 'pg_rewrite'::regclass "
+            "AND dependency.refclassid = 'pg_class'::regclass "
+            "AND dependent.relkind = 'v' "
+            "AND dependent.oid <> referenced.oid "
+            f"AND referenced_namespace.nspname = {_quote_sql_string(schema)} "
+            f"AND referenced.relname = {_quote_sql_string(name)} "
+            "ORDER BY 1, 2"
+        )
+        cursor: Any = connection.execute(query)
+        return tuple(
+            render_postgres_view_rebind(
+                view=f"{self.render_identifier(str(row[0]))}.{self.render_identifier(str(row[1]))}",
+                definition=str(row[2]),
+                reloptions=tuple(str(row[3]).split(chr(31))) if row[3] else (),
+            )
+            for row in cursor.fetchall()
+        )
+
+    def supports_transactional_ddl(self) -> bool:
+        return True
 
     def render_seed_select_before_cursor(
         self,
@@ -606,21 +625,6 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             origin=origin,
             cursor_column=cursor_column,
             cursor_end_exclusive=cursor_end_exclusive,
-            cursor_type=cursor_type,
-        )
-
-    def render_seed_select_after_cursor(
-        self,
-        *,
-        origin: str,
-        cursor_column: str,
-        cursor_start_exclusive: str,
-        cursor_type: str | None,
-    ) -> str:
-        return self._render_seed_select_after_cursor_impl(
-            origin=origin,
-            cursor_column=cursor_column,
-            cursor_start_exclusive=cursor_start_exclusive,
             cursor_type=cursor_type,
         )
 
@@ -993,24 +997,6 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             stmt: str
             for stmt in statements:
                 self.execute(connection=connection, sql=stmt)
-
-    def count_rows(
-        self,
-        *,
-        connection: Any,
-        relation: str,
-        cursor_column: str | None = None,
-        start_cursor: CursorValue | None = None,
-        end_cursor: CursorValue | None = None,
-    ) -> int:
-        where_clause: str = ""
-        if cursor_column and start_cursor:
-            where_clause = f" WHERE {cursor_column} >= '{start_cursor.value}'"
-            if end_cursor:
-                where_clause += f" AND {cursor_column} < '{end_cursor.value}'"
-        cursor: Any = connection.execute(f"SELECT COUNT(*) FROM {relation}{where_clause}")
-        result: Any = cursor.fetchone()
-        return int(result[0])
 
     def validate_row_diff_keys(
         self,
@@ -1524,6 +1510,18 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
 
         return build_janitor_events_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        )
+
+    def render_create_migration_state_table_sql(self, *, database: str | None, schema: str) -> str:
+        from sqlbuild.compiler.migrations.main.create_table_sql import (
+            build_migration_state_create_table_sql,
+        )
+
+        return build_migration_state_create_table_sql(
             database=database,
             schema=schema,
             render_qualified_name=self.render_qualified_name,

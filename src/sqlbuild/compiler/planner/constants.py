@@ -38,7 +38,6 @@ MODEL_CUSTOM_CONFIG_KEY: str = "config"
 MODEL_PLACEHOLDERS_CONFIG_KEY: str = "placeholders"
 MODEL_PRE_HOOKS_CONFIG_KEY: str = "pre_hooks"
 MODEL_POST_HOOKS_CONFIG_KEY: str = "post_hooks"
-MODEL_CONTRACT_CONFIG_KEY: str = "contract"
 MICROBATCH_START_SENTINEL: str = sentinel_to_token(sentinel=BoundSentinel.START)
 MICROBATCH_END_SENTINEL: str = sentinel_to_token(sentinel=BoundSentinel.END)
 METADATA_NAME_FILTER_LIMIT: int = 250
@@ -50,7 +49,6 @@ SCENARIO_PLAN_INVALID_HASH_PREFIX: str = "S501"
 SCENARIO_PLAN_HASH_COLLISION: str = "S502"
 SCENARIO_PLAN_RELATION_COLLISION: str = "S503"
 SCENARIO_PLAN_GRAPH_VALIDATION: str = "S504"
-SCENARIO_PLAN_SQLGLOT_UNAVAILABLE: str = "S505"
 SCENARIO_PLAN_SQLGLOT_PARSE: str = "S506"
 SCENARIO_PLAN_UNKNOWN_SEED: str = "S507"
 SCENARIO_PLAN_MISSING_FIXTURE_SQL: str = "S508"
@@ -59,3 +57,25 @@ SCENARIO_PLAN_INVALID_FIXTURE: str = "S510"
 SCENARIO_PLAN_INTERNAL: str = "S599"
 
 WHOLE_DAY_CURSOR_GRAINS: frozenset[str] = frozenset({"day", "month", "year"})
+VIEW_RELATION_TYPE_MARKER: str = "VIEW"
+QUALIFIED_RELATION_MAX_PARTS: int = 3
+MIGRATION_MODEL_NAME_METADATA_KEY: str = "model_name"
+MIGRATION_FINGERPRINT_METADATA_KEY: str = "migration_fingerprint"
+MIGRATION_REF_PLACEHOLDER_PREFIX: str = "__sqb_migration_ref__"
+MIGRATION_LOCAL_NAME_PREFIX: str = "__sqb_local_"
+MIGRATION_FINGERPRINT_EXCLUDED_CONFIG_KEYS: frozenset[str] = frozenset(
+    {
+        "batch_size",
+        "full_refresh",
+        "incremental_mode",
+        "incremental_strategy",
+        "lookback",
+        "materialized",
+        "max_microbatches",
+        "microbatch_limit",
+        "microbatch_strategy",
+        "on_schema_change",
+        "snapshot_full_refresh",
+        "snapshot_schema_change",
+    }
+)

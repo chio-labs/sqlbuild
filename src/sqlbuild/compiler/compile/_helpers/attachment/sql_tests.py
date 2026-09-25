@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -75,13 +74,6 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityRecord,
 )
 from sqlbuild.compiler.scopes.types import ResourceKind, ScopeKind, UsageKind
-
-_HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
-_LEGACY_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hook", "post_hook"})
-_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
-_HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
-    {"ctx", "context", "_ctx", "hook_context"}
-)
 
 
 @dataclass(frozen=True)

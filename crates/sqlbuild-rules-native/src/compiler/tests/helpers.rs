@@ -212,12 +212,98 @@ pub(crate) fn expected_projection_errors_name_the_expected_cte() -> bool {
         ),
         (
             r#"{"tests":[{"sql":"WITH __source__raw_orders AS (SELECT 1 AS id), __expected__orders AS (SELECT 1 + 1) SELECT 1","fileLabel":"tests/orders.sql","mode":"model"}]}"#,
-            "SQL test 'tests/orders.sql' must alias every non-trivial __expected__<model> projection",
+            "SQL test 'tests/orders.sql' must alias every non-trivial __expected__orders projection",
         ),
     ];
     for (request, expected_error) in cases {
         let error = extract_batch_json(request).expect_err("expected projection is rejected");
         assert_eq!(error, expected_error);
+    }
+    true
+}
+
+fn extract_expected(
+    mode: &str,
+    actual: &str,
+    expected_name: &str,
+    expected_sql: &str,
+) -> Result<String, String> {
+    let sql = format!("WITH {actual}, {expected_name} AS ({expected_sql}) SELECT 1");
+    extract_batch_json(
+        &json!({"tests": [{"sql": sql, "fileLabel": "tests/orders.sql", "mode": mode}]})
+            .to_string(),
+    )
+}
+
+pub(crate) fn set_operation_expected_ctes_validate_every_branch() -> bool {
+    let kinds = [
+        (
+            "model",
+            "__source__raw_orders AS (SELECT 1 AS order_id)",
+            "__expected__orders",
+        ),
+        (
+            "macro",
+            "__macro_actual__ AS (SELECT 1 AS order_id)",
+            "__macro_expected__",
+        ),
+        (
+            "udf",
+            "__udf_actual__ AS (SELECT 1 AS order_id)",
+            "__udf_expected__",
+        ),
+        (
+            "table_fn",
+            "__table_fn_actual__ AS (SELECT 1 AS order_id)",
+            "__table_fn_expected__",
+        ),
+    ];
+    let accepted = [
+        "SELECT 1 AS order_id INTERSECT SELECT 1 AS order_id",
+        "SELECT 1 AS order_id INTERSECT ALL SELECT 1 AS order_id",
+        "SELECT 1 AS order_id INTERSECT DISTINCT SELECT 1 AS order_id",
+        "SELECT 1 AS order_id EXCEPT SELECT 2 AS order_id",
+        "SELECT 1 AS order_id EXCEPT ALL SELECT 2 AS order_id",
+        "SELECT 1 AS order_id EXCEPT DISTINCT SELECT 2 AS order_id",
+        "SELECT 1 AS order_id UNION SELECT 2 AS order_id EXCEPT SELECT 3 AS order_id",
+        "SELECT 1 AS order_id INTERSECT /* EXCEPT */ -- UNION\n SELECT 1 AS order_id",
+    ];
+    for (mode, actual, expected_name) in kinds {
+        for expected_sql in accepted {
+            assert!(
+                extract_expected(mode, actual, expected_name, expected_sql).is_ok(),
+                "{mode}: {expected_sql}"
+            );
+        }
+        let mismatch = format!(
+            "SQL test 'tests/orders.sql' must use the same {expected_name} projection names and order in every set-operation branch; branch 2 does not match branch 1"
+        );
+        let third_mismatch = mismatch.replace("branch 2", "branch 3");
+        let not_select = format!(
+            "SQL test 'tests/orders.sql' must define each {expected_name} set-operation branch as a SELECT query"
+        );
+        let rejected = [
+            (
+                "SELECT 1 AS order_id INTERSECT SELECT 1 AS other_id",
+                &mismatch,
+            ),
+            (
+                "SELECT 1 AS order_id EXCEPT ALL SELECT 1 AS order_id, 2 AS extra",
+                &mismatch,
+            ),
+            (
+                "SELECT 1 AS order_id UNION SELECT 2 AS order_id EXCEPT SELECT 3 AS other_id",
+                &third_mismatch,
+            ),
+            ("SELECT 1 AS order_id EXCEPT VALUES (1)", &not_select),
+        ];
+        for (expected_sql, expected_error) in rejected {
+            assert_eq!(
+                extract_expected(mode, actual, expected_name, expected_sql).as_ref(),
+                Err(expected_error),
+                "{mode}: {expected_sql}"
+            );
+        }
     }
     true
 }
@@ -653,6 +739,70 @@ pub(crate) fn plan_without_rendering_returns_executable_steps() -> bool {
         artifact["assertions"][0]["resolvedSql"]
             .as_str()
             .is_some_and(|sql| sql.contains("__ref__orders AS (SELECT * FROM __ref__stg_orders)"))
+    );
+    true
+}
+
+pub(crate) fn textual_assertion_with_clause_merges_lifted_ctes() -> bool {
+    let response: Value = serde_json::from_str(
+        &crate::compiler::main::sql_test_planning::plan_and_render_json(
+            &json!({
+                "models": [
+                    {
+                        "name": "stg_orders",
+                        "querySql": "SELECT * FROM __source(\"raw_orders\")",
+                        "modelDependencies": []
+                    },
+                    {
+                        "name": "orders",
+                        "querySql": "SELECT * FROM __ref(\"stg_orders\")",
+                        "modelDependencies": ["stg_orders"]
+                    }
+                ],
+                "tests": [{
+                    "name": "orders_case",
+                    "fileLabel": "tests/orders.sql",
+                    "payload": {
+                        "kind": "model",
+                        "authoredCtes": [{
+                            "name": "__source__raw_orders",
+                            "sqlBody": "SELECT 1 AS order_id"
+                        }],
+                        "expectedCtes": [],
+                        "expectedModelNames": [],
+                        "assertionCtes": [{
+                            "name": "__assert__no_negative_orders",
+                            "sqlBody": "WITH negative_orders AS (SELECT * FROM __ref(\"orders\") WHERE order_id < 0) SELECT * FROM negative_orders"
+                        }]
+                    }
+                }],
+                "sqlAnalysisEnabled": false,
+                "sqlAnalysisDialect": "duckdb",
+                "renderSql": false
+            })
+            .to_string(),
+        )
+        .expect("test assumption must hold"),
+    )
+    .expect("test assumption must hold");
+
+    let resolved_sql = response["artifacts"][0]["assertions"][0]["resolvedSql"]
+        .as_str()
+        .expect("resolved assertion SQL");
+    assert_eq!(
+        resolved_sql,
+        concat!(
+            "WITH __ref__stg_orders AS (SELECT * FROM (SELECT 1 AS order_id)), ",
+            "__ref__orders AS (SELECT * FROM __ref__stg_orders), ",
+            "negative_orders AS (SELECT * FROM __ref__orders WHERE order_id < 0) ",
+            "SELECT * FROM negative_orders"
+        )
+    );
+    assert!(
+        polyglot_sql::Dialect::get(polyglot_sql::DialectType::DuckDB)
+            .parse(resolved_sql)
+            .is_ok(),
+        "{resolved_sql}"
     );
     true
 }

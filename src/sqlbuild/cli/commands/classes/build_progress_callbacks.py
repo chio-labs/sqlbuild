@@ -62,7 +62,6 @@ from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.spec.contracts.models import SourceEntry
 
 _TYPE_WIDTH: int = 10
-_MAX_NAME_WIDTH: int = 60
 _MIN_NAME_WIDTH: int = 20
 _NAME_PADDING: int = 2
 _SUB_INDENT: int = 2

@@ -1,30 +1,9 @@
-from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 
-from sqlbuild.compiler.discovery.types import LoaderConnectionMode
 from sqlbuild.compiler.planner.models import ParsedSelector
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.python_nodes.models import SqlResourceRef
-
-
-@dataclass(frozen=True)
-class PythonLoaderNodeConversionTestCase:
-    description: str
-    expected_kind: PythonNodeKind
-    expected_file_path: Path
-    expected_relative_path: Path
-    expected_name: str
-    expected_depends_on: tuple[Callable[..., object], ...]
-    expected_dependency_edges: tuple[tuple[str, str], ...]
-    expected_target: str | None
-    expected_write_strategy: str | None
-    expected_cursor_column: str | None
-    expected_unique_key: tuple[str, ...]
-    expected_column_names: tuple[str, ...]
-    expected_contract: str | None
-    expected_connection_mode: LoaderConnectionMode
 
 
 @dataclass(frozen=True)
@@ -95,7 +74,6 @@ class PythonSqlRunLifecycleTestCase:
     expected_ingress_python_names: frozenset[str]
     expected_ingress_loader_names: frozenset[str]
     expected_read_side_python_names: frozenset[str]
-    expected_read_side_sql_names: frozenset[str]
 
 
 @dataclass(frozen=True)

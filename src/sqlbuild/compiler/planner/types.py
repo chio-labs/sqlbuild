@@ -28,23 +28,6 @@ class CursorInputRole(StrEnum):
     WATERMARK = "watermark"
 
 
-class LocalNodePlanAction(StrEnum):
-    """Action for one locally classified planner graph node."""
-
-    RUN = "run"
-    CURRENT = "current"
-
-
-class LocalNodePlanReason(StrEnum):
-    """Reason for one locally classified planner graph node."""
-
-    FIRST_RUN = "first_run"
-    FULL_REFRESH = "full_refresh"
-    RELATION_MISSING = "relation_missing"
-    LOCAL_CHANGED = "local_changed"
-    NO_CHANGE = "no_change"
-
-
 class RelationMarkerTargetResolver(Protocol):
     def __call__(self, *, function_name: str, referenced_name: str) -> str | None: ...
 
@@ -75,6 +58,7 @@ class GraphResourceKind(StrEnum):
 
 class ChangeKind(StrEnum):
     FIRST_RUN = "first_run"
+    RENAMED = "renamed"
     QUERY_CHANGED = "query_changed"
     CONFIG_CHANGED = "config_changed"
     SCHEMA_CHANGED = "schema_changed"
@@ -106,14 +90,9 @@ class SchemaChangeKind(StrEnum):
     COLUMN_TYPE_CHANGED = "column_type_changed"
 
 
-class SchemaChangeBackfillKey(StrEnum):
-    ADD_COLUMN = "add_column"
-    TYPE_CHANGE = "type_change"
-
-
 class SchemaColumnSource(StrEnum):
     YML = "yml"
-    SQLGLOT = "sql_analysis"
+    SQL_ANALYSIS = "sql_analysis"
 
 
 class RetentionDirection(StrEnum):
@@ -145,6 +124,7 @@ class PlanAction(StrEnum):
 
 class PlanReason(StrEnum):
     FIRST_RUN = "first_run"
+    RENAMED = "renamed"
     FULL_REFRESH = "full_refresh"
     QUERY_CHANGED = "query_changed"
     FUNCTION_CHANGED = "function_changed"

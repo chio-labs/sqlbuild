@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.118.1](https://github.com/chio-labs/sqlbuild/compare/v0.118.0...v0.118.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* align SQL scanners and remove obsolete implementations ([#815](https://github.com/chio-labs/sqlbuild/issues/815)) ([920a933](https://github.com/chio-labs/sqlbuild/commit/920a933ba7c2c6d4f612320d964e0a57504a61a1))
+
+## [0.118.0](https://github.com/chio-labs/sqlbuild/compare/v0.117.1...v0.118.0) (2026-09-25)
+
+
+### Features
+
+* **migrations:** keep incremental and snapshot history when models are renamed ([#813](https://github.com/chio-labs/sqlbuild/issues/813)) ([427f4da](https://github.com/chio-labs/sqlbuild/commit/427f4dad2138bf6af49d604315807a7f8b82909a))
+
 ## [0.117.1](https://github.com/chio-labs/sqlbuild/compare/v0.117.0...v0.117.1) (2026-09-24)
 
 

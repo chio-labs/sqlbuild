@@ -534,7 +534,6 @@ def execute_microbatch_entry(
             batch_count=batch_outcome.completed_batches,
             batch_size=batch_plan.effective_batch_size,
             rows_affected=batch_outcome.rows_affected,
-            microbatch_applied_intervals=batch_outcome.applied_intervals,
             **_microbatch_result_fields(history=history_context, succeeded=False),
         )
     final_audit_run: FinalAuditRun = run_final_scope_audits(
@@ -617,7 +616,6 @@ def execute_microbatch_entry(
         batch_count=batch_outcome.completed_batches,
         batch_size=batch_plan.effective_batch_size,
         rows_affected=batch_outcome.rows_affected,
-        microbatch_applied_intervals=batch_outcome.applied_intervals,
         cursor_range_start=(
             None if resolved_range is None else sentinel_to_token(sentinel=resolved_range.start)
         ),
@@ -1039,7 +1037,6 @@ def _execute_microbatch_batches(
         )
     schema_checked: bool = False
     completed_batches: int = 0
-    applied_intervals: list[tuple[str, str]] = []
     total_rows: int = 0
     row_count_known: bool = False
     batch: BatchWindow
@@ -1123,7 +1120,6 @@ def _execute_microbatch_batches(
                     total_rows=total_rows,
                     row_count_known=row_count_known,
                 ),
-                applied_intervals=tuple(applied_intervals),
             )
         if isinstance(dml_result, int):
             total_rows += dml_result
@@ -1144,7 +1140,6 @@ def _execute_microbatch_batches(
                     total_rows=total_rows,
                     row_count_known=row_count_known,
                 ),
-                applied_intervals=tuple(applied_intervals),
             )
         completion_failure: ModelExecutionResult | None = (
             None
@@ -1181,7 +1176,6 @@ def _execute_microbatch_batches(
             raise
         lifecycle.completed(affected_rows=dml_result if isinstance(dml_result, int) else None)
         completed_batches += 1
-        applied_intervals.append((render(value=batch.start), render(value=batch.end)))
         if on_progress is not None:
             batch_elapsed: float = time.monotonic() - batch_start_time
             on_progress(
@@ -1194,7 +1188,6 @@ def _execute_microbatch_batches(
             total_rows=total_rows,
             row_count_known=row_count_known,
         ),
-        applied_intervals=tuple(applied_intervals),
     )
 
 
@@ -1360,7 +1353,6 @@ def _execute_microbatch_batches_concurrently(
         not in history_context.recovery_intervals
     )
     completed_batches: int = 0
-    applied_intervals: list[tuple[str, str]] = []
     total_rows: int = 0
     row_count_known: bool = False
     for phase_batches in (recovery_batches, ordinary_batches):
@@ -1378,7 +1370,6 @@ def _execute_microbatch_batches_concurrently(
         )
         state = phase_outcome.state
         completed_batches += phase_outcome.completed_batches
-        applied_intervals.extend(phase_outcome.applied_intervals)
         if phase_outcome.rows_affected is not None:
             total_rows += phase_outcome.rows_affected
             row_count_known = True
@@ -1390,7 +1381,6 @@ def _execute_microbatch_batches_concurrently(
                 rows_affected=_reported_rows_affected(
                     total_rows=total_rows, row_count_known=row_count_known
                 ),
-                applied_intervals=tuple(applied_intervals),
             )
     return MicrobatchPhaseOutcome(
         state=state,
@@ -1398,7 +1388,6 @@ def _execute_microbatch_batches_concurrently(
         rows_affected=_reported_rows_affected(
             total_rows=total_rows, row_count_known=row_count_known
         ),
-        applied_intervals=tuple(applied_intervals),
     )
 
 
@@ -1467,14 +1456,12 @@ def _execute_concurrent_microbatch_phase(
         lambda batch, connection: execute(batch=batch, connection=connection),
     )
     completed_batches: int = first_outcome.completed_batches
-    applied_intervals: list[tuple[str, str]] = list(first_outcome.applied_intervals)
     total_rows: int = first_outcome.rows_affected or 0
     row_count_known: bool = first_outcome.rows_affected is not None
     failure: ModelExecutionResult | None = None
     for outcome in outcomes:
         aggregate_state = _merge_microbatch_states(target=aggregate_state, source=outcome.state)
         completed_batches += outcome.completed_batches
-        applied_intervals.extend(outcome.applied_intervals)
         if outcome.rows_affected is not None:
             total_rows += outcome.rows_affected
             row_count_known = True
@@ -1487,7 +1474,6 @@ def _execute_concurrent_microbatch_phase(
         rows_affected=_reported_rows_affected(
             total_rows=total_rows, row_count_known=row_count_known
         ),
-        applied_intervals=tuple(applied_intervals),
     )
 
 
@@ -2745,12 +2731,6 @@ def _cursor_bound(*, values: list[str], cursor_type: str, maximum: bool) -> str:
         if maximum
         else min(values, key=lambda value: Decimal(value))
     )
-
-
-def _cursor_result_string(value: object) -> str:
-    if isinstance(value, datetime | date):
-        return value.isoformat()
-    return str(value)
 
 
 def _reported_rows_affected(*, total_rows: int, row_count_known: bool) -> int | None:

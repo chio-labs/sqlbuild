@@ -28,12 +28,6 @@ class InvalidQualifiedIdentityError(ScopeError):
     code: str = "S002"
 
 
-class DuplicateScopeIdentityError(ScopeError):
-    """Raised when records duplicate a canonical identity."""
-
-    code: str = "S003"
-
-
 class ScopeCacheDecodeError(ScopeError):
     """Raised when a persistent scope-index payload is malformed."""
 

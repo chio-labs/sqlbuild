@@ -48,6 +48,7 @@ from sqlbuild.adapter.contract.models import (
     ExpressionInferenceProfile,
     FunctionDefinition,
     FunctionInfo,
+    MigrationStagePlan,
     QueryResult,
     RelationInfo,
     RowDiffColumnResult,
@@ -72,6 +73,7 @@ from sqlbuild.adapter.contract.types import (
     HistoricalSnapshotCloseStyle,
     HistoricalSnapshotInsertStyle,
     LoaderLogicalType,
+    MigrationTransfer,
     PromotionStrategy,
     SnapshotLatestVersionStyle,
     SnapshotUpdateStyle,
@@ -228,24 +230,6 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"@tsql = N'{escaped_sql}', @params = NULL, @browse_information_mode = 0",
         )
         return tuple(str(row[2]) for row in cursor.fetchall() if row[2] is not None)
-
-    def get_relation_max_cursor(
-        self,
-        *,
-        connection: Any,
-        relation: str,
-        cursor_column: str,
-    ) -> object | None:
-        """Return the maximum cursor value currently present in a relation."""
-
-        quoted_cursor: str = self.render_identifier(cursor_column)
-        cursor: Any = self.execute(
-            connection=connection, sql=f"SELECT max({quoted_cursor}) FROM {relation}"
-        )
-        row: Any | None = cursor.fetchone()
-        if row is None:
-            return None
-        return row[0]
 
     def render_max_cursor_at_or_before(
         self,
@@ -629,6 +613,25 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             database=database,
             schema=schema,
             table_name=JANITOR_EVENTS_TABLE_NAME,
+        )
+
+    def render_create_migration_state_table_sql(self, *, database: str | None, schema: str) -> str:
+        from sqlbuild.compiler.migrations.constants import MIGRATION_TABLE_NAME
+        from sqlbuild.compiler.migrations.main.create_table_sql import (
+            build_migration_state_create_table_sql,
+        )
+
+        create_sql: str = build_migration_state_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        ).replace("CREATE TABLE IF NOT EXISTS", "CREATE TABLE", 1)
+        return self._create_table_if_missing_sql(
+            create_sql=create_sql,
+            database=database,
+            schema=schema,
+            table_name=MIGRATION_TABLE_NAME,
         )
 
     def render_read_latest_source_freshness_sql(
@@ -1089,25 +1092,6 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         stmt: str
         for stmt in statements:
             self.execute(connection=connection, sql=stmt)
-
-    def count_rows(
-        self,
-        *,
-        connection: Any,
-        relation: str,
-        cursor_column: str | None = None,
-        start_cursor: CursorValue | None = None,
-        end_cursor: CursorValue | None = None,
-    ) -> int:
-        cursor_filter: str = self.build_cursor_filter(
-            cursor_column=cursor_column,
-            start_cursor=start_cursor,
-            end_cursor=end_cursor,
-        )
-        where_clause: str = f" WHERE {cursor_filter}" if cursor_filter else ""
-        cursor: Any = connection.execute(f"SELECT COUNT(*) FROM {relation}{where_clause}")
-        result: Any = cursor.fetchone()
-        return int(result[0])
 
     def create_function(
         self,
@@ -1772,22 +1756,28 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         del origin_is_transient
         return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
-    def render_query_with_cursor_bounds(
+    def render_migration_stage(
         self,
         *,
-        sql: str,
-        cursor_column: str,
-        cursor_start: str,
-        cursor_end: str,
-        cursor_type: str | None,
-    ) -> str:
-        return self._render_query_with_cursor_bounds_impl(
-            sql=sql,
-            cursor_column=cursor_column,
-            cursor_start=cursor_start,
-            cursor_end=cursor_end,
-            cursor_type=cursor_type,
+        origin: str,
+        stage: str,
+        origin_is_transient: bool = False,
+        stage_is_transient: bool | None = None,
+    ) -> MigrationStagePlan:
+        del origin_is_transient, stage_is_transient
+        return MigrationStagePlan(
+            transfer=MigrationTransfer.COPY,
+            statements=(f"SELECT * INTO {stage} FROM {origin}",),
         )
+
+    def capture_dependent_view_rebinds(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        del connection, database, schema, name
+        return ()
+
+    def supports_transactional_ddl(self) -> bool:
+        return True
 
     def render_seed_select_before_cursor(
         self,
@@ -1801,21 +1791,6 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             origin=origin,
             cursor_column=cursor_column,
             cursor_end_exclusive=cursor_end_exclusive,
-            cursor_type=cursor_type,
-        )
-
-    def render_seed_select_after_cursor(
-        self,
-        *,
-        origin: str,
-        cursor_column: str,
-        cursor_start_exclusive: str,
-        cursor_type: str | None,
-    ) -> str:
-        return self._render_seed_select_after_cursor_impl(
-            origin=origin,
-            cursor_column=cursor_column,
-            cursor_start_exclusive=cursor_start_exclusive,
             cursor_type=cursor_type,
         )
 

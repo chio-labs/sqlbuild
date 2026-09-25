@@ -21,17 +21,6 @@ def build_ingress_lifecycle_nodes(
     )
 
 
-def build_read_side_python_lifecycle_nodes(
-    *, plan: PythonSqlRunLifecyclePlan, python_graph: PythonNodeGraph
-) -> tuple[LifecycleExecutionNode, ...]:
-    """Build schedulable SQL-read Python nodes from a lifecycle plan."""
-
-    return _build_python_lifecycle_nodes(
-        selected_names=plan.read_side_python_node_names,
-        python_graph=python_graph,
-    )
-
-
 def _build_python_lifecycle_nodes(
     *, selected_names: frozenset[str], python_graph: PythonNodeGraph
 ) -> tuple[LifecycleExecutionNode, ...]:

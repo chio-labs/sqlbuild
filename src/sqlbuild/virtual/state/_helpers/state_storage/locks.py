@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from sqlbuild.virtual.state.classes.state_backend import StateBackend
-from sqlbuild.virtual.state.constants import STATE_MIGRATION_LOCK_KEY
 from sqlbuild.virtual.state.models import StateLockLease
 
 
@@ -63,28 +62,6 @@ def acquire_model_version_lock(
         connection=connection,
         schema=schema,
         lock_key=model_version_lock_key(model_name=model_name, version_hash=version_hash),
-        owner_id=owner_id,
-        ttl=ttl,
-        now=now,
-    )
-
-
-def acquire_state_migration_lock(
-    *,
-    backend: StateBackend,
-    connection: Any,
-    schema: str,
-    owner_id: str,
-    ttl: timedelta,
-    now: datetime | None = None,
-) -> StateLockLease | None:
-    """Acquire the lock for state schema lifecycle operations."""
-
-    return acquire_state_lock(
-        backend=backend,
-        connection=connection,
-        schema=schema,
-        lock_key=STATE_MIGRATION_LOCK_KEY,
         owner_id=owner_id,
         ttl=ttl,
         now=now,

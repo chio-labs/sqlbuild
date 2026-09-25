@@ -63,19 +63,6 @@ class DiffMixin(ABC):
         ...
 
     @abstractmethod
-    def count_rows(
-        self,
-        *,
-        connection: Any,
-        relation: str,
-        cursor_column: str | None = None,
-        start_cursor: CursorValue | None = None,
-        end_cursor: CursorValue | None = None,
-    ) -> int:
-        """Return the row count for a relation, optionally bounded by cursor."""
-        ...
-
-    @abstractmethod
     def inspect_row_diff_coverage(
         self,
         *,

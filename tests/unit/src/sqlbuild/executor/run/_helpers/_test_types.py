@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from datetime import datetime
 
 from sqlbuild.adapter.contract.models import ColumnInfo, LifeCycleEvent
 from sqlbuild.executor.run.types import AuditGateReuseReason, AuditGateStatus, ExecutionPhase
@@ -169,26 +168,6 @@ class ReportedRowsAffectedTestCase:
 
 
 @dataclass(frozen=True)
-class MicrobatchCursorDiscoveryTestCase:
-    description: str
-    warehouse_column_type: str
-    cursor_min: object
-    cursor_max: object
-    cursor_type: str
-    expected_start: str
-    expected_end: str
-
-
-@dataclass(frozen=True)
-class MicrobatchCursorDiscoveryFailureTestCase:
-    description: str
-    warehouse_column_type: str
-    cursor_min: object
-    cursor_max: object
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
 class RuntimeTargetMaxTestCase:
     description: str
     target_rows: tuple[object, ...]
@@ -333,43 +312,6 @@ class PythonHookInvocationTestCase:
 
 
 @dataclass(frozen=True)
-class PermanentRequirementTestCase:
-    description: str
-    source_created_at: datetime
-    expected_operation_kind: str
-    expected_retention_days: int
-
-
-@dataclass(frozen=True)
-class PermanentPromotionTestCase:
-    description: str
-    initial_state: str
-    operation_identity: str
-    expected_timeline: tuple[str, ...]
-    expected_completion_time: datetime | None
-
-
-@dataclass(frozen=True)
-class PermanentArchiveConflictTestCase:
-    description: str
-    archive_generation_offset_seconds: int
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
-class PermanentPersistedConflictTestCase:
-    description: str
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
-class PermanentIdentifierFitTestCase:
-    description: str
-    identifier_limit: int
-    expected_prefix: str
-
-
-@dataclass(frozen=True)
 class PythonHookSkipTestCase:
     description: str
     expected_skipped: bool
@@ -451,30 +393,6 @@ class TryWriteFingerprintAuditGateTestCase:
 
 
 @dataclass(frozen=True)
-class AuditGateReuseDecisionTestCase:
-    description: str
-    metadata_mode: str
-    status: AuditGateStatus
-    planned_attached_column_name: str | None
-    planned_resolved_sql: str
-    expected_reusable: bool
-    expected_reason: AuditGateReuseReason
-    expected_reusable_count: int
-    expected_missing_count: int
-    planned_always_run: bool = False
-
-
-@dataclass(frozen=True)
-class AuditGatePartialReuseDecisionTestCase:
-    description: str
-    changed_resolved_sql: str
-    expected_reusable: bool
-    expected_reason: AuditGateReuseReason
-    expected_reusable_count: int
-    expected_missing_count: int
-
-
-@dataclass(frozen=True)
 class ReuseFromAuditGateDecisionTestCase:
     description: str
     origin_unresolved_sql: str
@@ -499,3 +417,19 @@ class RuntimeContractValidationTestCase:
     contract_dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = ()
     expected_error_fragment: str | None = None
     expected_error_code: str | None = None
+
+
+@dataclass(frozen=True)
+class StagedPromotionTestCase:
+    description: str
+    adapter_name: str
+    target_exists: bool
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FullRefreshPromotionTestCase:
+    description: str
+    adapter_name: str
+    target_exists: bool
+    expected_statements: tuple[str, ...]

@@ -202,7 +202,8 @@ fn classify_model(ctes: Vec<Cte>, file: &str) -> Result<Classified, String> {
             authored.push(cte);
         } else if let Some(value) = name.strip_prefix("__expected__") {
             expected_models.push(required(value, "__expected__<model>", file)?);
-            validate_expected(&cte, file, "__expected__<model>", true)?;
+            let label = cte.0.clone();
+            validate_expected(&cte, file, &label, true)?;
             expected.push(cte);
         } else if let Some(value) = name.strip_prefix("__assert__") {
             assertion_names.push(required(value, "__assert__<assertion>", file)?);
@@ -431,7 +432,7 @@ fn validate_expected(
             "SQL test '{file}' must not use SELECT * in {label} CTEs"
         ));
     }
-    let branches = split_unions(&cte.1)?;
+    let branches = split_set_operations(&cte.1)?;
     let mut names: Vec<Vec<String>> = Vec::new();
     for branch in branches {
         names.push(projection_names(branch, file, label)?);
@@ -844,80 +845,19 @@ fn contains_select_star(sql: &str) -> Result<bool, String> {
     Ok(false)
 }
 
-fn split_unions(sql: &str) -> Result<Vec<&str>, String> {
-    let mut values: Vec<&str> = Vec::new();
-    let mut start = 0;
-    let mut index = 0;
-    let mut depth = 0;
-    while index < sql.len() {
-        let next = skip_non_code(sql, index)?;
-        if next != index {
-            index = next;
-            continue;
-        }
-        match byte_at(sql, index) {
-            Some(b'(') => depth += 1,
-            Some(b')') => depth -= 1,
-            _ => {}
-        }
-        if depth == 0
-            && let Some(end) = consume_keyword(sql, index, "UNION")
-        {
-            let value = sql[start..index].trim();
-            if !value.is_empty() {
-                values.push(value);
-            }
-            index = skip_ignorable(sql, end)?;
-            if let Some(quantifier_end) = consume_keyword(sql, index, "ALL")
-                .or_else(|| consume_keyword(sql, index, "DISTINCT"))
-            {
-                index = skip_ignorable(sql, quantifier_end)?;
-            }
-            start = index;
-            continue;
-        }
-        index += char_len(sql, index);
-    }
-    let value = sql[start..].trim();
-    if !value.is_empty() {
-        values.push(value);
-    }
-    Ok(values)
+/// What a top-level scan does after visiting one code offset.
+enum CodeStep<T> {
+    Advance,
+    Resume(usize),
+    Stop(T),
 }
 
-fn split_top_level(sql: &str, separator: u8) -> Result<Vec<&str>, String> {
-    let mut values: Vec<&str> = Vec::new();
-    let mut start = 0;
-    let mut index = 0;
-    let mut depth = 0;
-    while index < sql.len() {
-        let next = skip_non_code(sql, index)?;
-        if next != index {
-            index = next;
-            continue;
-        }
-        match byte_at(sql, index) {
-            Some(b'(') => depth += 1,
-            Some(b')') => depth -= 1,
-            Some(value) if value == separator && depth == 0 => {
-                let item = sql[start..index].trim();
-                if !item.is_empty() {
-                    values.push(item);
-                }
-                start = index + 1;
-            }
-            _ => {}
-        }
-        index += char_len(sql, index);
-    }
-    let item = sql[start..].trim();
-    if !item.is_empty() {
-        values.push(item);
-    }
-    Ok(values)
-}
-
-fn find_top_level_keyword(sql: &str, start: usize, keyword: &str) -> Result<Option<usize>, String> {
+/// Visit each code offset outside quotes and comments with its depth after that byte's parenthesis.
+fn scan_code<T>(
+    sql: &str,
+    start: usize,
+    mut visit: impl FnMut(usize, isize) -> Result<CodeStep<T>, String>,
+) -> Result<Option<T>, String> {
     let mut index = start;
     let mut depth = 0;
     while index < sql.len() {
@@ -931,12 +871,85 @@ fn find_top_level_keyword(sql: &str, start: usize, keyword: &str) -> Result<Opti
             Some(b')') => depth -= 1,
             _ => {}
         }
-        if depth == 0 && consume_keyword(sql, index, keyword).is_some() {
-            return Ok(Some(index));
+        match visit(index, depth)? {
+            CodeStep::Advance => index += char_len(sql, index),
+            CodeStep::Resume(resume) => index = resume,
+            CodeStep::Stop(value) => return Ok(Some(value)),
         }
-        index += char_len(sql, index);
     }
     Ok(None)
+}
+
+fn non_empty_trimmed(value: &str) -> Option<&str> {
+    Some(value.trim()).filter(|trimmed| !trimmed.is_empty())
+}
+
+/// Split on top-level `UNION`, `INTERSECT` and `EXCEPT`, each with an optional `ALL`/`DISTINCT`.
+pub(crate) fn split_set_operations(sql: &str) -> Result<Vec<&str>, String> {
+    let mut values: Vec<&str> = Vec::new();
+    let mut start = 0;
+    scan_code::<()>(sql, 0, |index, depth| {
+        if depth != 0 {
+            return Ok(CodeStep::Advance);
+        }
+        let Some(end) = set_operator_end(sql, index)? else {
+            return Ok(CodeStep::Advance);
+        };
+        values.extend(non_empty_trimmed(&sql[start..index]));
+        let mut resume = skip_ignorable(sql, end)?;
+        if let Some(quantifier_end) =
+            consume_keyword(sql, resume, "ALL").or_else(|| consume_keyword(sql, resume, "DISTINCT"))
+        {
+            resume = skip_ignorable(sql, quantifier_end)?;
+        }
+        start = resume;
+        Ok(CodeStep::Resume(resume))
+    })?;
+    values.extend(non_empty_trimmed(&sql[start..]));
+    Ok(values)
+}
+
+/// Return the end of a set operator at `index`; `* EXCEPT (...)` star modifiers are not operators.
+fn set_operator_end(sql: &str, index: usize) -> Result<Option<usize>, String> {
+    if let Some(end) =
+        consume_keyword(sql, index, "UNION").or_else(|| consume_keyword(sql, index, "INTERSECT"))
+    {
+        return Ok(Some(end));
+    }
+    match consume_keyword(sql, index, "EXCEPT") {
+        Some(end) if previous_code_byte(sql, index)? != Some(b'*') => Ok(Some(end)),
+        _ => Ok(None),
+    }
+}
+
+pub(crate) fn split_top_level(sql: &str, separator: u8) -> Result<Vec<&str>, String> {
+    let mut values: Vec<&str> = Vec::new();
+    let mut start = 0;
+    scan_code::<()>(sql, 0, |index, depth| {
+        if depth == 0 && byte_at(sql, index) == Some(separator) {
+            values.extend(non_empty_trimmed(&sql[start..index]));
+            start = index + 1;
+        }
+        Ok(CodeStep::Advance)
+    })?;
+    values.extend(non_empty_trimmed(&sql[start..]));
+    Ok(values)
+}
+
+pub(crate) fn find_top_level_keyword(
+    sql: &str,
+    start: usize,
+    keyword: &str,
+) -> Result<Option<usize>, String> {
+    scan_code(sql, start, |index, depth| {
+        Ok(
+            if depth == 0 && consume_keyword(sql, index, keyword).is_some() {
+                CodeStep::Stop(index)
+            } else {
+                CodeStep::Advance
+            },
+        )
+    })
 }
 
 fn find_top_level_clause_keyword(

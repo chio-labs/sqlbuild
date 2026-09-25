@@ -44,7 +44,7 @@ _TYPE_CHANGED_YML_FINDING: SchemaFinding = SchemaFinding(
 _TYPE_CHANGED_SQLGLOT_FINDING: SchemaFinding = SchemaFinding(
     kind=SchemaChangeKind.COLUMN_TYPE_CHANGED,
     column_name="amount",
-    source=SchemaColumnSource.SQLGLOT,
+    source=SchemaColumnSource.SQL_ANALYSIS,
     expected_type="DECIMAL",
     actual_type="INTEGER",
 )
@@ -52,7 +52,7 @@ _TYPE_CHANGED_SQLGLOT_FINDING: SchemaFinding = SchemaFinding(
 _ADDED_SQLGLOT_FINDING: SchemaFinding = SchemaFinding(
     kind=SchemaChangeKind.COLUMN_ADDED,
     column_name="new_col",
-    source=SchemaColumnSource.SQLGLOT,
+    source=SchemaColumnSource.SQL_ANALYSIS,
     expected_type="VARCHAR",
 )
 

@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.integrations.dlt._helpers.destination import build_dlt_destination
-from sqlbuild.integrations.dlt.constants import DLT_DESTINATION_ADAPTERS
 from sqlbuild.integrations.dlt.exceptions import DltIntegrationError
 from sqlbuild.integrations.dlt.models import DltDestinationConfig
 from tests.unit.src.sqlbuild.integrations.dlt._test_types import (
-    DltDestinationCoverageTestCase,
     DltDestinationErrorTestCase,
     DltDestinationTestCase,
 )
@@ -172,19 +169,3 @@ def test_given_real_warehouse_without_schema_when_building_dlt_destination_then_
         )
 
     assert test_case.expected_error_fragment in str(exc_info.value)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DltDestinationCoverageTestCase(
-            description="covers all builtin adapters",
-            expected_adapters=frozenset(BuiltinAdapter),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_builtin_adapters_when_checking_dlt_destination_support_then_all_are_explicit(
-    test_case: DltDestinationCoverageTestCase,
-) -> None:
-    assert DLT_DESTINATION_ADAPTERS == test_case.expected_adapters
