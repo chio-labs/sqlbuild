@@ -1,1 +1,0 @@
-"""Virtual diff helper package."""

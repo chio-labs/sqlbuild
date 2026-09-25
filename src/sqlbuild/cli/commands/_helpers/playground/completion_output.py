@@ -46,20 +46,7 @@ def _suggested_commands(*, template: PlaygroundTemplate, display_path: str) -> t
         f"{display_path}/{PLAYGROUND_ORCHESTRATED_PROJECT_DIR}" if orchestrated else display_path
     )
     commands: list[str] = [f"cd {project_path}"]
-    if template == PlaygroundTemplate.VIRTUAL:
-        commands.extend(
-            [
-                "sqb state init",
-                "sqb build",
-                "sqb build --virtual-env pr",
-                "sqb test",
-                "sqb audit",
-                "sqb scenario test",
-                "sqb diff dev:pr --schema-only",
-                "sqb promote --from pr --to dev",
-            ]
-        )
-    elif template == PlaygroundTemplate.PYTHON_NODES:
+    if template == PlaygroundTemplate.PYTHON_NODES:
         commands.extend(
             [
                 "sqb plan --select +fact_orders --select +orders_export",
@@ -82,7 +69,6 @@ def _example_name(template: PlaygroundTemplate) -> str:
     labels: dict[PlaygroundTemplate, str] = {
         PlaygroundTemplate.DAGSTER: "waffle shop + Dagster",
         PlaygroundTemplate.RIVERS: "waffle shop + Rivers",
-        PlaygroundTemplate.VIRTUAL: "virtual environments waffle shop",
         PlaygroundTemplate.LOADER_WAFFLE_SHOP: "loader-focused waffle shop",
         PlaygroundTemplate.PYTHON_NODES: "Python nodes demo",
     }

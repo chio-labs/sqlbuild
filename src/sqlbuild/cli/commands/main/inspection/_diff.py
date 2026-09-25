@@ -6,10 +6,8 @@ from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.cli.commands._helpers.diff.execution import (
     execute_direct_diff,
     execute_query_diff,
-    execute_virtual_diff,
     prepare_direct_diff,
     prepare_query_diff,
-    prepare_virtual_diff,
 )
 from sqlbuild.cli.commands._helpers.diff.invocation import (
     is_query_diff_request,
@@ -18,7 +16,6 @@ from sqlbuild.cli.commands._helpers.diff.invocation import (
 from sqlbuild.cli.commands._helpers.diff.outputs import (
     resolve_diff_exit_code,
     write_direct_diff_output,
-    write_virtual_diff_output,
 )
 from sqlbuild.cli.commands.constants import (
     QUERY_DIFF_INCOMPLETE_EXECUTION_CODES,
@@ -36,8 +33,6 @@ from sqlbuild.cli.commands.models import (
     DirectDiffPreparation,
     QueryDiffPreparation,
     QueryDiffRunOutcome,
-    VirtualDiffPreparation,
-    VirtualDiffRunOutcome,
 )
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.diff.constants import (
@@ -130,22 +125,6 @@ def run_diff(request: DiffCommandRequest) -> int:
                 f"failed to publish query diff output: {error}", code="C257"
             ) from error
         return query_outcome.exit_code
-    if invocation.is_virtual_mode:
-        virtual_preparation: VirtualDiffPreparation = prepare_virtual_diff(
-            request=request,
-            invocation=invocation,
-        )
-        virtual_outcome: VirtualDiffRunOutcome = execute_virtual_diff(
-            request=request,
-            invocation=invocation,
-            preparation=virtual_preparation,
-        )
-        write_virtual_diff_output(
-            request=request,
-            preparation=virtual_preparation,
-            outcome=virtual_outcome,
-        )
-        return resolve_diff_exit_code(virtual_outcome.result)
 
     direct_preparation: DirectDiffPreparation = prepare_direct_diff(
         request=request,

@@ -7,14 +7,11 @@ from sqlbuild.cli.commands._helpers.diff.json_output import (
     write_diff_json_output,
 )
 from sqlbuild.cli.commands._helpers.diff.output import has_diff_failures, render_diff_output
-from sqlbuild.cli.commands._helpers.diff.virtual_output import format_virtual_diff_header
 from sqlbuild.cli.commands.constants import DEFAULT_DIFF_MAX_VALUE_LENGTH
 from sqlbuild.cli.commands.models import (
     DiffCommandRequest,
     DiffExampleRenderOptions,
     DirectDiffPreparation,
-    VirtualDiffPreparation,
-    VirtualDiffRunOutcome,
 )
 from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.presentation.main.supports_color import supports_color
@@ -66,61 +63,6 @@ def write_direct_diff_output(
                 outcome=outcome,
             )
         )
-
-
-def write_virtual_diff_output(
-    *,
-    request: DiffCommandRequest,
-    preparation: VirtualDiffPreparation,
-    outcome: VirtualDiffRunOutcome,
-) -> None:
-    """Write virtual diff header and optional diff body."""
-
-    example_render_options: DiffExampleRenderOptions = _example_render_options(request=request)
-    write_diff_json_output(
-        path=request.json_output_path,
-        result=outcome.result,
-        from_label=preparation.from_virtual_environment,
-        to_label=preparation.to_virtual_environment,
-        example_render_options=example_render_options,
-    )
-    if request.json_output:
-        print(
-            render_diff_json_output(
-                result=outcome.result,
-                from_label=preparation.from_virtual_environment,
-                to_label=preparation.to_virtual_environment,
-                example_render_options=example_render_options,
-            )
-        )
-        return
-    header: str = format_virtual_diff_header(
-        from_virtual_environment=preparation.from_virtual_environment,
-        to_virtual_environment=preparation.to_virtual_environment,
-        outcome=outcome,
-        allow_partial_diff=request.allow_partial_diff,
-        verbose=request.verbose,
-        use_color=preparation.use_color,
-    )
-    print()
-    print(header)
-    print()
-    if outcome.result.model_results:
-        print(
-            render_diff_output(
-                result=outcome.result,
-                from_label=preparation.from_virtual_environment,
-                to_label=preparation.to_virtual_environment,
-                mode_label=_mode_label(request=request),
-                use_color=preparation.use_color,
-                verbose=request.verbose,
-                max_column_examples=preparation.effective_max_column_examples,
-                max_row_only_examples=preparation.effective_max_row_only_examples,
-                example_render_options=example_render_options,
-            )
-        )
-    else:
-        print("No VDE ref differences in selected scope.")
 
 
 def resolve_diff_exit_code(result: DiffExecutionResult) -> int:

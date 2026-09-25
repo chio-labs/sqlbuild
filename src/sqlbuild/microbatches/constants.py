@@ -4,7 +4,6 @@ from sqlbuild.sql_values.types import StateSqlValueType
 
 MICROBATCH_TABLE_NAME: str = "_sqlbuild_microbatches"
 DIRECT_MICROBATCH_SCOPE_KIND: str = "direct_logical"
-VIRTUAL_MICROBATCH_SCOPE_KIND: str = "virtual_physical"
 MICROBATCH_GENERATION_COMMENT_PREFIX: str = "sqlbuild-generation:"
 MICROBATCH_REPLAY_GENERATION_PREFIX: str = "replay:"
 MICROBATCH_GENERATION_WILDCARD: str = "*"
@@ -22,8 +21,6 @@ MICROBATCH_COLUMNS: tuple[str, ...] = (
     "target_schema",
     "target_name",
     "physical_generation_id",
-    "virtual_environment_name",
-    "virtual_model_version_hash",
     "origin_run_id",
     "origin_run_started_at",
     "execution_run_id",

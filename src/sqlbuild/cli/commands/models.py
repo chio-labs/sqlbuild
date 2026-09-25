@@ -69,7 +69,6 @@ from sqlbuild.compiler.pipeline.models import (
 )
 from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
-from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 from sqlbuild.cost.types import CostStatus
 from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
@@ -80,18 +79,9 @@ from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
 from sqlbuild.integrations.dbt.models import DbtInitRequest
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.runtime.contracts.types import NodeStartCallback
 from sqlbuild.spec.contracts.models import CostConfig, ExecutionLimitsConfig, SourceEntry
-from sqlbuild.virtual.executor.models import VirtualBuildPipelineResult
-from sqlbuild.virtual.state.models import (
-    CheckpointRetentionInspection,
-    DetachedVirtualEnvironmentInspection,
-    ExpiredVirtualEnvironmentInspection,
-    PhysicalRelationRecord,
-    StateJanitorInspection,
-)
 
 
 @dataclass(frozen=True)
@@ -149,8 +139,6 @@ class BuildRunContext:
     concurrency: int
     full_refresh: bool
     selector_files: tuple[SelectorFileSummary, ...]
-    virtual_logical_schema: str | None = None
-    virtual_physical_schema: str | None = None
 
 
 @dataclass(frozen=True)
@@ -167,7 +155,6 @@ class BuildCommandRequest:
     no_color: bool = False
     fail_fast: bool = False
     full_refresh: bool = False
-    virtual_env: str | None = None
     load_sources: bool | None = None
     reload_sources: bool = False
     include_python: bool = True
@@ -181,8 +168,6 @@ class BuildCommandRequest:
     verbose: bool = False
     debug: bool = False
     cli_vars: dict[str, object] | None = None
-    include_stale_upstreams: bool = False
-    changes_only: bool = False
     run_tests: bool = True
     run_audits: bool = True
     manifest: bool = False
@@ -212,7 +197,6 @@ class BuildInvocation:
     effective_project_dir: Path
     discovered_inputs: DiscoveredProjectInputs
     effective_defer_clone_from: str | None
-    effective_changes_only: bool
     adapter_name: str
     adapter: BaseAdapter
     connection_config: dict[str, object]
@@ -221,7 +205,6 @@ class BuildInvocation:
     connection_progress: ConnectionProgressReporter
     planning_progress: PlanningProgressReporter
     should_load_sources: bool
-    virtual_mode: bool
     effective_target_name: str | None = None
     execution_limits: ExecutionLimitsConfig = field(default_factory=ExecutionLimitsConfig)
 
@@ -297,78 +280,6 @@ class BuildPhaseTimings:
 
 
 @dataclass(frozen=True)
-class VirtualBuildPlanHookConfig:
-    """Rendering, safety, and header options for the virtual build plan hook."""
-
-    full_refresh: bool
-    allow_snapshot_full_refresh: bool
-    allow_table_type_downgrade: bool
-    allow_retention_decrease: bool
-    use_color: bool
-    verbose: bool
-    debug: bool
-    json_output: bool
-    execution_command: str
-    concurrency: int | None
-    connection_config: dict[str, object] = field(default_factory=dict)
-    selector_files: tuple[SelectorFileSummary, ...] = ()
-    virtual_environment_name: str | None = None
-    unsuffixed_virtual_environment_name: str | None = None
-    effective_target_name: str | None = None
-    execution_limits: ExecutionLimitsConfig = field(default_factory=ExecutionLimitsConfig)
-
-
-@dataclass(frozen=True)
-class VirtualBuildCliRequest:
-    """Flag and option inputs for the virtual-build CLI entrypoint."""
-
-    selected_target: str | None = None
-    no_sql_validation: bool = False
-    defer_sources_to: str | None = None
-    cursor_overrides: CursorOverrides | None = None
-    full_refresh: bool = False
-    virtual_environment_name: str | None = None
-    include_stale_upstreams: bool = False
-    changes_only: bool = False
-    auto_load_sources: bool = False
-    reload_sources: bool = False
-    include_python: bool = True
-    seed_only: bool = False
-    select: tuple[str, ...] = ()
-    exclude: tuple[str, ...] = ()
-    fail_fast: bool = False
-    allow_snapshot_full_refresh: bool = False
-    allow_table_type_downgrade: bool = False
-    allow_retention_decrease: bool = False
-    allow_snapshot_schema_change: bool = False
-    concurrency: int | None = None
-    verbose: bool = False
-    debug: bool = False
-    cli_vars: dict[str, object] | None = None
-    run_tests: bool = True
-    run_audits: bool = True
-    json_output: bool = False
-    json_output_path: Path | None = None
-    execution_command: str = "build"
-    use_color: bool = False
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
-    providers: ProviderContainer | None = None
-    no_cache: bool = False
-    selector_files: tuple[SelectorFileSummary, ...] = ()
-    max_microbatches: int | None = None
-    command_started_at: float | None = None
-
-
-@dataclass(frozen=True)
-class VirtualBuildExecution:
-    """Pipeline result and output context produced by virtual build execution."""
-
-    result: VirtualBuildPipelineResult
-    stream: TextIO
-    elapsed: float
-
-
-@dataclass(frozen=True)
 class CheckCommandRequest:
     """CLI inputs for one check command invocation."""
 
@@ -421,7 +332,6 @@ class CloneCommandRequest:
     origin_target_name: str
     destination_target_name: str | None
     hard_copy: bool
-    virtual_env: str | None = None
     skip_locked: bool = False
     select: tuple[str, ...] = ()
     exclude: tuple[str, ...] = ()
@@ -551,7 +461,6 @@ class DiffCommandRequest:
     exclude: tuple[str, ...] = ()
     verbose: bool = False
     cli_vars: dict[str, object] | None = None
-    allow_partial_diff: bool = False
     selected_target: str | None = None
     left_query: str | None = None
     left_query_file: Path | None = None
@@ -574,7 +483,6 @@ class DiffInvocation:
 
     effective_project_dir: Path
     discovered_inputs: DiscoveredProjectInputs
-    is_virtual_mode: bool
 
 
 @dataclass(frozen=True)
@@ -641,32 +549,6 @@ class QueryDiffRunOutcome:
 
 
 @dataclass(frozen=True)
-class VirtualDiffPreparation:
-    """Resolved virtual diff adapter, connection, reporters, and sample limits."""
-
-    from_virtual_environment: str
-    to_virtual_environment: str
-    adapter: BaseAdapter
-    connection_config: dict[str, object]
-    effective_max_column_examples: int
-    effective_max_row_only_examples: int
-    use_color: bool
-
-
-@dataclass(frozen=True)
-class VirtualDiffRunOutcome:
-    """Virtual diff result plus virtual environment freshness metadata."""
-
-    result: DiffExecutionResult
-    selected_names: tuple[str, ...]
-    skipped_names: tuple[str, ...]
-    from_stale: tuple[str, ...]
-    to_stale: tuple[str, ...]
-    from_working: bool
-    to_working: bool
-
-
-@dataclass(frozen=True)
 class FreshnessCommandRequest:
     """CLI inputs for one `sqb freshness` invocation."""
 
@@ -682,7 +564,6 @@ class FreshnessCommandRequest:
     fail_on_error: bool = False
     compare_state: bool = False
     fail_on_stale: bool = False
-    virtual_environment_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -802,18 +683,6 @@ class JanitorConnectionContext:
     """Janitor warehouse connection handle."""
 
     connection: object
-
-
-@dataclass(frozen=True)
-class JanitorRetentionInspection:
-    """Retention inspection results used to build a janitor plan."""
-
-    checkpoint: CheckpointRetentionInspection | None
-    detached_environment: DetachedVirtualEnvironmentInspection | None
-    expired_environment: ExpiredVirtualEnvironmentInspection | None
-    state: StateJanitorInspection | None
-    unsuffixed_virtual_environment_name: str | None
-    active_microbatch_replay_relations: tuple[PhysicalRelationRecord, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -981,7 +850,6 @@ class PlanCommandRequest:
     cursor_overrides: CursorOverrides | None = None
     json_output: bool = False
     full_refresh: bool = False
-    virtual_env: str | None = None
     load_sources: bool | None = None
     include_python: bool = True
     no_color: bool = False
@@ -989,8 +857,6 @@ class PlanCommandRequest:
     exclude: tuple[str, ...] = ()
     verbose: bool = False
     cli_vars: dict[str, object] | None = None
-    include_stale_upstreams: bool = False
-    changes_only: bool = False
     no_cache: bool = False
     max_microbatches: int | None = None
     selection_diagnostics: bool = False
@@ -1002,7 +868,6 @@ class PlanInvocation:
 
     effective_project_dir: Path
     discovered_inputs: DiscoveredProjectInputs
-    effective_changes_only: bool
     adapter: BaseAdapter
     connection_config: dict[str, object]
     use_color: bool
@@ -1010,7 +875,6 @@ class PlanInvocation:
     connection_progress: ConnectionProgressReporter
     planning_progress: PlanningProgressReporter
     should_load_sources: bool
-    virtual_mode: bool
 
 
 @dataclass(frozen=True)
@@ -1028,40 +892,6 @@ class PlaygroundTarget:
 
     target_dir: Path
     template: PlaygroundTemplate
-
-
-@dataclass(frozen=True)
-class PromoteCommandRequest:
-    """CLI inputs for one `sqb promote` invocation."""
-
-    project_dir: Path | None
-    no_color: bool
-    no_sql_validation: bool
-    from_virtual_environment: str
-    to_virtual_environment: str
-    select: tuple[str, ...] = ()
-    exclude: tuple[str, ...] = ()
-    allow_partial_promotion: bool = False
-    include_stale_upstreams: bool = False
-    verbose: bool = False
-    cli_vars: dict[str, object] | None = None
-
-
-@dataclass(frozen=True)
-class RollbackCommandRequest:
-    """CLI inputs for one `sqb rollback` invocation."""
-
-    project_dir: Path | None
-    no_color: bool
-    no_sql_validation: bool
-    virtual_environment: str | None
-    verbose: bool = False
-    checkpoint_id: str | None = None
-    select: tuple[str, ...] = ()
-    exclude: tuple[str, ...] = ()
-    allow_partial_rollback: bool = False
-    include_stale_upstreams: bool = False
-    cli_vars: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)

@@ -8,16 +8,11 @@ from typing import TextIO
 from sqlbuild.executor.janitor.models import (
     JanitorArchiveCandidate,
     JanitorArchivedRelation,
-    JanitorCheckpointCandidate,
     JanitorDeleteCandidate,
-    JanitorDetachedVirtualEnvironmentCandidate,
-    JanitorExpiredLockCandidate,
-    JanitorExpiredVirtualEnvironmentCandidate,
     JanitorPlan,
     JanitorQueryDiffArtifactCandidate,
     JanitorSkippedRelation,
     JanitorSkippedSchema,
-    JanitorStateBackupCandidate,
 )
 from sqlbuild.presentation.classes.cli_style import CliStyle
 
@@ -86,44 +81,8 @@ def _write_plan_summary(*, plan: JanitorPlan, stream: TextIO, style: CliStyle) -
     _write_count_row(
         stream=stream,
         style=style,
-        label="checkpoints pruned",
-        items=plan.checkpoint_candidates,
-    )
-    _write_count_row(
-        stream=stream,
-        style=style,
-        label="detached VDEs pruned",
-        items=plan.detached_virtual_environment_candidates,
-    )
-    _write_count_row(
-        stream=stream,
-        style=style,
-        label="expired VDEs pruned",
-        items=plan.expired_virtual_environment_candidates,
-    )
-    _write_count_row(
-        stream=stream,
-        style=style,
-        label="state backups pruned",
-        items=plan.state_backup_candidates,
-    )
-    _write_count_row(
-        stream=stream,
-        style=style,
-        label="expired locks pruned",
-        items=plan.expired_lock_candidates,
-    )
-    _write_count_row(
-        stream=stream,
-        style=style,
         label="direct state pruned",
         items=plan.direct_state_prune_candidates,
-    )
-    _write_count_row(
-        stream=stream,
-        style=style,
-        label="virtual state pruned",
-        items=plan.virtual_state_prune_candidates,
     )
     skipped_count: str = style.accent(str(len(plan.skipped_relations)))
     stream.write(f"  {'objects skipped':<22} {skipped_count}\n")
@@ -248,66 +207,12 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
 
     _write_query_artifact_candidates(plan=plan, stream=stream, style=style)
 
-    if plan.checkpoint_candidates:
-        stream.write(f"\n{style.success('Eligible checkpoints')}\n")
-        checkpoint_candidate: JanitorCheckpointCandidate
-        for checkpoint_candidate in plan.checkpoint_candidates:
-            stream.write(
-                f"  {style.object_name(checkpoint_candidate.checkpoint_id)}  "
-                f"{style.muted(checkpoint_candidate.virtual_environment_name)}\n"
-            )
-
-    if plan.detached_virtual_environment_candidates:
-        stream.write(f"\n{style.success('Eligible detached VDEs')}\n")
-        detached_candidate: JanitorDetachedVirtualEnvironmentCandidate
-        for detached_candidate in plan.detached_virtual_environment_candidates:
-            stream.write(
-                f"  {style.object_name(detached_candidate.virtual_environment_name)}  "
-                f"{style.muted('detached virtual environment')}\n"
-            )
-
-    if plan.expired_virtual_environment_candidates:
-        stream.write(f"\n{style.success('Eligible expired VDEs')}\n")
-        expired_environment_candidate: JanitorExpiredVirtualEnvironmentCandidate
-        for expired_environment_candidate in plan.expired_virtual_environment_candidates:
-            target_name: str = expired_environment_candidate.virtual_environment_name
-            stream.write(
-                f"  {style.object_name(target_name)}  "
-                f"{style.muted('expired virtual environment')}\n"
-            )
-
-    if plan.state_backup_candidates:
-        stream.write(f"\n{style.success('Eligible state backups')}\n")
-        state_backup_candidate: JanitorStateBackupCandidate
-        for state_backup_candidate in plan.state_backup_candidates:
-            stream.write(
-                f"  {style.object_name(state_backup_candidate.backup_id)}  "
-                f"{style.muted(state_backup_candidate.schema_name)}\n"
-            )
-
-    if plan.expired_lock_candidates:
-        stream.write(f"\n{style.success('Eligible expired locks')}\n")
-        expired_lock_candidate: JanitorExpiredLockCandidate
-        for expired_lock_candidate in plan.expired_lock_candidates:
-            stream.write(
-                f"  {style.object_name(expired_lock_candidate.lock_key)}  "
-                f"{style.muted(expired_lock_candidate.owner_id)}\n"
-            )
-
     if plan.direct_state_prune_candidates:
         stream.write(f"\n{style.success('Eligible direct state pruning')}\n")
         for direct_state_candidate in plan.direct_state_prune_candidates:
             stream.write(
                 f"  {style.object_name(direct_state_candidate.display_name())}  "
                 f"{style.muted(f'keep latest {direct_state_candidate.retain_versions}')}\n"
-            )
-
-    if plan.virtual_state_prune_candidates:
-        stream.write(f"\n{style.success('Eligible virtual state pruning')}\n")
-        for virtual_state_candidate in plan.virtual_state_prune_candidates:
-            stream.write(
-                f"  {style.object_name(virtual_state_candidate.display_name())}  "
-                f"{style.muted(virtual_state_candidate.reason)}\n"
             )
 
     if plan.skipped_relations:
@@ -324,15 +229,7 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
 def confirmation_text(plan: JanitorPlan) -> str:
     """Build the exact confirmation phrase for a janitor plan."""
 
-    state_candidate_count: int = (
-        len(plan.checkpoint_candidates)
-        + len(plan.detached_virtual_environment_candidates)
-        + len(plan.expired_virtual_environment_candidates)
-        + len(plan.state_backup_candidates)
-        + len(plan.expired_lock_candidates)
-        + len(plan.direct_state_prune_candidates)
-        + len(plan.virtual_state_prune_candidates)
-    )
+    state_candidate_count: int = len(plan.direct_state_prune_candidates)
     archive_prefix: str = (
         f"archive {len(plan.archive_candidates)} and " if plan.archive_candidates else ""
     )
