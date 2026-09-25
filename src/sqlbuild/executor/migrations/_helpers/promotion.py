@@ -15,6 +15,7 @@ from sqlbuild.compiler.migrations.main.ensure_table import ensure_migration_tabl
 from sqlbuild.compiler.migrations.main.relation_for_location import migration_relation_for_location
 from sqlbuild.compiler.migrations.main.write_event import write_migration_event
 from sqlbuild.compiler.migrations.models import MigrationEvent, MigrationRelation
+from sqlbuild.compiler.migrations.types import MigrationDecision
 from sqlbuild.compiler.planner.models import ModelMigrationPlanEntry
 from sqlbuild.executor.migrations.models import MigrationArtifactNames
 from sqlbuild.executor.run.main.promote_staged_relation import promote_staged_relation
@@ -120,3 +121,29 @@ def migration_event(*, entry: ModelMigrationPlanEntry, run_id: str) -> Migration
         run_id=run_id,
         created_at=datetime.now(tz=UTC),
     )
+
+
+def record_renames(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    entries: tuple[ModelMigrationPlanEntry, ...],
+    run_id: str,
+) -> None:
+    """Record each newly handed-over table or view rename so retries keep the identity."""
+
+    entry: ModelMigrationPlanEntry
+    for entry in entries:
+        if entry.decision != MigrationDecision.RENAMED or entry.completed_at is not None:
+            continue
+        adapter.ensure_schema(
+            connection=connection,
+            database=entry.destination.database,
+            schema=entry.destination.schema,
+            statement_recorder=StatementRecorder(),
+        )
+        record_event(
+            adapter=adapter,
+            connection=connection,
+            event=migration_event(entry=entry, run_id=run_id),
+        )

@@ -74,6 +74,7 @@ _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
     PlanReason.SCHEMA_CHANGED,
     PlanReason.RUN_DESPITE_UNCHANGED,
     PlanReason.FIRST_RUN,
+    PlanReason.RENAMED,
 )
 
 _REASON_GROUP_LABELS: dict[PlanReason, str] = {
@@ -83,6 +84,7 @@ _REASON_GROUP_LABELS: dict[PlanReason, str] = {
     PlanReason.SCHEMA_CHANGED: "Schema changed",
     PlanReason.RUN_DESPITE_UNCHANGED: "Runs despite unchanged",
     PlanReason.FIRST_RUN: "First run",
+    PlanReason.RENAMED: "Renamed",
 }
 
 _ANSI_ESCAPE_PATTERN: re.Pattern[str] = re.compile(r"\033\[[0-9;]*m")
@@ -1145,6 +1147,8 @@ def _plan_reason_text(reason: PlanReason) -> str:
         return "schema changed"
     if reason == PlanReason.FIRST_RUN:
         return "first run"
+    if reason == PlanReason.RENAMED:
+        return "renamed"
     if reason == PlanReason.FULL_REFRESH:
         return "full refresh"
     if reason == PlanReason.RUN_DESPITE_UNCHANGED:

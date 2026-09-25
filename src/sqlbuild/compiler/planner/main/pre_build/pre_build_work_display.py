@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlbuild.compiler.migrations.types import MigrationDiscovery
+from sqlbuild.compiler.migrations.types import MigrationDecision, MigrationDiscovery
 from sqlbuild.compiler.planner.models import ModelMigrationPlanEntry, PlanOutput
 from sqlbuild.presentation.main.append_overflow_line import append_overflow_line
 from sqlbuild.presentation.main.visible_entries import visible_entries
@@ -60,27 +60,38 @@ def format_pre_build_work(
 def _format_model_migrations(
     *, lines: list[str], plan: PlanOutput, display_options: DisplayOptions
 ) -> list[str]:
-    if not plan.migration_entries:
-        return lines
-    lines.append(f"Migrations ({len(plan.migration_entries)})")
-    visible: Sequence[ModelMigrationPlanEntry] = visible_entries(
-        entries=plan.migration_entries, options=display_options
-    )
-    entry: ModelMigrationPlanEntry
-    for entry in visible:
-        lines.extend(_migration_lines(entry))
-    return append_overflow_line(
-        lines=lines,
-        total_count=len(plan.migration_entries),
-        visible_count=len(visible),
-        indent="  ",
-        options=display_options,
-    )
+    title: str
+    renamed: bool
+    for title, renamed in (("Migrations", False), ("Renamed", True)):
+        entries: tuple[ModelMigrationPlanEntry, ...] = tuple(
+            entry
+            for entry in plan.migration_entries
+            if (entry.decision == MigrationDecision.RENAMED) is renamed
+        )
+        if not entries:
+            continue
+        lines.append(f"{title} ({len(entries)})")
+        visible: Sequence[ModelMigrationPlanEntry] = visible_entries(
+            entries=entries, options=display_options
+        )
+        entry: ModelMigrationPlanEntry
+        for entry in visible:
+            lines.extend(_migration_lines(entry))
+        lines = append_overflow_line(
+            lines=lines,
+            total_count=len(entries),
+            visible_count=len(visible),
+            indent="  ",
+            options=display_options,
+        )
+    return lines
 
 
 def _migration_lines(entry: ModelMigrationPlanEntry) -> list[str]:
     origin: str = entry.origin.qualified_name or entry.origin.name
     destination: str = entry.destination.qualified_name or entry.destination.name
+    if entry.decision == MigrationDecision.RENAMED:
+        return [f"  {entry.model_name}  {origin} -> {destination}  (identity handed over)"]
     rows: list[str] = [f"  {entry.model_name}  {entry.decision.label}  {origin} -> {destination}"]
     if entry.decision.checks_compatibility:
         rows.append(f"    compatibility  {entry.compatibility.value}")

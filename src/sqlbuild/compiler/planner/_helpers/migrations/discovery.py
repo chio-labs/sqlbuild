@@ -18,7 +18,7 @@ from sqlbuild.compiler.migrations.main.relation_for_location import (
     migration_relation_for_location,
 )
 from sqlbuild.compiler.migrations.models import MigrationEvent, MigrationRelation
-from sqlbuild.compiler.migrations.types import MigrationDiscovery
+from sqlbuild.compiler.migrations.types import MigrationDecision, MigrationDiscovery
 from sqlbuild.compiler.planner._helpers.migrations.fingerprint import build_migration_fingerprint
 from sqlbuild.compiler.planner.classes.migration_state_inspection import (
     MigrationStateInspection,
@@ -45,6 +45,9 @@ from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 _HISTORY_MATERIALIZATIONS: frozenset[str] = frozenset(
     {MaterializationType.INCREMENTAL, MaterializationType.SNAPSHOT}
+)
+_IDENTITY_MATERIALIZATIONS: frozenset[str] = frozenset(
+    {MaterializationType.TABLE, MaterializationType.VIEW}
 )
 _CONFIG_KEY: str = "config"
 _MATERIALIZED_KEY: str = "materialized"
@@ -175,13 +178,13 @@ def _resumed_events(
     unbuilt: frozenset[str],
     state: MigrationStateInspection,
 ) -> dict[str, MigrationEvent]:
-    """Return recorded moves into models that have not been built since the move."""
+    """Return recorded moves or renames into models that have not been built since."""
 
     target_name: str | None = runtime.project.effective_target_name
     resumed: dict[str, MigrationEvent] = {}
     model: CompiledModel
     for model in models:
-        if model.name not in unbuilt or not _stores_history(model):
+        if model.name not in unbuilt or not (_stores_history(model) or _hands_over_identity(model)):
             continue
         destination: MigrationRelation = migration_relation_for_location(model.destination)
         newest: MigrationEvent | None = newest_migration_event_mentioning(
@@ -191,6 +194,7 @@ def _resumed_events(
             newest is not None
             and newest.destination.matches(destination)
             and newest.target_name in (None, target_name)
+            and (newest.decision == MigrationDecision.RENAMED) is _hands_over_identity(model)
         ):
             resumed[model.name] = newest
     return resumed
@@ -242,15 +246,20 @@ def _automatic_requests(
                     discovery=MigrationDiscovery.AUTOMATIC,
                     origin_location=_event_origin_location(runtime=runtime, event=event),
                     origin_model=event.origin_model,
+                    identity_only=_hands_over_identity(model),
                 )
             )
-        elif match is not None and _moves_history(model=model, origin=match):
+        elif match is not None and (
+            _moves_history(model=model, origin=match)
+            or _renames_identity(model=model, origin=match)
+        ):
             requests.append(
                 ModelMigrationRequest(
                     model=model,
                     discovery=MigrationDiscovery.AUTOMATIC,
                     origin_location=_fingerprint_location(runtime=runtime, fingerprint=match),
                     origin_model=match.node_name,
+                    identity_only=_hands_over_identity(model),
                 )
             )
     return tuple(requests)
@@ -520,6 +529,20 @@ def _destination_fingerprints(
 
 def _moves_history(*, model: CompiledModel, origin: Fingerprint) -> bool:
     return _stores_history(model) and _stored_materialization(origin) in _HISTORY_MATERIALIZATIONS
+
+
+def _renames_identity(*, model: CompiledModel, origin: Fingerprint) -> bool:
+    return (
+        _hands_over_identity(model)
+        and _stored_materialization(origin) in _IDENTITY_MATERIALIZATIONS
+    )
+
+
+def _hands_over_identity(model: CompiledModel) -> bool:
+    return (
+        get_config_str(values=model.config.values, key=_MATERIALIZED_KEY)
+        in _IDENTITY_MATERIALIZATIONS
+    )
 
 
 def _stores_history(model: CompiledModel) -> bool:

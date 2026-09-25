@@ -75,6 +75,7 @@ class GraphResourceKind(StrEnum):
 
 class ChangeKind(StrEnum):
     FIRST_RUN = "first_run"
+    RENAMED = "renamed"
     QUERY_CHANGED = "query_changed"
     CONFIG_CHANGED = "config_changed"
     SCHEMA_CHANGED = "schema_changed"
@@ -145,6 +146,7 @@ class PlanAction(StrEnum):
 
 class PlanReason(StrEnum):
     FIRST_RUN = "first_run"
+    RENAMED = "renamed"
     FULL_REFRESH = "full_refresh"
     QUERY_CHANGED = "query_changed"
     FUNCTION_CHANGED = "function_changed"

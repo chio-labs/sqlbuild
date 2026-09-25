@@ -504,11 +504,11 @@ def fail_after_migrations(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def enriched_view_sql(*, upstream: str, alias: str) -> str:
-    """Return a view that selects every order column through a table alias."""
+def enriched_view_sql(*, upstream: str, alias: str, materialized: str = "view") -> str:
+    """Return a view or table that selects every order column through a table alias."""
 
     return (
-        "MODEL (materialized view);\n\n"
+        f"MODEL (materialized {materialized});\n\n"
         f"SELECT {alias}.order_id, {alias}.order_date, {alias}.amount_cents "
         f'FROM __ref("{upstream}") AS {alias}\n'
     )
@@ -673,3 +673,40 @@ def live_relations(*, project_dir: Path, schema: str = "main") -> tuple[str, ...
             ),
         )
     )
+
+
+_REPLAY_FULL: str = "  replay_on_change full,\n"
+
+
+def original_replay_order_models(*, middle: str) -> dict[str, str]:
+    """Return the staging, enriched, and daily totals chain with full replay on the totals."""
+
+    return {
+        "stg_orders": incremental_orders_sql(),
+        "orders_enriched": enriched_view_sql(upstream="stg_orders", alias="o", materialized=middle),
+        "daily_order_totals": daily_totals_sql(
+            upstream="orders_enriched", cte="orders_enriched", extra_config=_REPLAY_FULL
+        ),
+    }
+
+
+def renamed_replay_order_models(*, middle: str) -> dict[str, str]:
+    """Return the same full-replay chain with every model renamed."""
+
+    return {
+        "stg_customer_orders": incremental_orders_sql(),
+        "customer_orders_enriched": enriched_view_sql(
+            upstream="stg_customer_orders", alias="customer_order", materialized=middle
+        ),
+        "customer_daily_order_totals": daily_totals_sql(
+            upstream="customer_orders_enriched",
+            cte="customer_orders_enriched",
+            extra_config=_REPLAY_FULL,
+        ),
+    }
+
+
+def fail_nothing_in_build(*, monkeypatch: pytest.MonkeyPatch, model_name: str) -> None:
+    """Install no build failure."""
+
+    del monkeypatch, model_name

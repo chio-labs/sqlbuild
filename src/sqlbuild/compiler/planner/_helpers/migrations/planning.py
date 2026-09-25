@@ -193,16 +193,24 @@ def plan_model_migrations(
                     request.model.name, ()
                 ),
             )
+    renamed: frozenset[str] = _renamed_models(
+        runtime=runtime, entries=tuple(entries), handovers=handovers
+    )
     return ModelMigrationPlanning(
-        snapshot=_overlay_snapshot(
-            runtime=runtime,
-            scope=scope,
-            snapshot=snapshot,
-            entries=tuple(entries),
-            handovers=handovers,
-            state=state,
-            overrides=overrides,
-            deferral=deferral,
+        snapshot=replace(
+            _overlay_snapshot(
+                runtime=runtime,
+                scope=scope,
+                snapshot=snapshot,
+                entries=tuple(entries),
+                handovers=_effective_handovers(
+                    entries=tuple(entries), handovers=handovers, renamed=renamed
+                ),
+                state=state,
+                overrides=overrides,
+                deferral=deferral,
+            ),
+            renamed_models=renamed,
         ),
         entries=tuple(entries),
         warnings=(
@@ -210,6 +218,40 @@ def plan_model_migrations(
             *(warning for entry in entries if (warning := _entry_warning(entry)) is not None),
         ),
     )
+
+
+def _renamed_models(
+    *,
+    runtime: PlannerRuntime,
+    entries: tuple[ModelMigrationPlanEntry, ...],
+    handovers: dict[str, Fingerprint | None],
+) -> frozenset[str]:
+    """Return renamed tables and views whose handed-over definition matches their own."""
+
+    query_sql: dict[str, str] = {model.name: model.query_sql for model in runtime.project.models}
+    return frozenset(
+        entry.model_name
+        for entry in entries
+        if entry.decision == MigrationDecision.RENAMED
+        and (handover := handovers.get(entry.model_name)) is not None
+        and handover.definition == query_sql.get(entry.model_name)
+    )
+
+
+def _effective_handovers(
+    *,
+    entries: tuple[ModelMigrationPlanEntry, ...],
+    handovers: dict[str, Fingerprint | None],
+    renamed: frozenset[str],
+) -> dict[str, Fingerprint | None]:
+    """Drop the handover of any rename whose definition no longer matches."""
+
+    unmatched: frozenset[str] = frozenset(
+        entry.model_name
+        for entry in entries
+        if entry.decision == MigrationDecision.RENAMED and entry.model_name not in renamed
+    )
+    return {name: None if name in unmatched else handover for name, handover in handovers.items()}
 
 
 def _equivalent_definition(
@@ -375,6 +417,14 @@ def _decide(
         ),
         origin_is_transient=bool(origin_relation is not None and origin_relation.is_transient),
     )
+    if request.identity_only:
+        return _decide_rename(
+            model=model,
+            base=base,
+            newest=newest,
+            origin=origin,
+            origin_fingerprint=origin_fingerprint,
+        )
     if (
         newest is not None
         and newest.destination.matches(migration_relation_for_location(destination))
@@ -432,6 +482,33 @@ def _decide(
             fingerprint=origin_fingerprint,
             version_hash=entry.origin_version_hash,
         ),
+        True,
+    )
+
+
+def _decide_rename(
+    *,
+    model: CompiledModel,
+    base: ModelMigrationPlanEntry,
+    newest: MigrationEvent | None,
+    origin: CompiledRelationLocation,
+    origin_fingerprint: Fingerprint | None,
+) -> tuple[ModelMigrationPlanEntry, Fingerprint | None, bool]:
+    """Hand a renamed table or view's identity to its unbuilt successor; no data moves."""
+
+    recorded: bool = (
+        newest is not None
+        and newest.decision == MigrationDecision.RENAMED
+        and newest.destination.matches(migration_relation_for_location(model.destination))
+        and newest.origin.matches(migration_relation_for_location(origin))
+    )
+    return (
+        replace(
+            base,
+            decision=MigrationDecision.RENAMED,
+            completed_at=newest.created_at if recorded and newest is not None else None,
+        ),
+        _handover_fingerprint(model=model, fingerprint=origin_fingerprint, version_hash=""),
         True,
     )
 

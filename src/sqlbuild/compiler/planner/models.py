@@ -646,6 +646,7 @@ class WarehouseSnapshot:
     cursor_snapshots: dict[str, ModelCursorSnapshot] = field(default_factory=dict)
     source_freshness_state_schemas: frozenset[str] = field(default_factory=frozenset)
     column_dialect: str | None = None
+    renamed_models: frozenset[str] = field(default_factory=frozenset)
 
 
 @dataclass(frozen=True)
@@ -1513,6 +1514,7 @@ class ModelMigrationRequest:
     origin_location: CompiledRelationLocation | None = None
     origin_model: str | None = None
     force: bool = False
+    identity_only: bool = False
 
 
 @dataclass(frozen=True)

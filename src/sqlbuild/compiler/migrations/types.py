@@ -15,6 +15,7 @@ class MigrationDecision(StrEnum):
     FORCED_REPLACE = "forced_replace"
     CONFLICT = "conflict"
     ORIGIN_MISSING = "origin_missing"
+    RENAMED = "renamed"
 
     @property
     def moves_data(self) -> bool:

@@ -107,3 +107,23 @@ class MigrationArchiveExpiryTestCase:
     description: str
     expected_archives_before: int
     expected_relations_after: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class IdentityHandoverTestCase:
+    description: str
+    middle_materialization: str
+    install_failure: Callable[..., None]
+    failing_model: str
+    expected_first_exit_code: int
+    expected_first_view_reason: str
+    expected_retry_totals_reason: str
+    expected_totals_rows: int
+    expected_marked_total: int
+    expected_events: tuple[tuple[str, str, str], ...]
+
+
+@dataclass(frozen=True)
+class RenamedPlanTextTestCase:
+    description: str
+    expected_fragment: str

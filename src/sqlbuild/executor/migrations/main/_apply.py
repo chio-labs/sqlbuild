@@ -13,7 +13,11 @@ from sqlbuild.adapter.contract.types import MigrationTransfer
 from sqlbuild.compiler.planner.models import ModelMigrationPlanEntry, PlanOutput
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.migrations._helpers.naming import resolve_artifact_names
-from sqlbuild.executor.migrations._helpers.promotion import migration_event, promote_and_record
+from sqlbuild.executor.migrations._helpers.promotion import (
+    migration_event,
+    promote_and_record,
+    record_renames,
+)
 from sqlbuild.executor.migrations._helpers.staging import create_stage, verify_stage
 from sqlbuild.executor.migrations.models import MigrationArtifactNames
 
@@ -49,6 +53,9 @@ def apply_model_migrations(
             run_id=run_id,
             on_progress=on_progress,
         )
+    _ = record_renames(
+        adapter=adapter, connection=connection, entries=plan.migration_entries, run_id=run_id
+    )
 
 
 def _apply_one(

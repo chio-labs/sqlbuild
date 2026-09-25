@@ -45,10 +45,12 @@ _FIRST_RUN: str = "first_run"
             description="incremental, view, and incremental renamed together",
             expected_migrations=(
                 ("daily_order_totals", "customer_daily_order_totals", "automatic", "migrate"),
+                ("orders_enriched", "customer_orders_enriched", "automatic", "renamed"),
                 ("stg_orders", "stg_customer_orders", "automatic", "migrate"),
             ),
             expected_events=(
                 ("daily_order_totals", "customer_daily_order_totals", "migrate"),
+                ("orders_enriched", "customer_orders_enriched", "renamed"),
                 ("stg_orders", "stg_customer_orders", "migrate"),
             ),
         )
@@ -298,10 +300,12 @@ def test_given_qualified_migrate_from_when_another_orphan_matches_then_only_decl
             description="recorded upstream move resolves the downstream rename on retry",
             expected_migrations=(
                 ("daily_order_totals", "customer_daily_order_totals", "automatic", "migrate"),
+                ("orders_enriched", "customer_orders_enriched", "automatic", "renamed"),
                 ("stg_orders", "stg_customer_orders", "automatic", "done"),
             ),
             expected_events=(
                 ("daily_order_totals", "customer_daily_order_totals", "migrate"),
+                ("orders_enriched", "customer_orders_enriched", "renamed"),
                 ("stg_orders", "stg_customer_orders", "migrate"),
             ),
         )
