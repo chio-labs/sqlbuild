@@ -26,6 +26,7 @@ class DetectModelChangesTestCase:
     inferred_columns: tuple[InferredColumn, ...] | None = None
     fast_lineage_has_star: bool = False
     expected_recorded_build_relation_missing: bool = False
+    renamed_by_migration: bool = False
 
 
 @dataclass(frozen=True)
