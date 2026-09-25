@@ -157,12 +157,17 @@ pre {
 }
 
 .brand img {
-	width: 26px;
-	height: 26px;
+	width: auto;
+	height: 24px;
 }
 
-.brand .sql {
-	color: var(--primary);
+.brand .logo-for-dark,
+:root[data-theme='dark'] .brand .logo-for-light {
+	display: none;
+}
+
+:root[data-theme='dark'] .brand .logo-for-dark {
+	display: block;
 }
 
 .nav {
