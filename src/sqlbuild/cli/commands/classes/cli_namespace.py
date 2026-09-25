@@ -13,7 +13,6 @@ _DEFAULT_VALUES: dict[str, object] = {
     "dbt_project_dir": None,
     "dbt_profiles_dir": None,
     "dbt_target": None,
-    "dbt_target_path": None,
     "dbt_profile": None,
     "sqb_output_dir": None,
     "dry_run": False,
@@ -186,7 +185,6 @@ class CliNamespace:
     dbt_project_dir: str | None
     dbt_profiles_dir: str | None
     dbt_target: str | None
-    dbt_target_path: str | None
     dbt_profile: str | None
     sqb_output_dir: str | None
     dry_run: bool

@@ -53,7 +53,6 @@ class NestedCommandProgressCallbacks:
         self._is_tty: bool = hasattr(stream, "isatty") and stream.isatty()
         self._counter: int = 0
         self._current_group: str = ""
-        self._active_group: str = ""
         self._active_name: str = ""
         self._active_group_is_new: bool = False
         self._spinner_frame_index: int = 0
@@ -74,7 +73,6 @@ class NestedCommandProgressCallbacks:
             self._projector.expect_resource_enrichment(
                 resource_name=canonical_resource_name or item_name
             )
-        self._active_group = group_name
         self._active_name = item_name
         self._active_group_is_new = group_name != self._current_group
         if self._active_group_is_new:
