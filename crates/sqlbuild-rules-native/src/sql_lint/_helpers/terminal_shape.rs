@@ -2,6 +2,80 @@ use polyglot_sql::tokens::{Span, Token, TokenType};
 
 const CEREMONIAL_SELECT_LITERAL: &str = "1";
 
+pub(super) fn final_cte_name_spans(tokens: &[Token], depths: &[usize]) -> Vec<Span> {
+    let mut names: Vec<(usize, bool)> = Vec::new();
+    for (index, token) in tokens.iter().enumerate() {
+        if token.token_type != TokenType::With {
+            continue;
+        }
+        let depth = depths[index];
+        let first = names.len();
+        let mut next = index + 1;
+        if tokens
+            .get(next)
+            .is_some_and(|token| token.text.eq_ignore_ascii_case("recursive"))
+        {
+            next += 1;
+        }
+        loop {
+            let name = next;
+            let Some(open) = cte_body_open(tokens, depths, name) else {
+                break;
+            };
+            let Some(close) = (open + 1..tokens.len()).find(|&position| {
+                depths[position] == depth + 1 && tokens[position].token_type == TokenType::RParen
+            }) else {
+                break;
+            };
+            names.push((name, false));
+            if tokens
+                .get(close + 1)
+                .is_none_or(|token| token.token_type != TokenType::Comma)
+            {
+                break;
+            }
+            next = close + 2;
+        }
+        if depth == 0
+            && names.len() > first
+            && let Some((_, terminal)) = names.last_mut()
+        {
+            *terminal = true;
+        }
+    }
+    names
+        .into_iter()
+        .filter_map(|(index, terminal)| {
+            let is_final = tokens[index].text.eq_ignore_ascii_case("final");
+            (terminal != is_final).then_some(tokens[index].span)
+        })
+        .collect()
+}
+
+fn cte_body_open(tokens: &[Token], depths: &[usize], name: usize) -> Option<usize> {
+    let mut position = name + 1;
+    if tokens.get(position)?.token_type == TokenType::LParen {
+        position = (position + 1..tokens.len()).find(|&index| {
+            depths[index] == depths[name] + 1 && tokens[index].token_type == TokenType::RParen
+        })? + 1;
+    }
+    if tokens.get(position)?.token_type != TokenType::As {
+        return None;
+    }
+    position += 1;
+    if tokens.get(position)?.token_type == TokenType::Not {
+        position += 1;
+    }
+    if tokens
+        .get(position)?
+        .text
+        .eq_ignore_ascii_case("materialized")
+    {
+        position += 1;
+    }
+    (tokens.get(position)?.token_type == TokenType::LParen).then_some(position)
+}
+
 pub(super) fn collect_terminal_shape_facts(
     tokens: &[Token],
     depths: &[usize],

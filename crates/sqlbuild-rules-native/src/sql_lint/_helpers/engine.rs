@@ -229,6 +229,16 @@ const INLINE_QUERY_RELATION: LintRuleMetadata = LintRuleMetadata {
     remediation: "Extract the derived relation into a named top-level CTE; use explicit LATERAL only when the relation must remain correlated.",
 };
 const TRIVIAL_EQUALITY_TOKEN_COUNT: usize = 3;
+const JOIN_EXPRESSION: LintRuleMetadata = LintRuleMetadata {
+    code: "SQBRSQL040",
+    message: "JOIN ON contains a computed expression",
+    remediation: "Compute join keys in input CTEs and join on plain columns.",
+};
+const FINAL_CTE_NAME: LintRuleMetadata = LintRuleMetadata {
+    code: "SQBRSQL041",
+    message: "Only the last top-level CTE may be named final, and it must use that name",
+    remediation: "Name the last top-level CTE final and rename any other final CTE; SQBRSQL035 checks the terminal SELECT.",
+};
 
 const DEFAULT_RULES: [&str; 13] = [
     NULL_COMPARISON.code,
@@ -246,7 +256,7 @@ const DEFAULT_RULES: [&str; 13] = [
     INLINE_QUERY_RELATION.code,
 ];
 
-const ALL_RULE_METADATA: [&LintRuleMetadata; 39] = [
+const ALL_RULE_METADATA: [&LintRuleMetadata; 41] = [
     &NULL_COMPARISON,
     &IMPLICIT_CARTESIAN_JOIN,
     &JOIN_WITHOUT_CONDITION,
@@ -286,6 +296,8 @@ const ALL_RULE_METADATA: [&LintRuleMetadata; 39] = [
     &RECURSIVE_CTE,
     &CROSS_JOIN,
     &INLINE_QUERY_RELATION,
+    &JOIN_EXPRESSION,
+    &FINAL_CTE_NAME,
 ];
 
 fn is_ceremonial_cte_name(name: &str) -> bool {
@@ -395,6 +407,25 @@ pub(crate) fn lint(request: LintRequest) -> Result<LintResponse, String> {
         enabled: &enabled,
     };
     let mut diagnostics = diagnostics(&context);
+    let depths = token_depths(&tokens);
+    if enabled.contains(JOIN_EXPRESSION.code) {
+        diagnostics.extend(diagnostics_for_spans(
+            &JOIN_EXPRESSION,
+            &crate::sql_lint::_helpers::join_predicates::join_expression_spans(
+                &tokens,
+                &depths,
+                dialect_type,
+            ),
+            Some("computing a join key requires an authored CTE rewrite"),
+        ));
+    }
+    if enabled.contains(FINAL_CTE_NAME.code) && !request.allows_ceremonial_select {
+        diagnostics.extend(diagnostics_for_spans(
+            &FINAL_CTE_NAME,
+            &crate::sql_lint::_helpers::terminal_shape::final_cte_name_spans(&tokens, &depths),
+            Some("renaming a CTE requires updating its references"),
+        ));
+    }
     diagnostics.sort_by_key(|diagnostic| (diagnostic.start, diagnostic.end, diagnostic.code));
     Ok(LintResponse {
         version: LINT_API_VERSION,
