@@ -37,24 +37,6 @@ class StubCursor:
         return None
 
 
-def fake_schema_diff_describe_relation(
-    connection: object,
-    relation: str,
-) -> tuple[ColumnInfo, ...]:
-    del connection
-    relation_columns: dict[str, tuple[ColumnInfo, ...]] = {
-        "left_relation": (
-            ColumnInfo(name="id", type="INT64"),
-            ColumnInfo(name="status", type="STRING"),
-        ),
-        "right_relation": (
-            ColumnInfo(name="id", type="STRING"),
-            ColumnInfo(name="new_col", type="DATE"),
-        ),
-    }
-    return relation_columns[relation]
-
-
 def fake_row_diff_describe_relation(
     connection: object,
     relation: str,
@@ -98,15 +80,6 @@ def build_sample_rows_execute() -> Any:
                 "__right.id IS NULL" in sql,
             )
         ]
-
-    return fake_execute
-
-
-def build_count_rows_execute(executed_sql: list[str]) -> Any:
-    def fake_execute(connection: object, sql: str) -> StubCursor:
-        del connection
-        executed_sql.append(sql)
-        return StubCursor(row=(2,))
 
     return fake_execute
 

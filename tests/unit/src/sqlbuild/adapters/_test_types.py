@@ -25,35 +25,12 @@ class AdapterCloneModeTestCase:
 
 
 @dataclass(frozen=True)
-class AdapterRelationMaxCursorTestCase:
-    description: str
-    adapter: StrictAdapter
-    connection: object
-    relation: str
-    cursor_column: str
-    expected_value: object | None
-    expected_sql: tuple[str, ...]
-    expected_closed_cursor_count: int
-
-
-@dataclass(frozen=True)
 class AdapterEligibleMaxCursorSqlTestCase:
     description: str
     adapter: StrictAdapter
     cursor_column: str
     maximum_allowed: str
     is_date: bool
-    expected_sql: str
-
-
-@dataclass(frozen=True)
-class AdapterSeedSelectAfterCursorTestCase:
-    description: str
-    adapter: StrictAdapter
-    origin: str
-    cursor_column: str
-    cursor_start_exclusive: str
-    cursor_type: str | None
     expected_sql: str
 
 

@@ -174,13 +174,6 @@ class BigQuerySampleRowsTestCase:
 
 
 @dataclass(frozen=True)
-class BigQueryCountRowsTestCase:
-    description: str
-    expected_count: int
-    expected_sql: str
-
-
-@dataclass(frozen=True)
 class BigQueryPruneSqlTestCase:
     description: str
     database: str | None

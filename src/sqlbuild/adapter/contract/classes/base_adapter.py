@@ -301,24 +301,6 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
             return ()
         return tuple(str(column[0]) for column in description)
 
-    def get_relation_max_cursor(
-        self,
-        *,
-        connection: Any,
-        relation: str,
-        cursor_column: str,
-    ) -> object | None:
-        """Return the maximum cursor value currently present in a relation."""
-
-        quoted_cursor: str = self.render_identifier(cursor_column)
-        cursor: Any = self.execute(
-            connection=connection, sql=f"SELECT max({quoted_cursor}) FROM {relation}"
-        )
-        row: Any | None = cursor.fetchone()
-        if row is None:
-            return None
-        return row[0]
-
     def render_max_cursor_at_or_before(
         self,
         *,
@@ -702,23 +684,6 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         del origin_is_transient
         return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
-    def render_query_with_cursor_bounds(
-        self,
-        *,
-        sql: str,
-        cursor_column: str,
-        cursor_start: str,
-        cursor_end: str,
-        cursor_type: str | None,
-    ) -> str:
-        return self._render_query_with_cursor_bounds_impl(
-            sql=sql,
-            cursor_column=cursor_column,
-            cursor_start=cursor_start,
-            cursor_end=cursor_end,
-            cursor_type=cursor_type,
-        )
-
     def render_seed_select_before_cursor(
         self,
         *,
@@ -734,44 +699,8 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
             cursor_type=cursor_type,
         )
 
-    def render_seed_select_after_cursor(
-        self,
-        *,
-        origin: str,
-        cursor_column: str,
-        cursor_start_exclusive: str,
-        cursor_type: str | None,
-    ) -> str:
-        return self._render_seed_select_after_cursor_impl(
-            origin=origin,
-            cursor_column=cursor_column,
-            cursor_start_exclusive=cursor_start_exclusive,
-            cursor_type=cursor_type,
-        )
-
     def relation_names_match(self, *, left: str, right: str) -> bool:
         return self._relation_names_match_impl(left=left, right=right)
-
-    def _render_query_with_cursor_bounds_impl(
-        self,
-        *,
-        sql: str,
-        cursor_column: str,
-        cursor_start: str,
-        cursor_end: str,
-        cursor_type: str | None,
-    ) -> str:
-        quoted_cursor: str = self.render_identifier(cursor_column)
-        start_literal: str = self.render_cursor_bound_literal(
-            value=cursor_start, cursor_type=cursor_type
-        )
-        end_literal: str = self.render_cursor_bound_literal(
-            value=cursor_end, cursor_type=cursor_type
-        )
-        return (
-            f"SELECT * FROM ({sql}) AS __sqlbuild_cursor_bounded "
-            f"WHERE {quoted_cursor} >= {start_literal} AND {quoted_cursor} < {end_literal}"
-        )
 
     def _render_seed_select_before_cursor_impl(
         self,
@@ -786,20 +715,6 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
             value=cursor_end_exclusive, cursor_type=cursor_type
         )
         return f"SELECT * FROM {origin} WHERE {quoted_cursor} < {end_literal}"
-
-    def _render_seed_select_after_cursor_impl(
-        self,
-        *,
-        origin: str,
-        cursor_column: str,
-        cursor_start_exclusive: str,
-        cursor_type: str | None,
-    ) -> str:
-        quoted_cursor: str = self.render_identifier(cursor_column)
-        start_literal: str = self.render_cursor_bound_literal(
-            value=cursor_start_exclusive, cursor_type=cursor_type
-        )
-        return f"SELECT * FROM {origin} WHERE {quoted_cursor} > {start_literal}"
 
     def _relation_names_match_impl(self, *, left: str, right: str) -> bool:
         return left.replace('"', "") == right.replace('"', "")
@@ -1444,24 +1359,6 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         end_cursor: CursorValue | None = None,
     ) -> RowDiffResult:
         raise AdapterUserError(message="diff_rows requires an engine-specific implementation")
-
-    def count_rows(
-        self,
-        *,
-        connection: Any,
-        relation: str,
-        cursor_column: str | None = None,
-        start_cursor: CursorValue | None = None,
-        end_cursor: CursorValue | None = None,
-    ) -> int:
-        where_clause: str = ""
-        if cursor_column and start_cursor:
-            where_clause = f" WHERE {cursor_column} >= '{start_cursor.value}'"
-            if end_cursor:
-                where_clause += f" AND {cursor_column} < '{end_cursor.value}'"
-        cursor: Any = connection.execute(f"SELECT COUNT(*) FROM {relation}{where_clause}")
-        result: Any = cursor.fetchone()
-        return int(result[0])
 
     def _inspect_row_diff_coverage(
         self,

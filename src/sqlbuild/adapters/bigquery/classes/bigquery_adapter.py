@@ -1712,23 +1712,6 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"CLONE {self._quote_identifier_path(origin)}",
         )
 
-    def render_query_with_cursor_bounds(
-        self,
-        *,
-        sql: str,
-        cursor_column: str,
-        cursor_start: str,
-        cursor_end: str,
-        cursor_type: str | None,
-    ) -> str:
-        return self._render_query_with_cursor_bounds_impl(
-            sql=sql,
-            cursor_column=cursor_column,
-            cursor_start=cursor_start,
-            cursor_end=cursor_end,
-            cursor_type=cursor_type,
-        )
-
     def render_seed_select_before_cursor(
         self,
         *,
@@ -1741,21 +1724,6 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             origin=origin,
             cursor_column=cursor_column,
             cursor_end_exclusive=cursor_end_exclusive,
-            cursor_type=cursor_type,
-        )
-
-    def render_seed_select_after_cursor(
-        self,
-        *,
-        origin: str,
-        cursor_column: str,
-        cursor_start_exclusive: str,
-        cursor_type: str | None,
-    ) -> str:
-        return self._render_seed_select_after_cursor_impl(
-            origin=origin,
-            cursor_column=cursor_column,
-            cursor_start_exclusive=cursor_start_exclusive,
             cursor_type=cursor_type,
         )
 
@@ -2035,24 +2003,6 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         if description is None:
             return ()
         return tuple(str(column[0]) for column in description)
-
-    def get_relation_max_cursor(
-        self,
-        *,
-        connection: Any,
-        relation: str,
-        cursor_column: str,
-    ) -> object | None:
-        """Return the maximum cursor value currently present in a relation."""
-
-        quoted_cursor: str = self.render_identifier(cursor_column)
-        cursor: Any = self.execute(
-            connection=connection, sql=f"SELECT max({quoted_cursor}) FROM {relation}"
-        )
-        row: Any | None = cursor.fetchone()
-        if row is None:
-            return None
-        return row[0]
 
     def render_max_cursor_at_or_before(
         self,
@@ -2463,28 +2413,6 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             compared_count=self._to_int(row[2]),
             sampling=sampling,
         )
-
-    def count_rows(
-        self,
-        *,
-        connection: Any,
-        relation: str,
-        cursor_column: str | None = None,
-        start_cursor: CursorValue | None = None,
-        end_cursor: CursorValue | None = None,
-    ) -> int:
-        cursor_filter: str = self.build_cursor_filter(
-            cursor_column=cursor_column,
-            start_cursor=start_cursor,
-            end_cursor=end_cursor,
-        )
-        query: str = f"SELECT COUNT(*) FROM {relation}"
-        if cursor_filter:
-            query += f" WHERE {cursor_filter}"
-        result: tuple[Any, ...] | None = self.execute(connection=connection, sql=query).fetchone()
-        if result is None:
-            raise AdapterUserError(message="BigQuery count query returned no result")
-        return self._to_int(result[0])
 
     def sample_unequal_rows(
         self,

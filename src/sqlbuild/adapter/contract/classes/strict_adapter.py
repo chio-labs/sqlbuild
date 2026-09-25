@@ -159,17 +159,6 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def get_relation_max_cursor(
-        self,
-        *,
-        connection: Any,
-        relation: str,
-        cursor_column: str,
-    ) -> object | None:
-        """Return the maximum cursor value currently present in a relation."""
-        ...
-
-    @abstractmethod
     def render_max_cursor_at_or_before(
         self,
         *,
@@ -342,19 +331,6 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def render_query_with_cursor_bounds(
-        self,
-        *,
-        sql: str,
-        cursor_column: str,
-        cursor_start: str,
-        cursor_end: str,
-        cursor_type: str | None,
-    ) -> str:
-        """Render a query wrapped with adapter-correct cursor bounds."""
-        ...
-
-    @abstractmethod
     def render_seed_select_before_cursor(
         self,
         *,
@@ -364,18 +340,6 @@ class StrictAdapter(
         cursor_type: str | None,
     ) -> str:
         """Render a seed-select query that keeps rows before a cursor bound."""
-        ...
-
-    @abstractmethod
-    def render_seed_select_after_cursor(
-        self,
-        *,
-        origin: str,
-        cursor_column: str,
-        cursor_start_exclusive: str,
-        cursor_type: str | None,
-    ) -> str:
-        """Render a seed-select query that keeps rows after a cursor bound."""
         ...
 
     @abstractmethod
