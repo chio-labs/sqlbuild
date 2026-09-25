@@ -686,6 +686,7 @@ class SqlReadabilityTestCase:
     description: str
     sql: str
     expected_fault: bool
+    rule_code: str = "SQBRSQL041"
 
 
 @dataclass(frozen=True)

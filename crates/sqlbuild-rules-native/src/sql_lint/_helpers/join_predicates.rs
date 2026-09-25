@@ -81,11 +81,12 @@ fn operand(expression: &Expression) -> bool {
 }
 
 fn comparison(left: &Expression, right: &Expression) -> bool {
-    operand(left) && operand(right) && (plain_column(left) || plain_column(right))
+    operand(left) && operand(right)
 }
 
 fn plain_predicate(expression: &Expression) -> bool {
     match expression {
+        Expression::Boolean(_) => true,
         Expression::Paren(value) => plain_predicate(&value.this),
         Expression::And(value) | Expression::Or(value) => {
             plain_predicate(&value.left) && plain_predicate(&value.right)

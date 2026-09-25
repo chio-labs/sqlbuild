@@ -149,6 +149,10 @@ including joins inside CTEs and subqueries. `USING (...)` is accepted. Allowed p
 
 - Plain column comparisons, including equality, inequality, range and null-safe comparisons.
 - A plain column compared with a literal, including a signed numeric literal.
+- Literal-only predicates such as `ON TRUE`, `ON FALSE`, and `ON 1 = 1`, including
+  `LEFT JOIN LATERAL FLATTEN(...) AS f ON TRUE`. Functions or casts applied to literals are
+  still computed expressions. Other rules, such as `SQBRSQL003`, independently govern
+  placeholder join conditions; this allowance is specific to `SQBRSQL040`.
 - `BETWEEN` / `NOT BETWEEN` on a plain column with plain-column or literal bounds.
 - `IN` / `NOT IN` on a plain column with a literal list.
 - `IS NULL` / `IS NOT NULL` on a plain column.
@@ -158,6 +162,8 @@ Functions, casts (including `::`), arithmetic, concatenation, CASE, subqueries a
 operands are findings. For example, replace `ON LOWER(o.category) = c.category_key` with a CTE
 that projects `LOWER(category) AS category_key`, then `ON o.category_key = c.category_key`.
 An `OR` with only plain predicates passes; an `OR` containing a computed branch fails.
+Snowflake variant path access is a computed operand: `ON a.data:key = b.id` is flagged.
+Project that value as a named input column before joining.
 
 `SQBRSQL041` checks naming, while `SQBRSQL035` owns the terminal SELECT's plain projection and
 reference to the last top-level CTE. Select both (normally via `SQBRSQL`) for the complete
@@ -165,6 +171,9 @@ convention. The last top-level CTE must be named `final`, compared case-insensit
 existing SQL rules, including quoted identifiers. Every other CTE, including a nested one, must
 use a different name. Queries without CTEs are unaffected. SQL-test fixture CTEs and their
 ceremonial `SELECT 1` remain exempt from this model naming convention.
+Parentheses enclosing the entire query, including multiple wrapper pairs, do not create a nested
+CTE scope. CTEs inside scalar subqueries or CTE bodies remain nested. `SQBRSQL035` and
+`SQBRSQL036` use the same root-wrapper distinction.
 
 Prefer `[rules] select = ["SQBRSQL", "SQBRMODEL", "SQBRGRAPH"]` to exact-code lists. New rules
 in those families apply automatically after an upgrade, so adopting this release can expose

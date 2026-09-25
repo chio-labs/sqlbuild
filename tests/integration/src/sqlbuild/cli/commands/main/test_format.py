@@ -481,11 +481,13 @@ def test_given_native_formatter_decline_when_formatting_then_whole_file_is_uncha
     assert test_case.authored_body in formatted_once
     assert "format-unsafe" in first_output
     assert "format-unsafe" in second_output
+    assert "File left unchanged" in first_output
     assert "orders.sql" in second_output
     json_exit: int = main(["--project-dir", str(tmp_path), "format", "--check", "--json"])
     json_output: str = capsys.readouterr().out
     assert json_exit == 1
     assert "format-unsafe" in json_output
+    assert "File left unchanged" in json_output
     assert json.loads(json_output)
     assert formatted_once == model.read_text(encoding="utf-8")
 

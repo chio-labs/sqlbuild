@@ -232,7 +232,7 @@ const TRIVIAL_EQUALITY_TOKEN_COUNT: usize = 3;
 const JOIN_EXPRESSION: LintRuleMetadata = LintRuleMetadata {
     code: "SQBRSQL040",
     message: "JOIN ON contains a computed expression",
-    remediation: "Compute join keys in input CTEs and join on plain columns.",
+    remediation: "Compute keys, including variant path access, in input CTEs and join on plain columns. Literal-only predicates such as ON TRUE are allowed.",
 };
 const FINAL_CTE_NAME: LintRuleMetadata = LintRuleMetadata {
     code: "SQBRSQL041",
@@ -539,6 +539,8 @@ fn collect_rule_migration_facts(
         .filter(|&index| !is_layout(&tokens[index]) && !is_comment(&tokens[index]))
         .collect();
 
+    let root_with = crate::sql_lint::_helpers::terminal_shape::root_with_indices(tokens, depths);
+
     for (position, &index) in significant.iter().enumerate() {
         let text = tokens[index].text.as_str();
         if text.eq_ignore_ascii_case("cross")
@@ -548,11 +550,11 @@ fn collect_rule_migration_facts(
         {
             facts.cross_joins.push(tokens[index].span);
         }
-        if text.eq_ignore_ascii_case("with") {
+        if tokens[index].token_type == TokenType::With {
             let starts_hierarchy = position.checked_sub(1).is_some_and(|previous| {
                 tokens[significant[previous]].token_type == TokenType::Start
             });
-            if depths[index] > 0 && !starts_hierarchy {
+            if !root_with.contains(&index) && !starts_hierarchy {
                 facts.nested_ctes.push(tokens[index].span);
             }
             if !starts_hierarchy

@@ -83,6 +83,70 @@ def test_given_join_predicate_when_compiling_and_running_rules_then_expression_p
     [
         SqlReadabilityTestCase("no CTE", "SELECT 1 AS order_id", False),
         SqlReadabilityTestCase(
+            "wrapped root", "(WITH final AS (SELECT 1 AS order_id) SELECT * FROM final)", False
+        ),
+        SqlReadabilityTestCase(
+            "double wrapped root",
+            "((WITH final AS (SELECT 1 AS order_id) SELECT * FROM final))",
+            False,
+        ),
+        SqlReadabilityTestCase(
+            "wrapped wrong name",
+            "((WITH orders AS (SELECT 1 AS order_id) SELECT * FROM orders))",
+            True,
+        ),
+        SqlReadabilityTestCase(
+            "wrapped CTE union",
+            "((WITH final AS (SELECT 1 AS order_id UNION ALL SELECT 2 AS order_id) SELECT * FROM final))",
+            False,
+        ),
+        SqlReadabilityTestCase(
+            "wrapped terminal union naming",
+            "(WITH final AS (SELECT 1 AS order_id) SELECT * FROM final UNION ALL SELECT * FROM final)",
+            False,
+        ),
+        SqlReadabilityTestCase(
+            "nested scalar final",
+            "SELECT (WITH final AS (SELECT 1 AS order_id) SELECT order_id FROM final) AS order_id",
+            True,
+        ),
+        SqlReadabilityTestCase(
+            "wrapped plain terminal",
+            "((WITH final AS (SELECT 1 AS order_id) SELECT * FROM final))",
+            False,
+            "SQBRSQL035",
+        ),
+        SqlReadabilityTestCase(
+            "wrapped computed terminal",
+            "((WITH final AS (SELECT 1 AS order_id) SELECT order_id + 1 AS order_id FROM final))",
+            True,
+            "SQBRSQL035",
+        ),
+        SqlReadabilityTestCase(
+            "wrapped terminal union shape",
+            "(WITH final AS (SELECT 1 AS order_id) SELECT * FROM final UNION ALL SELECT * FROM final)",
+            True,
+            "SQBRSQL035",
+        ),
+        SqlReadabilityTestCase(
+            "wrapped CTE union terminal shape",
+            "((WITH final AS (SELECT 1 AS order_id UNION ALL SELECT 2 AS order_id) SELECT * FROM final))",
+            False,
+            "SQBRSQL035",
+        ),
+        SqlReadabilityTestCase(
+            "wrapped root is not nested",
+            "((WITH final AS (SELECT 1 AS order_id) SELECT * FROM final))",
+            False,
+            "SQBRSQL036",
+        ),
+        SqlReadabilityTestCase(
+            "scalar CTE is nested",
+            "SELECT (WITH orders AS (SELECT 1 AS order_id) SELECT order_id FROM orders) AS order_id",
+            True,
+            "SQBRSQL036",
+        ),
+        SqlReadabilityTestCase(
             "final", "WITH final AS (SELECT 1 AS order_id) SELECT * FROM final", False
         ),
         SqlReadabilityTestCase(
@@ -123,11 +187,13 @@ def test_given_cte_names_when_compiling_and_running_rules_then_final_name_policy
     model.write_text(f'MODEL (description "Orders");\n{test_case.sql}\n')
     assert main(["--project-dir", str(tmp_path), "compile", "--no-cache"]) == 0
     capsys.readouterr()
-    result: int = main(["--project-dir", str(tmp_path), "rules", "--json", "run", "SQBRSQL041"])
+    result: int = main(
+        ["--project-dir", str(tmp_path), "rules", "--json", "run", test_case.rule_code]
+    )
     payload: dict[str, object] = json.loads(capsys.readouterr().out)
     assert result == int(test_case.expected_fault)
     assert bool(payload["findings"]) == test_case.expected_fault
-    assert ("SQBRSQL041" in json.dumps(payload["findings"])) == test_case.expected_fault
+    assert (test_case.rule_code in json.dumps(payload["findings"])) == test_case.expected_fault
 
 
 @pytest.mark.parametrize(
@@ -161,6 +227,34 @@ def test_given_family_selection_when_compiling_then_new_rules_are_enforced(
     payload: dict[str, object] = json.loads(capsys.readouterr().out)
     assert "SQBRSQL040" in json.dumps(payload["findings"])
     assert "SQBRSQL041" in json.dumps(payload["findings"])
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlReadabilityTestCase("lateral true", "TRUE", False),
+        SqlReadabilityTestCase("lateral false", "FALSE", False),
+        SqlReadabilityTestCase("literal equality", "1 = 1", False),
+        SqlReadabilityTestCase("computed constant", "CAST(TRUE AS BOOLEAN)", True),
+        SqlReadabilityTestCase("variant key", "o.data:key = f.value", True),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_lateral_join_when_running_expression_rule_then_literals_pass_and_variant_keys_fail(
+    test_case: SqlReadabilityTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "snowflake"\n')
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        'MODEL (description "Orders", database warehouse, schema analytics);\n'
+        "SELECT o.order_id FROM raw_orders AS o LEFT JOIN LATERAL FLATTEN(input => o.items) AS f "
+        f"ON {test_case.sql}\n"
+    )
+    result: int = main(["--project-dir", str(tmp_path), "rules", "--json", "run", "SQBRSQL040"])
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    assert result == int(test_case.expected_fault)
+    assert ("SQBRSQL040" in json.dumps(payload["findings"])) == test_case.expected_fault
 
 
 if __name__ == "__main__":

@@ -149,10 +149,13 @@ def _format_fault(*, file_path: Path, contents: str, start: int, reason: str) ->
         line=contents.count(LINE_FEED, 0, start) + 1,
         column=1,
         code=RULE_FORMAT_UNSAFE,
-        message=f"SQL body was not formatted: {reason}",
+        message=f"File left unchanged because its SQL body could not be formatted: {reason}",
         severity=VIOLATION_SEVERITY_FAULT,
         engine=LINT_ENGINE_NATIVE,
-        remediation="Rewrite the unsupported SQL shape or report a minimal formatter reproduction.",
+        remediation=(
+            "Rewrite the unsupported SQL shape or report a minimal formatter reproduction. "
+            "No header, SQL body, or fixture changes were written to this file."
+        ),
     )
 
 
