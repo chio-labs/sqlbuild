@@ -1,0 +1,8 @@
+---
+interface Props {
+	cols?: number;
+}
+const { cols = 2 } = Astro.props;
+---
+
+<div class="sqb-card-group" style={`--cols: ${cols}`}><slot /></div>

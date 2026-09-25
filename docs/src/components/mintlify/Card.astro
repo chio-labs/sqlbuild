@@ -1,0 +1,14 @@
+---
+interface Props {
+	title: string;
+	href?: string;
+	icon?: string;
+}
+const { title, href } = Astro.props;
+const Tag = href ? 'a' : 'div';
+---
+
+<Tag class="sqb-card" href={href}>
+	<span class="sqb-card-title">{title}</span>
+	<span class="sqb-card-body"><slot /></span>
+</Tag>

@@ -1,0 +1,305 @@
+/* Starlight theme mapped onto the SQLBuild UI tokens, matching sqlbuild.com. */
+:root {
+	--sl-font: 'Inter', system-ui, sans-serif;
+	--sl-font-mono: 'IBM Plex Mono', 'SQLBuild Box Drawing', ui-monospace, monospace;
+	--sl-nav-height: 60px;
+	--sl-content-width: 46rem;
+	--sl-sidebar-width: 17rem;
+	--sl-text-h1: 2rem;
+	--sl-text-h2: 1.45rem;
+	--sl-text-h3: 1.15rem;
+	--sl-text-h4: 1rem;
+	--sl-line-height-headings: 1.25;
+
+	/* Dark (Starlight's default) */
+	--sqb-bg: #0d0f12;
+	--sqb-panel: #171a1f;
+	--sqb-fg: #e9ebef;
+	--sqb-muted: #9ba1ac;
+	--sqb-faint: #626975;
+	--sqb-line: rgba(176, 184, 198, 0.1);
+	--sqb-line-strong: rgba(176, 184, 198, 0.18);
+	--sqb-primary: #3788e8;
+	--sqb-accent-soft: rgba(55, 136, 232, 0.12);
+	--sqb-code-bg: #111418;
+
+	--sl-color-accent-low: #0f2440;
+	--sl-color-accent: #3788e8;
+	--sl-color-accent-high: #a9cdf6;
+	--sl-color-white: #e9ebef;
+	--sl-color-gray-1: #d4d7dd;
+	--sl-color-gray-2: #b4b9c2;
+	--sl-color-gray-3: #9ba1ac;
+	--sl-color-gray-4: #626975;
+	--sl-color-gray-5: #2a2f37;
+	--sl-color-gray-6: #171a1f;
+	--sl-color-black: #0d0f12;
+}
+
+:root[data-theme='light'] {
+	--sqb-bg: #ffffff;
+	--sqb-panel: #ffffff;
+	--sqb-fg: #171a1f;
+	--sqb-muted: #626a76;
+	--sqb-faint: #98a0ad;
+	--sqb-line: rgba(28, 32, 38, 0.08);
+	--sqb-line-strong: rgba(28, 32, 38, 0.16);
+	--sqb-primary: #2677d9;
+	--sqb-accent-soft: rgba(38, 119, 217, 0.08);
+	--sqb-code-bg: #fbfcfe;
+
+	--sl-color-accent-low: #e3eefb;
+	--sl-color-accent: #2677d9;
+	--sl-color-accent-high: #174a8a;
+	--sl-color-white: #171a1f;
+	--sl-color-gray-1: #2b3038;
+	--sl-color-gray-2: #434a55;
+	--sl-color-gray-3: #626a76;
+	--sl-color-gray-4: #98a0ad;
+	--sl-color-gray-5: #dfe3e8;
+	--sl-color-gray-6: #f4f6f8;
+	--sl-color-gray-7: #fafbfc;
+	--sl-color-black: #ffffff;
+}
+
+:root {
+	--sl-color-bg: var(--sqb-bg);
+	--sl-color-bg-nav: var(--sqb-bg);
+	--sl-color-bg-sidebar: var(--sqb-bg);
+	--sl-color-bg-inline-code: var(--sqb-accent-soft);
+	--sl-color-hairline: var(--sqb-line);
+	--sl-color-hairline-light: var(--sqb-line);
+	--sl-color-hairline-shade: var(--sqb-line);
+	--sl-color-text: var(--sqb-fg);
+	--sl-color-text-accent: var(--sqb-primary);
+}
+
+body {
+	-webkit-font-smoothing: antialiased;
+}
+
+/* Header */
+.site-title img {
+	height: 24px;
+	width: auto;
+}
+
+site-search button[data-open-modal] {
+	border-radius: 2px;
+	border-color: var(--sqb-line-strong);
+	background: transparent;
+	color: var(--sqb-muted);
+}
+
+site-search button[data-open-modal]:hover {
+	border-color: var(--sqb-primary);
+	color: var(--sqb-fg);
+}
+
+starlight-theme-select select {
+	border-radius: 2px;
+}
+
+/* Sidebar */
+#starlight__sidebar {
+	border-inline-end: 1px solid var(--sqb-line);
+}
+
+.sidebar-content .group-label .large,
+.sidebar-content summary .large {
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--sqb-faint);
+}
+
+.sidebar-content a {
+	border-radius: 0;
+	padding-block: 0.3em;
+	font-size: 14px;
+	color: var(--sqb-muted);
+	border-inline-start: 2px solid transparent;
+}
+
+.sidebar-content a:hover {
+	color: var(--sqb-fg);
+}
+
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover {
+	background: var(--sqb-accent-soft);
+	color: var(--sqb-primary);
+	border-inline-start-color: var(--sqb-primary);
+	font-weight: 500;
+}
+
+/* Page title and on-this-page */
+.content-panel {
+	border-top-color: var(--sqb-line);
+}
+
+h1#_top {
+	font-weight: 650;
+	letter-spacing: -0.02em;
+}
+
+.sl-markdown-content :is(h2, h3, h4) {
+	font-weight: 620;
+	letter-spacing: -0.01em;
+	color: var(--sqb-fg);
+}
+
+.sl-markdown-content .sl-heading-wrapper.level-h2 {
+	padding-top: 1.4rem;
+	border-top: 1px solid var(--sqb-line);
+}
+
+.sl-markdown-content p,
+.sl-markdown-content li {
+	color: var(--sqb-muted);
+}
+
+.sl-markdown-content strong {
+	color: var(--sqb-fg);
+	font-weight: 600;
+}
+
+starlight-toc a,
+mobile-starlight-toc a {
+	font-size: 13px;
+}
+
+starlight-toc a[aria-current='true'] {
+	color: var(--sqb-primary);
+}
+
+/* Inline code */
+.sl-markdown-content :not(pre) > code {
+	border: 0;
+	border-radius: 2px;
+	padding: 0.1em 0.35em;
+	font-size: 0.86em;
+	color: var(--sqb-fg);
+}
+
+/* Tables */
+.sl-markdown-content table {
+	display: table;
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 14px;
+}
+
+.sl-markdown-content :is(th, td) {
+	border: 0;
+	border-bottom: 1px solid var(--sqb-line);
+	padding: 0.55rem 0.9rem 0.55rem 0;
+	vertical-align: top;
+}
+
+.sl-markdown-content th {
+	background: transparent;
+	color: var(--sqb-faint);
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	border-bottom-color: var(--sqb-line-strong);
+}
+
+.sl-markdown-content tr:nth-child(2n) {
+	background: transparent;
+}
+
+.sl-markdown-content td {
+	color: var(--sqb-muted);
+}
+
+.sl-markdown-content td:first-child code {
+	white-space: nowrap;
+}
+
+/* Search */
+site-search {
+	--pagefind-ui-border-radius: 2px;
+}
+
+site-search dialog {
+	border-radius: 2px;
+}
+
+/* Asides */
+.starlight-aside {
+	border-radius: 2px;
+	border-inline-start-width: 2px;
+}
+
+/* Mintlify-compatible components */
+.sqb-card-group {
+	display: grid;
+	grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr));
+	gap: 1px;
+	margin-top: 1rem;
+	background: var(--sqb-line);
+	border: 1px solid var(--sqb-line);
+}
+
+@media (max-width: 50rem) {
+	.sqb-card-group {
+		grid-template-columns: 1fr;
+	}
+}
+
+.sl-markdown-content .sqb-card {
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+	margin: 0;
+	padding: 1.1rem 1.2rem;
+	background: var(--sqb-bg);
+	color: var(--sqb-muted);
+	text-decoration: none;
+	font-size: 14px;
+	line-height: 1.5;
+}
+
+.sl-markdown-content a.sqb-card:hover {
+	background: var(--sqb-accent-soft);
+}
+
+.sqb-card-title {
+	color: var(--sqb-fg);
+	font-weight: 600;
+	font-size: 15px;
+}
+
+.sl-markdown-content a.sqb-card:hover .sqb-card-title {
+	color: var(--sqb-primary);
+}
+
+.sqb-card-body > :is(p, *) {
+	margin: 0;
+}
+
+.sqb-frame {
+	margin: 1rem 0;
+	padding: 0;
+	border: 1px solid var(--sqb-line);
+}
+
+.sqb-frame img {
+	display: block;
+	width: 100%;
+}
+
+/* Pagination and footer */
+.pagination-links a {
+	border-radius: 2px;
+	border-color: var(--sqb-line);
+	box-shadow: none;
+}
+
+.pagination-links a:hover {
+	border-color: var(--sqb-primary);
+}
