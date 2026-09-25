@@ -95,47 +95,71 @@ def promote_full_refresh_rebuild(
             target_kind="relation",
         ),
     ) as lifecycle:
-        if not target_exists:
-            adapter.rename(
-                connection=connection,
-                origin=relations.rebuild_qualified,
-                destination=relations.target_qualified,
-                statement_recorder=statement_recorder,
-            )
-        else:
+        if target_exists:
             adapter.drop(
                 connection=connection,
                 destination=relations.previous_qualified,
                 if_exists=True,
                 statement_recorder=statement_recorder,
             )
-            if adapter.adapter_name == BuiltinAdapter.SNOWFLAKE:
-                adapter.swap(
-                    connection=connection,
-                    left=relations.target_qualified,
-                    right=relations.rebuild_qualified,
-                    statement_recorder=statement_recorder,
-                )
-                adapter.rename(
-                    connection=connection,
-                    origin=relations.rebuild_qualified,
-                    destination=relations.previous_qualified,
-                    statement_recorder=statement_recorder,
-                )
-            else:
-                adapter.rename(
-                    connection=connection,
-                    origin=relations.target_qualified,
-                    destination=relations.previous_qualified,
-                    statement_recorder=statement_recorder,
-                )
-                adapter.rename(
-                    connection=connection,
-                    origin=relations.rebuild_qualified,
-                    destination=relations.target_qualified,
-                    statement_recorder=statement_recorder,
-                )
+        promote_staged_relation(
+            adapter=adapter,
+            connection=connection,
+            target_qualified=relations.target_qualified,
+            staged_qualified=relations.rebuild_qualified,
+            displaced_qualified=relations.previous_qualified,
+            target_exists=target_exists,
+            statement_recorder=statement_recorder,
+        )
         lifecycle.completed(metadata={"changed_count": 1})
+
+
+def promote_staged_relation(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    target_qualified: str,
+    staged_qualified: str,
+    displaced_qualified: str,
+    target_exists: bool,
+    statement_recorder: StatementRecorder,
+) -> None:
+    """Promote a staged relation without dropping anything; a live target moves aside."""
+
+    if not target_exists:
+        adapter.rename(
+            connection=connection,
+            origin=staged_qualified,
+            destination=target_qualified,
+            statement_recorder=statement_recorder,
+        )
+        return
+    if adapter.adapter_name == BuiltinAdapter.SNOWFLAKE:
+        adapter.swap(
+            connection=connection,
+            left=target_qualified,
+            right=staged_qualified,
+            statement_recorder=statement_recorder,
+        )
+        adapter.rename(
+            connection=connection,
+            origin=staged_qualified,
+            destination=displaced_qualified,
+            statement_recorder=statement_recorder,
+        )
+        return
+    adapter.rename(
+        connection=connection,
+        origin=target_qualified,
+        destination=displaced_qualified,
+        statement_recorder=statement_recorder,
+    )
+    adapter.rename(
+        connection=connection,
+        origin=staged_qualified,
+        destination=target_qualified,
+        statement_recorder=statement_recorder,
+    )
 
 
 def _artifact_name(*, logical_name: str, fixed_prefix: str, identifier_limit: int) -> str:

@@ -22,6 +22,9 @@ from sqlbuild.compiler.planner.main.execution.inclusive_cursor_end import inclus
 from sqlbuild.compiler.planner.main.execution.model_materialization_label import (
     model_materialization_label,
 )
+from sqlbuild.compiler.planner.main.pre_build.pre_build_work_display import (
+    format_pre_build_work,
+)
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
     CursorBounds,
@@ -71,6 +74,7 @@ _REASON_GROUP_ORDER: tuple[PlanReason, ...] = (
     PlanReason.SCHEMA_CHANGED,
     PlanReason.RUN_DESPITE_UNCHANGED,
     PlanReason.FIRST_RUN,
+    PlanReason.RENAMED,
 )
 
 _REASON_GROUP_LABELS: dict[PlanReason, str] = {
@@ -80,6 +84,7 @@ _REASON_GROUP_LABELS: dict[PlanReason, str] = {
     PlanReason.SCHEMA_CHANGED: "Schema changed",
     PlanReason.RUN_DESPITE_UNCHANGED: "Runs despite unchanged",
     PlanReason.FIRST_RUN: "First run",
+    PlanReason.RENAMED: "Renamed",
 }
 
 _ANSI_ESCAPE_PATTERN: re.Pattern[str] = re.compile(r"\033\[[0-9;]*m")
@@ -88,50 +93,6 @@ _SCHEMA_CHANGE_SYMBOLS: dict[SchemaChangeKind, str] = {
     SchemaChangeKind.COLUMN_REMOVED: "-",
     SchemaChangeKind.COLUMN_TYPE_CHANGED: "~",
 }
-
-
-def _format_retention(
-    *, lines: list[str], plan: PlanOutput, display_options: DisplayOptions
-) -> list[str]:
-    if plan.table_type_entries:
-        lines.append("Table type conversions")
-        for table_type_entry in visible_entries(
-            entries=plan.table_type_entries, options=display_options
-        ):
-            actual_type: str = table_type_entry.actual_type or "unknown"
-            lines.append(
-                f"  {table_type_entry.model_name} desired={table_type_entry.desired_type} "
-                f"actual={actual_type} source={table_type_entry.source}"
-            )
-            if table_type_entry.irreversible_warning is not None:
-                lines.append(f"    WARNING: {table_type_entry.irreversible_warning}")
-        lines = append_overflow_line(
-            lines=lines,
-            total_count=len(plan.table_type_entries),
-            visible_count=len(
-                visible_entries(entries=plan.table_type_entries, options=display_options)
-            ),
-            indent="  ",
-            options=display_options,
-        )
-    if plan.retention_entries:
-        lines.append("Retention")
-    for entry in plan.retention_entries:
-        scope: str = ".".join(
-            part
-            for part in (entry.request.database, entry.request.schema, entry.request.name)
-            if part
-        )
-        actual: str = "missing" if entry.actual_days is None else f"{entry.actual_days}d"
-        effective: str = "missing" if entry.effective_days is None else f"{entry.effective_days}d"
-        lines.append(
-            f"  {scope} desired={entry.request.desired_days}d actual={actual} "
-            f"effective={effective} source={entry.source} direction={entry.direction.value} "
-            f"phase={entry.phase.value}"
-        )
-        if entry.irreversible_warning is not None:
-            lines.append(f"    WARNING: {entry.irreversible_warning}")
-    return lines
 
 
 def format_plan(
@@ -174,7 +135,9 @@ def format_plan(
             include_direct_freshness_diagnostics=(include_direct_freshness_diagnostics),
             display_options=resolved_display_options,
         )
-        lines = _format_retention(lines=lines, plan=plan, display_options=resolved_display_options)
+        lines = format_pre_build_work(
+            lines=lines, plan=plan, display_options=resolved_display_options
+        )
         result: str = "\n".join(lines)
         return result if use_color else _strip_ansi(result)
 
@@ -225,7 +188,7 @@ def format_plan(
         display_options=resolved_display_options,
         skipped_header_style=style.muted,
     )
-    lines = _format_retention(lines=lines, plan=plan, display_options=resolved_display_options)
+    lines = format_pre_build_work(lines=lines, plan=plan, display_options=resolved_display_options)
 
     lines = _format_python_plan_entries(
         lines=lines,
@@ -1184,6 +1147,8 @@ def _plan_reason_text(reason: PlanReason) -> str:
         return "schema changed"
     if reason == PlanReason.FIRST_RUN:
         return "first run"
+    if reason == PlanReason.RENAMED:
+        return "renamed"
     if reason == PlanReason.FULL_REFRESH:
         return "full refresh"
     if reason == PlanReason.RUN_DESPITE_UNCHANGED:
@@ -1437,7 +1402,7 @@ def _format_warnings(
     include_direct_freshness_diagnostics: bool,
     display_options: DisplayOptions,
 ) -> list[str]:
-    """Append the warnings section."""
+    """Append the errors and warnings sections."""
 
     selection_diagnostics: bool | None = direct_selection_diagnostics_enabled(plan)
     include_stale_input_warnings: bool = (
@@ -1445,7 +1410,7 @@ def _format_warnings(
         if selection_diagnostics is not None
         else include_direct_freshness_diagnostics
     )
-    warning_entries: list[PlanWarning] = [
+    diagnostics: list[PlanWarning] = [
         warning
         for warning in plan.warnings
         if warning.severity != WarningSeverity.INFO
@@ -1454,18 +1419,46 @@ def _format_warnings(
             or not warning.message.startswith(_STALE_INPUT_WARNING_TITLE)
         )
     ]
-    if not warning_entries:
+    style: CliStyle = CliStyle(use_color=True)
+    lines = _format_diagnostic_section(
+        lines=lines,
+        entries=[entry for entry in diagnostics if entry.severity == WarningSeverity.ERROR],
+        title="Errors",
+        heading_style=style.error_strong,
+        line_style=style.error,
+        display_options=display_options,
+    )
+    return _format_diagnostic_section(
+        lines=lines,
+        entries=[entry for entry in diagnostics if entry.severity != WarningSeverity.ERROR],
+        title="Warnings",
+        heading_style=style.warning_strong,
+        line_style=style.warning,
+        display_options=display_options,
+    )
+
+
+def _format_diagnostic_section(
+    *,
+    lines: list[str],
+    entries: list[PlanWarning],
+    title: str,
+    heading_style: Callable[[str], str],
+    line_style: Callable[[str], str],
+    display_options: DisplayOptions,
+) -> list[str]:
+    """Append one severity-grouped plan diagnostic section."""
+
+    if not entries:
         return lines
     style: CliStyle = CliStyle(use_color=True)
     lines.append("")
-    lines.append(style.warning_strong(f"Warnings ({len(warning_entries)})"))
-    shown_warnings: Sequence[PlanWarning] = visible_entries(
-        entries=warning_entries, options=display_options
-    )
+    lines.append(heading_style(f"{title} ({len(entries)})"))
+    shown: Sequence[PlanWarning] = visible_entries(entries=entries, options=display_options)
     warning: PlanWarning
     warning_index: int
-    for warning_index, warning in enumerate(shown_warnings):
-        connector: str = tree_connector(style=style, last=warning_index == len(shown_warnings) - 1)
+    for warning_index, warning in enumerate(shown):
+        connector: str = tree_connector(style=style, last=warning_index == len(shown) - 1)
         message_lines: list[str] = warning.message.split("\n")
         if warning.model_name is not None:
             lines.append(f"{connector} {style.object_name(warning.model_name)}")
@@ -1475,16 +1468,16 @@ def _format_warnings(
                     style=style,
                     last=message_index == len(message_lines) - 1,
                 )
-                lines.append(f"    {child_connector} {style.warning(message_line)}")
+                lines.append(f"    {child_connector} {line_style(message_line)}")
         else:
-            lines.append(f"{connector} {style.warning(message_lines[0])}")
+            lines.append(f"{connector} {line_style(message_lines[0])}")
             continuation: str
             for continuation in message_lines[1:]:
-                lines.append(f"    {style.warning(continuation)}")
+                lines.append(f"    {line_style(continuation)}")
     return append_overflow_line(
         lines=lines,
-        total_count=len(warning_entries),
-        visible_count=len(shown_warnings),
+        total_count=len(entries),
+        visible_count=len(shown),
         indent="  ",
         options=display_options,
     )

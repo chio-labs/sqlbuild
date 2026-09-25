@@ -179,6 +179,15 @@ def _add_plan_and_build_parsers(
     plan_parser.add_argument("--defer-to", default=None)
     plan_parser.add_argument("--defer-sources-to", default=None)
     plan_parser.add_argument("--target", default=None)
+    plan_parser.add_argument(
+        "--as",
+        dest="as_target",
+        default=None,
+        help=(
+            "Preview the plan as another configured target through the active target's "
+            "connection; inspection only"
+        ),
+    )
     plan_parser.add_argument("--json", action="store_true", default=False)
     plan_parser.add_argument("--full-refresh", action="store_true", default=False)
     plan_parser.add_argument("--virtual-env", default=None)

@@ -260,3 +260,22 @@ class PostgresDbtSeedChangeE2ETestCase:
     expected_changed_total: int
     expected_changed_fragments: tuple[str, ...]
     expected_rerun_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PostgresModelMigrationE2ETestCase:
+    description: str
+    expected_destination_ids: tuple[tuple[object, ...], ...]
+    expected_view_ids: tuple[tuple[object, ...], ...]
+    expected_archive_ids: tuple[tuple[object, ...], ...]
+    expected_view_options: tuple[tuple[object, ...], ...]
+    expected_events: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class PostgresMigrationRollbackE2ETestCase:
+    description: str
+    expected_failure_fragment: str
+    expected_destination_ids_after_failure: tuple[tuple[object, ...], ...]
+    expected_previous_archives_after_failure: int
+    expected_final_destination_ids: tuple[tuple[object, ...], ...]

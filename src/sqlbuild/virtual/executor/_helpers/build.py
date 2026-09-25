@@ -19,6 +19,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
+from sqlbuild.compiler.compile.constants import MIGRATE_FROM_CONFIG_KEY
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -533,6 +534,20 @@ def _execute_leased_virtual_build(
     return result, ingress_python_results, read_side_results
 
 
+def _reject_model_migrations(*, project: CompiledProject) -> None:
+    declared: tuple[str, ...] = tuple(
+        model.name
+        for model in project.models
+        if model.config.values.get(MIGRATE_FROM_CONFIG_KEY) is not None
+    )
+    if declared:
+        raise PlannerInputError(
+            "migrate_from is supported only in direct mode; virtual environments do not run "
+            f"model migrations (declared by: {', '.join(declared)})",
+            code="M105",
+        )
+
+
 def _resolve_virtual_build(
     *,
     project_dir: Path,
@@ -886,6 +901,7 @@ def _plan_virtual_build(
     reads: _VirtualBuildStateReads,
     deferred_relations: dict[str, RelationInfo],
 ) -> _VirtualBuildPlan:
+    _reject_model_migrations(project=graph.project)
     adapter: BaseAdapter = runtime.adapter
     options: VirtualBuildOptions = runtime.options
     hooks: VirtualBuildHooks = runtime.hooks

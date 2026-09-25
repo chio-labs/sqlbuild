@@ -79,11 +79,19 @@ def compile_plan_pipeline(
             output_stream=StringIO(),
         )
         return virtual_result
+    if request.as_target is not None:
+        invocation.progress_stream.write(
+            f"Previewing plan as target '{request.as_target}' through the active target's "
+            "connection (inspection only).\n"
+        )
+        invocation.progress_stream.flush()
     result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=invocation.discovered_inputs,
         adapter=invocation.adapter,
         options=CompilePipelineOptions(
-            selected_target=request.selected_target,
+            selected_target=(
+                request.as_target if request.as_target is not None else request.selected_target
+            ),
             no_sql_validation=request.no_sql_validation,
             no_cache=request.no_cache,
             defer_to=request.defer_to,

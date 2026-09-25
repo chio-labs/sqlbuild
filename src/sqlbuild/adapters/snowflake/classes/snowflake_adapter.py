@@ -41,6 +41,7 @@ from sqlbuild.adapter.contract.models import (
     ExpressionInferenceProfile,
     FunctionDefinition,
     FunctionInfo,
+    MigrationStagePlan,
     QueryResult,
     RelationInfo,
     RenderedRetentionChange,
@@ -68,6 +69,7 @@ from sqlbuild.adapter.contract.types import (
     HistoricalSnapshotCloseStyle,
     HistoricalSnapshotInsertStyle,
     LoaderLogicalType,
+    MigrationTransfer,
     PromotionStrategy,
     RetentionChangePhase,
     RetentionScope,
@@ -490,6 +492,19 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
 
         return build_janitor_events_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+            transient=self.state_tables_transient,
+        )
+
+    def render_create_migration_state_table_sql(self, *, database: str | None, schema: str) -> str:
+        from sqlbuild.compiler.migrations.main.create_table_sql import (
+            build_migration_state_create_table_sql,
+        )
+
+        return build_migration_state_create_table_sql(
             database=database,
             schema=schema,
             render_qualified_name=self.render_qualified_name,
@@ -2229,6 +2244,38 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     ) -> tuple[str, ...]:
         table_kind: str = "TRANSIENT TABLE" if origin_is_transient else "TABLE"
         return (f"CREATE OR REPLACE {table_kind} {destination} CLONE {origin}",)
+
+    def render_migration_stage(
+        self,
+        *,
+        origin: str,
+        stage: str,
+        origin_is_transient: bool = False,
+        stage_is_transient: bool | None = None,
+    ) -> MigrationStagePlan:
+        transient: bool = origin_is_transient if stage_is_transient is None else stage_is_transient
+        if origin_is_transient and not transient:
+            return MigrationStagePlan(
+                transfer=MigrationTransfer.COPY,
+                statements=(
+                    f"CREATE TABLE {stage} LIKE {origin} COPY GRANTS",
+                    f"INSERT INTO {stage} SELECT * FROM {origin}",
+                ),
+            )
+        table_kind: str = "TRANSIENT TABLE" if transient else "TABLE"
+        return MigrationStagePlan(
+            transfer=MigrationTransfer.CLONE,
+            statements=(f"CREATE {table_kind} {stage} CLONE {origin} COPY GRANTS",),
+        )
+
+    def capture_dependent_view_rebinds(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        del connection, database, schema, name
+        return ()
+
+    def supports_transactional_ddl(self) -> bool:
+        return False
 
     def render_query_with_cursor_bounds(
         self,
