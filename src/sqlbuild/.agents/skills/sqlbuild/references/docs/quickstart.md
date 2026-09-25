@@ -221,7 +221,9 @@ See [Incremental](concepts/incremental.md) for details on cursor-based strategie
 waffle-shop/
   sqlbuild_project.toml         # project config
   sources/
-    raw.yml                     # source declarations (inline expression data)
+    raw.yml                     # source declarations (loader-managed and expression-backed)
+  loaders/
+    waffle_sources.py           # Python loaders for raw__customers and raw__orders
   seeds/
     waffle_types.csv            # seed data
     lookups.yml                 # seed declarations
@@ -229,9 +231,6 @@ waffle-shop/
     sql/
       udf__is_completed_order.sql    # scalar SQL UDF
       table_fn__customer_orders.sql  # table function
-  schemas/
-    orders/
-      order.sql                 # reusable model column schema
   models/
     staging/
       stg_customers.sql         # view (audits declared in MODEL() header)
@@ -245,6 +244,10 @@ waffle-shop/
       hourly_order_activity.sql # microbatch incremental
       hourly_activity_with_daily_context.sql # microbatch incremental
       daily_activity_rollup.sql # microbatch incremental
+      _sqlbuild/
+        _macros/                # visible only to models directly in marts/
+          currency.py           # cents_to_dollars macro
+          datetime.py           # adapter-portable timestamp_trunc
     intermediate/
       customer_status_snapshot.sql  # merge incremental
       order_status_index.sql       # integer cursor incremental
@@ -261,8 +264,7 @@ waffle-shop/
       daily_revenue_minimal.sql   # E2E scenario test
       daily_revenue_multi_order.sql # E2E scenario test
   macros/
-    currency.py                 # cents_to_dollars macro
-    datetime.py                 # adapter-portable timestamp_trunc
+    currency.py                 # project-wide line_total_cents macro
   materializations/
     partition_tracked.py        # custom materialization
 ```

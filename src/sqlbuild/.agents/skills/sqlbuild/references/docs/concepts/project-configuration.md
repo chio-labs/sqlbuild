@@ -372,12 +372,13 @@ See [Macros](macros.md) for details on variable substitution and how variables i
 
 ## Janitor
 
-Configuration for the `sqb janitor` command, which cleans up stale warehouse relations:
+Configuration for the `sqb janitor` command, which archives and then deletes stale warehouse relations:
 
 ```toml
 [janitor]
 enabled = false
-retention_days = 30
+retention_days = 14
+archive_retention_days = 14
 delete_tracked_only = true
 exclude_patterns = ["audit_*", "tmp_*"]
 ```
@@ -385,9 +386,14 @@ exclude_patterns = ["audit_*", "tmp_*"]
 | Field | Default | Description |
 |-------|---------|-------------|
 | `enabled` | `false` | Whether janitor is active |
-| `retention_days` | `30` | Only clean relations older than this many days |
+| `retention_days` | `14` in direct mode, `30` in virtual-environment mode | How many days a relation must be stale before it is archived (direct mode) or cleaned up (virtual-environment mode) |
+| `archive_retention_days` | `14` | Direct mode only: how many days an archive is kept before it is deleted. `0` deletes it in the same run. |
 | `delete_tracked_only` | `true` | Only clean relations that appear in fingerprint tracking |
 | `exclude_patterns` | `[]` | Glob patterns for relations to skip |
+| `direct_state_history_versions` | `20` | How many state-history rows to keep per identity in `_sqlbuild_fingerprints` and `_sqlbuild_source_freshness` |
+| `max_checkpoints` | `20` | Virtual-environment mode: how many checkpoints to keep |
+
+See [janitor](../cli/janitor.md) for the archive and delete lifecycle.
 
 ## Scenario
 
