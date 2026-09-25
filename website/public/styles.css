@@ -178,12 +178,21 @@ pre {
 }
 
 .nav a {
-	color: var(--muted-foreground);
+	color: var(--foreground);
+	font-weight: 500;
+	opacity: 0.8;
+	text-decoration: underline;
+	text-decoration-color: transparent;
+	text-decoration-thickness: 2px;
+	text-underline-offset: 6px;
+	transition:
+		opacity 120ms,
+		text-decoration-color 120ms;
 }
 
 .nav a:hover {
-	color: var(--foreground);
-	text-decoration: none;
+	opacity: 1;
+	text-decoration-color: var(--primary);
 }
 
 .nav .nav-icon {
@@ -194,6 +203,7 @@ pre {
 
 .nav .nav-icon:hover {
 	color: var(--foreground);
+	opacity: 1;
 }
 
 .nav-icon svg {
