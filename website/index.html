@@ -238,7 +238,7 @@ test  test_daily_revenue_chain           <span class="bad">FAIL</span>
 								<h3>Know what will rebuild, and why</h3>
 								<p>
 									
-									<code>sqb plan</code> shows why each model will run and how much it will rebuild. A new column rebuilds 14 days, not the full history, because that's the replay window this model sets.
+									<code>sqb plan</code> shows why each model will run and how much it will rebuild. You choose per model how far a change replays: forward only, a set window like 14 days, or the full history.
 								</p>
 							</div>
 <pre class="terminal"><span class="cmd">sqb plan --select daily_order_rollup+</span>
