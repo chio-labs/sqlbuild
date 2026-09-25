@@ -18,10 +18,10 @@ export default defineConfig({
 			},
 			favicon: '/favicon.png',
 			head: [
-				{ tag: 'meta', attrs: { property: 'og:image', content: 'https://sqlbuild.com/assets/og-docs.png' } },
+				{ tag: 'meta', attrs: { property: 'og:image', content: 'https://sqlbuild.com/assets/og-sqlbuild-docs.png' } },
 				{ tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
 				{ tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
-				{ tag: 'meta', attrs: { name: 'twitter:image', content: 'https://sqlbuild.com/assets/og-docs.png' } },
+				{ tag: 'meta', attrs: { name: 'twitter:image', content: 'https://sqlbuild.com/assets/og-sqlbuild-docs.png' } },
 			],
 			social: [
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/chio-labs/sqlbuild' },
