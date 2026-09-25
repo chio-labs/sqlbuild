@@ -875,6 +875,7 @@ class CompiledModel:
     binding_diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
     binding_validated: bool = False
     dynamic_column_contract: DynamicColumnContractProof | None = None
+    unchecked_output_columns: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)

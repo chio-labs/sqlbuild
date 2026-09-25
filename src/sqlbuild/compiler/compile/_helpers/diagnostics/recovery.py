@@ -6,22 +6,47 @@ import re
 from collections import Counter
 from dataclasses import replace
 
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.compile._helpers.assembly.metadata_validation import (
+    get_semantic_metadata_diagnostics,
+)
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
 from sqlbuild.compiler.compile._helpers.diagnostics.details import (
     closest_column,
+    explain_diagnostics,
     missing_column,
     unaliased_output_columns,
     update_binding_models,
 )
+from sqlbuild.compiler.compile._helpers.diagnostics.type_recovery import recover_output_types
 from sqlbuild.compiler.compile.models import (
     CompiledLineageSourceFact,
     CompiledModel,
     CompiledProject,
     CompilerDiagnostic,
 )
+from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 
 _MISSING_CODE: str = "B002"
 _TEST_CODE: str = "B302"
+
+
+def complete_semantic_diagnostics(
+    *,
+    project: CompiledProject,
+    profile: ExpressionInferenceProfile,
+    binding_results: dict[str, tuple[SqlBindingDiagnostic, ...]],
+) -> CompiledProject:
+    """Recover type facts before metadata checks, then explain retained root diagnostics."""
+    project = recover_output_types(project=project, binding_results=binding_results)
+    project = replace(
+        project,
+        diagnostics=(
+            *project.diagnostics,
+            *get_semantic_metadata_diagnostics(project=project, profile=profile),
+        ),
+    )
+    return explain_diagnostics(recover_diagnostics(project))
 
 
 def recover_diagnostics(project: CompiledProject) -> CompiledProject:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.analysis.compact import get_complete_schema_binding_request
 from sqlbuild.compiler.compile._helpers.assembly.binding_positions import (
@@ -29,6 +31,7 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.constants import BINDING_UNKNOWN_TABLE_INTERNAL_CODE
+from sqlbuild.compiler.sql_analysis.main._identifier_case import ignores_quoted_case
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.models import SqlBindingResult, SqlSchemaValidationRequest
 
@@ -58,15 +61,20 @@ def get_source_binding_diagnostics(
         ):
             models.append(model)
     requests: tuple[SqlSchemaValidationRequest, ...] = tuple(
-        get_complete_schema_binding_request(
-            known_functions=known_function_names(project.functions),
-            known_types=known_declared_types(functions=project.functions, column_types=shapes),
-            query_sql=cursor_intrinsics_analysis_sql(
-                sql=model.query_sql, cursor_type=model.config.values.get("cursor_type")
+        replace(
+            get_complete_schema_binding_request(
+                known_functions=known_function_names(project.functions),
+                known_types=known_declared_types(functions=project.functions, column_types=shapes),
+                query_sql=cursor_intrinsics_analysis_sql(
+                    sql=model.query_sql, cursor_type=model.config.values.get("cursor_type")
+                ),
+                placeholders=_placeholders(model),
+                dialect=profile.sql_analysis_dialect,
+                binding_schema=shapes,
             ),
-            placeholders=_placeholders(model),
-            dialect=profile.sql_analysis_dialect,
-            binding_schema=shapes,
+            quoted_identifiers_ignore_case=ignores_quoted_case(
+                connection=project.effective_connection, dialect=profile.sql_analysis_dialect
+            ),
         )
         for model in models
     )

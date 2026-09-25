@@ -42,9 +42,6 @@ from sqlbuild.compiler.compile._helpers.analysis.validation import (
 from sqlbuild.compiler.compile._helpers.assembly.binding_positions import (
     get_authored_binding_location,
 )
-from sqlbuild.compiler.compile._helpers.assembly.metadata_validation import (
-    get_semantic_metadata_diagnostics,
-)
 from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
     known_declared_types,
     known_function_names,
@@ -52,6 +49,9 @@ from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     build_complete_binding_schemas,
     get_expression_source_shape,
+)
+from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
+    build_declared_column_types as _build_column_types_by_table,
 )
 from sqlbuild.compiler.compile._helpers.assembly.targets import (
     build_model_relation_target,
@@ -66,8 +66,7 @@ from sqlbuild.compiler.compile._helpers.deps.dependencies import (
     model_build_deps,
     sql_test_scope_deps,
 )
-from sqlbuild.compiler.compile._helpers.diagnostics.details import explain_diagnostics
-from sqlbuild.compiler.compile._helpers.diagnostics.recovery import recover_diagnostics
+from sqlbuild.compiler.compile._helpers.diagnostics.recovery import complete_semantic_diagnostics
 from sqlbuild.compiler.compile._helpers.render.context_templates import (
     resolve_early_model_templates,
 )
@@ -150,6 +149,7 @@ from sqlbuild.compiler.sql_analysis.constants import (
     NATIVE_DIALECT_ALIASES,
 )
 from sqlbuild.compiler.sql_analysis.exceptions import SqlAnalysisBoundaryError
+from sqlbuild.compiler.sql_analysis.main._identifier_case import ignores_quoted_case
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.models import (
     SqlBindingDiagnostic,
@@ -227,6 +227,9 @@ def assemble_compiled_project(
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
     profile = replace(
         profile,
+        quoted_identifiers_ignore_case=ignores_quoted_case(
+            connection=inputs.effective_connection, dialect=profile.sql_analysis_dialect
+        ),
         sql_analysis_dialect=NATIVE_DIALECT_ALIASES.get(
             profile.sql_analysis_dialect or "", profile.sql_analysis_dialect
         ),
@@ -430,16 +433,13 @@ def assemble_compiled_project(
         external_sql_reference_resolver=inputs.external_sql_reference_resolver,
         scope_index=scope_index,
     )
-    return explain_diagnostics(
-        recover_diagnostics(
-            replace(
-                project,
-                diagnostics=(
-                    *project.diagnostics,
-                    *get_semantic_metadata_diagnostics(project=project, profile=profile),
-                ),
-            )
-        )
+    return complete_semantic_diagnostics(
+        project=project,
+        profile=profile,
+        binding_results={
+            name: analysis.polyglot_analysis.binding_diagnostics
+            for name, analysis in model_sql_analysis_by_name.items()
+        },
     )
 
 
@@ -997,6 +997,7 @@ def _analyze_model_sql_requests(
                             sql=prepared_by_index[index].cleaned_sql,
                             dialect=inference_profile.sql_analysis_dialect,
                             schema=requests[index].binding_schema or {},
+                            quoted_identifiers_ignore_case=inference_profile.quoted_identifiers_ignore_case,
                         )
                         for index in validation_indices
                     )
@@ -1140,13 +1141,18 @@ def _complete_inferred_bindings(
             continue
         deferred_validation_indices.append(index)
         deferred_validation_requests.append(
-            get_complete_schema_binding_request(
-                query_sql=request.query_sql,
-                known_functions=known_functions,
-                known_types=known_types,
-                placeholders=request.placeholders,
-                dialect=inference_profile.sql_analysis_dialect,
-                binding_schema={name: complete_schemas.get(name, {}) for name in required_names},
+            replace(
+                get_complete_schema_binding_request(
+                    query_sql=request.query_sql,
+                    known_functions=known_functions,
+                    known_types=known_types,
+                    placeholders=request.placeholders,
+                    dialect=inference_profile.sql_analysis_dialect,
+                    binding_schema={
+                        name: complete_schemas.get(name, {}) for name in required_names
+                    },
+                ),
+                quoted_identifiers_ignore_case=inference_profile.quoted_identifiers_ignore_case,
             )
         )
     with record_compile_timing("binding_validation_ms"):
@@ -1364,30 +1370,6 @@ def _build_column_nullability_by_table(
             continue
         facts[table_function_analysis_name(function_input.name)] = {
             column.name: InferredNullability.UNKNOWN for column in function_input.return_columns
-        }
-    return facts
-
-
-def _build_column_types_by_table(inputs: CompileProjectInputs) -> dict[str, dict[str, str]]:
-    facts: dict[str, dict[str, str]] = {}
-    for model_input in inputs.model_inputs:
-        if model_input.schema_entry is not None:
-            facts[model_input.schema_entry.name] = {
-                column.name: column.type or "UNKNOWN" for column in model_input.schema_entry.columns
-            }
-    for seed_input in inputs.seed_inputs:
-        facts[seed_input.schema_entry.name] = {
-            column.name: column.type or "UNKNOWN" for column in seed_input.schema_entry.columns
-        }
-    for source_input in inputs.source_inputs:
-        facts[source_input.source_entry.name] = {
-            column.name: column.type or "UNKNOWN" for column in source_input.source_entry.columns
-        }
-    for function_input in inputs.sql_function_inputs:
-        if not function_input.return_columns:
-            continue
-        facts[table_function_analysis_name(function_input.name)] = {
-            column.name: column.type for column in function_input.return_columns
         }
     return facts
 

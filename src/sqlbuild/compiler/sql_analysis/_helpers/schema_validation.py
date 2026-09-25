@@ -7,6 +7,7 @@ import re
 from typing import Any, cast
 
 import sqlbuild._native as _native
+from sqlbuild.compiler.sql_analysis._helpers.identifier_case import fold_quoted_identifiers
 from sqlbuild.compiler.sql_analysis.constants import (
     BINDING_SEVERITIES,
     NATIVE_DIALECT_ALIASES,
@@ -96,7 +97,9 @@ def _request_payload(*, request: SqlSchemaValidationRequest) -> dict[str, object
             table_columns.append({"name": column_name, "type": column_type or "UNKNOWN"})
         tables.append({"name": table_name, "columns": table_columns})
     return {
-        "sql": request.sql,
+        "sql": fold_quoted_identifiers(sql=request.sql, dialect=dialect)
+        if request.quoted_identifiers_ignore_case
+        else request.sql,
         "dialect": dialect,
         "schema": {
             "strict": True,

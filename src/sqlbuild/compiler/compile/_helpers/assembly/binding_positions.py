@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import replace
 from difflib import SequenceMatcher
+from functools import lru_cache
 from pathlib import Path
 
 from sqlbuild.compiler.compile.main.map_expanded_offset import map_expanded_offset
@@ -89,12 +90,35 @@ def get_authored_binding_position(
 
 
 def _normalized_offset(*, original: str, normalized: str, offset: int) -> int:
-    for _, original_start, original_end, normalized_start, normalized_end in SequenceMatcher(
-        a=original, b=normalized, autojunk=False
-    ).get_opcodes():
-        if normalized_start <= offset < normalized_end:
+    if original == normalized:
+        return offset
+    for original_start, original_end, normalized_start, normalized_end in _normalization_map(
+        original=original, normalized=normalized
+    ):
+        if offset < normalized_start:
+            return original_start
+        if normalized_start <= offset <= normalized_end:
             return original_start + min(offset - normalized_start, original_end - original_start)
     return len(original)
+
+
+@lru_cache(maxsize=32)
+def _normalization_map(*, original: str, normalized: str) -> tuple[tuple[int, int, int, int], ...]:
+    """Align SQL tokens once, avoiding quadratic character matching on repetitive queries."""
+    original_tokens: list[re.Match[str]] = list(re.finditer(r"\w+|[^\w\s]", original))
+    normalized_tokens: list[re.Match[str]] = list(re.finditer(r"\w+|[^\w\s]", normalized))
+    matcher: SequenceMatcher[str] = SequenceMatcher(
+        a=[token.group().casefold() for token in original_tokens],
+        b=[token.group().casefold() for token in normalized_tokens],
+        autojunk=True,
+    )
+    mappings: list[tuple[int, int, int, int]] = []
+    for block in matcher.get_matching_blocks():
+        for index in range(block.size):
+            source: re.Match[str] = original_tokens[block.a + index]
+            target: re.Match[str] = normalized_tokens[block.b + index]
+            mappings.append((source.start(), source.end(), target.start(), target.end()))
+    return tuple(mappings)
 
 
 def _position(*, text: str, offset: int) -> tuple[int, int]:
