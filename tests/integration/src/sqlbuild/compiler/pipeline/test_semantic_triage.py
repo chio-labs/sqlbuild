@@ -3,9 +3,11 @@
 import json
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
+import sqlbuild._native as native
 from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProfile
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
@@ -192,6 +194,82 @@ def test_given_repetitive_sql_when_mapping_diagnostic_then_preserves_authored_sp
     assert location["line"] == len(sql.splitlines())
     assert location["column"] == len("WHERE ") + 1
     assert location["end_column"] == len(sql.splitlines()[-1]) + 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [SemanticTriageCase("warm semantic cache", expected_codes=("B212",))],
+    ids=lambda case: case.description,
+)
+def test_given_cached_validation_when_warm_or_schema_changed_then_reuses_only_matching_inputs(
+    test_case: SemanticTriageCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = []\n'
+    )
+    (tmp_path / "sources").mkdir()
+    (tmp_path / "models").mkdir()
+    source: Path = tmp_path / "sources/orders.yml"
+    declaration: str = "sources:\n  - name: orders\n    table: orders\n    contract: enforced\n    columns:\n      - name: quantity\n        type: INTEGER\n"
+    source.write_text(declaration)
+    (tmp_path / "models/totals.sql").write_text(
+        'MODEL (materialized view);\nSELECT quantity + 1 AS total FROM __source("orders")'
+    )
+    args: list[str] = ["--project-dir", str(tmp_path), "compile", "--json"]
+    with monkeypatch.context() as patch:
+        repeated_validation: Mock = Mock(
+            side_effect=AssertionError("cold compile repeated fused validation")
+        )
+        patch.setattr(native, "validate_sql_with_schemas_json", repeated_validation)
+        assert main(args) == 0
+        repeated_validation.assert_not_called()
+    capsys.readouterr()
+    with monkeypatch.context() as patch:
+        forbidden: Mock = Mock(
+            side_effect=AssertionError("warm compile repeated native semantic work")
+        )
+        patch.setattr(native, "validate_sql_with_schemas_json", forbidden)
+        patch.setattr(native, "analyze_project_queries_compact_json", forbidden)
+        assert main(args) == 0
+        forbidden.assert_not_called()
+    capsys.readouterr()
+    source.write_text(declaration.replace("INTEGER", "TIMESTAMP"))
+    assert main(args) == 1
+    result: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert tuple(item["code"] for item in result["diagnostics"]) == test_case.expected_codes
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [SemanticTriageCase("distinct spans with identical messages", expected_codes=("B212", "B212"))],
+    ids=lambda case: case.description,
+)
+def test_given_repeated_root_messages_when_recovering_then_preserves_each_output_cause(
+    test_case: SemanticTriageCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = []\n'
+    )
+    (tmp_path / "models").mkdir()
+    files: dict[str, str] = {
+        "orders": "MODEL (materialized view, contract enforced, columns (quantity (type INTEGER), ordered_at (type TIMESTAMP)));\nSELECT CAST(1 AS INTEGER) AS quantity, CAST('2026-04-01' AS TIMESTAMP) AS ordered_at",
+        "broken": 'MODEL (materialized view, contract enforced, columns (total_a (type INTEGER), total_b (type INTEGER), ordered_at (type TIMESTAMP)));\nSELECT quantity + ordered_at AS total_a, quantity + ordered_at AS total_b, ordered_at FROM __ref("orders")',
+        "downstream": 'MODEL (materialized view);\nSELECT total_a > ordered_at AS a, total_b > ordered_at AS b FROM __ref("broken")',
+        "final_orders": 'MODEL (materialized view);\nSELECT a, b FROM __ref("downstream")',
+    }
+    for name, sql in files.items():
+        (tmp_path / "models" / f"{name}.sql").write_text(sql)
+    assert main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"]) == 1
+    result: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert tuple(item["code"] for item in result["diagnostics"]) == test_case.expected_codes
+    for diagnostic in result["diagnostics"]:
+        assert (
+            "2 downstream output uses were not type-checked because of this error"
+            in diagnostic["notes"]
+        )
 
 
 if __name__ == "__main__":

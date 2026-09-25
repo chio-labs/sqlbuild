@@ -388,6 +388,10 @@ jobs:
             make test-e2e-dense-compile-performance \
               SQLBUILD_BENCHMARK_MODELS="${BENCHMARK_MODELS}"
 
+      - name: Run diagnostic-heavy compile guards
+        if: matrix.models == 1000
+        run: make test-e2e-diagnostic-compile-performance
+
   cache_compile_performance:
     name: Fresh-process compile cache (${{ matrix.models }} models)
     needs: [changes, lockfile]

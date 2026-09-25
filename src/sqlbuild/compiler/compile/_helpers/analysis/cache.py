@@ -47,7 +47,7 @@ from sqlbuild.compiler.sql_analysis.constants import BINDING_SEVERITIES, TYPE_CH
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 
 _ANALYSIS_CACHE_VERSION: int = 12
-_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v17-target-identifier-case"
+_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v18-fused-semantic-validation"
 _LINEAGE_COLUMN_VALUE_COUNT: int = 4
 _LINEAGE_SOURCE_VALUE_COUNT: int = 3
 _COMPACT_TRANSFORM_CODES: dict[str, int] = {
@@ -741,6 +741,8 @@ def _inference_profile_payload(
     return {
         "sql_analysis_dialect": profile.sql_analysis_dialect,
         "quoted_identifiers_ignore_case": profile.quoted_identifiers_ignore_case,
+        "semantic_known_functions": profile.semantic_known_functions,
+        "semantic_known_types": profile.semantic_known_types,
         "function_nullability_rules": rules,
         "function_return_types": dict(sorted(profile.function_return_types.items())),
     }

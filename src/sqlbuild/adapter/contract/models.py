@@ -63,6 +63,8 @@ class ExpressionInferenceProfile:
     function_nullability_rules: Mapping[str, FunctionNullabilityRule] = field(default_factory=dict)
     function_return_types: Mapping[str, str] = field(default_factory=dict)
     quoted_identifiers_ignore_case: bool = False
+    semantic_known_functions: tuple[str, ...] = ()
+    semantic_known_types: tuple[str, ...] = ()
 
     def function_nullability_rule(self, function_name: str) -> FunctionNullabilityRule | None:
         """Return the adapter rule for a function name, if one is registered."""

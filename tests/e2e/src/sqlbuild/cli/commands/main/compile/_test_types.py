@@ -244,3 +244,13 @@ class EmptyInputTestRuleCacheTestCase:
     replacement_mock: str
     expected_first_codes: tuple[str, ...]
     expected_second_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DiagnosticPerformanceCase:
+    description: str
+    depth: int = 100
+    width: int = 32
+    expected_max_wall_seconds: float = 20.0
+    expected_timeout_seconds: float = 65.0
+    diagnostic_count: int = 100

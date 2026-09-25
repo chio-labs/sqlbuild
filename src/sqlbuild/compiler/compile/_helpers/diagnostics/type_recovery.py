@@ -1,6 +1,6 @@
 """Propagate unknown output types from located root errors without opening other columns."""
 
-from collections import Counter
+from collections import Counter, deque
 from dataclasses import replace
 from typing import Any
 
@@ -64,7 +64,10 @@ def recover_output_types(
         SqlBindingResult(diagnostics=binding_results.get(model.name, ())) for model in failed
     )
     poisoned: dict[tuple[str, str], CompilerDiagnostic] = {}
+    roots_by_model: dict[str, dict[SqlBindingDiagnostic, CompilerDiagnostic]] = {}
+    outputs_by_diagnostic: dict[CompilerDiagnostic, set[str]] = {}
     for model, request, result in zip(failed, requests, results, strict=True):
+        roots_by_model[model.name] = _root_bindings(model=model, diagnostics=result.diagnostics)
         spans: list[tuple[int, int]] = _projection_spans(sql=request.sql, dialect=request.dialect)
         columns: tuple[InferredColumn, ...] = model.inferred_columns or ()
         if len(spans) != len(columns):
@@ -72,12 +75,13 @@ def recover_output_types(
         for raw in result.diagnostics:
             if raw.start is None:
                 continue
-            root: CompilerDiagnostic | None = _root(model=model, raw=raw)
+            root: CompilerDiagnostic | None = roots_by_model[model.name].get(raw)
             if root is None or not root.is_error:
                 continue
             for column, (start, end) in zip(columns, spans, strict=True):
                 if start <= raw.start < end:
                     poisoned[(model.name, column.name)] = root
+                    outputs_by_diagnostic.setdefault(root, set()).add(column.name)
     if not poisoned:
         return project
     for _ in project.models:
@@ -113,7 +117,7 @@ def recover_output_types(
             (item.code, item.start, item.end) for item in revised.diagnostics
         }
         for raw in original.diagnostics:
-            diagnostic: CompilerDiagnostic | None = _root(model=model, raw=raw)
+            diagnostic: CompilerDiagnostic | None = roots_by_model[model.name].get(raw)
             if (
                 diagnostic is None
                 or diagnostic in causes
@@ -121,7 +125,14 @@ def recover_output_types(
             ):
                 continue
             skipped.add(diagnostic)
-            redirected[diagnostic] = causes
+            redirected[diagnostic] = (
+                _output_causes(
+                    model=model,
+                    outputs=outputs_by_diagnostic.get(diagnostic, set()),
+                    poisoned=poisoned,
+                )
+                or causes
+            )
     counts: Counter[CompilerDiagnostic] = _unchecked_uses(
         project=project, poisoned=poisoned, redirected=redirected
     )
@@ -193,15 +204,35 @@ def _unchecked_uses(
     return counts
 
 
-def _root(*, model: CompiledModel, raw: SqlBindingDiagnostic) -> CompilerDiagnostic | None:
-    return next(
-        (
-            item
-            for item in model.binding_diagnostics
-            if item.code == raw.code and item.message == raw.message
-        ),
-        None,
-    )
+def _root_bindings(
+    *, model: CompiledModel, diagnostics: tuple[SqlBindingDiagnostic, ...]
+) -> dict[SqlBindingDiagnostic, CompilerDiagnostic]:
+    """Pair repeated messages by occurrence, preserving distinct native spans."""
+    pending: dict[tuple[str, str], deque[CompilerDiagnostic]] = {}
+    for diagnostic in model.binding_diagnostics:
+        pending.setdefault((diagnostic.code, diagnostic.message), deque()).append(diagnostic)
+    result: dict[SqlBindingDiagnostic, CompilerDiagnostic] = {}
+    for raw in diagnostics:
+        matches: deque[CompilerDiagnostic] | None = pending.get((raw.code, raw.message))
+        if matches:
+            result[raw] = matches.popleft()
+    return result
+
+
+def _output_causes(
+    *, model: CompiledModel, outputs: set[str], poisoned: dict[tuple[str, str], CompilerDiagnostic]
+) -> set[CompilerDiagnostic]:
+    """Redirect only the failing projection's lineage instead of every poisoned input."""
+    result: set[CompilerDiagnostic] = set()
+    for output in model.fast_lineage_columns or ():
+        if output.output_column in outputs:
+            for source in output.upstream_columns:
+                root: CompilerDiagnostic | None = poisoned.get(
+                    (source.resource_name, source.column_name)
+                )
+                if root is not None:
+                    result.add(root)
+    return result
 
 
 def _request(
