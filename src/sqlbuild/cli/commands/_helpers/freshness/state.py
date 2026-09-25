@@ -7,13 +7,9 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
 from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.compiler.source_freshness.main.read import read_latest_source_freshness
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
-from sqlbuild.spec.contracts.main.resolve_target_name import resolve_target_name
-from sqlbuild.virtual.state.main.environments.runtime import build_state_runtime
-from sqlbuild.virtual.state.models import SourceFreshnessRecord as VirtualSourceFreshnessRecord
 
 
 def read_direct_freshness_state_for_command(
@@ -50,60 +46,6 @@ def read_direct_freshness_state_for_command(
             ).records
         )
     return records
-
-
-def read_virtual_freshness_state_for_command(
-    *,
-    discovered_inputs: DiscoveredProjectInputs,
-    project_dir: Any,
-    virtual_environment_name: str | None,
-) -> dict[str, SourceFreshnessRecord]:
-    """Read virtual source freshness state by source name for one virtual environment."""
-
-    config: Any
-    backend: Any
-    config, backend = build_state_runtime(
-        discovered_inputs=discovered_inputs,
-        project_dir=project_dir,
-    )
-    state_connection: Any = backend.connect(config.connection)
-    try:
-        target_name: str | None = virtual_environment_name or resolve_target_name(
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-            selected_target=None,
-        )
-        if target_name is None:
-            return {}
-        records: tuple[VirtualSourceFreshnessRecord, ...] = (
-            backend.get_virtual_environment_source_freshness(
-                connection=state_connection,
-                schema=config.schema,
-                virtual_environment_name=target_name,
-            )
-        )
-        return {
-            record.source_name: _direct_record_from_virtual_record(record) for record in records
-        }
-    finally:
-        backend.close(state_connection)
-
-
-def _direct_record_from_virtual_record(
-    record: VirtualSourceFreshnessRecord,
-) -> SourceFreshnessRecord:
-    return SourceFreshnessRecord(
-        source_name=record.source_name,
-        target_database=None,
-        target_schema=None,
-        target_name=None,
-        run_id=record.virtual_environment_name,
-        strategy=record.strategy,
-        value_kind=record.value_kind,
-        data_version=record.data_version,
-        data_version_hash=record.data_version_hash,
-        observed_at=record.observed_at,
-    )
 
 
 def _resolve_state_database(*, project: Any) -> str | None:

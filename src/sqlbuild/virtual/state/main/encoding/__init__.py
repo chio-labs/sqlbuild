@@ -1,1 +1,0 @@
-"""Virtual state encoding entries."""

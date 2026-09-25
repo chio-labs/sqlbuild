@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-from sqlbuild.spec.contracts.constants import CHANGES_ONLY_SETTING_OVERRIDE_KEY
 from sqlbuild.spec.contracts.exceptions import SpecConfigError
 from sqlbuild.spec.contracts.models import (
     ClonePolicy,
     ExecutionLimitsConfig,
     LocalClonePolicy,
     LocalConfig,
-    LocalStateConfig,
     LocalTargetConfig,
     ProjectConfig,
-    StateConfig,
     TargetConfig,
 )
 
@@ -80,11 +77,6 @@ def resolve_target_config(
             if local_target.defer_clone_from is not None
             else project_target.defer_clone_from
         ),
-        changes_only=(
-            local_target.changes_only
-            if local_target.changes_only is not None
-            else project_target.changes_only
-        ),
         compile_cache=(
             local_target.compile_cache
             if local_target.compile_cache is not None
@@ -128,10 +120,6 @@ def resolve_target_config(
             project_clone=project_target.clone,
             local_clone=local_target.clone,
         ),
-        state=_merge_state_config(
-            project_state=project_target.state,
-            local_state=local_target.state,
-        ),
     )
     return target_config
 
@@ -163,37 +151,6 @@ def _merge_execution_limits(
     )
 
 
-def resolve_effective_changes_only(
-    *,
-    project_config: ProjectConfig,
-    local_config: LocalConfig,
-    selected_target: str | None,
-    cli_changes_only: bool,
-) -> bool:
-    """Resolve changes-only selection with CLI, target, and settings precedence."""
-
-    if cli_changes_only:
-        return True
-    target_name: str | None = resolve_target_name(
-        project_config=project_config,
-        local_config=local_config,
-        selected_target=selected_target,
-    )
-    if target_name is not None:
-        target_config: TargetConfig = resolve_target_config(
-            project_config=project_config,
-            local_config=local_config,
-            target_name=target_name,
-        )
-        if target_config.changes_only is not None:
-            return target_config.changes_only
-    return (
-        local_config.settings.changes_only
-        if CHANGES_ONLY_SETTING_OVERRIDE_KEY in local_config.setting_overrides
-        else project_config.settings.changes_only
-    )
-
-
 def _merge_clone_policy(
     *, project_clone: ClonePolicy, local_clone: LocalClonePolicy
 ) -> ClonePolicy:
@@ -209,27 +166,5 @@ def _merge_clone_policy(
             allow_as_clone_destination
             if allow_as_clone_destination is not None
             else project_clone.allow_as_clone_destination
-        ),
-    )
-
-
-def _merge_state_config(
-    *,
-    project_state: StateConfig,
-    local_state: LocalStateConfig,
-) -> StateConfig:
-    return StateConfig(
-        backend=local_state.backend if local_state.backend is not None else project_state.backend,
-        schema=local_state.schema if local_state.schema is not None else project_state.schema,
-        connection={**project_state.connection, **local_state.connection},
-        allow_reset=(
-            local_state.allow_reset
-            if local_state.allow_reset is not None
-            else project_state.allow_reset
-        ),
-        unsuffixed_virtual_env=(
-            local_state.unsuffixed_virtual_env
-            if local_state.unsuffixed_virtual_env is not None
-            else project_state.unsuffixed_virtual_env
         ),
     )

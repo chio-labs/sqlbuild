@@ -81,14 +81,12 @@ def _expected_command_failure_types() -> tuple[type[Exception], ...]:
     from sqlbuild.executor.pipeline.exceptions import AuditExecutionError
     from sqlbuild.runtime.execution_limits.exceptions import ExecutionDurationLimitError
     from sqlbuild.spec.contracts.exceptions import SpecConfigError
-    from sqlbuild.virtual.state.exceptions import StateBackendError
 
     return (
         AuditExecutionError,
         DiscoveryError,
         ExecutionDurationLimitError,
         SpecConfigError,
-        StateBackendError,
         ValueError,
     )
 

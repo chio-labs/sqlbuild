@@ -40,7 +40,6 @@ def resolve_janitor_settings(
     retention_days: int = resolve_janitor_retention_days(
         override=request.retention_days,
         configured=invocation.discovered_inputs.project_config.janitor.retention_days,
-        virtual_environments=invocation.discovered_inputs.project_config.settings.virtual_environments,
     )
     if retention_days < 0:
         raise CliUserError("janitor --retention-days must be >= 0", code="C501")

@@ -1,1 +1,0 @@
-"""Virtual state lock entrypoints."""

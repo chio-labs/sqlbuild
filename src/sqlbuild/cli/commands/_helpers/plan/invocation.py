@@ -9,10 +9,6 @@ from typing import TextIO
 from sqlbuild.cli.commands._helpers.runtime.adapter_context import (
     resolve_adapter_connection_context,
 )
-from sqlbuild.cli.commands._helpers.runtime.mode_policy import (
-    enforce_no_defer_to_in_virtual_mode,
-    enforce_virtual_only_flags_in_virtual_mode,
-)
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import (
     AdapterConnectionContext,
@@ -27,9 +23,6 @@ from sqlbuild.compiler.compile.main.effective_settings import build_effective_se
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.presentation.main.supports_color import supports_color
-from sqlbuild.spec.contracts.main.resolve_effective_changes_only import (
-    resolve_effective_changes_only,
-)
 
 
 def resolve_plan_invocation(*, request: PlanCommandRequest) -> PlanInvocation:
@@ -41,25 +34,7 @@ def resolve_plan_invocation(*, request: PlanCommandRequest) -> PlanInvocation:
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
-    effective_changes_only: bool = resolve_effective_changes_only(
-        project_config=discovered_inputs.project_config,
-        local_config=discovered_inputs.local_config,
-        selected_target=request.selected_target,
-        cli_changes_only=request.changes_only,
-    )
     _validate_preview_target(discovered_inputs=discovered_inputs, as_target=request.as_target)
-    enforce_no_defer_to_in_virtual_mode(
-        discovered_inputs=discovered_inputs,
-        command_name="plan",
-        defer_to=request.defer_to,
-    )
-    enforce_virtual_only_flags_in_virtual_mode(
-        discovered_inputs=discovered_inputs,
-        command_name="plan",
-        virtual_env=request.virtual_env,
-        include_stale_upstreams=request.include_stale_upstreams,
-        changes_only=effective_changes_only,
-    )
     adapter_context: AdapterConnectionContext = resolve_adapter_connection_context(
         discovered_inputs=discovered_inputs,
         effective_project_dir=effective_project_dir,
@@ -81,7 +56,6 @@ def resolve_plan_invocation(*, request: PlanCommandRequest) -> PlanInvocation:
     return PlanInvocation(
         effective_project_dir=effective_project_dir,
         discovered_inputs=discovered_inputs,
-        effective_changes_only=effective_changes_only,
         adapter=adapter_context.adapter,
         connection_config=adapter_context.connection_config,
         use_color=use_color,
@@ -89,7 +63,6 @@ def resolve_plan_invocation(*, request: PlanCommandRequest) -> PlanInvocation:
         connection_progress=reporters.connection,
         planning_progress=reporters.planning,
         should_load_sources=should_load_sources,
-        virtual_mode=bool(discovered_inputs.project_config.settings.virtual_environments),
     )
 
 
@@ -98,11 +71,6 @@ def _validate_preview_target(
 ) -> None:
     if as_target is None:
         return
-    if discovered_inputs.project_config.settings.virtual_environments:
-        raise CliUserError(
-            "plan --as is supported only in direct mode",
-            help="Virtual environments preview other environments with --virtual-env.",
-        )
     configured: set[str] = set(discovered_inputs.project_config.targets) | set(
         discovered_inputs.local_config.targets
     )

@@ -1,1 +1,0 @@
-"""Virtual state retention entrypoints."""

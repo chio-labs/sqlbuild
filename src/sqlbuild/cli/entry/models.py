@@ -13,10 +13,8 @@ from sqlbuild.cli.commands.types import (
     FormatCommandHandler,
     LineageCommandHandler,
     QueryCommandHandler,
-    ReconcileCommandHandler,
     ScopeCommandHandler,
     SkillsUpdateCommandHandler,
-    StateCommandHandler,
 )
 from sqlbuild.cli.compile.models import CompileCommandRequest
 
@@ -67,14 +65,10 @@ class CliEntrypointHandlers:
     run_load: Callable[..., int]
     run_clone: Callable[..., int]
     run_diff: Callable[..., int]
-    run_reconcile: ReconcileCommandHandler
-    run_promote: Callable[..., int]
-    run_rollback: Callable[..., int]
     run_query: QueryCommandHandler
     run_debug: DebugCommandHandler
     run_lineage: LineageCommandHandler
     run_janitor: Callable[..., int]
-    run_state: StateCommandHandler
     run_init: Callable[[Path | None], int]
     run_playground: Callable[..., int]
     run_skills_update: SkillsUpdateCommandHandler

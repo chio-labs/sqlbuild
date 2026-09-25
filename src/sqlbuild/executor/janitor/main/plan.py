@@ -24,7 +24,6 @@ from sqlbuild.executor.janitor.models import (
     JanitorPlan,
     JanitorRelationScope,
     JanitorSchemaClassification,
-    JanitorStateCandidates,
     JanitorWarehouseFacts,
 )
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
@@ -39,16 +38,12 @@ def build_janitor_plan(
     delete_tracked_only: bool = True,
     exclude_patterns: tuple[str, ...] = (),
     relation_scope: JanitorRelationScope | None = None,
-    state_candidates: JanitorStateCandidates | None = None,
     direct_settings: JanitorDirectModeSettings | None = None,
 ) -> JanitorPlan:
     """Build a desired-vs-warehouse cleanup plan for target schemas."""
 
     scope: JanitorRelationScope = (
         relation_scope if relation_scope is not None else JanitorRelationScope()
-    )
-    state: JanitorStateCandidates = (
-        state_candidates if state_candidates is not None else JanitorStateCandidates()
     )
     direct: JanitorDirectModeSettings = direct_settings or JanitorDirectModeSettings()
     managed_target_schemas: set[tuple[str | None, str | None]] = collect_target_schemas(project)
@@ -80,12 +75,6 @@ def build_janitor_plan(
             direct_mode=direct.enabled,
             archive_retention_days=direct.archive_retention_days,
             query_diff_artifact_candidates=query_diff_artifact_candidates,
-            checkpoint_candidates=state.checkpoint_candidates,
-            detached_virtual_environment_candidates=(state.detached_virtual_environment_candidates),
-            expired_virtual_environment_candidates=(state.expired_virtual_environment_candidates),
-            state_backup_candidates=state.state_backup_candidates,
-            expired_lock_candidates=state.expired_lock_candidates,
-            virtual_state_prune_candidates=state.virtual_state_prune_candidates,
             direct_state_prune_candidates=(),
             skipped_relations=query_diff_artifact_skipped,
             scanned_schema_count=len(query_artifact_schemas),
@@ -149,12 +138,6 @@ def build_janitor_plan(
         archive_deletion_candidates=archives.archive_deletion_candidates,
         retained_archives=archives.retained_archives,
         query_diff_artifact_candidates=query_diff_artifact_candidates,
-        checkpoint_candidates=state.checkpoint_candidates,
-        detached_virtual_environment_candidates=state.detached_virtual_environment_candidates,
-        expired_virtual_environment_candidates=state.expired_virtual_environment_candidates,
-        state_backup_candidates=state.state_backup_candidates,
-        expired_lock_candidates=state.expired_lock_candidates,
-        virtual_state_prune_candidates=state.virtual_state_prune_candidates,
         direct_state_prune_candidates=direct_state_prune_candidates,
         skipped_relations=(
             *(

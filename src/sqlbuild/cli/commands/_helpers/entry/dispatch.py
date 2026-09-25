@@ -59,8 +59,6 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
         LineageCommandRequest,
         LoadCommandRequest,
         PlanCommandRequest,
-        PromoteCommandRequest,
-        RollbackCommandRequest,
         ScopeCommandRequest,
         SeedCommandRequest,
         TestCommandRequest,
@@ -119,7 +117,6 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 ),
                 json_output=args.json,
                 full_refresh=args.full_refresh,
-                virtual_env=args.virtual_env,
                 load_sources=args.load_sources,
                 include_python=args.include_python,
                 no_color=args.no_color,
@@ -127,8 +124,6 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 exclude=tuple(args.exclude),
                 verbose=args.verbose,
                 cli_vars=args.vars,
-                include_stale_upstreams=args.include_stale_upstreams,
-                changes_only=args.changes_only,
                 max_microbatches=args.max_microbatches,
                 selection_diagnostics=args.selection_diagnostics,
             )
@@ -161,7 +156,6 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 no_color=args.no_color,
                 fail_fast=args.fail_fast,
                 full_refresh=args.full_refresh,
-                virtual_env=args.virtual_env,
                 load_sources=args.load_sources,
                 reload_sources=args.reload,
                 include_python=args.include_python,
@@ -176,8 +170,6 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 verbose=args.verbose,
                 debug=args.debug,
                 cli_vars=args.vars,
-                include_stale_upstreams=args.include_stale_upstreams,
-                changes_only=args.changes_only,
                 run_tests=args.run_tests,
                 run_audits=args.run_audits,
                 manifest=args.manifest,
@@ -203,7 +195,6 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 fail_on_error=args.fail_on_error,
                 compare_state=args.state,
                 fail_on_stale=args.fail_on_stale,
-                virtual_environment_name=args.virtual_env,
             )
         )
     if args.command == CliCommand.TEST:
@@ -317,7 +308,6 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 origin_target_name=args.from_target,
                 destination_target_name=args.to_target,
                 hard_copy=args.hard_copy,
-                virtual_env=args.virtual_env,
                 skip_locked=args.skip_locked,
                 select=select,
                 exclude=tuple(args.exclude),
@@ -355,7 +345,6 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 exclude=tuple(args.exclude),
                 verbose=args.verbose,
                 cli_vars=args.vars,
-                allow_partial_diff=args.allow_partial_diff,
                 selected_target=args.target,
                 left_query=args.left_query,
                 left_query_file=args.left_query_file,
@@ -370,52 +359,6 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 max_value_length=args.max_value_length,
                 suppress_example_values=args.no_example_values,
                 full_example_values=args.full_example_values,
-            )
-        )
-    if args.command == CliCommand.RECONCILE:
-        return handlers.run_reconcile(
-            project_dir=project_dir,
-            no_color=args.no_color,
-            virtual_environment=args.virtual_env,
-            reconcile_command=args.reconcile_command,
-            model_name=getattr(args, "reconcile_model", None),
-            seed_name=getattr(args, "reconcile_seed", None),
-            physical_relation_name=getattr(args, "reconcile_physical_relation", None),
-            auto_approve=getattr(args, "auto_approve", False),
-            cli_vars=args.vars,
-        )
-    if args.command == CliCommand.PROMOTE:
-        if args.from_virtual_environment is None or args.to_virtual_environment is None:
-            raise CliUserError("promote requires --from and --to", code="C244")
-        return handlers.run_promote(
-            PromoteCommandRequest(
-                project_dir=project_dir,
-                no_color=args.no_color,
-                no_sql_validation=args.no_sql_validation,
-                from_virtual_environment=args.from_virtual_environment,
-                to_virtual_environment=args.to_virtual_environment,
-                select=select,
-                exclude=tuple(args.exclude),
-                allow_partial_promotion=args.allow_partial_promotion,
-                include_stale_upstreams=args.include_stale_upstreams,
-                verbose=args.verbose,
-                cli_vars=args.vars,
-            )
-        )
-    if args.command == CliCommand.ROLLBACK:
-        return handlers.run_rollback(
-            RollbackCommandRequest(
-                project_dir=project_dir,
-                no_color=args.no_color,
-                no_sql_validation=args.no_sql_validation,
-                virtual_environment=args.virtual_env,
-                verbose=args.verbose,
-                checkpoint_id=args.rollback_checkpoint_id,
-                select=select,
-                exclude=tuple(args.exclude),
-                allow_partial_rollback=args.allow_partial_rollback,
-                include_stale_upstreams=args.include_stale_upstreams,
-                cli_vars=args.vars,
             )
         )
     if args.command == CliCommand.QUERY:
@@ -461,20 +404,6 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 retention_days=args.retention_days,
                 direct_state_history_versions=args.direct_state_history_versions,
             )
-        )
-    if args.command == CliCommand.STATE:
-        if args.state_command is None:
-            raise CliUserError("state requires a subcommand such as 'init'", code="C901")
-        return handlers.run_state(
-            project_dir=project_dir,
-            state_command=args.state_command,
-            backup_id=args.state_backup_id,
-            auto_approve=args.auto_approve,
-            no_color=args.no_color,
-            checkpoint_command=args.state_checkpoint_command,
-            checkpoint_id=args.state_checkpoint_id,
-            virtual_environment=args.virtual_env,
-            allow_copy=getattr(args, "allow_copy", False),
         )
     return _dispatch_local_command(
         args=args,

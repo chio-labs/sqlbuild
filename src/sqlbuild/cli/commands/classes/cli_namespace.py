@@ -29,8 +29,6 @@ _DEFAULT_VALUES: dict[str, object] = {
     "target_range": None,
     "from_target": None,
     "to_target": None,
-    "from_virtual_environment": None,
-    "to_virtual_environment": None,
     "hard_copy": False,
     "json": False,
     "json_output": None,
@@ -49,11 +47,8 @@ _DEFAULT_VALUES: dict[str, object] = {
     "no_color": False,
     "fail_fast": False,
     "full_refresh": False,
-    "virtual_env": None,
     "as_target": None,
     "skip_locked": False,
-    "include_stale_upstreams": False,
-    "changes_only": False,
     "include_python": True,
     "load_sources": None,
     "reload": False,
@@ -63,19 +58,12 @@ _DEFAULT_VALUES: dict[str, object] = {
     "allow_table_type_downgrade": False,
     "allow_retention_decrease": False,
     "allow_snapshot_schema_change": False,
-    "allow_partial_promotion": False,
-    "allow_partial_rollback": False,
-    "rollback_checkpoint_id": None,
     "concurrency": None,
     "verbose": False,
     "debug": False,
     "auto_approve": False,
     "retention_days": None,
     "direct_state_history_versions": None,
-    "state_command": None,
-    "state_checkpoint_command": None,
-    "state_checkpoint_id": None,
-    "state_backup_id": None,
     "bounded": None,
     "max_column_examples": None,
     "max_row_only_examples": None,
@@ -108,7 +96,6 @@ _DEFAULT_VALUES: dict[str, object] = {
     "state": False,
     "full": False,
     "schema_only": False,
-    "allow_partial_diff": False,
     "left_query": None,
     "left_query_file": None,
     "right_query": None,
@@ -122,9 +109,6 @@ _DEFAULT_VALUES: dict[str, object] = {
     "max_value_length": None,
     "no_example_values": False,
     "full_example_values": False,
-    "reconcile_command": None,
-    "reconcile_model": None,
-    "reconcile_physical_relation": None,
     "playground_path": "sqlbuild-playground",
     "playground_template": "waffle_shop",
     "scenario_command": None,
@@ -202,8 +186,6 @@ class CliNamespace:
     target_range: str | None
     from_target: str | None
     to_target: str | None
-    from_virtual_environment: str | None
-    to_virtual_environment: str | None
     hard_copy: bool
     json: bool
     json_output: Path | None
@@ -223,11 +205,8 @@ class CliNamespace:
     no_color: bool
     fail_fast: bool
     full_refresh: bool
-    virtual_env: str | None
     as_target: str | None
     skip_locked: bool
-    include_stale_upstreams: bool
-    changes_only: bool
     selection_diagnostics: bool
     include_python: bool
     load_sources: bool | None
@@ -238,19 +217,12 @@ class CliNamespace:
     allow_table_type_downgrade: bool
     allow_retention_decrease: bool
     allow_snapshot_schema_change: bool
-    allow_partial_promotion: bool
-    allow_partial_rollback: bool
-    rollback_checkpoint_id: str | None
     concurrency: int | None
     verbose: bool
     debug: bool
     auto_approve: bool
     retention_days: int | None
     direct_state_history_versions: int | None
-    state_command: str | None
-    state_checkpoint_command: str | None
-    state_checkpoint_id: str | None
-    state_backup_id: str | None
     bounded: str | None
     max_column_examples: int | None
     max_row_only_examples: int | None
@@ -283,7 +255,6 @@ class CliNamespace:
     state: bool
     full: bool
     schema_only: bool
-    allow_partial_diff: bool
     left_query: str | None
     left_query_file: Path | None
     left_label: str | None
@@ -297,9 +268,6 @@ class CliNamespace:
     max_value_length: int | None
     no_example_values: bool
     full_example_values: bool
-    reconcile_command: str | None
-    reconcile_model: str | None
-    reconcile_physical_relation: str | None
     playground_path: str
     playground_template: str
     scenario_command: str | None

@@ -176,7 +176,7 @@ def classify_janitor_relations(
     retention_days: int,
     age_reader: JanitorRelationAgeReader,
     now: datetime,
-    direct_mode: bool = False,
+    direct_mode: bool = True,
 ) -> JanitorRelationClassification:
     """Split one schema's relations into delete candidates and skipped relations."""
 
@@ -264,7 +264,7 @@ def _relation_skip_reason(
     if relation_key in protected_relation_keys:
         return protection_reasons.get(
             relation_key,
-            "relation is referenced by a retained virtual checkpoint",
+            "relation is protected from cleanup",
         )
     exclude_pattern: str | None = matching_exclude_pattern(
         key=relation_key,

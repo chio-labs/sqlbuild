@@ -59,12 +59,6 @@ from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
-from sqlbuild.virtual.executor.constants import (
-    VIRTUAL_CLONE_FOUND_ACTIONS,
-    VIRTUAL_CLONE_MISSING_ACTION,
-    VIRTUAL_CLONE_SKIPPED_LOCKED_ACTION,
-)
-from sqlbuild.virtual.executor.models import VirtualCloneResult
 
 _JSON_VERSION: int = 1
 _SCENARIO_RESOURCE_NAMESPACE: ContextVar[str | None] = ContextVar(
@@ -415,47 +409,6 @@ def _format_clone_asset(*, item: CloneItemResult, resource_type: str) -> dict[st
             "message": item.message,
         }
     )
-
-
-def format_virtual_clone_execution_json(*, result: VirtualCloneResult) -> str:
-    """Format virtual clone command execution results as JSON."""
-
-    return _format_execution_json(
-        command="clone",
-        status=(
-            BuildStatus.SUCCESS.value if result.missing_count == 0 else BuildStatus.FAILED.value
-        ),
-        assets=tuple(
-            _drop_none(
-                {
-                    "kind": item.artifact_type.value,
-                    "name": item.artifact_name,
-                    "status": _virtual_clone_item_status(action=item.action),
-                    "action": item.action,
-                    "version_hash": item.version_hash,
-                    "message": item.message,
-                }
-            )
-            for item in result.item_results
-        ),
-        checks=(),
-        summary={
-            "success_count": result.found_count,
-            "failure_count": result.missing_count,
-            "skipped_count": result.skipped_locked_count,
-            "total_count": result.selected_count,
-        },
-    )
-
-
-def _virtual_clone_item_status(*, action: str) -> str:
-    if action in VIRTUAL_CLONE_FOUND_ACTIONS:
-        return "success"
-    if action == VIRTUAL_CLONE_SKIPPED_LOCKED_ACTION:
-        return "skipped"
-    if action == VIRTUAL_CLONE_MISSING_ACTION:
-        return "warning"
-    return "failed"
 
 
 def format_test_execution_json(*, results: tuple[SqlTestExecutionResult, ...]) -> str:

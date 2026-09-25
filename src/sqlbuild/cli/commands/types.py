@@ -38,16 +38,12 @@ class CliCommand(StrEnum):
     SEED = "seed"
     CLONE = "clone"
     DIFF = "diff"
-    RECONCILE = "reconcile"
-    PROMOTE = "promote"
-    ROLLBACK = "rollback"
     DEBUG = "debug"
     LINEAGE = "lineage"
     QUERY = "query"
     COST = "cost"
     CLEAN = "clean"
     JANITOR = "janitor"
-    STATE = "state"
     INIT = "init"
     PLAYGROUND = "playground"
     SCENARIO = "scenario"
@@ -74,22 +70,6 @@ class DagCommandHandler(Protocol):
         *,
         no_sql_validation: bool,
         json_output: bool,
-        cli_vars: dict[str, object] | None,
-    ) -> int: ...
-
-
-class ReconcileCommandHandler(Protocol):
-    def __call__(
-        self,
-        project_dir: Path | None,
-        *,
-        no_color: bool,
-        virtual_environment: str | None,
-        reconcile_command: str | None,
-        model_name: str | None,
-        seed_name: str | None,
-        physical_relation_name: str | None,
-        auto_approve: bool,
         cli_vars: dict[str, object] | None,
     ) -> int: ...
 
@@ -121,22 +101,6 @@ class DebugCommandHandler(Protocol):
 
 class LineageCommandHandler(Protocol):
     def __call__(self, request: LineageCommandRequest) -> int: ...
-
-
-class StateCommandHandler(Protocol):
-    def __call__(
-        self,
-        project_dir: Path | None,
-        *,
-        state_command: str,
-        backup_id: str | None,
-        auto_approve: bool,
-        no_color: bool,
-        checkpoint_command: str | None,
-        checkpoint_id: str | None,
-        virtual_environment: str | None,
-        allow_copy: bool,
-    ) -> int: ...
 
 
 class SkillsUpdateCommandHandler(Protocol):
@@ -183,5 +147,4 @@ class PlaygroundTemplate(StrEnum):
     LOADER_WAFFLE_SHOP = "loader_waffle_shop"
     DAGSTER = "dagster"
     RIVERS = "rivers"
-    VIRTUAL = "virtual"
     PYTHON_NODES = "python_nodes"

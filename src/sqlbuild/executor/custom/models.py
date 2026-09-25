@@ -84,63 +84,6 @@ class MaterializationContext:
 
 
 @dataclass(frozen=True)
-class PrepareVersionContext:
-    """Context provided to optional custom prepare_version() functions."""
-
-    adapter: BaseAdapter
-    connection: Any
-    origin_relation: str
-    destination: str
-    destination_database: str | None
-    destination_schema: str | None
-    destination_name: str
-    config: dict[str, Any]
-    placeholders: dict[str, str]
-    run_id: str
-    environment: str
-    vars: dict[str, object]
-    unique_key: tuple[str, ...]
-    declared_columns: tuple[ColumnInfo, ...]
-    statement_recorder: StatementRecorder = field(default_factory=StatementRecorder)
-
-    def execute_sql(self, sql: str) -> Any:
-        """Execute a SQL statement, recording it for runtime artifacts and verbose output."""
-        return execute_sql_with_recording(
-            adapter=self.adapter,
-            connection=self.connection,
-            sql=sql,
-            statement_recorder=self.statement_recorder,
-        )
-
-    def log(self, message: str) -> None:
-        """Record a log message for verbose output."""
-        self.statement_recorder.log(message)
-
-    def qualify_name(
-        self,
-        *,
-        name: str,
-        database: str | None = None,
-        schema: str | None = None,
-    ) -> str:
-        """Return a fully-qualified relation name, preserving already-qualified input."""
-
-        return qualify_custom_relation(
-            adapter=self.adapter,
-            name=name,
-            destination_database=self.destination_database,
-            destination_schema=self.destination_schema,
-            database=database,
-            schema=schema,
-        )
-
-    def qualify_in_destination_schema(self, name: str) -> str:
-        """Return a relation name qualified into the destination database/schema."""
-
-        return self.qualify_name(name=name)
-
-
-@dataclass(frozen=True)
 class MaterializationResult:
     """Result returned by a custom materialize() function."""
 

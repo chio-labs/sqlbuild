@@ -5,7 +5,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-_AUDITED_ROOTS: tuple[str, ...] = ("adapter", "adapters", "virtual/state")
+_AUDITED_ROOTS: tuple[str, ...] = ("adapter", "adapters")
 _RAW_RECEIVERS: frozenset[str] = frozenset({"client", "raw_connection", "raw_cursor"})
 _STATEMENT_METHODS: frozenset[str] = frozenset({"execute", "executemany", "query"})
 _APPROVED_BOUNDARIES: dict[str, frozenset[tuple[str, str]]] = {

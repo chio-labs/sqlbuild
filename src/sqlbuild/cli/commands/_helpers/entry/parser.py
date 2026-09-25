@@ -26,7 +26,6 @@ from sqlbuild.cli.commands.constants import (
 from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode
 from sqlbuild.compiler.contract_adoption.types import ContractAction
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
-from sqlbuild.virtual.state.types import StateCommand
 
 
 def _installed_version() -> str:
@@ -66,7 +65,6 @@ def build_cli_parser(*, use_color: bool = False) -> argparse.ArgumentParser:
     _add_plan_and_build_parsers(subparsers)
     _add_quality_parsers(subparsers)
     _add_data_parsers(subparsers)
-    _add_virtual_parsers(subparsers)
     _add_inspection_parsers(subparsers)
     _add_contract_parser(subparsers)
     _add_maintenance_parsers(subparsers)
@@ -190,14 +188,6 @@ def _add_plan_and_build_parsers(
     )
     plan_parser.add_argument("--json", action="store_true", default=False)
     plan_parser.add_argument("--full-refresh", action="store_true", default=False)
-    plan_parser.add_argument("--virtual-env", default=None)
-    plan_parser.add_argument("--include-stale-upstreams", action="store_true", default=False)
-    plan_parser.add_argument(
-        "--changes-only",
-        action="store_true",
-        default=False,
-        help="Only include resources that require execution.",
-    )
     plan_parser.add_argument(
         "--selection-diagnostics",
         action="store_true",
@@ -230,14 +220,6 @@ def _add_plan_and_build_parsers(
     build_parser.add_argument("--defer-sources-to", default=None)
     build_parser.add_argument("--target", default=None)
     build_parser.add_argument("--json", action="store_true", default=False)
-    build_parser.add_argument("--virtual-env", default=None)
-    build_parser.add_argument("--include-stale-upstreams", action="store_true", default=False)
-    build_parser.add_argument(
-        "--changes-only",
-        action="store_true",
-        default=False,
-        help="Only include resources that require execution.",
-    )
     build_parser.add_argument(
         "--selection-diagnostics",
         action="store_true",
@@ -272,7 +254,6 @@ def _add_quality_parsers(
     freshness_parser.add_argument("--json", action="store_true", default=False)
     freshness_parser.add_argument("--state", action="store_true", default=False)
     freshness_parser.add_argument("--target", default=None)
-    freshness_parser.add_argument("--virtual-env", default=None)
     freshness_parser.add_argument("--fail-on-error", action="store_true", default=False)
     freshness_parser.add_argument("--fail-on-stale", action="store_true", default=False)
     _ = add_execution_json_output_arg(freshness_parser)
@@ -360,7 +341,6 @@ def _add_data_parsers(
     clone_parser.add_argument("--from", dest="from_target", required=True)
     clone_parser.add_argument("--to", dest="to_target", default=None)
     clone_parser.add_argument("--hard-copy", action="store_true", default=False)
-    clone_parser.add_argument("--virtual-env", default=None)
     clone_parser.add_argument("--skip-locked", action="store_true", default=False)
     clone_parser.add_argument("--verbose", "-v", action="store_true", default=False)
     _ = add_select_args(clone_parser)
@@ -383,7 +363,6 @@ def _add_data_parsers(
     diff_parser.add_argument("--exhaustive", action="store_true", default=False)
     diff_parser.add_argument("--max-models", type=int, default=None)
     diff_parser.add_argument("--max-columns", type=int, default=None)
-    diff_parser.add_argument("--allow-partial-diff", action="store_true", default=False)
     diff_parser.add_argument(
         "--target",
         default=None,
@@ -446,50 +425,6 @@ def _add_data_parsers(
     _ = add_execution_json_output_arg(diff_parser)
     _ = add_select_args(diff_parser)
     _ = add_vars_args(diff_parser)
-
-
-def _add_virtual_parsers(
-    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
-) -> None:
-    reconcile_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.RECONCILE)
-    reconcile_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
-    reconcile_parser.add_argument("--model", dest="reconcile_model", default=None)
-    reconcile_parser.add_argument("--seed", dest="reconcile_seed", default=None)
-    reconcile_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
-    reconcile_subparsers = reconcile_parser.add_subparsers(dest="reconcile_command")
-    reconcile_repair_view_parser: argparse.ArgumentParser = reconcile_subparsers.add_parser(
-        "repair-view"
-    )
-    reconcile_repair_view_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
-    reconcile_repair_view_parser.add_argument("--model", dest="reconcile_model", default=None)
-    reconcile_repair_view_parser.add_argument("--seed", dest="reconcile_seed", default=None)
-    reconcile_attach_parser: argparse.ArgumentParser = reconcile_subparsers.add_parser("attach")
-    reconcile_attach_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
-    reconcile_attach_parser.add_argument("--model", dest="reconcile_model", required=True)
-    reconcile_attach_parser.add_argument(
-        "--physical-relation", dest="reconcile_physical_relation", required=True
-    )
-    reconcile_attach_parser.add_argument("--auto-approve", action="store_true", default=False)
-
-    promote_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.PROMOTE)
-    _add_sql_analysis_override(promote_parser)
-    promote_parser.add_argument("--from", dest="from_virtual_environment", required=True)
-    promote_parser.add_argument("--to", dest="to_virtual_environment", required=True)
-    promote_parser.add_argument("--allow-partial-promotion", action="store_true", default=False)
-    promote_parser.add_argument("--include-stale-upstreams", action="store_true", default=False)
-    promote_parser.add_argument("--verbose", "-v", action="store_true", default=False)
-    _ = add_select_args(promote_parser)
-    _ = add_vars_args(promote_parser)
-
-    rollback_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.ROLLBACK)
-    _add_sql_analysis_override(rollback_parser)
-    rollback_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
-    rollback_parser.add_argument("--checkpoint-id", dest="rollback_checkpoint_id", default=None)
-    rollback_parser.add_argument("--allow-partial-rollback", action="store_true", default=False)
-    rollback_parser.add_argument("--include-stale-upstreams", action="store_true", default=False)
-    rollback_parser.add_argument("--verbose", "-v", action="store_true", default=False)
-    _ = add_select_args(rollback_parser)
-    _ = add_vars_args(rollback_parser)
 
 
 def _add_inspection_parsers(
@@ -645,47 +580,6 @@ def _add_maintenance_parsers(
     janitor_parser.add_argument("--auto-approve", action="store_true", default=False)
     janitor_parser.add_argument("--retention-days", type=int, default=None)
     janitor_parser.add_argument("--direct-state-history-versions", type=int, default=None)
-
-    state_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.STATE)
-    state_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
-    state_subparsers = state_parser.add_subparsers(dest="state_command")
-    state_subparsers.add_parser(StateCommand.INIT.value)
-    state_subparsers.add_parser(StateCommand.MIGRATE.value)
-    state_adopt_parser: argparse.ArgumentParser = state_subparsers.add_parser(
-        StateCommand.ADOPT.value
-    )
-    state_adopt_parser.add_argument("--allow-copy", action="store_true", default=False)
-    state_detach_parser: argparse.ArgumentParser = state_subparsers.add_parser(
-        StateCommand.DETACH.value
-    )
-    state_detach_parser.add_argument("--allow-copy", action="store_true", default=False)
-    state_rollback_parser: argparse.ArgumentParser = state_subparsers.add_parser(
-        StateCommand.ROLLBACK.value
-    )
-    state_rollback_parser.add_argument("--backup-id", dest="state_backup_id", default=None)
-    state_reset_parser: argparse.ArgumentParser = state_subparsers.add_parser(
-        StateCommand.RESET.value
-    )
-    state_reset_parser.add_argument("--auto-approve", action="store_true", default=False)
-    state_checkpoints_parser: argparse.ArgumentParser = state_subparsers.add_parser("checkpoints")
-    state_checkpoints_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
-    state_checkpoints_subparsers = state_checkpoints_parser.add_subparsers(
-        dest="state_checkpoint_command"
-    )
-    state_checkpoints_list_parser: argparse.ArgumentParser = (
-        state_checkpoints_subparsers.add_parser("list")
-    )
-    state_checkpoints_list_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
-    state_checkpoints_show_parser: argparse.ArgumentParser = (
-        state_checkpoints_subparsers.add_parser("show")
-    )
-    state_checkpoints_show_parser.add_argument("state_checkpoint_id", metavar="checkpoint_id")
-    state_checkpoints_show_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
-    state_checkpoints_diff_parser: argparse.ArgumentParser = (
-        state_checkpoints_subparsers.add_parser("diff")
-    )
-    state_checkpoints_diff_parser.add_argument("state_checkpoint_id", metavar="checkpoint_id")
-    state_checkpoints_diff_parser.add_argument("--virtual-env", dest="virtual_env", default=None)
 
 
 def _add_workspace_parsers(

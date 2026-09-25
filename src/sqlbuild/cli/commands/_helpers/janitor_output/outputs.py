@@ -42,13 +42,7 @@ def janitor_plan_has_work(planning_result: JanitorPlanningResult) -> bool:
         or plan.archive_candidates
         or plan.archive_deletion_candidates
         or plan.query_diff_artifact_candidates
-        or plan.checkpoint_candidates
-        or plan.detached_virtual_environment_candidates
-        or plan.expired_virtual_environment_candidates
-        or plan.state_backup_candidates
-        or plan.expired_lock_candidates
         or plan.direct_state_prune_candidates
-        or plan.virtual_state_prune_candidates
     )
 
 
@@ -57,23 +51,13 @@ def confirm_janitor_plan(*, planning_result: JanitorPlanningResult) -> bool:
 
     plan: JanitorPlan = planning_result.plan
     expected: str = confirmation_text(plan)
-    state_candidate_count: int = (
-        len(plan.checkpoint_candidates)
-        + len(plan.detached_virtual_environment_candidates)
-        + len(plan.expired_virtual_environment_candidates)
-        + len(plan.state_backup_candidates)
-        + len(plan.expired_lock_candidates)
-        + len(plan.virtual_state_prune_candidates)
-    )
-    prune_count: int = len(plan.direct_state_prune_candidates) + len(
-        plan.virtual_state_prune_candidates
-    )
+    prune_count: int = len(plan.direct_state_prune_candidates)
     archive_prefix: str = (
         f"archive {len(plan.archive_candidates)} and " if plan.archive_candidates else ""
     )
-    if state_candidate_count or prune_count:
+    if prune_count:
         physical_deletion_count: int = physical_janitor_deletion_count(plan)
-        deletion_count: int = physical_deletion_count + state_candidate_count + prune_count
+        deletion_count: int = physical_deletion_count + prune_count
         sys.stdout.write(
             f"Janitor will {archive_prefix}delete {deletion_count} items "
             f"from {environment_label(plan)}.\n"
@@ -126,31 +110,15 @@ def _deleted_message(*, result: JanitorExecutionResult) -> str:
 
 
 def _deletion_summary(*, result: JanitorExecutionResult) -> str:
-    deleted_state_count: int = (
-        len(result.deleted_checkpoints)
-        + len(result.deleted_detached_virtual_environments)
-        + len(result.deleted_expired_virtual_environments)
-        + len(result.deleted_state_backups)
-        + len(result.deleted_expired_locks)
-    )
     deleted_object_count: int = (
         len(result.deleted)
         + len(result.deleted_archives)
         + len(result.deleted_query_diff_artifacts)
     )
-    pruned_state_count: int = len(result.pruned_direct_state) + len(result.pruned_virtual_state)
-    non_checkpoint_state_count: int = deleted_state_count - len(result.deleted_checkpoints)
-    if non_checkpoint_state_count or pruned_state_count:
-        pruned_state_label: str = (
-            "state tables" if result.pruned_virtual_state else "direct state tables"
-        )
+    pruned_state_count: int = len(result.pruned_direct_state)
+    if pruned_state_count:
         return (
-            f"Deleted {deleted_object_count} objects, deleted {deleted_state_count} "
-            f"state items, and pruned {pruned_state_count} {pruned_state_label}."
-        )
-    if result.deleted_checkpoints:
-        return (
-            f"Deleted {deleted_object_count} objects and "
-            f"{len(result.deleted_checkpoints)} checkpoints."
+            f"Deleted {deleted_object_count} objects and pruned "
+            f"{pruned_state_count} direct state tables."
         )
     return f"Deleted {deleted_object_count} objects."

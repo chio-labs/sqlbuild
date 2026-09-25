@@ -10,7 +10,6 @@ from sqlbuild.cli.commands._helpers.seed.outputs import (
     write_seed_execution_header,
 )
 from sqlbuild.cli.commands._helpers.seed.planning import prepare_seed_execution
-from sqlbuild.cli.commands._helpers.seed.virtual import execute_virtual_seed
 from sqlbuild.cli.commands.models import (
     SeedCommandRequest,
     SeedExecutionPreparation,
@@ -23,8 +22,6 @@ def run_seed(request: SeedCommandRequest) -> int:
     """Execute the seed command."""
 
     invocation: SeedInvocation = resolve_seed_invocation(request=request)
-    if invocation.discovered_inputs.project_config.settings.virtual_environments:
-        return execute_virtual_seed(request=request, invocation=invocation)
     preparation: SeedExecutionPreparation = prepare_seed_execution(
         request=request,
         invocation=invocation,

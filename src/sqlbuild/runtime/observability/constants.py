@@ -180,7 +180,6 @@ OPERATION_STRATEGIES: frozenset[str] = frozenset(
         RENAME_OPERATION_STRATEGY,
         "build_aside",
         "create_new",
-        "virtual",
         "append_new_columns",
         "sync_all_columns",
         "adapter",
@@ -197,7 +196,6 @@ OPERATION_TARGET_KINDS: frozenset[str] = frozenset(
         "sql_test",
         "staging_relation",
         "state_batch",
-        "virtual_environment",
     }
 )
 OPERATION_SCOPES: frozenset[str] = frozenset(

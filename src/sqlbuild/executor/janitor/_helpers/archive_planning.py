@@ -45,7 +45,7 @@ def plan_janitor_archives(
     archive_retention_days: int,
     now: datetime,
 ) -> JanitorArchivePlanning:
-    """Plan direct-mode archives; virtual mode never archives or expires archives."""
+    """Plan archives and archive expiry."""
 
     if not direct_mode:
         return JanitorArchivePlanning(

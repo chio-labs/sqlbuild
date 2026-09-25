@@ -33,14 +33,12 @@ from sqlbuild.cli.commands._helpers.build_planning.planning import compile_build
 from sqlbuild.cli.commands._helpers.cost.collection import (
     finalize_build_cost,
 )
-from sqlbuild.cli.commands.main.execution._virtual_build import run_virtual_build
 from sqlbuild.cli.commands.models import (
     BuildCommandRequest,
     BuildCostFinalization,
     BuildExecutionPreparation,
     BuildInvocation,
     BuildRunOutcome,
-    VirtualBuildCliRequest,
 )
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.cost.classes.cost_context import CostContext
@@ -95,49 +93,6 @@ def _run_build(
         discovered_providers=invocation.discovered_inputs.providers
     )
     try:
-        if invocation.virtual_mode:
-            return run_virtual_build(
-                project_dir=invocation.effective_project_dir,
-                discovered_inputs=invocation.discovered_inputs,
-                adapter=invocation.adapter,
-                adapter_name=invocation.adapter_name,
-                connection_config=invocation.connection_config,
-                progress_stream=invocation.progress_stream,
-                request=VirtualBuildCliRequest(
-                    selected_target=request.selected_target,
-                    no_sql_validation=request.no_sql_validation,
-                    no_cache=request.no_cache,
-                    defer_sources_to=request.defer_sources_to,
-                    cursor_overrides=request.cursor_overrides,
-                    full_refresh=request.full_refresh,
-                    virtual_environment_name=request.virtual_env,
-                    include_stale_upstreams=request.include_stale_upstreams,
-                    changes_only=invocation.effective_changes_only,
-                    auto_load_sources=invocation.should_load_sources,
-                    reload_sources=request.reload_sources,
-                    include_python=request.include_python,
-                    select=request.select,
-                    selector_files=request.selector_files,
-                    exclude=request.exclude,
-                    fail_fast=request.fail_fast,
-                    allow_snapshot_full_refresh=request.allow_snapshot_full_refresh,
-                    allow_table_type_downgrade=request.allow_table_type_downgrade,
-                    allow_retention_decrease=request.allow_retention_decrease,
-                    allow_snapshot_schema_change=request.allow_snapshot_schema_change,
-                    concurrency=request.concurrency,
-                    verbose=request.verbose,
-                    debug=request.debug,
-                    cli_vars=request.cli_vars,
-                    run_tests=request.run_tests,
-                    run_audits=request.run_audits,
-                    json_output=request.json_output,
-                    json_output_path=request.json_output_path,
-                    use_color=invocation.use_color,
-                    providers=provider_session.providers,
-                    command_started_at=command_started_at,
-                    max_microbatches=request.max_microbatches,
-                ),
-            )
         if invocation.effective_defer_clone_from is not None:
             _ = run_defer_clone_boundary_prephase(
                 request=request,

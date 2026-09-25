@@ -45,13 +45,7 @@ def _format_build_run_context(*, context: BuildRunContext, use_color: bool) -> s
         + len(context.discovered_inputs.asset_functions)
     )
     placement_rows: tuple[tuple[str, str], ...]
-    if context.virtual_logical_schema is not None or context.virtual_physical_schema is not None:
-        placement_rows = (
-            ("logical schema", _display_value(context.virtual_logical_schema)),
-            ("physical schema", _display_value(context.virtual_physical_schema)),
-        )
-    else:
-        placement_rows = (("schema", _display_value(context.project.effective_target_schema)),)
+    placement_rows = (("schema", _display_value(context.project.effective_target_schema)),)
     document.header(text="Execution")
     document.fields(
         rows=(

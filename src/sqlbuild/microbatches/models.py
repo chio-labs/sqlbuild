@@ -26,8 +26,6 @@ class MicrobatchScope:
     target_schema: str | None
     target_name: str
     physical_generation_id: str
-    virtual_environment_name: str | None = None
-    virtual_model_version_hash: str | None = None
 
 
 @dataclass(frozen=True)

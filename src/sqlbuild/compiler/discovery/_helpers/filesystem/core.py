@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import inspect
 import sys
@@ -1892,7 +1893,24 @@ def _evict_stale_project_package_modules(*, root_module: str, project_dir: Path)
 
 
 def _load_materialization_module(*, file_path: Path, project_dir: Path) -> ModuleType:
-    return _exec_project_module(
+    removed_hook_name: str = "prepare_version"
+    removed_hook_message: str = (
+        f"materialization '{file_path.stem}' at {file_path} defines "
+        "'prepare_version', which was removed with virtual environments; "
+        "projects run in direct mode"
+    )
+    try:
+        module_ast: ast.Module = ast.parse(file_path.read_text(encoding="utf-8"))
+    except SyntaxError as error:
+        raise PythonNodeDiscoveryError(
+            f"Failed to import materialization file {file_path.relative_to(project_dir)}: {error}"
+        ) from error
+    if any(
+        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == removed_hook_name
+        for node in module_ast.body
+    ):
+        raise PythonNodeDiscoveryError(removed_hook_message)
+    module: ModuleType = _exec_project_module(
         module_name=".".join(
             _project_relative_path(path=file_path, project_dir=project_dir).with_suffix("").parts
         ),
@@ -1901,6 +1919,9 @@ def _load_materialization_module(*, file_path: Path, project_dir: Path) -> Modul
         file_label="materialization",
         error_type=PythonNodeDiscoveryError,
     )
+    if hasattr(module, removed_hook_name):
+        raise PythonNodeDiscoveryError(removed_hook_message)
+    return module
 
 
 def discover_adapter_file(*, project_dir: Path) -> DiscoveredAdapterFile | None:

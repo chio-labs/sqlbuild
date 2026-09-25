@@ -37,8 +37,6 @@ class MicrobatchEventCodec:
             event.scope.target_schema,
             event.scope.target_name,
             event.scope.physical_generation_id,
-            event.scope.virtual_environment_name,
-            event.scope.virtual_model_version_hash,
             event.origin_run_id,
             event.origin_run_started_at,
             event.execution_run_id,
@@ -81,12 +79,6 @@ class MicrobatchEventCodec:
             target_schema=MicrobatchEventCodec._optional_str(values["target_schema"]),
             target_name=str(values["target_name"]),
             physical_generation_id=str(values["physical_generation_id"]),
-            virtual_environment_name=MicrobatchEventCodec._optional_str(
-                values["virtual_environment_name"]
-            ),
-            virtual_model_version_hash=MicrobatchEventCodec._optional_str(
-                values["virtual_model_version_hash"]
-            ),
         )
 
         return MicrobatchEvent(

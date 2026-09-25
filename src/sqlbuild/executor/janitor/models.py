@@ -89,49 +89,6 @@ class JanitorQueryDiffArtifactCandidate:
 
 
 @dataclass(frozen=True)
-class JanitorCheckpointCandidate:
-    """One retained-history checkpoint eligible for pruning."""
-
-    checkpoint_id: str
-    virtual_environment_name: str
-    created_at: datetime | None
-
-
-@dataclass(frozen=True)
-class JanitorDetachedVirtualEnvironmentCandidate:
-    """One detached virtual environment eligible for state cleanup."""
-
-    virtual_environment_name: str
-    updated_at: datetime | None
-
-
-@dataclass(frozen=True)
-class JanitorExpiredVirtualEnvironmentCandidate:
-    """One non-active virtual environment eligible for TTL cleanup."""
-
-    virtual_environment_name: str
-    updated_at: datetime | None
-
-
-@dataclass(frozen=True)
-class JanitorStateBackupCandidate:
-    """One state migration backup eligible for pruning."""
-
-    backup_id: str
-    schema_name: str
-    created_at: datetime | None
-
-
-@dataclass(frozen=True)
-class JanitorExpiredLockCandidate:
-    """One expired state lock eligible for pruning."""
-
-    lock_key: str
-    owner_id: str
-    expires_at: datetime
-
-
-@dataclass(frozen=True)
 class JanitorDirectStatePruneCandidate:
     """One direct-mode state table eligible for history pruning."""
 
@@ -148,18 +105,6 @@ class JanitorDirectStatePruneCandidate:
         parts.append(self.schema)
         parts.append(self.table_name)
         return ".".join(parts)
-
-
-@dataclass(frozen=True)
-class JanitorVirtualStatePruneCandidate:
-    """One virtual-mode state table eligible for orphaned state pruning."""
-
-    schema: str
-    table_name: str
-    reason: str
-
-    def display_name(self) -> str:
-        return f"{self.schema}.{self.table_name}"
 
 
 @dataclass(frozen=True)
@@ -254,22 +199,6 @@ class JanitorArchivePlanning:
 
 
 @dataclass(frozen=True)
-class JanitorStateCandidates:
-    """Precomputed state-side cleanup candidates for one janitor plan."""
-
-    checkpoint_candidates: tuple[JanitorCheckpointCandidate, ...] = ()
-    detached_virtual_environment_candidates: tuple[
-        JanitorDetachedVirtualEnvironmentCandidate, ...
-    ] = ()
-    expired_virtual_environment_candidates: tuple[
-        JanitorExpiredVirtualEnvironmentCandidate, ...
-    ] = ()
-    state_backup_candidates: tuple[JanitorStateBackupCandidate, ...] = ()
-    expired_lock_candidates: tuple[JanitorExpiredLockCandidate, ...] = ()
-    virtual_state_prune_candidates: tuple[JanitorVirtualStatePruneCandidate, ...] = ()
-
-
-@dataclass(frozen=True)
 class JanitorRelationScope:
     """Scan scope and protection rules for one janitor plan."""
 
@@ -282,7 +211,7 @@ class JanitorRelationScope:
 class JanitorDirectModeSettings:
     """Direct-mode state-history settings."""
 
-    enabled: bool = False
+    enabled: bool = True
     state_history_versions: int = 20
     archive_retention_days: int = 14
 
@@ -293,7 +222,7 @@ class JanitorPlan:
 
     target_name: str | None
     retention_days: int
-    direct_mode: bool = False
+    direct_mode: bool = True
     archive_retention_days: int = 14
     candidates: tuple[JanitorDeleteCandidate, ...] = field(default_factory=tuple)
     archive_candidates: tuple[JanitorArchiveCandidate, ...] = field(default_factory=tuple)
@@ -302,19 +231,7 @@ class JanitorPlan:
     query_diff_artifact_candidates: tuple[JanitorQueryDiffArtifactCandidate, ...] = field(
         default_factory=tuple
     )
-    checkpoint_candidates: tuple[JanitorCheckpointCandidate, ...] = field(default_factory=tuple)
-    detached_virtual_environment_candidates: tuple[
-        JanitorDetachedVirtualEnvironmentCandidate, ...
-    ] = field(default_factory=tuple)
-    expired_virtual_environment_candidates: tuple[
-        JanitorExpiredVirtualEnvironmentCandidate, ...
-    ] = field(default_factory=tuple)
-    state_backup_candidates: tuple[JanitorStateBackupCandidate, ...] = field(default_factory=tuple)
-    expired_lock_candidates: tuple[JanitorExpiredLockCandidate, ...] = field(default_factory=tuple)
     direct_state_prune_candidates: tuple[JanitorDirectStatePruneCandidate, ...] = field(
-        default_factory=tuple
-    )
-    virtual_state_prune_candidates: tuple[JanitorVirtualStatePruneCandidate, ...] = field(
         default_factory=tuple
     )
     skipped_relations: tuple[JanitorSkippedRelation, ...] = field(default_factory=tuple)
@@ -335,16 +252,4 @@ class JanitorExecutionResult:
     deleted_query_diff_artifacts: tuple[JanitorQueryDiffArtifactCandidate, ...] = field(
         default_factory=tuple
     )
-    deleted_checkpoints: tuple[JanitorCheckpointCandidate, ...] = field(default_factory=tuple)
-    deleted_detached_virtual_environments: tuple[
-        JanitorDetachedVirtualEnvironmentCandidate, ...
-    ] = field(default_factory=tuple)
-    deleted_expired_virtual_environments: tuple[JanitorExpiredVirtualEnvironmentCandidate, ...] = (
-        field(default_factory=tuple)
-    )
-    deleted_state_backups: tuple[JanitorStateBackupCandidate, ...] = field(default_factory=tuple)
-    deleted_expired_locks: tuple[JanitorExpiredLockCandidate, ...] = field(default_factory=tuple)
     pruned_direct_state: tuple[JanitorDirectStatePruneCandidate, ...] = field(default_factory=tuple)
-    pruned_virtual_state: tuple[JanitorVirtualStatePruneCandidate, ...] = field(
-        default_factory=tuple
-    )

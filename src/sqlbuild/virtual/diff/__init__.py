@@ -1,1 +1,0 @@
-"""Virtual diff domain."""

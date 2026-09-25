@@ -22,7 +22,6 @@ from sqlbuild.cli.commands._helpers.janitor_runtime.invocation import (
 )
 from sqlbuild.cli.commands._helpers.janitor_runtime.planning import (
     build_janitor_execution_plan,
-    inspect_janitor_retention,
 )
 from sqlbuild.cli.commands.models import (
     JanitorCommandRequest,
@@ -30,7 +29,6 @@ from sqlbuild.cli.commands.models import (
     JanitorConnectionContext,
     JanitorInvocation,
     JanitorPlanningResult,
-    JanitorRetentionInspection,
     JanitorSettings,
 )
 from sqlbuild.executor.janitor.models import JanitorExecutionResult
@@ -50,17 +48,11 @@ def run_janitor(request: JanitorCommandRequest) -> int:
         compile_context=compile_context,
     )
     try:
-        inspection: JanitorRetentionInspection = inspect_janitor_retention(
-            invocation=invocation,
-            settings=settings,
-            compile_context=compile_context,
-        )
         planning_result: JanitorPlanningResult = build_janitor_execution_plan(
             invocation=invocation,
             settings=settings,
             compile_context=compile_context,
             connection_context=connection_context,
-            inspection=inspection,
         )
         write_janitor_plan(invocation=invocation, planning_result=planning_result)
         if planning_result.plan.blocked_schemas:
@@ -71,10 +63,8 @@ def run_janitor(request: JanitorCommandRequest) -> int:
             write_janitor_cancelled()
             return 1
         result: JanitorExecutionResult = execute_janitor_cleanup(
-            invocation=invocation,
             compile_context=compile_context,
             connection_context=connection_context,
-            inspection=inspection,
             planning_result=planning_result,
         )
         write_janitor_completion(invocation=invocation, result=result)
