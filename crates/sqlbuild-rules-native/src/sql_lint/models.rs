@@ -132,5 +132,5 @@ pub(crate) struct FormatResponse {
     pub changed: bool,
     pub formatted: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub reason: Option<&'static str>,
+    pub reason: Option<String>,
 }

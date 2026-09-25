@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
-use polyglot_sql::tokens::Token;
+use polyglot_sql::tokens::{Token, TokenType};
 use polyglot_sql::{Dialect, DialectType, format_by_name};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
@@ -13,7 +13,8 @@ use crate::sql_lint::models::{FormatRequest, FormatResponse};
 
 const COMMENT_ATTACHMENT_FAILURE: &str =
     "native formatter could not preserve comment token attachments";
-const UNSUPPORTED_SQL_FAILURE: &str = "native formatter could not safely format unsupported SQL";
+const UNSUPPORTED_SQL_FAILURE: &str =
+    "native formatter could not safely restore literal or cast spelling";
 
 pub(crate) fn format_json_impl(request_json: &str) -> Result<String, String> {
     let request: FormatRequest =
@@ -31,6 +32,20 @@ pub(crate) fn format_batch_json_impl(request_json: &str) -> Result<String, Strin
 }
 
 fn format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
+    let original = request.sql.clone();
+    match try_format_sql(request) {
+        Ok(value) => Ok(value),
+        Err(reason) => Ok(FormatResponse {
+            version: LINT_API_VERSION,
+            sql: original,
+            changed: false,
+            formatted: false,
+            reason: Some(reason),
+        }),
+    }
+}
+
+fn try_format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
     if request.version != LINT_API_VERSION {
         return Err(format!(
             "unsupported native format request version {}; expected {LINT_API_VERSION}",
@@ -41,15 +56,14 @@ fn format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
     let dialect_type =
         DialectType::from_str(&request.dialect).map_err(|error| error.to_string())?;
     let dialect = Dialect::get(dialect_type);
-    let tokens = match dialect.tokenize(&original) {
-        Ok(value) => value,
-        Err(_) => return response(original, false, false, Some(UNSUPPORTED_SQL_FAILURE)),
-    };
+    let tokens = dialect
+        .tokenize(&original)
+        .map_err(|error| format!("native formatter tokenization failed: {error}"))?;
     let comments = comments_in(&original, &tokens);
     let neutral = neutralize_comments(&original, &comments);
-    if dialect.parse(&neutral).is_err() {
-        return response(original, false, false, Some(UNSUPPORTED_SQL_FAILURE));
-    }
+    dialect
+        .parse(&neutral)
+        .map_err(|error| format!("native formatter could not parse SQL: {error}"))?;
     let semantic_tokens = without_statement_terminators(&tokens);
     let formatted_context = FormatOnceContext {
         dialect_name: &request.dialect,
@@ -58,13 +72,7 @@ fn format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
         original_tokens: &semantic_tokens,
         comments: &comments,
     };
-    let formatted = match format_once(&neutral, &formatted_context) {
-        Ok(value) => value,
-        Err(error) if error == COMMENT_ATTACHMENT_FAILURE => {
-            return response(original, false, false, Some(COMMENT_ATTACHMENT_FAILURE));
-        }
-        Err(_) => return response(original, false, false, Some(UNSUPPORTED_SQL_FAILURE)),
-    };
+    let formatted = format_once(&neutral, &formatted_context)?;
     let formatted_tokens = dialect
         .tokenize(&formatted)
         .map_err(|error| error.to_string())?;
@@ -86,13 +94,7 @@ fn format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
         original_tokens: &second_semantic_tokens,
         comments: &second_comments,
     };
-    let second_pass = match format_once(&second_neutral, &second_context) {
-        Ok(value) => value,
-        Err(error) if error == COMMENT_ATTACHMENT_FAILURE => {
-            return response(original, false, false, Some(COMMENT_ATTACHMENT_FAILURE));
-        }
-        Err(error) => return Err(error),
-    };
+    let second_pass = format_once(&second_neutral, &second_context)?;
     if second_pass != formatted {
         return Err("native formatter output is not idempotent".to_string());
     }
@@ -127,6 +129,7 @@ fn format_once(neutral_sql: &str, context: &FormatOnceContext<'_>) -> Result<Str
     if context.comments.is_empty() {
         return Ok(formatted);
     }
+    formatted = restore_implicit_aliases(formatted, context)?;
     let formatted_tokens = context
         .dialect
         .tokenize(&formatted)
@@ -170,6 +173,42 @@ fn format_once(neutral_sql: &str, context: &FormatOnceContext<'_>) -> Result<Str
     Ok(formatted)
 }
 
+fn restore_implicit_aliases(
+    mut formatted: String,
+    context: &FormatOnceContext<'_>,
+) -> Result<String, String> {
+    let tokens = context
+        .dialect
+        .tokenize(&formatted)
+        .map_err(|error| error.to_string())?;
+    let mut original = context.original_tokens.iter().peekable();
+    let mut removals: Vec<(usize, usize)> = Vec::new();
+    for token in &tokens {
+        if original
+            .peek()
+            .is_some_and(|before| before.token_type == token.token_type)
+        {
+            original.next();
+        } else if token.token_type == TokenType::As {
+            removals.push((token.span.start, token.span.end));
+        } else {
+            return Err(COMMENT_ATTACHMENT_FAILURE.to_string());
+        }
+    }
+    if original.next().is_some() {
+        return Err(COMMENT_ATTACHMENT_FAILURE.to_string());
+    }
+    for (start, end) in removals.into_iter().rev() {
+        let start = char_to_byte(&formatted, start)?;
+        let end = char_to_byte(&formatted, end)?;
+        formatted.replace_range(
+            start..end + usize::from(formatted[end..].starts_with(' ')),
+            "",
+        );
+    }
+    Ok(formatted)
+}
+
 fn restore_unparenthesized_from_values(
     mut formatted: String,
     context: &FormatOnceContext<'_>,
@@ -200,7 +239,7 @@ fn restore_unparenthesized_from_values(
         })
         .collect();
     if authored_parenthesized.len() != formatted_values.len() {
-        return Ok(formatted);
+        return Err("native formatter could not preserve VALUES relation count".to_string());
     }
     let mut removals: Vec<(usize, usize)> = Vec::new();
     for (was_parenthesized, values_index) in
@@ -234,7 +273,7 @@ fn restore_unparenthesized_from_values(
             }
         }
         let Some(close_index) = close_index else {
-            return Ok(formatted);
+            return Err("native formatter could not locate the VALUES wrapper end".to_string());
         };
         let open = &formatted_tokens[wrapper_index];
         let close = &formatted_tokens[close_index];
@@ -544,6 +583,6 @@ fn response(
         changed,
         sql,
         formatted,
-        reason,
+        reason: reason.map(str::to_owned),
     })
 }

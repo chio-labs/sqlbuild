@@ -13,9 +13,12 @@ from sqlbuild.lint._helpers.sqlbuild_tokens import neutralize_interpolation, res
 from sqlbuild.lint.constants import (
     CARRIAGE_RETURN_LINE_FEED,
     LINE_FEED,
+    LINT_ENGINE_NATIVE,
+    RULE_FORMAT_UNSAFE,
+    VIOLATION_SEVERITY_FAULT,
 )
-from sqlbuild.lint.exceptions import NativeLintError
-from sqlbuild.lint.models import HeaderSpan, InterpolationSite, LintConfig
+from sqlbuild.lint.exceptions import InterpolationRestorationError, NativeLintError
+from sqlbuild.lint.models import HeaderSpan, InterpolationSite, LintConfig, LintViolation
 
 _NATIVE_FORMAT_API_VERSION: int = 1
 
@@ -41,11 +44,15 @@ def with_newline_style(*, contents: str, newline: str) -> str:
 
 
 def format_native_sql_bodies(
-    *, files: dict[Path, str], config: LintConfig, project_dir: Path
-) -> dict[Path, str]:
-    """Format supported SQL bodies while leaving declined bodies unchanged."""
+    *,
+    files: dict[Path, str],
+    config: LintConfig,
+    project_dir: Path,
+) -> tuple[dict[Path, str], list[LintViolation]]:
+    """Format SQL bodies and report every declined body as a named fault."""
 
     prepared_by_path: dict[Path, tuple[_PreparedBody, ...]] = {}
+    faults: list[LintViolation] = []
     requests_by_key: dict[tuple[str, str], dict[str, object]] = {}
     for file_path, contents in sorted(files.items()):
         headers: tuple[HeaderSpan, ...] = scan_headers(contents=contents)
@@ -98,19 +105,53 @@ def format_native_sql_bodies(
             ):
                 raise NativeLintError("native formatter returned invalid SQL or changed state")
             if not formatted:
+                faults.append(
+                    _format_fault(
+                        file_path=file_path,
+                        contents=contents,
+                        start=prepared.start,
+                        reason=str(
+                            response.get("reason") or "native formatter declined without a reason"
+                        ),
+                    )
+                )
                 continue
             if not changed:
                 continue
-            restored: str = restore_interpolation(
-                fixed=raw_sql,
-                sites=prepared.interpolation_sites,
-            )
+            try:
+                restored: str = restore_interpolation(
+                    fixed=raw_sql,
+                    sites=prepared.interpolation_sites,
+                )
+            except InterpolationRestorationError as error:
+                faults.append(
+                    _format_fault(
+                        file_path=file_path,
+                        contents=contents,
+                        start=prepared.start,
+                        reason=str(error),
+                    )
+                )
+                continue
             updated = (
                 f"{updated[: prepared.start]}{restored}{prepared.trailing}{updated[prepared.end :]}"
             )
         if updated != contents:
             formatted_files[file_path] = updated
-    return formatted_files
+    return formatted_files, faults
+
+
+def _format_fault(*, file_path: Path, contents: str, start: int, reason: str) -> LintViolation:
+    return LintViolation(
+        file_path=file_path,
+        line=contents.count(LINE_FEED, 0, start) + 1,
+        column=1,
+        code=RULE_FORMAT_UNSAFE,
+        message=f"SQL body was not formatted: {reason}",
+        severity=VIOLATION_SEVERITY_FAULT,
+        engine=LINT_ENGINE_NATIVE,
+        remediation="Rewrite the unsupported SQL shape or report a minimal formatter reproduction.",
+    )
 
 
 def _format_responses(

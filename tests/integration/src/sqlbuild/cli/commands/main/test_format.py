@@ -36,6 +36,44 @@ _UNFORMATTED_ORDERS_SQL: str = "MODEL (materialized table);\nselect   1 as order
     "test_case",
     [
         FormatCompileIntegrationTestCase(
+            "commented lateral alias", "LATERAL FLATTEN(input => parsed.items, outer => TRUE) f"
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_commented_lateral_alias_when_formatting_then_canonical_sql_is_written(
+    test_case: FormatCompileIntegrationTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A comment plus generated AS used to decline the entire larger query silently."""
+    (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "snowflake"\n')
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    columns: str = ", ".join(f"parsed.order_attribute_{index}" for index in range(47))
+    model.write_text(
+        'MODEL (description "Order items");\n'
+        "WITH parsed AS (SELECT SPLIT(REGEXP_REPLACE(order_text, '[ ]+', ''), ',') AS items, order_id FROM orders "
+        "UNION ALL BY NAME SELECT items, order_id FROM customers), "
+        "distinct_orders AS (SELECT DISTINCT items, order_id FROM parsed), final AS (\n"
+        "-- Expand the order items.\n"
+        f"select f.index, f.value, {columns} FROM parsed, LATERAL FLATTEN(input => parsed.items, outer => TRUE) f) "
+        "SELECT * FROM final\n"
+    )
+    assert main(["--project-dir", str(tmp_path), "format", "--check", "--json"]) == 1
+    capsys.readouterr()
+    assert main(["--project-dir", str(tmp_path), "format", "--json"]) == 0
+    capsys.readouterr()
+    formatted: str = model.read_text()
+    assert "    f.index,\n    f.value,\n    parsed.order_attribute_0," in formatted
+    assert "-- Expand the order items." in formatted
+    assert test_case.expected_literal in formatted
+    assert main(["--project-dir", str(tmp_path), "format", "--check", "--json"]) == 0
+    assert model.read_text() == formatted
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FormatCompileIntegrationTestCase(
             description="canonical empty input fixture remains compiler-compatible",
             expected_literal="SELECT * FROM __empty_fixture()",
         )
@@ -404,14 +442,9 @@ def test_given_unparseable_file_when_formatting_then_file_is_untouched_and_fault
     "test_case",
     [
         FormatterDeclineIntegrationTestCase(
-            description="unsupported SQL body is skipped while header formats",
+            description="unsupported SQL body reports a fault while header formats",
             authored_body="select from\n",
-            expected_exit_code=0,
-        ),
-        FormatterDeclineIntegrationTestCase(
-            description="comment attachment decline is skipped while header formats",
-            authored_body="select order_id order_key /* keep */ from orders\n",
-            expected_exit_code=0,
+            expected_exit_code=1,
         ),
     ],
     ids=lambda case: case.description,
@@ -445,8 +478,14 @@ def test_given_native_formatter_decline_when_formatting_then_header_formats_and_
     assert second_exit == test_case.expected_exit_code
     assert '  description "Orders.",\n' in formatted_once
     assert test_case.authored_body in formatted_once
-    assert "FAULT=0  WARN=0" in first_output
-    assert "FAULT=0  WARN=0" in second_output
+    assert "format-unsafe" in first_output
+    assert "format-unsafe" in second_output
+    assert "orders.sql" in second_output
+    json_exit: int = main(["--project-dir", str(tmp_path), "format", "--check", "--json"])
+    json_output: str = capsys.readouterr().out
+    assert json_exit == 1
+    assert "format-unsafe" in json_output
+    assert json.loads(json_output)
     assert formatted_once == model.read_text(encoding="utf-8")
 
 
