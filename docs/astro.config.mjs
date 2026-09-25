@@ -23,6 +23,7 @@ export default defineConfig({
 				PageFrame: './src/components/PageFrame.astro',
 				TwoColumnContent: './src/components/TwoColumnContent.astro',
 				Header: './src/components/Header.astro',
+				PageTitle: './src/components/PageTitle.astro',
 				ThemeSelect: './src/components/ThemeSelect.astro',
 			},
 			customCss: ['./src/styles/fonts.css', './src/styles/sqlbuild.css'],
@@ -52,7 +53,7 @@ export default defineConfig({
 			},
 			sidebar: [
 				{ label: 'Getting Started', items: ['index', 'quickstart'] },
-				{ label: 'Concepts', items: ['concepts/interpolation'] },
+				{ label: 'Concepts', items: ['concepts/interpolation', { label: 'Models', items: ['concepts/models/contracts'] }] },
 				{ label: 'CLI Reference', items: ['cli/plan'] },
 			],
 			plugins: [

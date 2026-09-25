@@ -1,0 +1,54 @@
+---
+const { entry, sidebar } = Astro.locals.starlightRoute;
+
+type Entry = (typeof sidebar)[number];
+
+function currentGroup(entries: Entry[], parent?: string): string | undefined {
+	for (const item of entries) {
+		if (item.type === 'link' && item.isCurrent) return parent;
+		if (item.type === 'group') {
+			const found = currentGroup(item.entries, item.label);
+			if (found) return found;
+		}
+	}
+	return undefined;
+}
+
+const group = currentGroup(sidebar);
+const { title, description } = entry.data;
+---
+
+<div class="page-title">
+	{group && <p class="eyebrow">{group}</p>}
+	<h1 id="_top">{title}</h1>
+	{description && <p class="description">{description}</p>}
+</div>
+
+<style>
+	.page-title {
+		margin-top: 0.5rem;
+	}
+
+	.eyebrow {
+		margin: 0 0 0.35rem;
+		color: var(--sqb-primary);
+		font-size: 14px;
+		font-weight: 600;
+	}
+
+	h1 {
+		margin: 0;
+		font-size: var(--sl-text-h1);
+		line-height: var(--sl-line-height-headings);
+		font-weight: 650;
+		letter-spacing: -0.02em;
+		color: var(--sqb-fg);
+	}
+
+	.description {
+		margin: 0.5rem 0 0;
+		color: var(--sqb-muted);
+		font-size: 1.1rem;
+		line-height: 1.5;
+	}
+</style>

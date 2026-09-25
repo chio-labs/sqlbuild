@@ -35,6 +35,8 @@ function theme(name, type, c) {
 				settings: { foreground: c.type },
 			},
 			{ scope: ['variable.parameter'], settings: { foreground: c.fg } },
+			{ scope: ['variable.other.key', 'support.type.property-name'], settings: { foreground: c.keyword } },
+			{ scope: ['entity.name.section', 'entity.name.tag'], settings: { foreground: c.type } },
 			{ scope: ['entity.other.attribute-name', 'support.type.property-name'], settings: { foreground: c.type } },
 		],
 	};
