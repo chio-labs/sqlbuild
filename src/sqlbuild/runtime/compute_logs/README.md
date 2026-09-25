@@ -15,5 +15,5 @@ The local implementation rejects symlink roots and path escapes but leaves modes
 ownership and the process umask. It is host-local and may contain sensitive output. It does not
 provide object storage, lifecycle authority, or a cross-host log service.
 
-Selected public API examples and the operator walkthrough are documented in
-[`docs/execution-observability.md`](../../../../docs/execution-observability.md).
+Operator documentation is at
+[docs.sqlbuild.com/concepts/observability](https://docs.sqlbuild.com/concepts/observability).
