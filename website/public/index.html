@@ -122,26 +122,27 @@
 								<h3>Catch errors before anything runs</h3>
 								<p>
 									
-									Every column is bound and every type checked, offline. A missing column fails in seconds, pointing at the line.
+									Every column and type is checked offline against your declared contracts. A missing column fails in seconds, pointing at the line.
 								</p>
 							</div>
-<!-- Placeholder: replace with real `sqb compile` output (codes and wording included) once compile reports unknown columns and type mismatches. -->
 <pre class="terminal"><span class="cmd">sqb compile</span>
-<span class="bad">error[B101]</span>: column 'qty' does not exist in stg_orders
-  --&gt; models/marts/fact_orders.sql:16:3
+<span class="bad">error[B002]: Unknown column 'qty' in table 'stg_orders' (context: SELECT)</span>
+  model: fact_orders
+  --&gt; models/marts/fact_orders.sql:16:5
      |
   16 |   o.qty,
-     |   <span class="bad">^^^^^</span>
-  = help: stg_orders has order_id, customer_id, waffle_type_id, quantity, ordered_at, status
+     |     ^
+  <span class="dim">= help:</span> review the SQL expression, input types, and authoritative schema
 
-<span class="bad">error[B201]</span>: cannot compare TIMESTAMP with INTEGER
-  --&gt; models/staging/stg_orders.sql:27:7
+<span class="bad">error[B217]: Incompatible comparison between timestamp and integer</span>
+  model: fact_orders
+  --&gt; models/marts/fact_orders.sql:27:7
      |
-  27 | WHERE ordered_at &gt; 5
-     |       <span class="bad">^^^^^^^^^^^^^^</span>
-  = help: ordered_at is TIMESTAMP; compare it with a TIMESTAMP value
+  27 | WHERE o.ordered_at &gt; 5
+     |       ^
+  <span class="dim">= help:</span> review the SQL expression, input types, and authoritative schema
 
-<span class="bad">✗ Project compiled</span>  12 models, 1 seed, 2 functions, 2 errors, 0 warnings</pre>
+<span class="bad">✗</span> <span class="bad strong">Project compiled</span>  <span class="dim">12 models, 1 seed, 2 functions, 4 errors, 0 warnings</span></pre>
 						</div>
 
 						<div class="step">

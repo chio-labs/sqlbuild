@@ -6,9 +6,20 @@ DuckDB.
 
 | Project | Landing page |
 |---------|--------------|
-| `waffle-shop/` | Steps 02 to 07. It is `sqb playground waffle-shop` plus the custom Rule in `rules/layers.py` and its test, the scoped enum and macros under `models/marts/_sqlbuild/`, and the renamed `daily_order_rollup` model. |
+| `waffle-shop/` | Steps 01 to 07. It is `sqb playground waffle-shop` plus the custom Rule in `rules/layers.py` and its test, the scoped enum and macros under `models/marts/_sqlbuild/`, and the renamed `daily_order_rollup` model. |
 | `tidy-shop/` | Step 08, the janitor. |
 | `hero-shop/` | The hero: a model moved and renamed. |
+
+## Step 01: compile errors
+
+Step 01 needs semantic compile checks for unknown columns and type mismatches, which are not
+released yet; the output was produced with a development build. In a copy of `waffle-shop`:
+
+1. In `sources/raw.yml`, add `contract: enforced` to `raw__customers` and `raw__orders`, so the
+   columns and types that flow into the models are authoritative.
+2. In `models/marts/fact_orders.sql`, change `o.quantity,` to `o.qty,` and add
+   `WHERE o.ordered_at > 5` as the last line.
+3. Run `sqb compile`.
 
 ## Step 08: janitor
 
