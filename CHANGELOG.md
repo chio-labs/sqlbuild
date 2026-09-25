@@ -1723,11 +1723,11 @@
 
 ### Features
 
-* **cli:** adopt balanced color hierarchy for human output (CHI-45) ([eac4ddc](https://github.com/chio-labs/sqlbuild/commit/eac4ddc9842a670038a1f57c9821fb6ab92d8fe4))
+* **cli:** adopt balanced color hierarchy for human output ([eac4ddc](https://github.com/chio-labs/sqlbuild/commit/eac4ddc9842a670038a1f57c9821fb6ab92d8fe4))
 * **cli:** clarify virtual state and expand previews ([3b94316](https://github.com/chio-labs/sqlbuild/commit/3b943167e06784f8cc174b92ef71ef489b2f67ee))
 * **cli:** dim kind columns, accent change actions, fix spinner wrap and error-label padding ([b17b1ef](https://github.com/chio-labs/sqlbuild/commit/b17b1efc31f98fa77c0596707a282373dff95025))
 * **cli:** refine hierarchy and add output previews ([7607c4f](https://github.com/chio-labs/sqlbuild/commit/7607c4f08636a00d525fdc406a7b65e4939d8804))
-* **cli:** structural output hierarchy across SQLBuild CLI (CHI-45) ([7c46d43](https://github.com/chio-labs/sqlbuild/commit/7c46d43174f1e61238e919a4201e37e699b63d80))
+* **cli:** structural output hierarchy across SQLBuild CLI ([7c46d43](https://github.com/chio-labs/sqlbuild/commit/7c46d43174f1e61238e919a4201e37e699b63d80))
 * **cli:** structure source freshness output ([c0e42f4](https://github.com/chio-labs/sqlbuild/commit/c0e42f4ef110995d985b9b32e559ae154b657ae7))
 * **cli:** structured build surface - phase lines, status cells, dim timings ([e321e11](https://github.com/chio-labs/sqlbuild/commit/e321e11232e414fc9d954c61c23cafd59da5a1d2))
 * **cli:** structured clone completion and connection phase lines ([e5a154d](https://github.com/chio-labs/sqlbuild/commit/e5a154d711125854449c8e309eaee285bbb7e7a5))
