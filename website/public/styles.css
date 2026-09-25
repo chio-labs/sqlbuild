@@ -186,6 +186,21 @@ pre {
 	text-decoration: none;
 }
 
+.nav .nav-icon {
+	display: inline-grid;
+	place-items: center;
+	color: var(--muted-foreground);
+}
+
+.nav .nav-icon:hover {
+	color: var(--foreground);
+}
+
+.nav-icon svg {
+	width: 18px;
+	height: 18px;
+}
+
 .theme-toggle {
 	display: inline-grid;
 	place-items: center;

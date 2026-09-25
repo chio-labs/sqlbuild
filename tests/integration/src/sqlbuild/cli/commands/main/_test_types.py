@@ -677,3 +677,23 @@ class AbsentMicrobatchFullRefreshTestCase:
     setup_build_flags: tuple[str, ...]
     setup_drop_sql: str
     expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SqlReadabilityTestCase:
+    """One authored SQL readability contract case."""
+
+    description: str
+    sql: str
+    expected_fault: bool
+    rule_code: str = "SQBRSQL041"
+
+
+@dataclass(frozen=True)
+class FormatterSyntaxTestCase:
+    """Authored constructs that must survive canonical layout formatting."""
+
+    description: str
+    sql: str
+    expected_fragments: tuple[str, ...]
+    macro_source: str = ""

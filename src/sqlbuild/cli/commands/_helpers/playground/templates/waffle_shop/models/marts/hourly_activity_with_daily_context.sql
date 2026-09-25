@@ -26,12 +26,23 @@ MODEL (
   ],
 );
 
-SELECT
-  h.activity_hour,
-  h.orders_placed,
-  d.orders_placed AS day_orders_placed,
-  h.waffles_ordered,
-  h.revenue_cents
-FROM __ref("hourly_order_activity") h
-INNER JOIN __ref("daily_activity_rollup") d
-  ON @timestamp_trunc('day', 'h.activity_hour') = d.activity_day
+WITH hourly_activity AS (
+  SELECT
+    activity_hour,
+    @timestamp_trunc('day', 'activity_hour') AS activity_day,
+    orders_placed,
+    waffles_ordered,
+    revenue_cents
+  FROM __ref("hourly_order_activity")
+), final AS (
+  SELECT
+    h.activity_hour,
+    h.orders_placed,
+    d.orders_placed AS day_orders_placed,
+    h.waffles_ordered,
+    h.revenue_cents
+  FROM hourly_activity AS h
+  INNER JOIN __ref("daily_activity_rollup") AS d
+    ON h.activity_day = d.activity_day
+)
+SELECT * FROM final

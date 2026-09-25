@@ -54,6 +54,10 @@ def run_format(
         discovered_inputs=discovered_inputs,
         fixtures_only=fixtures_only,
     )
+    declined_paths: set[Path] = {fault.file_path for fault in format_faults}
+    updated_contents: dict[Path, str] = {
+        path: contents for path, contents in updated_contents.items() if path not in declined_paths
+    }
     formatted: list[Path] = []
     changes: list[FormatChange] = []
     file_path: Path
@@ -133,6 +137,7 @@ def _apply_fixes(
     current_files: dict[Path, str] = {
         file_path: updated.get(file_path, contents) for file_path, contents in files.items()
     }
+    faults: list[LintViolation] = []
     _ = prepare_native_header_cache(files=current_files)
     for file_path, contents in sorted(current_files.items()):
         native_result: tuple[str, tuple[LintViolation, ...]] = format_native_headers(
@@ -140,22 +145,24 @@ def _apply_fixes(
             file_path=file_path,
             config=config,
         )
+        faults.extend(native_result[1])
         if native_result[0] != contents:
             updated[file_path] = native_result[0]
     if not config.native_enabled:
         return reject_unparseable_header_rewrites(
             updated=updated,
             config=config,
-            faults=[],
+            faults=faults,
         )
     current_files = {
         file_path: updated.get(file_path, contents) for file_path, contents in files.items()
     }
-    native_formatted: dict[Path, str] = format_native_sql_bodies(
+    native_formatted, native_faults = format_native_sql_bodies(
         files=current_files,
         config=config,
         project_dir=project_dir,
     )
+    faults.extend(native_faults)
     updated.update(native_formatted)
     post_native_files: dict[Path, str] = {
         file_path: updated.get(file_path, contents) for file_path, contents in files.items()
@@ -170,17 +177,18 @@ def _apply_fixes(
         else {}
     )
     if fixture_formatted:
-        final_native: dict[Path, str] = format_native_sql_bodies(
+        final_native, final_faults = format_native_sql_bodies(
             files=fixture_formatted,
             config=config,
             project_dir=project_dir,
         )
+        faults.extend(final_faults)
         updated.update(fixture_formatted)
         updated.update(final_native)
     return reject_unparseable_header_rewrites(
         updated=updated,
         config=config,
-        faults=[],
+        faults=faults,
     )
 
 

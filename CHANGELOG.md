@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.119.0](https://github.com/chio-labs/sqlbuild/compare/v0.118.3...v0.119.0) (2026-09-25)
+
+
+### Features
+
+* report unsafe formatting and add join-predicate and final-CTE rules ([#822](https://github.com/chio-labs/sqlbuild/issues/822)) ([cdc6a61](https://github.com/chio-labs/sqlbuild/commit/cdc6a61db862733db305ce43d313e9db72b884a3))
+
 ## [0.118.3](https://github.com/chio-labs/sqlbuild/compare/v0.118.2...v0.118.3) (2026-09-25)
 
 
