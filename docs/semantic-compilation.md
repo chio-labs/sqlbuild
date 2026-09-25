@@ -45,8 +45,10 @@ and BigQuery**. Other adapters retain reference and semantic checks without expr
 Only proven bind-time rejections are errors. For example, DuckDB rejects `ordered_at > 5` for a
 TIMESTAMP column, but accepts `ordered_at > '2026-01-01'`. Accepted implicit conversions that may
 fail on data produce **W21x compile warnings**, with source locations and a warning summary count;
-they do not fail compilation. Unknown input types never cause type errors. Dialect coercions differ:
-numeric predicates are accepted by DuckDB but rejected by PostgreSQL, Snowflake, and BigQuery.
+they do not fail compilation. Identical warnings at the same reported location are grouped with
+an occurrence count in human output; JSON and the summary retain every occurrence. Unknown input
+types never cause type errors. Dialect coercions differ: numeric predicates are accepted by DuckDB
+but rejected by PostgreSQL, Snowflake, and BigQuery.
 Snowflake's function catalogue is partial and deliberately does not reject unknown function names.
 Function signatures and overload coverage remain partial; compilation is not a replacement for
 executing SQL unit tests.
