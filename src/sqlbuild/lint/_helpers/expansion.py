@@ -135,9 +135,9 @@ def prepare_lint_body(
     project_dir: Path,
     file_path: Path,
     contents: str,
-    body_start: int,
-    body_end: int,
+    body_range: tuple[int, int],
     context: SqlExpansionContext,
+    dialect: str,
     external_identifiers: tuple[str, ...] = (),
     allows_ceremonial_select: bool = False,
     allows_dynamic_output_star: bool = False,
@@ -145,6 +145,9 @@ def prepare_lint_body(
 ) -> LintBody:
     """Expand one authored body and neutralize whatever interpolation remains."""
 
+    body_start: int
+    body_end: int
+    body_start, body_end = body_range
     authored_body: str = contents[body_start:body_end]
     pre_expansion_sites: tuple[InterpolationSite, ...] = ()
     expansion_input: str = authored_body
@@ -184,11 +187,16 @@ def prepare_lint_body(
     sites: tuple[InterpolationSite, ...]
     native_prepared: tuple[str, list[tuple[str, int, int, int, int, str]], list[str]] | None = (
         _native.prepare_lint_sql(
-            expanded, expansion_input, [site.neutralized_start for site in pre_expansion_sites]
+            {
+                "expanded": expanded,
+                "before_expansion": expansion_input,
+                "prior_sites": [site.neutralized_start for site in pre_expansion_sites],
+                "dialect": dialect,
+            }
         )
     )
     if native_prepared is None:
-        neutralized, sites = neutralize_interpolation(body=expanded)
+        neutralized, sites = neutralize_interpolation(body=expanded, dialect=dialect)
         externally_referenced_ctes: tuple[str, ...] = _externally_referenced_ctes(
             expanded=expanded,
             interpolation_sites=sites,

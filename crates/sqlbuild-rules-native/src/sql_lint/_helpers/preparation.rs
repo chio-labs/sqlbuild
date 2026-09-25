@@ -5,14 +5,22 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+use crate::rules::main::quote_policy::quote_policy;
 use crate::sql_lint::types::{InterpolationSite, PreparedSql};
 use crate::sql_scan::main::matching_paren::matching_paren as scan_matching_paren;
 use crate::sql_scan::models::QuotePolicy;
 
-static SITES: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| {
-    Regex::new(
-        r#"--[^\n]*(?:\n|\z)|/\*[\s\S]*?(?:\*/|\z)|'(?:\\.|''|[^'\\])*(?:'|\z)|"(?:\\.|""|[^"\\])*(?:"|\z)|(?P<site>@@|\$\{|@|(?:__dbt_ref|__ref|__seed|__source|__table_fn|__udf)\s*\()"#,
-    )
+const SITE_PATTERN: &str =
+    r#"(?P<site>@@|\$\{|@|(?:__dbt_ref|__ref|__seed|__source|__table_fn|__udf)\s*\()"#;
+const NON_CODE_PATTERN: &str = r#"--[^\n]*(?:\n|\z)|/\*[\s\S]*?(?:\*/|\z)|'(?:\\.|''|[^'\\])*(?:'|\z)|"(?:\\.|""|[^"\\])*(?:"|\z)"#;
+const BACKTICK_PATTERN: &str = r#"`(?:``|[^`])*(?:`|\z)"#;
+
+static SITES: LazyLock<Result<Regex, regex::Error>> =
+    LazyLock::new(|| Regex::new(&format!("{NON_CODE_PATTERN}|{SITE_PATTERN}")));
+static BACKTICK_SITES: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| {
+    Regex::new(&format!(
+        "{NON_CODE_PATTERN}|{BACKTICK_PATTERN}|{SITE_PATTERN}"
+    ))
 });
 static CTES: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| {
     Regex::new(
@@ -24,15 +32,27 @@ static WORDS: LazyLock<Result<Regex, regex::Error>> =
 static OPAQUE_CTE: LazyLock<Result<Regex, regex::Error>> =
     LazyLock::new(|| Regex::new(r"(?i)\b[A-Za-z_][A-Za-z0-9_]*\s+AS\s*\(\s*(?:--[^\n]*\n\s*)?$"));
 
+/// Return whether SQL lint treats backticks as identifier quotes for `dialect`, as rules do.
+pub(crate) fn backtick_identifiers(dialect: &str) -> bool {
+    quote_policy(dialect).backtick_identifiers
+}
+
 pub(crate) fn prepare(
     expanded: &str,
     before_expansion: &str,
     prior_sites: &[usize],
+    dialect: &str,
 ) -> Result<Option<PreparedSql>, String> {
     if !expanded.is_ascii() || !before_expansion.is_ascii() {
         return Ok(None);
     }
-    let site_pattern = SITES.as_ref().map_err(|error| error.to_string())?;
+    let policy = QuotePolicy::SQL_LINT.with_backtick_identifiers(backtick_identifiers(dialect));
+    let sites_regex = if policy.backtick_identifiers {
+        &BACKTICK_SITES
+    } else {
+        &SITES
+    };
+    let site_pattern = sites_regex.as_ref().map_err(|error| error.to_string())?;
     let cte_pattern = CTES.as_ref().map_err(|error| error.to_string())?;
     let word_pattern = WORDS.as_ref().map_err(|error| error.to_string())?;
     let opaque_pattern = OPAQUE_CTE.as_ref().map_err(|error| error.to_string())?;
@@ -47,7 +67,7 @@ pub(crate) fn prepare(
         if start < copied_to {
             continue;
         }
-        let Some(end) = site_end(expanded, start) else {
+        let Some(end) = site_end(expanded, start, policy) else {
             continue;
         };
         text.push_str(&expanded[copied_to..start]);
@@ -96,7 +116,7 @@ pub(crate) fn prepare(
     Ok(Some((text, sites, referenced)))
 }
 
-fn site_end(text: &str, start: usize) -> Option<usize> {
+fn site_end(text: &str, start: usize, policy: QuotePolicy) -> Option<usize> {
     let bytes = text.as_bytes();
     match bytes[start] {
         b'@' if bytes.get(start + 1) == Some(&b'@') => Some(scan_name(bytes, start + 2, true)),
@@ -110,7 +130,7 @@ fn site_end(text: &str, start: usize) -> Option<usize> {
             }
             let end = scan_name(bytes, start + 1, false);
             if bytes.get(end) == Some(&b'(') {
-                matching_paren(bytes, end)
+                matching_paren(bytes, end, policy)
             } else {
                 Some(end)
             }
@@ -119,7 +139,7 @@ fn site_end(text: &str, start: usize) -> Option<usize> {
         b'_' => {
             let end = scan_name(bytes, start, false);
             (bytes.get(end) == Some(&b'('))
-                .then(|| matching_paren(bytes, end))
+                .then(|| matching_paren(bytes, end, policy))
                 .flatten()
         }
         _ => None,
@@ -137,8 +157,8 @@ fn scan_name(bytes: &[u8], mut index: usize, interpolation: bool) -> usize {
     index
 }
 
-fn matching_paren(bytes: &[u8], open: usize) -> Option<usize> {
-    match scan_matching_paren(bytes, open, QuotePolicy::SQL_LINT) {
+fn matching_paren(bytes: &[u8], open: usize, policy: QuotePolicy) -> Option<usize> {
+    match scan_matching_paren(bytes, open, policy) {
         Ok(close) => Some(close + 1),
         Err(_) => None,
     }

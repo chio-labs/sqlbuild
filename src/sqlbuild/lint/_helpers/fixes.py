@@ -89,9 +89,9 @@ def lint_contents(
                     project_dir=project_dir,
                     file_path=file_path,
                     contents=contents,
-                    body_start=body_start,
-                    body_end=body_end,
+                    body_range=(body_start, body_end),
                     context=context,
+                    dialect=config.dialect,
                 )
             )
     if bodies:

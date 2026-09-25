@@ -66,7 +66,7 @@ def format_native_sql_bodies(
             body: str = contents[body_start:body_end]
             trailing: str = body[len(body.rstrip()) :]
             core: str = body[: len(body) - len(trailing)] if trailing else body
-            neutralized, sites = neutralize_interpolation(body=core)
+            neutralized, sites = neutralize_interpolation(body=core, dialect=config.dialect)
             cache_key: tuple[str, str] = (neutralized, config.dialect)
             requests_by_key.setdefault(
                 cache_key,
