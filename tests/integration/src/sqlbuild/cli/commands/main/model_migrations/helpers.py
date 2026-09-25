@@ -13,6 +13,8 @@ import duckdb
 import pytest
 from _pytest.capture import CaptureResult
 
+from sqlbuild.adapter.contract.models import MigrationStagePlan
+from sqlbuild.adapter.contract.types import MigrationTransfer
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.executor.build._helpers import scheduler as scheduler_module
@@ -64,6 +66,24 @@ VIRTUAL_PROJECT_TOML: str = dedent(
 
     [targets.dev.state.connection]
     database = "state.duckdb"
+    """
+).lstrip()
+JANITOR_PROJECT_TOML: str = dedent(
+    f"""
+    name = "orders_project"
+    adapter = "duckdb"
+
+    default_target = "dev"
+
+    [connection]
+    database = "{DATABASE_FILE}"
+
+    [targets.dev]
+    schema = "dev"
+
+    [janitor]
+    enabled = true
+    archive_retention_days = 0
     """
 ).lstrip()
 RAW_SOURCES_YML: str = dedent(
@@ -355,40 +375,98 @@ def snapshot_orders_sql(*, migration_lines: str) -> str:
     return _SNAPSHOT_SQL.format(migration=migration_lines)
 
 
-def _raise_interruption(**_: object) -> None:
+def _raise_interruption(*_: object, **__: object) -> None:
     raise RuntimeError("simulated interruption")
 
 
 def fail_clone(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Make the migration clone statement fail."""
+    """Make the migration stage statement fail before any stage exists."""
 
     monkeypatch.setattr(
         DuckDbAdapter,
-        "render_replace_with_clone",
-        lambda self, *, origin, destination, origin_is_transient=False: (
-            "SELECT * FROM main.simulated_missing_relation"
+        "render_migration_stage",
+        lambda self, **_: MigrationStagePlan(
+            transfer=MigrationTransfer.COPY,
+            statements=("SELECT * FROM main.simulated_missing_relation",),
         ),
     )
 
 
-def fail_clone_into(*, monkeypatch: pytest.MonkeyPatch, destination: str) -> None:
-    """Make only the clone into one destination fail; every other clone runs normally."""
+def fail_partial_stage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Leave an empty, incomplete stage behind and then fail the copy."""
 
-    original: Callable[..., str] = DuckDbAdapter.render_replace_with_clone
-    failing: dict[str, str] = {destination: "SELECT * FROM main.simulated_missing_relation"}
     monkeypatch.setattr(
         DuckDbAdapter,
-        "render_replace_with_clone",
-        lambda self, *, origin, destination, origin_is_transient=False: failing.get(
-            destination,
-            original(
-                self,
-                origin=origin,
-                destination=destination,
-                origin_is_transient=origin_is_transient,
+        "render_migration_stage",
+        lambda self, *, origin, stage, **_: MigrationStagePlan(
+            transfer=MigrationTransfer.COPY,
+            statements=(
+                f"CREATE TABLE {stage} AS SELECT * FROM {origin} WHERE false",
+                "SELECT * FROM main.simulated_missing_relation",
             ),
         ),
     )
+
+
+def fail_verification(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Complete the stage, then refuse promotion."""
+
+    monkeypatch.setattr(
+        "sqlbuild.executor.migrations.main._apply.verify_stage", _raise_interruption
+    )
+
+
+def fail_clone_into(*, monkeypatch: pytest.MonkeyPatch, origin: str) -> None:
+    """Make only the stage copied from one origin fail; every other stage runs normally."""
+
+    original: Callable[..., MigrationStagePlan] = DuckDbAdapter.render_migration_stage
+    failing: dict[str, MigrationStagePlan] = {
+        origin: MigrationStagePlan(
+            transfer=MigrationTransfer.COPY,
+            statements=("SELECT * FROM main.simulated_missing_relation",),
+        )
+    }
+    monkeypatch.setattr(
+        DuckDbAdapter,
+        "render_migration_stage",
+        lambda self, *, origin, **kwargs: (
+            failing.get(origin) or original(self, origin=origin, **kwargs)
+        ),
+    )
+
+
+def disable_transactional_ddl(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Promote without a transaction, as Snowflake, BigQuery, and Databricks do."""
+
+    monkeypatch.setattr(DuckDbAdapter, "supports_transactional_ddl", lambda self: False)
+
+
+def fail_promotion_rename(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail when the stage is renamed into place, after any live destination moved aside."""
+
+    original: Callable[..., None] = DuckDbAdapter.rename
+    failing: dict[bool, Callable[..., None]] = {True: _raise_interruption}
+    monkeypatch.setattr(
+        DuckDbAdapter,
+        "rename",
+        lambda self, *, origin, **kwargs: failing.get("migration_stage" in origin, original)(
+            self, origin=origin, **kwargs
+        ),
+    )
+
+
+def fail_non_transactional_promotion_rename(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Leave the destination moved aside and missing, as a non-transactional crash would."""
+
+    disable_transactional_ddl(monkeypatch)
+    fail_promotion_rename(monkeypatch)
+
+
+def fail_non_transactional_record(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Crash after a committed promotion but before the event, as non-transactional adapters can."""
+
+    disable_transactional_ddl(monkeypatch)
+    fail_record(monkeypatch)
 
 
 def fail_model_build(*, monkeypatch: pytest.MonkeyPatch, model_name: str) -> None:
@@ -413,7 +491,7 @@ def fail_record(monkeypatch: pytest.MonkeyPatch) -> None:
     """Crash after the clone but before the migration event is recorded."""
 
     monkeypatch.setattr(
-        "sqlbuild.executor.build.main._apply_model_migrations.write_migration_event",
+        "sqlbuild.executor.migrations._helpers.promotion.write_migration_event",
         _raise_interruption,
     )
 
@@ -518,4 +596,80 @@ def prepare_prod_rename(*, project_dir: Path, capsys: pytest.CaptureFixture[str]
         project_dir=project_dir,
         models={DESTINATION_MODEL: incremental_orders_sql(migrate_from=ORIGIN_MODEL)},
         project_toml=TARGETS_PROJECT_TOML,
+    )
+
+
+def archived_relations(*, project_dir: Path, kind: str, schema: str = "main") -> tuple[str, ...]:
+    """Return every janitor-archive relation of one migration kind in one schema."""
+
+    return tuple(
+        str(row[0])
+        for row in query(
+            project_dir=project_dir,
+            sql=(
+                "SELECT table_name FROM information_schema.tables "
+                f"WHERE table_schema = '{schema}' "
+                "AND starts_with(table_name, '_sqb_archive__') "
+                f"AND contains(table_name, '__{kind}__') ORDER BY 1"
+            ),
+        )
+    )
+
+
+def archived_order_ids(*, project_dir: Path, kind: str) -> tuple[tuple[int, ...], ...]:
+    """Return the order IDs held by each archive of one migration kind."""
+
+    return tuple(
+        order_ids(project_dir=project_dir, relation=f"main.{name}")
+        for name in archived_relations(project_dir=project_dir, kind=kind)
+    )
+
+
+def prepare_forced_replace(
+    *, project_dir: Path, capsys: pytest.CaptureFixture[str], project_toml: str = PROJECT_TOML
+) -> None:
+    """Build an origin and an independent destination, then force the origin over it."""
+
+    write_project(
+        project_dir=project_dir,
+        models={
+            ORIGIN_MODEL: incremental_orders_sql(),
+            DESTINATION_MODEL: incremental_orders_sql(
+                select_sql=(
+                    'SELECT order_id, order_date, amount_cents FROM __source("raw_orders") '
+                    "WHERE order_id <= 2"
+                )
+            ),
+        },
+        project_toml=project_toml,
+    )
+    load_raw_orders(project_dir=project_dir, first_day=1, last_day=5)
+    _ = build_ok(project_dir=project_dir, capsys=capsys)
+    write_project(
+        project_dir=project_dir,
+        models={
+            DESTINATION_MODEL: incremental_orders_sql(migrate_from=ORIGIN_MODEL, migrate_force=True)
+        },
+        project_toml=project_toml,
+    )
+
+
+def no_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Install no failure."""
+
+    del monkeypatch
+
+
+def live_relations(*, project_dir: Path, schema: str = "main") -> tuple[str, ...]:
+    """Return relations in one schema that are neither state tables nor archives."""
+
+    return tuple(
+        str(row[0])
+        for row in query(
+            project_dir=project_dir,
+            sql=(
+                "SELECT table_name FROM information_schema.tables "
+                f"WHERE table_schema = '{schema}' AND NOT starts_with(table_name, '_') ORDER BY 1"
+            ),
+        )
     )

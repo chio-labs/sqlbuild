@@ -319,7 +319,7 @@ def test_given_interrupted_coordinated_renames_when_rerunning_then_downstream_re
     write_project(project_dir=tmp_path, models=renamed_order_models())
 
     with monkeypatch.context() as patch:
-        fail_clone_into(monkeypatch=patch, destination="main.customer_daily_order_totals")
+        fail_clone_into(monkeypatch=patch, origin="main.daily_order_totals")
         interrupted: CliRun = build(project_dir=tmp_path, capsys=capsys)
     events_after_crash: tuple[tuple[str, str, str], ...] = migration_events(project_dir=tmp_path)
     retry_plan: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)

@@ -24,7 +24,11 @@ from tests.integration.src.sqlbuild.cli.commands.main.model_migrations.helpers i
     execute,
     fail_after_migrations,
     fail_clone,
+    fail_non_transactional_promotion_rename,
+    fail_non_transactional_record,
+    fail_partial_stage,
     fail_record,
+    fail_verification,
     incremental_orders_sql,
     load_raw_orders,
     migration_decisions,
@@ -578,12 +582,44 @@ def test_given_origin_schema_when_migrating_then_normal_incremental_rules_decide
             expected_final_decisions=("migrate",),
         ),
         MigrationInterruptionTestCase(
-            description="crash before recording redoes the clone on a plain re-run",
+            description="partial stage is abandoned and a fresh stage is used on re-run",
+            install_failure=fail_partial_stage,
+            rerun_with_force=False,
+            expected_first_exit_code=1,
+            expected_decision_after_failure="migrate",
+            expected_final_decisions=("migrate",),
+        ),
+        MigrationInterruptionTestCase(
+            description="failed stage verification never promotes the stage",
+            install_failure=fail_verification,
+            rerun_with_force=False,
+            expected_first_exit_code=1,
+            expected_decision_after_failure="migrate",
+            expected_final_decisions=("migrate",),
+        ),
+        MigrationInterruptionTestCase(
+            description="transactional crash before recording rolls the promotion back",
             install_failure=fail_record,
+            rerun_with_force=False,
+            expected_first_exit_code=1,
+            expected_decision_after_failure="migrate",
+            expected_final_decisions=("migrate",),
+        ),
+        MigrationInterruptionTestCase(
+            description="non-transactional crash before recording redoes the move",
+            install_failure=fail_non_transactional_record,
             rerun_with_force=False,
             expected_first_exit_code=1,
             expected_decision_after_failure="redo",
             expected_final_decisions=("redo",),
+        ),
+        MigrationInterruptionTestCase(
+            description="non-transactional crash while renaming the stage migrates again",
+            install_failure=fail_non_transactional_promotion_rename,
+            rerun_with_force=False,
+            expected_first_exit_code=1,
+            expected_decision_after_failure="migrate",
+            expected_final_decisions=("migrate",),
         ),
         MigrationInterruptionTestCase(
             description="crash after recording continues from the migrated history",
@@ -662,7 +698,7 @@ def test_given_interrupted_superseded_replace_when_rerunning_then_replaces_again
     rename_model(project_dir=tmp_path, name=ORIGIN_MODEL, migrate_from=DESTINATION_MODEL)
 
     with monkeypatch.context() as patch:
-        fail_record(patch)
+        fail_non_transactional_record(patch)
         interrupted: CliRun = build(project_dir=tmp_path, capsys=capsys)
     after_failure: dict[str, Any] = plan_json(project_dir=tmp_path, capsys=capsys)
     _ = build_ok(project_dir=tmp_path, capsys=capsys)

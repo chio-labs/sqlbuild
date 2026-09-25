@@ -73,15 +73,6 @@ class RowDiffSampleSqlTestCase:
 
 
 @dataclass(frozen=True)
-class AdapterReplaceWithCloneTestCase:
-    description: str
-    adapter: BaseAdapter
-    origin_is_transient: bool
-    expected_statement: str | None
-    expected_error_fragment: str | None = None
-
-
-@dataclass(frozen=True)
 class AdapterRelationAgeMetadataCapabilityTestCase:
     description: str
     adapter: StrictAdapter

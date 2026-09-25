@@ -486,7 +486,9 @@ def _serialize_model_migrations(plan: PlanOutput) -> list[dict[str, object]]:
             "destination": entry.destination.qualified_name or entry.destination.name,
             "target": entry.target_name,
             "origin_version_hash": entry.origin_version_hash,
-            "statement": entry.statement,
+            "transfer": entry.transfer.value if entry.transfer is not None else None,
+            "storage_transition": entry.storage_transition,
+            "promotion": entry.promotion.value if entry.promotion is not None else None,
             "completed_at": (
                 entry.completed_at.isoformat() if entry.completed_at is not None else None
             ),

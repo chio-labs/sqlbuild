@@ -25,35 +25,44 @@ def write_migration_event(
     render_qualified_name: Callable[..., str | None],
     render_framework_type: Callable[[FrameworkType], str],
     transient: bool,
+    create_table: bool = True,
+    attempts: int = MIGRATION_WRITE_ATTEMPTS,
 ) -> None:
     """Create the state table when missing and insert the event unless already present."""
 
     if event.destination.schema is None:
         raise MigrationStateError("model migration events require a destination schema")
+    create_statements: tuple[str, ...] = (
+        (
+            build_create_table_sql(
+                database=event.destination.database,
+                schema=event.destination.schema,
+                render_qualified_name=render_qualified_name,
+                render_framework_type=render_framework_type,
+                transient=transient,
+            ),
+        )
+        if create_table
+        else ()
+    )
     statements: tuple[str, ...] = (
-        build_create_table_sql(
-            database=event.destination.database,
-            schema=event.destination.schema,
-            render_qualified_name=render_qualified_name,
-            render_framework_type=render_framework_type,
-            transient=transient,
-        ),
+        *create_statements,
         build_insert_sql(event=event, render_qualified_name=render_qualified_name),
     )
     attempt: int
-    for attempt in range(MIGRATION_WRITE_ATTEMPTS):
+    for attempt in range(attempts):
         try:
             statement: str
             for statement in statements:
                 _ = execute(connection=connection, sql=statement)
             return
         except Exception as error:
-            if attempt + 1 == MIGRATION_WRITE_ATTEMPTS:
+            if attempt + 1 == attempts:
                 raise
             logging.getLogger("sqlbuild.migrations").warning(
                 "model migration event write attempt %s/%s failed for '%s'; retrying: %s",
                 attempt + 1,
-                MIGRATION_WRITE_ATTEMPTS,
+                attempts,
                 event.destination_model,
                 error,
             )

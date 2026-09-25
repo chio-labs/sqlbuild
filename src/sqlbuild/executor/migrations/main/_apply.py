@@ -9,14 +9,13 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.compiler.migrations.main.deterministic_event_id import (
-    deterministic_migration_event_id,
-)
-from sqlbuild.compiler.migrations.main.relation_for_location import migration_relation_for_location
-from sqlbuild.compiler.migrations.main.write_event import write_migration_event
-from sqlbuild.compiler.migrations.models import MigrationEvent, MigrationRelation
+from sqlbuild.adapter.contract.types import MigrationTransfer
 from sqlbuild.compiler.planner.models import ModelMigrationPlanEntry, PlanOutput
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.migrations._helpers.naming import resolve_artifact_names
+from sqlbuild.executor.migrations._helpers.promotion import migration_event, promote_and_record
+from sqlbuild.executor.migrations._helpers.staging import create_stage, verify_stage
+from sqlbuild.executor.migrations.models import MigrationArtifactNames
 
 
 def apply_model_migrations(
@@ -27,7 +26,7 @@ def apply_model_migrations(
     run_id: str,
     on_progress: Callable[[str], None] | None = None,
 ) -> None:
-    """Clone each pending migration origin over its destination, then record the event."""
+    """Stage, verify, and promote each pending migration, then record its event."""
 
     blocked: tuple[ModelMigrationPlanEntry, ...] = tuple(
         entry for entry in plan.migration_entries if entry.blocks_build
@@ -39,9 +38,7 @@ def apply_model_migrations(
             code="M103",
         )
     pending: tuple[ModelMigrationPlanEntry, ...] = tuple(
-        entry
-        for entry in plan.migration_entries
-        if entry.decision.moves_data and entry.statement is not None
+        entry for entry in plan.migration_entries if entry.decision.moves_data
     )
     entry: ModelMigrationPlanEntry
     for entry in pending:
@@ -68,12 +65,17 @@ def _apply_one(
         on_progress(f"Migrating {origin_label} -> {destination_label} ({entry.decision.value})...")
     started: float = time.monotonic()
     try:
-        _ = _clone_and_record(entry=entry, adapter=adapter, connection=connection, run_id=run_id)
+        _ = _stage_promote_and_record(
+            entry=entry, adapter=adapter, connection=connection, run_id=run_id
+        )
     except Exception as error:
         raise ExecutorInputError(
             f"model migration {origin_label} -> {destination_label} failed: {error}",
             code="M106",
-            help="Re-run the build; migration decisions are re-evaluated from recorded events.",
+            help=(
+                "Re-run the build; migration decisions are re-evaluated from recorded events. "
+                "Any abandoned _sqb_archive__ stage is left for janitor to expire."
+            ),
         ) from error
     if on_progress is not None:
         on_progress(
@@ -81,7 +83,7 @@ def _apply_one(
         )
 
 
-def _clone_and_record(
+def _stage_promote_and_record(
     *, entry: ModelMigrationPlanEntry, adapter: BaseAdapter, connection: Any, run_id: str
 ) -> None:
     adapter.ensure_schema(
@@ -90,31 +92,19 @@ def _clone_and_record(
         schema=entry.destination.schema,
         statement_recorder=StatementRecorder(),
     )
-    _ = adapter.execute(connection=connection, sql=entry.statement or "")
-    origin: MigrationRelation = migration_relation_for_location(entry.origin)
-    destination: MigrationRelation = migration_relation_for_location(entry.destination)
-    write_migration_event(
+    names: MigrationArtifactNames = resolve_artifact_names(
+        adapter=adapter, connection=connection, entry=entry, now=datetime.now(tz=UTC)
+    )
+    transfer: MigrationTransfer = create_stage(
+        adapter=adapter, connection=connection, entry=entry, names=names
+    )
+    _ = verify_stage(
+        adapter=adapter, connection=connection, entry=entry, names=names, transfer=transfer
+    )
+    _ = promote_and_record(
+        adapter=adapter,
         connection=connection,
-        execute=adapter.execute,
-        event=MigrationEvent(
-            event_id=deterministic_migration_event_id(
-                run_id=run_id,
-                target_name=entry.target_name,
-                origin=origin,
-                destination=destination,
-            ),
-            target_name=entry.target_name,
-            origin_model=entry.origin_model,
-            origin=origin,
-            destination_model=entry.model_name,
-            destination=destination,
-            origin_version_hash=entry.origin_version_hash,
-            discovery=entry.discovery,
-            decision=entry.decision,
-            run_id=run_id,
-            created_at=datetime.now(tz=UTC),
-        ),
-        render_qualified_name=adapter.render_qualified_name,
-        render_framework_type=adapter.render_framework_type,
-        transient=adapter.state_tables_transient,
+        entry=entry,
+        names=names,
+        event=migration_event(entry=entry, run_id=run_id),
     )

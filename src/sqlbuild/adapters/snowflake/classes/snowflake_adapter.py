@@ -2232,13 +2232,6 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         table_kind: str = "TRANSIENT TABLE" if origin_is_transient else "TABLE"
         return (f"CREATE OR REPLACE {table_kind} {destination} CLONE {origin}",)
 
-    def render_replace_with_clone(
-        self, *, origin: str, destination: str, origin_is_transient: bool = False
-    ) -> str:
-        return self.render_durable_clone(
-            origin=origin, destination=destination, origin_is_transient=origin_is_transient
-        )[0]
-
     def render_migration_stage(
         self,
         *,
@@ -2261,6 +2254,12 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             transfer=MigrationTransfer.CLONE,
             statements=(f"CREATE {table_kind} {stage} CLONE {origin} COPY GRANTS",),
         )
+
+    def capture_dependent_view_rebinds(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        del connection, database, schema, name
+        return ()
 
     def supports_transactional_ddl(self) -> bool:
         return False

@@ -1526,12 +1526,6 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         del origin_is_transient
         return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
-    def render_replace_with_clone(
-        self, *, origin: str, destination: str, origin_is_transient: bool = False
-    ) -> str:
-        del origin_is_transient
-        return f"CREATE OR REPLACE TABLE {destination} AS SELECT * FROM {origin}"
-
     def render_migration_stage(
         self,
         *,
@@ -1545,6 +1539,12 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
             transfer=MigrationTransfer.COPY,
             statements=(f"CREATE TABLE {stage} AS SELECT * FROM {origin}",),
         )
+
+    def capture_dependent_view_rebinds(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        del connection, database, schema, name
+        return ()
 
     def supports_transactional_ddl(self) -> bool:
         return True

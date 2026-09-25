@@ -579,14 +579,6 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         del origin_is_transient
         return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
-    def render_replace_with_clone(
-        self, *, origin: str, destination: str, origin_is_transient: bool = False
-    ) -> str:
-        del origin, destination, origin_is_transient
-        raise AdapterUserError(
-            message=f"adapter '{self.adapter_name}' does not support model migrations"
-        )
-
     def render_migration_stage(
         self,
         *,
@@ -599,6 +591,36 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         return MigrationStagePlan(
             transfer=MigrationTransfer.COPY,
             statements=(f"CREATE TABLE {stage} AS SELECT * FROM {origin}",),
+        )
+
+    def capture_dependent_view_rebinds(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        del database
+        query: str = (
+            "SELECT DISTINCT dependent_namespace.nspname, dependent.relname, "
+            "pg_get_viewdef(dependent.oid) "
+            "FROM pg_depend AS dependency "
+            "JOIN pg_rewrite AS rewrite ON rewrite.oid = dependency.objid "
+            "JOIN pg_class AS dependent ON dependent.oid = rewrite.ev_class "
+            "JOIN pg_namespace AS dependent_namespace "
+            "ON dependent_namespace.oid = dependent.relnamespace "
+            "JOIN pg_class AS referenced ON referenced.oid = dependency.refobjid "
+            "JOIN pg_namespace AS referenced_namespace "
+            "ON referenced_namespace.oid = referenced.relnamespace "
+            "WHERE dependency.classid = 'pg_rewrite'::regclass "
+            "AND dependency.refclassid = 'pg_class'::regclass "
+            "AND dependent.relkind = 'v' "
+            "AND dependent.oid <> referenced.oid "
+            f"AND referenced_namespace.nspname = {_quote_sql_string(schema)} "
+            f"AND referenced.relname = {_quote_sql_string(name)} "
+            "ORDER BY 1, 2"
+        )
+        cursor: Any = connection.execute(query)
+        return tuple(
+            f"CREATE OR REPLACE VIEW {self.render_identifier(str(row[0]))}."
+            f"{self.render_identifier(str(row[1]))} AS {str(row[2]).strip().rstrip(';')}"
+            for row in cursor.fetchall()
         )
 
     def supports_transactional_ddl(self) -> bool:

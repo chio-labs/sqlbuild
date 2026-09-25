@@ -6,7 +6,8 @@ import json
 from dataclasses import replace
 from datetime import UTC, datetime
 
-from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
+from sqlbuild.adapter.contract.models import ColumnInfo, MigrationStagePlan, RelationInfo
+from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.compiler.compile.constants import MIGRATE_FORCE_CONFIG_KEY, MIGRATE_FROM_CONFIG_KEY
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -19,6 +20,7 @@ from sqlbuild.compiler.migrations.types import (
     MigrationCompatibility,
     MigrationDecision,
     MigrationDiscovery,
+    MigrationPromotion,
 )
 from sqlbuild.compiler.planner._helpers.migrations.compatibility import (
     MigrationCompatibilityResult,
@@ -61,6 +63,7 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import MaterializationType, WarningSeverity
 from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 from sqlbuild.spec.contracts.models import SnapshotsConfig
+from sqlbuild.spec.contracts.types import TableType
 
 
 def manual_migration_requests(*, scope: PlannerScope) -> tuple[ModelMigrationRequest, ...]:
@@ -423,14 +426,7 @@ def _decide(
     if not decision.moves_data or entry.blocks_build:
         return entry, None, False
     return (
-        replace(
-            entry,
-            statement=runtime.adapter.render_replace_with_clone(
-                origin=origin.qualified_name or origin.name,
-                destination=destination.qualified_name or destination.name,
-                origin_is_transient=entry.origin_is_transient,
-            ),
-        ),
+        _with_execution(runtime=runtime, model=model, entry=entry),
         _handover_fingerprint(
             model=model,
             fingerprint=origin_fingerprint,
@@ -438,6 +434,40 @@ def _decide(
         ),
         True,
     )
+
+
+def _with_execution(
+    *, runtime: PlannerRuntime, model: CompiledModel, entry: ModelMigrationPlanEntry
+) -> ModelMigrationPlanEntry:
+    """Describe how the executor will stage and promote this migration."""
+
+    stage_is_transient: bool | None = (
+        model.config.table_type.value == TableType.TRANSIENT
+        if runtime.adapter.adapter_name == BuiltinAdapter.SNOWFLAKE
+        else None
+    )
+    stage: MigrationStagePlan = runtime.adapter.render_migration_stage(
+        origin=entry.origin.qualified_name or entry.origin.name,
+        stage=entry.destination.qualified_name or entry.destination.name,
+        origin_is_transient=entry.origin_is_transient,
+        stage_is_transient=stage_is_transient,
+    )
+    return replace(
+        entry,
+        stage_is_transient=stage_is_transient,
+        transfer=stage.transfer,
+        promotion=_promotion(runtime=runtime, decision=entry.decision),
+    )
+
+
+def _promotion(*, runtime: PlannerRuntime, decision: MigrationDecision) -> MigrationPromotion:
+    if runtime.adapter.supports_transactional_ddl():
+        return MigrationPromotion.TRANSACTIONAL_RENAME
+    if decision != MigrationDecision.MIGRATE and (
+        runtime.adapter.adapter_name == BuiltinAdapter.SNOWFLAKE
+    ):
+        return MigrationPromotion.SWAP
+    return MigrationPromotion.RENAME
 
 
 def _done_handover_applies(
@@ -527,6 +557,11 @@ def _overlay_snapshot(
             database=entry.destination.database,
             schema=entry.destination.schema,
             name=entry.destination.name,
+            is_transient=(
+                origin_relation.is_transient
+                if entry.stage_is_transient is None
+                else entry.stage_is_transient
+            ),
         )
         columns[entry.model_name] = state.relation_columns(entry.origin)
         if entry.origin.qualified_name is not None and _has_cursor(
@@ -619,8 +654,8 @@ def _entry_warning(entry: ModelMigrationPlanEntry) -> PlanWarning | None:
             message=(
                 f"migration conflict: {destination} already exists with its own build history "
                 f"and has no recorded migration from {origin}; set migrate_force true to "
-                "replace it (the replaced table remains recoverable through warehouse time "
-                "travel)"
+                "replace it (the replaced table is kept under a _sqb_archive__ name until "
+                "janitor expires it)"
             ),
             code="M103",
         )

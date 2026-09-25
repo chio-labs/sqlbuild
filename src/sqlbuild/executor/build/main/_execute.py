@@ -21,7 +21,6 @@ from sqlbuild.executor.build._helpers.retention import (
     reconcile_retention_after_build,
 )
 from sqlbuild.executor.build.classes.build_scheduler import BuildScheduler
-from sqlbuild.executor.build.main._apply_model_migrations import apply_model_migrations
 from sqlbuild.executor.build.main.aggregate_result import aggregate_build_result
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
@@ -34,6 +33,7 @@ from sqlbuild.executor.build.models import (
 )
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.migrations.main._apply import apply_model_migrations
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 

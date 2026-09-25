@@ -78,3 +78,32 @@ class VirtualModeMigrationTestCase:
     description: str
     expected_exit_code: int
     expected_fragment: str
+
+
+@dataclass(frozen=True)
+class StagedReplaceTestCase:
+    description: str
+    install_failure: Callable[[pytest.MonkeyPatch], None]
+    expected_first_exit_code: int
+    expected_relations_after_failure: tuple[str, ...]
+    expected_previous_ids_after_failure: tuple[tuple[int, ...], ...]
+    expected_decision_after_failure: str
+    expected_final_previous_ids: tuple[tuple[int, ...], ...]
+    expected_final_abandoned_stages: int
+    expected_final_events: tuple[tuple[str, str, str], ...]
+
+
+@dataclass(frozen=True)
+class StagedPlanOutputTestCase:
+    description: str
+    expected_transfer: str
+    expected_promotion: str
+    expected_storage_transition: str | None
+    expected_text_fragment: str
+
+
+@dataclass(frozen=True)
+class MigrationArchiveExpiryTestCase:
+    description: str
+    expected_archives_before: int
+    expected_relations_after: tuple[str, ...]

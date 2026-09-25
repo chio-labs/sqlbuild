@@ -1774,14 +1774,6 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         del origin_is_transient
         return self.render_create_table_as(destination=destination, sql=f"SELECT * FROM {origin}")
 
-    def render_replace_with_clone(
-        self, *, origin: str, destination: str, origin_is_transient: bool = False
-    ) -> str:
-        del origin, destination, origin_is_transient
-        raise AdapterUserError(
-            message=f"adapter '{self.adapter_name}' does not support model migrations"
-        )
-
     def render_migration_stage(
         self,
         *,
@@ -1795,6 +1787,12 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             transfer=MigrationTransfer.COPY,
             statements=(f"SELECT * INTO {stage} FROM {origin}",),
         )
+
+    def capture_dependent_view_rebinds(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        del connection, database, schema, name
+        return ()
 
     def supports_transactional_ddl(self) -> bool:
         return True

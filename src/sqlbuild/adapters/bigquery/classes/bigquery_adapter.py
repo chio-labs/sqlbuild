@@ -1714,14 +1714,6 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"CLONE {self._quote_identifier_path(origin)}",
         )
 
-    def render_replace_with_clone(
-        self, *, origin: str, destination: str, origin_is_transient: bool = False
-    ) -> str:
-        del origin, destination, origin_is_transient
-        raise AdapterUserError(
-            message=f"adapter '{self.adapter_name}' does not support model migrations"
-        )
-
     def render_migration_stage(
         self,
         *,
@@ -1738,6 +1730,12 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             statements=(f"CREATE TABLE {quoted_stage} CLONE {quoted_origin}",),
             fallback_statements=(f"CREATE TABLE {quoted_stage} COPY {quoted_origin}",),
         )
+
+    def capture_dependent_view_rebinds(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        del connection, database, schema, name
+        return ()
 
     def supports_transactional_ddl(self) -> bool:
         return False

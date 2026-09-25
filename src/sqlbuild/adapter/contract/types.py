@@ -42,6 +42,12 @@ class MigrationTransfer(StrEnum):
     CLONE = "clone"
     COPY = "copy"
 
+    @property
+    def label(self) -> str:
+        """Return the human-readable plan label for this transfer."""
+
+        return "zero-copy clone" if self == MigrationTransfer.CLONE else "physical copy"
+
 
 class TablePromotionMode(StrEnum):
     IMMEDIATE = "immediate"

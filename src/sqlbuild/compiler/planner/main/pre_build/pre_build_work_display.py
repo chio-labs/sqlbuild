@@ -84,6 +84,13 @@ def _migration_lines(entry: ModelMigrationPlanEntry) -> list[str]:
     rows: list[str] = [f"  {entry.model_name}  {entry.decision.label}  {origin} -> {destination}"]
     if entry.decision.checks_compatibility:
         rows.append(f"    compatibility  {entry.compatibility.value}")
+    if entry.transfer is not None:
+        details: tuple[str | None, ...] = (
+            entry.transfer.label,
+            entry.storage_transition,
+            None if entry.promotion is None else f"promote by {entry.promotion.label}",
+        )
+        rows.append(f"    transfer  {', '.join(detail for detail in details if detail)}")
     if entry.discovery != MigrationDiscovery.MANUAL:
         rows.append(f"    discovery  {entry.discovery.value}")
     if entry.completed_at is not None:

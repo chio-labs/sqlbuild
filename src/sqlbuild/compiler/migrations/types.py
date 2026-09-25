@@ -61,6 +61,20 @@ class MigrationDiscovery(StrEnum):
     AUTOMATIC = "automatic"
 
 
+class MigrationPromotion(StrEnum):
+    """How a completed migration stage replaces or creates the destination."""
+
+    SWAP = "swap"
+    RENAME = "rename"
+    TRANSACTIONAL_RENAME = "transactional_rename"
+
+    @property
+    def label(self) -> str:
+        """Return the human-readable plan label for this promotion."""
+
+        return self.value.replace("_", " ")
+
+
 class MigrationCompatibility(StrEnum):
     """Outcome of checking the origin relation against the destination model."""
 

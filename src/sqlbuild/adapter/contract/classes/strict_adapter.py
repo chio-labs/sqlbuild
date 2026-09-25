@@ -343,13 +343,6 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def render_replace_with_clone(
-        self, *, origin: str, destination: str, origin_is_transient: bool = False
-    ) -> str:
-        """Render one statement that replaces the destination with a durable source copy."""
-        ...
-
-    @abstractmethod
     def render_migration_stage(
         self,
         *,
@@ -359,6 +352,13 @@ class StrictAdapter(
         stage_is_transient: bool | None = None,
     ) -> MigrationStagePlan:
         """Render statements that create a fresh, independent stage holding the origin's data."""
+        ...
+
+    @abstractmethod
+    def capture_dependent_view_rebinds(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        """Capture statements that re-point identity-bound dependent views at this table name."""
         ...
 
     @abstractmethod

@@ -11,6 +11,7 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RetentionRequest
+from sqlbuild.adapter.contract.types import MigrationTransfer
 from sqlbuild.compiler.auditing.models import MeasurementThresholds
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
@@ -34,6 +35,7 @@ from sqlbuild.compiler.migrations.types import (
     MigrationCompatibility,
     MigrationDecision,
     MigrationDiscovery,
+    MigrationPromotion,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import (
@@ -977,10 +979,21 @@ class ModelMigrationPlanEntry:
     target_name: str | None
     origin_version_hash: str = ""
     origin_is_transient: bool = False
-    statement: str | None = None
+    stage_is_transient: bool | None = None
+    transfer: MigrationTransfer | None = None
+    promotion: MigrationPromotion | None = None
     completed_at: datetime | None = None
     compatibility_findings: tuple[str, ...] = ()
     message: str | None = None
+
+    @property
+    def storage_transition(self) -> str | None:
+        """Return the Snowflake table-type transition label, when both types are known."""
+
+        if self.stage_is_transient is None:
+            return None
+        labels: tuple[str, str] = ("permanent", "transient")
+        return f"{labels[self.origin_is_transient]} -> {labels[self.stage_is_transient]}"
 
     @property
     def blocks_build(self) -> bool:
