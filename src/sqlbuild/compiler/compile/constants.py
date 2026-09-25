@@ -56,7 +56,9 @@ LEFT_JOIN_SIDE: str = "LEFT"
 RIGHT_JOIN_SIDE: str = "RIGHT"
 FULL_JOIN_SIDE: str = "FULL"
 
-POLYGLOT_UNION_EXPRESSION_NAME: str = "Union"
+POLYGLOT_SET_OPERATION_EXPRESSION_NAMES: frozenset[str] = frozenset(
+    {"Union", "Intersect", "Except"}
+)
 POLYGLOT_SELECT_EXPRESSION_NAME: str = "Select"
 POLYGLOT_COLUMN_EXPRESSION_NAME: str = "Column"
 POLYGLOT_WRAPPER_EXPRESSION_NAMES: frozenset[str] = frozenset({"Subquery", "Paren"})

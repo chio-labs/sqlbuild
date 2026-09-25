@@ -7,20 +7,18 @@ from typing import Any
 from sqlbuild.compiler.compile.constants import (
     POLYGLOT_COLUMN_EXPRESSION_NAME,
     POLYGLOT_SELECT_EXPRESSION_NAME,
-    POLYGLOT_UNION_EXPRESSION_NAME,
+    POLYGLOT_SET_OPERATION_EXPRESSION_NAMES,
     POLYGLOT_WRAPPER_EXPRESSION_NAMES,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.sql_analysis.main._contains_top_level_keyword import (
-    contains_top_level_keyword,
+from sqlbuild.compiler.sql_analysis.main._split_set_operation_branches import (
+    split_set_operation_branches,
 )
-from sqlbuild.compiler.sql_analysis.main._split_union_branches import split_union_branches
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 
 _POLYGLOT_VALUES_EXPRESSION_NAME: str = "Values"
 _POLYGLOT_VALUES_SET_ALIAS: str = "_values"
 _SCAN_CONTEXT: str = "SQL test"
-_UNSUPPORTED_SET_OPERATION_KEYWORDS: tuple[str, ...] = ("INTERSECT", "EXCEPT")
 
 
 def extract_expected_branch_column_names_with_sql_analysis(
@@ -42,16 +40,9 @@ def extract_expected_branch_column_names_with_sql_analysis(
 def _extract_unparsed_branch_names(
     *, sql: str, polyglot_module: Any, file_label: str, label: str
 ) -> tuple[tuple[str, ...], ...] | None:
-    """Parse UNION branches separately, rejecting set operations the parsed path rejects."""
+    """Parse each top-level set-operation branch separately when the whole query cannot parse."""
 
-    if contains_top_level_keyword(
-        sql=sql, keywords=_UNSUPPORTED_SET_OPERATION_KEYWORDS, context=_SCAN_CONTEXT
-    ):
-        raise CompileInputError(
-            f"SQL test '{file_label}' must define each {label} set-operation branch as a "
-            "SELECT query"
-        )
-    branches: tuple[str, ...] = split_union_branches(sql=sql, context=_SCAN_CONTEXT)
+    branches: tuple[str, ...] = split_set_operation_branches(sql=sql, context=_SCAN_CONTEXT)
     if len(branches) <= 1:
         return None
     try:
@@ -70,7 +61,7 @@ def _extract_branch_names(
     *, expression: Any, file_label: str, label: str
 ) -> tuple[tuple[str, ...], ...]:
     expression = _unwrap_expression(expression=expression)
-    if expression.__class__.__name__ == POLYGLOT_UNION_EXPRESSION_NAME:
+    if expression.__class__.__name__ in POLYGLOT_SET_OPERATION_EXPRESSION_NAMES:
         left_expression: Any = expression.args["left"]
         right_expression: Any = expression.args["right"]
         return (

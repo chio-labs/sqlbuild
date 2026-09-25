@@ -176,3 +176,13 @@ class CursorWindowE2ETestCase:
     expected_exit_code: int
     expected_output_fragments: tuple[str, ...]
     expected_compiled_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class SetOperationExpectedE2ETestCase:
+    """SQL tests whose expected CTEs combine branches with set operations."""
+
+    description: str
+    test_files: dict[str, str]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]

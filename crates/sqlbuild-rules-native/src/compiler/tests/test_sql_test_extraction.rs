@@ -1,5 +1,5 @@
 use crate::compiler::_helpers::sql_tests::extraction::{
-    find_top_level_keyword, split_top_level, split_unions,
+    find_top_level_keyword, split_set_operations, split_top_level,
 };
 use crate::compiler::tests::helpers::{
     dependent_assertion_returns_authoritative_error,
@@ -7,6 +7,7 @@ use crate::compiler::tests::helpers::{
     expected_projection_errors_name_the_expected_cte,
     mixed_expanded_tests_preserve_order_and_payloads,
     quoted_ctes_and_implicit_alias_preserve_payload,
+    set_operation_expected_ctes_validate_every_branch,
 };
 use crate::compiler::tests::test_types::{SqlTestExtractionTestCase, TopLevelScanTestCase};
 
@@ -38,6 +39,11 @@ fn given_sql_test_cases_when_extracting_native_payloads_then_expected_behavior_h
             run: expected_projection_errors_name_the_expected_cte,
             expected_success: true,
         },
+        SqlTestExtractionTestCase {
+            description: "set-operation expected CTEs validate every branch",
+            run: set_operation_expected_ctes_validate_every_branch,
+            expected_success: true,
+        },
     ];
 
     for test_case in test_cases {
@@ -51,7 +57,8 @@ fn given_sql_test_cases_when_extracting_native_payloads_then_expected_behavior_h
 }
 
 #[test]
-fn given_expected_cte_sql_when_scanning_top_level_then_unions_commas_and_keywords_are_pinned() {
+fn given_expected_cte_sql_when_scanning_top_level_then_set_operations_commas_and_keywords_are_pinned()
+ {
     let unclosed_quote = "SQL test contains an unclosed quoted string".to_owned();
     let unclosed_comment = "SQL test contains an unclosed block comment".to_owned();
     let test_cases = [
@@ -112,6 +119,34 @@ fn given_expected_cte_sql_when_scanning_top_level_then_unions_commas_and_keyword
             expected_from: Ok(Some(22)),
         },
         TopLevelScanTestCase {
+            description: "intersect and except quantifiers mixed with union",
+            sql: "SELECT 1 AS a INTERSECT ALL SELECT 2 AS a EXCEPT DISTINCT SELECT 3 AS a UNION SELECT 4 AS a EXCEPT SELECT 5 AS a",
+            expected_unions: Ok(vec![
+                "SELECT 1 AS a",
+                "SELECT 2 AS a",
+                "SELECT 3 AS a",
+                "SELECT 4 AS a",
+                "SELECT 5 AS a",
+            ]),
+            expected_commas: Ok(vec![
+                "SELECT 1 AS a INTERSECT ALL SELECT 2 AS a EXCEPT DISTINCT SELECT 3 AS a UNION SELECT 4 AS a EXCEPT SELECT 5 AS a",
+            ]),
+            expected_from: Ok(None),
+        },
+        TopLevelScanTestCase {
+            description: "star except modifier and identifier boundaries are not set operations",
+            sql: "SELECT t.* EXCEPT (status), exceptional, intersection FROM t",
+            expected_unions: Ok(vec![
+                "SELECT t.* EXCEPT (status), exceptional, intersection FROM t",
+            ]),
+            expected_commas: Ok(vec![
+                "SELECT t.* EXCEPT (status)",
+                "exceptional",
+                "intersection FROM t",
+            ]),
+            expected_from: Ok(Some(54)),
+        },
+        TopLevelScanTestCase {
             description: "unclosed quote",
             sql: "SELECT 'a, b FROM t",
             expected_unions: Err(unclosed_quote.clone()),
@@ -128,7 +163,7 @@ fn given_expected_cte_sql_when_scanning_top_level_then_unions_commas_and_keyword
     ];
     for test_case in test_cases {
         assert_eq!(
-            split_unions(test_case.sql),
+            split_set_operations(test_case.sql),
             test_case.expected_unions,
             "unions: {}",
             test_case.description

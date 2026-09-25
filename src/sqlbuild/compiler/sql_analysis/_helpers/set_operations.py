@@ -9,32 +9,43 @@ from sqlbuild.compiler.sql_analysis._helpers.scanning import (
     skip_line_comment_impl,
 )
 
-_UNION_KEYWORD: str = "UNION"
-_UNION_ALL_KEYWORD: str = "ALL"
-_UNION_DISTINCT_KEYWORD: str = "DISTINCT"
+_SET_OPERATOR_KEYWORDS: tuple[str, ...] = ("UNION", "INTERSECT")
+_EXCEPT_KEYWORD: str = "EXCEPT"
+_ALL_KEYWORD: str = "ALL"
+_DISTINCT_KEYWORD: str = "DISTINCT"
+_STAR_CHARACTER: str = "*"
 
 
-def split_union_branches_impl(*, sql: str, context: str) -> tuple[str, ...]:
-    """Split SQL on top-level `UNION [ALL | DISTINCT]`, ignoring quotes and comments."""
+def split_set_operation_branches_impl(*, sql: str, context: str) -> tuple[str, ...]:
+    """Split SQL on top-level `UNION`, `INTERSECT` and `EXCEPT` with optional quantifiers."""
 
     branches: list[str] = []
     branch_start: int = 0
     resume: int = 0
+    previous_code: str | None = None
+    previous_depth: int = 0
     index: int
     depth: int
     for index, depth in iter_code_positions_impl(sql=sql, context=context):
-        if index < resume or depth != 0:
-            continue
-        union_end: int | None = _keyword_end(sql=sql, start=index, keyword=_UNION_KEYWORD)
-        if union_end is None:
+        if depth != previous_depth:
+            previous_code = None
+        previous_depth = depth
+        operator_end: int | None = (
+            None
+            if index < resume or depth != 0
+            else _set_operator_end(sql=sql, start=index, previous_code=previous_code)
+        )
+        if not sql[index].isspace():
+            previous_code = sql[index]
+        if operator_end is None:
             continue
         branch_sql: str = sql[branch_start:index].strip()
         if branch_sql:
             branches.append(branch_sql)
-        resume = _skip_ignorable(sql=sql, start=union_end, context=context)
+        resume = _skip_ignorable(sql=sql, start=operator_end, context=context)
         quantifier_end: int | None = _keyword_end(
-            sql=sql, start=resume, keyword=_UNION_ALL_KEYWORD
-        ) or _keyword_end(sql=sql, start=resume, keyword=_UNION_DISTINCT_KEYWORD)
+            sql=sql, start=resume, keyword=_ALL_KEYWORD
+        ) or _keyword_end(sql=sql, start=resume, keyword=_DISTINCT_KEYWORD)
         if quantifier_end is not None:
             resume = _skip_ignorable(sql=sql, start=quantifier_end, context=context)
         branch_start = resume
@@ -44,19 +55,17 @@ def split_union_branches_impl(*, sql: str, context: str) -> tuple[str, ...]:
     return tuple(branches)
 
 
-def contains_top_level_keyword_impl(*, sql: str, keywords: tuple[str, ...], context: str) -> bool:
-    """Return whether any keyword appears as top-level code outside quotes and comments."""
+def _set_operator_end(*, sql: str, start: int, previous_code: str | None) -> int | None:
+    """Return a set operator's end; `* EXCEPT (...)` star modifiers are not operators."""
 
-    index: int
-    depth: int
-    for index, depth in iter_code_positions_impl(sql=sql, context=context):
-        if depth != 0:
-            continue
-        keyword: str
-        for keyword in keywords:
-            if _keyword_end(sql=sql, start=index, keyword=keyword) is not None:
-                return True
-    return False
+    keyword: str
+    for keyword in _SET_OPERATOR_KEYWORDS:
+        keyword_end: int | None = _keyword_end(sql=sql, start=start, keyword=keyword)
+        if keyword_end is not None:
+            return keyword_end
+    if previous_code == _STAR_CHARACTER:
+        return None
+    return _keyword_end(sql=sql, start=start, keyword=_EXCEPT_KEYWORD)
 
 
 def _keyword_end(*, sql: str, start: int, keyword: str) -> int | None:

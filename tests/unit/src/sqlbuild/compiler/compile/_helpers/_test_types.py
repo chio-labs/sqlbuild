@@ -910,3 +910,25 @@ class ExpectedProjectionScanTestCase:
     expected_commas: tuple[str, ...]
     expected_alias: str | None
     expected_contains_select_star: bool
+
+
+@dataclass(frozen=True)
+class SetOperationExpectedKind:
+    """One SQL-test kind whose expected CTE accepts set operations."""
+
+    description: str
+    mode: SqlTestMode
+    support_ctes: tuple[tuple[str, str], ...]
+    expected_cte_name: str
+    payload_type: str
+
+
+@dataclass(frozen=True)
+class SetOperationExpectedTestCase:
+    """One expected-CTE set operation in one SQL-test kind."""
+
+    description: str
+    kind: SetOperationExpectedKind
+    sql: str
+    expected_payload_type: str = ""
+    expected_error_template: str = ""
