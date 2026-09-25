@@ -2748,12 +2748,6 @@ def _cursor_bound(*, values: list[str], cursor_type: str, maximum: bool) -> str:
     )
 
 
-def _cursor_result_string(value: object) -> str:
-    if isinstance(value, datetime | date):
-        return value.isoformat()
-    return str(value)
-
-
 def _reported_rows_affected(*, total_rows: int, row_count_known: bool) -> int | None:
     """Preserve a known zero row count while keeping unavailable counts as None."""
 

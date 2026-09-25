@@ -69,10 +69,6 @@ class ReadSidePythonExecutionTracker:
     def results(self) -> tuple[PythonNodeExecutionResult, ...]:
         return tuple(self._results_by_name.values())
 
-    @property
-    def completed_python_names(self) -> frozenset[str]:
-        return frozenset(self._completed_python_names)
-
     def finalize_unrun_python_nodes(self) -> tuple[PythonNodeExecutionResult, ...]:
         """Record selected Python nodes that could not run after SQL scheduling finished."""
 
