@@ -16,7 +16,58 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
     NeutralizeInterpolationTestCase,
     RestoreFailureTestCase,
     RestoreInterpolationTestCase,
+    UnicodePreparationTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        UnicodePreparationTestCase(label, label, ('__ref("orders")',))
+        for label in ("ASCII", "é", "€", "😀", "é € 😀")
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unicode_before_intrinsics_when_preparing_then_lint_preserves_semantic_calls(
+    test_case: UnicodePreparationTestCase,
+) -> None:
+    sql: str = (
+        f"SELECT '{test_case.prefix}' AS label, __cursor_start(), __cursor_end() "
+        'FROM __EMPTY_FIXTURE(); SELECT * FROM __ref("orders")'
+    )
+    lint_sql, lint_sites = neutralize_interpolation(body=sql, dialect="duckdb")
+    format_sql, format_sites = neutralize_interpolation(
+        body=sql, dialect="duckdb", for_formatting=True
+    )
+    assert tuple(site.original_text for site in lint_sites) == test_case.expected_lint_calls
+    assert "__EMPTY_FIXTURE()" in lint_sql
+    assert "__cursor_start()" in lint_sql
+    assert "__cursor_end()" in lint_sql
+    assert lint_sites[0].original_start == sql.index('__ref("orders")')
+    assert (
+        lint_sql[lint_sites[0].neutralized_start : lint_sites[0].neutralized_end]
+        == lint_sites[0].sentinel
+    )
+    assert len(format_sites) == 4
+    assert restore_interpolation(fixed=format_sql, sites=format_sites) == sql
+    assert all(
+        sql[site.original_start : site.original_end] == site.original_text for site in format_sites
+    )
+    ascii_prefix: str = "a" * len(test_case.prefix)
+    ascii_sql: str = sql.replace(f"'{test_case.prefix}'", f"'{ascii_prefix}'", 1)
+    native: tuple[str, list[tuple[str, int, int, int, int, str]], list[str]] | None = (
+        _native.prepare_lint_sql(
+            {
+                "expanded": ascii_sql,
+                "before_expansion": ascii_sql,
+                "prior_sites": [],
+                "dialect": "duckdb",
+            }
+        )
+    )
+    assert native is not None
+    assert native[0].replace(f"'{ascii_prefix}'", f"'{test_case.prefix}'", 1) == lint_sql
+    assert tuple(InterpolationSite(*site) for site in native[1]) == lint_sites
 
 
 @pytest.mark.parametrize(
@@ -130,6 +181,18 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
             description="ordinary double-underscore function remains generic SQL",
             body="SELECT __custom(value) FROM items",
             expected_neutralized="SELECT __custom(value) FROM items",
+            expected_original_texts=(),
+        ),
+        NeutralizeInterpolationTestCase(
+            description="lint retains semantic intrinsics in either case",
+            body="SELECT __cursor_start(), __cursor_end() FROM __empty_fixture(); SELECT * FROM __EMPTY_FIXTURE()",
+            expected_neutralized="SELECT __cursor_start(), __cursor_end() FROM __empty_fixture(); SELECT * FROM __EMPTY_FIXTURE()",
+            expected_original_texts=(),
+        ),
+        NeutralizeInterpolationTestCase(
+            description="lint matches native reference spelling policy",
+            body='SELECT * FROM __REF("orders"); SELECT * FROM __ref ("orders")',
+            expected_neutralized='SELECT * FROM __REF("orders"); SELECT * FROM __ref ("orders")',
             expected_original_texts=(),
         ),
         NeutralizeInterpolationTestCase(

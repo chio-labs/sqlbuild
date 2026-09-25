@@ -30,10 +30,7 @@ from sqlbuild.lint.constants import (
 from sqlbuild.lint.exceptions import InterpolationRestorationError
 from sqlbuild.lint.models import InterpolationSite
 
-_SQLBUILD_FUNCTION_NAMES: tuple[str, ...] = (
-    "__cursor_start",
-    "__cursor_end",
-    "__empty_fixture",
+_SQLBUILD_REFERENCE_FUNCTION_NAMES: tuple[str, ...] = (
     "__dbt_ref",
     "__table_fn",
     "__source",
@@ -41,14 +38,17 @@ _SQLBUILD_FUNCTION_NAMES: tuple[str, ...] = (
     "__udf",
     "__ref",
 )
+_SQLBUILD_FUNCTION_NAMES: tuple[str, ...] = (
+    "__cursor_start",
+    "__cursor_end",
+    "__empty_fixture",
+    *_SQLBUILD_REFERENCE_FUNCTION_NAMES,
+)
 _AUDIT_PARAMETER_SENTINEL_TEMPLATE: str = "__sqlbuild_audit_parameter_{index}__"
 _CONTEXT_SENTINEL_TEMPLATE: str = "__sqlbuild_context_parameter_{index}__"
 _LINE_COMMENT_START: str = "--"
 _BLOCK_COMMENT_START: str = "/*"
 _BLOCK_COMMENT_END: str = "*/"
-_SQLBUILD_FUNCTION_PATTERN: str = "|".join(
-    re.escape(name) for name in sorted(_SQLBUILD_FUNCTION_NAMES)
-)
 _NON_CODE_SCAN_PATTERN: str = (
     r"--[^\n]*(?:\n|\Z)"
     r"|/\*[\s\S]*?(?:\*/|\Z)"
@@ -56,13 +56,23 @@ _NON_CODE_SCAN_PATTERN: str = (
     r'|"(?:\\.|""|[^"\\])*(?:"|\Z)'
 )
 _BACKTICK_SCAN_PATTERN: str = r"|`(?:``|[^`])*(?:`|\Z)"
-_SITE_SCAN_PATTERN: str = rf"|(?P<site>@@|\$\{{|@|(?:{_SQLBUILD_FUNCTION_PATTERN})\s*\()"
-_INTERPOLATION_SCAN_PATTERN: re.Pattern[str] = re.compile(
-    _NON_CODE_SCAN_PATTERN + _SITE_SCAN_PATTERN, re.IGNORECASE
-)
-_BACKTICK_INTERPOLATION_SCAN_PATTERN: re.Pattern[str] = re.compile(
-    _NON_CODE_SCAN_PATTERN + _BACKTICK_SCAN_PATTERN + _SITE_SCAN_PATTERN, re.IGNORECASE
-)
+
+
+@cache
+def _interpolation_scan_pattern(
+    *, backtick_identifiers: bool, for_formatting: bool
+) -> re.Pattern[str]:
+    """Keep lint fallback lexical policy identical to the native ASCII fast path."""
+
+    names: tuple[str, ...] = (
+        _SQLBUILD_FUNCTION_NAMES if for_formatting else _SQLBUILD_REFERENCE_FUNCTION_NAMES
+    )
+    functions: str = "|".join(re.escape(name) for name in sorted(names))
+    whitespace: str = r"\s*" if for_formatting else ""
+    sites: str = rf"|(?P<site>@@|\$\{{|@|(?:{functions}){whitespace}\()"
+    backticks: str = _BACKTICK_SCAN_PATTERN if backtick_identifiers else ""
+    flags: re.RegexFlag = re.IGNORECASE if for_formatting else re.NOFLAG
+    return re.compile(_NON_CODE_SCAN_PATTERN + backticks + sites, flags)
 
 
 @cache
@@ -142,17 +152,15 @@ def neutralize_generic_audit_parameters(*, body: str) -> tuple[str, tuple[Interp
 
 
 def neutralize_interpolation(
-    *, body: str, dialect: str
+    *, body: str, dialect: str, for_formatting: bool = False
 ) -> tuple[str, tuple[InterpolationSite, ...]]:
-    """Replace every interpolation site with a unique sentinel identifier."""
+    """Neutralize references for lint, or protect every intrinsic spelling for formatting."""
 
     if not _contains_interpolation_candidate(body=body):
         return body, ()
     backtick_identifiers: bool = _backtick_identifiers(dialect)
-    scan_pattern: re.Pattern[str] = (
-        _BACKTICK_INTERPOLATION_SCAN_PATTERN
-        if backtick_identifiers
-        else _INTERPOLATION_SCAN_PATTERN
+    scan_pattern: re.Pattern[str] = _interpolation_scan_pattern(
+        backtick_identifiers=backtick_identifiers, for_formatting=for_formatting
     )
     sites: list[InterpolationSite] = []
     pieces: list[str] = []

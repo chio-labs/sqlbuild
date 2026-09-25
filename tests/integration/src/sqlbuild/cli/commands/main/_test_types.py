@@ -697,3 +697,13 @@ class FormatterSyntaxTestCase:
     sql: str
     expected_fragments: tuple[str, ...]
     macro_source: str = ""
+
+
+@dataclass(frozen=True)
+class UnicodeRuleLocationTestCase:
+    """SQL rule diagnostics expressed in authored Unicode character coordinates."""
+
+    description: str
+    rule_code: str
+    sql: str
+    expected_anchors: tuple[str, ...]
