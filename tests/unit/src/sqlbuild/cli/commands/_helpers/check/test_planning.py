@@ -116,7 +116,6 @@ def test_given_direct_check_sql_refs_when_preflighting_then_refs_are_validated_w
         lifecycle_plan=PythonSqlRunLifecyclePlan(
             ingress_python_node_names=frozenset(),
             ingress_loader_names=frozenset(),
-            read_side_sql_keys=frozenset(),
             read_side_python_node_names=frozenset(),
         ),
         relation_targets={model_ref: "analytics.orders", source_ref: "raw.orders"},
@@ -198,7 +197,6 @@ def test_given_missing_direct_check_sql_ref_when_preflighting_then_existing_rela
             lifecycle_plan=PythonSqlRunLifecyclePlan(
                 ingress_python_node_names=frozenset(),
                 ingress_loader_names=frozenset(),
-                read_side_sql_keys=frozenset(),
                 read_side_python_node_names=frozenset(),
             ),
             relation_targets={ref: "analytics.orders"},

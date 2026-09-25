@@ -41,7 +41,6 @@ from tests.unit.src.sqlbuild.compiler.python_nodes._helpers.helpers import (
             expected_ingress_python_names=frozenset({"prepare_orders", "load_events"}),
             expected_ingress_loader_names=frozenset({"load_events"}),
             expected_read_side_python_names=frozenset(),
-            expected_read_side_sql_names=frozenset({"raw_orders"}),
         ),
         PythonSqlRunLifecycleTestCase(
             description="classifies read only asset into read-side Python",
@@ -55,7 +54,6 @@ from tests.unit.src.sqlbuild.compiler.python_nodes._helpers.helpers import (
             expected_ingress_python_names=frozenset(),
             expected_ingress_loader_names=frozenset(),
             expected_read_side_python_names=frozenset({"export_orders"}),
-            expected_read_side_sql_names=frozenset({"orders"}),
         ),
         PythonSqlRunLifecycleTestCase(
             description="classifies intermediate loader dependency into pre sql ingress",
@@ -73,7 +71,6 @@ from tests.unit.src.sqlbuild.compiler.python_nodes._helpers.helpers import (
             expected_ingress_python_names=frozenset({"fetch_pages"}),
             expected_ingress_loader_names=frozenset({"fetch_pages"}),
             expected_read_side_python_names=frozenset({"export_orders"}),
-            expected_read_side_sql_names=frozenset({"fetch_pages"}),
         ),
         PythonSqlRunLifecycleTestCase(
             description="excludes external loader from ingress so it runs pre-connection",
@@ -85,7 +82,6 @@ from tests.unit.src.sqlbuild.compiler.python_nodes._helpers.helpers import (
             expected_ingress_python_names=frozenset(),
             expected_ingress_loader_names=frozenset(),
             expected_read_side_python_names=frozenset(),
-            expected_read_side_sql_names=frozenset(),
         ),
     ],
     ids=lambda case: case.description,
@@ -103,6 +99,3 @@ def test_given_run_selection_when_building_lifecycle_plan_then_classifies_phases
     assert result.ingress_python_node_names == test_case.expected_ingress_python_names
     assert result.ingress_loader_names == test_case.expected_ingress_loader_names
     assert result.read_side_python_node_names == test_case.expected_read_side_python_names
-    assert frozenset(key.name for key in result.read_side_sql_keys) == (
-        test_case.expected_read_side_sql_names
-    )

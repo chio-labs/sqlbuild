@@ -123,8 +123,6 @@ def build_python_node_dependency_edges(
                 PythonNodeDependencyEdge(
                     upstream_name=upstream_node.name,
                     downstream_name=node.name,
-                    upstream_function=upstream_node.function,
-                    downstream_function=node.function,
                 )
             )
     return tuple(edges)

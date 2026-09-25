@@ -47,7 +47,6 @@ def build_python_sql_run_lifecycle_plan(
     return PythonSqlRunLifecyclePlan(
         ingress_python_node_names=ingress_names,
         ingress_loader_names=selected_loader_names,
-        read_side_sql_keys=selection.sql_keys,
         read_side_python_node_names=read_side_names,
     )
 

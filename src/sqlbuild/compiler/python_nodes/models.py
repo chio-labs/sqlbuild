@@ -9,7 +9,7 @@ from pathlib import Path
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
-from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonRunPhase
+from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.python_nodes.models import ColumnLineageRef, RetryPolicy, SqlResourceRef
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.spec.contracts.models import SourceColumnEntry
@@ -81,8 +81,6 @@ class PythonNodeDependencyEdge:
 
     upstream_name: str
     downstream_name: str
-    upstream_function: Callable[..., object]
-    downstream_function: Callable[..., object]
 
 
 @dataclass(frozen=True)
@@ -138,38 +136,7 @@ class PythonSqlRunLifecyclePlan:
 
     ingress_python_node_names: frozenset[str]
     ingress_loader_names: frozenset[str]
-    read_side_sql_keys: frozenset[CompiledObjectKey]
     read_side_python_node_names: frozenset[str]
-
-    def python_phase(self, node_name: str) -> PythonRunPhase | None:
-        """Return the assigned lifecycle phase for a Python node name."""
-
-        if node_name in self.ingress_python_node_names:
-            return PythonRunPhase.PRE_SQL_INGRESS
-        if node_name in self.read_side_python_node_names:
-            return PythonRunPhase.READ_SIDE
-        return None
-
-
-@dataclass(frozen=True)
-class DiscoveredPythonTaskNode:
-    """Placeholder for future task-specific discovered node metadata."""
-
-    node: DiscoveredPythonNode
-
-
-@dataclass(frozen=True)
-class DiscoveredPythonAssetNode:
-    """Placeholder for future asset-specific discovered node metadata."""
-
-    node: DiscoveredPythonNode
-
-
-@dataclass(frozen=True)
-class DiscoveredPythonCheckNode:
-    """Placeholder for future check-specific discovered node metadata."""
-
-    node: DiscoveredPythonNode
 
 
 @dataclass(frozen=True)
@@ -190,8 +157,6 @@ class PythonNodeIdentity:
 
     node_type: str
     node_name: str
-    object_module: str
-    object_qualname: str
     source_path: str
     source_hash: str
     definition_hash: str
