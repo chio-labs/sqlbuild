@@ -62,6 +62,7 @@ class ExpressionInferenceProfile:
     sql_analysis_dialect: str | None = None
     function_nullability_rules: Mapping[str, FunctionNullabilityRule] = field(default_factory=dict)
     function_return_types: Mapping[str, str] = field(default_factory=dict)
+    quoted_identifiers_ignore_case: bool = False
 
     def function_nullability_rule(self, function_name: str) -> FunctionNullabilityRule | None:
         """Return the adapter rule for a function name, if one is registered."""

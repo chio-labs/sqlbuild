@@ -47,8 +47,8 @@ _SELECT_KIND: str = "select"
 _FUNCTION_KIND: str = "function"
 _CURSOR_FAMILIES: dict[str, frozenset[TypeFamily]] = {
     "integer": frozenset({TypeFamily.INTEGER, TypeFamily.DECIMAL}),
-    "timestamp": frozenset({TypeFamily.TIMESTAMP, TypeFamily.DATETIME}),
-    "date": frozenset({TypeFamily.DATE}),
+    "timestamp": frozenset({TypeFamily.TIMESTAMP, TypeFamily.DATETIME, TypeFamily.DATE}),
+    "date": frozenset({TypeFamily.TIMESTAMP, TypeFamily.DATETIME, TypeFamily.DATE}),
 }
 
 
@@ -194,6 +194,7 @@ def _audit_errors(
                             dialect=profile.sql_analysis_dialect,
                             schema={"output": shape},
                             known_functions=known_function_names(project.functions),
+                            quoted_identifiers_ignore_case=profile.quoted_identifiers_ignore_case,
                             known_types=known_declared_types(
                                 functions=project.functions, column_types=shapes
                             ),

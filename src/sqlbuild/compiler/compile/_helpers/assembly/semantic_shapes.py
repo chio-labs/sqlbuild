@@ -23,6 +23,30 @@ from sqlbuild.compiler.sql_analysis.constants import NATIVE_DIALECT_ALIASES
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
+def build_declared_column_types(inputs: CompileProjectInputs) -> dict[str, dict[str, str]]:
+    """Collect declared type hints independently of closed-schema authority."""
+    facts: dict[str, dict[str, str]] = {}
+    for model_input in inputs.model_inputs:
+        if model_input.schema_entry is not None:
+            facts[model_input.schema_entry.name] = {
+                column.name: column.type or "UNKNOWN" for column in model_input.schema_entry.columns
+            }
+    for seed_input in inputs.seed_inputs:
+        facts[seed_input.schema_entry.name] = {
+            column.name: column.type or "UNKNOWN" for column in seed_input.schema_entry.columns
+        }
+    for source_input in inputs.source_inputs:
+        facts[source_input.source_entry.name] = {
+            column.name: column.type or "UNKNOWN" for column in source_input.source_entry.columns
+        }
+    for function_input in inputs.sql_function_inputs:
+        if function_input.return_columns:
+            facts[table_function_analysis_name(function_input.name)] = {
+                column.name: column.type for column in function_input.return_columns
+            }
+    return facts
+
+
 def build_complete_binding_schemas(inputs: CompileProjectInputs) -> dict[str, dict[str, str]]:
     """Collect authoritative declared interfaces before SQL inference."""
     schemas: dict[str, dict[str, str]] = {}
@@ -96,7 +120,10 @@ def semantic_shapes(
                 and not model.schema_entry.dynamic_columns
             ):
                 shapes[model.name] = {
-                    column.name: column.type or "UNKNOWN" for column in model.schema_entry.columns
+                    column.name: "UNKNOWN"
+                    if column.name in model.unchecked_output_columns
+                    else column.type or "UNKNOWN"
+                    for column in model.schema_entry.columns
                 }
             elif model.inferred_columns and (
                 not model.fast_lineage_has_star

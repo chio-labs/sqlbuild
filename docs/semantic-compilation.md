@@ -105,6 +105,33 @@ independent errors on other columns and other inputs remain errors. Recovery doe
 whole dependent query or make its unchecked uses valid. Affected models remain in
 `semantic_checks_partial`, including on warm/cache-hit runs.
 
+Located binding and type errors also make the affected projection's type unknown. That uncertainty
+propagates through column lineage. Failed dependants are checked again with only those input types
+unknown; an independent error on another column or input remains visible. Root notes count unchecked
+downstream output uses, including transitive uses. Contract type checks do not emit a secondary
+unknown-type warning for those same poisoned outputs. If native evidence cannot locate the failing
+projection, recovery retains the diagnostic rather than opening the entire input.
+
+Temporal cursor metadata accepts DATE, DATETIME, and TIMESTAMP families interchangeably, including
+Snowflake timestamp variants. A timestamp cursor on a string, numeric, or Boolean column still
+produces B301.
+
+Snowflake binding honours `QUOTED_IDENTIFIERS_IGNORE_CASE = true` from the effective target's
+connection `session_parameters`, for both offline declared schemas and warehouse-backed rebinding.
+False or absent settings preserve the dialect's existing case rules. For example:
+
+```toml
+[targets.analytics]
+schema = "preserve"
+
+[targets.analytics.connection]
+session_parameters = { QUOTED_IDENTIFIERS_IGNORE_CASE = true }
+```
+
+The setting participates in the analysis-cache identity. Identifier folding is token-based and
+does not alter string literals, comments, or authored SQL. Diagnostic offset mapping is lazy and
+uses a bounded cache of token alignments, shared by all diagnostics on the same normalized query.
+
 The single human partial-check notice groups model names by reason, gives the relevant repair or
 rerun command, and truncates long lists. `sqb compile --json` contains the full selected-model
 reason map. Unknown output types and unresolved stars are reported as explicitly as open sources;

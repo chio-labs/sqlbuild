@@ -332,7 +332,7 @@ def _type_diagnostics(
         model.schema_entry.type_enforcement
     )
     if inferred_column.type is None:
-        if not type_enforcement:
+        if not type_enforcement or inferred_column.name in model.unchecked_output_columns:
             return ()
         return (
             CompilerDiagnostic(

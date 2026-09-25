@@ -35,3 +35,4 @@ class SqlSchemaValidationRequest:
     schema: Mapping[str, Mapping[str, str]]
     known_functions: tuple[str, ...] = ()
     known_types: tuple[str, ...] = ()
+    quoted_identifiers_ignore_case: bool = False

@@ -36,6 +36,17 @@ class ColumnSuggestionCase:
 
 
 @dataclass(frozen=True)
+class SemanticTriageCase:
+    description: str
+    column_type: str = "DATE"
+    cursor_type: str = "timestamp"
+    setting: str = ""
+    expected_codes: tuple[str, ...] = ()
+    independent_sql: str = ""
+    root_contract: str = ""
+
+
+@dataclass(frozen=True)
 class RulesPipelineIntegrationTestCase:
     """One configured Rules failure in the shared planning compiler."""
 
