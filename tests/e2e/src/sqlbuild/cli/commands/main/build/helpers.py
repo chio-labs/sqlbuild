@@ -862,3 +862,29 @@ def physical_orders_relation(*, state_path: Path) -> tuple[str, str]:
         ),
     )[0]
     return str(schema_name), str(relation_name)
+
+
+def dropped_incremental_project_files(*, incremental_strategy: str) -> dict[str, str]:
+    """Return a DuckDB project with one timestamp-cursor incremental order model."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "dropped_orders"\nadapter = "duckdb"\n\n'
+            '[connection]\ndatabase = "dropped_orders.duckdb"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+        ),
+        "models/orders.sql": (
+            "MODEL (\n"
+            "  materialized incremental,\n"
+            f"  incremental_strategy {incremental_strategy},\n"
+            "  unique_key id,\n"
+            "  cursor ordered_at,\n"
+            "  cursor_type timestamp,\n"
+            "  cursor_grain day,\n"
+            "  cursor_start '2026-01-02',\n"
+            ");\n\n"
+            'SELECT id, ordered_at FROM __source("raw_orders")\n'
+        ),
+    }

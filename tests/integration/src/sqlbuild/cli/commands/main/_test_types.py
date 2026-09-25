@@ -622,3 +622,49 @@ class LeadingCteCommentFormatIntegrationTestCase:
     description: str
     authored_sql: str
     expected_fragment: str
+
+
+@dataclass(frozen=True)
+class DroppedRelationRecoveryTestCase:
+    """One model whose relation is dropped outside SQLBuild after a successful build."""
+
+    description: str
+    model_sql: str
+    drop_sql: str
+    expected_action: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    settings_toml: str = ""
+    stale_artifact_sql: str = "SELECT 1"
+
+
+@dataclass(frozen=True)
+class DroppedIncrementalFirstRunRangeTestCase:
+    """One incremental model rebuilt from its configured start after an external drop."""
+
+    description: str
+    model_sql: str
+    expected_start: str
+    expected_end: str
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class DroppedSeedPlanTestCase:
+    """One seed dropped outside SQLBuild after a successful build."""
+
+    description: str
+    model_sql: str
+    expected_steady_reasons: dict[str, object]
+    expected_dropped_reasons: dict[str, object]
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class AbsentMicrobatchFullRefreshTestCase:
+    """One full-refresh build of a microbatch model whose live target is absent."""
+
+    description: str
+    batch_concurrency: int
+    setup_build_flags: tuple[str, ...]
+    setup_drop_sql: str
+    expected_rows: tuple[tuple[object, ...], ...]

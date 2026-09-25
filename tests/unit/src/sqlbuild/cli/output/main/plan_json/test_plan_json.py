@@ -487,6 +487,32 @@ def test_given_direct_diagnostics_policy_when_formatting_plan_json_then_evidence
             ),
         ),
         JsonOutputTestCase(
+            description="plan json exposes warning diagnostic codes",
+            plan_output=build_plan_output(
+                model_entries=(
+                    build_model_entry(
+                        name="orders",
+                        action=PlanAction.CREATE_TABLE,
+                        reason=PlanReason.FIRST_RUN,
+                        fingerprint_version_hash="expected_hash",
+                    ),
+                ),
+                warnings=(
+                    build_warning(
+                        model_name="orders",
+                        message="relation no longer exists",
+                        code="RECORDED_RELATION_MISSING",
+                    ),
+                ),
+            ),
+            expected_keys=("models", "warnings"),
+            expected_fragments=(
+                '"code": "RECORDED_RELATION_MISSING"',
+                '"built_version_present": false',
+                '"identity_status": "missing"',
+            ),
+        ),
+        JsonOutputTestCase(
             description="plan json includes source load count",
             plan_output=build_plan_output(
                 model_entries=(build_model_entry(name="orders", action=PlanAction.CREATE_TABLE),),

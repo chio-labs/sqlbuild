@@ -1109,3 +1109,10 @@ class SqlHookIdentityBuildE2ETestCase:
     added_hook_path: str
     added_hook_contents: str
     expected_reason: str
+
+
+@dataclass(frozen=True)
+class DroppedIncrementalRelationE2ETestCase:
+    description: str
+    incremental_strategy: str
+    expected_rows: tuple[tuple[int, str], ...]

@@ -181,6 +181,8 @@ def _resolve_seed_plan_reason(
     reason: PlanReason | None = (seed_plan_reasons or {}).get(seed_name)
     if reason is not None:
         return reason
+    if seed_name not in snapshot.existing_relations:
+        return PlanReason.FIRST_RUN
     fingerprint: Fingerprint | None = snapshot.fingerprints.seeds.get(seed_name)
     if fingerprint is None:
         return PlanReason.FIRST_RUN

@@ -43,7 +43,6 @@ from sqlbuild.compiler.planner.types import (
     IncrementalStrategy,
     MicrobatchStrategy,
     OnSchemaChange,
-    PlanReason,
 )
 from sqlbuild.cursor_algebra.main.cap_from_end import cap_from_end
 from sqlbuild.cursor_algebra.main.cap_from_start import cap_from_start
@@ -3105,11 +3104,6 @@ def _prepare_full_refresh_rebuild(
                 origin=relations.rebuild_qualified,
                 destination=relations.target_qualified,
                 statement_recorder=state.statement_recorder,
-            )
-        elif not live_exists and context.entry.reason == PlanReason.FULL_REFRESH:
-            raise ExecutorInputError(
-                "full-refresh reconciliation found neither the live target nor its rebuild "
-                f"relation for '{context.entry.name}'"
             )
         elif rebuild_exists:
             context.adapter.drop(

@@ -246,3 +246,137 @@ def run_build(
 
     exit_code: int = main(["--project-dir", str(project_dir), "--no-color", "build", *flags])
     return exit_code, "".join(capsys.readouterr())
+
+
+def write_dropped_relation_project(
+    *, project_dir: Path, model_name: str, model_sql: str, settings_toml: str = ""
+) -> Path:
+    """Write a DuckDB project with raw order sources, one seed, and one model."""
+
+    (project_dir / "models").mkdir(parents=True, exist_ok=True)
+    (project_dir / "sources").mkdir(parents=True, exist_ok=True)
+    (project_dir / "seeds").mkdir(parents=True, exist_ok=True)
+    _ = (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[connection]\ndatabase = "orders.duckdb"\n'
+        + settings_toml,
+        encoding="utf-8",
+    )
+    _ = (project_dir / "sources" / "raw.yml").write_text(
+        "sources:\n"
+        "  - name: raw_orders\n"
+        "    schema: main\n"
+        "    table: raw_orders\n"
+        "  - name: raw_customers\n"
+        "    schema: main\n"
+        "    table: raw_customers\n",
+        encoding="utf-8",
+    )
+    _ = (project_dir / "seeds" / "order_statuses.csv").write_text(
+        "status_code,status_name\n1,placed\n2,shipped\n", encoding="utf-8"
+    )
+    _ = (project_dir / "seeds" / "lookups.yml").write_text(
+        "seeds:\n"
+        "  - name: order_statuses\n"
+        "    columns:\n"
+        "      - name: status_code\n"
+        "        type: INTEGER\n"
+        "      - name: status_name\n"
+        "        type: VARCHAR\n",
+        encoding="utf-8",
+    )
+    _ = (project_dir / "models" / f"{model_name}.sql").write_text(model_sql, encoding="utf-8")
+    db_path: Path = project_dir / "orders.duckdb"
+    execute_duckdb_sql(
+        db_path=db_path,
+        sql=(
+            "CREATE TABLE main.raw_orders (id INTEGER, ordered_at TIMESTAMP); "
+            "INSERT INTO main.raw_orders VALUES "
+            "(1, '2026-01-01 05:00:00'), (2, '2026-01-02 01:00:00'), "
+            "(3, '2026-01-03 01:00:00'); "
+            "CREATE TABLE main.raw_customers AS "
+            "SELECT 1 AS customer_id, 'basic' AS plan, TIMESTAMP '2026-01-01' AS updated_at"
+        ),
+    )
+    return db_path
+
+
+def execute_duckdb_sql(*, db_path: Path, sql: str) -> None:
+    """Run mutating SQL directly against a DuckDB file, outside SQLBuild."""
+
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(db_path))
+    try:
+        _ = connection.execute(sql)
+    finally:
+        connection.close()
+
+
+def query_duckdb_rows(*, db_path: Path, sql: str) -> tuple[tuple[object, ...], ...]:
+    """Read rows directly from a DuckDB file."""
+
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(db_path), read_only=True)
+    try:
+        return tuple(tuple(row) for row in connection.execute(sql).fetchall())
+    finally:
+        connection.close()
+
+
+def run_plan_json(
+    *, project_dir: Path, flags: tuple[str, ...], capsys: pytest.CaptureFixture[str]
+) -> dict[str, object]:
+    """Run one real CLI JSON plan and return the parsed document."""
+
+    _ = capsys.readouterr()
+    exit_code: int = main(["--project-dir", str(project_dir), "plan", "--json", *flags])
+    out: str
+    err: str
+    out, err = capsys.readouterr()
+    assert exit_code == 0, out + err
+    return cast(dict[str, object], json.loads(out))
+
+
+def plan_model(*, plan: dict[str, object], name: str) -> dict[str, object]:
+    """Return one serialized model entry from a JSON plan."""
+
+    models: list[dict[str, object]] = cast(list[dict[str, object]], plan["models"])
+    return {str(model["name"]): model for model in models}[name]
+
+
+def plan_warning_identities(*, plan: dict[str, object]) -> tuple[tuple[object, object], ...]:
+    """Return the resource name and diagnostic code of every plan warning."""
+
+    warnings: list[dict[str, object]] = cast(list[dict[str, object]], plan["warnings"])
+    return tuple((warning.get("model_name"), warning.get("code")) for warning in warnings)
+
+
+def plan_cursor_bounds(*, plan: dict[str, object], name: str) -> dict[str, object]:
+    """Return the serialized cursor bounds of one planned model."""
+
+    return cast(dict[str, object], plan_model(plan=plan, name=name)["cursor_bounds"])
+
+
+def plan_seed_reasons(*, plan: dict[str, object]) -> dict[str, object]:
+    """Return plan reasons keyed by seed name."""
+
+    seeds: list[dict[str, object]] = cast(list[dict[str, object]], plan["seeds"])
+    return {str(seed["name"]): seed["reason"] for seed in seeds}
+
+
+def dropped_relation_microbatch_sql(*, batch_concurrency: int) -> str:
+    """Render an integer-cursor microbatch model over the raw order source."""
+
+    return (
+        "MODEL (\n"
+        "  materialized incremental,\n"
+        "  incremental_strategy delete_insert,\n"
+        "  incremental_mode microbatch,\n"
+        "  microbatch_strategy watermark,\n"
+        "  cursor_watermark_mode all,\n"
+        "  cursor id,\n"
+        "  cursor_type integer,\n"
+        "  cursor_inputs (raw_orders (column id, roles [filter, watermark]),),\n"
+        '  batch_size "1",\n'
+        f"  batch_concurrency {batch_concurrency},\n"
+        ");\n\n"
+        'SELECT id, ordered_at FROM __source("raw_orders")\n'
+        "WHERE id >= __cursor_start() AND id < __cursor_end()\n"
+    )

@@ -9,6 +9,12 @@ from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.changes.detect import detect_changes, detect_model_changes
+from sqlbuild.compiler.planner._helpers.output.strategy import (
+    build_model_warnings,
+    get_materialization_type,
+    resolve_model_plan_action,
+)
+from sqlbuild.compiler.planner.constants import RECORDED_RELATION_MISSING_WARNING_CODE
 from sqlbuild.compiler.planner.main.identity._version_identity_metadata import (
     build_version_identity_metadata_json,
 )
@@ -16,10 +22,17 @@ from sqlbuild.compiler.planner.models import (
     ChangeDetectionResult,
     PlannerChangeResults,
     PlannerScope,
+    PlanWarning,
     WarehouseFingerprints,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
+from sqlbuild.compiler.planner.types import (
+    BackfillAction,
+    ChangeKind,
+    PlanAction,
+    PlanReason,
+    WarningSeverity,
+)
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_helpers import (
     build_metadata_json_with_audit_gate,
     build_model_from_metadata_test_case,
@@ -32,6 +45,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_helpers imp
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types import (
     DetectModelChangesTestCase,
     DetectModelMetadataTestCase,
+    DroppedRelationPlanActionTestCase,
 )
 
 _QUERY_SQL: str = "SELECT id, name FROM orders"
@@ -56,6 +70,39 @@ _DIFFERENT_HASH: str = "completely_different_hash"
             full_refresh=False,
             expected_change_kind=ChangeKind.FIRST_RUN,
             expected_backfill_action=BackfillAction.FULL,
+        ),
+        DetectModelChangesTestCase(
+            description="detects first run when relation is missing despite matching fingerprint",
+            model_name="orders",
+            query_sql=_QUERY_SQL,
+            config_values={},
+            schema_columns=(),
+            relation_exists=False,
+            fingerprint_query_hash=_MATCHING_HASH,
+            warehouse_column_names=(),
+            sql_analysis_enabled=False,
+            query_change_tracking=True,
+            full_refresh=False,
+            expected_change_kind=ChangeKind.FIRST_RUN,
+            expected_backfill_action=BackfillAction.FULL,
+            expected_recorded_build_relation_missing=True,
+        ),
+        DetectModelChangesTestCase(
+            description="detects first run when relation is missing despite changed fingerprint",
+            model_name="orders",
+            query_sql=_QUERY_SQL,
+            config_values={"replay_on_change": "bounded-30d"},
+            schema_columns=(("id", "INTEGER"), ("status", "VARCHAR")),
+            relation_exists=False,
+            fingerprint_query_hash=_DIFFERENT_HASH,
+            fingerprint_config_values={"materialized": "view"},
+            warehouse_column_names=(),
+            sql_analysis_enabled=False,
+            query_change_tracking=True,
+            full_refresh=False,
+            expected_change_kind=ChangeKind.FIRST_RUN,
+            expected_backfill_action=BackfillAction.FULL,
+            expected_recorded_build_relation_missing=True,
         ),
         DetectModelChangesTestCase(
             description="detects no change when query hash matches and no schema columns declared",
@@ -200,6 +247,100 @@ def test_given_model_and_snapshot_when_detecting_changes_then_returns_expected(
 
     assert result.change_kind == test_case.expected_change_kind
     assert result.backfill.action == test_case.expected_backfill_action
+    assert (
+        result.recorded_build_relation_missing == test_case.expected_recorded_build_relation_missing
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DroppedRelationPlanActionTestCase(
+            description="incremental plans create table",
+            config_values={"materialized": "incremental", "incremental_strategy": "delete_insert"},
+            expected_action=PlanAction.CREATE_TABLE,
+            expected_reason=PlanReason.FIRST_RUN,
+        ),
+        DroppedRelationPlanActionTestCase(
+            description="table plans create table",
+            config_values={"materialized": "table"},
+            expected_action=PlanAction.CREATE_TABLE,
+            expected_reason=PlanReason.FIRST_RUN,
+        ),
+        DroppedRelationPlanActionTestCase(
+            description="view plans create view",
+            config_values={"materialized": "view"},
+            expected_action=PlanAction.CREATE_VIEW,
+            expected_reason=PlanReason.FIRST_RUN,
+        ),
+        DroppedRelationPlanActionTestCase(
+            description="snapshot plans first run",
+            config_values={"materialized": "snapshot"},
+            expected_action=PlanAction.SNAPSHOT,
+            expected_reason=PlanReason.FIRST_RUN,
+        ),
+        DroppedRelationPlanActionTestCase(
+            description="custom materialization plans first run",
+            config_values={"materialized": "partition_tracked"},
+            expected_action=PlanAction.CUSTOM,
+            expected_reason=PlanReason.FIRST_RUN,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_dropped_relation_with_recorded_build_when_planning_then_plans_first_run(
+    test_case: DroppedRelationPlanActionTestCase,
+) -> None:
+    detection_case: DetectModelChangesTestCase = DetectModelChangesTestCase(
+        description=test_case.description,
+        model_name="orders",
+        query_sql=_QUERY_SQL,
+        config_values=test_case.config_values,
+        schema_columns=(),
+        relation_exists=False,
+        fingerprint_query_hash=_MATCHING_HASH,
+        warehouse_column_names=(),
+        sql_analysis_enabled=False,
+        query_change_tracking=True,
+        full_refresh=False,
+        expected_change_kind=ChangeKind.FIRST_RUN,
+        expected_backfill_action=BackfillAction.FULL,
+    )
+    model: CompiledModel = build_model_from_test_case(detection_case)
+
+    change: ChangeDetectionResult = detect_model_changes(
+        model=model,
+        snapshot=build_snapshot_from_test_case(detection_case),
+        sql_analysis_enabled=False,
+        query_change_tracking=True,
+        full_refresh=False,
+    )
+    action: PlanAction
+    reason: PlanReason
+    action, reason = resolve_model_plan_action(
+        model=model, change_result=change, full_refresh=False
+    )
+    warnings: tuple[PlanWarning, ...] = build_model_warnings(
+        model_name=model.name,
+        materialization_type=get_materialization_type(model),
+        change_result=change,
+        schema_actions=(),
+        on_schema_change=None,
+        type_enforcement=False,
+    )
+
+    assert (action, reason) == (test_case.expected_action, test_case.expected_reason)
+    assert change.backfill.action == BackfillAction.FULL
+    assert change.previous_version_hash is None
+    assert change.previous_metadata_json is None
+    assert (change.query_changed, change.config_changed, change.schema_findings) == (
+        False,
+        False,
+        (),
+    )
+    assert [warning.code for warning in warnings] == [RECORDED_RELATION_MISSING_WARNING_CODE]
+    assert warnings[0].severity == WarningSeverity.WARNING
+    assert warnings[0].model_name == "orders"
 
 
 @pytest.mark.parametrize(
