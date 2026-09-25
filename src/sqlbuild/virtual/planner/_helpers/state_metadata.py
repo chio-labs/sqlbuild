@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.virtual.state.main.encoding._decode_state_text import decode_state_text
-from sqlbuild.virtual.state.models import FunctionVersionRecord, ModelVersionRecord
+from sqlbuild.virtual.state.models import ModelVersionRecord
 
 
 def decode_model_version_query_sqls(
@@ -38,42 +35,4 @@ def decode_model_version_metadata_jsons(
         if metadata_json is None:
             continue
         result[model_name] = metadata_json
-    return result
-
-
-def read_previous_function_query_sqls(
-    *,
-    backend: Any,
-    state_connection: Any,
-    schema: str,
-    graph: ProjectGraph,
-    virtual_environment_name: str,
-) -> dict[str, str]:
-    """Read persisted virtual function fingerprint SQL by function name."""
-
-    function_refs: dict[str, str] = {
-        ref.function_name: ref.version_hash
-        for ref in backend.get_virtual_environment_function_refs(
-            connection=state_connection,
-            schema=schema,
-            virtual_environment_name=virtual_environment_name,
-        )
-    }
-    function_versions: dict[str, FunctionVersionRecord | None] = {
-        function.name: backend.get_function_version(
-            connection=state_connection,
-            schema=schema,
-            function_name=function.name,
-            version_hash=function_refs[function.name],
-        )
-        for function in graph.project.functions
-        if function.name in function_refs
-    }
-    result: dict[str, str] = {}
-    for function_name, function_version in function_versions.items():
-        if function_version is None:
-            continue
-        query_sql: str | None = decode_state_text(function_version.definition_text_b64)
-        if query_sql is not None:
-            result[function_name] = query_sql
     return result
