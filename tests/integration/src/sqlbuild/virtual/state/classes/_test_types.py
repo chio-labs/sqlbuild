@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.microbatches.types import MicrobatchRecordType
 from sqlbuild.virtual.state.types import VirtualEnvironmentStatus
 from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     ConditionalPublicationPayload,
@@ -272,3 +273,11 @@ class DuckDbStateBackendRefContractTestCase:
     expected_observation: StateRefContractObservation
     schema: str
     sqlbuild_version: str
+
+
+@dataclass(frozen=True)
+class MicrobatchBulkAppendTestCase:
+    """One production-shaped microbatch event batch written through the bulk append."""
+
+    description: str
+    record_type: MicrobatchRecordType

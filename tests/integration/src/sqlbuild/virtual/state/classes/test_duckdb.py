@@ -22,7 +22,7 @@ from sqlbuild.executor.node_results.models import (
     NodeResultRecord,
 )
 from sqlbuild.executor.node_results.types import NodeResultStatus
-from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
+from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope, MicrobatchWriteResult
 from sqlbuild.microbatches.types import (
     MicrobatchCompletionType,
     MicrobatchFingerprintStatus,
@@ -94,6 +94,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes._test_types import (
     DuckDbStateBackendTableCreationTestCase,
     DuckDbStateBackendTransactionRollbackTestCase,
     DuckDbStateBackendValidationTestCase,
+    MicrobatchBulkAppendTestCase,
     MicrobatchStateRoundTripTestCase,
     StateReadContractTestCase,
 )
@@ -120,6 +121,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     VALID_PAYLOAD,
     StateReadContractObservation,
     StateRefContractObservation,
+    build_production_shaped_microbatch_event,
     exercise_state_read_contract,
     exercise_state_ref_contract,
     fetch_all,
@@ -286,6 +288,57 @@ def test_given_invalid_conditional_payload_when_duckdb_publishes_then_contract_r
         )
         is None
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MicrobatchBulkAppendTestCase(
+            description="replay requirement with no completion or observation facts",
+            record_type=MicrobatchRecordType.REPLAY_REQUIREMENT,
+        ),
+        MicrobatchBulkAppendTestCase(
+            description="executed partition completion with no observation facts",
+            record_type=MicrobatchRecordType.PARTITION_COMPLETION,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_all_null_nullable_columns_when_bulk_appending_then_duckdb_persists_idempotently(
+    test_case: MicrobatchBulkAppendTestCase, tmp_path: Path
+) -> None:
+    backend, connection = open_duckdb_state_backend(db_path=tmp_path / "state.duckdb")
+    scope: MicrobatchScope = MicrobatchScope(
+        scope_kind="virtual_physical",
+        scope_key="duckdb:state:orders:F2:main.orders__F2",
+        model_name="orders",
+        target_database=None,
+        target_schema="main",
+        target_name="orders__F2",
+        physical_generation_id="F2:main.orders__F2",
+        virtual_environment_name="dev",
+        virtual_model_version_hash="F2",
+    )
+    event: MicrobatchEvent = build_production_shaped_microbatch_event(
+        scope=scope, record_type=test_case.record_type
+    )
+    try:
+        backend.initialize(connection=connection, schema="sqlbuild_state", sqlbuild_version="test")
+
+        first: MicrobatchWriteResult = backend.append_microbatch_events(
+            connection=connection, schema="sqlbuild_state", events=(event,)
+        )
+        second: MicrobatchWriteResult = backend.append_microbatch_events(
+            connection=connection, schema="sqlbuild_state", events=(event,)
+        )
+        history: tuple[MicrobatchEvent, ...] = backend.read_microbatch_scope_history(
+            connection=connection, schema="sqlbuild_state", scope=scope
+        )
+    finally:
+        backend.close(connection)
+
+    assert (first.inserted, second.already_existing) == (1, 1)
+    assert history == (event,)
 
 
 @pytest.mark.parametrize(

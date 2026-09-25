@@ -196,7 +196,19 @@ class PostgresStateBackend(SqlStateBackend):
                 event for event in events if event.event_id not in existing_ids
             )
             if missing:
-                row_placeholders: str = "(" + ", ".join("%s" for _ in MICROBATCH_COLUMNS) + ")"
+                # VALUES resolves all-NULL columns before the INSERT target can type them.
+                row_placeholders: str = (
+                    "("
+                    + ", ".join(
+                        f"%s::{
+                            self._state_column_sql_type(
+                                STATE_TABLE_COLUMNS[MICROBATCH_EVENT_TABLE][column]
+                            )
+                        }"
+                        for column in MICROBATCH_COLUMNS
+                    )
+                    + ")"
+                )
                 values_sql: str = ", ".join(row_placeholders for _ in missing)
                 columns: str = ", ".join(MICROBATCH_COLUMNS)
                 params: list[object | None] = []

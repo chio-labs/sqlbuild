@@ -14,7 +14,7 @@ from sqlbuild.executor.node_results.models import (
     NodeResultRecord,
 )
 from sqlbuild.executor.node_results.types import NodeResultStatus
-from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
+from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope, MicrobatchWriteResult
 from sqlbuild.microbatches.types import (
     MicrobatchCompletionType,
     MicrobatchFingerprintStatus,
@@ -57,6 +57,9 @@ from sqlbuild.virtual.state.types import (
     StateSchemaValidationIssueKind,
     VirtualEnvironmentStatus,
 )
+from tests.integration.src.sqlbuild.virtual.state.classes._test_types import (
+    MicrobatchBulkAppendTestCase,
+)
 from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     ACTIVE_CHECKPOINT_PAYLOAD,
     ACTIVE_PAYLOAD,
@@ -80,6 +83,7 @@ from tests.integration.src.sqlbuild.virtual.state.classes.helpers import (
     VALID_PAYLOAD,
     StateReadContractObservation,
     StateRefContractObservation,
+    build_production_shaped_microbatch_event,
     exercise_state_read_contract,
     exercise_state_ref_contract,
 )
@@ -359,6 +363,60 @@ def test_given_invalid_conditional_payload_when_postgres_publishes_then_contract
         )
         is None
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MicrobatchBulkAppendTestCase(
+            description="replay requirement with no completion or observation facts",
+            record_type=MicrobatchRecordType.REPLAY_REQUIREMENT,
+        ),
+        MicrobatchBulkAppendTestCase(
+            description="executed partition completion with no observation facts",
+            record_type=MicrobatchRecordType.PARTITION_COMPLETION,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_all_null_nullable_columns_when_bulk_appending_then_postgres_persists_idempotently(
+    test_case: MicrobatchBulkAppendTestCase,
+    postgres_state_backend: PostgresStateBackend,
+    postgres_state_connection: Any,
+    postgres_state_schema: str,
+) -> None:
+    postgres_state_backend.initialize(
+        connection=postgres_state_connection,
+        schema=postgres_state_schema,
+        sqlbuild_version="test",
+    )
+    scope: MicrobatchScope = MicrobatchScope(
+        scope_kind="virtual_physical",
+        scope_key="postgres:state:orders:F2:analytics.orders__F2",
+        model_name="orders",
+        target_database="warehouse",
+        target_schema="analytics",
+        target_name="orders__F2",
+        physical_generation_id="F2:analytics.orders__F2",
+        virtual_environment_name="dev",
+        virtual_model_version_hash="F2",
+    )
+    event: MicrobatchEvent = build_production_shaped_microbatch_event(
+        scope=scope, record_type=test_case.record_type
+    )
+
+    first: MicrobatchWriteResult = postgres_state_backend.append_microbatch_events(
+        connection=postgres_state_connection, schema=postgres_state_schema, events=(event,)
+    )
+    second: MicrobatchWriteResult = postgres_state_backend.append_microbatch_events(
+        connection=postgres_state_connection, schema=postgres_state_schema, events=(event,)
+    )
+
+    history: tuple[MicrobatchEvent, ...] = postgres_state_backend.read_microbatch_scope_history(
+        connection=postgres_state_connection, schema=postgres_state_schema, scope=scope
+    )
+    assert (first.inserted, second.already_existing) == (1, 1)
+    assert history == (event,)
 
 
 @pytest.mark.parametrize(
