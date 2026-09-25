@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.119.1](https://github.com/chio-labs/sqlbuild/compare/v0.119.0...v0.119.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* preserve empty-fixture lint semantics after Unicode text ([#829](https://github.com/chio-labs/sqlbuild/issues/829)) ([3260499](https://github.com/chio-labs/sqlbuild/commit/3260499bbff2e3d347009419dd9ba4c0cd1f9622))
+
+
+### Documentation
+
+* add link preview images and show the hero animation on mobile ([#827](https://github.com/chio-labs/sqlbuild/issues/827)) ([0cb0df8](https://github.com/chio-labs/sqlbuild/commit/0cb0df871723eadf8bdc500e8509f345eeb40882))
+* add the sqlbuild.com website with the docs at /docs ([#824](https://github.com/chio-labs/sqlbuild/issues/824)) ([68f79f8](https://github.com/chio-labs/sqlbuild/commit/68f79f8f565dc0c5a5278e7591583a6efca5b013))
+* centre the link preview cards so square crops stay readable ([#828](https://github.com/chio-labs/sqlbuild/issues/828)) ([71e49ef](https://github.com/chio-labs/sqlbuild/commit/71e49ef90ad2a8c3294aefb9975e85eaaf845a68))
+
 ## [0.119.0](https://github.com/chio-labs/sqlbuild/compare/v0.118.3...v0.119.0) (2026-09-25)
 
 
