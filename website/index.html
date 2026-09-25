@@ -330,17 +330,11 @@ Migrations (1)
 					<div class="grid">
 						<div class="item">
 							<h3>Audits that block bad data</h3>
-							<p>
-								Full builds go to a staging table and only replace production if their audits pass. Incremental
-								batches are checked before they are written.
-							</p>
+							<p>Failing audits stop bad data before it reaches production, for full builds and incremental batches alike.</p>
 						</div>
 						<div class="item">
 							<h3>Data contracts</h3>
-							<p>
-								Declare a model's columns and types. SQLBuild checks them at compile time, and again on the built
-								table before it replaces production.
-							</p>
+							<p>Declared columns and types, checked at compile time and again before the table replaces production.</p>
 						</div>
 						<div class="item">
 							<h3>Column lineage</h3>
@@ -351,12 +345,12 @@ Migrations (1)
 							<p>Run the real model graph against test data, then replay it locally on DuckDB in CI.</p>
 						</div>
 						<div class="item">
-							<h3>Incremental processing</h3>
-							<p>Picks up from the last data actually written, with microbatches for large ranges.</p>
+							<h3>Python macros</h3>
+							<p>Logic lives in plain, testable Python functions, not Jinja blocks in your SQL.</p>
 						</div>
 						<div class="item">
 							<h3>Python in the same graph</h3>
-							<p>Loaders, tasks, assets and checks run alongside your SQL models in one build.</p>
+							<p>Loaders, tasks, assets and checks run in the same build as your SQL.</p>
 						</div>
 					</div>
 				</div>
