@@ -8,7 +8,6 @@ import logoLight from '../assets/logo-light.png';
 		<img class="logo-for-light" src={logoLight.src} alt="SQLBuild" width={111} height={30} />
 		<img class="logo-for-dark" src={logoDark.src} alt="SQLBuild" width={111} height={30} />
 	</a>
-	<span class="divider" aria-hidden="true"></span>
 	<a class="docs" href="/docs/">Docs</a>
 </div>
 
@@ -39,20 +38,21 @@ import logoLight from '../assets/logo-light.png';
 		display: block;
 	}
 
-	.divider {
-		width: 1px;
-		height: 20px;
-		background: var(--sqb-line-strong);
-	}
-
 	.docs {
-		color: var(--sqb-fg);
-		font-size: 16px;
-		font-weight: 550;
+		padding: 2px 6px;
+		border: 1px solid var(--sqb-line-strong);
+		border-radius: 2px;
+		color: var(--sqb-muted);
+		font-size: 11px;
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		line-height: 1.4;
+		text-transform: uppercase;
 		text-decoration: none;
 	}
 
 	.docs:hover {
+		border-color: var(--sqb-primary);
 		color: var(--sqb-primary);
 	}
 </style>
