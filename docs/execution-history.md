@@ -13,7 +13,7 @@ contract. The public types, filters, pages, records, errors, and helper function
 The concrete SQLite and PostgreSQL classes additionally provide transactional
 `append_and_project`, `reconcile`, and `check_health` operations.
 
-`EventLogStorage` remains a deprecated compatibility alias for `LifecycleEventLogStorage`. Storage
+The deprecated `EventLogStorage` alias has been removed; use `LifecycleEventLogStorage`. Storage
 tables use the lifecycle-specific names `lifecycle_event_log` in SQLite and
 `sqlbuild_lifecycle_event_log` in PostgreSQL; the former `event_log` and `sqlbuild_event_log` names
 are retired.
