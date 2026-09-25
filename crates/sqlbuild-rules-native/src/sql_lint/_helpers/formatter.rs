@@ -2,9 +2,10 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use polyglot_sql::tokens::{Token, TokenType};
-use polyglot_sql::{Dialect, DialectType, format_by_name};
+use polyglot_sql::{ComplexityGuardOptions, Dialect, DialectType, ParseOptions};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
+use crate::sql_lint::_helpers::formatter_syntax::protect_syntax;
 use crate::sql_lint::constants::{
     CAST_TYPE_SEPARATOR_KEYWORD, CLOSE_PARENTHESIS, LINT_API_VERSION, OPEN_PARENTHESIS,
     VALUES_RELATION_PREFIX_TOKEN_COUNT,
@@ -56,17 +57,24 @@ fn try_format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
     let dialect_type =
         DialectType::from_str(&request.dialect).map_err(|error| error.to_string())?;
     let dialect = Dialect::get(dialect_type);
+    let parse_options = ParseOptions {
+        complexity_guard: Some(ComplexityGuardOptions {
+            max_function_call_depth: request.max_function_call_depth,
+            ..Default::default()
+        }),
+    };
     let tokens = dialect
         .tokenize(&original)
         .map_err(|error| format!("native formatter tokenization failed: {error}"))?;
     let comments = comments_in(&original, &tokens);
     let neutral = neutralize_comments(&original, &comments);
+    let validation_sql = protect_syntax(&neutral, &tokens, &[], false)?;
     dialect
-        .parse(&neutral)
+        .parse_with_options(&validation_sql.sql, &parse_options)
         .map_err(|error| format!("native formatter could not parse SQL: {error}"))?;
     let semantic_tokens = without_statement_terminators(&tokens);
     let formatted_context = FormatOnceContext {
-        dialect_name: &request.dialect,
+        parse_options: &parse_options,
         dialect: &dialect,
         original_sql: &neutral,
         original_tokens: &semantic_tokens,
@@ -78,8 +86,9 @@ fn try_format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
         .map_err(|error| error.to_string())?;
     let formatted_neutral =
         neutralize_comments(&formatted, &comments_in(&formatted, &formatted_tokens));
+    let validation_sql = protect_syntax(&formatted_neutral, &formatted_tokens, &[], false)?;
     let _ = dialect
-        .parse(&formatted_neutral)
+        .parse_with_options(&validation_sql.sql, &parse_options)
         .map_err(|error| error.to_string())?;
     let second_tokens = dialect
         .tokenize(&formatted)
@@ -88,7 +97,7 @@ fn try_format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
     let second_neutral = neutralize_comments(&formatted, &second_comments);
     let second_semantic_tokens = without_statement_terminators(&second_tokens);
     let second_context = FormatOnceContext {
-        dialect_name: &request.dialect,
+        parse_options: &parse_options,
         dialect: &dialect,
         original_sql: &second_neutral,
         original_tokens: &second_semantic_tokens,
@@ -112,7 +121,7 @@ struct Comment {
 }
 
 struct FormatOnceContext<'a> {
-    dialect_name: &'a str,
+    parse_options: &'a ParseOptions,
     dialect: &'a Dialect,
     original_sql: &'a str,
     original_tokens: &'a [Token],
@@ -120,12 +129,28 @@ struct FormatOnceContext<'a> {
 }
 
 fn format_once(neutral_sql: &str, context: &FormatOnceContext<'_>) -> Result<String, String> {
-    let mut formatted = format_by_name(neutral_sql, context.dialect_name)
-        .map_err(|error| error.to_string())?
-        .join(";\n");
+    let protected = protect_syntax(
+        neutral_sql,
+        context.original_tokens,
+        &cast_type_token_ranges(context)?,
+        true,
+    )?;
+    let expressions = context
+        .dialect
+        .parse_with_options(&protected.sql, context.parse_options)
+        .map_err(|error| error.to_string())?;
+    let formatted_statements: Result<Vec<String>, String> = expressions
+        .iter()
+        .map(|expression| {
+            context
+                .dialect
+                .generate_pretty(expression)
+                .map_err(|error| error.to_string())
+        })
+        .collect();
+    let mut formatted = protected.restore(formatted_statements?.join(";\n"), context.dialect)?;
     formatted = restore_unparenthesized_from_values(formatted, context)?;
-    formatted = restore_string_literals(formatted, context)?;
-    formatted = restore_cast_type_spellings(formatted, context)?;
+    formatted = restore_null_treatment(formatted, context)?;
     if context.comments.is_empty() {
         return Ok(formatted);
     }
@@ -192,7 +217,11 @@ fn restore_implicit_aliases(
         } else if token.token_type == TokenType::As {
             removals.push((token.span.start, token.span.end));
         } else {
-            return Err(COMMENT_ATTACHMENT_FAILURE.to_string());
+            return Err(format!(
+                "{COMMENT_ATTACHMENT_FAILURE}: expected {:?}, generated {:?}",
+                original.peek().map(|token| token.token_type),
+                token.token_type
+            ));
         }
     }
     if original.next().is_some() {
@@ -205,6 +234,52 @@ fn restore_implicit_aliases(
             start..end + usize::from(formatted[end..].starts_with(' ')),
             "",
         );
+    }
+    Ok(formatted)
+}
+
+fn restore_null_treatment(
+    mut formatted: String,
+    context: &FormatOnceContext<'_>,
+) -> Result<String, String> {
+    let authored: Vec<bool> = context
+        .original_tokens
+        .windows(3)
+        .filter(|tokens| {
+            matches!(
+                tokens[0].text.to_ascii_uppercase().as_str(),
+                "IGNORE" | "RESPECT"
+            ) && tokens[1].text.eq_ignore_ascii_case("NULLS")
+        })
+        .map(|tokens| tokens[2].token_type == TokenType::RParen)
+        .collect();
+    if authored.is_empty() {
+        return Ok(formatted);
+    }
+    let tokens = context
+        .dialect
+        .tokenize(&formatted)
+        .map_err(|error| error.to_string())?;
+    let generated: Vec<usize> = (1..tokens.len().saturating_sub(1))
+        .filter(|&index| {
+            matches!(
+                tokens[index].text.to_ascii_uppercase().as_str(),
+                "IGNORE" | "RESPECT"
+            ) && tokens[index + 1].text.eq_ignore_ascii_case("NULLS")
+        })
+        .collect();
+    if authored.len() != generated.len() {
+        return Err("native formatter changed null-treatment clauses".to_string());
+    }
+    for (inside, index) in authored.into_iter().zip(generated).rev() {
+        if inside && tokens[index - 1].token_type == TokenType::RParen {
+            let start = char_to_byte(&formatted, tokens[index - 1].span.start)?;
+            let end = char_to_byte(&formatted, tokens[index + 1].span.end)?;
+            formatted.replace_range(
+                start..end,
+                &format!(" {} NULLS)", tokens[index].text.to_ascii_uppercase()),
+            );
+        }
     }
     Ok(formatted)
 }
@@ -386,73 +461,6 @@ fn trailing_comment_insertion(
     }
 }
 
-fn restore_string_literals(
-    mut formatted: String,
-    context: &FormatOnceContext<'_>,
-) -> Result<String, String> {
-    let originals: Vec<String> = context
-        .original_tokens
-        .iter()
-        .filter(|token| token.token_type == polyglot_sql::tokens::TokenType::String)
-        .map(|token| char_slice(context.original_sql, token.span.start, token.span.end))
-        .collect::<Option<Vec<String>>>()
-        .ok_or_else(|| UNSUPPORTED_SQL_FAILURE.to_string())?;
-    let formatted_tokens = context
-        .dialect
-        .tokenize(&formatted)
-        .map_err(|error| error.to_string())?;
-    let formatted_strings: Vec<&Token> = formatted_tokens
-        .iter()
-        .filter(|token| token.token_type == polyglot_sql::tokens::TokenType::String)
-        .collect();
-    if originals.len() != formatted_strings.len() {
-        return Err(UNSUPPORTED_SQL_FAILURE.to_string());
-    }
-    for (token, original) in formatted_strings.into_iter().zip(originals).rev() {
-        let start = char_to_byte(&formatted, token.span.start)?;
-        let end = char_to_byte(&formatted, token.span.end)?;
-        formatted.replace_range(start..end, &original);
-    }
-    Ok(formatted)
-}
-
-fn restore_cast_type_spellings(
-    mut formatted: String,
-    context: &FormatOnceContext<'_>,
-) -> Result<String, String> {
-    let type_ranges = cast_type_token_ranges(context)?;
-    if type_ranges.is_empty() {
-        return Ok(formatted);
-    }
-    let formatted_tokens = context
-        .dialect
-        .tokenize(&formatted)
-        .map_err(|error| error.to_string())?;
-    if context.original_tokens.len() != formatted_tokens.len() {
-        return Err(UNSUPPORTED_SQL_FAILURE.to_string());
-    }
-    let mut type_indices: Vec<usize> = type_ranges
-        .into_iter()
-        .flat_map(|(start, end)| start..=end)
-        .collect();
-    type_indices.sort_unstable();
-    type_indices.dedup();
-    for index in type_indices.into_iter().rev() {
-        let original_token = &context.original_tokens[index];
-        let formatted_token = &formatted_tokens[index];
-        let original = char_slice(
-            context.original_sql,
-            original_token.span.start,
-            original_token.span.end,
-        )
-        .ok_or_else(|| UNSUPPORTED_SQL_FAILURE.to_string())?;
-        let start = char_to_byte(&formatted, formatted_token.span.start)?;
-        let end = char_to_byte(&formatted, formatted_token.span.end)?;
-        formatted.replace_range(start..end, &original);
-    }
-    Ok(formatted)
-}
-
 fn cast_type_token_ranges(context: &FormatOnceContext<'_>) -> Result<Vec<(usize, usize)>, String> {
     let mut ranges: Vec<(usize, usize)> = Vec::new();
     let mut cast_type_starts: Vec<Option<usize>> = Vec::new();
@@ -492,8 +500,15 @@ fn char_slice(value: &str, start: usize, end: usize) -> Option<String> {
 fn without_statement_terminators(tokens: &[Token]) -> Vec<Token> {
     tokens
         .iter()
-        .filter(|token| token.token_type != polyglot_sql::tokens::TokenType::Semicolon)
-        .cloned()
+        .enumerate()
+        .filter(|(index, token)| {
+            token.token_type != TokenType::Semicolon
+                && !(token.token_type == TokenType::Comma
+                    && tokens
+                        .get(index + 1)
+                        .is_some_and(|next| next.token_type == TokenType::From))
+        })
+        .map(|(_, token)| token.clone())
         .collect()
 }
 

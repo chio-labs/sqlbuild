@@ -686,3 +686,13 @@ class SqlReadabilityTestCase:
     description: str
     sql: str
     expected_fault: bool
+
+
+@dataclass(frozen=True)
+class FormatterSyntaxTestCase:
+    """Authored constructs that must survive canonical layout formatting."""
+
+    description: str
+    sql: str
+    expected_fragments: tuple[str, ...]
+    macro_source: str = ""

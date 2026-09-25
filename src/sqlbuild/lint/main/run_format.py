@@ -54,6 +54,10 @@ def run_format(
         discovered_inputs=discovered_inputs,
         fixtures_only=fixtures_only,
     )
+    declined_paths: set[Path] = {fault.file_path for fault in format_faults}
+    updated_contents: dict[Path, str] = {
+        path: contents for path, contents in updated_contents.items() if path not in declined_paths
+    }
     formatted: list[Path] = []
     changes: list[FormatChange] = []
     file_path: Path

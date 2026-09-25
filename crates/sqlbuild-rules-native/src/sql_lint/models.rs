@@ -123,6 +123,8 @@ pub(crate) struct FormatRequest {
     pub version: u32,
     pub sql: String,
     pub dialect: String,
+    #[serde(default)]
+    pub max_function_call_depth: Option<usize>,
 }
 
 #[derive(Debug, Serialize)]

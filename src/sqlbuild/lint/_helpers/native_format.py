@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import sqlbuild._native as _native
+from sqlbuild.compiler.sql_analysis.constants import POLYGLOT_MAX_FUNCTION_CALL_DEPTH
 from sqlbuild.lint._helpers.headers import lint_body_ranges, scan_headers
 from sqlbuild.lint._helpers.sqlbuild_tokens import neutralize_interpolation, restore_interpolation
 from sqlbuild.lint.constants import (
@@ -75,6 +76,7 @@ def format_native_sql_bodies(
                     "version": _NATIVE_FORMAT_API_VERSION,
                     "sql": neutralized,
                     "dialect": config.dialect,
+                    "max_function_call_depth": POLYGLOT_MAX_FUNCTION_CALL_DEPTH,
                 },
             )
             prepared_bodies.append(

@@ -203,8 +203,15 @@ for their exact scope and relationship to `SQBRSQL035`.
 
 `sqb format` reports a file-specific `format-unsafe` fault whenever a SQL body cannot be safely
 formatted, including parser, comment-attachment, interpolation-restoration, and idempotence
-failures. The original body is retained, the reason appears in human and JSON output, and both
+failures. The entire original file is retained (including its headers and fixtures), the reason
+appears in human and JSON output, and both
 formatting and `sqb format --check` exit nonzero. A declined body is never counted as canonical.
+
+Formatting preserves authored cast types, postfix casts, quoted literals, variant paths, typed
+lambda parameters, and supported SQL function spellings while applying canonical layout. It uses
+the compiler's trusted-SQL function-depth budget and does not impose the separate browser-oriented
+UNION-chain limit from Polyglot's convenience formatting API. CTE-producing macros are formatted as
+authored macro calls rather than expanded project SQL.
 
 Custom rules are ordinary Python beneath `rules/**/*.py`. Only `@rule` functions register; helper
 functions, constants, dataclasses, classes, and nested packages remain ordinary Python. Typed,

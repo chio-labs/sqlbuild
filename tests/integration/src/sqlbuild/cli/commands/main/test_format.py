@@ -442,14 +442,14 @@ def test_given_unparseable_file_when_formatting_then_file_is_untouched_and_fault
     "test_case",
     [
         FormatterDeclineIntegrationTestCase(
-            description="unsupported SQL body reports a fault while header formats",
+            description="unsupported SQL body leaves the whole file unchanged",
             authored_body="select from\n",
             expected_exit_code=1,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_native_formatter_decline_when_formatting_then_header_formats_and_body_is_unchanged(
+def test_given_native_formatter_decline_when_formatting_then_whole_file_is_unchanged(
     test_case: FormatterDeclineIntegrationTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -468,6 +468,7 @@ def test_given_native_formatter_decline_when_formatting_then_header_formats_and_
         encoding="utf-8",
     )
 
+    original: str = model.read_text(encoding="utf-8")
     first_exit: int = main(["--project-dir", str(tmp_path), "format"])
     first_output: str = capsys.readouterr().out
     formatted_once: str = model.read_text(encoding="utf-8")
@@ -476,7 +477,7 @@ def test_given_native_formatter_decline_when_formatting_then_header_formats_and_
 
     assert first_exit == test_case.expected_exit_code
     assert second_exit == test_case.expected_exit_code
-    assert '  description "Orders.",\n' in formatted_once
+    assert formatted_once == original
     assert test_case.authored_body in formatted_once
     assert "format-unsafe" in first_output
     assert "format-unsafe" in second_output
@@ -553,7 +554,7 @@ def test_given_inline_typed_null_fixture_when_formatting_then_one_pass_is_idempo
     [
         CanonicalFixtureFormatIntegrationTestCase(
             description="post-native fixture simplification reaches fixed point in one pass",
-            expected_retained_literal="CAST(COLUMN2 AS TEXT) AS CLUSTER_ID",
+            expected_retained_literal="COLUMN2::VARCHAR AS CLUSTER_ID",
             expected_removed_literal="is_archived",
             expected_exit_code=0,
         )
