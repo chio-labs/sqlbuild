@@ -119,6 +119,8 @@ markers = [
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+# The website's example projects are sample SQLBuild projects, not package code.
+extend-exclude = ["website"]
 
 [tool.ruff.lint]
 select = ["B", "E", "F", "I", "PLR0913", "PLR0915", "UP"]
