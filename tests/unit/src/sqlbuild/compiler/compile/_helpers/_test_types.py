@@ -453,7 +453,7 @@ class BuildScenarioInputsErrorTestCase:
 class ExtractSqlAnalysisExpectedBranchesTestCase:
     description: str
     sql: str
-    expected_branch_column_names: tuple[tuple[str, ...], ...]
+    expected_branch_column_names: tuple[tuple[str, ...], ...] | None
 
 
 @dataclass(frozen=True)
