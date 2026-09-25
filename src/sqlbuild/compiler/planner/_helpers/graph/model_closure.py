@@ -17,16 +17,6 @@ def build_downstream_model_name_closure(
     return _build_model_name_closure(start_keys=start_keys, deps=downstream_deps)
 
 
-def build_upstream_model_name_closure(
-    *,
-    start_keys: tuple[CompiledObjectKey, ...],
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-) -> frozenset[str]:
-    """Return model names reachable upstream from the given keys, including model roots."""
-
-    return _build_model_name_closure(start_keys=start_keys, deps=upstream_deps)
-
-
 def _build_model_name_closure(
     *,
     start_keys: tuple[CompiledObjectKey, ...],

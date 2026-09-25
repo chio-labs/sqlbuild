@@ -753,14 +753,6 @@ class PlannerScope:
 
 
 @dataclass(frozen=True)
-class PlannerWarehouseSnapshotResult:
-    """Warehouse discovery phase output with its resolved planning scope."""
-
-    scope: PlannerScope
-    snapshot: WarehouseSnapshot
-
-
-@dataclass(frozen=True)
 class PlannerRelationsContext:
     """Resolved relation and source inputs for plan entry construction."""
 
@@ -797,25 +789,6 @@ class CursorOverridePair:
 
     start_cursor_override: str | None = None
     end_cursor_override: str | None = None
-
-
-@dataclass(frozen=True)
-class ModelChangesPlanInputs:
-    """Optional planning inputs for building a plan output from model changes."""
-
-    cursor_overrides: CursorOverrides | None = None
-    full_refresh: bool = False
-    reload_sources: bool = False
-    deferred_locations: dict[str, CompiledRelationLocation] | None = None
-    project_config: ProjectConfig | None = None
-    local_config: LocalConfig | None = None
-    defer_sources_to: str | None = None
-    source_deferral_enabled: bool = True
-    seed_version_hashes: dict[str, str] | None = None
-    seed_metadata_jsons: dict[str, str] | None = None
-    seed_plan_reasons: dict[str, PlanReason] | None = None
-    max_microbatches: int | None = None
-    plan_sql_tests: bool = True
 
 
 @dataclass(frozen=True)

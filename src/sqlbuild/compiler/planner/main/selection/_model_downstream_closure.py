@@ -1,4 +1,4 @@
-"""Public wrapper for downstream model-name closure."""
+"""Compiler-internal downstream model-name closure entrypoint."""
 
 from __future__ import annotations
 

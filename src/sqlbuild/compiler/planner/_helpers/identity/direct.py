@@ -6,6 +6,7 @@ from sqlbuild.compiler.compile.models import CompiledFunction, CompiledModel, Co
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner._helpers.identity.hashing import (
+    build_model_local_identity_hash,
     compose_native_graph_identity,
     graph_key_for_compiled_resource,
 )
@@ -15,9 +16,6 @@ from sqlbuild.compiler.planner.main.identity._graph_identity import (
 )
 from sqlbuild.compiler.planner.main.identity.version_identity_function_hashes import (
     build_function_local_hashes,
-)
-from sqlbuild.compiler.planner.main.identity.version_identity_local_hash import (
-    build_model_local_identity_hash,
 )
 from sqlbuild.compiler.planner.main.identity.version_identity_model_metadata import (
     build_model_version_identity_metadata_json,
