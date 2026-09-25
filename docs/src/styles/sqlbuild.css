@@ -3,8 +3,10 @@
 	--sl-font: 'Inter', system-ui, sans-serif;
 	--sl-font-mono: 'IBM Plex Mono', 'SQLBuild Box Drawing', ui-monospace, monospace;
 	--sl-nav-height: 60px;
-	--sl-content-width: 46rem;
-	--sl-sidebar-width: 17rem;
+	--sl-content-width: 50rem;
+	--sl-sidebar-width: 16rem;
+	--sqb-toc-width: 15rem;
+	--sqb-frame-width: 1360px;
 	--sl-text-h1: 2rem;
 	--sl-text-h2: 1.45rem;
 	--sl-text-h3: 1.15rem;
@@ -96,15 +98,7 @@ site-search button[data-open-modal]:hover {
 	color: var(--sqb-fg);
 }
 
-starlight-theme-select select {
-	border-radius: 2px;
-}
-
 /* Sidebar */
-#starlight__sidebar {
-	border-inline-end: 1px solid var(--sqb-line);
-}
-
 .sidebar-content .group-label .large,
 .sidebar-content summary .large {
 	font-size: 11px;
@@ -302,4 +296,18 @@ site-search dialog {
 
 .pagination-links a:hover {
 	border-color: var(--sqb-primary);
+}
+
+/* Mobile controls */
+.sl-menu-button {
+	border: 1px solid var(--sqb-line-strong) !important;
+	border-radius: 2px !important;
+	background: var(--sqb-bg) !important;
+	color: var(--sqb-muted) !important;
+	box-shadow: none !important;
+}
+
+mobile-starlight-toc summary .toggle {
+	border-radius: 2px;
+	border-color: var(--sqb-line-strong);
 }

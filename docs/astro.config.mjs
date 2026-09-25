@@ -19,6 +19,12 @@ export default defineConfig({
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/chio-labs/sqlbuild' },
 				{ icon: 'discord', label: 'Discord', href: 'https://discord.gg/tYU4nXdsT' },
 			],
+			components: {
+				PageFrame: './src/components/PageFrame.astro',
+				TwoColumnContent: './src/components/TwoColumnContent.astro',
+				Header: './src/components/Header.astro',
+				ThemeSelect: './src/components/ThemeSelect.astro',
+			},
 			customCss: ['./src/styles/fonts.css', './src/styles/sqlbuild.css'],
 			expressiveCode: {
 				themes: [sqlbuildDark, sqlbuildLight],

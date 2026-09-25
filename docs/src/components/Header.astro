@@ -1,0 +1,64 @@
+---
+import Search from '@astrojs/starlight/components/Search.astro';
+import SiteTitle from '@astrojs/starlight/components/SiteTitle.astro';
+import SocialIcons from '@astrojs/starlight/components/SocialIcons.astro';
+import ThemeSelect from './ThemeSelect.astro';
+---
+
+<div class="header">
+	<SiteTitle />
+	<div class="search print:hidden"><Search /></div>
+	<div class="right-group sl-hidden md:sl-flex print:hidden">
+		<a class="home-link" href="https://sqlbuild.com">sqlbuild.com</a>
+		<div class="sl-flex social-icons"><SocialIcons /></div>
+		<ThemeSelect />
+	</div>
+</div>
+
+<style>
+	.header {
+		display: flex;
+		align-items: center;
+		gap: var(--sl-nav-gap);
+		height: 100%;
+	}
+
+	.search {
+		display: flex;
+		flex: 1;
+		justify-content: flex-end;
+	}
+
+	.right-group,
+	.social-icons {
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.home-link {
+		color: var(--sqb-muted);
+		font-size: 14px;
+		text-decoration: none;
+	}
+
+	.home-link:hover {
+		color: var(--sqb-fg);
+	}
+
+	@media (min-width: 50rem) {
+		.header {
+			display: grid;
+			grid-template-columns: calc(var(--sl-sidebar-width) - var(--sl-nav-pad-x)) minmax(0, 1fr) auto;
+			gap: 0;
+		}
+
+		.search {
+			justify-content: flex-start;
+			padding-inline-start: var(--sl-content-pad-x);
+		}
+
+		.search :global(site-search) {
+			width: min(100%, 22rem);
+		}
+	}
+</style>
