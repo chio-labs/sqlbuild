@@ -712,11 +712,19 @@ footer a {
 	align-items: center;
 }
 
-.hero-visual {
+.hero-visual.terminal {
 	border: 1px solid var(--panel-border);
 	border-left: 1px solid var(--inner-line);
 	border-radius: var(--radius);
 	min-height: 236px;
+}
+
+.hero-visual {
+	font-family: var(--font-mono);
+}
+
+.hero-visual .tree {
+	display: inline;
 }
 
 .hero-visual .hv-stack {
@@ -729,10 +737,6 @@ footer a {
 
 .hero-visual .hv-l {
 	display: block;
-}
-
-.hero-visual .hv-l1 {
-	margin-top: 16px;
 }
 
 .hero-visual .hv-a,
