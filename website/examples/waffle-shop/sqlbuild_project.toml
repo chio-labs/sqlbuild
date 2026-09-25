@@ -1,0 +1,26 @@
+name = "waffle_shop"
+adapter = "duckdb"
+default_target = "dev"
+
+[connections.developer]
+database = "waffle_shop_control.duckdb"
+
+[settings]
+default_audit_severity = "warn"
+
+[defaults]
+materialized = "table"
+
+[targets.prod]
+connection = "developer"
+schema = "prod"
+
+[targets.dev]
+connection = "developer"
+schema = "dev"
+
+[path_defaults.staging]
+materialized = "view"
+
+[rules]
+select = ["XSQBRARCH"]

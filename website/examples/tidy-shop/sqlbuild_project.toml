@@ -1,0 +1,15 @@
+name = "waffle_shop"
+adapter = "duckdb"
+default_target = "prod"
+
+[connections.local]
+database = "warehouse.duckdb"
+
+[targets.prod]
+connection = "local"
+schema = "prod"
+
+[janitor]
+enabled = true
+retention_days = 0
+archive_retention_days = 14
