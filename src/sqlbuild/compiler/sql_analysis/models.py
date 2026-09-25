@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class SqlBindingDiagnostic:
-    """One proven SQL binding failure returned by the native validator."""
+    """One native binding error or non-blocking runtime-conversion warning."""
 
     code: str
     message: str
@@ -16,6 +16,7 @@ class SqlBindingDiagnostic:
     column: int | None = None
     start: int | None = None
     end: int | None = None
+    severity: str = "error"
 
 
 @dataclass(frozen=True)
@@ -32,3 +33,5 @@ class SqlSchemaValidationRequest:
     sql: str
     dialect: str | None
     schema: Mapping[str, Mapping[str, str]]
+    known_functions: tuple[str, ...] = ()
+    known_types: tuple[str, ...] = ()

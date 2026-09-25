@@ -363,6 +363,9 @@ def build_plan_entries(
             selected_keys=scope.selected_keys,
         ),
     )
+    binding_diagnostics = tuple(
+        diagnostic for diagnostic in binding_diagnostics if diagnostic.is_error
+    )
     if binding_diagnostics:
         raise PlannerInputError(
             "\n".join(

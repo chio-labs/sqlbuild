@@ -47,8 +47,28 @@ _PERFORMANCE_SAFETY_TIMEOUT_MULTIPLIER: float = 2.0
 
 def semantic_corpus_cases(*, group: str) -> list[dict[str, Any]]:
     path: Path = Path(__file__).parent / "fixtures" / "semantic" / "corpus.json"
-    raw: list[dict[str, Any]] = json.loads(path.read_text(encoding="utf-8"))[group]
-    return raw
+    raw: dict[str, list[dict[str, Any]]] = json.loads(path.read_text(encoding="utf-8"))
+    outcomes: dict[str, list[str]] = json.loads(
+        path.with_name("native_outcomes.json").read_text(encoding="utf-8")
+    )
+    resolved: dict[str, list[dict[str, Any]]] = {name: [] for name in (*raw, "warning")}
+    overrides: dict[str, tuple[str, str]] = {}
+    for outcome, identifiers in outcomes.items():
+        destination, code = outcome.split(":")
+        overrides.update(dict.fromkeys(identifiers, (destination, code)))
+    for original_group, cases in raw.items():
+        for case in cases:
+            identifier: str = case["description"].split(":", maxsplit=1)[0]
+            destination, code = overrides.get(identifier, (original_group, ""))
+            resolved[destination].append(
+                {
+                    **case,
+                    "expected_exit_code": int(destination in {"invalid", "pending"}),
+                    "expected_codes": [code] * bool(code) or case["expected_codes"],
+                    "pending_native": destination == "pending",
+                }
+            )
+    return resolved[group]
 
 
 def prepare_semantic_corpus_project(

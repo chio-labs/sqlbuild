@@ -7,7 +7,11 @@ import re
 from typing import Any, cast
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.sql_analysis.constants import NATIVE_DIALECT_ALIASES, TYPE_CHECKED_DIALECTS
+from sqlbuild.compiler.sql_analysis.constants import (
+    BINDING_SEVERITIES,
+    NATIVE_DIALECT_ALIASES,
+    TYPE_CHECKED_DIALECTS,
+)
 from sqlbuild.compiler.sql_analysis.exceptions import SqlAnalysisBoundaryError
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.compiler.sql_analysis.models import (
@@ -38,8 +42,10 @@ _SQLBUILD_CODE_BY_NATIVE_CODE: dict[str, str] = {
     "E230": "B230",
     "E231": "B231",
     "E232": "B232",
+    "E233": "B233",
+    "E234": "B234",
+    **{f"W21{number}": f"W21{number}" for number in range(10)},
 }
-_ERROR_SEVERITY: str = "error"
 _NATIVE_UNKNOWN_COLUMN_CODE: str = "E201"
 _NATIVE_AMBIGUOUS_COLUMN_CODE: str = "E221"
 _ORDER_BY_CONTEXT: str = "ORDER BY"
@@ -102,6 +108,8 @@ def _request_payload(*, request: SqlSchemaValidationRequest) -> dict[str, object
             "strict": True,
             "semantic": True,
             "strict_syntax": False,
+            "known_functions": request.known_functions,
+            "known_types": request.known_types,
         },
     }
 
@@ -118,7 +126,7 @@ def _binding_result(*, sql: str, dialect: str | None, response: object) -> SqlBi
         if not isinstance(value, dict):
             continue
         value_dict: dict[str, object] = cast(dict[str, object], value)
-        if value_dict.get("severity") != _ERROR_SEVERITY:
+        if value_dict.get("severity") not in BINDING_SEVERITIES:
             continue
         native_code: object = value_dict.get("code")
         if not isinstance(native_code, str) or native_code not in _SQLBUILD_CODE_BY_NATIVE_CODE:
@@ -159,6 +167,7 @@ def _binding_result(*, sql: str, dialect: str | None, response: object) -> SqlBi
                 column=column,
                 start=_optional_int(value_dict.get("start")),
                 end=_optional_int(value_dict.get("end")),
+                severity=str(value_dict["severity"]),
             )
         )
     return SqlBindingResult(diagnostics=tuple(diagnostics))
@@ -427,7 +436,7 @@ def _diagnostic_position(
     if line is not None and column is not None:
         return line, column
     match: re.Match[str] | None = re.search(
-        r"(?:Unknown column|Ambiguous column reference) '([^']+)'", message
+        r"(?:Unknown column|Ambiguous column reference|JOIN USING column) '([^']+)'", message
     )
     if match is None:
         return line, column
@@ -443,7 +452,7 @@ def _diagnostic_position(
 
 def _diagnostic_context(*, sql: str, message: str) -> str | None:
     match: re.Match[str] | None = re.search(
-        r"(?:Unknown column|Ambiguous column reference) '([^']+)'", message
+        r"(?:Unknown column|Ambiguous column reference|JOIN USING column) '([^']+)'", message
     )
     if match is None:
         return None

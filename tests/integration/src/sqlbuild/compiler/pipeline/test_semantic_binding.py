@@ -121,13 +121,14 @@ def test_given_complete_contract_when_clause_references_missing_column_then_comp
 
     output: str = capsys.readouterr().out
     assert exit_code == test_case.expected_exit_code
-    assert (
-        f"error[{test_case.expected_error_code}]: Unknown column '{test_case.missing_column}'"
-        in output
-    )
+    assert f"error[{test_case.expected_error_code}]" in output
+    assert f"'{test_case.missing_column}'" in output
     assert "(context:" in output
     assert "model: downstream" in output
-    assert "--> models/downstream.sql:2:" in output
+    assert (
+        f"--> models/downstream.sql:2:{test_case.query_sql.index(test_case.missing_column) + 1}"
+        in output
+    )
 
 
 @pytest.mark.parametrize(

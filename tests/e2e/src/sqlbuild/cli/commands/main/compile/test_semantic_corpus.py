@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -36,7 +38,10 @@ def test_given_invalid_semantics_when_compiling_then_errors_precede_execution(
         assert code in result.stdout + result.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="Native coercion, signature, or structural coverage pending")
+@pytest.mark.xfail(
+    strict=True,
+    reason="External relation, scope ordering, or project-function type coverage pending",
+)
 @pytest.mark.parametrize(
     "test_case",
     [SemanticCorpusCase(**case) for case in semantic_corpus_cases(group="pending")],
@@ -75,6 +80,32 @@ def test_given_dialect_valid_control_when_compiling_and_building_then_both_succe
     assert compiled.returncode == test_case.expected_exit_code, compiled.stdout + compiled.stderr
     built: subprocess.CompletedProcess[str] = run_sqb(project_dir=project, command=("build",))
     assert built.returncode == test_case.expected_exit_code, built.stdout + built.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [SemanticCorpusCase(**case) for case in semantic_corpus_cases(group="warning")],
+    ids=lambda case: case.description,
+)
+def test_given_runtime_conversion_risk_when_compiling_then_warns_without_blocking(
+    test_case: SemanticCorpusCase,
+    semantic_playground: Path,
+    tmp_path: Path,
+) -> None:
+    project: Path = prepare_semantic_corpus_project(
+        base=semantic_playground, tmp_path=tmp_path, test_case=test_case
+    )
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        project_dir=project, command=("compile", "--no-cache", "--json")
+    )
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    report: dict[str, Any] = json.loads(result.stdout)
+    assert report["summary"]["errors"] == 0
+    assert report["summary"]["warnings"] >= 1
+    assert all(diagnostic["severity"] == "warning" for diagnostic in report["diagnostics"])
+    assert set(test_case.expected_codes) <= {
+        diagnostic["code"] for diagnostic in report["diagnostics"]
+    }
 
 
 if __name__ == "__main__":

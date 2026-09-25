@@ -30,19 +30,35 @@ unqualified physical names stay open.
 
 Binding checks apply to SQL clauses, CTEs, subqueries, and expanded macros. Semantic grouping,
 aggregate and window-placement diagnostics are errors. Project UDF arity and known argument types
-are checked separately; declared return types contribute to inference. Project functions are
-excluded from native unknown-function diagnostics until the native catalogue accepts declarations.
+are checked separately; declared return types contribute to inference. SQL and Python UDFs and
+table functions are registered with the native catalogue, along with types named in project
+contracts and function signatures. Registration does not replace SQLBuild's signature checks.
 
 Known output shapes also validate `unique_key`, `cursor`, `cursor_type`, `cursor_inputs`, custom
 `config.partition_column`, `row_diff_exclude_columns`, `row_diff_tolerances.by_column`, source
 `cursor_column`, audit expressions/relationships/accepted values, and SQL-test mock/expected names.
 
-General expression type checking is **not enabled yet**. The native literal and dialect coercion
-catalogue must first distinguish errors from valid expressions such as
-`ordered_at > '2026-01-01'`. The supported dialects are controlled in one place:
-`TYPE_CHECKED_DIALECTS` in `compiler/sql_analysis/constants.py`, initially empty. Mapping for native
-E210–E219 is ready for that integration. Function-catalogue and structural coverage also depend on
-the native engine; compilation is not a replacement for executing SQL unit tests.
+Expression type checks are enabled for **DuckDB (including MotherDuck), PostgreSQL, Snowflake,
+and BigQuery**. Other adapters retain reference and semantic checks without expression type checks.
+`TYPE_CHECKED_DIALECTS` in `compiler/sql_analysis/constants.py` owns this gate.
+
+Only proven bind-time rejections are errors. For example, DuckDB rejects `ordered_at > 5` for a
+TIMESTAMP column, but accepts `ordered_at > '2026-01-01'`. Accepted implicit conversions that may
+fail on data produce **W21x compile warnings**, with source locations and a warning summary count;
+they do not fail compilation. Unknown input types never cause type errors. Dialect coercions differ:
+numeric predicates are accepted by DuckDB but rejected by PostgreSQL, Snowflake, and BigQuery.
+Snowflake's function catalogue is partial and deliberately does not reject unknown function names.
+Function signatures and overload coverage remain partial; compilation is not a replacement for
+executing SQL unit tests.
+
+The current native validator still rejects some valid derived-table column aliases, UNPIVOT
+queries, and Snowflake GROUPING SETS. These are known upstream limitations; use the model-level
+escape hatch for an affected query. Project function registration prevents unknown-function
+errors but does not declare return types to the validator: some expressions consuming a project
+function result remain unchecked. Raw external relations and scope-ordering cases also remain
+partially checked. An unknown cast type is a warning because extensions may install that type.
+Wide queries with many repeated UNION branches and CTE layers can also incur severe native
+type-validation cost.
 
 One notice summarizes partial semantic checks. `sqb compile --json` includes per-model reasons in
 `semantic_checks_partial`; progress and notices go to stderr. The notice does not increment the
@@ -60,9 +76,12 @@ Escape hatches are `MODEL (sql_analysis false)`, the corresponding path default,
 | B004–B005 | E222–E223 | Reference/scope errors |
 | B101 | E202 | Unknown function |
 | B102 | E203 or project declaration | Invalid function arity |
-| B210–B219 | E210–E219 | Native type/shape errors (type checking gated) |
-| B216 | E216 | Set-operation arity; native emission currently shares the type-check gate |
+| B210–B219 | E210–E219 | Proven native type/shape errors on enabled dialects |
+| B216 | E216 | Set-operation, subquery, or row arity |
 | B230–B232 | E230–E232 | Grouping, aggregate, and window semantics |
+| B233 | E233 | Duplicate scope names, according to dialect rules |
+| B234 | E234 | Invalid LIMIT/OFFSET bounds |
+| W210–W219 | W210–W219 | Non-blocking runtime-conversion or uncertain-type warnings |
 | B300 | SQLBuild | Unknown metadata/audit column |
 | B301 | SQLBuild | Incompatible declared metadata, audit, or UDF argument type |
 | B302 | SQLBuild | Unknown SQL-test fixture/expected column |

@@ -521,11 +521,11 @@
       "category": "unknown column",
       "expected_exit_code": 1,
       "expected_codes": [
-        "P001"
+        "B002"
       ],
       "pending_native": false,
       "repo_files": {
-        "models/probe.sql": "MODEL (materialized table);\n\nSELECT @cents_to_dollars('SUM(amount_usd)') AS d FROM __source(\"raw__payments\")\n"
+        "models/marts/probe.sql": "MODEL (materialized table);\n\nSELECT @cents_to_dollars('SUM(amount_usd)') AS d FROM __source(\"raw__payments\")\n"
       }
     },
     {

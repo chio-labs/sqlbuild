@@ -38,6 +38,10 @@ from tests.unit.src.sqlbuild.compiler.sql_analysis.main._test_types import (
                 "B230",
                 "B231",
                 "B232",
+                "B233",
+                "B234",
+                "W210",
+                "W213",
             ),
         )
     ],
@@ -48,16 +52,19 @@ def test_given_native_semantic_errors_when_validating_then_codes_and_locations_s
     test_case: SemanticDiagnosticMappingCase,
 ) -> None:
     codes: dict[str, str] = {"E202": "B101", "E203": "B102", "E222": "B004", "E223": "B005"}
-    codes.update({f"E{number}": f"B{number}" for number in (*range(210, 220), 230, 231, 232)})
+    codes.update(
+        {f"E{number}": f"B{number}" for number in (*range(210, 220), 230, 231, 232, 233, 234)}
+    )
+    codes.update({"W210": "W210", "W213": "W213"})
 
     def validate(payload: str) -> str:
         requests: list[dict[str, Any]] = json.loads(payload)
         assert all(request["options"]["semantic"] for request in requests)
-        assert all(not request["options"]["check_types"] for request in requests)
+        assert all(request["options"]["check_types"] for request in requests)
         errors: list[dict[str, object]] = [
             {
                 "code": code,
-                "severity": "error",
+                "severity": {True: "warning", False: "error"}[code.startswith("W")],
                 "message": "Invalid expression",
                 "line": 2,
                 "column": 8,
@@ -79,6 +86,11 @@ def test_given_native_semantic_errors_when_validating_then_codes_and_locations_s
         )
         assert all(
             (diagnostic.line, diagnostic.column) == (2, 8) for diagnostic in result.diagnostics
+        )
+        assert all(
+            diagnostic.severity
+            == {True: "warning", False: "error"}[diagnostic.code.startswith("W")]
+            for diagnostic in result.diagnostics
         )
 
 

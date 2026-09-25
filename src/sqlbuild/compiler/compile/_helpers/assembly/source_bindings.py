@@ -7,8 +7,9 @@ from sqlbuild.compiler.compile._helpers.analysis.compact import get_complete_sch
 from sqlbuild.compiler.compile._helpers.assembly.binding_positions import (
     get_authored_binding_position,
 )
-from sqlbuild.compiler.compile._helpers.assembly.function_diagnostics import (
-    is_declared_function_diagnostic,
+from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
+    known_declared_types,
+    known_function_names,
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
@@ -58,6 +59,8 @@ def get_source_binding_diagnostics(
             models.append(model)
     requests: tuple[SqlSchemaValidationRequest, ...] = tuple(
         get_complete_schema_binding_request(
+            known_functions=known_function_names(project.functions),
+            known_types=known_declared_types(functions=project.functions, column_types=shapes),
             query_sql=cursor_intrinsics_analysis_sql(
                 sql=model.query_sql, cursor_type=model.config.values.get("cursor_type")
             ),
@@ -85,15 +88,10 @@ def get_source_binding_diagnostics(
                 diagnostic=diagnostic,
                 expansion=expansions.get(model.name),
             )
-            if is_declared_function_diagnostic(
-                diagnostic=diagnostic,
-                names=frozenset(function.name for function in project.functions),
-            ):
-                continue
             diagnostics.append(
                 CompilerDiagnostic(
                     phase=DiagnosticPhase.COMPILE,
-                    severity=DiagnosticSeverity.ERROR,
+                    severity=DiagnosticSeverity(diagnostic.severity),
                     code=diagnostic.code,
                     message=diagnostic.message,
                     resource_type=CompiledResourceType.MODEL,

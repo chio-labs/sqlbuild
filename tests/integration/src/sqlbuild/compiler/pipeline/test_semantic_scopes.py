@@ -84,10 +84,10 @@ _UPSTREAM: str = "SELECT 1 AS id, 'placed' AS status"
             None,
         ),
         SemanticCompileCase(
-            "type checking pending",
+            "timestamp numeric comparison rejected",
             _UPSTREAM,
             "SELECT 1 AS id WHERE TIMESTAMP '2026-01-02' > 5",
-            None,
+            "B217",
         ),
     ],
     ids=lambda case: case.description,
@@ -146,6 +146,42 @@ def test_given_macro_before_invalid_aggregate_when_compiling_then_reports_author
     assert "downstream.sql:2:44" in output.out + output.err
     assert test_case.expected_code is not None
     assert test_case.expected_code in output.out + output.err
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SemanticCompileCase(
+            "runtime equality", _UPSTREAM, "SELECT 1 = 'not-a-number' AS result", "W213"
+        ),
+        SemanticCompileCase(
+            "runtime cast",
+            _UPSTREAM,
+            "SELECT CAST(TIMESTAMP '2026-01-01' AS INTEGER) AS result",
+            "W213",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_runtime_conversion_when_compiling_cold_and_warm_then_warnings_do_not_block(
+    test_case: SemanticCompileCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_semantic_binding_project(
+        project_dir=tmp_path,
+        upstream_sql=test_case.header + test_case.upstream,
+        downstream_sql=test_case.header + test_case.downstream,
+    )
+    arguments: list[str] = ["--no-color", "--project-dir", str(tmp_path), "compile", "--json"]
+    assert main(arguments) == 0
+    cold: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert main(arguments) == 0
+    warm: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert cold["diagnostics"] == warm["diagnostics"]
+    assert cold["summary"]["errors"] == 0
+    assert cold["summary"]["warnings"] >= 1
+    warnings: list[dict[str, Any]] = cold["diagnostics"]
+    assert test_case.expected_code in {warning["code"] for warning in warnings}
+    assert all(warning["severity"] == "warning" for warning in warnings)
 
 
 if __name__ == "__main__":

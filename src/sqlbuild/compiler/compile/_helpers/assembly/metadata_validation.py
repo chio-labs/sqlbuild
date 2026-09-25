@@ -14,6 +14,10 @@ from sqlbuild.compiler.compile._helpers.analysis.compact import (
     analyze_columns_and_lineage_with_polyglot,
     get_complete_schema_binding_request,
 )
+from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
+    known_declared_types,
+    known_function_names,
+)
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
@@ -68,7 +72,9 @@ def get_semantic_metadata_diagnostics(
         shape: dict[str, str] | None = shapes.get(model.name)
         if shape is None:
             continue
-        diagnostics.extend(_audit_errors(model=model, shape=shape, shapes=shapes, profile=profile))
+        diagnostics.extend(
+            _audit_errors(model=model, project=project, shape=shape, shapes=shapes, profile=profile)
+        )
         values: dict[str, object] = model.config.values
         references: list[tuple[str, str, dict[str, str]]] = []
         for key in ("unique_key", "cursor", "partition_column", "row_diff_exclude_columns"):
@@ -163,6 +169,7 @@ def get_semantic_metadata_diagnostics(
 def _audit_errors(
     *,
     model: CompiledModel,
+    project: CompiledProject,
     shape: dict[str, str],
     shapes: dict[str, dict[str, str]],
     profile: ExpressionInferenceProfile,
@@ -186,6 +193,10 @@ def _audit_errors(
                             sql=f"SELECT * FROM output WHERE {expression}",
                             dialect=profile.sql_analysis_dialect,
                             schema={"output": shape},
+                            known_functions=known_function_names(project.functions),
+                            known_types=known_declared_types(
+                                functions=project.functions, column_types=shapes
+                            ),
                         ),
                     )
                 )[0]
@@ -195,6 +206,7 @@ def _audit_errors(
                         code=diagnostic.code,
                         name=expression,
                         message=f"expression_is_true: {diagnostic.message}",
+                        severity=DiagnosticSeverity(diagnostic.severity),
                     )
                     for diagnostic in result.diagnostics
                     if diagnostic.code != BINDING_UNKNOWN_TABLE_INTERNAL_CODE
@@ -450,13 +462,20 @@ def _argument_column_type(
     return candidates[0] if len(candidates) == 1 else _UNKNOWN_TYPE
 
 
-def _model_error(*, model: CompiledModel, code: str, name: str, message: str) -> CompilerDiagnostic:
+def _model_error(
+    *,
+    model: CompiledModel,
+    code: str,
+    name: str,
+    message: str,
+    severity: DiagnosticSeverity = DiagnosticSeverity.ERROR,
+) -> CompilerDiagnostic:
     line: int
     column: int
     line, column = _text_position(text=model.authored_sql, name=name)
     return CompilerDiagnostic(
         phase=DiagnosticPhase.COMPILE,
-        severity=DiagnosticSeverity.ERROR,
+        severity=severity,
         code=code,
         message=message,
         resource_type=CompiledResourceType.MODEL,
