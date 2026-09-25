@@ -30,6 +30,14 @@ const { hasSidebar } = Astro.locals.starlightRoute;
 							}
 						}
 						customElements.define('sl-sidebar-pane', StarlightSidebarPane);
+
+						// Bring the current page into view, unless Starlight is restoring an earlier scroll position.
+						const pane = document.getElementById('starlight__sidebar');
+						const current = pane?.querySelector<HTMLElement>('a[aria-current="page"]');
+						if (pane && current && (window as { _starlightScrollRestore?: number })._starlightScrollRestore === undefined) {
+							const offset = current.getBoundingClientRect().top - pane.getBoundingClientRect().top;
+							if (offset > pane.clientHeight * 0.8) pane.scrollTop = offset - pane.clientHeight / 3;
+						}
 					</script>
 					<sl-sidebar-pane popover="" id="starlight__sidebar" class="sidebar-pane">
 						<div class="sidebar-content sl-flex">
@@ -46,6 +54,7 @@ const { hasSidebar } = Astro.locals.starlightRoute;
 <style>
 	.frame {
 		width: min(var(--sqb-frame-width), 100%);
+		padding-inline: max(0px, min(1rem, (100vw - 72rem) / 2));
 		margin-inline: auto;
 	}
 
@@ -60,7 +69,7 @@ const { hasSidebar } = Astro.locals.starlightRoute;
 
 	.site-header .frame {
 		height: 100%;
-		padding-inline: var(--sl-nav-pad-x);
+		padding-inline: calc(var(--sl-nav-pad-x) + max(0px, min(1rem, (100vw - 72rem) / 2)));
 	}
 
 	:global([data-has-sidebar]) .site-header .frame {
@@ -96,7 +105,7 @@ const { hasSidebar } = Astro.locals.starlightRoute;
 
 	@media (min-width: 50rem) {
 		:global([data-has-sidebar]) .site-header .frame {
-			padding-inline-end: var(--sl-nav-pad-x);
+			padding-inline-end: calc(var(--sl-nav-pad-x) + max(0px, min(1rem, (100vw - 72rem) / 2)));
 		}
 
 		.body {

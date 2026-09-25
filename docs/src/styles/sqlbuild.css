@@ -4,9 +4,9 @@
 	--sl-font-mono: 'IBM Plex Mono', 'SQLBuild Box Drawing', ui-monospace, monospace;
 	--sl-nav-height: 60px;
 	--sl-content-width: 50rem;
-	--sl-sidebar-width: 16rem;
-	--sqb-toc-width: 15rem;
-	--sqb-frame-width: 1360px;
+	--sl-sidebar-width: 18rem;
+	--sqb-toc-width: 16rem;
+	--sqb-frame-width: 1440px;
 	--sl-text-h1: 2rem;
 	--sl-text-h2: 1.45rem;
 	--sl-text-h3: 1.15rem;
@@ -24,6 +24,7 @@
 	--sqb-primary: #3788e8;
 	--sqb-accent-soft: rgba(55, 136, 232, 0.12);
 	--sqb-code-bg: #111418;
+	--sqb-warning: #f0c267;
 
 	--sl-color-accent-low: #0f2440;
 	--sl-color-accent: #3788e8;
@@ -49,6 +50,7 @@
 	--sqb-primary: #2677d9;
 	--sqb-accent-soft: rgba(38, 119, 217, 0.08);
 	--sqb-code-bg: #fbfcfe;
+	--sqb-warning: #aa6c16;
 
 	--sl-color-accent-low: #e3eefb;
 	--sl-color-accent: #2677d9;
@@ -98,25 +100,72 @@ site-search button[data-open-modal]:hover {
 	color: var(--sqb-fg);
 }
 
-/* Sidebar */
-.sidebar-content .group-label .large,
-.sidebar-content summary .large {
-	font-size: 11px;
+/* Sidebar: bold top-level headings, nested groups styled like links (as on Mintlify). */
+.sidebar-content ul ul li {
+	margin-inline-start: 0;
+	padding-inline-start: 0;
+	border-inline-start: 0;
+}
+
+.sidebar-content .top-level > li + li {
+	margin-top: 1.1rem;
+}
+
+.sidebar-content .top-level > li > details > summary {
+	padding: 0.2rem 0.5rem 0.35rem;
+	pointer-events: none;
+}
+
+.sidebar-content .top-level > li > details > summary .caret {
+	display: none;
+}
+
+.sidebar-content .top-level > li > details > summary .large {
+	color: var(--sqb-fg);
+	font-size: 14px;
 	font-weight: 600;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
+}
+
+.sidebar-content ul ul summary {
+	padding: 0.3rem 0.5rem;
+	border-radius: 2px;
+}
+
+.sidebar-content ul ul summary:hover {
+	background: var(--sqb-accent-soft);
+}
+
+.sidebar-content ul ul summary .large {
+	color: var(--sqb-muted);
+	font-size: 14px;
+	font-weight: 400;
+	line-height: 1.4;
+}
+
+.sidebar-content ul ul summary:hover .large {
+	color: var(--sqb-fg);
+}
+
+.sidebar-content ul ul summary .caret {
+	width: 1rem;
+	height: 1rem;
 	color: var(--sqb-faint);
 }
 
+.sidebar-content ul ul ul {
+	margin-inline-start: 0.75rem;
+}
+
 .sidebar-content a {
-	border-radius: 0;
-	padding-block: 0.3em;
+	padding: 0.3rem 0.5rem;
+	border-radius: 2px;
 	font-size: 14px;
+	line-height: 1.4;
 	color: var(--sqb-muted);
-	border-inline-start: 2px solid transparent;
 }
 
 .sidebar-content a:hover {
+	background: var(--sqb-accent-soft);
 	color: var(--sqb-fg);
 }
 
@@ -124,7 +173,6 @@ site-search button[data-open-modal]:hover {
 .sidebar-content a[aria-current='page']:hover {
 	background: var(--sqb-accent-soft);
 	color: var(--sqb-primary);
-	border-inline-start-color: var(--sqb-primary);
 	font-weight: 500;
 }
 
@@ -181,7 +229,9 @@ starlight-toc li:has(> a[href='#_top']) {
 
 starlight-toc a,
 mobile-starlight-toc a {
-	font-size: 13px;
+	padding-block: 0.3rem;
+	font-size: 13.5px;
+	line-height: 1.4;
 	color: var(--sqb-muted);
 }
 
@@ -193,6 +243,30 @@ starlight-toc a[aria-current='true'],
 starlight-toc a[aria-current='true']:hover {
 	color: var(--sqb-primary);
 	font-weight: 500;
+}
+
+/* Links */
+.sl-markdown-content a:not(.sqb-card) {
+	color: var(--sqb-fg);
+	font-weight: 500;
+	text-decoration: underline;
+	text-decoration-color: var(--sqb-primary);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 3px;
+}
+
+.sl-markdown-content a:not(.sqb-card):hover {
+	color: var(--sqb-primary);
+	text-decoration-thickness: 2px;
+}
+
+/* Code blocks: a quiet copy icon that is always visible, as on Mintlify. */
+.expressive-code .copy button {
+	opacity: 0.6 !important;
+}
+
+.expressive-code .copy button:hover {
+	opacity: 1 !important;
 }
 
 /* Inline code */
@@ -210,6 +284,7 @@ starlight-toc a[aria-current='true']:hover {
 	width: 100%;
 	border-collapse: collapse;
 	font-size: 14px;
+	line-height: 1.5;
 }
 
 .sl-markdown-content :is(th, td) {
@@ -248,10 +323,48 @@ site-search dialog {
 	border-radius: 2px;
 }
 
-/* Asides */
-.starlight-aside {
+/* Callouts */
+.sqb-callout {
+	display: flex;
+	gap: 12px;
+	padding: 14px 16px;
+	border: 1px solid color-mix(in srgb, var(--sqb-callout) 30%, transparent);
 	border-radius: 2px;
-	border-inline-start-width: 2px;
+	background: color-mix(in srgb, var(--sqb-callout) 8%, transparent);
+	font-size: 14px;
+	line-height: 1.6;
+}
+
+.sqb-callout.note {
+	--sqb-callout: var(--sqb-primary);
+}
+
+.sqb-callout.warning {
+	--sqb-callout: var(--sqb-warning);
+}
+
+.sl-markdown-content .sqb-callout-icon {
+	width: 16px;
+	height: 16px;
+}
+
+.sl-markdown-content .sqb-callout > .sqb-callout-body {
+	margin: 0;
+}
+
+.sqb-callout-icon {
+	flex: none;
+	margin-top: 4px;
+	color: var(--sqb-callout);
+}
+
+.sl-markdown-content .sqb-callout-body > * {
+	margin: 0;
+	color: var(--sqb-fg);
+}
+
+.sl-markdown-content .sqb-callout-body > * + * {
+	margin-top: 0.6rem;
 }
 
 /* Mintlify-compatible components */

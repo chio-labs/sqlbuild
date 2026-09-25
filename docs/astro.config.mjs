@@ -33,6 +33,10 @@ export default defineConfig({
 			customCss: ['./src/styles/fonts.css', './src/styles/sqlbuild.css'],
 			expressiveCode: {
 				themes: [sqlbuildDark, sqlbuildLight],
+				defaultProps: {
+					// Plain boxes for shell snippets, without the fake terminal title bar.
+					overridesByLang: { 'bash,sh,shell,zsh,console,powershell': { frame: 'none' } },
+				},
 				styleOverrides: {
 					borderRadius: '2px',
 					borderWidth: '1px',
@@ -42,6 +46,10 @@ export default defineConfig({
 					uiFontFamily: 'var(--sl-font)',
 					frames: {
 						shadowColor: 'transparent',
+						inlineButtonBorder: 'transparent',
+						inlineButtonBackgroundIdleOpacity: '0',
+						inlineButtonBackgroundHoverOrFocusOpacity: '0.08',
+						inlineButtonForeground: 'var(--sqb-muted)',
 						frameBoxShadowCssValue: 'none',
 						editorTabBarBackground: 'var(--sqb-code-bg)',
 						editorActiveTabBackground: 'var(--sqb-code-bg)',

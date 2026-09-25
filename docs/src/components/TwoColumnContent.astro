@@ -23,6 +23,10 @@ const { toc } = Astro.locals.starlightRoute;
 	}
 
 	@media (min-width: 72rem) {
+		.right-sidebar :global(.right-sidebar-panel .sl-container) {
+			width: auto;
+		}
+
 		.columns.has-toc {
 			display: grid;
 			grid-template-columns: minmax(0, 1fr) var(--sqb-toc-width);
