@@ -92,8 +92,9 @@ def test_given_repeated_event_write_when_reading_then_event_is_stored_once(
             execute=adapter.execute,
             event=event,
             render_qualified_name=adapter.render_qualified_name,
-            render_framework_type=adapter.render_framework_type,
-            transient=False,
+            create_table_sql=adapter.render_create_migration_state_table_sql(
+                database=None, schema="main"
+            ),
         )
     stored: tuple[MigrationEvent, ...] = read_migration_events(
         connection=connection,

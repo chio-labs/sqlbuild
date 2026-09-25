@@ -911,6 +911,11 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_create_migration_state_table_sql(self, *, database: str | None, schema: str) -> str:
+        """Render DDL that creates the model migration event table when it is missing."""
+        ...
+
+    @abstractmethod
     def render_prune_fingerprint_history_sql(
         self,
         *,

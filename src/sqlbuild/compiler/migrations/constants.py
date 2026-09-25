@@ -28,5 +28,5 @@ MIGRATION_COLUMNS: tuple[str, ...] = (
 
 MIGRATION_COLUMN_TYPES: dict[str, StateSqlValueType] = {
     **{column: StateSqlValueType.STRING for column in MIGRATION_COLUMNS},
-    "created_at": StateSqlValueType.TIMESTAMP,
+    "created_at": StateSqlValueType.TEXT_TIMESTAMP,
 }

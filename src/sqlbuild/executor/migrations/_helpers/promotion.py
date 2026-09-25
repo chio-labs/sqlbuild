@@ -11,7 +11,6 @@ from sqlbuild.compiler.migrations.constants import MIGRATION_WRITE_ATTEMPTS
 from sqlbuild.compiler.migrations.main.deterministic_event_id import (
     deterministic_migration_event_id,
 )
-from sqlbuild.compiler.migrations.main.ensure_table import ensure_migration_table
 from sqlbuild.compiler.migrations.main.relation_for_location import migration_relation_for_location
 from sqlbuild.compiler.migrations.main.write_event import write_migration_event
 from sqlbuild.compiler.migrations.models import MigrationEvent, MigrationRelation
@@ -35,14 +34,11 @@ def promote_and_record(
         _promote(adapter=adapter, connection=connection, names=names)
         record_event(adapter=adapter, connection=connection, event=event)
         return
-    ensure_migration_table(
+    _ = adapter.execute(
         connection=connection,
-        execute=adapter.execute,
-        database=event.destination.database,
-        schema=event.destination.schema or "",
-        render_qualified_name=adapter.render_qualified_name,
-        render_framework_type=adapter.render_framework_type,
-        transient=adapter.state_tables_transient,
+        sql=adapter.render_create_migration_state_table_sql(
+            database=event.destination.database, schema=event.destination.schema or ""
+        ),
     )
     with adapter.transaction(connection):
         rebinds: tuple[str, ...] = (
@@ -79,9 +75,13 @@ def record_event(
         execute=adapter.execute,
         event=event,
         render_qualified_name=adapter.render_qualified_name,
-        render_framework_type=adapter.render_framework_type,
-        transient=adapter.state_tables_transient,
-        create_table=create_table,
+        create_table_sql=(
+            adapter.render_create_migration_state_table_sql(
+                database=event.destination.database, schema=event.destination.schema or ""
+            )
+            if create_table
+            else None
+        ),
         attempts=attempts,
     )
 

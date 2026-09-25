@@ -7,13 +7,12 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from sqlbuild.adapter.contract.types import AdapterExecute, FrameworkType
-from sqlbuild.compiler.migrations._helpers.sql import build_create_table_sql, build_insert_sql
+from sqlbuild.adapter.contract.types import AdapterExecute
+from sqlbuild.compiler.migrations._helpers.sql import build_existing_event_sql, build_insert_sql
 from sqlbuild.compiler.migrations.constants import (
     MIGRATION_WRITE_ATTEMPTS,
     MIGRATION_WRITE_RETRY_BASE_SECONDS,
 )
-from sqlbuild.compiler.migrations.exceptions import MigrationStateError
 from sqlbuild.compiler.migrations.models import MigrationEvent
 
 
@@ -23,38 +22,22 @@ def write_migration_event(
     execute: AdapterExecute[Any, Any],
     event: MigrationEvent,
     render_qualified_name: Callable[..., str | None],
-    render_framework_type: Callable[[FrameworkType], str],
-    transient: bool,
-    create_table: bool = True,
+    create_table_sql: str | None,
     attempts: int = MIGRATION_WRITE_ATTEMPTS,
 ) -> None:
-    """Create the state table when missing and insert the event unless already present."""
+    """Create the state table from adapter DDL when given, then insert the event if absent."""
 
-    if event.destination.schema is None:
-        raise MigrationStateError("model migration events require a destination schema")
-    create_statements: tuple[str, ...] = (
-        (
-            build_create_table_sql(
-                database=event.destination.database,
-                schema=event.destination.schema,
-                render_qualified_name=render_qualified_name,
-                render_framework_type=render_framework_type,
-                transient=transient,
-            ),
-        )
-        if create_table
-        else ()
+    existing_sql: str = build_existing_event_sql(
+        event=event, render_qualified_name=render_qualified_name
     )
-    statements: tuple[str, ...] = (
-        *create_statements,
-        build_insert_sql(event=event, render_qualified_name=render_qualified_name),
-    )
+    insert_sql: str = build_insert_sql(event=event, render_qualified_name=render_qualified_name)
     attempt: int
     for attempt in range(attempts):
         try:
-            statement: str
-            for statement in statements:
-                _ = execute(connection=connection, sql=statement)
+            if create_table_sql is not None:
+                _ = execute(connection=connection, sql=create_table_sql)
+            if not execute(connection=connection, sql=existing_sql).fetchall():
+                _ = execute(connection=connection, sql=insert_sql)
             return
         except Exception as error:
             if attempt + 1 == attempts:

@@ -7,6 +7,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.adapter.contract.types import FrameworkType
+from sqlbuild.adapter.state_sql.main.render_state_table_create_sql import (
+    render_state_table_create_sql,
+)
 from sqlbuild.compiler.migrations.constants import (
     MIGRATION_COLUMN_TYPES,
     MIGRATION_COLUMNS,
@@ -38,45 +41,47 @@ def build_create_table_sql(
     render_framework_type: Callable[[FrameworkType], str],
     transient: bool,
 ) -> str:
-    table: str = qualified_migration_table(
-        database=database, schema=schema, render_qualified_name=render_qualified_name
+    return render_state_table_create_sql(
+        qualified_name=qualified_migration_table(
+            database=database, schema=schema, render_qualified_name=render_qualified_name
+        ),
+        columns=MIGRATION_COLUMNS,
+        column_types=MIGRATION_COLUMN_TYPES,
+        required_columns=frozenset(),
+        render_framework_type=render_framework_type,
+        transient=transient,
     )
-    string_type: str = render_framework_type(FrameworkType.STRING)
-    timestamp_type: str = render_framework_type(FrameworkType.TIMESTAMP)
-    definitions: str = ", ".join(
-        f"{column} "
-        + (
-            timestamp_type
-            if MIGRATION_COLUMN_TYPES[column] == StateSqlValueType.TIMESTAMP
-            else string_type
-        )
-        for column in MIGRATION_COLUMNS
+
+
+def build_existing_event_sql(
+    *, event: MigrationEvent, render_qualified_name: Callable[..., str | None]
+) -> str:
+    table: str = _event_table(event=event, render_qualified_name=render_qualified_name)
+    event_id_literal: str = render_state_sql_literal(
+        value=event.event_id, declared_type=StateSqlValueType.STRING
     )
-    table_kind: str = "TRANSIENT TABLE" if transient else "TABLE"
-    return f"CREATE {table_kind} IF NOT EXISTS {table} ({definitions})"
+    return f"SELECT event_id FROM {table} WHERE event_id = {event_id_literal}"
 
 
 def build_insert_sql(
     *, event: MigrationEvent, render_qualified_name: Callable[..., str | None]
 ) -> str:
-    if event.destination.schema is None:
-        raise MigrationStateError("model migration events require a destination schema")
-    table: str = qualified_migration_table(
-        database=event.destination.database,
-        schema=event.destination.schema,
-        render_qualified_name=render_qualified_name,
-    )
+    table: str = _event_table(event=event, render_qualified_name=render_qualified_name)
     values: tuple[object | None, ...] = _event_values(event)
     literals: str = ", ".join(
         render_state_sql_literal(value=value, declared_type=MIGRATION_COLUMN_TYPES[column])
         for column, value in zip(MIGRATION_COLUMNS, values, strict=True)
     )
-    event_id_literal: str = render_state_sql_literal(
-        value=event.event_id, declared_type=StateSqlValueType.STRING
-    )
-    return (
-        f"INSERT INTO {table} ({', '.join(MIGRATION_COLUMNS)}) SELECT {literals} "
-        f"WHERE NOT EXISTS (SELECT 1 FROM {table} WHERE event_id = {event_id_literal})"
+    return f"INSERT INTO {table} ({', '.join(MIGRATION_COLUMNS)}) VALUES ({literals})"
+
+
+def _event_table(*, event: MigrationEvent, render_qualified_name: Callable[..., str | None]) -> str:
+    if event.destination.schema is None:
+        raise MigrationStateError("model migration events require a destination schema")
+    return qualified_migration_table(
+        database=event.destination.database,
+        schema=event.destination.schema,
+        render_qualified_name=render_qualified_name,
     )
 
 
