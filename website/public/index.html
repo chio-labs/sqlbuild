@@ -75,7 +75,7 @@
     <span class="dim">└──</span> revenue.sql</span></span><span class="hv-b"><span class="tree"><span class="dim">models</span>
 <span class="dim">└──</span> finance
     <span class="dim">└──</span> <span class="info">daily_revenue.sql</span></span></span></span>
-<span class="hv-l hv-l1"><span class="cmd">sqb plan</span></span><span class="hv-l hv-l2">Migrations (1)</span><span class="hv-l hv-l3"><span class="tree"><span class="dim">└──</span></span> daily_revenue  migrate  prod.revenue -&gt; prod.daily_revenue</span><span class="hv-l hv-l4"><span class="tree">    <span class="dim">├──</span></span> compatibility  compatible</span><span class="hv-l hv-l5"><span class="tree">    <span class="dim">├──</span></span> transfer  physical copy, promote by transactional rename</span><span class="hv-l hv-l6"><span class="tree">    <span class="dim">└──</span></span> discovery  automatic</span></div>
+<span class="hv-l hv-l1"><span class="cmd">sqb plan</span></span><span class="hv-l hv-l2">Migrations (1)</span><span class="hv-l hv-l3"><span class="tree"><span class="dim">└──</span></span> daily_revenue  migrate  prod.revenue -&gt; prod.daily_revenue</span><span class="hv-l hv-l4"><span class="tree">    <span class="dim">├──</span></span> compatibility  compatible</span><span class="hv-l hv-l5"><span class="tree">    <span class="dim">├──</span></span> transfer  physical copy, promote by staged rename</span><span class="hv-l hv-l6"><span class="tree">    <span class="dim">└──</span></span> discovery  automatic</span></div>
 			</div>
 
 			<section>
@@ -321,7 +321,7 @@ lifetime_orders
 Migrations (1)
 <span class="dim">└──</span> daily_order_rollup  migrate  dev.daily_activity_rollup -&gt; dev.daily_order_rollup
     <span class="dim">├──</span> compatibility  compatible
-    <span class="dim">├──</span> transfer  physical copy, promote by transactional rename
+    <span class="dim">├──</span> transfer  physical copy, promote by staged rename
     <span class="dim">└──</span> discovery  automatic</pre>
 						</div>
 						<div class="step">
