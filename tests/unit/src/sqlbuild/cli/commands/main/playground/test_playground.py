@@ -37,6 +37,8 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                 Path("functions/sql/table_fn__customer_orders.sql"),
                 Path("loaders/waffle_sources.py"),
                 Path("macros/currency.py"),
+                Path("models/marts/_sqlbuild/_macros/currency.py"),
+                Path("models/marts/_sqlbuild/_macros/datetime.py"),
                 Path("materializations/partition_tracked.py"),
             ),
             unexpected_paths=(
@@ -44,6 +46,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                 Path("sqlbuild_local.toml"),
                 Path("waffle_shop_control.duckdb"),
                 Path("macros/__pycache__"),
+                Path("models/marts/_macros"),
             ),
             expected_file_fragments=(
                 (
@@ -225,7 +228,12 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                 ),
                 (
                     Path("tasks/orders.py"),
-                    ("def prepare_raw_orders", "SkipMode.SOFT", "def export_window"),
+                    (
+                        "from sqlbuild.tasks import SkipMode, task",
+                        "def prepare_raw_orders",
+                        "SkipMode.SOFT",
+                        "def export_window",
+                    ),
                 ),
                 (
                     Path("loaders/orders.py"),
@@ -247,6 +255,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                     ),
                 ),
             ),
+            unexpected_file_fragments=((Path("tasks/orders.py"), ("sqlbuild.compiler",)),),
         ),
     ],
     ids=lambda case: case.description,

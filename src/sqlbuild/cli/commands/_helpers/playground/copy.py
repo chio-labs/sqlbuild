@@ -81,8 +81,7 @@ FROM __source("raw_orders")
 
 _PYTHON_NODES_TASKS_PY: str = '''"""Task examples for the Python nodes playground."""
 
-from sqlbuild.compiler.python_nodes.types import SkipMode
-from sqlbuild.tasks import task
+from sqlbuild.tasks import SkipMode, task
 
 
 @task(tags=["python", "ingress"], group="ingress")

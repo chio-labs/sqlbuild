@@ -81,6 +81,8 @@ Table promotion mode is a project setting rather than a `MODEL()` field. Staged 
 | `full_refresh` | Optional model execution override: `false` always runs incrementally, `true` always full-refreshes, and omission follows the command |
 | `on_schema_change` | `append_new_columns`, `sync_all_columns`, `ignore`, or `fail` |
 | `replay_on_change` | `forward`, `full`, or `bounded-<duration>` |
+| `migrate_from` | Old model name (or `schema.name`) whose data this model takes over; see [Model migrations](migrations.md). Also valid on snapshot models |
+| `migrate_force` | `true` replaces a destination that already has its own build history during a migration |
 
 See [Incremental](../incremental.md) for full semantics.
 

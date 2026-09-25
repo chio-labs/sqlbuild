@@ -25,6 +25,7 @@ sqb --project-dir <path> plan [flags]
 | `--changes-only` | Virtual mode only: show work not already bound to its expected VDE version |
 | `--no-python` | Exclude read-side Python tasks and assets from the plan |
 | `--defer-to` | Resolve unselected model references against another target |
+| `--as` | Compile for another target and show its plan, including [model migration](../concepts/models/migrations.md) decisions, using the current connection. Inspection only. |
 | `--json` | Output the plan as JSON |
 | `--full-refresh` | Plan a full rebuild for selected models unless a model sets `full_refresh false`; `full_refresh true` forces a model without this flag |
 | `--start-cursor-ts` | Override start cursor for timestamp incremental models (ISO format) |

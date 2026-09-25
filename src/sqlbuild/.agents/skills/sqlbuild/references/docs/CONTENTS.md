@@ -36,6 +36,7 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [Schemas](concepts/models/schemas.md) (`concepts/models/schemas`) - Declare model columns inline or reuse canonical inherited schemas.
 - [Type Enforcement](concepts/models/type-enforcement.md) (`concepts/models/type-enforcement`) - Understand declared model types, static checks, and runtime casting.
 - [Contracts](concepts/models/contracts.md) (`concepts/models/contracts`) - Validate required or exact model output schemas.
+- [Model migrations](concepts/models/migrations.md) (`concepts/models/migrations`) - Keep the history of an incremental or snapshot model when you rename it.
 - [Hooks](concepts/models/hooks.md) (`concepts/models/hooks`) - Run SQL or Python lifecycle hooks around model materialization.
 - [SQL Hooks](concepts/models/hooks/sql.md) (`concepts/models/hooks/sql`) - Define, parameterize, compile, and invoke reusable or inline SQL lifecycle hooks.
 - [Python Hooks](concepts/models/hooks/python.md) (`concepts/models/hooks/python`) - Define Python lifecycle hooks with runtime context, providers, SQL access, and skips.
@@ -137,7 +138,7 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [dag](cli/dag.md) (`cli/dag`) - Generate the static DAG artifact for Dagster and other integrations.
 - [query](cli/query.md) (`cli/query`) - Run ad hoc SQL queries against the project database.
 - [debug](cli/debug.md) (`cli/debug`) - Validate project configuration and test the warehouse connection.
-- [janitor](cli/janitor.md) (`cli/janitor`) - Clean up stale warehouse relations.
+- [janitor](cli/janitor.md) (`cli/janitor`) - Archive and then delete stale warehouse relations.
 - [clean](cli/clean.md) (`cli/clean`) - Remove compiled artifacts from the target directory.
 - [dbt](cli/dbt.md) (`cli/dbt`) - Coordinate dbt and SQLBuild projects.
 - [state](cli/state.md) (`cli/state`) - Manage the virtual mode state store.
