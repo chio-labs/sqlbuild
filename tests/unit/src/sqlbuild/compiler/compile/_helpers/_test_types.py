@@ -67,12 +67,6 @@ class AnalysisCacheTestCase:
 
 
 @dataclass(frozen=True)
-class SqlTestCteCacheTestCase:
-    description: str
-    expected_scanner_calls: int
-
-
-@dataclass(frozen=True)
 class NativeSqlTestExtractionParityTestCase:
     description: str
     sql: str
