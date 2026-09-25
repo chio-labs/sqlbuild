@@ -11,7 +11,6 @@ from collections import deque
 from collections.abc import Callable, Mapping
 from concurrent.futures import FIRST_COMPLETED, CancelledError, Future, ThreadPoolExecutor, wait
 from contextvars import copy_context
-from datetime import datetime
 from functools import partial
 from pathlib import Path
 from typing import Any, cast
@@ -203,11 +202,6 @@ class BuildScheduler:
                 loader_functions=customizations.loader_functions,
             ).loader_ref_entries
         )
-        self._loader_is_reload: bool = runtime.loader_is_reload
-        self._start_cursor_ts: datetime | None = runtime.start_cursor_ts
-        self._end_cursor_ts: datetime | None = runtime.end_cursor_ts
-        self._start_cursor_int: int | None = runtime.start_cursor_int
-        self._end_cursor_int: int | None = runtime.end_cursor_int
         self._target: str = runtime.target
         self._effective_vars: dict[str, object] = runtime.effective_vars or {}
         self._warehouse_relations: dict[str, RelationInfo] = initial_state.warehouse_relations or {}

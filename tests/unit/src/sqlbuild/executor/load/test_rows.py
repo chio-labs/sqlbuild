@@ -13,7 +13,7 @@ from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load._helpers.rows import (
     build_rows_sql,
     iter_loader_row_batches,
-    normalize_loader_rows,
+    iter_normalized_loader_rows,
     update_loader_rows_schema,
 )
 from sqlbuild.executor.load.models import LoaderRowsSchema
@@ -176,7 +176,7 @@ def test_given_reserved_loader_row_columns_when_executing_sql_then_quotes_identi
 def test_given_loader_return_value_when_normalizing_then_returns_expected_rows(
     test_case: LoaderRowsNormalizeTestCase,
 ) -> None:
-    assert normalize_loader_rows(test_case.value) == test_case.expected_rows
+    assert tuple(iter_normalized_loader_rows(test_case.value)) == test_case.expected_rows
 
 
 @pytest.mark.parametrize(
@@ -209,7 +209,7 @@ def test_given_invalid_loader_return_value_when_normalizing_then_raises(
     test_case: LoaderRowsNormalizeErrorTestCase,
 ) -> None:
     with pytest.raises(ExecutorInputError) as exc_info:
-        normalize_loader_rows(test_case.value)
+        tuple(iter_normalized_loader_rows(test_case.value))
 
     assert test_case.expected_error_fragment in str(exc_info.value)
 

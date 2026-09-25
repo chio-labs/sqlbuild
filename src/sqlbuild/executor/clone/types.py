@@ -23,12 +23,6 @@ class CloneFingerprintProgressReporter(CloneFingerprintProgressCallback, Protoco
     def write_interrupted(self) -> None: ...
 
 
-class CloneStartCallback(Protocol):
-    def __call__(
-        self, *, origin_target_name: str, destination_target_name: str, total: int
-    ) -> None: ...
-
-
 class CloneStatus(StrEnum):
     SUCCESS = "success"
     WARNING = "warning"
