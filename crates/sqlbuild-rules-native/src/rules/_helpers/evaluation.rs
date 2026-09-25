@@ -13,7 +13,6 @@ use crate::rules::models::{
 };
 use crate::sql_scan::main::matching_paren::matching_paren;
 use crate::sql_scan::main::non_code_end::non_code_end;
-use crate::sql_scan::main::quote_end::quote_end;
 use crate::sql_scan::models::QuotePolicy;
 use globset::{Glob, GlobSetBuilder};
 use sqlparser::ast::{
@@ -273,12 +272,13 @@ fn normalize_generic_fallback(sql: &str) -> String {
     while index < bytes.len() {
         let byte = bytes[index];
         let next = bytes.get(index + 1).copied();
-        if policy.is_quote(byte) {
-            let Ok(end) = quote_end(&bytes, index, policy) else {
-                break;
-            };
-            index = end;
-            continue;
+        match non_code_end(&bytes, index, policy) {
+            Ok(Some(end)) => {
+                index = end;
+                continue;
+            }
+            Ok(None) => {}
+            Err(_) => break,
         }
         if byte == b'-' && next == Some(b'>') {
             bytes[index] = b',';

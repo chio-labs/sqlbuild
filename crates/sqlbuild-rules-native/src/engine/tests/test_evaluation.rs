@@ -480,6 +480,48 @@ fn given_dialect_quoting_around_table_functions_when_evaluating_rules_then_model
 }
 
 #[test]
+fn given_comment_apostrophes_when_generic_fallback_normalizes_rules_sql_then_model_parses()
+-> Result<(), String> {
+    let project_dir = TempDir::new().map_err(|error| error.to_string())?;
+    let test_cases = [
+        test_types::DialectEvaluationTestCase {
+            description: "line comment apostrophe before a colon path",
+            dialect: "postgres",
+            query_sql: "-- don't drop the customer path\nSELECT payload:customer_id AS customer_id FROM orders",
+            expected_code: "SQBRCONTRACT101",
+        },
+        test_types::DialectEvaluationTestCase {
+            description: "block comment apostrophe before a colon path",
+            dialect: "postgres",
+            query_sql: "/* customer's path */ SELECT payload:customer_id AS customer_id FROM orders",
+            expected_code: "SQBRCONTRACT101",
+        },
+        test_types::DialectEvaluationTestCase {
+            description: "colon inside a line comment stays commented",
+            dialect: "postgres",
+            query_sql: "SELECT payload:customer_id AS customer_id -- note: it's nested\nFROM orders",
+            expected_code: "SQBRCONTRACT101",
+        },
+    ];
+
+    for test_case in test_cases {
+        let config = json!({"select": ["SQBRCONTRACT101"], "cache": {"enabled": false}});
+        let mut request: Value = serde_json::from_str(&helpers::request(&project_dir, &config))
+            .map_err(|error| error.to_string())?;
+        request["dialect"] = json!(test_case.dialect);
+        request["models"][0]["query_sql"] = json!(test_case.query_sql);
+        let result: Value = serde_json::from_str(&evaluate_json(&request.to_string())?)
+            .map_err(|error| error.to_string())?;
+        assert_eq!(
+            result["faults"][0]["code"], test_case.expected_code,
+            "{}: {result}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn given_enforced_contract_outputs_when_evaluating_explicit_type_rule_then_returns_expected_faults()
 -> Result<(), String> {
     let test_cases = [
