@@ -129,5 +129,115 @@ def test_given_unsupported_variant_key_when_formatting_then_compilable_file_stay
     assert model.read_text() == original
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FormatterSyntaxTestCase(
+            "model reference", 'select order_id from __ref("orders")', ('__ref("orders")',)
+        ),
+        FormatterSyntaxTestCase(
+            "source reference",
+            'select order_id from __source("raw.orders")',
+            ('__source("raw.orders")',),
+        ),
+        FormatterSyntaxTestCase(
+            "seed reference", 'select order_id from __seed("orders")', ('__seed("orders")',)
+        ),
+        FormatterSyntaxTestCase(
+            "dbt reference", 'select order_id from __dbt_ref("orders")', ('__dbt_ref("orders")',)
+        ),
+        FormatterSyntaxTestCase(
+            "table function",
+            'select * from __table_fn("order_items")(1)',
+            ('__table_fn("order_items")(1)',),
+        ),
+        FormatterSyntaxTestCase(
+            "scalar function",
+            'select __udf("order_label")(1) as label',
+            ('__udf("order_label")(1)',),
+        ),
+        FormatterSyntaxTestCase(
+            "cursor start", "select __cursor_start() as start_at", ("__cursor_start()",)
+        ),
+        FormatterSyntaxTestCase(
+            "cursor end", "select __cursor_end() as end_at", ("__cursor_end()",)
+        ),
+        FormatterSyntaxTestCase(
+            "empty fixture", "select * from __empty_fixture()", ("__empty_fixture()",)
+        ),
+        FormatterSyntaxTestCase(
+            "authored case and spacing",
+            "select __CuRsOr_StArT () as start_at",
+            ("__CuRsOr_StArT ()",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_sqlbuild_call_when_formatting_then_authored_spelling_is_preserved(
+    test_case: FormatterSyntaxTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
+    model: Path = tmp_path / "models" / "order_summary.sql"
+    model.parent.mkdir()
+    model.write_text('MODEL (description "Order summary");\n' + test_case.sql + "\n")
+    assert main(["--project-dir", str(tmp_path), "format", "--json"]) == 0
+    capsys.readouterr()
+    formatted: str = model.read_text()
+    assert all(fragment in formatted for fragment in test_case.expected_fragments)
+    assert main(["--project-dir", str(tmp_path), "format", "--check", "--json"]) == 0
+    assert model.read_text() == formatted
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FormatterSyntaxTestCase(
+            "several CTE macros with attached comments",
+            "WITH base AS (SELECT 1 AS order_id),\n"
+            '-- First order stage.\n@make_ctes("first_orders", "base"),\n'
+            '-- Second order stage.\n@make_ctes("second_orders", "first_orders"),\n'
+            '@other_ctes("third_orders", "second_orders"),\n'
+            "-- Publish order identifiers.\nfinal AS (SELECT order_id FROM third_orders)\nSELECT * FROM final",
+            (
+                '\n@make_ctes("first_orders", "base"),\n',
+                '\n@make_ctes("second_orders", "first_orders"),\n',
+                '\n@other_ctes("third_orders", "second_orders"),\n',
+                "\n-- Publish order identifiers.\nfinal AS (",
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cte_macros_and_comments_when_formatting_then_layout_and_rules_stay_valid(
+    test_case: FormatterSyntaxTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = ["SQBRSQL033"]\n'
+    )
+    macros: Path = tmp_path / "models" / "_macros"
+    macros.mkdir(parents=True)
+    (macros / "ctes.py").write_text(
+        "def make_ctes(name: str, source: str) -> str:\n"
+        '    return f"{name} AS (SELECT order_id FROM {source})"\n\n'
+        "def other_ctes(name: str, source: str) -> str:\n"
+        "    return make_ctes(name, source)\n"
+    )
+    model: Path = tmp_path / "models" / "order_summary.sql"
+    model.write_text('MODEL (description "Order summary");\n' + test_case.sql + "\n")
+    assert main(["--project-dir", str(tmp_path), "compile", "--no-cache"]) == 0
+    capsys.readouterr()
+    assert main(["--project-dir", str(tmp_path), "format", "--json"]) == 0
+    capsys.readouterr()
+    formatted: str = model.read_text()
+    assert all(fragment in formatted for fragment in test_case.expected_fragments)
+    assert main(["--project-dir", str(tmp_path), "format", "--check", "--json"]) == 0
+    assert model.read_text() == formatted
+    assert main(["--project-dir", str(tmp_path), "compile", "--no-cache"]) == 0
+    capsys.readouterr()
+    assert main(["--project-dir", str(tmp_path), "rules", "--json", "run", "SQBRSQL033"]) == 0
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    assert payload["findings"] == []
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-vv"])

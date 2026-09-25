@@ -498,7 +498,7 @@ def test_given_native_formatter_decline_when_formatting_then_whole_file_is_uncha
         TypedNullFormatIntegrationTestCase(
             description="inline colon casts reach empty fixture fixed point in one pass",
             fixture_projection=("NULL::VARCHAR AS customer_key, NULL::BIGINT AS order_count"),
-            expected_literal="__EMPTY_FIXTURE()",
+            expected_literal="__empty_fixture()",
             expected_exit_code=0,
         )
     ],

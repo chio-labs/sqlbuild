@@ -255,7 +255,7 @@ fn canonical_fragment(chars: &[char], tokens: &[Token]) -> String {
     result
 }
 
-fn cte_macro_indices(tokens: &[Token]) -> HashSet<usize> {
+pub(super) fn cte_macro_indices(tokens: &[Token]) -> HashSet<usize> {
     let depths = token_depths(tokens);
     let mut scopes: HashSet<usize> = HashSet::new();
     let mut indices: HashSet<usize> = HashSet::new();

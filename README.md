@@ -210,8 +210,10 @@ formatting and `sqb format --check` exit nonzero. A declined body is never count
 Formatting preserves authored cast types, postfix casts, quoted literals, variant paths, typed
 lambda parameters, and supported SQL function spellings while applying canonical layout. It uses
 the compiler's trusted-SQL function-depth budget and does not impose the separate browser-oriented
-UNION-chain limit from Polyglot's convenience formatting API. CTE-producing macros are formatted as
-authored macro calls rather than expanded project SQL.
+UNION-chain limit from Polyglot's convenience formatting API. SQLBuild calls retain their authored
+spelling, including zero-argument cursor and empty-fixture intrinsics. CTE-producing macros remain
+authored calls rather than expanded project SQL, with each call on its own CTE-list line and
+leading comments attached to the node they describe.
 
 Custom rules are ordinary Python beneath `rules/**/*.py`. Only `@rule` functions register; helper
 functions, constants, dataclasses, classes, and nested packages remain ordinary Python. Typed,

@@ -5,7 +5,7 @@ use polyglot_sql::tokens::{Token, TokenType};
 use polyglot_sql::{ComplexityGuardOptions, Dialect, DialectType, ParseOptions};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use crate::sql_lint::_helpers::formatter_syntax::protect_syntax;
+use crate::sql_lint::_helpers::formatter_syntax::{cte_macro_indices, protect_syntax};
 use crate::sql_lint::constants::{
     CAST_TYPE_SEPARATOR_KEYWORD, CLOSE_PARENTHESIS, LINT_API_VERSION, OPEN_PARENTHESIS,
     VALUES_RELATION_PREFIX_TOKEN_COUNT,
@@ -151,6 +151,7 @@ fn format_once(neutral_sql: &str, context: &FormatOnceContext<'_>) -> Result<Str
     let mut formatted = protected.restore(formatted_statements?.join(";\n"), context.dialect)?;
     formatted = restore_unparenthesized_from_values(formatted, context)?;
     formatted = restore_null_treatment(formatted, context)?;
+    formatted = layout_cte_macros(formatted, context)?;
     if context.comments.is_empty() {
         return Ok(formatted);
     }
@@ -234,6 +235,50 @@ fn restore_implicit_aliases(
             start..end + usize::from(formatted[end..].starts_with(' ')),
             "",
         );
+    }
+    Ok(formatted)
+}
+
+fn layout_cte_macros(
+    mut formatted: String,
+    context: &FormatOnceContext<'_>,
+) -> Result<String, String> {
+    let tokens = context
+        .dialect
+        .tokenize(&formatted)
+        .map_err(|error| error.to_string())?;
+    let macros = cte_macro_indices(&tokens);
+    if macros.is_empty() {
+        return Ok(formatted);
+    }
+    let depths = crate::sql_lint::_helpers::engine::token_depths(&tokens);
+    let chars: Vec<char> = formatted.chars().collect();
+    let mut gaps: BTreeMap<(usize, usize), String> = BTreeMap::new();
+    for index in macros {
+        let with = (0..index)
+            .rev()
+            .find(|&previous| {
+                tokens[previous].token_type == TokenType::With && depths[previous] == depths[index]
+            })
+            .ok_or_else(|| "native formatter lost a CTE macro scope".to_string())?;
+        let indentation = line_indentation(&chars, tokens[with].span.start);
+        let newline = format!("\n{}", " ".repeat(indentation));
+        gaps.insert(
+            (tokens[index - 1].span.end, tokens[index].span.start),
+            newline.clone(),
+        );
+        if tokens
+            .get(index + 1)
+            .is_some_and(|token| token.token_type == TokenType::Comma)
+            && let Some(next) = tokens.get(index + 2)
+        {
+            gaps.insert((tokens[index + 1].span.end, next.span.start), newline);
+        }
+    }
+    for ((start, end), replacement) in gaps.into_iter().rev() {
+        let start = char_to_byte(&formatted, start)?;
+        let end = char_to_byte(&formatted, end)?;
+        formatted.replace_range(start..end, &replacement);
     }
     Ok(formatted)
 }
