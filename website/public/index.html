@@ -312,11 +312,29 @@ Migrations (1)
     ├── transfer  physical copy, promote by transactional rename
     └── discovery  automatic</pre>
 						</div>
+						<div class="step">
+							<div class="step-text">
+								<span class="num">08 · Tidy up safely</span>
+								<h3>Archive old tables before deleting them</h3>
+								<p>
+									The janitor renames tables your project no longer builds, and only drops them once the archive expires, 14 days later by default.
+								</p>
+							</div>
+<pre class="terminal"><span class="cmd">sqb janitor</span>
+Janitor preview  prod
+  relations to archive   1
+  archives to delete     0
+  archive retention      14 days
+
+Relations to archive
+  prod.weekly_revenue  -&gt;  prod._sqb_archive__20260925t155417z__weekly_revenue  …</pre>
+						</div>
 					</div>
 					<p class="caption">
 						Real output from SQLBuild's example project, trimmed to the relevant lines. During a migration the old
-						table is never modified, and every move is recorded.
-						<a href="/docs/concepts/models/migrations/">How migrations work</a>
+						table is never modified, archives can be renamed back until they expire, and every move is recorded.
+						<a href="/docs/concepts/models/migrations/">How migrations work</a> ·
+						<a href="/docs/cli/janitor/">How the janitor works</a>
 					</p>
 				</div>
 			</section>
