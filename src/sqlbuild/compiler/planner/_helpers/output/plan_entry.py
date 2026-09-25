@@ -12,6 +12,7 @@ from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.compile.constants import CURSOR_INPUTS_CONFIG_KEY
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
+from sqlbuild.compiler.compile.main._source_bindings import get_source_binding_diagnostics
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
@@ -20,6 +21,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledRelationLocation,
     CompiledSeed,
+    CompilerDiagnostic,
     CompileSqlReference,
     CursorInputRoles,
 )
@@ -62,6 +64,9 @@ from sqlbuild.compiler.planner._helpers.resolve.refs import (
     build_seed_locations,
 )
 from sqlbuild.compiler.planner._helpers.resolve.resolve import resolve_model_sql
+from sqlbuild.compiler.planner._helpers.warehouse.semantic_sources import (
+    get_semantic_source_columns,
+)
 from sqlbuild.compiler.planner._helpers.warehouse.source_deferral import build_source_read_map
 from sqlbuild.compiler.planner.constants import (
     METADATA_NAME_FILTER_LIMIT,
@@ -249,12 +254,19 @@ def build_planner_relations_context(
         function_locations=function_locations,
         source_map=source_map,
         source_read_map=source_read_map,
-        source_warehouse_columns=_resolve_source_warehouse_columns(
+        source_warehouse_columns=get_semantic_source_columns(
             project=project,
             adapter=adapter,
             connection=connection,
             source_read_map=source_read_map,
-            known_source_columns=known_source_columns,
+            selected_keys=scope.selected_keys,
+            columns=_resolve_source_warehouse_columns(
+                project=project,
+                adapter=adapter,
+                connection=connection,
+                source_read_map=source_read_map,
+                known_source_columns=known_source_columns,
+            ),
         ),
         star_exclude_keyword=adapter.star_exclude_keyword(),
     )
@@ -338,6 +350,28 @@ def build_plan_entries(
     inputs: PlanEntryBuildInputs = (
         build_inputs if build_inputs is not None else PlanEntryBuildInputs()
     )
+    binding_diagnostics: tuple[CompilerDiagnostic, ...] = (
+        *(
+            diagnostic
+            for diagnostic in project.diagnostics
+            if diagnostic.is_error and diagnostic.resource_type != CompiledResourceType.SQL_TEST
+        ),
+        *get_source_binding_diagnostics(
+            project=project,
+            columns=relations.source_warehouse_columns,
+            profile=adapter.expression_inference_profile(),
+            selected_keys=scope.selected_keys,
+        ),
+    )
+    if binding_diagnostics:
+        raise PlannerInputError(
+            "\n".join(
+                f"error[{diagnostic.code}]: {diagnostic.message}\n"
+                f"  --> {diagnostic.path}:{diagnostic.line or 1}:{diagnostic.column or 1}"
+                for diagnostic in binding_diagnostics
+            ),
+            code=binding_diagnostics[0].code,
+        )
     run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = inputs.run_despite_unchanged
     source_freshness_blocked_model_names: frozenset[str] = (
         inputs.source_freshness_blocked_model_names

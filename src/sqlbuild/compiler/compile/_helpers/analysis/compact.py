@@ -1334,14 +1334,16 @@ def _compact_projection_type(
     cast_type: object = projection.get(_POLYGLOT_ANALYSIS_CAST_TYPE)
     if isinstance(cast_type, str) and cast_type and cast_type != UNKNOWN_SQL_TYPE_NAME:
         return cast_type
-    type_hint: object = projection.get(_POLYGLOT_ANALYSIS_TYPE_HINT)
-    if isinstance(type_hint, str) and type_hint and type_hint != UNKNOWN_SQL_TYPE_NAME:
-        return type_hint
     transform_function: object = projection.get(_POLYGLOT_ANALYSIS_TRANSFORM_FUNCTION)
     if isinstance(transform_function, dict):
         function_name: object = transform_function.get(_POLYGLOT_ANALYSIS_FUNCTION_NAME)
         if isinstance(function_name, str):
-            return inference_profile.function_return_type(function_name)
+            declared_type: str | None = inference_profile.function_return_type(function_name)
+            if declared_type is not None:
+                return declared_type
+    type_hint: object = projection.get(_POLYGLOT_ANALYSIS_TYPE_HINT)
+    if isinstance(type_hint, str) and type_hint and type_hint != UNKNOWN_SQL_TYPE_NAME:
+        return type_hint
     return None
 
 

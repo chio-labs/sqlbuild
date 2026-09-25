@@ -41,6 +41,7 @@ ALLOWED_METADATA_LOOP_PATHS: frozenset[str] = frozenset(
     {
         "src/sqlbuild/adapter/relations/main/relation_lookup.py",
         "src/sqlbuild/compiler/planner/_helpers/output/plan_entry.py",
+        "src/sqlbuild/compiler/planner/_helpers/warehouse/semantic_sources.py",
         "src/sqlbuild/executor/janitor/_helpers/plan.py",
         "src/sqlbuild/executor/pipeline/_helpers/testing.py",
         "src/sqlbuild/executor/run/_helpers/materializations/microbatch.py",

@@ -7,6 +7,7 @@ import re
 from typing import Any, cast
 
 import sqlbuild._native as _native
+from sqlbuild.compiler.sql_analysis.constants import NATIVE_DIALECT_ALIASES, TYPE_CHECKED_DIALECTS
 from sqlbuild.compiler.sql_analysis.exceptions import SqlAnalysisBoundaryError
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.compiler.sql_analysis.models import (
@@ -22,6 +23,21 @@ _SQLBUILD_CODE_BY_NATIVE_CODE: dict[str, str] = {
     "E221": "B003",
     "E222": "B004",
     "E223": "B005",
+    "E202": "B101",
+    "E203": "B102",
+    "E210": "B210",
+    "E211": "B211",
+    "E212": "B212",
+    "E213": "B213",
+    "E214": "B214",
+    "E215": "B215",
+    "E216": "B216",
+    "E217": "B217",
+    "E218": "B218",
+    "E219": "B219",
+    "E230": "B230",
+    "E231": "B231",
+    "E232": "B232",
 }
 _ERROR_SEVERITY: str = "error"
 _NATIVE_UNKNOWN_COLUMN_CODE: str = "E201"
@@ -64,7 +80,9 @@ def get_schema_validations(
 
 
 def _request_payload(*, request: SqlSchemaValidationRequest) -> dict[str, object]:
-
+    dialect: str = NATIVE_DIALECT_ALIASES.get(
+        request.dialect or "generic", request.dialect or "generic"
+    )
     tables: list[dict[str, object]] = []
     for table_name, columns in sorted(request.schema.items()):
         table_columns: list[dict[str, str]] = []
@@ -73,16 +91,16 @@ def _request_payload(*, request: SqlSchemaValidationRequest) -> dict[str, object
         tables.append({"name": table_name, "columns": table_columns})
     return {
         "sql": request.sql,
-        "dialect": request.dialect or "generic",
+        "dialect": dialect,
         "schema": {
             "strict": True,
             "tables": tables,
         },
         "options": {
-            "check_types": False,
+            "check_types": dialect.lower() in TYPE_CHECKED_DIALECTS,
             "check_references": True,
             "strict": True,
-            "semantic": False,
+            "semantic": True,
             "strict_syntax": False,
         },
     }
@@ -108,12 +126,18 @@ def _binding_result(*, sql: str, dialect: str | None, response: object) -> SqlBi
         raw_message: str = str(value_dict.get("message") or "SQL binding failed")
         context: str | None = _diagnostic_context(sql=sql, message=raw_message)
         message: str = f"{raw_message} (context: {context})" if context is not None else raw_message
+        line: int | None
+        column: int | None
         line, column = _diagnostic_position(
             sql=sql,
             message=message,
             line=_optional_int(value_dict.get("line")),
             column=_optional_int(value_dict.get("column")),
         )
+        start: int | None = _optional_int(value_dict.get("start"))
+        if start is not None and 0 <= start < len(sql):
+            line = sql.count("\n", 0, start) + 1
+            column = start - sql.rfind("\n", 0, start)
         if _is_proven_snowflake_values_column(
             sql=sql,
             dialect=dialect,

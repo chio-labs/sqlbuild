@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import sqlbuild._native as _native
+from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     expand_declaration_references_result,
     expand_declaration_references_with_spans,
@@ -23,7 +24,6 @@ from sqlbuild.compiler.compile.constants import (
     SQL_QUOTE_TOKENS,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
     DeclarationExpansionResult,

@@ -190,7 +190,7 @@ def test_given_exact_compact_batch_when_entry_rows_are_absent_then_warm_compile_
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     monkeypatch.setattr(assembly_project, "_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT", 1)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v10" / "model-analysis.sqlite3"
+    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v11" / "model-analysis.sqlite3"
     with sqlite3.connect(cache_path) as connection:
         batch_count: int = connection.execute(
             "SELECT COUNT(*) FROM model_analysis_compact_batch"
@@ -223,7 +223,7 @@ def test_given_one_changed_model_when_entry_rows_are_absent_then_compact_batch_r
     write_repo_files(tmp_path, _SELECTION_REPO_FILES)
     monkeypatch.setattr(assembly_project, "_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT", 1)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v10" / "model-analysis.sqlite3"
+    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v11" / "model-analysis.sqlite3"
     with sqlite3.connect(cache_path) as connection:
         _ = connection.execute("DELETE FROM model_analysis")
     (tmp_path / "models" / "unrelated.sql").write_text(
@@ -261,7 +261,7 @@ def test_given_corrupt_compact_batch_when_entry_rows_are_valid_then_warm_compile
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     monkeypatch.setattr(assembly_project, "_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT", 1)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v10" / "model-analysis.sqlite3"
+    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v11" / "model-analysis.sqlite3"
     with sqlite3.connect(cache_path) as connection:
         _ = connection.execute(
             "UPDATE model_analysis_compact_batch SET payload = ?",
@@ -277,7 +277,7 @@ def test_given_corrupt_compact_batch_when_entry_rows_are_valid_then_warm_compile
 
 @pytest.mark.parametrize(
     "test_case",
-    (AnalysisCacheTestCase(description="changed SQL cache miss", expected_count=1),),
+    (AnalysisCacheTestCase(description="changed SQL cache miss", expected_count=2),),
     ids=lambda case: case.description,
 )
 def test_given_changed_expanded_sql_when_compiling_then_writes_a_new_analysis_object(
@@ -301,7 +301,7 @@ def test_given_changed_expanded_sql_when_compiling_then_writes_a_new_analysis_ob
 
 @pytest.mark.parametrize(
     "test_case",
-    (AnalysisCacheTestCase(description="corrupt cache fallback", expected_count=1),),
+    (AnalysisCacheTestCase(description="corrupt cache fallback", expected_count=2),),
     ids=lambda case: case.description,
 )
 def test_given_corrupt_analysis_when_compiling_then_reanalyzes_and_repairs_the_entry(
@@ -312,7 +312,7 @@ def test_given_corrupt_analysis_when_compiling_then_reanalyzes_and_repairs_the_e
 ) -> None:
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v10" / "model-analysis.sqlite3"
+    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v11" / "model-analysis.sqlite3"
     with sqlite3.connect(cache_path) as connection:
         persisted_contents: str = connection.execute(
             "SELECT payload FROM model_analysis"
@@ -335,14 +335,14 @@ def test_given_corrupt_analysis_when_compiling_then_reanalyzes_and_repairs_the_e
     _digest, _separator, serialized_payload = repaired_contents.partition("\n")
     repaired_payload: dict[str, object] = json.loads(serialized_payload)
     assert repaired_project.models == cold_project.models
-    assert repaired_payload["v"] == 10
+    assert repaired_payload["v"] == 11
     assert isinstance(repaired_payload["s"], str)
     assert analyzer.call_count == test_case.expected_count
 
 
 @pytest.mark.parametrize(
     "test_case",
-    (AnalysisCacheTestCase(description="non-text analysis cache fallback", expected_count=1),),
+    (AnalysisCacheTestCase(description="non-text analysis cache fallback", expected_count=2),),
     ids=lambda case: case.description,
 )
 def test_given_non_text_analysis_cache_when_compiling_then_reanalyzes_safely(
@@ -353,7 +353,7 @@ def test_given_non_text_analysis_cache_when_compiling_then_reanalyzes_safely(
 ) -> None:
     write_repo_files(tmp_path, _CACHE_REPO_FILES)
     _ = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v10" / "model-analysis.sqlite3"
+    cache_path: Path = tmp_path / "target" / "cache" / "compiler" / "v11" / "model-analysis.sqlite3"
     with sqlite3.connect(cache_path) as connection:
         _ = connection.execute(
             "UPDATE model_analysis SET payload = ?",
@@ -688,7 +688,7 @@ def test_given_analysis_inputs_when_building_keys_then_all_semantic_inputs_affec
 
 @pytest.mark.parametrize(
     "test_case",
-    (AnalysisCacheTestCase(description="propagated schema invalidation", expected_count=2),),
+    (AnalysisCacheTestCase(description="propagated schema invalidation", expected_count=4),),
     ids=lambda case: case.description,
 )
 def test_given_schema_change_when_compiling_then_affected_consumers_miss_cache(
@@ -764,7 +764,7 @@ def test_given_model_sql_change_with_stable_signature_when_compiling_then_downst
 
 @pytest.mark.parametrize(
     "test_case",
-    (AnalysisCacheTestCase(description="changed exported signature", expected_count=3),),
+    (AnalysisCacheTestCase(description="changed exported signature", expected_count=5),),
     ids=lambda case: case.description,
 )
 def test_given_model_output_change_when_compiling_then_downstream_closure_misses_cache(
@@ -818,7 +818,7 @@ def test_given_changed_output_signature_when_reanalyzing_downstream_then_uses_on
 
 @pytest.mark.parametrize(
     "test_case",
-    (AnalysisCacheTestCase(description="restored exported signature", expected_count=2),),
+    (AnalysisCacheTestCase(description="restored exported signature", expected_count=4),),
     ids=lambda case: case.description,
 )
 def test_given_cached_model_signature_is_restored_when_compiling_then_downstream_reanalyzes(
@@ -844,7 +844,7 @@ def test_given_cached_model_signature_is_restored_when_compiling_then_downstream
 
 @pytest.mark.parametrize(
     "test_case",
-    (AnalysisCacheTestCase(description="selected upstream change", expected_count=1),),
+    (AnalysisCacheTestCase(description="selected upstream change", expected_count=5),),
     ids=lambda case: case.description,
 )
 def test_given_selected_upstream_change_when_compiling_full_project_then_stale_consumer_misses(
@@ -945,7 +945,7 @@ def test_given_upstream_interface_change_when_compact_batch_exists_then_dependen
 
 @pytest.mark.parametrize(
     "test_case",
-    (AnalysisCacheTestCase(description="selected upstream analysis", expected_count=2),),
+    (AnalysisCacheTestCase(description="selected upstream analysis", expected_count=3),),
     ids=lambda case: case.description,
 )
 def test_given_partial_selection_when_compiling_then_analyzes_only_upstream_closure(
@@ -1010,7 +1010,7 @@ def test_given_unselected_invalid_reference_when_compiling_then_live_validation_
 
 @pytest.mark.parametrize(
     "test_case",
-    (AnalysisCacheTestCase(description="explicit cache bypass", expected_count=2),),
+    (AnalysisCacheTestCase(description="explicit cache bypass", expected_count=4),),
     ids=lambda case: case.description,
 )
 def test_given_compile_cache_bypass_when_compiling_twice_then_both_runs_analyze_cold(
@@ -1046,7 +1046,7 @@ def test_given_compile_cache_bypass_when_compiling_twice_then_both_runs_analyze_
 
 @pytest.mark.parametrize(
     "test_case",
-    (AnalysisCacheTestCase(description="command cache bypass", expected_count=2),),
+    (AnalysisCacheTestCase(description="command cache bypass", expected_count=4),),
     ids=lambda case: case.description,
 )
 def test_given_command_cache_bypass_when_compiling_twice_then_both_runs_analyze_cold(
@@ -1067,7 +1067,7 @@ def test_given_command_cache_bypass_when_compiling_twice_then_both_runs_analyze_
 
 @pytest.mark.parametrize(
     "test_case",
-    (AnalysisCacheTestCase(description="target cache bypass", expected_count=2),),
+    (AnalysisCacheTestCase(description="target cache bypass", expected_count=4),),
     ids=lambda case: case.description,
 )
 def test_given_target_cache_disabled_when_compiling_twice_then_both_runs_analyze_cold(

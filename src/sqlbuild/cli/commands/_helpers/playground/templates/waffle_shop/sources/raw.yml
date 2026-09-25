@@ -1,5 +1,6 @@
 sources:
   - name: raw__customers
+    contract: enforced
     managed: true
     write_strategy: table
     columns:
@@ -15,6 +16,7 @@ sources:
         type: TIMESTAMP
 
   - name: raw__orders
+    contract: enforced
     managed: true
     write_strategy: delete_insert
     cursor_column: ordered_at

@@ -47,7 +47,8 @@ def write_from_values_format_project(*, tmp_path: Path, adapter: str) -> tuple[P
     models: Path = project_dir / "models"
     models.mkdir()
     (models / "customers.sql").write_text(
-        'MODEL (description "Customers.");\nSELECT 1 AS customer_key\n', encoding="utf-8"
+        'MODEL (description "Customers.");\nSELECT 1 AS customer_key, 1 AS order_count\n',
+        encoding="utf-8",
     )
     (models / "orders.sql").write_text(
         'MODEL (description "Orders.");\nSELECT customer_key, 1 AS order_count '

@@ -6,6 +6,23 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class SourceSemanticBindingCase:
+    description: str
+    command: str
+    expected_code: str = "B002"
+
+
+@dataclass(frozen=True)
+class SemanticCorpusCase:
+    description: str
+    category: str
+    repo_files: dict[str, str]
+    expected_exit_code: int
+    expected_codes: tuple[str, ...]
+    pending_native: bool
+
+
+@dataclass(frozen=True)
 class VariedCompileCacheTestCase:
     description: str
     model_count: int

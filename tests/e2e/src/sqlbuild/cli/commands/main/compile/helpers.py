@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import signal
 import statistics
 import subprocess
@@ -26,6 +27,7 @@ from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FreshProcessCompileCachePerformanceGuardTestCase,
+    SemanticCorpusCase,
 )
 
 _DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
@@ -41,6 +43,23 @@ _DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
 )
 _DBT_SHAPED_WARM_SAMPLE_COUNT: int = 3
 _PERFORMANCE_SAFETY_TIMEOUT_MULTIPLIER: float = 2.0
+
+
+def semantic_corpus_cases(*, group: str) -> list[dict[str, Any]]:
+    path: Path = Path(__file__).parent / "fixtures" / "semantic" / "corpus.json"
+    raw: list[dict[str, Any]] = json.loads(path.read_text(encoding="utf-8"))[group]
+    return raw
+
+
+def prepare_semantic_corpus_project(
+    *, base: Path, tmp_path: Path, test_case: SemanticCorpusCase
+) -> Path:
+    project: Path = tmp_path / "orders_project"
+    shutil.copytree(base, project)
+    for relative_path, contents in test_case.repo_files.items():
+        path: Path = project / relative_path
+        path.write_text(contents, encoding="utf-8")
+    return project
 
 
 class CompileBenchmarkMeasurement(NamedTuple):

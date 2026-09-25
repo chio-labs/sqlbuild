@@ -52,7 +52,7 @@ _VIRTUAL_PROJECT_TOML: str = (
             description="build with tests rejects an invalid SQL test fixture",
             build_flags=(),
             expected_exit_code=1,
-            expected_fragment="Invalid SQL test fixtures",
+            expected_fragment="error[B302]",
         ),
         BuildTestPlanningTestCase(
             description="build without tests does not plan SQL tests",

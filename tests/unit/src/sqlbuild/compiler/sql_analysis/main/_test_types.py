@@ -4,6 +4,12 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class SemanticDiagnosticMappingCase:
+    description: str
+    expected_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SchemaValidationScopeTestCase:
     description: str
     query_sql: str
