@@ -1093,9 +1093,10 @@ def _complete_inferred_bindings(
     indexes: dict[str, int] = {
         _model_name(request.model_input): index for index, request in enumerate(requests)
     }
+    available_names: frozenset[str] = frozenset(indexes)
     graph: dict[str, tuple[str, ...]] = {
         name: _referenced_model_names(
-            model_input=requests[index].model_input, available_names=frozenset(indexes)
+            model_input=requests[index].model_input, available_names=available_names
         )
         for name, index in indexes.items()
     }
