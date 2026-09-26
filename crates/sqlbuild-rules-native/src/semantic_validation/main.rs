@@ -3,6 +3,7 @@
 pub(crate) mod diagnostics;
 pub(crate) mod map_diagnostics;
 pub(crate) mod normalize;
+pub(crate) mod normalize_batch;
 pub(crate) mod normalize_dialect;
 use crate::semantic_validation::models::ProjectCatalog;
 

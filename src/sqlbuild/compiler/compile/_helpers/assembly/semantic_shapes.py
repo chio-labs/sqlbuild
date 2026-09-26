@@ -14,6 +14,7 @@ from sqlbuild.compiler.compile._helpers.analysis.compact import (
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,
+    CompileModelInput,
     CompileProjectInputs,
     CompileSqlReference,
     PolyglotAnalysisResult,
@@ -32,6 +33,12 @@ def binding_relation_names(references: tuple[CompileSqlReference, ...]) -> froze
         for reference in references
         if reference.ref_kind != SqlReferenceKind.UDF
     )
+
+
+def binding_required_names(model_input: CompileModelInput) -> frozenset[str] | None:
+    if not model_input.sql_validation_enabled:
+        return None
+    return binding_relation_names(model_input.references)
 
 
 def build_declared_column_types(inputs: CompileProjectInputs) -> dict[str, dict[str, str]]:

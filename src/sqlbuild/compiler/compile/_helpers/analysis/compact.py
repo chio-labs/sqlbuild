@@ -154,6 +154,7 @@ from sqlbuild.compiler.sql_analysis.exceptions import SqlAnalysisBoundaryError
 from sqlbuild.compiler.sql_analysis.main._binding_catalog import create_binding_catalog
 from sqlbuild.compiler.sql_analysis.main._decode_schema_validation import decode_schema_validation
 from sqlbuild.compiler.sql_analysis.main._normalize_analysis import normalize_analysis_sql
+from sqlbuild.compiler.sql_analysis.main._normalize_analysis_batch import normalize_analysis_sqls
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.compiler.sql_analysis.models import (
@@ -461,25 +462,27 @@ def _prepare_compact_analysis_batch(
     ] = {}
     projections: list[dict[str, object]] = []
     function_return_types: dict[str, str] = dict(inference_profile.function_return_types)
+    normalized_sqls: list[str] = normalize_analysis_sqls(
+        sqls=query_sqls,
+        dialect=dialect,
+        placeholders=placeholders,
+    )
     for (
         query_sql,
+        cleaned_sql,
         query_references,
         query_placeholders,
         query_recover_cte_facts,
         binding_schema,
     ) in zip(
         query_sqls,
+        normalized_sqls,
         references,
         placeholders,
         recover_cte_facts,
         binding_schemas if binding_schemas is not None else (None,) * len(query_sqls),
         strict=True,
     ):
-        cleaned_sql: str = _cleaned_analysis_sql(
-            query_sql=query_sql,
-            placeholders=query_placeholders,
-            dialect=dialect,
-        )
         lineage_references: dict[str, tuple[CompiledResourceType, str]] = _lineage_reference_map(
             query_references
         )
@@ -1073,12 +1076,14 @@ def get_complete_schema_binding_request(
     binding_schema: dict[str, dict[str, str]],
     known_functions: tuple[str, ...] = (),
     known_types: tuple[str, ...] = (),
+    cleaned_sql: str | None = None,
 ) -> SqlSchemaValidationRequest:
     """Build one stable native schema-validation request."""
 
-    cleaned_sql: str = normalize_analysis_sql(
-        sql=query_sql, dialect=dialect, placeholders=placeholders
-    )
+    if cleaned_sql is None:
+        cleaned_sql = normalize_analysis_sql(
+            sql=query_sql, dialect=dialect, placeholders=placeholders
+        )
     return SqlSchemaValidationRequest(
         sql=cleaned_sql,
         dialect=dialect,

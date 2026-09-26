@@ -5,6 +5,8 @@ contains the dialect, session identifier-case policy, known functions and types,
 and ordered relation columns. Compact analysis sends relation references rather
 than repeating column objects and function catalogs in every model request.
 Native workers assemble the binding schemas and validate the batches.
+Catalog validation releases the GIL and uses a bounded Rayon pool of up to four
+workers. Clause checks and schema validation share the parsed AST.
 
 Inferred relations are registered as they become available. A request can mark a
 relation open or provide a local schema override. Physical source validation
@@ -27,6 +29,9 @@ SELECT "orderid" FROM (SELECT 1 AS "OrderId") q
 
 With Snowflake's `QUOTED_IDENTIFIERS_IGNORE_CASE` enabled, the derived alias
 resolves. Type checks still run on the resolved expression.
+For SQL without double quotes, the compiler reuses fused semantic validation even
+when this session setting is enabled. Reuse requires the final input schemas to
+match the schemas used for that validation.
 
 ## Diagnostic positions
 
@@ -37,6 +42,9 @@ provenance with macro-expansion spans and maps both diagnostic endpoints to the
 authored SQL. Inputs transformed outside this normalizer use a native alignment
 fallback. Python constructs diagnostic and source-location objects from these
 results; it no longer runs `SequenceMatcher` or token alignment.
+Compact compilation normalizes inputs in one native batch. Deferred binding and
+diagnostic location construction reuse the resulting SQL rather than repeating
+normalization for each consumer or diagnostic.
 
 Native diagnostics carry SQLBuild codes, severity, messages, and span facts.
 Validation guard failures are explicit errors, rather than discarded native

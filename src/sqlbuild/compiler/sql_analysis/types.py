@@ -39,6 +39,9 @@ class NativeBindingPositions(Protocol):
 
 
 class NativePositionsModule(Protocol):
+    def normalize_analysis_sqls(
+        self, *, dialect: str, requests: list[tuple[str, dict[str, str]]]
+    ) -> list[str]: ...
     def binding_diagnostics(
         self, *, sql: str, dialect: str, rows: list[NativeDiagnosticRow]
     ) -> list[NativeDiagnosticRow]: ...

@@ -5,10 +5,18 @@ from pathlib import Path
 from typing import cast
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.models import CompiledSqlExpansion, ExpansionSpan
+from sqlbuild.compiler.compile.models import CompiledSqlExpansion, CompileModelInput, ExpansionSpan
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 from sqlbuild.compiler.sql_analysis.types import NativeBindingPositions, NativePositionsModule
 from sqlbuild.spec.contracts.models import SourceLocation
+
+
+def query_line_offset(model_input: CompileModelInput) -> int | None:
+    query_sql: str = model_input.model_file.query_sql
+    query_start: int = model_input.model_file.contents.find(query_sql)
+    if query_start < 0:
+        return None
+    return model_input.model_file.contents[:query_start].count("\n")
 
 
 @lru_cache(maxsize=32)

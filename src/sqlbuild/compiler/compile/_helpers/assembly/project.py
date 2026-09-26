@@ -41,13 +41,14 @@ from sqlbuild.compiler.compile._helpers.analysis.validation import (
 )
 from sqlbuild.compiler.compile._helpers.assembly.binding_positions import (
     get_authored_binding_location,
+    query_line_offset,
 )
 from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
     known_declared_types,
     known_function_names,
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
-    binding_relation_names,
+    binding_required_names,
     build_complete_binding_schemas,
     get_expression_source_shape,
 )
@@ -148,6 +149,7 @@ from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.compiler.sql_analysis.constants import (
     BINDING_UNKNOWN_TABLE_INTERNAL_CODE,
     NATIVE_DIALECT_ALIASES,
+    SQL_QUOTED_IDENTIFIER_DELIMITER,
 )
 from sqlbuild.compiler.sql_analysis.exceptions import SqlAnalysisBoundaryError
 from sqlbuild.compiler.sql_analysis.main._binding_catalog import create_binding_catalog
@@ -182,6 +184,7 @@ class _ModelSqlAnalysis:
     placeholders: dict[str, str] | None
     cached: bool = False
     fused_binding_validated: bool = False
+    cleaned_sql: str | None = None
 
 
 @dataclass(frozen=True)
@@ -603,6 +606,7 @@ def _assemble_compiled_model(
         enum_columns=model_input.enum_columns,
         binding_diagnostics=_binding_compiler_diagnostics(
             model_input=model_input,
+            cleaned_sql=sql_analysis.cleaned_sql if sql_analysis is not None else None,
             dialect=profile.sql_analysis_dialect,
             diagnostics=(polyglot_analysis.binding_diagnostics if sql_analysis_enabled else ()),
         ),
@@ -1097,7 +1101,7 @@ def _complete_inferred_bindings(
     for name in ordered_names:
         index: int = indexes[name]
         request: _ModelSqlAnalysisRequest = requests[index]
-        required_names: frozenset[str] | None = _binding_required_names(request.model_input)
+        required_names: frozenset[str] | None = binding_required_names(request.model_input)
         if required_names is None:
             continue
         analysis: PolyglotAnalysisResult = results[index].polyglot_analysis
@@ -1157,21 +1161,19 @@ def _complete_inferred_bindings(
     for index, request in enumerate(requests):
         if results[index].cached:
             continue
-        required_names = _binding_required_names(request.model_input)
+        required_names = binding_required_names(request.model_input)
         if required_names is None:
             continue
-        if (
-            not inference_profile.quoted_identifiers_ignore_case
-            and results[index].fused_binding_validated
-            and request.binding_schema
-            == {name: complete_schemas.get(name, {}) for name in required_names}
-        ):
+        if results[index].fused_binding_validated and request.binding_schema == {
+            name: complete_schemas.get(name, {}) for name in required_names
+        }:
             continue
         deferred_validation_indices.append(index)
         deferred_validation_requests.append(
             replace(
                 get_complete_schema_binding_request(
                     query_sql=request.query_sql,
+                    cleaned_sql=results[index].cleaned_sql,
                     known_functions=known_functions,
                     known_types=known_types,
                     placeholders=request.placeholders,
@@ -1201,12 +1203,6 @@ def _complete_inferred_bindings(
             ),
         )
     return tuple(results)
-
-
-def _binding_required_names(model_input: CompileModelInput) -> frozenset[str] | None:
-    if not model_input.sql_validation_enabled:
-        return None
-    return binding_relation_names(model_input.references)
 
 
 def _downstream_model_names(
@@ -1304,10 +1300,14 @@ def _analyze_model_sql(
     )
     return _ModelSqlAnalysis(
         polyglot_analysis=polyglot_analysis,
+        cleaned_sql=precomputed.cleaned_sql if precomputed is not None else None,
         placeholders=request.placeholders,
         fused_binding_validated=precomputed is not None
         and precomputed.binding_diagnostics is not None
-        and not inference_profile.quoted_identifiers_ignore_case,
+        and (
+            not inference_profile.quoted_identifiers_ignore_case
+            or SQL_QUOTED_IDENTIFIER_DELIMITER not in precomputed.cleaned_sql
+        ),
     )
 
 
@@ -1414,7 +1414,7 @@ def _binding_schema_for_model(
     model_input: CompileModelInput,
     complete_binding_schemas: dict[str, dict[str, str]],
 ) -> dict[str, dict[str, str]] | None:
-    required_names: frozenset[str] | None = _binding_required_names(model_input)
+    required_names: frozenset[str] | None = binding_required_names(model_input)
     if required_names is None:
         return None
     schema: dict[str, dict[str, str]] = {}
@@ -1438,6 +1438,7 @@ def _project_binding_diagnostics(
         diagnostics.extend(
             _binding_compiler_diagnostics(
                 model_input=model_input,
+                cleaned_sql=analysis.cleaned_sql,
                 dialect=dialect,
                 diagnostics=analysis.polyglot_analysis.binding_diagnostics,
             )
@@ -1450,20 +1451,16 @@ def _binding_compiler_diagnostics(
     model_input: CompileModelInput,
     diagnostics: tuple[SqlBindingDiagnostic, ...],
     dialect: str | None,
+    cleaned_sql: str | None = None,
 ) -> tuple[CompilerDiagnostic, ...]:
-    query_line_offset: int | None = _query_line_offset(model_input)
+    line_offset: int | None = query_line_offset(model_input)
     seen: set[tuple[str, str, int | None, int | None]] = set()
     result: list[CompilerDiagnostic] = []
     for diagnostic in diagnostics:
         if diagnostic.code == BINDING_UNKNOWN_TABLE_INTERNAL_CODE:
             continue
-        line: int | None
-        column: int | None
-        location: SourceLocation | None = get_authored_binding_location(
-            path=model_input.model_file.relative_path,
-            authored_sql=model_input.model_file.contents,
-            authored_query_sql=model_input.model_file.query_sql,
-            cleaned_sql=get_complete_schema_binding_request(
+        if cleaned_sql is None:
+            cleaned_sql = get_complete_schema_binding_request(
                 query_sql=cursor_intrinsics_analysis_sql(
                     sql=model_input.query_sql,
                     cursor_type=model_input.config.values.get("cursor_type"),
@@ -1471,15 +1468,22 @@ def _binding_compiler_diagnostics(
                 placeholders=_model_placeholders(model_input),
                 dialect=dialect,
                 binding_schema={},
-            ).sql,
+            ).sql
+        line: int | None
+        column: int | None
+        location: SourceLocation | None = get_authored_binding_location(
+            path=model_input.model_file.relative_path,
+            authored_sql=model_input.model_file.contents,
+            authored_query_sql=model_input.model_file.query_sql,
+            cleaned_sql=cleaned_sql,
             expansion=model_input.sql_expansion,
             diagnostic=diagnostic,
         )
         line, column = (location.line, location.column) if location is not None else (None, None)
         if line is None:
             line = (
-                diagnostic.line + query_line_offset
-                if diagnostic.line is not None and query_line_offset is not None
+                diagnostic.line + line_offset
+                if diagnostic.line is not None and line_offset is not None
                 else diagnostic.line
             )
             column = diagnostic.column
@@ -1507,14 +1511,6 @@ def _binding_compiler_diagnostics(
             )
         )
     return tuple(result)
-
-
-def _query_line_offset(model_input: CompileModelInput) -> int | None:
-    query_sql: str = model_input.model_file.query_sql
-    query_start: int = model_input.model_file.contents.find(query_sql)
-    if query_start < 0:
-        return None
-    return model_input.model_file.contents[:query_start].count("\n")
 
 
 def _schema_column_nullability(
