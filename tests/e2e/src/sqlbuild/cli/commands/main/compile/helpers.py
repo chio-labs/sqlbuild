@@ -1614,7 +1614,7 @@ def _semantic_regular_model_sql(
         False: f'__ref("model_{index - 1:05d}")',
     }[_layered_is_base_model(index=index)]
     metric_expressions: str = "".join(
-        f",\n  CAST(COALESCE(CASE WHEN id % {column_index % 11 + 2} = 0 "
+        f",\n  CAST(COALESCE(CASE WHEN input.id % {column_index % 11 + 2} = 0 "
         f"THEN amount + {column_index} WHEN status = 'priority' "
         f"THEN amount * {column_index % 7 + 1} ELSE amount - {column_index} END, 0) AS DOUBLE) "
         f"AS metric_{column_index:04d}"
@@ -1632,13 +1632,13 @@ def _semantic_regular_model_sql(
     }[index % _FUNCTION_INTERVAL == 0]
     macro_index: int = (index // macro_call_interval) % macro_count
     id_expression: str = {
-        True: f'@macro_{macro_index:05d}("id")',
-        False: "id",
+        True: f'@macro_{macro_index:05d}("input.id")',
+        False: "input.id",
     }[index % macro_call_interval == 0]
     direct_sql: str = f"""SELECT
   CAST({id_expression} AS INTEGER) AS id,
   CAST({amount_expression} AS DOUBLE) AS amount,
-  CAST(CASE WHEN id % 2 = 0 THEN 'even' ELSE 'odd' END AS VARCHAR) AS status{metric_expressions}
+  CAST(CASE WHEN input.id % 2 = 0 THEN 'even' ELSE 'odd' END AS VARCHAR) AS status{metric_expressions}
 FROM {relation_sql} AS input{seed_join_sql}
 """
     with_sql: str = f"WITH transformed AS (\n{direct_sql.rstrip()}\n)\nSELECT * FROM transformed\n"
