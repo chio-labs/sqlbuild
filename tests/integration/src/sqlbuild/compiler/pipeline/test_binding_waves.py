@@ -58,6 +58,11 @@ def test_given_inferred_producer_when_binding_consumers_then_avoids_deferred_req
     assert main([*args, "--no-cache"]) == 1
     oracle: dict[str, Any] = json.loads(capsys.readouterr().out)
     assert oracle["diagnostics"] == changed["diagnostics"]
+    producer.write_text(producer.read_text().replace("SELECT quantity", "SELECT id"))
+    assert main(args) == 0
+    restored: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert restored["resources"] == cold["resources"]
+    assert restored["diagnostics"] == cold["diagnostics"]
 
 
 if __name__ == "__main__":

@@ -794,7 +794,7 @@ def test_given_model_output_change_when_compiling_then_downstream_closure_misses
     (AnalysisCacheTestCase(description="parallel downstream invalidation", expected_count=2),),
     ids=lambda case: case.description,
 )
-def test_given_changed_output_signature_when_reanalyzing_downstream_then_uses_one_native_batch(
+def test_given_changed_output_signature_when_reanalyzing_downstream_then_uses_dependency_ready_batches(
     test_case: AnalysisCacheTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -812,8 +812,8 @@ def test_given_changed_output_signature_when_reanalyzing_downstream_then_uses_on
 
     _ = compile_project_with_cache(project_dir=tmp_path)
 
-    assert batcher.call_count == 1
-    assert len(batcher.call_args.kwargs["query_sqls"]) == test_case.expected_count
+    assert batcher.call_count == test_case.expected_count
+    assert all(len(call.kwargs["query_sqls"]) == 1 for call in batcher.call_args_list)
 
 
 @pytest.mark.parametrize(
@@ -844,7 +844,7 @@ def test_given_cached_model_signature_is_restored_when_compiling_then_downstream
 
 @pytest.mark.parametrize(
     "test_case",
-    (AnalysisCacheTestCase(description="selected upstream change", expected_count=5),),
+    (AnalysisCacheTestCase(description="selected upstream change", expected_count=4),),
     ids=lambda case: case.description,
 )
 def test_given_selected_upstream_change_when_compiling_full_project_then_stale_consumer_misses(

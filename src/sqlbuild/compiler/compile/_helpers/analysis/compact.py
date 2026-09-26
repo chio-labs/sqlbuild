@@ -443,11 +443,11 @@ def _prepare_compact_analysis_batch(
         )
     prepared: list[str] = []
     if binding_catalog is not None:
-        required_tables: set[str] = {
-            _analysis_reference_name(reference)
-            for query_references in references
-            for reference in query_references
-        }
+        required_tables: set[str] = set()
+        for query_references in references:
+            required_tables.update(
+                _analysis_reference_name(reference) for reference in query_references
+            )
         binding_catalog.prepare_analysis(
             types={
                 name: column_types_by_table[name]
