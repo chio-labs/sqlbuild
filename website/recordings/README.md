@@ -12,7 +12,7 @@ scripts are the source; the rendered GIF, MP4 and PNG files go to `out/`, which 
 | `janitor` | `sqb janitor` archives a stale table before anything is deleted. |
 | `quickstart` | The playground: `sqb playground`, `sqb build` and `sqb test`. |
 
-Each demo runs locally on DuckDB, using the projects in [`../examples`](../examples).
+The README uses `rename.gif` and `scope.gif`, copied into `.github/demos/`. Each demo runs locally on DuckDB, using the projects in [`../examples`](../examples).
 
 ## Requirements
 
