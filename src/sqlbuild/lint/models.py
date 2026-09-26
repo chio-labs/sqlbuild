@@ -9,7 +9,7 @@ from typing import Literal
 
 from sqlbuild.compiler.compile.models import ExpansionSpan
 from sqlbuild.lint.constants import VIOLATION_SEVERITY_FAULT, VIOLATION_SEVERITY_WARNING
-from sqlbuild.lint.types import LintSeverity
+from sqlbuild.lint.types import LintRelationCatalog, LintSeverity
 
 
 @dataclass(frozen=True)
@@ -49,6 +49,7 @@ class LintBody:
     allows_dynamic_output_star: bool = False
     allows_empty_fixture_star: bool = False
     header_literals: bool = False
+    relation_columns: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -115,6 +116,7 @@ class LintConfig:
     native_enabled: bool = True
     max_ranking_order_by: int = 4
     max_literal_length: int = 100
+    relation_columns: LintRelationCatalog = field(default_factory=dict, repr=False)
     max_description_lines: int = 10
     line_width: int = 100
     dialect: str = "generic"

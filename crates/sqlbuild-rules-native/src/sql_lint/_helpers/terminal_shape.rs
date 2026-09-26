@@ -1,6 +1,422 @@
+use crate::query_analysis::models::CteSlotUsage;
+use crate::sql_lint::_helpers::engine::{
+    char_slice, contains_comment, is_ceremonial_cte_name, is_comment, is_layout, token_depths,
+};
+use crate::sql_lint::models::{
+    CteBodyLocation, LintDiagnostic, LintEdit, LintRuleMetadata, UnusedOutputContext,
+};
+use polyglot_sql::expressions::{Column, Identifier, Literal, Select};
+use polyglot_sql::optimizer::normalize_identifiers::{
+    get_normalization_strategy, normalize_identifier,
+};
 use polyglot_sql::tokens::{Span, Token, TokenType};
+use polyglot_sql::{Dialect, DialectType, Expression, ExpressionWalk};
 
 const CEREMONIAL_SELECT_LITERAL: &str = "1";
+
+pub(super) const UNUSED_CTE_OUTPUT: LintRuleMetadata = LintRuleMetadata {
+    code: "SQBRSQL042",
+    message: "CTE output column is never read by a later query scope",
+    remediation: "Remove the unused output column with format --fix. Keep grouping expressions in GROUP BY; restructure dependencies when no safe edit is available.",
+};
+
+pub(super) fn unused_cte_spans(tokens: &[Token], unused_names: &[String]) -> Vec<Span> {
+    let mut remaining: Vec<String> = unused_names
+        .iter()
+        .map(|name| name.to_ascii_lowercase())
+        .collect();
+    let mut spans: Vec<Span> = Vec::new();
+    for (index, token) in tokens.iter().enumerate() {
+        let name = token.text.to_ascii_lowercase();
+        let Some(position) = remaining.iter().position(|candidate| candidate == &name) else {
+            continue;
+        };
+        if tokens
+            .get(index + 1)
+            .is_some_and(|next| next.token_type == TokenType::As)
+        {
+            remaining.remove(position);
+            spans.push(token.span);
+        }
+    }
+    spans
+}
+
+pub(super) fn unused_outputs(
+    context: UnusedOutputContext<'_>,
+) -> Result<Vec<LintDiagnostic>, String> {
+    let tokens: Vec<Token> = context
+        .tokens
+        .iter()
+        .filter(|token| !is_layout(token) && !is_comment(token))
+        .cloned()
+        .collect();
+    let context = UnusedOutputContext {
+        tokens: &tokens,
+        ..context
+    };
+    let depths = token_depths(&tokens);
+    let locations = cte_locations(&tokens, &depths, context.dialect);
+    let mut diagnostics: Vec<LintDiagnostic> = Vec::new();
+    for statement in context.statements {
+        for cte in crate::query_analysis::cte_usage::analyze_with_exemptions(
+            statement,
+            context.schema,
+            context.dialect,
+            |cte| {
+                context.fixtures && is_ceremonial_cte_name(&cte.alias.name.to_ascii_lowercase())
+                    || dependency_import(&cte.this, &context)
+            },
+        )? {
+            if cte.model_output
+                || cte.set_operation
+                || context.fixtures && is_ceremonial_cte_name(&cte.name.to_ascii_lowercase())
+                || dependency_import(&cte.original.this, &context)
+            {
+                continue;
+            }
+            let location = locate_cte(&cte, &locations, &context);
+            for (ordinal, slot) in cte
+                .slots
+                .iter()
+                .enumerate()
+                .filter(|(_, slot)| !slot.read && !slot.semantically_required)
+            {
+                let planned = location
+                    .ok_or("Cannot map this scoped CTE to one contiguous authored definition")
+                    .and_then(|location| output_edit(&cte, ordinal, location, &context));
+                let (fix, reason) = match planned {
+                    Ok(edit) => (Some(edit), None),
+                    Err(reason) => (None, Some(reason)),
+                };
+                let span = fix
+                    .as_ref()
+                    .map(|fix| (fix.start, fix.end))
+                    .unwrap_or_else(|| {
+                        location.map_or((0, 0), |location| {
+                            (location.name_span.start, location.name_span.end)
+                        })
+                    });
+                diagnostics.push(LintDiagnostic {
+                    code: UNUSED_CTE_OUTPUT.code,
+                    message: format!("CTE '{}' output '{}' (slot {}) is never read by a later query scope", cte.name, slot.name, ordinal + 1),
+                    remediation: if cte.distinct { "This unused DISTINCT output still affects deduplication. Make deduplication independent of the column, or restructure the CTE; no autofix is safe." } else { UNUSED_CTE_OUTPUT.remediation },
+                    start: span.0, end: span.1, fix, fix_unavailable_reason: reason,
+                });
+            }
+        }
+    }
+    Ok(diagnostics)
+}
+
+fn dependency_import(expression: &Expression, context: &UnusedOutputContext<'_>) -> bool {
+    let Expression::Select(select) = expression else {
+        return false;
+    };
+    if select.expressions.len() != 1
+        || !matches!(&select.expressions[0], Expression::Star(star) if star.except.is_none() && star.replace.is_none() && star.rename.is_none())
+        || !select.joins.is_empty()
+        || select.where_clause.is_some()
+        || select.group_by.is_some()
+        || select.having.is_some()
+        || select.qualify.is_some()
+        || select.order_by.is_some()
+        || select.limit.is_some()
+        || select.offset.is_some()
+        || select.fetch.is_some()
+        || select.top.is_some()
+        || select.sample.is_some()
+        || select.with.is_some()
+        || select.distinct
+    {
+        return false;
+    }
+    let Some(from) = &select.from else {
+        return false;
+    };
+    from.expressions.len() == 1
+        && matches!(&from.expressions[0], Expression::Table(table)
+        if context.dependency_identifiers.contains(&table.name.name.to_ascii_lowercase()))
+}
+
+fn cte_locations(tokens: &[Token], depths: &[usize], dialect: DialectType) -> Vec<CteBodyLocation> {
+    let mut locations: Vec<CteBodyLocation> = Vec::new();
+    for (index, token) in tokens.iter().enumerate() {
+        if token.token_type != TokenType::With {
+            continue;
+        }
+        let mut name = index + 1;
+        while let Some(open) = cte_body_open(tokens, depths, name) {
+            let Some(close) = (open + 1..tokens.len()).find(|&index| {
+                depths[index] == depths[open] + 1 && tokens[index].token_type == TokenType::RParen
+            }) else {
+                break;
+            };
+            let identifier = if tokens[name].token_type == TokenType::QuotedIdentifier {
+                Identifier::quoted(&tokens[name].text)
+            } else {
+                Identifier::new(&tokens[name].text)
+            };
+            locations.push(CteBodyLocation {
+                name: normalize_identifier(identifier, get_normalization_strategy(Some(dialect)))
+                    .name,
+                name_span: tokens[name].span,
+                open,
+                close,
+            });
+            if tokens
+                .get(close + 1)
+                .is_none_or(|token| token.token_type != TokenType::Comma)
+            {
+                break;
+            }
+            name = close + 2;
+        }
+    }
+    locations
+}
+
+fn locate_cte<'a>(
+    cte: &CteSlotUsage,
+    locations: &'a [CteBodyLocation],
+    context: &UnusedOutputContext<'_>,
+) -> Option<&'a CteBodyLocation> {
+    let tokens = context.tokens;
+    let candidates: Vec<&CteBodyLocation> = locations
+        .iter()
+        .filter(|location| location.name == normalize_identifier(cte.original.alias.clone(), get_normalization_strategy(Some(context.dialect))).name)
+        .collect();
+    if candidates.len() == 1 {
+        return candidates.first().copied();
+    }
+    let dialect = Dialect::get(context.dialect);
+    let expected = match dialect.generate(&cte.original.this) {
+        Ok(sql) => sql,
+        Err(_) => return None,
+    };
+    let matching: Vec<&CteBodyLocation> = candidates
+        .into_iter()
+        .filter(|location| {
+            let Some(sql) = char_slice(
+                context.sql,
+                tokens[location.open].span.end,
+                tokens[location.close].span.start,
+            ) else {
+                return false;
+            };
+            let Ok(mut expressions) = polyglot_sql::parse(sql, context.dialect) else {
+                return false;
+            };
+            if expressions.len() != 1 {
+                return false;
+            }
+            let expression = expressions.remove(0);
+            dialect
+                .generate(&expression)
+                .is_ok_and(|sql| sql == expected)
+        })
+        .collect();
+    (matching.len() == 1).then(|| matching[0])
+}
+
+fn output_edit(
+    cte: &CteSlotUsage,
+    ordinal: usize,
+    location: &CteBodyLocation,
+    context: &UnusedOutputContext<'_>,
+) -> Result<LintEdit, &'static str> {
+    let tokens = context.tokens;
+    if cte.distinct {
+        return Err(
+            "DISTINCT depends on every output column; deduplication must be restructured manually",
+        );
+    }
+    if !cte.original.columns.is_empty() {
+        return Err("Remove the corresponding explicit CTE column alias together with this output");
+    }
+    let Expression::Select(select) = &cte.original.this else {
+        return Err("This CTE does not have an editable SELECT projection");
+    };
+    if select.top.is_some() || select.kind.is_some() || !select.operation_modifiers.is_empty() {
+        return Err("SELECT modifiers require an explicit projection rewrite");
+    }
+    if positional_clauses(select) {
+        return Err(
+            "Expand positional clauses and GROUP BY ALL to explicit expressions before dropping this output",
+        );
+    }
+    if select.group_by.is_none()
+        && select
+            .expressions
+            .get(ordinal)
+            .is_some_and(contains_aggregate)
+    {
+        return Err(
+            "An aggregate projection may establish the CTE row grain; preserve explicit grouping before removing it",
+        );
+    }
+    if cte.slots.len() <= 1 {
+        return Err(
+            "Removing the final projection would change row semantics; remove or restructure the CTE",
+        );
+    }
+    let ranges = projection_ranges(tokens, location)
+        .ok_or("Cannot identify a contiguous SELECT projection list")?;
+    if ranges.len() == cte.slots.len() && referenced_local_alias(select, ordinal) {
+        return Err("Expand references to this output alias in local clauses before removing it");
+    }
+    let (start, end, replacement) = if ranges.len() == cte.slots.len() {
+        let (first, last) = ranges[ordinal];
+        let (start, end) = if ordinal + 1 < ranges.len() {
+            (
+                tokens[first].span.start,
+                tokens[ranges[ordinal + 1].0].span.start,
+            )
+        } else {
+            (tokens[first - 1].span.start, tokens[last].span.end)
+        };
+        (start, end, String::new())
+    } else if ranges.len() == 1 && select.expressions.len() == 1 {
+        let Expression::Star(star) = &select.expressions[0] else {
+            return Err("Expanded projection slots cannot be mapped to authored expressions");
+        };
+        if star.except.is_some() || star.replace.is_some() || star.rename.is_some() {
+            return Err("Rewrite the modified star as explicit columns before removing an output");
+        }
+        let projections: Result<Vec<String>, _> = cte
+            .slots
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| *index != ordinal)
+            .map(|(_, slot)| {
+                Dialect::get(context.dialect).generate(&Expression::Column(Box::new(Column {
+                    name: Identifier::quoted(&slot.name),
+                    table: star.table.clone(),
+                    join_mark: false,
+                    trailing_comments: Vec::new(),
+                    span: None,
+                    inferred_type: None,
+                })))
+            })
+            .collect();
+        (
+            tokens[ranges[0].0].span.start,
+            tokens[ranges[0].1].span.end,
+            projections
+                .map_err(|_| "Cannot render bound star outputs in this dialect")?
+                .join(", "),
+        )
+    } else {
+        return Err("Expand mixed star projections to explicit columns before removing an output");
+    };
+    if contains_comment(
+        char_slice(context.sql, start, end).ok_or("Invalid authored projection range")?,
+    ) {
+        return Err("The projection edit would remove a comment; relocate it before fixing");
+    }
+    Ok(LintEdit {
+        start,
+        end,
+        replacement,
+    })
+}
+
+fn positional_clauses(select: &Select) -> bool {
+    select
+        .group_by
+        .as_ref()
+        .is_some_and(|group| group.all == Some(true) || group.expressions.iter().any(is_ordinal))
+        || select.order_by.as_ref().is_some_and(|order| {
+            order
+                .expressions
+                .iter()
+                .any(|ordered| is_ordinal(&ordered.this))
+        })
+}
+
+fn referenced_local_alias(select: &Select, ordinal: usize) -> bool {
+    let Some(Expression::Alias(alias)) = select.expressions.get(ordinal) else {
+        return false;
+    };
+    if matches!(&alias.this, Expression::Column(column) if column.table.is_none() && column.name == alias.alias)
+    {
+        return false;
+    }
+    select
+        .expressions
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| *index != ordinal)
+        .map(|(_, expression)| expression)
+        .chain(select.group_by.iter().flat_map(|group| &group.expressions))
+        .chain(
+            select
+                .order_by
+                .iter()
+                .flat_map(|order| &order.expressions)
+                .map(|ordered| &ordered.this),
+        )
+        .chain(select.where_clause.iter().map(|clause| &clause.this))
+        .chain(select.having.iter().map(|clause| &clause.this))
+        .chain(select.qualify.iter().map(|clause| &clause.this))
+        .any(|expression| references_alias(expression, &alias.alias))
+}
+
+fn references_alias(expression: &Expression, alias: &Identifier) -> bool {
+    expression.dfs().any(|node| matches!(node, Expression::Column(column) if column.table.is_none() && column.name == *alias))
+}
+
+fn contains_aggregate(expression: &Expression) -> bool {
+    polyglot_sql::scope::walk_in_scope(expression, false).any(polyglot_sql::traversal::is_aggregate)
+}
+
+fn is_ordinal(expression: &Expression) -> bool {
+    matches!(expression, Expression::Literal(literal) if matches!(literal.as_ref(), Literal::Number(_)))
+}
+
+fn projection_ranges(tokens: &[Token], location: &CteBodyLocation) -> Option<Vec<(usize, usize)>> {
+    let depths = token_depths(tokens);
+    let depth = depths[location.open] + 1;
+    let select = (location.open + 1..location.close)
+        .find(|&index| depths[index] == depth && tokens[index].token_type == TokenType::Select)?;
+    let end = (select + 1..location.close)
+        .find(|&index| {
+            depths[index] == depth
+                && matches!(
+                    tokens[index].token_type,
+                    TokenType::From
+                        | TokenType::Where
+                        | TokenType::Group
+                        | TokenType::GroupBy
+                        | TokenType::Having
+                        | TokenType::Qualify
+                        | TokenType::Order
+                        | TokenType::OrderBy
+                        | TokenType::Limit
+                        | TokenType::Offset
+                        | TokenType::Window
+                        | TokenType::Fetch
+                        | TokenType::Into
+                )
+        })
+        .unwrap_or(location.close);
+    let mut ranges: Vec<(usize, usize)> = Vec::new();
+    let mut start = select + 1;
+    if tokens.get(start)?.token_type == TokenType::All {
+        start += 1;
+    }
+    for index in start..end {
+        if depths[index] == depth && tokens[index].token_type == TokenType::Comma {
+            ranges.push((start, index.checked_sub(1)?));
+            start = index + 1;
+        }
+    }
+    if start >= end {
+        return None;
+    }
+    ranges.push((start, end - 1));
+    Some(ranges)
+}
 
 pub(super) fn final_cte_name_spans(tokens: &[Token], depths: &[usize]) -> Vec<Span> {
     let roots = root_with_indices(tokens, depths);

@@ -12,6 +12,25 @@ pub(crate) struct LiteralContext<'a> {
     pub header: bool,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct UnusedOutputContext<'a> {
+    pub sql: &'a str,
+    pub tokens: &'a [polyglot_sql::tokens::Token],
+    pub statements: &'a [polyglot_sql::Expression],
+    pub dialect: polyglot_sql::DialectType,
+    pub schema: Option<&'a polyglot_sql::ValidationSchema>,
+    pub dependency_identifiers: &'a HashSet<String>,
+    pub fixtures: bool,
+}
+
+#[derive(Debug)]
+pub(crate) struct CteBodyLocation {
+    pub name: String,
+    pub name_span: Span,
+    pub open: usize,
+    pub close: usize,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct QueryFacts {
     pub null_comparisons: Vec<Span>,
@@ -63,6 +82,8 @@ pub(crate) struct AdditionalQueryFacts {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct LintRequest {
+    #[serde(default)]
+    pub schema: Option<polyglot_sql::ValidationSchema>,
     pub version: u32,
     pub sql: String,
     pub dialect: String,
@@ -108,7 +129,7 @@ pub(crate) struct LintResponse {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct LintDiagnostic {
     pub code: &'static str,
-    pub message: &'static str,
+    pub message: String,
     pub remediation: &'static str,
     pub start: usize,
     pub end: usize,

@@ -170,10 +170,11 @@ def _prepared_bodies(
                     dialect=config.dialect,
                     external_identifiers=external_identifiers,
                     allows_ceremonial_select=allows_ceremonial_select,
-                    allows_dynamic_output_star=allows_dynamic_output_star,
+                    relation_columns=config.relation_columns,
                     compiled_expansion=compiled_expansion,
                 ),
                 allows_empty_fixture_star=allows_empty_fixture_star,
+                allows_dynamic_output_star=allows_dynamic_output_star,
             )
         )
     return tuple(bodies)

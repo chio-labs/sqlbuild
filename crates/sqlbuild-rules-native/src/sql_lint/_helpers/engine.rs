@@ -18,7 +18,7 @@ use crate::sql_lint::_helpers::additional::collect_additional_facts;
 use crate::sql_lint::_helpers::inline_relations::collect_inline_query_relation_spans;
 use crate::sql_lint::_helpers::literals::{self, LONG_LITERAL};
 use crate::sql_lint::_helpers::ranking::{self, RANKING_SORT_CAP};
-use crate::sql_lint::_helpers::terminal_shape::collect_terminal_shape_facts;
+use crate::sql_lint::_helpers::terminal_shape::{collect_terminal_shape_facts, unused_cte_spans};
 
 const NULL_COMPARISON: LintRuleMetadata = LintRuleMetadata {
     code: "SQBRSQL001",
@@ -258,7 +258,7 @@ const DEFAULT_RULES: [&str; 13] = [
     INLINE_QUERY_RELATION.code,
 ];
 
-const ALL_RULE_METADATA: [&LintRuleMetadata; 43] = [
+const ALL_RULE_METADATA: [&LintRuleMetadata; 44] = [
     &NULL_COMPARISON,
     &IMPLICIT_CARTESIAN_JOIN,
     &JOIN_WITHOUT_CONDITION,
@@ -300,11 +300,12 @@ const ALL_RULE_METADATA: [&LintRuleMetadata; 43] = [
     &INLINE_QUERY_RELATION,
     &JOIN_EXPRESSION,
     &FINAL_CTE_NAME,
+    &crate::sql_lint::_helpers::terminal_shape::UNUSED_CTE_OUTPUT,
     &RANKING_SORT_CAP,
     &LONG_LITERAL,
 ];
 
-fn is_ceremonial_cte_name(name: &str) -> bool {
+pub(super) fn is_ceremonial_cte_name(name: &str) -> bool {
     CEREMONIAL_CTE_PREFIXES
         .iter()
         .any(|prefix| name.starts_with(prefix))
@@ -439,6 +440,19 @@ pub(crate) fn lint(request: LintRequest) -> Result<LintResponse, String> {
         enabled: &enabled,
     };
     let mut diagnostics = diagnostics(&context);
+    if enabled.contains(crate::sql_lint::_helpers::terminal_shape::UNUSED_CTE_OUTPUT.code) {
+        diagnostics.extend(crate::sql_lint::_helpers::terminal_shape::unused_outputs(
+            crate::sql_lint::models::UnusedOutputContext {
+                sql: &request.sql,
+                tokens: &tokens,
+                statements: &statements,
+                dialect: dialect_type,
+                schema: request.schema.as_ref(),
+                dependency_identifiers: &dependency_identifiers,
+                fixtures: request.allows_ceremonial_select,
+            },
+        )?);
+    }
     diagnostics.extend(literal_diagnostics);
     if enabled.contains(RANKING_SORT_CAP.code) {
         if request.max_ranking_order_by == 0 {
@@ -1837,7 +1851,7 @@ fn explicit_union_fix(dialect: DialectType, span: Span) -> Option<LintEdit> {
     })
 }
 
-fn char_slice(sql: &str, start: usize, end: usize) -> Option<&str> {
+pub(super) fn char_slice(sql: &str, start: usize, end: usize) -> Option<&str> {
     if start > end {
         return None;
     }
@@ -1855,7 +1869,7 @@ fn char_offset_to_byte_offset(sql: &str, offset: usize) -> Option<usize> {
         .map(|(byte_offset, _)| byte_offset)
 }
 
-fn contains_comment(source: &str) -> bool {
+pub(super) fn contains_comment(source: &str) -> bool {
     source.contains("--") || source.contains("/*")
 }
 
@@ -1879,35 +1893,13 @@ fn diagnostic(
     let span = span.unwrap_or_default();
     LintDiagnostic {
         code: rule.code,
-        message: rule.message,
+        message: rule.message.to_owned(),
         remediation: rule.remediation,
         start: span.start,
         end: span.end,
         fix_unavailable_reason: fix.is_none().then_some(fix_unavailable_reason).flatten(),
         fix,
     }
-}
-
-fn unused_cte_spans(tokens: &[Token], unused_names: &[String]) -> Vec<Span> {
-    let mut remaining: Vec<String> = unused_names
-        .iter()
-        .map(|name| name.to_ascii_lowercase())
-        .collect();
-    let mut spans: Vec<Span> = Vec::new();
-    for (index, token) in tokens.iter().enumerate() {
-        let name = token.text.to_ascii_lowercase();
-        let Some(position) = remaining.iter().position(|candidate| candidate == &name) else {
-            continue;
-        };
-        if tokens
-            .get(index + 1)
-            .is_some_and(|next| next.token_type == TokenType::As)
-        {
-            remaining.remove(position);
-            spans.push(token.span);
-        }
-    }
-    spans
 }
 
 fn null_comparison_spans(tokens: &[Token]) -> Vec<Span> {

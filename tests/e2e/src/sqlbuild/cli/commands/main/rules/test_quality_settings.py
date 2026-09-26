@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.rules._test_types import (
+    CteOutputSettingsCase,
     LiteralSettingsCase,
     OverrideSettingsCase,
     RankingSettingsCase,
@@ -128,6 +129,54 @@ def test_given_cached_literal_when_limit_is_lowered_then_fix_restores_compliance
         [*command, "compile", "--json"], capture_output=True, text=True, timeout=30, check=False
     )
     assert final.returncode == 0, final.stdout + final.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [CteOutputSettingsCase("star outputs reach a verified fix point")],
+    ids=lambda case: case.description,
+)
+def test_given_unused_star_outputs_when_fixing_then_compile_and_check_are_clean(
+    test_case: CteOutputSettingsCase, tmp_path: Path
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = ["SQBRSQL042", "SQBRSQL005"]\n'
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        "MODEL (); WITH prepared AS (SELECT 1 AS a, 2 AS b), passed AS (SELECT * FROM prepared), final AS (SELECT a FROM passed) SELECT * FROM final"
+    )
+    command: list[str] = [
+        str(Path(sys.executable).with_name("sqb")),
+        "--project-dir",
+        str(tmp_path),
+    ]
+    initial: subprocess.CompletedProcess[str] = subprocess.run(
+        [*command, "compile", "--json"], capture_output=True, text=True, timeout=30, check=False
+    )
+    assert initial.returncode == 1
+    assert test_case.expected_code in initial.stdout
+    fixed: subprocess.CompletedProcess[str] = subprocess.run(
+        [*command, "format", "--fix", "--json"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert fixed.returncode == 0, fixed.stdout + fixed.stderr
+    final: subprocess.CompletedProcess[str] = subprocess.run(
+        [*command, "compile", "--json"], capture_output=True, text=True, timeout=30, check=False
+    )
+    assert final.returncode == 0, final.stdout + final.stderr
+    checked: subprocess.CompletedProcess[str] = subprocess.run(
+        [*command, "format", "--fix", "--check", "--json"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert checked.returncode == 0, checked.stdout + checked.stderr
 
 
 if __name__ == "__main__":

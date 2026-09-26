@@ -28,9 +28,11 @@ from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.lint.constants import TEMPLATE_INTERPOLATION_START
 from sqlbuild.lint.exceptions import NativeLintError
 from sqlbuild.lint.main.build_expansion_context import build_expansion_context
+from sqlbuild.lint.main.build_relation_catalog import build_relation_catalog
 from sqlbuild.lint.main.collect_project_files import collect_project_files
 from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import LintConfig, LintRunResult, LintViolation
+from sqlbuild.lint.types import LintRelationCatalog
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue, select_rules
 from sqlbuild.rule_engine._helpers.engine.config import resolve_rule_ignore_selectors
 from sqlbuild.rule_engine._helpers.engine.hermeticity import verify_custom_rules
@@ -55,9 +57,10 @@ from sqlbuild.rule_engine.models import (
     SqlExpansionReuse,
 )
 
-_SQL_RULE_CACHE_VERSION: str = "sql-rules-v3"
+_SQL_RULE_CACHE_VERSION: str = "sql-rules-v4"
 _SQLBUILD_VERSION: str = version("sqlbuild")
 _SQL_RULE_SUPPRESSION_CODE: str = "SQBRSQL000"
+_CTE_OUTPUT_RULE_CODE: str = "SQBRSQL042"
 
 
 @dataclass(frozen=True)
@@ -127,6 +130,11 @@ def evaluate_rules(
         )
         sql_started: float = time.monotonic()
         sql_result: _SqlRulesEvaluation = _run_sql_rules(
+            relation_columns=(
+                build_relation_catalog(project=graph.project)
+                if any(rule.code == _CTE_OUTPUT_RULE_CODE for rule in native_rules)
+                else {}
+            ),
             config=effective_config,
             rules=native_rules,
             project_dir=resolved_project_dir,
@@ -196,6 +204,8 @@ def prepare_sql_rules(
     if not config.select or (config.cache.enabled and _read_sql_rule_cache(project_dir)):
         return None
     codes: tuple[str, ...] = _selected_sql_codes(config)
+    if _CTE_OUTPUT_RULE_CODE in codes:
+        return None
     if not codes:
         return None
     return PreparedSqlLint(
@@ -350,6 +360,7 @@ def _run_sql_rules(
     dialect: str,
     selected_model_paths: frozenset[str] | None,
     config: RulesConfig,
+    relation_columns: LintRelationCatalog,
     prepared_sql: PreparedSqlLint | None = None,
     expansion_reuse: SqlExpansionReuse | None = None,
 ) -> _SqlRulesEvaluation:
@@ -361,11 +372,15 @@ def _run_sql_rules(
         for model in project.models
         if project.settings.sql_analysis and model.config.values.get("sql_analysis") is not False
     }
+    schema_fingerprint: str = hashlib.sha256(
+        json.dumps(sorted(relation_columns.items(), key=lambda item: str(item[0]))).encode()
+    ).hexdigest()
     bucket: dict[str, dict[str, object]] = (
         _read_sql_rule_cache(project_dir) if config.cache.enabled else {}
     )
     identities: dict[str, str] = {
         path: _sql_rule_identity(
+            schema_fingerprint=schema_fingerprint,
             model=model,
             codes=codes,
             dialect=dialect,
@@ -399,6 +414,7 @@ def _run_sql_rules(
                 continue
             relative_path: str = file_path.relative_to(project_dir).as_posix()
             file_identity: str | None = _sql_file_rule_identity(
+                schema_fingerprint=schema_fingerprint,
                 file_path=file_path,
                 relative_path=relative_path,
                 contents=contents,
@@ -423,6 +439,7 @@ def _run_sql_rules(
         _run_prepared_lint(
             project_dir=project_dir,
             config=LintConfig(
+                relation_columns=relation_columns,
                 dialect=dialect,
                 enabled_native_rules=codes,
                 header_rules_enabled=False,
@@ -526,6 +543,7 @@ def _sql_rule_identity(
     dialect: str,
     max_ranking_order_by: int = 4,
     max_literal_length: int = 100,
+    schema_fingerprint: str = "",
 ) -> str:
     digest: Any = hashlib.sha256()
     digest.update(_SQL_RULE_CACHE_VERSION.encode())
@@ -533,6 +551,7 @@ def _sql_rule_identity(
     digest.update(dialect.encode())
     digest.update(str(max_ranking_order_by).encode())
     digest.update(f"/{max_literal_length}/".encode())
+    digest.update(schema_fingerprint.encode())
     digest.update("\0".join(codes).encode())
     digest.update(model.authored_sql.encode())
     digest.update(model.query_sql.encode())
@@ -558,6 +577,7 @@ def _sql_file_rule_identity(
     sql_expansions: dict[Path, CompiledSqlExpansion],
     max_ranking_order_by: int = 4,
     max_literal_length: int = 100,
+    schema_fingerprint: str = "",
 ) -> str | None:
     """Identify non-model SQL whose lint depends only on its text; expansions return None."""
 
@@ -572,6 +592,7 @@ def _sql_file_rule_identity(
         _SQL_RULE_CACHE_VERSION,
         str(max_ranking_order_by),
         str(max_literal_length),
+        schema_fingerprint,
         "file",
         _SQLBUILD_VERSION,
         dialect,
