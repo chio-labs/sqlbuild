@@ -609,6 +609,7 @@ class PolyglotAnalysisResult:
     columns: tuple[InferredColumn, ...] | None = None
     lineage_columns: Sequence[CompiledLineageColumnFact] = field(default_factory=tuple)
     has_star: bool = False
+    star_resolved: bool = False
     binding_diagnostics: tuple[SqlBindingDiagnostic, ...] = field(default_factory=tuple)
     binding_validated: bool = False
 
@@ -865,6 +866,7 @@ class CompiledModel:
     inferred_columns: tuple[InferredColumn, ...] | None = None
     fast_lineage_columns: Sequence[CompiledLineageColumnFact] | None = None
     fast_lineage_has_star: bool = False
+    fast_lineage_star_resolved: bool = False
     authored_sql: str = ""
     authored_query_sql: str = ""
     output_column_locations: dict[str, SourceLocation] = field(default_factory=dict)

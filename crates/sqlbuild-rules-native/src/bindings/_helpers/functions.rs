@@ -1,6 +1,5 @@
 //! Register the versioned Python boundary for the native Rules engine.
 
-use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{
     Bound, IntoPyObject, Py, PyAny, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };

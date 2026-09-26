@@ -677,6 +677,7 @@ def model_analysis_output_signature(analysis: PolyglotAnalysisResult) -> str:
                 ]
             ),
             "has_star": analysis.has_star,
+            "star_resolved": analysis.star_resolved,
         }
     )
 
@@ -807,6 +808,7 @@ def _analysis_payload(*, cache_key: str, analysis: PolyglotAnalysisResult) -> di
         ),
         "l": [_lineage_column_payload(column) for column in analysis.lineage_columns],
         "h": analysis.has_star,
+        "sr": analysis.star_resolved,
         "b": [
             [
                 diagnostic.code,
@@ -894,6 +896,7 @@ def _analysis_from_payload(
             columns=columns,
             lineage_columns=lineage_columns,
             has_star=has_star,
+            star_resolved=values.get("sr") is True,
             binding_diagnostics=binding_diagnostics,
             binding_validated=binding_validated,
         ),
