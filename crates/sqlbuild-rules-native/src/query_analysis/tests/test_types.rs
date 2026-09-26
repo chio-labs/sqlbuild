@@ -19,3 +19,9 @@ pub(crate) struct QueryAnalysisTestCase {
     pub(crate) expected_values: Vec<QueryAnalysisExpectedValue>,
     pub(crate) expected_nonempty_strings: Vec<&'static str>,
 }
+pub(super) struct CteUsageTestCase {
+    pub description: &'static str,
+    pub sql: &'static str,
+    pub expected_unused: &'static [(&'static str, usize)],
+    pub expected_required: &'static [(&'static str, usize)],
+}

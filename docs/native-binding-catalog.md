@@ -65,3 +65,28 @@ WHERE NOT SPLIT_PART('orders:pending', ':', 2) LIKE 'pending%'
 The parser must represent the predicate as typed NOT/LIKE expressions before
 Rules can claim complete evaluation. A source location attached to a spanless
 refusal can be the query-body fallback, rather than the predicate's position.
+## CTE output-slot usage facts
+
+The native analysis boundary exposes `analyze_cte_slots_batch_json`. Its input is
+`{"requests": [{"sql": "...", "dialect": "duckdb", "schema": {"tables": []}}]}`.
+Schema is optional; supply the compiler's input relation columns to resolve stars
+and otherwise ambiguous inputs. Each result is independently `Ok` or `Err`, in
+request order. An unresolved binding is an error, never evidence that a slot is
+unused.
+
+The version-1 compact `Ok` document contains:
+
+- `strings`: interned scope paths, CTE names and column names.
+- `ctes`: rows `(scope_index, name_index, distinct, set_operation, model_output,
+  explicit_column_aliases)`.
+- `slots`: rows `(cte_index, zero_based_ordinal, output_name_index, read,
+  semantically_required)`.
+
+The identity is the lexical CTE scope plus ordinal, not terminal source lineage.
+For example, an intermediate literal-valued `priority` read only in a later
+WHERE clause is marked read even though it has no physical upstream column.
+Qualification and scope resolution are native AST operations. Nested CTEs and
+shadowed names retain distinct identities; aliases, stars, filters, joins,
+grouping, window clauses and correlated subqueries participate in usage.
+Set-operation outputs and read set-operation inputs carry the semantic-required
+flag. Incomplete star schemas or unprovable alias lists fail with a reason.

@@ -1026,8 +1026,8 @@ enum CompactProjectResponse {
 type CompactProjectProjection = (usize, Vec<(usize, usize)>);
 
 #[derive(Default)]
-struct StringInterner {
-    strings: Vec<String>,
+pub(super) struct StringInterner {
+    pub(super) strings: Vec<String>,
     indexes: HashMap<String, usize>,
 }
 
@@ -1039,7 +1039,7 @@ struct CompactProjectAccumulator {
 }
 
 impl StringInterner {
-    fn intern(&mut self, value: String) -> usize {
+    pub(super) fn intern(&mut self, value: String) -> usize {
         if let Some(index) = self.indexes.get(&value) {
             return *index;
         }

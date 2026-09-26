@@ -174,6 +174,14 @@ fn analyze_queries_json(py: Python<'_>, request_json: &str) -> PyResult<String> 
 }
 
 #[pyfunction]
+fn analyze_cte_slots_batch_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
+    py.detach(|| {
+        crate::query_analysis::main::analyze_cte_slots::analyze_cte_slots_batch_json(request_json)
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
 fn analyze_project_queries_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
     py.detach(|| crate::query_analysis::main::analyze_project::analyze_project_json(request_json))
         .map_err(value_error)
@@ -419,6 +427,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(schema_validations_json, module)?)?;
     module.add_function(wrap_pyfunction!(analyze_sql_uses_json, module)?)?;
     module.add_function(wrap_pyfunction!(analyze_queries_json, module)?)?;
+    module.add_function(wrap_pyfunction!(analyze_cte_slots_batch_json, module)?)?;
     module.add_function(wrap_pyfunction!(analyze_project_queries_json, module)?)?;
     module.add_function(wrap_pyfunction!(
         analyze_project_queries_compact_json,

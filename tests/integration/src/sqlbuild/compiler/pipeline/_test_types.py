@@ -7,6 +7,13 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 
 
 @dataclass(frozen=True)
+class NativeCteSlotCase:
+    description: str
+    sql: str
+    expected_unused: tuple[tuple[str, int], ...]
+
+
+@dataclass(frozen=True)
 class NativeCatalogCase:
     description: str
     sql: str
