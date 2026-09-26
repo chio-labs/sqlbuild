@@ -49,8 +49,10 @@ from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     binding_required_names,
+    binding_schema_for_model,
     build_complete_binding_schemas,
     get_expression_source_shape,
+    inferred_binding_shape,
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     build_declared_column_types as _build_column_types_by_table,
@@ -1154,7 +1156,13 @@ def _complete_inferred_bindings(
             not analysis.has_star or (required_names and required_names <= complete_schemas.keys())
         ):
             complete_schemas.setdefault(
-                name, {column.name: column.type or "UNKNOWN" for column in analysis.columns}
+                name,
+                inferred_binding_shape(
+                    sql=results[index].cleaned_sql or request.query_sql,
+                    profile=inference_profile,
+                    columns={column.name: column.type or "UNKNOWN" for column in analysis.columns},
+                    inputs={table: complete_schemas.get(table, {}) for table in required_names},
+                ),
             )
     deferred_validation_indices: list[int] = []
     deferred_validation_requests: list[SqlSchemaValidationRequest] = []
@@ -1324,7 +1332,7 @@ def _model_sql_analysis_request(
         sql=model_input.query_sql,
         cursor_type=model_input.config.values.get("cursor_type"),
     )
-    binding_schema: dict[str, dict[str, str]] | None = _binding_schema_for_model(
+    binding_schema: dict[str, dict[str, str]] | None = binding_schema_for_model(
         model_input=model_input,
         complete_binding_schemas=complete_binding_schemas,
     )
@@ -1407,21 +1415,6 @@ def _build_dynamic_families_by_table(
         and model_input.schema_entry is not None
         and model_input.schema_entry.dynamic_columns
     }
-
-
-def _binding_schema_for_model(
-    *,
-    model_input: CompileModelInput,
-    complete_binding_schemas: dict[str, dict[str, str]],
-) -> dict[str, dict[str, str]] | None:
-    required_names: frozenset[str] | None = binding_required_names(model_input)
-    if required_names is None:
-        return None
-    schema: dict[str, dict[str, str]] = {}
-    for table_name in required_names:
-        columns: dict[str, str] | None = complete_binding_schemas.get(table_name)
-        schema[table_name] = columns or {}
-    return schema
 
 
 def _project_binding_diagnostics(

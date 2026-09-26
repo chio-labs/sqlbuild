@@ -7,6 +7,15 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 
 
 @dataclass(frozen=True)
+class IdentifierBindingCase:
+    description: str
+    dialect: str
+    projection: str
+    reference: str
+    expected_codes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class ValidationCacheCase:
     description: str
     enabled: bool
@@ -20,6 +29,7 @@ class NativeCatalogCase:
     sql: str
     expected_codes: tuple[str, ...] = ()
     spelling: str = "MiSsPeLlEd"
+    expected_sql: str = "SELECT * FROM __sqlbuild_table_function_table_fn__orders"
 
 
 @dataclass(frozen=True)

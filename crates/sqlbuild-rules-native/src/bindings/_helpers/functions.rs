@@ -14,6 +14,8 @@ use crate::models::CatalogueResponse;
 use crate::rules::main::{catalogue, selected_codes};
 
 const SKILL_OWNER: &str = "sqlbuild";
+use crate::bindings::_helpers::panics::compiler_guard;
+use crate::bindings::types::CompilerDetach;
 const SKILL_IDENTITY: &str = "sqlbuild-rules";
 
 #[pyfunction]
@@ -21,13 +23,15 @@ fn normalize_analysis_sql(
     py: Python<'_>,
     request: crate::semantic_validation::models::NormalizationInput,
 ) -> PyResult<String> {
-    py.detach(|| crate::semantic_validation::main::normalize::normalize_analysis_sql(request))
-        .map_err(value_error)
+    py.compiler_detach(|| {
+        crate::semantic_validation::main::normalize::normalize_analysis_sql(request)
+    })
+    .map_err(value_error)
 }
 
 #[pyfunction]
 fn normalize_dialect_sql(py: Python<'_>, sql: &str, dialect: &str) -> PyResult<String> {
-    py.detach(|| {
+    py.compiler_detach(|| {
         crate::semantic_validation::main::normalize_dialect::normalize_dialect_sql(sql, dialect)
     })
     .map_err(value_error)
@@ -39,7 +43,7 @@ fn normalize_analysis_sqls(
     dialect: &str,
     requests: Vec<(String, std::collections::HashMap<String, String>)>,
 ) -> PyResult<Vec<String>> {
-    py.detach(|| {
+    py.compiler_detach(|| {
         crate::semantic_validation::main::normalize_batch::normalize_analysis_sqls(
             dialect, requests,
         )
@@ -72,31 +76,31 @@ fn binding_diagnostics(
         String,
     )>,
 > {
-    py.detach(|| {
+    py.compiler_detach(|| {
         crate::semantic_validation::main::diagnostics::binding_diagnostics(sql, dialect, rows)
     })
     .map_err(value_error)
 }
 
 fn value_error(error: impl std::fmt::Display) -> PyErr {
-    PyValueError::new_err(error.to_string())
+    crate::bindings::_helpers::panics::compiler_error(error)
 }
 
 #[pyfunction]
 fn evaluate_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| evaluate::evaluate_json(request_json))
+    py.compiler_detach(|| evaluate::evaluate_json(request_json))
         .map_err(value_error)
 }
 
 #[pyfunction]
 fn lint_sql_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::sql_lint::main::engine::lint_json(request_json))
+    py.compiler_detach(|| crate::sql_lint::main::engine::lint_json(request_json))
         .map_err(value_error)
 }
 
 #[pyfunction]
 fn finalize_rule_findings_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::engine::main::finalize::finalize_findings_json(request_json))
+    py.compiler_detach(|| crate::engine::main::finalize::finalize_findings_json(request_json))
         .map_err(value_error)
 }
 
@@ -115,7 +119,7 @@ fn prepare_lint_sql(
     py: Python<'_>,
     request: LintPreparationRequest,
 ) -> PyResult<Option<crate::sql_lint::types::PreparedSql>> {
-    py.detach(|| {
+    py.compiler_detach(|| {
         crate::sql_lint::main::preparation::prepare(
             &request.expanded,
             &request.before_expansion,
@@ -127,61 +131,65 @@ fn prepare_lint_sql(
 }
 
 #[pyfunction]
-fn lint_backtick_identifiers(dialect: &str) -> bool {
-    crate::sql_lint::main::backtick_identifiers::backtick_identifiers(dialect)
+fn lint_backtick_identifiers(dialect: &str) -> PyResult<bool> {
+    compiler_guard(|| {
+        Ok(crate::sql_lint::main::backtick_identifiers::backtick_identifiers(dialect))
+    })
 }
 
 #[pyfunction]
 fn lint_sql_batch_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::sql_lint::main::batch_engine::lint_batch_json(request_json))
-        .map_err(pyo3::exceptions::PyValueError::new_err)
+    py.compiler_detach(|| crate::sql_lint::main::batch_engine::lint_batch_json(request_json))
+        .map_err(value_error)
 }
 
 #[pyfunction]
 fn format_sql_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::sql_lint::main::formatter::format_json(request_json))
+    py.compiler_detach(|| crate::sql_lint::main::formatter::format_json(request_json))
         .map_err(value_error)
 }
 
 #[pyfunction]
 fn format_sql_batch_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::sql_lint::main::batch_formatter::format_batch_json(request_json))
+    py.compiler_detach(|| crate::sql_lint::main::batch_formatter::format_batch_json(request_json))
         .map_err(value_error)
 }
 
 #[pyfunction(name = "validate_sql_with_schema_json")]
 fn schema_validation_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::semantic_validation::main::validation_json(request_json))
+    py.compiler_detach(|| crate::semantic_validation::main::validation_json(request_json))
         .map_err(value_error)
 }
 
 #[pyfunction(name = "validate_sql_with_schemas_json")]
 fn schema_validations_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::semantic_validation::main::validations_json(request_json))
+    py.compiler_detach(|| crate::semantic_validation::main::validations_json(request_json))
         .map_err(value_error)
 }
 
 #[pyfunction]
 fn analyze_sql_uses_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::semantic_usage::main::analyze_json(request_json))
+    py.compiler_detach(|| crate::semantic_usage::main::analyze_json(request_json))
         .map_err(value_error)
 }
 
 #[pyfunction]
 fn analyze_queries_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::query_analysis::main::analyze::analyze_json(request_json))
+    py.compiler_detach(|| crate::query_analysis::main::analyze::analyze_json(request_json))
         .map_err(value_error)
 }
 
 #[pyfunction]
 fn analyze_project_queries_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::query_analysis::main::analyze_project::analyze_project_json(request_json))
-        .map_err(value_error)
+    py.compiler_detach(|| {
+        crate::query_analysis::main::analyze_project::analyze_project_json(request_json)
+    })
+    .map_err(value_error)
 }
 
 #[pyfunction]
 fn analyze_project_queries_compact_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| {
+    py.compiler_detach(|| {
         crate::query_analysis::main::analyze_project_compact::analyze_project_compact_json(
             request_json,
         )
@@ -191,19 +199,21 @@ fn analyze_project_queries_compact_json(py: Python<'_>, request_json: &str) -> P
 
 #[pyfunction]
 fn render_sql_test_comparisons_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::compiler::main::sql_test_rendering::render_json(request_json))
+    py.compiler_detach(|| crate::compiler::main::sql_test_rendering::render_json(request_json))
         .map_err(value_error)
 }
 
 #[pyfunction]
 fn plan_and_render_sql_tests_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::compiler::main::sql_test_planning::plan_and_render_json(request_json))
-        .map_err(value_error)
+    py.compiler_detach(|| {
+        crate::compiler::main::sql_test_planning::plan_and_render_json(request_json)
+    })
+    .map_err(value_error)
 }
 
 #[pyfunction]
 fn resolve_sql_test_chains_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| {
+    py.compiler_detach(|| {
         crate::compiler::main::sql_test_chain_resolution::resolve_chains_json(request_json)
     })
     .map_err(value_error)
@@ -211,7 +221,7 @@ fn resolve_sql_test_chains_json(py: Python<'_>, request_json: &str) -> PyResult<
 
 #[pyfunction]
 fn render_sql_test_difference_sample_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| {
+    py.compiler_detach(|| {
         crate::compiler::main::sql_test_difference_sampling::render_difference_sample_json(
             request_json,
         )
@@ -221,8 +231,10 @@ fn render_sql_test_difference_sample_json(py: Python<'_>, request_json: &str) ->
 
 #[pyfunction]
 fn extract_sql_tests_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.detach(|| crate::compiler::main::sql_test_extraction::extract_batch_json(request_json))
-        .map_err(value_error)
+    py.compiler_detach(|| {
+        crate::compiler::main::sql_test_extraction::extract_batch_json(request_json)
+    })
+    .map_err(value_error)
 }
 
 fn authored_value_to_python(
@@ -324,7 +336,7 @@ type ParsedModelHeader = (
 #[pyfunction]
 fn parse_model_headers(py: Python<'_>, headers: Vec<String>) -> PyResult<Vec<ParsedModelHeader>> {
     let parsed = py
-        .detach(|| crate::compiler::main::model_header_parsing::parse_batch(&headers))
+        .compiler_detach(|| crate::compiler::main::model_header_parsing::parse_batch(&headers))
         .map_err(value_error)?;
     parsed
         .into_iter()
@@ -340,53 +352,65 @@ fn parse_model_headers(py: Python<'_>, headers: Vec<String>) -> PyResult<Vec<Par
 
 #[pyfunction]
 fn tokenize_model_header(header: &str) -> PyResult<Vec<(u8, String, usize)>> {
-    crate::compiler::main::model_header_tokenizing::tokenize_one(header).map_err(value_error)
+    compiler_guard(|| {
+        crate::compiler::main::model_header_tokenizing::tokenize_one(header).map_err(value_error)
+    })
 }
 
 #[pyfunction]
 fn substitute_static_project_vars(
     sqls: Vec<String>,
     variables: Vec<(String, String)>,
-) -> Vec<(u8, Option<String>)> {
-    crate::compiler::main::sql_interpolation::substitute_batch(&sqls, &variables)
+) -> PyResult<Vec<(u8, Option<String>)>> {
+    compiler_guard(|| {
+        Ok(crate::compiler::main::sql_interpolation::substitute_batch(
+            &sqls, &variables,
+        ))
+    })
 }
 
 #[pyfunction]
 fn extract_static_sql_references(
     sql: &str,
-) -> Option<Vec<crate::compiler::_helpers::sql_references::extraction::StaticReference>> {
-    crate::compiler::main::sql_references::extract(sql)
+) -> PyResult<Option<Vec<crate::compiler::_helpers::sql_references::extraction::StaticReference>>> {
+    compiler_guard(|| Ok(crate::compiler::main::sql_references::extract(sql)))
 }
 
 #[pyfunction]
 fn load_config_json(project_dir: &str) -> PyResult<String> {
-    load::load_config_json(std::path::Path::new(project_dir)).map_err(value_error)
+    compiler_guard(|| {
+        load::load_config_json(std::path::Path::new(project_dir)).map_err(value_error)
+    })
 }
 
 #[pyfunction]
 fn catalogue_json() -> PyResult<String> {
-    serde_json::to_string(&CatalogueResponse {
-        version: API_VERSION,
-        rules: catalogue::catalogue(),
+    compiler_guard(|| {
+        serde_json::to_string(&CatalogueResponse {
+            version: API_VERSION,
+            rules: catalogue::catalogue(),
+        })
+        .map_err(value_error)
     })
-    .map_err(value_error)
 }
 
 #[pyfunction]
 fn selected_codes_json(request_json: &str) -> PyResult<String> {
-    selected_codes::selected_codes_json(request_json).map_err(value_error)
+    compiler_guard(|| selected_codes::selected_codes_json(request_json).map_err(value_error))
 }
 
 #[pyfunction]
 fn render_owned_skill(content: &str, input_fingerprint: &str) -> PyResult<String> {
-    fensu_policy::render_owned_skill(
-        SKILL_OWNER,
-        SKILL_IDENTITY,
-        input_fingerprint,
-        content.as_bytes(),
-    )
-    .map_err(value_error)
-    .and_then(|value| String::from_utf8(value).map_err(value_error))
+    compiler_guard(|| {
+        fensu_policy::render_owned_skill(
+            SKILL_OWNER,
+            SKILL_IDENTITY,
+            input_fingerprint,
+            content.as_bytes(),
+        )
+        .map_err(value_error)
+        .and_then(|value| String::from_utf8(value).map_err(value_error))
+    })
 }
 
 #[pyfunction]
@@ -405,6 +429,12 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(finalize_rule_findings_json, module)?)?;
     module.add_function(wrap_pyfunction!(lint_sql_json, module)?)?;
     module.add_function(wrap_pyfunction!(prepare_lint_sql, module)?)?;
+    module.add(
+        "NativeCompilerError",
+        module
+            .py()
+            .get_type::<crate::bindings::_helpers::panics::NativeCompilerError>(),
+    )?;
     module.add_class::<crate::semantic_validation::models::ProjectCatalog>()?;
     module.add_class::<crate::semantic_validation::models::BindingPositions>()?;
     module.add_function(wrap_pyfunction!(normalize_analysis_sql, module)?)?;
