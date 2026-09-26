@@ -42,17 +42,19 @@ def test_given_completed_shape_when_an_unrelated_model_changes_then_cached_colum
     args: list[str] = ["--project-dir", str(tmp_path), "compile", "--json"]
     assert main(args) == 0
     cold: dict[str, Any] = json.loads(capsys.readouterr().out)
-    expected: dict[str, Any] = next(
-        model for model in cold["resources"]["models"] if model["name"] == "orders"
-    )
+    cold_models: dict[str, dict[str, Any]] = {
+        model["name"]: model for model in cold["resources"]["models"]
+    }
+    expected: dict[str, Any] = cold_models["orders"]
     assert expected["column_count"] == test_case.expected_columns
     assert expected["lineage"]["has_star"] is test_case.expected_star
     edited.write_text(edited.read_text() + "\n-- unrelated edit\n")
     assert main(args) == 0
     changed: dict[str, Any] = json.loads(capsys.readouterr().out)
-    actual: dict[str, Any] = next(
-        model for model in changed["resources"]["models"] if model["name"] == "orders"
-    )
+    changed_models: dict[str, dict[str, Any]] = {
+        model["name"]: model for model in changed["resources"]["models"]
+    }
+    actual: dict[str, Any] = changed_models["orders"]
     assert actual == expected
     assert main([*args, "--no-cache"]) == 0
     oracle: dict[str, Any] = json.loads(capsys.readouterr().out)

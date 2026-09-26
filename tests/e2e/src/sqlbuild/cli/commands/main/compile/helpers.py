@@ -1635,10 +1635,13 @@ def _semantic_regular_model_sql(
         True: f'@macro_{macro_index:05d}("input.id")',
         False: "input.id",
     }[index % macro_call_interval == 0]
+    status_expression: str = (
+        "CAST(CASE WHEN input.id % 2 = 0 THEN 'even' ELSE 'odd' END AS VARCHAR)"
+    )
     direct_sql: str = f"""SELECT
   CAST({id_expression} AS INTEGER) AS id,
   CAST({amount_expression} AS DOUBLE) AS amount,
-  CAST(CASE WHEN input.id % 2 = 0 THEN 'even' ELSE 'odd' END AS VARCHAR) AS status{metric_expressions}
+  {status_expression} AS status{metric_expressions}
 FROM {relation_sql} AS input{seed_join_sql}
 """
     with_sql: str = f"WITH transformed AS (\n{direct_sql.rstrip()}\n)\nSELECT * FROM transformed\n"
