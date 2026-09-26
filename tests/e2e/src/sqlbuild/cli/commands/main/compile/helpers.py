@@ -115,6 +115,7 @@ class FreshProcessCompileBenchmarkResult(NamedTuple):
     peak_rss_bytes: int
     semantic_fingerprint: str
     payload: dict[str, object]
+    cpu_seconds: float
 
 
 class FreshProcessCompileCacheBenchmarkResult(NamedTuple):
@@ -597,7 +598,7 @@ def _run_fresh_process_compile_benchmark(
         "--output",
         str(measurement_path),
         "--format",
-        "%e %M",
+        "%e %M %U %S",
         str(Path(sys.executable).with_name("sqb")),
         "--project-dir",
         str(project_dir),
@@ -623,7 +624,9 @@ def _run_fresh_process_compile_benchmark(
                 process.wait()
                 raise
     assert returncode == 0, stderr_path.read_text(encoding="utf-8")
-    elapsed_text, peak_rss_kib_text = measurement_path.read_text(encoding="utf-8").split()
+    elapsed_text, peak_rss_kib_text, user_text, system_text = measurement_path.read_text(
+        encoding="utf-8"
+    ).split()
     elapsed_seconds: float = float(elapsed_text)
     payload_object: object = json.loads(output_path.read_bytes())
     assert isinstance(payload_object, dict)
@@ -638,6 +641,7 @@ def _run_fresh_process_compile_benchmark(
         peak_rss_bytes=peak_rss_bytes,
         semantic_fingerprint=semantic_fingerprint,
         payload=payload,
+        cpu_seconds=float(user_text) + float(system_text),
     )
 
 
