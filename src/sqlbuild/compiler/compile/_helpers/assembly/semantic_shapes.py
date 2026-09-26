@@ -188,7 +188,8 @@ def semantic_shapes(
             elif model.inferred_columns and (
                 not model.fast_lineage_has_star
                 or (
-                    model.references
+                    model.fast_lineage_star_resolved
+                    and model.references
                     and all(
                         (
                             table_function_analysis_name(reference.ref_name)
