@@ -7,6 +7,13 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 
 
 @dataclass(frozen=True)
+class ExpressionMemoCase:
+    description: str
+    expression: str
+    expected_analysis_calls: int = 1
+
+
+@dataclass(frozen=True)
 class ShapeCacheCase:
     description: str
     sql: str

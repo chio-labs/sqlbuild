@@ -147,6 +147,7 @@ def semantic_shapes(
     profile = profile or ExpressionInferenceProfile(
         sql_analysis_dialect=project.sql_analysis_dialect
     )
+    profile = replace(profile, binding_catalog=project.binding_catalog)
     shapes: dict[str, dict[str, str]] = {}
     for seed in project.seeds:
         shapes[seed.name] = {
@@ -231,6 +232,16 @@ def get_expression_source_shape(
             effective_profile.sql_analysis_dialect,
         ),
     )
+    key: tuple[str, str | None, bool, tuple[tuple[str, str], ...]] = (
+        expression,
+        effective_profile.sql_analysis_dialect,
+        effective_profile.quoted_identifiers_ignore_case,
+        tuple(sorted(effective_profile.function_return_types.items())),
+    )
+    catalog: Any = effective_profile.binding_catalog
+    if catalog is not None and key in catalog.expression_shapes:
+        cached: dict[str, str] | None = catalog.expression_shapes[key]
+        return None if cached is None else dict(cached)
     prepared: tuple[NativeCompactAnalysis, ...] = analyze_queries_with_compact_polyglot_batch(
         query_sqls=(expression,),
         references=((),),
@@ -249,11 +260,16 @@ def get_expression_source_shape(
         recover_cte_facts=True,
         precomputed=prepared[0],
     )
-    if not analysis.columns or analysis.has_star:
-        return None
-    return inferred_binding_shape(
-        sql=expression,
-        profile=effective_profile,
-        columns={column.name: column.type or "UNKNOWN" for column in analysis.columns},
-        inputs={},
+    shape: dict[str, str] | None = (
+        None
+        if not analysis.columns or analysis.has_star
+        else inferred_binding_shape(
+            sql=expression,
+            profile=effective_profile,
+            columns={column.name: column.type or "UNKNOWN" for column in analysis.columns},
+            inputs={},
+        )
     )
+    if catalog is not None:
+        catalog.expression_shapes[key] = shape
+    return None if shape is None else dict(shape)
