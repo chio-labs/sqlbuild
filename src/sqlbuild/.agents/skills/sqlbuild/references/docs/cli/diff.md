@@ -16,6 +16,7 @@ sqb diff <FROM>:<TO> <mode> --select <models> [flags]
 
 # Query mode
 sqb diff --left-query <sql> --right-query <sql> (--key <column> | --unkeyed) [flags]
+sqb diff --left-query <sql> --right-query <sql> --schema-only [flags]
 ```
 
 In model mode, the first argument is a positional `FROM:TO` range, `--select` is required, and exactly one mode is required: `--full`, `--schema-only`, or `--bounded <duration>`.
@@ -26,7 +27,7 @@ be able to read both namespaces.
 
 Full and bounded row comparisons match rows on the model's `unique_key`, or on `--key` columns when given; use `--unkeyed` for an exact full-row comparison. Bounded mode uses the model's cursor and falls back to a full row comparison when no cursor is configured.
 
-In query mode, omit `FROM:TO` and model selectors; each query identifies its own input and the active target's connection (or `--target`) runs both. A full comparison is the default, `--schema-only` is also available, and `--bounded` is model-only.
+In query mode, omit `FROM:TO` and model selectors; each query identifies its own input and the active target's connection (or `--target`) runs both. A full comparison is the default and needs `--key` or `--unkeyed`; `--schema-only` takes neither, and `--bounded` is model-only.
 
 ## Flags
 
