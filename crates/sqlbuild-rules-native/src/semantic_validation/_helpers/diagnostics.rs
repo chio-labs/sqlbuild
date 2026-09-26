@@ -57,7 +57,7 @@ pub(crate) fn column_pattern() -> Result<&'static Regex, String> {
 struct DiagnosticContext<'a> {
     sql: &'a str,
     dialect: DialectType,
-    statements: Option<Vec<Expression>>,
+    statements: Option<polyglot_sql::Result<Vec<Expression>>>,
 }
 
 impl DiagnosticContext<'_> {
@@ -81,13 +81,10 @@ impl DiagnosticContext<'_> {
                     .map_err(Clone::clone)?
                     .is_match(&error.message))
         {
-            let expressions = self.statements.get_or_insert_with(|| {
-                match Dialect::get(self.dialect).parse(self.sql) {
-                    Ok(expressions) => expressions,
-                    Err(_) => Vec::new(),
-                }
-            });
-            for expression in expressions {
+            let parsed = self
+                .statements
+                .get_or_insert_with(|| Dialect::get(self.dialect).parse(self.sql));
+            for expression in parsed.iter().flatten() {
                 for node in expression.dfs() {
                     if let Expression::Select(select) = node
                         && select_proves(select, &error)?

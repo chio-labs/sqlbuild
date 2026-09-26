@@ -55,26 +55,8 @@ fn binding_diagnostics(
     py: Python<'_>,
     sql: &str,
     dialect: &str,
-    rows: Vec<(
-        String,
-        String,
-        Option<usize>,
-        Option<usize>,
-        Option<usize>,
-        Option<usize>,
-        String,
-    )>,
-) -> PyResult<
-    Vec<(
-        String,
-        String,
-        Option<usize>,
-        Option<usize>,
-        Option<usize>,
-        Option<usize>,
-        String,
-    )>,
-> {
+    rows: Vec<crate::semantic_validation::types::DiagnosticRow>,
+) -> PyResult<Vec<crate::semantic_validation::types::DiagnosticRow>> {
     py.compiler_detach(|| {
         crate::semantic_validation::main::diagnostics::binding_diagnostics(sql, dialect, rows)
     })

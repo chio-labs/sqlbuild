@@ -159,9 +159,9 @@ fn align_offsets(original: &str, normalized: &str) -> Result<Vec<usize>, String>
     while let Some((alo, ahi, blo, bhi)) = pending.pop() {
         let (mut ai, mut bi, mut size) = (alo, blo, 0);
         let mut previous: HashMap<usize, usize> = HashMap::new();
-        for i in alo..ahi {
+        for (i, token) in av.iter().enumerate().take(ahi).skip(alo) {
             let mut current: HashMap<usize, usize> = HashMap::new();
-            for &j in index.get(av[i].as_str()).into_iter().flatten() {
+            for &j in index.get(token.as_str()).into_iter().flatten() {
                 if j < blo {
                     continue;
                 }

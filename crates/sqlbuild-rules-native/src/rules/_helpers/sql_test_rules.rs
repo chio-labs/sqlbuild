@@ -716,7 +716,7 @@ fn empty_relation(cte: &SqlTestCteFact, dialect: &str) -> bool {
     if fixture_facts(&cte.name, &cte.sql).empty_fixture_marker {
         return true;
     }
-    let Some(query) = parse_fixture_query(&cte.sql, dialect) else {
+    let Ok(query) = fixture_query(&cte.sql, dialect) else {
         return false;
     };
     let SetExpr::Select(select) = query.body.as_ref() else {
@@ -725,13 +725,6 @@ fn empty_relation(cte: &SqlTestCteFact, dialect: &str) -> bool {
     query.with.is_none()
         && (limited_to_zero_rows(&query)
             || (filtered_to_zero_rows(select) && !contains_function(&query.order_by)))
-}
-
-fn parse_fixture_query(sql: &str, dialect: &str) -> Option<Query> {
-    match fixture_query(sql, dialect) {
-        Ok(query) => Some(query),
-        Err(_) => None,
-    }
 }
 
 fn fixture_query(sql: &str, dialect: &str) -> Result<Query, String> {
@@ -790,7 +783,7 @@ fn numeric_literal(expression: &Expr) -> Option<f64> {
 }
 
 fn bare_row_existence(sql: &str, targets: &[String], dialect: &str) -> bool {
-    let Some(query) = parse_fixture_query(sql, dialect) else {
+    let Ok(query) = fixture_query(sql, dialect) else {
         return false;
     };
     let SetExpr::Select(select) = query.body.as_ref() else {
