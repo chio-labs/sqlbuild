@@ -1457,7 +1457,7 @@ def build_cursor_window_project_files(*, tests: dict[str, str]) -> dict[str, str
             "  cursor_inputs (raw_orders (column order_date, roles [filter, watermark]),),\n"
             "  batch_size 1h,\n"
             ");\n\n"
-            "SELECT COUNT(*) AS order_count\n"
+            "SELECT MAX(DATE_TRUNC('hour', order_date)) AS order_hour, COUNT(*) AS order_count\n"
             'FROM __source("raw_orders")\n'
             "WHERE order_date >= __cursor_start() AND order_date < __cursor_end()\n"
         ),
