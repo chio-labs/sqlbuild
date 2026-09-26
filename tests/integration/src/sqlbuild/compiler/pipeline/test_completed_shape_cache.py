@@ -40,7 +40,8 @@ def test_given_completed_shape_when_an_unrelated_model_changes_then_cached_colum
         'MODEL (materialized view); SELECT id, quantity FROM __source("raw_orders")'
     )
     (tmp_path / "models/orders.sql").write_text(
-        "MODEL (materialized view);\n" + test_case.sql.replace('__source("raw_orders")', '__ref("order_inputs")')
+        "MODEL (materialized view);\n"
+        + test_case.sql.replace('__source("raw_orders")', '__ref("order_inputs")')
     )
     edited: Path = tmp_path / "models/customers.sql"
     edited.write_text("MODEL (materialized view); SELECT 1 AS id")
