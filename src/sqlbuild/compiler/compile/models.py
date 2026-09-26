@@ -108,6 +108,7 @@ class CompilerDiagnostic:
     related_locations: tuple[RelatedLocation, ...] = field(default_factory=tuple)
     help: str | None = None
     notes: tuple[str, ...] = ()
+    affected_rules: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "phase", DiagnosticPhase(self.phase))

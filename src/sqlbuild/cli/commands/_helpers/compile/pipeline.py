@@ -228,6 +228,7 @@ def _analyze_compile_project(
             line=fault.line,
             column=fault.column,
             help=fault.remediation,
+            affected_rules=fault.affected_rules,
         )
         for fault in rules_result.findings
     )

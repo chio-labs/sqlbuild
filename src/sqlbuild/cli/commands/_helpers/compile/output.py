@@ -529,6 +529,8 @@ def _diagnostic_to_json(diagnostic: CompilerDiagnostic) -> dict[str, object]:
         payload["help"] = diagnostic.help
     if diagnostic.notes:
         payload["notes"] = list(diagnostic.notes)
+    if diagnostic.affected_rules:
+        payload["affected_rules"] = list(diagnostic.affected_rules)
     return payload
 
 
@@ -610,6 +612,8 @@ def _format_diagnostic_text(
             )
         )
     lines.extend(f"  {style.muted('= note:')} {note}" for note in diagnostic.notes)
+    if diagnostic.affected_rules:
+        lines.append(f"  {style.muted('= affected Rules:')} {', '.join(diagnostic.affected_rules)}")
     if diagnostic.help is not None:
         lines.append(f"  {style.muted('= help:')} {diagnostic.help}")
     return lines

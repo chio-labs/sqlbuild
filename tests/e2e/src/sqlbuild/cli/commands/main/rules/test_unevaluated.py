@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.rules._test_types import (
+    GroupedRulesCase,
     UnevaluatedResourceCase,
     UnevaluatedRuleCase,
 )
@@ -66,7 +67,7 @@ def test_given_guarded_resource_when_running_rules_then_reports_failure_and_cove
         (finding,) = payload["findings"]
         assert finding["code"] == "rules-unevaluated"
         assert finding["path"] == test_case.path
-        assert "SQBRSQL035" in finding["message"]
+        assert finding["affected_rules"] == ["SQBRSQL035"]
         assert test_case.expected_reason in finding["message"]
     human: subprocess.CompletedProcess[str] = run_unevaluated_rules_cli(
         tmp_path, "rules", "run", "SQBRSQL035"
@@ -128,6 +129,54 @@ def test_given_explicit_escape_hatch_when_running_rules_then_honors_policy(
     )
     assert compiled.returncode == test_case.expected_exit, compiled.stdout + compiled.stderr
     assert json.loads(compiled.stdout)["diagnostics"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        GroupedRulesCase(
+            "compile groups two Rules",
+            ("compile", "--json", "--no-cache"),
+            "diagnostics",
+            ("SQBRSQL034", "SQBRSQL035"),
+        ),
+        GroupedRulesCase(
+            "Rules CLI groups selected family",
+            ("rules", "--json", "run", "SQBRSQL"),
+            "findings",
+            tuple(f"SQBRSQL{number:03}" for number in range(1, 42)),
+        ),
+        GroupedRulesCase(
+            "suppression precedes grouping",
+            ("compile", "--json", "--no-cache"),
+            "diagnostics",
+            ("SQBRSQL034",),
+            '\n[[rules.rule_ignores]]\nrules = ["SQBRSQL035"]\npaths = ["models/staging/orders.sql"]\nreason = "External SQL syntax"\n',
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_one_failed_resource_and_multiple_rules_when_running_cli_then_groups_cause(
+    test_case: GroupedRulesCase,
+    tmp_path: Path,
+) -> None:
+    write_unevaluated_rules_project(
+        project_dir=tmp_path,
+        selected_rules=("SQBRSQL034", "SQBRSQL035"),
+        configuration=test_case.configuration,
+    )
+    for _ in range(2):
+        result: subprocess.CompletedProcess[str] = run_unevaluated_rules_cli(
+            tmp_path, *test_case.arguments
+        )
+        assert result.returncode == 1, result.stdout + result.stderr
+        payload: dict[str, Any] = json.loads(result.stdout)
+        (finding,) = payload[test_case.result_key]
+        assert finding["code"] == "rules-unevaluated"
+        assert finding["affected_rules"] == list(test_case.expected_rules)
+        assert finding["message"].startswith(
+            f"{len(test_case.expected_rules)} selected Rules could not evaluate this resource:"
+        )
 
 
 if __name__ == "__main__":
