@@ -10,6 +10,9 @@ type NativeBindingRequest = tuple[str, list[tuple[str, bool]], dict[str, Mapping
 
 
 class NativeProjectCatalog(Protocol):
+    def inferred_schema(
+        self, *, sql: str, columns: Mapping[str, str], inputs: Mapping[str, Mapping[str, str]]
+    ) -> dict[str, str]: ...
     def with_relations(
         self, relations: Mapping[str, Mapping[str, str]]
     ) -> NativeProjectCatalog: ...

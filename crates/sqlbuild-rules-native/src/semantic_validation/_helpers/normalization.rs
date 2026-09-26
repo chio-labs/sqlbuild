@@ -106,12 +106,16 @@ pub(super) fn normalize(
     }
     result = result.edits(edits);
     let mut edits: Vec<Edit> = Vec::new();
+    let mut consumed_until = 0;
     for captures in FUNCTIONS
         .as_ref()
         .map_err(Clone::clone)?
         .captures_iter(&result.sql)
     {
         let whole = captures.get(0).ok_or("missing function match")?;
+        if whole.start() < consumed_until {
+            continue;
+        }
         if result.sql.as_bytes().get(whole.end()) != Some(&b'(') {
             continue;
         }
@@ -134,6 +138,7 @@ pub(super) fn normalize(
                 result.offsets[result.sql[..whole.start()].chars().count()],
             ),
         ));
+        consumed_until = end;
     }
     result = result.edits(edits);
     if dialect.eq_ignore_ascii_case("snowflake") {

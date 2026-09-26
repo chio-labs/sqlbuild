@@ -7,6 +7,10 @@ from copy import copy
 from typing import cast
 
 import sqlbuild._native as _native
+from sqlbuild.compiler.sql_analysis.constants import (
+    CASE_SENSITIVE_BINDING_DIALECTS,
+    SQL_QUOTED_IDENTIFIER_DELIMITER,
+)
 from sqlbuild.compiler.sql_analysis.models import SqlSchemaValidationRequest
 from sqlbuild.compiler.sql_analysis.types import (
     NativeBindingRequest,
@@ -26,6 +30,8 @@ class BindingCatalog:
         relations: Mapping[str, Mapping[str, str]],
     ) -> None:
         self.schemas: dict[str, Mapping[str, str]] = dict(relations)
+        self.dialect: str = dialect
+        self.quoted_ignore_case: bool = quoted_ignore_case
         self.analysis_shapes: dict[str, tuple[Mapping[str, str], Mapping[str, str]]] = {}
         self.native: NativeProjectCatalog = cast(NativeCatalogModule, _native).ProjectCatalog(
             {
@@ -58,6 +64,20 @@ class BindingCatalog:
         catalog.analysis_shapes = dict(self.analysis_shapes)
         catalog.native = self.native.with_relations(relations)
         return catalog
+
+    def inferred_schema(
+        self, *, sql: str, columns: dict[str, str], inputs: Mapping[str, Mapping[str, str]]
+    ) -> dict[str, str]:
+        if self.quoted_ignore_case or self.dialect not in CASE_SENSITIVE_BINDING_DIALECTS:
+            return columns
+        has_exact_input: bool = False
+        for shape in inputs.values():
+            if any(SQL_QUOTED_IDENTIFIER_DELIMITER in name for name in shape):
+                has_exact_input = True
+                break
+        if SQL_QUOTED_IDENTIFIER_DELIMITER not in sql and not has_exact_input:
+            return columns
+        return self.native.inferred_schema(sql=sql, columns=columns, inputs=inputs)
 
     def prepare(self, requests: Sequence[SqlSchemaValidationRequest]) -> list[NativeBindingRequest]:
         additions: dict[str, Mapping[str, str]] = {}

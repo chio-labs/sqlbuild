@@ -1,5 +1,6 @@
 //! Native authored positions, including macro-expansion passes.
 
+use crate::bindings::main::compiler_guard::compiler_guard;
 use crate::semantic_validation::_helpers::diagnostics::column_pattern;
 use crate::semantic_validation::_helpers::normalization::normalize;
 use crate::semantic_validation::models::{BindingPositions, PositionInput};
@@ -18,28 +19,30 @@ type Mapping = (usize, usize, usize, usize);
 impl BindingPositions {
     #[new]
     fn new(request: PositionInput) -> PyResult<Self> {
-        let PositionInput {
-            authored,
-            query,
-            expanded,
-            cleaned,
-            passes,
-        } = request;
-        let mapped = normalize(&expanded, "snowflake", &HashMap::new(), &HashMap::new());
-        let offsets = match mapped {
-            Ok(mapped) if mapped.sql == cleaned => mapped.offsets,
-            _ if expanded == cleaned => (0..=expanded.chars().count()).collect(),
-            _ => align_offsets(&expanded, &cleaned).map_err(PyValueError::new_err)?,
-        };
-        Ok(Self {
-            query_start: authored
-                .find(&query)
-                .map(|offset| authored[..offset].chars().count()),
-            lines: line_starts(&authored),
-            cleaned_lines: line_starts(&cleaned),
-            authored,
-            offsets,
-            passes,
+        compiler_guard(|| {
+            let PositionInput {
+                authored,
+                query,
+                expanded,
+                cleaned,
+                passes,
+            } = request;
+            let mapped = normalize(&expanded, "snowflake", &HashMap::new(), &HashMap::new());
+            let offsets = match mapped {
+                Ok(mapped) if mapped.sql == cleaned => mapped.offsets,
+                _ if expanded == cleaned => (0..=expanded.chars().count()).collect(),
+                _ => align_offsets(&expanded, &cleaned).map_err(PyValueError::new_err)?,
+            };
+            Ok(Self {
+                query_start: authored
+                    .find(&query)
+                    .map(|offset| authored[..offset].chars().count()),
+                lines: line_starts(&authored),
+                cleaned_lines: line_starts(&cleaned),
+                authored,
+                offsets,
+                passes,
+            })
         })
     }
 
@@ -50,64 +53,66 @@ impl BindingPositions {
         column: Option<usize>,
         message: &str,
     ) -> PyResult<(Option<usize>, Option<usize>)> {
-        if let Some(captures) = column_pattern()
-            .map_err(PyValueError::new_err)?
-            .captures(message)
-        {
-            let identifier = captures[1].rsplit('.').next().unwrap_or(&captures[1]);
-            let mut occurrences = self
-                .authored
-                .match_indices(identifier)
-                .filter(|(offset, _)| {
-                    let before = self.authored[..*offset].chars().next_back();
-                    let after = self.authored[*offset + identifier.len()..].chars().next();
-                    !before.is_some_and(word) && !after.is_some_and(word)
-                });
-            if let Some((offset, _)) = occurrences.next()
-                && occurrences.next().is_none()
+        compiler_guard(|| {
+            if let Some(captures) = column_pattern()
+                .map_err(PyValueError::new_err)?
+                .captures(message)
             {
-                return Ok(position(
-                    &self.lines,
-                    self.authored[..offset].chars().count(),
-                ));
-            }
-        }
-        let Some(query_start) = self.query_start else {
-            return Ok((None, None));
-        };
-        let offset = start.or_else(|| {
-            line.zip(column).map(|(line, column)| {
-                self.cleaned_lines
-                    .get(line.saturating_sub(1))
-                    .copied()
-                    .unwrap_or(0)
-                    + column.saturating_sub(1)
-            })
-        });
-        let Some(offset) = offset else {
-            return Ok(position(&self.lines, query_start));
-        };
-        let mut mapped = self
-            .offsets
-            .get(offset)
-            .copied()
-            .unwrap_or_else(|| *self.offsets.last().unwrap_or(&0));
-        for pass in self.passes.iter().rev() {
-            let mut adjusted = mapped as isize;
-            for &(source_start, source_end, output_start, output_end) in pass {
-                if mapped < output_start {
-                    break;
+                let identifier = captures[1].rsplit('.').next().unwrap_or(&captures[1]);
+                let mut occurrences =
+                    self.authored
+                        .match_indices(identifier)
+                        .filter(|(offset, _)| {
+                            let before = self.authored[..*offset].chars().next_back();
+                            let after = self.authored[*offset + identifier.len()..].chars().next();
+                            !before.is_some_and(word) && !after.is_some_and(word)
+                        });
+                if let Some((offset, _)) = occurrences.next()
+                    && occurrences.next().is_none()
+                {
+                    return Ok(position(
+                        &self.lines,
+                        self.authored[..offset].chars().count(),
+                    ));
                 }
-                if mapped < output_end {
-                    adjusted = source_start as isize;
-                    break;
-                }
-                adjusted +=
-                    (source_end - source_start) as isize - (output_end - output_start) as isize;
             }
-            mapped = adjusted.max(0) as usize;
-        }
-        Ok(position(&self.lines, query_start + mapped))
+            let Some(query_start) = self.query_start else {
+                return Ok((None, None));
+            };
+            let offset = start.or_else(|| {
+                line.zip(column).map(|(line, column)| {
+                    self.cleaned_lines
+                        .get(line.saturating_sub(1))
+                        .copied()
+                        .unwrap_or(0)
+                        + column.saturating_sub(1)
+                })
+            });
+            let Some(offset) = offset else {
+                return Ok(position(&self.lines, query_start));
+            };
+            let mut mapped = self
+                .offsets
+                .get(offset)
+                .copied()
+                .unwrap_or_else(|| *self.offsets.last().unwrap_or(&0));
+            for pass in self.passes.iter().rev() {
+                let mut adjusted = mapped as isize;
+                for &(source_start, source_end, output_start, output_end) in pass {
+                    if mapped < output_start {
+                        break;
+                    }
+                    if mapped < output_end {
+                        adjusted = source_start as isize;
+                        break;
+                    }
+                    adjusted +=
+                        (source_end - source_start) as isize - (output_end - output_start) as isize;
+                }
+                mapped = adjusted.max(0) as usize;
+            }
+            Ok(position(&self.lines, query_start + mapped))
+        })
     }
 }
 

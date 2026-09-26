@@ -1,5 +1,7 @@
 //! Compile-owned schema catalog and native, batched binding requests.
 
+use crate::bindings::main::compiler_error::compiler_error;
+use crate::bindings::types::CompilerDetach;
 use std::collections::HashMap;
 
 use crate::semantic_validation::models::{CatalogInput, Columns, ProjectCatalog};
@@ -31,6 +33,65 @@ impl<'py> FromPyObject<'py> for Columns {
 }
 #[pymethods]
 impl ProjectCatalog {
+    fn inferred_schema(
+        &self,
+        py: Python<'_>,
+        sql: &str,
+        columns: Columns,
+        inputs: Relations,
+    ) -> PyResult<HashMap<String, Option<String>>> {
+        py.compiler_detach(|| {
+            use polyglot_sql::{Expression, ExpressionWalk};
+            let parsed = Dialect::get(self.dialect)
+                .parse(sql)
+                .map_err(|error| error.to_string())?;
+            let mut identifiers: HashMap<String, String> = HashMap::new();
+            for expression in &parsed {
+                if let Some(select) = expression.dfs().find_map(|node| match node {
+                    Expression::Select(select) => Some(select),
+                    _ => None,
+                }) {
+                    for projection in &select.expressions {
+                        let identifier = match projection {
+                            Expression::Alias(alias) => Some(&alias.alias),
+                            Expression::Column(column) => Some(&column.name),
+                            _ => None,
+                        };
+                        if let Some(identifier) = identifier {
+                            let name = if identifier.quoted {
+                                format!("\"{}\"", identifier.name.replace('"', "\"\""))
+                            } else {
+                                identifier.name.clone()
+                            };
+                            identifiers.insert(identifier.name.clone(), name);
+                        }
+                    }
+                    break;
+                }
+            }
+            let mut exact_inputs: HashMap<String, String> = HashMap::new();
+            for shape in inputs.values() {
+                for (name, _) in &shape.0 {
+                    if name.len() > 1 && name.starts_with('"') && name.ends_with('"') {
+                        exact_inputs
+                            .insert(name[1..name.len() - 1].replace("\"\"", "\""), name.clone());
+                    }
+                }
+            }
+            let mut result: HashMap<String, Option<String>> = HashMap::new();
+            for (name, column_type) in columns.0 {
+                let binding_name = identifiers
+                    .get(&name)
+                    .or_else(|| exact_inputs.get(&name))
+                    .cloned()
+                    .unwrap_or(name);
+                result.insert(binding_name, column_type);
+            }
+            Ok(result)
+        })
+        .map_err(compiler_error)
+    }
+
     #[new]
     fn new(request: CatalogInput) -> PyResult<Self> {
         let CatalogInput {
@@ -132,7 +193,7 @@ impl ProjectCatalog {
         for (sql, references, overrides) in requests {
             let schema = self
                 .schema(&references, overrides)
-                .map_err(PyValueError::new_err)?;
+                .map_err(compiler_error)?;
             payloads.push(serde_json::json!({"sql": sql, "dialect": self.dialect.to_string(), "schema": schema,
                 "options": self.options, "quoted_ignore_case": self.quoted_ignore_case}));
         }
@@ -146,8 +207,8 @@ impl ProjectCatalog {
     ) -> PyResult<Bound<'py, PyBytes>> {
         let text = std::str::from_utf8(payload)
             .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        let result = py.detach(|| crate::query_analysis::main::analyze_project_catalog::analyze_project_compact_with_catalog(text, self))
-            .map_err(PyValueError::new_err)?;
+        let result = py.compiler_detach(|| crate::query_analysis::main::analyze_project_catalog::analyze_project_compact_with_catalog(text, self))
+            .map_err(compiler_error)?;
         Ok(PyBytes::new(py, result.as_bytes()))
     }
 
@@ -156,7 +217,7 @@ impl ProjectCatalog {
         py: Python<'_>,
         requests: Vec<BindingRequest>,
     ) -> PyResult<Vec<Vec<DiagnosticRow>>> {
-        py.detach(|| {
+        py.compiler_detach(|| {
             let pool = rayon::ThreadPoolBuilder::new()
                 .num_threads(4.min(requests.len().max(1)))
                 .stack_size(16 * 1024 * 1024)
@@ -174,7 +235,7 @@ impl ProjectCatalog {
                     .collect::<Result<Vec<_>, String>>()
             })
         })
-        .map_err(PyValueError::new_err)
+        .map_err(compiler_error)
     }
 }
 
@@ -299,6 +360,26 @@ impl ProjectCatalog {
         sql: &str,
         schema: &ValidationSchema,
     ) -> Result<ValidationResult, String> {
+        let exact_names = !self.quoted_ignore_case && schema.tables.iter().any(has_exact_columns);
+        let mut encoded_schema;
+        let schema = if exact_names {
+            encoded_schema = schema.clone();
+            for table in &mut encoded_schema.tables {
+                table.name = identifiers::encoded_name(&table.name, self.dialect);
+                if let Some(name) = &mut table.schema {
+                    *name = identifiers::encoded_name(name, self.dialect);
+                }
+                for name in &mut table.aliases {
+                    *name = identifiers::encoded_name(name, self.dialect);
+                }
+                for column in &mut table.columns {
+                    column.name = identifiers::encoded_name(&column.name, self.dialect);
+                }
+            }
+            &encoded_schema
+        } else {
+            schema
+        };
         let statements = match Dialect::get(self.dialect).parse_with_options(
             sql,
             &polyglot_sql::ParseOptions {
@@ -323,7 +404,9 @@ impl ProjectCatalog {
                 &self.options,
             ));
         }
-        let (statements, authored) = if self.quoted_ignore_case && sql.contains('"') {
+        let (statements, authored) = if exact_names {
+            identifiers::transform_statements(statements, Some(self.dialect))?
+        } else if self.quoted_ignore_case && sql.contains('"') {
             identifiers::fold_statements(statements)?
         } else {
             (statements, Vec::new())
@@ -351,6 +434,11 @@ impl ProjectCatalog {
             result.errors.extend(clause_errors);
         }
         for error in &mut result.errors {
+            if exact_names {
+                error.message =
+                    identifiers::restore_names(&error.message, &authored, error.start, error.end)?;
+                continue;
+            }
             for (normalized, spelling, span) in &authored {
                 if error.start.is_none_or(|start| {
                     span.is_none_or(|span| {
@@ -389,4 +477,11 @@ pub(super) fn diagnostic_row(error: ValidationError) -> DiagnosticRow {
         error.end,
         severity.to_owned(),
     )
+}
+
+fn has_exact_columns(table: &SchemaTable) -> bool {
+    table
+        .columns
+        .iter()
+        .any(|column| column.name.starts_with('"'))
 }

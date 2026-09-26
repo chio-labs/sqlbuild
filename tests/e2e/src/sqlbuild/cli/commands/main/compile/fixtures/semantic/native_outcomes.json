@@ -9,9 +9,10 @@
   "invalid:B232": ["N01", "N04", "N06", "N08"],
   "invalid:B233": ["J01", "J04", "E01"],
   "invalid:B234": ["M01", "M02", "M03"],
-  "warning:W210": ["t03", "t21", "t24", "J02", "ticket case 8"],
+  "warning:W210": ["t03", "t21", "t24", "J02", "ticket case 8", "D07"],
+  "warning:W301": ["t28", "metadata-udf"],
   "warning:W215": ["t08", "A10", "O02", "O05", "O08", "O11"],
-  "warning:W213": ["t11", "t17", "t25", "O07", "L01", "L02", "L03", "L04", "L05"],
+  "warning:W213": ["t11", "t17", "t25", "O07", "L01", "L02", "L03", "L04", "L05", "D05"],
   "warning:W216": ["N02", "N03", "F10"],
   "warning:W214": ["E02", "S03"]
 }

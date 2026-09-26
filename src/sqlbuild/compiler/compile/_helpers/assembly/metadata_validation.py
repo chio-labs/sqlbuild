@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterator
+from functools import lru_cache
 from typing import Any, cast
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
@@ -36,6 +37,7 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.constants import BINDING_UNKNOWN_TABLE_INTERNAL_CODE
+from sqlbuild.compiler.sql_analysis.main._resolve_binding_column import resolve_binding_column
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.compiler.sql_analysis.models import SqlBindingResult, SqlSchemaValidationRequest
@@ -222,7 +224,13 @@ def _audit_errors(
             )
             target_shape: dict[str, str] | None = shapes.get(match.group(1) if match else target)
             field: str = str(arguments.get("field", ""))
-            if target_shape is not None and field not in target_shape:
+            resolved_field: str | None = resolve_binding_column(
+                name=field,
+                columns=target_shape or {},
+                dialect=profile.sql_analysis_dialect,
+                ignore_quoted_case=profile.quoted_identifiers_ignore_case,
+            )
+            if target_shape and resolved_field is None:
                 diagnostics.append(
                     _model_error(
                         model=model,
@@ -231,64 +239,100 @@ def _audit_errors(
                         message=f"relationships target has no column '{field}'",
                     )
                 )
-            elif (
-                target_shape is not None
-                and column in shape
-                and _incompatible(left=shape[column], right=target_shape[field], profile=profile)
-            ):
-                diagnostics.append(
+            elif target_shape is not None and resolved_field is not None and column in shape:
+                diagnostics.extend(
                     _model_error(
                         model=model,
-                        code="B301",
+                        code="B301"
+                        if diagnostic.severity == DiagnosticSeverity.ERROR
+                        else diagnostic.code,
                         name=column,
-                        message=(
-                            f"relationships column '{column}' type {shape[column]} "
-                            f"is incompatible with '{field}' type {target_shape[field]}"
-                        ),
+                        message=f"relationships: {diagnostic.message}",
+                        severity=DiagnosticSeverity(diagnostic.severity),
                     )
+                    for diagnostic in _comparison_result(
+                        left=shape[column],
+                        right=target_shape[resolved_field],
+                        dialect=profile.sql_analysis_dialect,
+                    ).diagnostics
                 )
         elif audit.definition_name == _ACCEPTED_VALUES_AUDIT and column in shape:
             values: object = arguments.get("values")
             if isinstance(values, (list, tuple)):
-                for value in values:
-                    value_type: str = (
-                        "BOOLEAN"
-                        if isinstance(value, bool)
-                        else "INTEGER"
-                        if isinstance(value, int)
-                        else "DOUBLE"
-                        if isinstance(value, float)
-                        else "VARCHAR"
-                        if isinstance(value, str)
-                        else "UNKNOWN"
+                literals: list[str | None] = [_audit_literal(value) for value in values]
+                if literals and all(literal is not None for literal in literals):
+                    result = _accepted_values_result(
+                        literals=tuple(str(value) for value in literals),
+                        dialect=profile.sql_analysis_dialect,
+                        column_type=shape[column],
                     )
-                    if _incompatible(left=shape[column], right=value_type, profile=profile):
-                        diagnostics.append(
-                            _model_error(
-                                model=model,
-                                code="B301",
-                                name=column,
-                                message=(
-                                    f"accepted_values value {value!r} is incompatible "
-                                    f"with column '{column}' type {shape[column]}"
-                                ),
-                            )
+                    diagnostics.extend(
+                        _model_error(
+                            model=model,
+                            code="B301" if item.severity == DiagnosticSeverity.ERROR else item.code,
+                            name=column,
+                            message=f"accepted_values: {item.message}",
+                            severity=DiagnosticSeverity(item.severity),
                         )
-                        break
+                        for item in result.diagnostics
+                    )
     return tuple(diagnostics)
 
 
-def _incompatible(*, left: str, right: str, profile: ExpressionInferenceProfile) -> bool:
+def _different_argument_families(
+    *, left: str, right: str, profile: ExpressionInferenceProfile
+) -> bool:
     families: set[TypeFamily] = {
         normalize_type(type_sql=value, dialect=profile.sql_analysis_dialect).family
         for value in (left, right)
     }
-    return (
+    different_families: bool = (
         len(families) > 1
         and TypeFamily.OTHER not in families
         and not families <= {TypeFamily.INTEGER, TypeFamily.DECIMAL, TypeFamily.FLOAT}
         and not families <= {TypeFamily.TIMESTAMP, TypeFamily.DATE, TypeFamily.DATETIME}
     )
+    return different_families
+
+
+@lru_cache(maxsize=256)
+def _comparison_result(*, left: str, right: str, dialect: str | None) -> SqlBindingResult:
+    return get_schema_validations(
+        requests=(
+            SqlSchemaValidationRequest(
+                sql="SELECT lhs.value = rhs.value FROM lhs CROSS JOIN rhs",
+                dialect=dialect,
+                schema={"lhs": {"value": left}, "rhs": {"value": right}},
+            ),
+        )
+    )[0]
+
+
+def _audit_literal(value: object) -> str | None:
+    if value is None:
+        return "NULL"
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, int | float):
+        return str(value)
+    if isinstance(value, str):
+        return "'" + value.replace("'", "''") + "'"
+    return None
+
+
+@lru_cache(maxsize=256)
+def _accepted_values_result(
+    *, literals: tuple[str, ...], dialect: str | None, column_type: str
+) -> SqlBindingResult:
+    return get_schema_validations(
+        requests=(
+            SqlSchemaValidationRequest(
+                sql=f"SELECT value NOT IN ({', '.join(literals)}) FROM output",
+                dialect=dialect,
+                schema={"output": {"value": column_type}},
+            ),
+        )
+    )[0]
 
 
 def _sql_test_errors(
@@ -447,17 +491,19 @@ def _function_errors(
                 )
             elif column:
                 actual = _argument_column_type(column=column, select=select, shapes=shapes)
-            if actual != _UNKNOWN_TYPE and _incompatible(
+            if actual != _UNKNOWN_TYPE and _different_argument_families(
                 left=actual, right=declaration.type, profile=profile
             ):
                 diagnostics.append(
                     _model_error(
                         model=model,
-                        code="B301",
+                        code="W301",
+                        severity=DiagnosticSeverity.WARNING,
                         name=name,
                         message=(
                             f"Function '{name}' argument '{declaration.name}' "
-                            f"expects {declaration.type}, received {actual}"
+                            f"expects {declaration.type}, received {actual}; "
+                            "implicit conversion depends on the dialect"
                         ),
                     )
                 )

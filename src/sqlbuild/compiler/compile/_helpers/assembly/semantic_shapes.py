@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Any
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.analysis.columns import table_function_analysis_name
@@ -21,7 +22,12 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.compiler.sql_analysis.constants import NATIVE_DIALECT_ALIASES
+from sqlbuild.compiler.sql_analysis.constants import (
+    CASE_SENSITIVE_BINDING_DIALECTS,
+    NATIVE_DIALECT_ALIASES,
+)
+from sqlbuild.compiler.sql_analysis.main._binding_catalog import create_binding_catalog
+from sqlbuild.compiler.sql_analysis.main._normalize_analysis import normalize_analysis_sql
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -39,6 +45,41 @@ def binding_required_names(model_input: CompileModelInput) -> frozenset[str] | N
     if not model_input.sql_validation_enabled:
         return None
     return binding_relation_names(model_input.references)
+
+
+def binding_schema_for_model(
+    *, model_input: CompileModelInput, complete_binding_schemas: dict[str, dict[str, str]]
+) -> dict[str, dict[str, str]] | None:
+    required_names: frozenset[str] | None = binding_required_names(model_input)
+    if required_names is None:
+        return None
+    return {name: complete_binding_schemas.get(name) or {} for name in required_names}
+
+
+def inferred_binding_shape(
+    *,
+    sql: str,
+    columns: dict[str, str],
+    inputs: dict[str, dict[str, str]],
+    profile: ExpressionInferenceProfile,
+) -> dict[str, str]:
+    if (
+        profile.quoted_identifiers_ignore_case
+        or profile.sql_analysis_dialect not in CASE_SENSITIVE_BINDING_DIALECTS
+    ):
+        return columns
+    catalog: Any = profile.binding_catalog or create_binding_catalog(
+        dialect=profile.sql_analysis_dialect or "generic",
+        quoted_ignore_case=False,
+        known_functions=profile.semantic_known_functions,
+        known_types=profile.semantic_known_types,
+        relations=inputs,
+    )
+    return catalog.inferred_schema(
+        sql=normalize_analysis_sql(sql=sql, dialect=profile.sql_analysis_dialect),
+        columns=columns,
+        inputs=inputs,
+    )
 
 
 def build_declared_column_types(inputs: CompileProjectInputs) -> dict[str, dict[str, str]]:
@@ -159,9 +200,17 @@ def semantic_shapes(
                     )
                 )
             ):
-                shapes[model.name] = {
-                    column.name: column.type or "UNKNOWN" for column in model.inferred_columns
-                }
+                shapes[model.name] = inferred_binding_shape(
+                    sql=model.query_sql,
+                    profile=replace(profile, binding_catalog=project.binding_catalog),
+                    columns={
+                        column.name: column.type or "UNKNOWN" for column in model.inferred_columns
+                    },
+                    inputs={
+                        name: shapes.get(name, {})
+                        for name in binding_relation_names(model.references)
+                    },
+                )
             else:
                 remaining.append(model)
         if len(remaining) == len(pending):
@@ -202,4 +251,9 @@ def get_expression_source_shape(
     )
     if not analysis.columns or analysis.has_star:
         return None
-    return {column.name: column.type or "UNKNOWN" for column in analysis.columns}
+    return inferred_binding_shape(
+        sql=expression,
+        profile=effective_profile,
+        columns={column.name: column.type or "UNKNOWN" for column in analysis.columns},
+        inputs={},
+    )

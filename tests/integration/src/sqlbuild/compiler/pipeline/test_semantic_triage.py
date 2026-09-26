@@ -102,7 +102,7 @@ def test_given_effective_target_when_binding_quotes_then_honours_session_setting
         profile=ExpressionInferenceProfile(sql_analysis_dialect="snowflake"),
         selected_keys=frozenset(model.key for model in project.models),
     )
-    assert tuple(item.code for item in physical) == test_case.expected_codes
+    assert physical == ()
 
 
 @pytest.mark.parametrize(

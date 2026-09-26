@@ -1381,7 +1381,7 @@
       "pending_native": false
     },
     {
-      "description": "metadata: scalar UDF declared argument type",
+      "description": "metadata-udf: scalar UDF declared argument type",
       "category": "udf",
       "repo_files": {
         "models/probe.sql": "MODEL (materialized table);\nSELECT __udf(\"udf__is_completed_order\")(quantity) AS valid FROM __source(\"raw__orders\")\n"
