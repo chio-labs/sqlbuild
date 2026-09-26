@@ -7,6 +7,14 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 
 
 @dataclass(frozen=True)
+class ShapeCacheCase:
+    description: str
+    sql: str
+    expected_columns: int = 2
+    expected_star: bool = True
+
+
+@dataclass(frozen=True)
 class IdentifierBindingCase:
     description: str
     dialect: str

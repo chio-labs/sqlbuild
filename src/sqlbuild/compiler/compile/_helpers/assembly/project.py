@@ -678,7 +678,7 @@ def _analyze_model_sql_in_parallel(
     )
     if compact_candidate is not None:
         completed_analyses: dict[str, PolyglotAnalysisResult] = {}
-        if analysis_cache is not None and len(compact_candidate.matching_indexes) == len(requests):
+        if analysis_cache is not None:
             completed_analyses, _, _ = read_model_analyses(
                 context=analysis_cache,
                 cache_keys=request_cache_keys,
