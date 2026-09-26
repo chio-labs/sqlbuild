@@ -82,7 +82,7 @@
     <span class="dim">└──</span> revenue.sql</span></span><span class="hv-b"><span class="tree"><span class="dim">models</span>
 <span class="dim">└──</span> finance
     <span class="dim">└──</span> <span class="info">daily_revenue.sql</span></span></span></span>
-<span class="hv-l hv-l1"><span class="cmd">sqb plan</span></span><span class="hv-l hv-l2">Migrations (1)</span><span class="hv-l hv-l3"><span class="tree"><span class="dim">└──</span></span> daily_revenue  migrate<span class="hv-wide">  prod.revenue -&gt; prod.daily_revenue</span></span><span class="hv-l hv-l4"><span class="tree">    <span class="dim">├──</span></span> compatibility  compatible</span><span class="hv-l hv-l5"><span class="tree">    <span class="dim">├──</span></span> transfer  physical copy<span class="hv-wide">, promote by staged rename</span></span><span class="hv-l hv-l6"><span class="tree">    <span class="dim">└──</span></span> discovery  automatic</span></div>
+<span class="hv-l hv-l1"><span class="cmd">sqb plan</span></span><span class="hv-l hv-l2"><span class="strong">Migrations</span> <span class="dim">(1)</span></span><span class="hv-l hv-l3"><span class="tree"><span class="dim">└──</span></span> daily_revenue  <span class="info strong">migrate</span><span class="hv-wide">  <span class="dim">prod.revenue -&gt;</span> prod.daily_revenue</span></span><span class="hv-l hv-l4"><span class="tree">    <span class="dim">├──</span></span> <span class="dim">compatibility</span>  <span class="ok">compatible</span></span><span class="hv-l hv-l5"><span class="tree">    <span class="dim">├──</span></span> <span class="dim">transfer</span>  physical copy<span class="hv-wide">, promote by staged rename</span></span><span class="hv-l hv-l6"><span class="tree">    <span class="dim">└──</span></span> <span class="dim">discovery</span>  automatic</span></div>
 			</div>
 
 			<section>
@@ -202,14 +202,14 @@
 │       └── datetime.py        <span class="cm"># timestamp_trunc</span>
 └── daily_revenue.sql          <span class="cm"># uses payment_status and cents_to_dollars</span></span>
 <span class="cmd">sqb scope model:daily_revenue --as-path models/intermediate/daily_revenue.sql</span>
-Move preview
-  Resource: model:daily_revenue
-  Destination: models/intermediate/daily_revenue.sql
-  Lost (3)
-    ├─ <span class="bad">●</span> enum:payment_status     models/marts/_sqlbuild/_enums/payment_status.sql:1:1
-    ├─ <span class="bad">●</span> macro:cents_to_dollars  models/marts/_sqlbuild/_macros/currency.py:4:1
-    └─ ○ macro:timestamp_trunc   models/marts/_sqlbuild/_macros/datetime.py:4:1
-  Invalidated usages (2)
+<span class="strong">Move preview</span>
+  <span class="dim">Resource:</span> model:daily_revenue
+  <span class="dim">Destination:</span> models/intermediate/daily_revenue.sql
+  <span class="warn strong">Lost</span> <span class="warn">(3)</span>
+    <span class="dim">├─</span> <span class="bad">●</span> enum:payment_status  <span class="dim">models/marts/_sqlbuild/_enums/payment_status.sql:1</span>
+    <span class="dim">├─</span> <span class="bad">●</span> macro:cents_to_dollars  <span class="dim">models/marts/_sqlbuild/_macros/currency.py:4</span>
+    <span class="dim">└─ ○</span> macro:timestamp_trunc  <span class="dim">models/marts/_sqlbuild/_macros/datetime.py:4</span>
+  <span class="bad strong">Invalidated usages</span> <span class="bad">(2)</span>
     <span class="bad">- enum:payment_status</span>
     <span class="bad">- macro:cents_to_dollars</span></pre>
 						</div>
@@ -326,11 +326,11 @@ lifetime_orders
 								</p>
 							</div>
 <pre class="terminal"><span class="cmd">sqb plan</span>
-Migrations (1)
-<span class="dim">└──</span> daily_order_rollup  migrate  dev.daily_activity_rollup -&gt; dev.daily_order_rollup
-    <span class="dim">├──</span> compatibility  compatible
-    <span class="dim">├──</span> transfer  physical copy, promote by staged rename
-    <span class="dim">└──</span> discovery  automatic</pre>
+<span class="strong">Migrations</span> <span class="dim">(1)</span>
+<span class="dim">└──</span> daily_order_rollup  <span class="info strong">migrate</span>  <span class="dim">dev.daily_activity_rollup -&gt;</span> dev.daily_order_rollup
+    <span class="dim">├── compatibility</span>  <span class="ok">compatible</span>
+    <span class="dim">├── transfer</span>  physical copy, promote by staged rename
+    <span class="dim">└── discovery</span>  automatic</pre>
 						</div>
 						<div class="step">
 							<div class="step-text">
