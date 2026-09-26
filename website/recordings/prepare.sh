@@ -8,16 +8,41 @@ dir="$here/scratch/$demo"
 rm -rf "$dir"
 mkdir -p "$here/scratch"
 case "$demo" in
-  quickstart)
-    mkdir -p "$dir" ;;
   rename)
-    # Build the model under its old name, so the tape can move and rename it.
+    # Build the model under its old name, so the tape can move it back to models/finance.
     cp -r "$examples/hero-shop" "$dir"
     cd "$dir"
     mkdir -p models/marts
     mv models/finance/daily_revenue.sql models/marts/revenue.sql
-    rmdir models/finance
     sqb build >/dev/null ;;
+  contract)
+    # Give daily_revenue an enforced contract, then rename one of its columns in the SELECT.
+    cp -r "$examples/waffle-shop" "$dir"
+    cd "$dir"
+    python3 - <<'PY'
+path = "models/marts/daily_revenue.sql"
+text = open(path).read()
+text = text.replace("  materialized table,\n", "  materialized table,\n  contract enforced,\n", 1)
+text = text.replace(
+    "    revenue_date (nullable false),\n",
+    "    revenue_date (type DATE, nullable false),\n"
+    '    order_count (description "Orders placed that day"),\n'
+    '    waffles_sold (description "Waffles sold that day"),\n'
+    '    total_revenue_cents (description "Successful payments in cents"),\n'
+    '    total_revenue_dollars (description "Successful payments in dollars"),\n'
+    '    avg_order_value_cents (description "Average order value in cents"),\n',
+    1,
+)
+text = text.replace("AS waffles_sold", "AS units_sold", 1)
+open(path, "w").write(text)
+PY
+    ;;
+  rules)
+    # Make a mart read a raw source directly, which the project's layering rule forbids.
+    cp -r "$examples/waffle-shop" "$dir"
+    cd "$dir"
+    sed -i 's/LEFT JOIN __ref("stg_payments") p/LEFT JOIN __source("raw__payments") p/' \
+      models/marts/fact_orders.sql ;;
   scope)
     cp -r "$examples/waffle-shop" "$dir"
     cd "$dir"
