@@ -682,7 +682,8 @@ fn try_borrowed_query(
             Ok(ProjectAnalysis {
                 columns,
                 lineage_columns,
-                has_star: false,
+                has_star: matches!(&expression, polyglot_sql::Expression::Select(select)
+                    if select.expressions.iter().any(|projection| super::borrowed_facts::projection_star(projection).is_some())),
                 requires_legacy_fallback,
                 preserve_fallback_lineage: true,
             }),
