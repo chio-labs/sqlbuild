@@ -12,7 +12,7 @@ use sqlparser::ast::{
     BinaryOperator, Expr, FunctionArg, FunctionArgExpr, LimitClause, Query, Select, SetExpr,
     Statement, TableFactor, Value, Visit, Visitor,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ops::ControlFlow;
 use std::path::Path;
 
@@ -32,6 +32,9 @@ pub(crate) fn evaluate_project(
     });
     let mut scenarios: Vec<&SqlScenarioFact> = evaluation.request.sql_scenarios.iter().collect();
     scenarios.sort_by(|left, right| left.source_path.cmp(&right.source_path));
+    // Eligibility depends on fixture content and this evaluation's fixed dialect,
+    // not on the Rule or the resource that happens to reuse that content.
+    let mut fixture_eligibility: HashMap<&str, Result<(), String>> = HashMap::new();
 
     for rule in evaluation.selected.values().filter(|rule| {
         matches!(
@@ -56,7 +59,9 @@ pub(crate) fn evaluate_project(
                 if fixture_facts(&cte.name, &cte.sql).empty_fixture_marker {
                     continue;
                 }
-                if let Err(reason) = fixture_query(&cte.sql, &evaluation.request.dialect) {
+                if let Err(reason) = fixture_eligibility.entry(&cte.sql).or_insert_with(|| {
+                    fixture_query(&cte.sql, &evaluation.request.dialect).map(|_| ())
+                }) {
                     let mut fault = path_fault(
                         rule,
                         &test.source_path,
