@@ -328,7 +328,7 @@ def test_given_inspection_when_requesting_json_file_then_parser_rejects_conflict
             expected_stdout_fragment="PASS=1",
         ),
         FixtureCompatibilityE2ETestCase(
-            description="open star-model contract accepts required fixture payload columns",
+            description="open star-model schema accepts required fixture payload columns",
             repo_files=build_open_schema_ref_fixture_project_files(),
             expected_stdout_fragment="PASS=1",
         ),
@@ -437,8 +437,8 @@ def test_given_complex_strings_in_values_when_processing_then_literals_remain_in
                 supplied_column="order_identifer",
             ),
             expected_stderr_fragments=(
-                "supplies unknown columns: order_identifer",
-                "must provide required non-nullable columns: order_id",
+                "[B302] tests/unit/test_orders.sql:4:38:",
+                "SQL test '__source__raw_orders' names unknown column 'order_identifer'",
             ),
         ),
         SqlTestFixtureValidationE2ETestCase(
@@ -1115,8 +1115,8 @@ def test_given_deep_shared_graph_missing_mock_when_testing_then_error_is_reporte
             expected_tests=_UNKNOWN_EXPECTED_COLUMN,
             expected_exit_code=1,
             expected_output_fragments=(
-                "SQL test 'unknown_column': tests/unit/unknown_column.sql:8:",
-                _UNKNOWN_COLUMN_MESSAGE,
+                "[B302] tests/unit/unknown_column.sql:9:36:",
+                "SQL test '__expected__orders' names unknown column 'region'",
             ),
             unexpected_output_fragments=("Connecting to", "Binder Error"),
         ),
