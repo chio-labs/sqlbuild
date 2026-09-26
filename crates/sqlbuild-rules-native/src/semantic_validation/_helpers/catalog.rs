@@ -360,6 +360,32 @@ impl ProjectCatalog {
         sql: &str,
         schema: &ValidationSchema,
     ) -> Result<ValidationResult, String> {
+        self.statement_validation(sql, schema, None)
+    }
+
+    pub(crate) fn expression_validation(
+        &self,
+        sql: &str,
+        schema: &ValidationSchema,
+        expression: polyglot_sql::Expression,
+    ) -> Result<ValidationResult, String> {
+        self.statement_validation(sql, schema, Some(vec![expression]))
+    }
+
+    pub(crate) fn needs_identifier_encoding(&self, sql: &str, schema: &ValidationSchema) -> bool {
+        if self.quoted_ignore_case {
+            sql.contains('"')
+        } else {
+            schema.tables.iter().any(has_exact_columns)
+        }
+    }
+
+    fn statement_validation(
+        &self,
+        sql: &str,
+        schema: &ValidationSchema,
+        parsed: Option<Vec<polyglot_sql::Expression>>,
+    ) -> Result<ValidationResult, String> {
         let exact_names = !self.quoted_ignore_case && schema.tables.iter().any(has_exact_columns);
         let mut encoded_schema;
         let schema = if exact_names {
@@ -380,11 +406,16 @@ impl ProjectCatalog {
         } else {
             schema
         };
-        let statements = match Dialect::get(self.dialect).parse_with_options(
-            sql,
-            &polyglot_sql::ParseOptions {
-                complexity_guard: self.options.complexity_guard,
+        let statements = match parsed.map_or_else(
+            || {
+                Dialect::get(self.dialect).parse_with_options(
+                    sql,
+                    &polyglot_sql::ParseOptions {
+                        complexity_guard: self.options.complexity_guard,
+                    },
+                )
             },
+            Ok,
         ) {
             Ok(statements) => statements,
             Err(_) => {

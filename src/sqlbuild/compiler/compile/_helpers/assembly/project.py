@@ -58,7 +58,6 @@ from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     binding_required_names,
-    binding_requires_exact_names,
     binding_schema_for_model,
     build_complete_binding_schemas,
     get_expression_source_shape,
@@ -167,7 +166,6 @@ from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.compiler.sql_analysis.constants import (
     BINDING_UNKNOWN_TABLE_INTERNAL_CODE,
     NATIVE_DIALECT_ALIASES,
-    SQL_QUOTED_IDENTIFIER_DELIMITER,
 )
 from sqlbuild.compiler.sql_analysis.exceptions import SqlAnalysisBoundaryError
 from sqlbuild.compiler.sql_analysis.main._binding_catalog import create_binding_catalog
@@ -1305,14 +1303,7 @@ def _analyze_model_sql(
         placeholders=request.placeholders,
         validated_schema=request.binding_schema,
         fused_binding_validated=precomputed is not None
-        and precomputed.binding_diagnostics is not None
-        and not binding_requires_exact_names(
-            schema=request.binding_schema, profile=inference_profile
-        )
-        and (
-            not inference_profile.quoted_identifiers_ignore_case
-            or SQL_QUOTED_IDENTIFIER_DELIMITER not in precomputed.cleaned_sql
-        ),
+        and precomputed.binding_diagnostics is not None,
     )
 
 

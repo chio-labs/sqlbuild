@@ -427,7 +427,7 @@ pub(crate) fn analyze_project_compact_with_catalog(
         let analysis_groups: Vec<CompiledQueryWorkResult> = pool.install(|| {
             batch
                 .into_par_iter()
-                .map(analyze_compact_query_work)
+                .map(|work| analyze_compact_query_work(work, catalog))
                 .collect()
         });
         for group in analysis_groups {
@@ -448,13 +448,16 @@ pub(crate) fn analyze_project_compact_with_catalog(
     serde_json::to_string(&response).map_err(|error| error.to_string())
 }
 
-fn analyze_compact_query_work(work: CompactQueryWork) -> CompiledQueryWorkResult {
+fn analyze_compact_query_work(
+    work: CompactQueryWork,
+    catalog: Option<&crate::semantic_validation::models::ProjectCatalog>,
+) -> CompiledQueryWorkResult {
     let diagnostic_sql = work
         .query
         .sqlbuild_diagnostics
         .then(|| work.query.sql.clone());
     let dialect = work.query.dialect.parse::<DialectType>();
-    let mut result = analyze_compact_query_work_inner(work);
+    let mut result = analyze_compact_query_work_inner(work, catalog);
     if let (Some(sql), Ok(dialect)) = (diagnostic_sql, dialect) {
         if let Some(validation) = result.validation.take() {
             result.validation = Some(validation.and_then(|value| {
@@ -467,12 +470,34 @@ fn analyze_compact_query_work(work: CompactQueryWork) -> CompiledQueryWorkResult
     result
 }
 
-fn analyze_compact_query_work_inner(work: CompactQueryWork) -> CompiledQueryWorkResult {
-    let work = match try_borrowed_query(work) {
-        Ok(result) => return result,
-        Err(work) => *work,
+fn analyze_compact_query_work_inner(
+    work: CompactQueryWork,
+    catalog: Option<&crate::semantic_validation::models::ProjectCatalog>,
+) -> CompiledQueryWorkResult {
+    let exact_catalog = catalog.filter(|catalog| {
+        work.query
+            .binding_schema
+            .as_ref()
+            .is_some_and(|schema| catalog.needs_identifier_encoding(&work.query.sql, schema))
+    });
+    let work = if exact_catalog.is_some() {
+        work
+    } else {
+        match try_borrowed_query(work) {
+            Ok(result) => return result,
+            Err(work) => *work,
+        }
     };
-    let (query_result, validation, _) = compile_query(work.query, work.project_projections);
+    let exact_schema = exact_catalog.and_then(|_| work.query.binding_schema.clone());
+    let sql = exact_catalog.map(|_| work.query.sql.clone());
+    let (query_result, mut validation, expression) =
+        compile_query(work.query, work.project_projections);
+    if let (Some(catalog), Some(schema), Some(sql)) = (exact_catalog, exact_schema, sql) {
+        validation = Some(match expression {
+            Some(expression) => catalog.expression_validation(&sql, &schema, expression),
+            None => catalog.validate(&sql, &schema),
+        });
+    }
     CompiledQueryWorkResult {
         projections: project_query_templates(&query_result, work.projections),
         validation,
