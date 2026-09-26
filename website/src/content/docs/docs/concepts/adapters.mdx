@@ -3,22 +3,25 @@ title: "Overview"
 description: "Supported database engines and their connection configuration."
 ---
 
-SQLBuild uses adapters to connect to different database engines.
+SQLBuild uses adapters to connect to different database engines. Snowflake is the main target.
+
+- **Supported:** ready for production use.
+- **Beta:** builds, tests and plans work, but with less production use so far. Expect rough edges, and please [report issues](https://github.com/chio-labs/sqlbuild/issues).
 
 | Adapter | Status | Install |
 |---------|--------|---------|
+| [Snowflake](/docs/concepts/adapters/snowflake) | Supported | `sqlbuild[snowflake]` |
 | [DuckDB](/docs/concepts/adapters/duckdb) | Supported | included by default |
 | [MotherDuck](/docs/concepts/adapters/motherduck) | Supported | included by default (uses DuckDB) |
-| [Snowflake](/docs/concepts/adapters/snowflake) | Supported | `sqlbuild[snowflake]` |
-| [BigQuery](/docs/concepts/adapters/bigquery) | Supported | `sqlbuild[bigquery]` |
-| [Databricks](/docs/concepts/adapters/databricks) | Supported | `sqlbuild[databricks]` |
 | [PostgreSQL](/docs/concepts/adapters/postgres) | Supported | `sqlbuild[postgres]` |
-| [SQL Server](/docs/concepts/adapters/sqlserver) | Supported | `sqlbuild[sqlserver]` |
-| ClickHouse | Coming soon | |
-| Redshift | Coming soon | |
-| Trino | Coming soon | |
-| Spark | Coming soon | |
-| Athena | Coming soon | |
+| [BigQuery](/docs/concepts/adapters/bigquery) | Beta | `sqlbuild[bigquery]` |
+| [Databricks](/docs/concepts/adapters/databricks) | Beta | `sqlbuild[databricks]` |
+| [SQL Server](/docs/concepts/adapters/sqlserver) | Beta | `sqlbuild[sqlserver]` |
+| ClickHouse | Planned | |
+| Redshift | Planned | |
+| Trino | Planned | |
+| Spark | Planned | |
+| Athena | Planned | |
 
 Set the adapter in `sqlbuild_project.toml`:
 
