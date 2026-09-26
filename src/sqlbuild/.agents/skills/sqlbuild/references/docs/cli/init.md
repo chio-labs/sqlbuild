@@ -1,12 +1,10 @@
 <!-- generated-by: sqlbuild skills -->
 
-# init
+# sqb init
 
 > Scaffold a new SQLBuild project.
 
-Online: https://docs.sqlbuild.com/cli/init
-
-# sqb init
+Online: https://sqlbuild.com/docs/cli/init/
 
 Creates a new SQLBuild project with a minimal directory structure and configuration files.
 

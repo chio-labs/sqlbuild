@@ -4,83 +4,61 @@ import json
 from pathlib import Path
 from typing import Any
 
-from scripts.docs_skill.constants import UNGROUPED_LABEL
+from scripts.docs_skill.constants import DOCS_SLUG, INDEX_PAGE, UNGROUPED_LABEL
 from scripts.docs_skill.models import NavigationGroup
 
 
-def list_ordered_page_paths(*, docs_root: Path) -> list[Path]:
-    """Return existing MDX pages in navigation order followed by unlisted pages."""
+def list_ordered_page_paths(*, docs_root: Path, sidebar_path: Path | None = None) -> list[Path]:
+    """Return existing pages in sidebar order followed by unlisted pages."""
 
-    docs_json_path: Path = docs_root / "docs.json"
-    if docs_json_path.exists():
-        docs_json: dict[str, Any] = json.loads(docs_json_path.read_text(encoding="utf-8"))
-        ordered_pages: list[str] = _collect_navigation_pages(docs_json.get("navigation", {}))
-    else:
-        ordered_pages = sorted(path.with_suffix("").as_posix() for path in docs_root.rglob("*.mdx"))
-
-    page_paths: list[Path] = []
-    seen_pages: set[str] = set()
-    for page in ordered_pages:
-        page_path: Path = Path(f"{page}.mdx")
-        if page in seen_pages or not (docs_root / page_path).exists():
-            continue
-        page_paths.append(page_path)
-        seen_pages.add(page)
-
-    for mdx_path in sorted(docs_root.rglob("*.mdx")):
-        page: str = mdx_path.relative_to(docs_root).with_suffix("").as_posix()
-        if page not in seen_pages:
-            page_paths.append(mdx_path.relative_to(docs_root))
-            seen_pages.add(page)
-
-    return page_paths
+    paths: list[Path] = []
+    for group in list_navigation_groups(docs_root=docs_root, sidebar_path=sidebar_path):
+        paths.extend(group.page_paths)
+    return paths
 
 
 def _collect_navigation_pages(node: Any) -> list[str]:
-    pages: list[str] = []
-
     if isinstance(node, str):
-        return [node]
+        return [INDEX_PAGE if node == DOCS_SLUG else node.removeprefix(f"{DOCS_SLUG}/")]
     if isinstance(node, list):
+        pages: list[str] = []
         for item in node:
             pages.extend(_collect_navigation_pages(item))
         return pages
     if isinstance(node, dict):
-        for key in ("root", "groups", "pages"):
-            pages.extend(_collect_navigation_pages(node.get(key, [])))
-
-    return pages
+        return _collect_navigation_pages(node.get("slug", node.get("items", [])))
+    return []
 
 
-def list_navigation_groups(*, docs_root: Path) -> list[NavigationGroup]:
-    """Return pages grouped by top-level navigation group, then unlisted pages."""
+def list_navigation_groups(
+    *, docs_root: Path, sidebar_path: Path | None = None
+) -> list[NavigationGroup]:
+    """Flatten nested sidebar groups within each top-level group, then add unlisted pages."""
 
-    ordered_paths: list[Path] = list_ordered_page_paths(docs_root=docs_root)
-    docs_json_path: Path = docs_root / "docs.json"
-    top_level_nodes: list[Any] = []
-    if docs_json_path.exists():
-        navigation: Any = json.loads(docs_json_path.read_text(encoding="utf-8")).get(
-            "navigation", {}
-        )
-        top_level_nodes = navigation.get("groups", []) if isinstance(navigation, dict) else []
-
+    sidebar_path = sidebar_path or docs_root.resolve().parents[2] / "sidebar.json"
+    nodes: list[Any] = (
+        json.loads(sidebar_path.read_text(encoding="utf-8")) if sidebar_path.exists() else []
+    )
+    available: dict[str, Path] = {}
+    for suffix in ("*.md", "*.mdx"):
+        for path in sorted(docs_root.rglob(suffix)):
+            relative_path: Path = path.relative_to(docs_root)
+            available[relative_path.with_suffix("").as_posix()] = relative_path
     groups: list[NavigationGroup] = []
-    grouped_pages: set[str] = set()
-    for node in top_level_nodes:
-        label: str = str(node.get("group", UNGROUPED_LABEL)) if isinstance(node, dict) else ""
-        member_pages: set[str] = set(_collect_navigation_pages(node))
-        page_paths: tuple[Path, ...] = tuple(
-            path
-            for path in ordered_paths
-            if path.with_suffix("").as_posix() in member_pages
-            and path.with_suffix("").as_posix() not in grouped_pages
-        )
-        grouped_pages.update(path.with_suffix("").as_posix() for path in page_paths)
-        if page_paths:
-            groups.append(NavigationGroup(label=label, page_paths=page_paths))
-
+    seen: set[str] = set()
+    for node in nodes:
+        members: list[Path] = []
+        for page in _collect_navigation_pages(node):
+            if page in available and page not in seen:
+                members.append(available[page])
+                seen.add(page)
+        if members:
+            label: str = (
+                node.get("label", UNGROUPED_LABEL) if isinstance(node, dict) else UNGROUPED_LABEL
+            )
+            groups.append(NavigationGroup(label=label, page_paths=tuple(members)))
     remaining: tuple[Path, ...] = tuple(
-        path for path in ordered_paths if path.with_suffix("").as_posix() not in grouped_pages
+        available[page] for page in sorted(available) if page not in seen
     )
     if remaining:
         groups.append(NavigationGroup(label=UNGROUPED_LABEL, page_paths=remaining))

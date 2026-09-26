@@ -4,7 +4,7 @@
 
 > SQL unit tests and multi-model tests with macro support, assertions, and model chaining.
 
-Online: https://docs.sqlbuild.com/concepts/testing
+Online: https://sqlbuild.com/docs/concepts/testing/
 
 ## Contents
 
@@ -12,6 +12,7 @@ Online: https://docs.sqlbuild.com/concepts/testing
 - CTE conventions
 - Multi-model tests
 - Mocking refs and seeds
+- Fixture columns
 - Mocking table functions in model tests
 - Multiple expected models
 - Macro-powered mocks
@@ -223,6 +224,21 @@ SELECT 1
 ```
 
 You can mix `__source__`, `__ref__`, and `__seed__` mocks in the same test. As long as every leaf dependency is satisfied (either by a source mock, a ref mock, a seed mock, or by being in the expected chain), the test resolves.
+
+## Fixture columns
+
+A relation fixture can omit a column when the compiled test or scenario closure requires it and
+SQLBuild knows its adapter type, unless the column is explicitly non-nullable. SQLBuild completes
+that test-only fixture column with a typed null such as `CAST(NULL AS VARCHAR)`; it never changes
+model SQL or warehouse defaults. Required columns declared with `nullable false` and columns with
+unknown types must be supplied explicitly. When the relation's complete column set is
+authoritative, misspelled or unknown supplied fixture columns are rejected.
+
+A direct `NULL AS column_name` projection receives the authoritative relation type in compiled test
+SQL, including expected-output CTEs for contracted models. To represent a contracted upstream with
+no rows, use `SELECT * FROM __empty_fixture()` as the complete body of a `__ref__`, `__source__`, or
+`__seed__` fixture CTE, or a contracted `__expected__` CTE. SQLBuild expands it to the relation's
+full typed schema with a false filter.
 
 ## Mocking table functions in model tests
 

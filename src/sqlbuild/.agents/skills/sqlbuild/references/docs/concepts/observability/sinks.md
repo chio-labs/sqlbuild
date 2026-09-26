@@ -4,7 +4,7 @@
 
 > Export lifecycle facts and command output through project-owned providers.
 
-Online: https://docs.sqlbuild.com/concepts/observability/sinks
+Online: https://sqlbuild.com/docs/concepts/observability/sinks/
 
 Project sinks consume one declared record type. Lifecycle and command-output streams remain separate
 even when they share a provider and destination.

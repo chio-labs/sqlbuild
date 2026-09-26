@@ -4,7 +4,7 @@
 
 > Keep enums and constants inside one model when no other resource should use them.
 
-Online: https://docs.sqlbuild.com/concepts/model-private-values
+Online: https://sqlbuild.com/docs/concepts/model-private-values/
 
 Put an enum or constant directly in `MODEL()` when it belongs to one model and should not enter the
 project-wide namespace.

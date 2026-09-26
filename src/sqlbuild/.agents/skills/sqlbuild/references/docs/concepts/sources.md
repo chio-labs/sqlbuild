@@ -4,7 +4,7 @@
 
 > Declare external data inputs for your pipeline.
 
-Online: https://docs.sqlbuild.com/concepts/sources
+Online: https://sqlbuild.com/docs/concepts/sources/
 
 ## Contents
 
@@ -125,8 +125,7 @@ For common ingestion you can declare the source entirely in YAML, with no `@load
 
 Source freshness lets SQLBuild observe whether a source's data changed between runs. This feeds into
 [planning and change detection](planning.md): changed observations propagate to downstream
-models and can alter their planned action. Virtual environments can also use the signal for
-[stale-driven execution](virtual-environments/building.md#stale-driven-execution).
+models and can alter their planned action.
 
 Configure freshness per source with a `freshness:` block:
 

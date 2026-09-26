@@ -4,7 +4,7 @@
 
 > How a change signal propagates downstream through the DAG, and how each materialization type responds.
 
-Online: https://docs.sqlbuild.com/concepts/planning/cascade-propagation
+Online: https://sqlbuild.com/docs/concepts/planning/cascade-propagation/
 
 When a model or function changes, the change signal propagates downstream through the DAG. Every model downstream of a changed node is marked `Upstream changed` in the plan, even if its own SQL and config are identical.
 

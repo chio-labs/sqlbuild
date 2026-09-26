@@ -8,8 +8,11 @@ from scripts.docs_skill._helpers.mdx import normalize_blank_lines, parse_mdx_pag
 from scripts.docs_skill._helpers.navigation import list_navigation_groups
 from scripts.docs_skill.constants import (
     DOCS_BASE_URL,
+    DOCS_URL_PATH,
     GENERATED_MARKER,
     INDEX_FILENAME,
+    INDEX_PAGE,
+    SITE_BASE_URL,
     TABLE_OF_CONTENTS_MIN_LINES,
 )
 from scripts.docs_skill.models import MdxPage, NavigationGroup
@@ -18,10 +21,12 @@ _INTERNAL_LINK: re.Pattern[str] = re.compile(r"\]\((/[^)\s#]*)(#[^)\s]*)?\)")
 _SECTION_HEADING: re.Pattern[str] = re.compile(r"^## (.+)$", re.MULTILINE)
 
 
-def build_reference_pages(*, docs_root: Path) -> dict[str, str]:
+def build_reference_pages(*, docs_root: Path, sidebar_path: Path | None = None) -> dict[str, str]:
     """Render every documentation page plus a grouped index, keyed by relative output path."""
 
-    groups: list[NavigationGroup] = list_navigation_groups(docs_root=docs_root)
+    groups: list[NavigationGroup] = list_navigation_groups(
+        docs_root=docs_root, sidebar_path=sidebar_path
+    )
     page_names: set[str] = set()
     for group in groups:
         page_names.update(path.with_suffix("").as_posix() for path in group.page_paths)
@@ -49,7 +54,8 @@ def _render_page(*, page: MdxPage, page_name: str, known_pages: frozenset[str]) 
     return (
         normalize_blank_lines(
             f"{GENERATED_MARKER}\n\n# {page.title}\n\n{description_block}"
-            f"Online: {DOCS_BASE_URL}/{page_name}\n\n{contents_block}{body}"
+            f"Online: {DOCS_BASE_URL}/{'' if page_name == INDEX_PAGE else page_name + '/'}"
+            f"\n\n{contents_block}{body}"
         ).strip()
         + "\n"
     )
@@ -72,10 +78,13 @@ def _rewrite_internal_links(*, body: str, page_name: str, known_pages: frozenset
     source_dir: PurePosixPath = PurePosixPath(page_name).parent
 
     def replace(match: re.Match[str]) -> str:
-        target: str = match.group(1).strip("/") or "index"
+        path: str = match.group(1)
         anchor: str = match.group(2) or ""
+        if path != DOCS_URL_PATH and not path.startswith(f"{DOCS_URL_PATH}/"):
+            return f"]({SITE_BASE_URL}{path}{anchor})"
+        target: str = path.removeprefix(DOCS_URL_PATH).strip("/") or INDEX_PAGE
         if target not in known_pages:
-            return f"]({DOCS_BASE_URL}/{target}{anchor})"
+            return f"]({DOCS_BASE_URL}/{target}/{anchor})"
         relative: str = os.path.relpath(f"{target}.md", start=source_dir.as_posix() or ".")
         return f"]({PurePosixPath(relative).as_posix()}{anchor})"
 

@@ -4,7 +4,7 @@
 
 > Produce or observe external artifacts as nodes in the SQLBuild graph.
 
-Online: https://docs.sqlbuild.com/concepts/python-nodes/assets
+Online: https://sqlbuild.com/docs/concepts/python-nodes/assets/
 
 ## Contents
 

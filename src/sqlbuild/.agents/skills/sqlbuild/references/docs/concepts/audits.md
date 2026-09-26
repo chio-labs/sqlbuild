@@ -4,7 +4,7 @@
 
 > Violation and measurement checks that gate data and record quality outcomes.
 
-Online: https://docs.sqlbuild.com/concepts/audits
+Online: https://sqlbuild.com/docs/concepts/audits/
 
 ## Contents
 

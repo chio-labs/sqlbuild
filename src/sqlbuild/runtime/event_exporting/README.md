@@ -75,4 +75,4 @@ not import project providers or construct exporter queue, dispatcher, or notific
 Normal command-owned project discovery remains responsible for providers needed by nodes and hooks.
 
 The project declaration, configuration, delivery, security, and failure contract is documented at
-[docs.sqlbuild.com/concepts/observability/sinks](https://docs.sqlbuild.com/concepts/observability/sinks).
+[sqlbuild.com/docs/concepts/observability/sinks](https://sqlbuild.com/docs/concepts/observability/sinks/).

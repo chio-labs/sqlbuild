@@ -4,7 +4,9 @@
 
 > BigQuery adapter configuration for SQLBuild.
 
-Online: https://docs.sqlbuild.com/concepts/adapters/bigquery
+Online: https://sqlbuild.com/docs/concepts/adapters/bigquery/
+
+The BigQuery adapter is in beta: builds, tests and plans work, but it has had less production use so far. Please [report issues](https://github.com/chio-labs/sqlbuild/issues).
 
 BigQuery requires the optional `google-cloud-bigquery` dependency:
 

@@ -4,7 +4,7 @@
 
 > See which enums, constants, and macros are available to each SQL file.
 
-Online: https://docs.sqlbuild.com/concepts/declaration-scopes/visibility
+Online: https://sqlbuild.com/docs/concepts/declaration-scopes/visibility/
 
 ## Contents
 

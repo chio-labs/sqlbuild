@@ -4,7 +4,7 @@
 
 > DuckDB adapter configuration for SQLBuild.
 
-Online: https://docs.sqlbuild.com/concepts/adapters/duckdb
+Online: https://sqlbuild.com/docs/concepts/adapters/duckdb/
 
 DuckDB is included as a core dependency. No extra installation needed.
 

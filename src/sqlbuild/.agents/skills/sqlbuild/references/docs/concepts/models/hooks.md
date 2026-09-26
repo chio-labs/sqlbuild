@@ -4,7 +4,7 @@
 
 > Run SQL or Python lifecycle hooks around model materialization.
 
-Online: https://docs.sqlbuild.com/concepts/models/hooks
+Online: https://sqlbuild.com/docs/concepts/models/hooks/
 
 ## Contents
 

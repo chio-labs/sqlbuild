@@ -4,7 +4,7 @@
 
 > Find the new focused guides for enums, constants, collections, contracts, and private values.
 
-Online: https://docs.sqlbuild.com/concepts/enums-and-constants
+Online: https://sqlbuild.com/docs/concepts/enums-and-constants/
 
 Enums and constants now have separate guides so each feature is easier to find and learn. This page
 remains available for existing links and bookmarks but is not part of the main navigation.

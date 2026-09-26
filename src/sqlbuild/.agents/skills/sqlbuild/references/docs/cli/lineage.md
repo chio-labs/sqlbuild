@@ -4,7 +4,7 @@
 
 > Explore model and column-level dependency graphs from the command line.
 
-Online: https://docs.sqlbuild.com/cli/lineage
+Online: https://sqlbuild.com/docs/cli/lineage/
 
 ## Contents
 

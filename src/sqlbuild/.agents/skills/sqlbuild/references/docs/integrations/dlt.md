@@ -4,7 +4,7 @@
 
 > Declarative dlt sources in YAML, or full dlt pipelines inside Python source loaders.
 
-Online: https://docs.sqlbuild.com/integrations/dlt
+Online: https://sqlbuild.com/docs/integrations/dlt/
 
 ## Contents
 

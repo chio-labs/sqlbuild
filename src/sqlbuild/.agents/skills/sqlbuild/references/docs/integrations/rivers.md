@@ -4,7 +4,7 @@
 
 > Orchestrate SQLBuild pipelines with Rivers scheduling, jobs, and asset tracking.
 
-Online: https://docs.sqlbuild.com/integrations/rivers
+Online: https://sqlbuild.com/docs/integrations/rivers/
 
 ## Contents
 

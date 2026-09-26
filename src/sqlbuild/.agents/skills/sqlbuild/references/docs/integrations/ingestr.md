@@ -4,7 +4,7 @@
 
 > Declarative data ingestion from 50+ sources using ingestr.
 
-Online: https://docs.sqlbuild.com/integrations/ingestr
+Online: https://sqlbuild.com/docs/integrations/ingestr/
 
 ## Contents
 

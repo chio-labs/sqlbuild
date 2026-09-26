@@ -4,7 +4,7 @@
 
 > Validate required or exact model output schemas.
 
-Online: https://docs.sqlbuild.com/concepts/models/contracts
+Online: https://sqlbuild.com/docs/concepts/models/contracts/
 
 ## Contents
 

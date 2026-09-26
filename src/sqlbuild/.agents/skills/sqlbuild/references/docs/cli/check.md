@@ -1,12 +1,10 @@
 <!-- generated-by: sqlbuild skills -->
 
-# check
+# sqb check
 
 > Run Python checks against tasks, assets, and loaders.
 
-Online: https://docs.sqlbuild.com/cli/check
-
-# sqb check
+Online: https://sqlbuild.com/docs/cli/check/
 
 Runs Python [checks](../concepts/python-nodes/checks.md) in isolation. Checks validate the output of tasks, assets, and loaders. For SQL relation validation, use [`sqb audit`](audit.md) instead.
 

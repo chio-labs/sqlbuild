@@ -1,12 +1,10 @@
 <!-- generated-by: sqlbuild skills -->
 
-# test
+# sqb test
 
 > Run SQL unit tests and multi-model tests in isolation.
 
-Online: https://docs.sqlbuild.com/cli/test
-
-# sqb test
+Online: https://sqlbuild.com/docs/cli/test/
 
 Runs SQL unit tests, independently reported parameterized cases, and multi-model tests without
 building models. Useful for validating test logic independently.

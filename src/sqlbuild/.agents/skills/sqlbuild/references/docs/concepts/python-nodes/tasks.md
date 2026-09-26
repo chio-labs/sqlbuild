@@ -4,7 +4,7 @@
 
 > Run Python computation and side effects as nodes in the SQLBuild graph.
 
-Online: https://docs.sqlbuild.com/concepts/python-nodes/tasks
+Online: https://sqlbuild.com/docs/concepts/python-nodes/tasks/
 
 ## Contents
 

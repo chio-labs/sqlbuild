@@ -4,7 +4,9 @@
 
 > Databricks adapter configuration for SQLBuild.
 
-Online: https://docs.sqlbuild.com/concepts/adapters/databricks
+Online: https://sqlbuild.com/docs/concepts/adapters/databricks/
+
+The Databricks adapter is in beta: builds, tests and plans work, but it has had less production use so far. Please [report issues](https://github.com/chio-labs/sqlbuild/issues).
 
 Databricks requires the optional `databricks-sql-connector` dependency:
 

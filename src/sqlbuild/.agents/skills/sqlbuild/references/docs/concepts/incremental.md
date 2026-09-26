@@ -4,7 +4,7 @@
 
 > Cursor-based incremental strategies, microbatch execution, and backfill policies.
 
-Online: https://docs.sqlbuild.com/concepts/incremental
+Online: https://sqlbuild.com/docs/concepts/incremental/
 
 ## Contents
 

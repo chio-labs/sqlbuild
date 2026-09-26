@@ -4,7 +4,7 @@
 
 > Inspect visibility, explain resolution, browse declarations, and preview moves offline.
 
-Online: https://docs.sqlbuild.com/concepts/declaration-scopes/explorer
+Online: https://sqlbuild.com/docs/concepts/declaration-scopes/explorer/
 
 ## Contents
 

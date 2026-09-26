@@ -4,7 +4,7 @@
 
 > How select and exclude flags route work across the dbt and SQLBuild graphs.
 
-Online: https://docs.sqlbuild.com/concepts/dbt-compatibility/selection
+Online: https://sqlbuild.com/docs/concepts/dbt-compatibility/selection/
 
 The `sqb dbt` commands use `--select` and `--exclude` to scope what runs. Selectors work across both dbt and SQLBuild, with the system determining which side owns each selector and how to route work.
 

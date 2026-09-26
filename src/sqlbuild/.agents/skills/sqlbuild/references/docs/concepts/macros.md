@@ -4,7 +4,7 @@
 
 > Write Python functions that generate reusable SQL fragments at compile time.
 
-Online: https://docs.sqlbuild.com/concepts/macros
+Online: https://sqlbuild.com/docs/concepts/macros/
 
 ## Contents
 

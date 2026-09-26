@@ -1,12 +1,10 @@
 <!-- generated-by: sqlbuild skills -->
 
-# contract
+# sqb contract
 
 > Compare or generate repository contracts from physical warehouse schemas.
 
-Online: https://docs.sqlbuild.com/cli/contract
-
-# sqb contract
+Online: https://sqlbuild.com/docs/cli/contract/
 
 Existing-schema comparison is explicitly online and read-only with respect to the warehouse.
 

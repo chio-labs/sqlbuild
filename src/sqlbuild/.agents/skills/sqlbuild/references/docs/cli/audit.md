@@ -1,12 +1,10 @@
 <!-- generated-by: sqlbuild skills -->
 
-# audit
+# sqb audit
 
 > Run data quality audits in isolation.
 
-Online: https://docs.sqlbuild.com/cli/audit
-
-# sqb audit
+Online: https://sqlbuild.com/docs/cli/audit/
 
 Runs all attached audits without rebuilding models. Useful for verifying data quality on existing warehouse state.
 

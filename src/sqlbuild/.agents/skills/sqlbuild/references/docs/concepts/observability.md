@@ -4,7 +4,7 @@
 
 > Choose authoritative lifecycle facts, readable logs, or command-output records.
 
-Online: https://docs.sqlbuild.com/concepts/observability
+Online: https://sqlbuild.com/docs/concepts/observability/
 
 SQLBuild keeps execution facts separate from human output. Do not parse terminal text to determine
 whether work started, completed, failed, skipped, or retried.

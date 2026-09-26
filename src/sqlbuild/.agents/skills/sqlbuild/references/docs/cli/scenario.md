@@ -1,18 +1,16 @@
 <!-- generated-by: sqlbuild skills -->
 
-# scenario
+# sqb scenario
 
 > Run end-to-end scenario tests against the warehouse or locally with DuckDB.
 
-Online: https://docs.sqlbuild.com/cli/scenario
+Online: https://sqlbuild.com/docs/cli/scenario/
 
 ## Contents
 
 - sqb scenario test
 - sqb scenario capture
 - Runtime artifacts
-
-# sqb scenario
 
 Run end-to-end scenario tests. Scenarios materialize fixture inputs as physical relations, build the real project graph against them, and evaluate expected outputs and assertions. See [Scenarios](../concepts/scenarios.md) for concepts and authoring details.
 

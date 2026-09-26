@@ -1,12 +1,10 @@
 <!-- generated-by: sqlbuild skills -->
 
-# clean
+# sqb clean
 
 > Remove compiled artifacts from the target directory.
 
-Online: https://docs.sqlbuild.com/cli/clean
-
-# sqb clean
+Online: https://sqlbuild.com/docs/cli/clean/
 
 Removes the `target/` directory containing compiled artifacts, runtime SQL recordings, and other build outputs.
 

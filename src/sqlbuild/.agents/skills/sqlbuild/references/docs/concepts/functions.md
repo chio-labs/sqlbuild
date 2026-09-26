@@ -4,7 +4,7 @@
 
 > User-defined functions and table functions managed as part of your project.
 
-Online: https://docs.sqlbuild.com/concepts/functions
+Online: https://sqlbuild.com/docs/concepts/functions/
 
 ## Contents
 

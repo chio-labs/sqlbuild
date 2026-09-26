@@ -4,7 +4,7 @@
 
 > MODEL() header fields and SQL-analysis controls.
 
-Online: https://docs.sqlbuild.com/concepts/models/configuration
+Online: https://sqlbuild.com/docs/concepts/models/configuration/
 
 ## Contents
 

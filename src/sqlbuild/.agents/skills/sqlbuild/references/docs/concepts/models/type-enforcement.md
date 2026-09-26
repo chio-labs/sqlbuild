@@ -4,7 +4,7 @@
 
 > Understand declared model types, static checks, and runtime casting.
 
-Online: https://docs.sqlbuild.com/concepts/models/type-enforcement
+Online: https://sqlbuild.com/docs/concepts/models/type-enforcement/
 
 Type enforcement makes authored column types operational. It is a model feature as well as a related source feature, and it is separate from whether a model uses an exact contract.
 

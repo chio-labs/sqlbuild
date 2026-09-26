@@ -2,7 +2,7 @@
 
 import re
 
-from scripts.docs_skill.constants import FRONTMATTER_DELIMITER
+from scripts.docs_skill.constants import COMPONENT_TAG_END, FRONTMATTER_DELIMITER
 from scripts.docs_skill.models import MdxPage
 
 
@@ -41,6 +41,7 @@ def _split_frontmatter(contents: str) -> tuple[dict[str, str], str]:
 def _clean_mdx_body(body: str) -> str:
     cleaned_lines: list[str] = []
     in_code_block: bool = False
+    in_component_tag: bool = False
 
     for raw_line in body.splitlines():
         line: str = raw_line.rstrip()
@@ -53,6 +54,12 @@ def _clean_mdx_body(body: str) -> str:
             continue
 
         stripped: str = line.strip()
+        if in_component_tag:
+            in_component_tag = COMPONENT_TAG_END not in stripped
+            continue
+        if re.match(r"<[A-Z][\w.]*\b", stripped) and COMPONENT_TAG_END not in stripped:
+            in_component_tag = True
+            continue
         if _is_mdx_only_line(stripped):
             continue
         cleaned_lines.append(line)

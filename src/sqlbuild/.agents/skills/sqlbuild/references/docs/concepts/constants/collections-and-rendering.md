@@ -4,7 +4,7 @@
 
 > Define list, set, and object constants and control their adapter-specific SQL rendering.
 
-Online: https://docs.sqlbuild.com/concepts/constants/collections-and-rendering
+Online: https://sqlbuild.com/docs/concepts/constants/collections-and-rendering/
 
 ## Contents
 

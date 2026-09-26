@@ -1,10 +1,10 @@
 <!-- generated-by: sqlbuild skills -->
 
-# freshness
+# sqb freshness
 
 > Observe source freshness without writing state.
 
-Online: https://docs.sqlbuild.com/cli/freshness
+Online: https://sqlbuild.com/docs/cli/freshness/
 
 ## Contents
 
@@ -16,8 +16,6 @@ Online: https://docs.sqlbuild.com/cli/freshness
 - CI integration
 - JSON output
 - See also
-
-# sqb freshness
 
 Observes the current data version of each source and reports whether the data has changed since the last build. Does not write any state or trigger builds.
 
@@ -34,7 +32,6 @@ sqb --project-dir <path> freshness [flags]
 | `--state` | Compare observations against stored freshness state from the last build |
 | `--fail-on-error` | Exit with code 1 if any source observation fails or is unknown |
 | `--fail-on-stale` | Exit with code 1 if any source has changed, is unknown, or errored (requires `--state`) |
-| `--virtual-env` | Read previous state from the specified virtual environment instead of direct state |
 | `--json` | Output as JSON instead of human-readable text |
 | `--json-output` | Write JSON output to a file path (also prints text to stdout unless `--json` is set) |
 | `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
@@ -110,14 +107,6 @@ Summary: observed=0 changed=1 unchanged=1 tolerated=1 unknown=0 errors=0
 | `tolerated` | Data version differs but is within the `lag_tolerance` threshold |
 | `unknown` | No freshness config and adapter metadata unavailable, or no previous state to compare against |
 | `error` | Observation failed (e.g. source table does not exist, query error) |
-
-### Virtual environment state
-
-To compare against state stored in a virtual environment instead of direct mode state:
-
-```bash
-sqb freshness --state --virtual-env pr_123
-```
 
 ## CI integration
 

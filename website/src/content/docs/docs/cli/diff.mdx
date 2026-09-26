@@ -36,6 +36,18 @@ Full and bounded row comparisons require the model to define `unique_key`. Bound
 | `--max-models` | Fail when the selected scope contains more models than this limit |
 | `--max-columns` | Fail when either side of a model has more columns than this limit |
 | `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
+| `--key` | Row key column; repeat for a composite key. Overrides the model's `unique_key` |
+| `--unkeyed` | Compare exact full-row multisets when there is no stable row key |
+| `--exclude-column` | Leave a column out of the comparison; repeatable |
+| `--tolerance` | Numeric tolerance such as `amount:absolute=1` or `rate:relative=0.001`; repeatable |
+| `--left-query`, `--right-query` | Compare two read-only SQL queries instead of models |
+| `--left-query-file`, `--right-query-file` | Read each query from a UTF-8 file |
+| `--left-label`, `--right-label` | Names for the two query sides in the output |
+| `--target` | Target whose connection runs both queries |
+| `--max-value-length` | Maximum characters shown per example value (default 160) |
+| `--no-example-values` | Keep keys and counts but hide example values |
+| `--full-example-values` | Show complete example values |
+| `--json` | Print one JSON document to stdout |
 | `--select`, `-s` | Select specific models to diff (required in v1) |
 | `--exclude` | Exclude specific models from diffing |
 

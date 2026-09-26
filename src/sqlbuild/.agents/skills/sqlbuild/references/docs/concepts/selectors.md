@@ -4,7 +4,7 @@
 
 > Target specific models, paths, tags, or DAG subsets with select and exclude flags.
 
-Online: https://docs.sqlbuild.com/concepts/selectors
+Online: https://sqlbuild.com/docs/concepts/selectors/
 
 ## Contents
 

@@ -4,7 +4,7 @@
 
 > Run dbt and SQLBuild side by side with coordinated selection and SQLBuild models downstream.
 
-Online: https://docs.sqlbuild.com/concepts/dbt-compatibility/overview
+Online: https://sqlbuild.com/docs/concepts/dbt-compatibility/overview/
 
 ## Contents
 
@@ -17,7 +17,7 @@ Online: https://docs.sqlbuild.com/concepts/dbt-compatibility/overview
 
 Use the dbt compatibility bridge to coordinate dbt selections with SQLBuild-owned models downstream of their outputs.
 
-SQLBuild reads the dbt manifest and drives the `dbt` CLI as a subprocess. dbt remains responsible for compiling and executing dbt-owned models; SQLBuild statically analyzes and executes only SQLBuild-owned models downstream. `sqb dbt` runs in direct mode, so change-aware execution and virtual environments are not supported by the bridge.
+SQLBuild reads the dbt manifest and drives the `dbt` CLI as a subprocess. dbt remains responsible for compiling and executing dbt-owned models; SQLBuild statically analyzes and executes only SQLBuild-owned models downstream. Change-aware execution is not supported by the bridge.
 
 ## Start with your existing dbt project
 

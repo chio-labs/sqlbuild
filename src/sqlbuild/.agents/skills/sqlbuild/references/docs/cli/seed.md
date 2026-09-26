@@ -1,12 +1,10 @@
 <!-- generated-by: sqlbuild skills -->
 
-# seed
+# sqb seed
 
 > Load seed CSV files into the warehouse.
 
-Online: https://docs.sqlbuild.com/cli/seed
-
-# sqb seed
+Online: https://sqlbuild.com/docs/cli/seed/
 
 Loads seed CSV files into the warehouse as tables. Seeds are fully replaced on every run.
 

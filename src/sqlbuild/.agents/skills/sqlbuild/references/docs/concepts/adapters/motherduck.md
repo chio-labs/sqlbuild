@@ -4,7 +4,7 @@
 
 > MotherDuck adapter configuration for SQLBuild.
 
-Online: https://docs.sqlbuild.com/concepts/adapters/motherduck
+Online: https://sqlbuild.com/docs/concepts/adapters/motherduck/
 
 MotherDuck uses DuckDB's built-in `md:` connection support. No extra installation needed beyond the core DuckDB dependency.
 

@@ -4,7 +4,7 @@
 
 > Validate tasks, assets, and loaders with Python checks.
 
-Online: https://docs.sqlbuild.com/concepts/python-nodes/checks
+Online: https://sqlbuild.com/docs/concepts/python-nodes/checks/
 
 ## Contents
 
