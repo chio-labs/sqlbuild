@@ -480,13 +480,9 @@ fn analyze_compact_query_work_inner(
             .as_ref()
             .is_some_and(|schema| catalog.needs_identifier_encoding(&work.query.sql, schema))
     });
-    let work = if exact_catalog.is_some() {
-        work
-    } else {
-        match try_borrowed_query(work) {
-            Ok(result) => return result,
-            Err(work) => *work,
-        }
+    let work = match try_borrowed_query(work, exact_catalog) {
+        Ok(result) => return result,
+        Err(work) => *work,
     };
     let exact_schema = exact_catalog.and_then(|_| work.query.binding_schema.clone());
     let sql = exact_catalog.map(|_| work.query.sql.clone());
@@ -507,6 +503,7 @@ fn analyze_compact_query_work_inner(
 /// Fold fully bound lexical query graphs; unsupported shapes retain the existing resolver.
 fn try_borrowed_query(
     mut work: CompactQueryWork,
+    exact_catalog: Option<&crate::semantic_validation::models::ProjectCatalog>,
 ) -> Result<CompiledQueryWorkResult, Box<CompactQueryWork>> {
     if work.query.schema.is_none()
         || (work.query.binding_schema.is_none()
@@ -601,6 +598,7 @@ fn try_borrowed_query(
                 })
         })
         .and_then(|schema| super::borrowed_facts::infer_bound(&expression, Some(schema), dialect));
+    let catalog_expression = exact_catalog.map(|_| expression.clone());
     let validation_expression =
         (bound_facts.is_none() || work.query.binding_options.is_some()).then(|| expression.clone());
     let unannotated_outputs: Option<Vec<_>> = work
@@ -720,7 +718,7 @@ fn try_borrowed_query(
             }),
         ));
     }
-    let validation = work
+    let mut validation = work
         .query
         .binding_schema
         .as_ref()
@@ -747,6 +745,13 @@ fn try_borrowed_query(
         });
     if !matches!(validation, Some(Ok(ref result)) if result.valid) {
         return Err(Box::new(work));
+    }
+    if let (Some(catalog), Some(expression), Some(schema)) = (
+        exact_catalog,
+        catalog_expression,
+        work.query.binding_schema.as_ref(),
+    ) {
+        validation = Some(catalog.expression_validation(&work.query.sql, schema, expression));
     }
     Ok(CompiledQueryWorkResult {
         projections,
