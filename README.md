@@ -95,15 +95,36 @@ Both sides are reported: the new column isn't in the contract, and the declared 
 
 ### Your own conventions as compile errors
 
-The project's rule says marts must read sources through staging. A mart that reads
-`__source("raw__payments")` directly fails, and so does the unit test that has no mock for it.
+Rules are Python functions in your project. This one, from
+[`rules/layers.py`](website/examples/waffle-shop/rules/layers.py), says marts must read sources
+through staging:
+
+```python
+from sqlbuild.rules import Finding, Model, RuleContext, rule
+
+
+@rule(
+    code="XSQBRARCH001",
+    message="Marts must read sources through staging",
+    remediation="Reference a staging model with __ref() instead.",
+)
+def marts_use_staging(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    layer = ctx.project.tree.relative_parts(path=model.path, under="models")[0]
+    sql = ctx.sql.for_model(model).authored.source
+    if layer != "marts" or "__source(" not in sql:
+        return []
+    line = sql[: sql.index("__source(")].count("\n") + 1
+    return [ctx.finding(subject=model, line=line)]
+```
+
+A mart that reads `__source("raw__payments")` directly now fails, and so does the unit test that
+has no mock for it:
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/chio-labs/sqlbuild/main/.github/demos/rules.gif" alt="sqb compile reports the custom rule XSQBRARCH001 on the line that reads a raw source, and a unit test with no mock for that source" width="100%">
 </p>
 
-The rule is [a short Python function](website/examples/waffle-shop/rules/layers.py). See
-[rules](https://sqlbuild.com/docs/concepts/rules/).
+See [rules](https://sqlbuild.com/docs/concepts/rules/).
 
 ### See what a move would break
 
