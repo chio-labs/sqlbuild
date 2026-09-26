@@ -497,13 +497,13 @@ def _function_errors(
                 diagnostics.append(
                     _model_error(
                         model=model,
-                        code="W301",
-                        severity=DiagnosticSeverity.WARNING,
+                        code="B301",
+                        severity=DiagnosticSeverity.ERROR,
                         name=name,
                         message=(
                             f"Function '{name}' argument '{declaration.name}' "
                             f"expects {declaration.type}, received {actual}; "
-                            "implicit conversion depends on the dialect"
+                            "convert the argument explicitly"
                         ),
                     )
                 )

@@ -21,7 +21,7 @@ All state is persisted as append-only tables in the warehouse alongside your dat
 Offline semantic binding checks enforced contracts, seeds, expression sources, table functions,
 and explicit model projections. Open table sources remain partial until a contract or warehouse
 inspection supplies their complete shape. Type checks on DuckDB/MotherDuck, PostgreSQL, Snowflake,
-and BigQuery reject proven bind-time errors and warn about runtime-conversion risks. See
+and BigQuery reject proven bind-time errors and implicit conversions that can fail at runtime. See
 [semantic compilation](docs/semantic-compilation.md) for
 guarantees, diagnostics, and escape hatches.
 - **Audits that block bad data.** Audits run before data reaches the target table. Full table builds materialize into a staging table and only promote if audits pass; incremental models validate each batch before DML.

@@ -249,6 +249,16 @@
       "expected_exit_code": 0,
       "expected_codes": [],
       "pending_native": false
+    },
+    {
+      "description": "star03: CTE star join on matching types",
+      "category": "type",
+      "expected_exit_code": 0,
+      "expected_codes": [],
+      "pending_native": false,
+      "repo_files": {
+        "models/probe.sql": "MODEL (materialized table);\n\nWITH o AS (SELECT * FROM __source(\"raw__orders\")), c AS (SELECT * FROM __source(\"raw__customers\")) SELECT o.id FROM o JOIN c ON o.id = c.id\n"
+      }
     }
   ],
   "invalid": [
@@ -1391,6 +1401,30 @@
         "B301"
       ],
       "pending_native": false
+    },
+    {
+      "description": "star01: CTE star join INTEGER = VARCHAR",
+      "category": "type",
+      "expected_exit_code": 1,
+      "expected_codes": [
+        "B217"
+      ],
+      "pending_native": false,
+      "repo_files": {
+        "models/probe.sql": "MODEL (materialized table);\n\nWITH o AS (SELECT * FROM __source(\"raw__orders\")), c AS (SELECT * FROM __source(\"raw__customers\")) SELECT o.id FROM o JOIN c ON o.id = c.email\n"
+      }
+    },
+    {
+      "description": "star02: derived-table star join INTEGER = VARCHAR",
+      "category": "type",
+      "expected_exit_code": 1,
+      "expected_codes": [
+        "B217"
+      ],
+      "pending_native": false,
+      "repo_files": {
+        "models/probe.sql": "MODEL (materialized table);\n\nSELECT o.id FROM (SELECT * FROM __source(\"raw__orders\")) AS o JOIN __source(\"raw__customers\") AS c ON o.id = c.email\n"
+      }
     }
   ],
   "pending": [

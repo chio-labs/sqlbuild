@@ -19,7 +19,7 @@ from tests.unit.src.sqlbuild.compiler.sql_analysis.main._test_types import (
     "test_case",
     [
         SemanticDiagnosticMappingCase(
-            description="semantic and prepared type diagnostics",
+            description="semantic, prepared type, and implicit-conversion diagnostics",
             expected_codes=(
                 "B101",
                 "B102",
@@ -40,8 +40,8 @@ from tests.unit.src.sqlbuild.compiler.sql_analysis.main._test_types import (
                 "B232",
                 "B233",
                 "B234",
-                "W210",
-                "W213",
+                "B217",
+                "B218",
             ),
         )
     ],
@@ -55,7 +55,7 @@ def test_given_native_semantic_errors_when_validating_then_codes_and_locations_s
     codes.update(
         {f"E{number}": f"B{number}" for number in (*range(210, 220), 230, 231, 232, 233, 234)}
     )
-    codes.update({"W210": "W210", "W213": "W213"})
+    codes.update({"W210": "B217", "W213": "B218"})
 
     def validate(payload: str) -> str:
         requests: list[dict[str, Any]] = json.loads(payload)
@@ -87,11 +87,7 @@ def test_given_native_semantic_errors_when_validating_then_codes_and_locations_s
         assert all(
             (diagnostic.line, diagnostic.column) == (2, 8) for diagnostic in result.diagnostics
         )
-        assert all(
-            diagnostic.severity
-            == {True: "warning", False: "error"}[diagnostic.code.startswith("W")]
-            for diagnostic in result.diagnostics
-        )
+        assert all(diagnostic.severity == "error" for diagnostic in result.diagnostics)
 
 
 if __name__ == "__main__":

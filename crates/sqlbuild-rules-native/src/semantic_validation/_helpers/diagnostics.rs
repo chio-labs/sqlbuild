@@ -132,6 +132,9 @@ impl DiagnosticContext<'_> {
                 }
             }
         }
+        if error.code.starts_with('W') {
+            error.severity = ValidationSeverity::Error;
+        }
         error.code = code;
         Ok(Some(error))
     }
@@ -180,7 +183,25 @@ fn sqlbuild_code(code: &str) -> Option<String> {
     if code.starts_with('E') && ((210..=219).contains(&number) || (230..=234).contains(&number)) {
         return Some(format!("B{number}"));
     }
-    (code.starts_with('W') && (210..=219).contains(&number)).then(|| code.to_owned())
+    if code.starts_with('W') {
+        return implicit_conversion_code(number).map(str::to_owned);
+    }
+    None
+}
+
+/// Implicit conversions are enforced like the incompatibility they risk:
+/// each has a mechanical remedy (an explicit conversion or comparison).
+fn implicit_conversion_code(number: usize) -> Option<&'static str> {
+    match number {
+        210 => Some("B217"),
+        211 => Some("B212"),
+        212 => Some("B214"),
+        213 => Some("B218"),
+        214 => Some("B215"),
+        215 => Some("B211"),
+        216 => Some("B213"),
+        _ => None,
+    }
 }
 
 fn occurrences(sql: &str, name: &str) -> Vec<usize> {
