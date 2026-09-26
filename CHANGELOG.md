@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.119.4](https://github.com/chio-labs/sqlbuild/compare/v0.119.3...v0.119.4) (2026-09-26)
+
+
+### Bug Fixes
+
+* keep authored SQL tokens when formatting ([#846](https://github.com/chio-labs/sqlbuild/issues/846)) ([0eb4bb7](https://github.com/chio-labs/sqlbuild/commit/0eb4bb7f0c8759f95d5354936f5e443722f95de1))
+
 ## [0.119.3](https://github.com/chio-labs/sqlbuild/compare/v0.119.2...v0.119.3) (2026-09-26)
 
 
