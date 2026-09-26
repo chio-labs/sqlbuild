@@ -63,6 +63,17 @@ class KeywordFunctionCompileTestCase:
 
 
 @dataclass(frozen=True)
+class StarExpansionCompileTestCase:
+    """Expected diagnostics for a model reading a star over an inferred upstream."""
+
+    description: str
+    star_model_sql: str
+    downstream_sql: str
+    expected_exit_code: int
+    expected_diagnostics: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class CombinedCompilationTestCase:
     """Expected CLI behavior for schema-bound CTE compilation."""
 

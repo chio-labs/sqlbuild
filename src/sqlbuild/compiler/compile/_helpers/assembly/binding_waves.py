@@ -10,7 +10,7 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.analysis.cache import model_analysis_output_signature
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     binding_relation_names,
-    inferred_binding_shape,
+    published_model_shape,
 )
 from sqlbuild.compiler.compile.models import CompileModelInput, PolyglotAnalysisResult
 from sqlbuild.compiler.compile.models import (
@@ -96,6 +96,12 @@ def analyze_binding_waves(
             complete_binding_schemas={
                 name: complete_shapes[name] for name in wave_names if name in complete_shapes
             },
+            supplied_relations=frozenset(
+                name
+                for name in wave_names
+                if name in complete_shapes
+                and available_types.get(name, {}).keys() == complete_shapes[name].keys()
+            ),
         )
         for name, request, result in zip(ready, wave_requests, analyses, strict=True):
             results[name] = result
@@ -103,12 +109,16 @@ def analyze_binding_waves(
             if model_analysis_output_signature(analysis) != previous_signatures.get(name):
                 changed.add(name)
             required: frozenset[str] = binding_relation_names(request.model_input.references)
-            if analysis.columns and (not analysis.has_star or required <= complete_shapes.keys()):
-                shape: dict[str, str] = inferred_binding_shape(
+            star_known: bool = not analysis.has_star or (
+                analysis.star_resolved and required <= complete_shapes.keys()
+            )
+            if analysis.columns and star_known:
+                shape: dict[str, str] = published_model_shape(
                     sql=result.cleaned_sql or request.query_sql,
                     columns={column.name: column.type or "UNKNOWN" for column in analysis.columns},
                     inputs={table: complete_shapes.get(table, {}) for table in required},
                     profile=profile,
+                    config_values=request.model_input.config.values,
                 )
                 complete_shapes.setdefault(name, shape)
                 available_types.setdefault(name, shape)

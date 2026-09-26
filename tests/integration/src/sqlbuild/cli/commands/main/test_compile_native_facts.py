@@ -15,6 +15,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     BoundProjectionCompileTestCase,
     DerivedNativeCompileTestCase,
     KeywordFunctionCompileTestCase,
+    StarExpansionCompileTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import compile_duckdb_projection
 
@@ -79,6 +80,50 @@ def test_given_derived_native_facts_when_compiling_then_contract_and_execution_a
     with duckdb.connect() as connection:
         rows: tuple[tuple[int, ...], ...] = tuple(connection.execute(compiled_sql).fetchall())
     assert rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        StarExpansionCompileTestCase(
+            description="qualified star beside a joined column expands for downstream readers",
+            star_model_sql=(
+                'SELECT staged.*, extra.status FROM __ref("staged_orders") AS staged '
+                "CROSS JOIN (SELECT 'open' AS status) AS extra"
+            ),
+            downstream_sql='SELECT order_id, status FROM __ref("wide_orders")',
+            expected_exit_code=0,
+            expected_diagnostics=(),
+        ),
+        StarExpansionCompileTestCase(
+            description="bare star over an inferred upstream still rejects unknown columns",
+            star_model_sql='SELECT * FROM __ref("staged_orders")',
+            downstream_sql='SELECT order_id, missing_column FROM __ref("wide_orders")',
+            expected_exit_code=1,
+            expected_diagnostics=("B002",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_star_over_inferred_upstream_when_compiling_then_downstream_binding_is_exact(
+    test_case: StarExpansionCompileTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "staged_orders.sql").write_text("MODEL ();\nSELECT 1 AS order_id")
+    (models / "wide_orders.sql").write_text(f"MODEL ();\n{test_case.star_model_sql}")
+    (models / "order_readers.sql").write_text(f"MODEL ();\n{test_case.downstream_sql}")
+
+    for _ in ("cold", "warm"):
+        exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
+        result: dict[str, object] = json.loads(capsys.readouterr().out)
+        diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], result["diagnostics"])
+
+        assert exit_code == test_case.expected_exit_code
+        assert tuple(item["code"] for item in diagnostics) == test_case.expected_diagnostics
 
 
 @pytest.mark.parametrize(
