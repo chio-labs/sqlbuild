@@ -7,12 +7,9 @@ from dataclasses import replace
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
-from sqlbuild.compiler.pipeline._helpers.python_stale_selection import (
-    filter_python_node_names_for_selected_sql,
-)
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry, PythonRunPlanOutputs
 from sqlbuild.compiler.planner.models import PlanOutput, PlanWarning
-from sqlbuild.compiler.planner.types import WarningSeverity, WorkSelectionPolicy
+from sqlbuild.compiler.planner.types import WarningSeverity
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
 from sqlbuild.compiler.python_nodes.main.run_lifecycle import build_python_sql_run_lifecycle
 from sqlbuild.compiler.python_nodes.models import (
@@ -34,7 +31,6 @@ def build_python_run_plan_outputs(
     plan_output: PlanOutput,
     run_selection: PythonSqlRunSelection | None,
     selected_python_node_names: frozenset[str],
-    work_selection_policy: WorkSelectionPolicy,
 ) -> PythonRunPlanOutputs:
     """Attach python-aware selection warnings and plan entries to the plan output."""
 
@@ -47,12 +43,6 @@ def build_python_run_plan_outputs(
     python_graph: PythonNodeGraph = build_discovered_python_node_graph(
         discovered_inputs=discovered_inputs
     )
-    if work_selection_policy == WorkSelectionPolicy.STALE_ONLY:
-        selected_python_node_names = filter_python_node_names_for_selected_sql(
-            python_graph=python_graph,
-            python_node_names=selected_python_node_names,
-            selected_sql_keys=plan_output.selected_keys,
-        )
     plan_output = replace(
         plan_output,
         warnings=(

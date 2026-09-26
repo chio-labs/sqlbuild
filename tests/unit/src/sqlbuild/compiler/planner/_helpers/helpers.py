@@ -213,19 +213,15 @@ def model_key(name: str) -> CompiledObjectKey:
     return CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name)
 
 
-def build_run_despite_unchanged_model(
+def build_selection_model(
     *,
     key: CompiledObjectKey,
     name: str,
     materialized: str,
-    run_despite_unchanged: object | None,
 ) -> CompiledModel:
-    """Build a minimal model for run_despite_unchanged helper tests."""
+    """Build a minimal model for selection helper tests."""
 
-    values: dict[str, object] = {"materialized": materialized} | (
-        {},
-        {"run_despite_unchanged": run_despite_unchanged},
-    )[run_despite_unchanged is not None]
+    values: dict[str, object] = {"materialized": materialized}
     return CompiledModel(
         key=key,
         deps=(),

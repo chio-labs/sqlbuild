@@ -813,6 +813,12 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
     mapping: dict[str, object] = _coerce_mapping(
         payload=payload, label="defaults", file_path=file_path
     )
+    _reject_removed_virtual_keys(
+        mapping=mapping,
+        removed_keys=frozenset({"run_despite_unchanged"}),
+        label="defaults",
+        file_path=file_path,
+    )
     row_diff_exclude_columns: tuple[str, ...] = tuple(
         _load_string_sequence(
             payload=mapping.get("row_diff_exclude_columns"),
@@ -879,7 +885,6 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
             payload=mapping, key="unaccounted_partition_policy"
         ),
         replay_on_change=_optional_str(payload=mapping, key="replay_on_change"),
-        run_despite_unchanged=_optional_str(payload=mapping, key="run_despite_unchanged"),
         row_diff_exclude_columns=row_diff_exclude_columns,
         row_diff_tolerances=row_diff_tolerances,
         row_diff_sample_rows=_optional_non_negative_int(
@@ -901,6 +906,12 @@ def _load_path_defaults(*, payload: object, file_path: Path) -> dict[str, dict[s
         if not isinstance(path_value, dict):
             raise ProjectConfigError(f"{file_path} path_defaults['{path_key}'] must be a mapping")
         path_dict: dict[str, object] = cast(dict[str, object], path_value)
+        _reject_removed_virtual_keys(
+            mapping=path_dict,
+            removed_keys=frozenset({"run_despite_unchanged"}),
+            label="path_defaults",
+            file_path=file_path,
+        )
         _validate_path_default_tags(path_dict=path_dict, path_key=path_key, file_path=file_path)
         normalized_path_key: str = _normalize_path_default_key(
             path_key=path_key, file_path=file_path

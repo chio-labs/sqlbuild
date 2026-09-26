@@ -262,7 +262,6 @@ class DefaultsConfig:
     max_microbatches: int | None = None
     unaccounted_partition_policy: str | None = None
     replay_on_change: str | None = None
-    run_despite_unchanged: str | None = None
     row_diff_exclude_columns: tuple[str, ...] = field(default_factory=tuple)
     row_diff_tolerances: dict[str, object] = field(default_factory=dict)
     row_diff_sample_rows: int | None = None
