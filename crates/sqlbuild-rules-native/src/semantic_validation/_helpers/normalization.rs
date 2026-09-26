@@ -11,7 +11,8 @@ const DBT_REF: &str = "dbt_ref";
 const UDF: &str = "udf";
 type Edit = (usize, usize, MappedSql);
 static REFERENCES: LazyLock<Result<Regex, String>> = LazyLock::new(|| {
-    Regex::new(r#"__(ref|seed|source|dbt_ref)\("([^"]+)"\)"#).map_err(|error| error.to_string())
+    Regex::new(r#"__(ref|seed|source|dbt_ref)\((?:"[^"]+"\s*,\s*)?"([^"]+)"\)"#)
+        .map_err(|error| error.to_string())
 });
 static FUNCTIONS: LazyLock<Result<Regex, String>> = LazyLock::new(|| {
     Regex::new(r#"__(udf|table_fn)\("([A-Za-z_][A-Za-z0-9_]*)"\)\s*"#)
