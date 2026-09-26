@@ -47,6 +47,20 @@ def binding_required_names(model_input: CompileModelInput) -> frozenset[str] | N
     return binding_relation_names(model_input.references)
 
 
+def binding_requires_exact_names(
+    *, schema: dict[str, dict[str, str]] | None, profile: ExpressionInferenceProfile
+) -> bool:
+    if (
+        profile.quoted_identifiers_ignore_case
+        or profile.sql_analysis_dialect not in CASE_SENSITIVE_BINDING_DIALECTS
+    ):
+        return False
+    for columns in (schema or {}).values():
+        if any(name.startswith('"') for name in columns):
+            return True
+    return False
+
+
 def binding_schema_for_model(
     *, model_input: CompileModelInput, complete_binding_schemas: dict[str, dict[str, str]]
 ) -> dict[str, dict[str, str]] | None:
