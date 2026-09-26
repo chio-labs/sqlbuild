@@ -1705,7 +1705,9 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     ) -> tuple[FunctionInfo, ...]:
         query: str = (
             "SELECT function_name, function_schema, 'function' "
-            "FROM information_schema.functions WHERE 1=1"
+            "FROM "
+            + self._information_schema_relation(database=database, name="functions")
+            + " WHERE 1=1"
         )
         params: list[str] = []
         if schemas:

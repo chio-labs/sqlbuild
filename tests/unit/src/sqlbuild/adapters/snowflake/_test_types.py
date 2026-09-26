@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlbuild.adapter.contract.models import SchemaDiffResult
+from sqlbuild.adapter.contract.models import FunctionInfo, SchemaDiffResult
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.cost.types import CostStatus
 
@@ -204,3 +204,15 @@ class SnowflakeRelationAgeMetadataTestCase:
     last_altered: datetime | None
     expected_created_at: datetime | None
     expected_last_altered_at: datetime | None
+
+
+@dataclass(frozen=True)
+class SnowflakeFunctionDiscoveryTestCase:
+    description: str
+    database: str | None
+    schemas: tuple[str, ...] | None
+    names: tuple[str, ...] | None
+    rows: tuple[tuple[object, ...], ...]
+    expected_relation: str
+    expected_params: tuple[str, ...]
+    expected_functions: tuple[FunctionInfo, ...]

@@ -123,3 +123,10 @@ class SnowflakeCostTestCase:
     expected_query_count: int
     expected_resource_name: str
     expected_minimum_credits: int
+
+
+@dataclass(frozen=True)
+class SnowflakeFunctionDiscoveryTestCase:
+    description: str
+    function_name: str
+    expected_function_count: int
