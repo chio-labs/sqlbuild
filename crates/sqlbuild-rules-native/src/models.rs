@@ -540,6 +540,8 @@ impl Default for ScopeIndexFacts {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct Model {
+    #[serde(default)]
+    pub sql_analysis_disabled: bool,
     pub name: String,
     pub relative_path: String,
     pub query_sql: String,
@@ -697,6 +699,8 @@ pub(crate) struct CustomRule {
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Fault {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unevaluated: bool,
     pub code: String,
     pub path: String,
     pub line: u64,

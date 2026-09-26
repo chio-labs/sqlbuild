@@ -112,7 +112,23 @@ enum ImportRejection {
 }
 
 pub(crate) fn evaluate_model(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault>, String> {
-    stacker::grow(8 * 1024 * 1024, || evaluate_model_inner(request))
+    if request.model.sql_analysis_disabled {
+        return Ok(Vec::new());
+    }
+    let model = request.model;
+    let selected = request.selected;
+    match stacker::grow(8 * 1024 * 1024, || evaluate_model_inner(request)) {
+        Ok(faults) => Ok(faults),
+        Err(reason) => Ok(selected.values().filter(|rule| requires_model_query(rule)).map(|rule| Fault {
+            unevaluated: true,
+            code: rule.code.clone(),
+            path: model.relative_path.clone(),
+            line: 1,
+            column: 1,
+            message: format!("Rule {} could not be evaluated: {reason}", rule.code),
+            remediation: "Use supported SQL, disable SQL analysis, or explicitly ignore the affected Rule.".to_owned(),
+        }).collect()),
+    }
 }
 
 fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault>, String> {
@@ -236,14 +252,27 @@ pub(crate) fn evaluate_project_rules(request: &ProjectEvaluationRequest<'_>) -> 
 }
 
 fn requires_parsed_model(selected: &BTreeMap<String, &RuleMetadata>) -> bool {
-    selected.values().any(|rule| {
-        !rule.custom
-            && !rule.code.starts_with("SQBRSQL")
-            && !matches!(
+    selected.values().any(|rule| requires_model_query(rule))
+}
+
+fn requires_model_query(rule: &RuleMetadata) -> bool {
+    !rule.custom
+        && (rule.code.starts_with("SQBRMODEL")
+            || rule.code.starts_with("SQBRCONTRACT")
+            || matches!(
                 rule.code.as_str(),
-                "SQBRDECLARATION201" | "SQBRDECLARATION301" | "SQBRTEST301"
-            )
-    })
+                "SQBRGRAPH102"
+                    | "SQBRPROJECT101"
+                    | "SQBRPROJECT102"
+                    | "SQBRPROJECT103"
+                    | "SQBRPROJECT104"
+                    | "SQBRPROJECT105"
+                    | "SQBRPROJECT106"
+                    | "SQBRDECLARATION101"
+                    | "SQBRDECLARATION102"
+                    | "SQBRTEST201"
+                    | "SQBRTEST202"
+            ))
 }
 
 pub(super) fn parse_rule_statements(
@@ -518,6 +547,7 @@ fn is_lambda_parameter_type(word: &[u8]) -> bool {
 
 fn fault(model: &Model, rule: &RuleMetadata, position: Option<&Position>) -> Fault {
     Fault {
+        unevaluated: false,
         code: rule.code.clone(),
         path: model.relative_path.clone(),
         line: position.map_or(1, |value| value.line),
@@ -548,8 +578,14 @@ macro_rules! custom_fault {
     };
 }
 
-fn path_fault(path: &str, rule: &RuleMetadata, message: String, remediation: String) -> Fault {
+pub(super) fn path_fault(
+    rule: &RuleMetadata,
+    path: &str,
+    message: String,
+    remediation: String,
+) -> Fault {
     Fault {
+        unevaluated: false,
         code: rule.code.clone(),
         path: path.into(),
         line: 1,
@@ -1363,8 +1399,8 @@ fn duplicate_enums(request: &EvaluateRequest, rule: &RuleMetadata, faults: &Faul
         let signature = serde_json::to_string(&members).unwrap_or_default();
         if let Some(previous) = signatures.get(&signature) {
             faults.push(path_fault(
-                &declaration.relative_path,
                 rule,
+                &declaration.relative_path,
                 format!("enum {:?} duplicates {:?}", declaration.name, previous.name),
                 rule.remediation.clone(),
             ));
@@ -1422,8 +1458,8 @@ fn declaration_domain_placement(
         };
         let root = parts.first().copied().unwrap_or("declarations");
         faults.push(path_fault(
-            path,
             rule,
+            path,
             format!(
                 "public declaration {:?} has no configured domain folder",
                 name
@@ -1454,6 +1490,7 @@ fn custom_rule_test_coverage(
         }
         if custom.test_case_count < minimum {
             faults.push(Fault {
+                unevaluated: false,
                 code: rule.code.clone(),
                 path: custom.source.clone().unwrap_or_else(|| "rules".into()),
                 line: custom.source_line.max(1),

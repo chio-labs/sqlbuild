@@ -156,6 +156,7 @@ def _run_rule_selection(
             result=RulesResult(
                 findings=result.findings,
                 evaluated_models=result.evaluated_models,
+                unevaluated_resources=result.unevaluated_resources,
                 cache_hits=result.cache_hits,
                 cache_misses=result.cache_misses,
             ),

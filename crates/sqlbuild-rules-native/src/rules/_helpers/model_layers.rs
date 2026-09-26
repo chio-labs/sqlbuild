@@ -83,6 +83,7 @@ pub(crate) fn internal_forward_refs(
     }
     for exception in configured.difference(&used) {
         faults.push(Fault {
+            unevaluated: false,
             code: rule.code.clone(),
             path: "sqlbuild_project.toml".into(),
             line: 1,
@@ -193,6 +194,7 @@ fn model_fault(
     remediation: Option<String>,
 ) -> Fault {
     Fault {
+        unevaluated: false,
         code: rule.code.clone(),
         path: model.relative_path.clone(),
         line: 1,

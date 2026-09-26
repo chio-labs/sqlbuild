@@ -35,6 +35,7 @@ pub(crate) fn evaluate_without_query(
             && let Some(rule) = selected.get(code)
         {
             faults.push(Fault {
+                unevaluated: false,
                 code: rule.code.clone(),
                 path: model.relative_path.clone(),
                 line: 1,
@@ -110,6 +111,7 @@ fn rules_need_no_query(model: &Model, selected: &BTreeMap<String, &RuleMetadata>
 
 fn fault(model: &Model, rule: &RuleMetadata) -> Fault {
     Fault {
+        unevaluated: false,
         code: rule.code.clone(),
         path: model.relative_path.clone(),
         line: 1,

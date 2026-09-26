@@ -4,7 +4,8 @@ use crate::models::{
     ScopeResource, SqlScenarioFact, SqlTestCteFact, SqlTestFact, SqlTestMode,
 };
 use crate::rules::_helpers::evaluation::{
-    dependency_name, group_by_empty, normalize_rules_sql, parse_rule_statements, unwrap_nested,
+    dependency_name, group_by_empty, normalize_rules_sql, parse_rule_statements, path_fault,
+    unwrap_nested,
 };
 use crate::rules::models::ProjectEvaluationRequest;
 use sqlparser::ast::{
@@ -31,6 +32,48 @@ pub(crate) fn evaluate_project(
     });
     let mut scenarios: Vec<&SqlScenarioFact> = evaluation.request.sql_scenarios.iter().collect();
     scenarios.sort_by(|left, right| left.source_path.cmp(&right.source_path));
+
+    for rule in evaluation.selected.values().filter(|rule| {
+        matches!(
+            rule.code.as_str(),
+            "SQBRTEST201" | "SQBRTEST202" | EMPTY_INPUT_RULE_CODE
+        )
+    }) {
+        for test in &tests {
+            if !matches!(test.mode, SqlTestMode::Model)
+                || test.has_macro_mocks
+                || test.has_model_query_overrides
+            {
+                continue;
+            }
+            for cte in test
+                .authored_ctes
+                .iter()
+                .filter(|cte| fixture_facts(&cte.name, &cte.sql).mock)
+                .chain(test.expected_ctes.iter())
+                .chain(test.assertion_ctes.iter())
+            {
+                if fixture_facts(&cte.name, &cte.sql).empty_fixture_marker {
+                    continue;
+                }
+                if let Err(reason) = fixture_query(&cte.sql, &evaluation.request.dialect) {
+                    let mut fault = path_fault(
+                        rule,
+                        &test.source_path,
+                        format!(
+                            "Rule {} could not be evaluated for test block {}: {reason}",
+                            rule.code, test.block_index
+                        ),
+                        "Use supported fixture SQL or explicitly ignore the affected Rule."
+                            .to_owned(),
+                    );
+                    fault.unevaluated = true;
+                    faults.push(fault);
+                    break;
+                }
+            }
+        }
+    }
 
     if let Some(rule) = evaluation.selected.get("SQBRTEST101") {
         faults.extend(canonical_roots(rule, &tests, &scenarios));
@@ -434,17 +477,6 @@ fn name_fault(
     )
 }
 
-fn path_fault(rule: &RuleMetadata, path: &str, message: String, remediation: String) -> Fault {
-    Fault {
-        code: rule.code.clone(),
-        path: path.to_owned(),
-        line: 1,
-        column: 1,
-        message,
-        remediation,
-    }
-}
-
 fn is_beneath(path: &str, root: &str) -> bool {
     path.strip_prefix(root)
         .is_some_and(|suffix| suffix.starts_with('/'))
@@ -693,13 +725,18 @@ fn empty_relation(cte: &SqlTestCteFact, dialect: &str) -> bool {
 }
 
 fn parse_fixture_query(sql: &str, dialect: &str) -> Option<Query> {
-    let mut statements = match parse_rule_statements(&normalize_rules_sql(dialect, sql), dialect) {
-        Ok(statements) => statements,
-        Err(_) => return None,
-    };
+    match fixture_query(sql, dialect) {
+        Ok(query) => Some(query),
+        Err(_) => None,
+    }
+}
+
+fn fixture_query(sql: &str, dialect: &str) -> Result<Query, String> {
+    let mut statements = parse_rule_statements(&normalize_rules_sql(dialect, sql), dialect)
+        .map_err(|error| format!("could not parse SQL-test fixture: {error}"))?;
     match (statements.pop(), statements.is_empty()) {
-        (Some(Statement::Query(query)), true) => Some(*query),
-        _ => None,
+        (Some(Statement::Query(query)), true) => Ok(*query),
+        _ => Err("SQL-test fixture must contain exactly one query".to_owned()),
     }
 }
 

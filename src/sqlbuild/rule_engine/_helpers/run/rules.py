@@ -26,6 +26,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.lint.constants import TEMPLATE_INTERPOLATION_START
+from sqlbuild.lint.exceptions import NativeLintError
 from sqlbuild.lint.main.build_expansion_context import build_expansion_context
 from sqlbuild.lint.main.collect_project_files import collect_project_files
 from sqlbuild.lint.main.run_lint import run_lint
@@ -34,6 +35,7 @@ from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue, sele
 from sqlbuild.rule_engine._helpers.engine.config import resolve_rule_ignore_selectors
 from sqlbuild.rule_engine._helpers.engine.hermeticity import verify_custom_rules
 from sqlbuild.rule_engine._helpers.engine.native import (
+    decode_rule_finding,
     evaluate_native,
     finalize_native_findings,
     native_catalogue,
@@ -51,7 +53,7 @@ from sqlbuild.rule_engine.models import (
     SqlExpansionReuse,
 )
 
-_SQL_RULE_CACHE_VERSION: str = "sql-rules-v2"
+_SQL_RULE_CACHE_VERSION: str = "sql-rules-v3"
 _SQLBUILD_VERSION: str = version("sqlbuild")
 _SQL_RULE_SUPPRESSION_CODE: str = "SQBRSQL000"
 
@@ -138,13 +140,24 @@ def evaluate_rules(
     )
     findings: tuple[Finding, ...] = tuple(
         sorted(
-            finalized,
+            (
+                replace(item, code="rules-unevaluated") if item.unevaluated else item
+                for item in finalized
+            ),
             key=lambda item: (item.path.as_posix(), item.line, item.column, item.code),
         )
     )
     return RulesRunResult(
         findings=findings,
-        evaluated_models=result.evaluated_models,
+        evaluated_models=max(
+            0,
+            result.evaluated_models
+            - len(
+                {item.path for item in findings if item.unevaluated}
+                & {model.relative_path for model in selected_project.models}
+            ),
+        ),
+        unevaluated_resources=len({item.path for item in findings if item.unevaluated}),
         built_in_ms=sql_ms + result.built_in_ms,
         custom_ms=result.custom_ms,
         cache_hits=result.cache_hits + sql_result.cache_hits,
@@ -336,7 +349,9 @@ def _run_sql_rules(
     if not codes:
         return _SqlRulesEvaluation(findings=(), cache_hits=0, cache_misses=0)
     models_by_path: dict[str, CompiledModel] = {
-        model.relative_path.as_posix(): model for model in project.models
+        model.relative_path.as_posix(): model
+        for model in project.models
+        if project.settings.sql_analysis and model.config.values.get("sql_analysis") is not False
     }
     bucket: dict[str, dict[str, object]] = (
         _read_sql_rule_cache(project_dir) if cache_enabled else {}
@@ -359,7 +374,9 @@ def _run_sql_rules(
     file_identities: dict[str, str] = {}
     project_files: dict[Path, str] | None = None
     if selected_model_paths is None:
-        model_paths: frozenset[Path] = frozenset(project_dir / path for path in models_by_path)
+        model_paths: frozenset[Path] = frozenset(
+            project_dir / model.relative_path for model in project.models
+        )
         project_files = collect_project_files(project_dir=project_dir, selected_paths=None)
         file_path: Path
         contents: str
@@ -409,11 +426,21 @@ def _run_sql_rules(
         else None
     )
     selected_codes: frozenset[str] = frozenset((*codes, _SQL_RULE_SUPPRESSION_CODE))
-    evaluated: tuple[Finding, ...] = tuple(
-        _lint_finding(violation=violation, project_dir=project_dir)
-        for violation in (() if result is None else result.violations)
-        if violation.code in selected_codes
-    )
+    evaluated: list[Finding] = []
+    for violation in () if result is None else result.violations:
+        if violation.code in selected_codes:
+            evaluated.append(_lint_finding(violation=violation, project_dir=project_dir))
+        elif violation.code == NativeLintError.code:
+            finding: Finding = _lint_finding(violation=violation, project_dir=project_dir)
+            evaluated.extend(
+                replace(
+                    finding,
+                    code=code,
+                    message=f"Rule {code} could not be evaluated: {violation.message}",
+                    unevaluated=True,
+                )
+                for code in codes
+            )
     findings.extend(evaluated)
     written_identities: dict[str, str] = {
         **{path: identities[path] for path in misses},
@@ -551,42 +578,14 @@ def _cached_sql_findings(
     if not isinstance(values, list):
         return None
     try:
-        return tuple(_finding_from_cache_payload(value) for value in values)
+        return tuple(decode_rule_finding(value) for value in values)
     except (KeyError, RulesError, TypeError, ValueError):
         return None
 
 
-def _finding_from_cache_payload(value: object) -> Finding:
-    if not isinstance(value, dict):
-        raise RulesError("cached SQL finding must be an object")
-    payload: dict[str, object] = {str(key): item for key, item in value.items()}
-    code: object = payload["code"]
-    path: object = payload["path"]
-    line: object = payload["line"]
-    column: object = payload["column"]
-    message: object = payload["message"]
-    remediation: object = payload["remediation"]
-    if (
-        not isinstance(code, str)
-        or not isinstance(path, str)
-        or not isinstance(line, int)
-        or not isinstance(column, int)
-        or not isinstance(message, str)
-        or not isinstance(remediation, str)
-    ):
-        raise RulesError("cached SQL finding has invalid fields")
-    return Finding(
-        code=code,
-        path=Path(path),
-        line=line,
-        column=column,
-        message=message,
-        remediation=remediation,
-    )
-
-
 def _finding_cache_payload(finding: Finding) -> dict[str, object]:
     return {
+        "unevaluated": finding.unevaluated,
         "code": finding.code,
         "path": finding.path.as_posix(),
         "line": finding.line,

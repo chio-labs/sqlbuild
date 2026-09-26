@@ -1,4 +1,5 @@
 use crate::models::{DeclarationKind, Fault, Model, RuleMetadata, ScopeDeclaration, ScopeKind};
+use crate::rules::_helpers::evaluation::path_fault;
 use crate::rules::models::ProjectEvaluationRequest;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -665,15 +666,4 @@ fn threshold(evaluation: &ProjectEvaluationRequest<'_>, name: &str, default: u32
         .get(name)
         .copied()
         .unwrap_or(default)
-}
-
-fn path_fault(rule: &RuleMetadata, path: &str, message: String, remediation: String) -> Fault {
-    Fault {
-        code: rule.code.clone(),
-        path: path.into(),
-        line: 1,
-        column: 1,
-        message,
-        remediation,
-    }
 }

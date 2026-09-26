@@ -153,7 +153,7 @@ def evaluate_native(
     if not isinstance(raw_findings, list):
         raise RulesError("native rules engine returned invalid findings")
     return RulesResult(
-        findings=tuple(_decode_finding(value) for value in raw_findings),
+        findings=tuple(decode_rule_finding(value) for value in raw_findings),
         evaluated_models=int(payload.get("evaluated_models", 0)),
         cache_hits=max(0, int(payload.get("cache_hits", 0)) - retry_native_misses),
         cache_misses=int(payload.get("cache_misses", 0)) + retry_native_misses,
@@ -192,7 +192,7 @@ def finalize_native_findings(
         raise RulesError(str(error)) from error
     if not isinstance(payload, list):
         raise RulesError("native rules engine returned invalid finalized findings")
-    return tuple(_decode_finding(value) for value in payload)
+    return tuple(decode_rule_finding(value) for value in payload)
 
 
 def load_native_config(project_dir: Path) -> dict[str, object]:
@@ -310,12 +310,16 @@ def _model_payloads(
         for name in test.target_model_names:
             test_counts[name] = test_counts.get(name, 0) + 1
     return [
-        _model_payload(
-            model=model,
-            compiled_audit_count=audit_counts.get(model.name, 0),
-            targeting_test_count=test_counts.get(model.name, 0),
-            dialect=dialect,
-            include_type_proof=include_type_proof,
+        dict(
+            _model_payload(
+                model=model,
+                compiled_audit_count=audit_counts.get(model.name, 0),
+                targeting_test_count=test_counts.get(model.name, 0),
+                dialect=dialect,
+                include_type_proof=include_type_proof,
+            ),
+            sql_analysis_disabled=not project.settings.sql_analysis
+            or model.config.values.get("sql_analysis") is False,
         )
         for model in project.models
     ]
@@ -771,7 +775,7 @@ def _custom_host_payload(
     )
 
 
-def _decode_finding(value: object) -> Finding:
+def decode_rule_finding(value: object) -> Finding:
     if not isinstance(value, dict):
         raise RulesError("native rules engine returned an invalid finding")
     payload: dict[str, object] = {str(key): item for key, item in value.items()}
@@ -797,11 +801,13 @@ def _decode_finding(value: object) -> Finding:
         column=column,
         message=message,
         remediation=remediation,
+        unevaluated=payload.get("unevaluated") is True,
     )
 
 
 def _finding_payload(finding: Finding) -> dict[str, object]:
     return {
+        "unevaluated": finding.unevaluated,
         "code": finding.code,
         "path": finding.path.as_posix(),
         "line": finding.line,

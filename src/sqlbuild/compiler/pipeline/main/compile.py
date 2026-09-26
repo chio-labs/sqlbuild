@@ -125,6 +125,7 @@ def run_compile_pipeline(
             result=RulesResult(
                 findings=rules_result.findings,
                 evaluated_models=rules_result.evaluated_models,
+                unevaluated_resources=rules_result.unevaluated_resources,
                 cache_hits=rules_result.cache_hits,
                 cache_misses=rules_result.cache_misses,
             ),

@@ -218,6 +218,7 @@ class Finding:
     column: int
     message: str
     remediation: str
+    unevaluated: bool = False
 
 
 @dataclass(frozen=True)
@@ -301,6 +302,7 @@ class RulesConfig:
 class RulesResult:
     findings: tuple[Finding, ...]
     evaluated_models: int
+    unevaluated_resources: int = 0
     cache_hits: int = 0
     cache_misses: int = 0
     built_in_ms: int = 0
@@ -339,6 +341,7 @@ class RulesRunResult:
     evaluated_models: int
     built_in_ms: int
     custom_ms: int
+    unevaluated_resources: int = 0
     cache_hits: int = 0
     cache_misses: int = 0
 

@@ -190,7 +190,7 @@ fn given_sql_test_shapes_when_evaluating_empty_input_rule_then_flags_only_filler
             ],
         },
         test_types::EmptyInputTestRuleTestCase {
-            description: "an unparseable mock is not flagged",
+            description: "an unparseable mock reports missing evaluation evidence",
             test: helpers::empty_input_test_fact(
                 "orders__empty_inputs_produce_no_rows",
                 &[(
@@ -201,7 +201,9 @@ fn given_sql_test_shapes_when_evaluating_empty_input_rule_then_flags_only_filler
                 &[NO_ROWS_ASSERTION],
             ),
             allowed_tests: json!([]),
-            expected_messages: &[],
+            expected_messages: &[
+                "SQBRTEST203 tests/unit/test_orders__empty_inputs_produce_no_rows.sql: Rule SQBRTEST203 could not be evaluated for test block 1: could not parse SQL-test fixture: sql parser error: sql parser error: Expected: an expression, found: EOF; generic fallback also failed: sql parser error: Expected: an expression, found: EOF",
+            ],
         },
         test_types::EmptyInputTestRuleTestCase {
             description: "a macro-mode test is not flagged",
