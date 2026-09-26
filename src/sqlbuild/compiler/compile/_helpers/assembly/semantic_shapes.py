@@ -20,7 +20,11 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
     PolyglotAnalysisResult,
 )
-from sqlbuild.compiler.planner.types import ContractPolicy
+from sqlbuild.compiler.planner.constants import (
+    SNAPSHOT_DEFAULT_VALID_FROM_COLUMN,
+    SNAPSHOT_DEFAULT_VALID_TO_COLUMN,
+)
+from sqlbuild.compiler.planner.types import ContractPolicy, MaterializationType
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.constants import (
     CASE_SENSITIVE_BINDING_DIALECTS,
@@ -45,6 +49,27 @@ def binding_required_names(model_input: CompileModelInput) -> frozenset[str] | N
     if not model_input.sql_validation_enabled:
         return None
     return binding_relation_names(model_input.references)
+
+
+def published_model_shape(
+    *,
+    sql: str,
+    columns: dict[str, str],
+    inputs: dict[str, dict[str, str]],
+    profile: ExpressionInferenceProfile,
+    config_values: dict[str, object],
+) -> dict[str, str]:
+    """Return a model relation's shape, including snapshot validity columns."""
+    shape: dict[str, str] = inferred_binding_shape(
+        sql=sql, columns=columns, inputs=inputs, profile=profile
+    )
+    if config_values.get("materialized") == MaterializationType.SNAPSHOT:
+        for name in (
+            config_values.get("valid_from_column") or SNAPSHOT_DEFAULT_VALID_FROM_COLUMN,
+            config_values.get("valid_to_column") or SNAPSHOT_DEFAULT_VALID_TO_COLUMN,
+        ):
+            shape[str(name)] = "UNKNOWN"
+    return shape
 
 
 def binding_schema_for_model(
@@ -202,7 +227,7 @@ def semantic_shapes(
                     )
                 )
             ):
-                shapes[model.name] = inferred_binding_shape(
+                shapes[model.name] = published_model_shape(
                     sql=model.query_sql,
                     profile=replace(profile, binding_catalog=project.binding_catalog),
                     columns={
@@ -212,6 +237,7 @@ def semantic_shapes(
                         name: shapes.get(name, {})
                         for name in binding_relation_names(model.references)
                     },
+                    config_values=model.config.values,
                 )
             else:
                 remaining.append(model)

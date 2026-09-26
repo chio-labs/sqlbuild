@@ -20,7 +20,7 @@ from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     binding_relation_names,
-    inferred_binding_shape,
+    published_model_shape,
     semantic_shapes,
 )
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
@@ -136,11 +136,12 @@ def get_source_binding_diagnostics(
                 recover_cte_facts=True,
             )
             if analysis.columns and (not analysis.has_star or all(inputs.values())):
-                shapes[model.name] = inferred_binding_shape(
+                shapes[model.name] = published_model_shape(
                     sql=model.query_sql,
                     profile=profile,
                     inputs=inputs,
                     columns={column.name: column.type or "UNKNOWN" for column in analysis.columns},
+                    config_values=model.config.values,
                 )
             else:
                 shapes.pop(model.name, None)

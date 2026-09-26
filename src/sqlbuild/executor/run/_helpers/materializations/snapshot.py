@@ -20,6 +20,10 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
 )
 from sqlbuild.adapter.type_system.main.normalize_type import normalize_type
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
+from sqlbuild.compiler.planner.constants import (
+    SNAPSHOT_DEFAULT_VALID_FROM_COLUMN,
+    SNAPSHOT_DEFAULT_VALID_TO_COLUMN,
+)
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.compiler.planner.types import (
     HistoricalInput,
@@ -71,8 +75,6 @@ from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
 )
 from sqlbuild.spec.contracts.models import SnapshotsConfig
 
-_DEFAULT_VALID_FROM_COLUMN: str = "valid_from"
-_DEFAULT_VALID_TO_COLUMN: str = "valid_to"
 _SCHEMA_CHANGE_STRICTNESS: dict[SnapshotSchemaChangePolicy, int] = {
     SnapshotSchemaChangePolicy.APPEND_NEW_COLUMNS: 0,
     SnapshotSchemaChangePolicy.REQUIRE_CONFIRMATION: 1,
@@ -1065,8 +1067,8 @@ def _require_updated_at(entry: ModelPlanEntry) -> str:
 
 
 def _valid_from_column(entry: ModelPlanEntry) -> str:
-    return entry.valid_from_column or _DEFAULT_VALID_FROM_COLUMN
+    return entry.valid_from_column or SNAPSHOT_DEFAULT_VALID_FROM_COLUMN
 
 
 def _valid_to_column(entry: ModelPlanEntry) -> str:
-    return entry.valid_to_column or _DEFAULT_VALID_TO_COLUMN
+    return entry.valid_to_column or SNAPSHOT_DEFAULT_VALID_TO_COLUMN

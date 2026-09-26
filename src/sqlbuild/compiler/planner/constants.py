@@ -79,3 +79,5 @@ MIGRATION_FINGERPRINT_EXCLUDED_CONFIG_KEYS: frozenset[str] = frozenset(
         "snapshot_schema_change",
     }
 )
+SNAPSHOT_DEFAULT_VALID_FROM_COLUMN: str = "valid_from"
+SNAPSHOT_DEFAULT_VALID_TO_COLUMN: str = "valid_to"
