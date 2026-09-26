@@ -15,6 +15,28 @@ mutate the offline compile catalog or leak into a subsequent rebind. Catalog
 handles are process-local and excluded from the custom Rule host's serialized
 project.
 
+## Warm compilation and cache policy
+
+Model analysis and semantic validation follow the effective target's
+`compile_cache` setting. An explicit `compile_cache = false`, the compiler-cache
+disable environment setting, or `compile --no-cache` bypasses their cache.
+Repeating `compile` does not override an explicit target setting. Rules have a
+separate cache, so a run can report Rules cache hits while redoing model analysis.
+
+When measuring a cache-enabled warm compile, start with a normal `compile` in a
+fresh project copy, then run `compile` again in that copy. A first invocation with
+`--no-cache` does not prime the model-analysis cache. Inspect
+`analysis_batch_cache_hits`, `analysis_entry_cache_hits`, `analysis_cache_misses`,
+and `analysis_cache_bypasses` in JSON `compile_timings` to distinguish reuse,
+invalidation, and deliberate bypass.
+
+The cache identity includes expanded SQL, referenced shapes, dialect and semantic
+options, and compiler/parser versions. It does not serialize the native catalog
+handle. Cached analysis includes semantic diagnostics and their span facts;
+changing the relevant SQL or schema invalidates the result, including cached
+errors. Authored-position projection and compile-lifetime catalog construction
+can still run after a cache hit.
+
 ## Identifier semantics
 
 For case-insensitive quoted identifiers, SQLBuild folds binding identifiers in
