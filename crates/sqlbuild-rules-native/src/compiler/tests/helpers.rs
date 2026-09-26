@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier, Mutex};
 
+use crate::compiler::_helpers::sql_tests::cte_namespace::CteNamespace;
+use polyglot_sql::{Dialect, DialectType, Expression};
 use serde_json::{Value, json};
 
 use crate::compiler::_helpers::model_headers::tokenization::{
@@ -1367,4 +1369,87 @@ pub(crate) fn mock_read_through_helper_brings_its_mock_dependencies_into_scope()
         assert_eq!(response["artifacts"][0]["warnings"], json!([]), "{sql}");
     }
     true
+}
+pub(super) fn bounded_names_are_unique() -> bool {
+    let dialect = Dialect::get(DialectType::DuckDB);
+    let long = "orders_".repeat(40);
+    let sql = format!(
+        "WITH {long} AS (SELECT 1 AS order_id), __sqb_cte_0 AS (SELECT * FROM {long}), \
+         final AS (SELECT * FROM __sqb_cte_0) SELECT final.* FROM final"
+    );
+    let reserved = "__sqb_cte_1 __ref__orders __source__orders __expected__orders __actual__orders";
+    let mut first = CteNamespace::default();
+    first.reserve(&sql);
+    first.reserve(reserved);
+    let parsed = dialect.parse(&sql).expect("valid CTE query").remove(0);
+    let rewritten = first
+        .rewrite(parsed.clone(), dialect.dialect_type())
+        .expect("valid rename");
+    let Expression::Select(select) = &rewritten else {
+        return false;
+    };
+    let names: Vec<_> = select
+        .with
+        .as_ref()
+        .expect("WITH retained")
+        .ctes
+        .iter()
+        .map(|cte| cte.alias.name.as_str())
+        .collect();
+    let second_step = first
+        .rewrite(parsed.clone(), dialect.dialect_type())
+        .expect("second rename");
+    let mut replay = CteNamespace::default();
+    replay.reserve(&sql);
+    replay.reserve(reserved);
+    names.len() == 3
+        && names
+            .iter()
+            .all(|name| name.len() <= 30 && name.starts_with("__sqb_cte_"))
+        && !names.contains(&"__sqb_cte_0")
+        && !names.contains(&"__sqb_cte_1")
+        && rewritten != second_step
+        && rewritten
+            == replay
+                .rewrite(parsed, dialect.dialect_type())
+                .expect("deterministic rename")
+}
+
+pub(super) fn quoted_names_keep_bindings() -> bool {
+    let dialect = Dialect::get(DialectType::Snowflake);
+    let sql = "WITH final AS (SELECT 1 AS order_id), \"final\" AS (SELECT 2 AS order_id) \
+               SELECT a.order_id, b.order_id, 'final' AS label FROM FINAL a CROSS JOIN \"final\" b";
+    let mut namespace = CteNamespace::default();
+    namespace.reserve(sql);
+    let rewritten = namespace
+        .rewrite(
+            dialect.parse(sql).expect("valid quoted CTEs").remove(0),
+            dialect.dialect_type(),
+        )
+        .expect("quoted rename");
+    let rendered = dialect.generate(&rewritten).expect("render renamed CTEs");
+    rendered.contains("FROM __sqb_cte_0 AS a")
+        && rendered.contains("JOIN __sqb_cte_1 AS b")
+        && rendered.contains("'final' AS label")
+}
+pub(super) fn model_cte_names_are_isolated_across_dialects() -> bool {
+    [("duckdb", "final"), ("snowflake", "final"), ("postgres", "final"), ("tsql", "final"), ("bigquery", "`final`"), ("databricks", "`final`")].iter().all(|(dialect, name)| {
+        let request = json!({
+            "requests": [{
+                "sqlAnalysisDialect": dialect,
+                "chain": [{
+                    "modelName": "orders",
+                    "resolvedSql": format!("WITH {name} AS (SELECT 2 AS order_id) SELECT final.order_id FROM final"),
+                    "comparisonBodySql": format!("WITH {name} AS (SELECT order_id + 1 AS order_id FROM __ref__stg_orders) SELECT final.order_id FROM final"),
+                    "liftedCtes": [["__ref__stg_orders", format!("WITH {name} AS (SELECT 1 AS order_id) SELECT * FROM {name}")]],
+                    "expectedCteSql": "SELECT 2 AS order_id"
+                }]
+            }]
+        });
+        let response = crate::compiler::_helpers::sql_tests::rendering::render_json(&request.to_string()).expect("supported render dialect");
+        let response: Value = serde_json::from_str(&response).expect("render response");
+        let sql = response[0]["sql"].as_str().expect("rendered query");
+        sql.contains("__sqb_cte_0 AS") && sql.contains("FROM __sqb_cte_0 ")
+            && sql.contains("__sqb_cte_1 AS") && !sql.contains("AS (WITH")
+    })
 }

@@ -5,11 +5,30 @@ use crate::compiler::tests::helpers::{
     snowflake_plan_keeps_quoted_expected_columns,
     sqlserver_difference_sample_projects_bracketed_columns,
 };
+use crate::compiler::tests::helpers::{
+    bounded_names_are_unique, model_cte_names_are_isolated_across_dialects,
+    quoted_names_keep_bindings,
+};
 use crate::compiler::tests::test_types::SqlTestRenderingTestCase;
 
 #[test]
 fn given_sql_rendering_cases_when_rendering_native_batches_then_expected_behavior_holds() {
     let test_cases = [
+        SqlTestRenderingTestCase {
+            description: "model CTEs are isolated across every first-class dialect",
+            run: model_cte_names_are_isolated_across_dialects,
+            expected_success: true,
+        },
+        SqlTestRenderingTestCase {
+            description: "long and reserved CTE names are bounded, unique and deterministic",
+            run: bounded_names_are_unique,
+            expected_success: true,
+        },
+        SqlTestRenderingTestCase {
+            description: "quoted CTEs and literals retain their bindings",
+            run: quoted_names_keep_bindings,
+            expected_success: true,
+        },
         SqlTestRenderingTestCase {
             description: "ordered comparison batches preserve SQL order",
             run: ordered_comparison_batch_preserves_order,

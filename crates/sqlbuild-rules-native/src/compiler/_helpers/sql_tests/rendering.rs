@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use polyglot_sql::{Dialect, DialectType, Expression};
 
+use crate::compiler::_helpers::sql_tests::cte_namespace::CteNamespace;
 use crate::compiler::_helpers::sql_tests::cte_sql::{
     cte_definition_sql, leading_with_prefix_end, with_leading_ctes,
 };
@@ -100,22 +101,44 @@ struct RenderCteState<'a> {
     dialect: &'a Dialect,
     lifted: Vec<(String, String)>,
     name_counts: CteSuffixCounter,
+    namespace: CteNamespace,
 }
 
 impl<'a> RenderCteState<'a> {
-    fn new(dialect: &'a Dialect) -> Self {
+    fn new(dialect: &'a Dialect, chain: &[ChainStep], assertions: &[AssertionStep]) -> Self {
+        let mut namespace = CteNamespace::default();
+        for step in chain {
+            namespace.reserve(&step.resolved_sql);
+            namespace.reserve(step.comparison_body_sql.as_deref().unwrap_or_default());
+            namespace.reserve(step.expected_cte_sql.as_deref().unwrap_or_default());
+            for (name, sql) in step.lifted_ctes.iter().chain(&step.expected_lifted_ctes) {
+                namespace.reserve(name);
+                namespace.reserve(sql);
+            }
+        }
+        for assertion in assertions {
+            namespace.reserve(&assertion.resolved_sql);
+            namespace.reserve(assertion.comparison_body_sql.as_deref().unwrap_or_default());
+            for (name, sql) in &assertion.lifted_ctes {
+                namespace.reserve(name);
+                namespace.reserve(sql);
+            }
+        }
         Self {
             dialect,
             lifted: Vec::new(),
             name_counts: CteSuffixCounter::default(),
+            namespace,
         }
     }
 
-    fn lift(&mut self, sql: &str, enabled: bool) -> String {
+    fn lift(&mut self, sql: &str, enabled: bool, namespace: bool) -> String {
         if !enabled || leading_with_prefix_end(sql).is_none() {
             return sql.to_string();
         }
-        let Some((step_ctes, body_sql)) = split_top_level_with(sql, self.dialect) else {
+        let Some((step_ctes, body_sql)) =
+            split_top_level_with(sql, self.dialect, namespace.then_some(&mut self.namespace))
+        else {
             return sql.to_string();
         };
         if step_ctes.iter().any(|(name, body)| {
@@ -132,7 +155,7 @@ impl<'a> RenderCteState<'a> {
     /// Place a chain step's generated CTEs at top level and return its comparison body.
     fn actual_step_sql(&mut self, step: &ChainStep, enabled: bool) -> String {
         if step.lifted_ctes.is_empty() {
-            return self.lift(&step.resolved_sql, enabled);
+            return self.lift(&step.resolved_sql, enabled, true);
         }
         if !self.merge(&step.lifted_ctes) {
             return step.resolved_sql.clone();
@@ -142,18 +165,19 @@ impl<'a> RenderCteState<'a> {
                 .as_deref()
                 .unwrap_or(&step.resolved_sql),
             enabled,
+            true,
         )
     }
 
     /// Place an expected step's helper CTEs at top level and return its comparison body.
     fn expected_step_sql(&mut self, step: &ChainStep, expected_sql: &str, enabled: bool) -> String {
         if step.expected_lifted_ctes.is_empty() {
-            return self.lift(expected_sql, enabled);
+            return self.lift(expected_sql, enabled, false);
         }
         if !self.merge(&step.expected_lifted_ctes) {
             return with_leading_ctes(&step.expected_lifted_ctes, expected_sql);
         }
-        self.lift(expected_sql, enabled)
+        self.lift(expected_sql, enabled, false)
     }
 
     fn merge(&mut self, ctes: &[(String, String)]) -> bool {
@@ -172,6 +196,56 @@ impl<'a> RenderCteState<'a> {
 
     fn unique_suffix(&mut self, model_name: &str) -> String {
         self.name_counts.next(model_name)
+    }
+
+    /// Nested model bodies must also be isolated from the shared outer scope.
+    fn definition(&mut self, name: &str, sql: &str, enabled: bool) -> String {
+        let scoped = if enabled && leading_with_prefix_end(sql).is_some() {
+            let (protected, identifiers) = protect_backtick_identifiers(sql);
+            match self.dialect.parse(&protected) {
+                Ok(mut expressions) => (|| {
+                    if expressions.len() != 1 {
+                        return None;
+                    }
+                    let expression = match self
+                        .namespace
+                        .rewrite(expressions.pop()?, self.dialect.dialect_type())
+                    {
+                        Ok(expression) => expression,
+                        Err(_) => return None,
+                    };
+                    let sql = match self.dialect.generate(&expression) {
+                        Ok(sql) => sql,
+                        Err(_) => return None,
+                    };
+                    Some(restore_backtick_identifiers(&sql, &identifiers))
+                })(),
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+        cte_definition_sql(name, scoped.as_deref().unwrap_or(sql))
+    }
+
+    fn definitions(&mut self, enabled: bool) -> Vec<String> {
+        let mut definitions: Vec<String> = Vec::new();
+        for (name, sql) in std::mem::take(&mut self.lifted) {
+            if enabled
+                && leading_with_prefix_end(&sql).is_some()
+                && let Some((ctes, body)) =
+                    split_top_level_with(&sql, self.dialect, Some(&mut self.namespace))
+            {
+                definitions.extend(
+                    ctes.iter()
+                        .map(|(name, sql)| self.definition(name, sql, enabled)),
+                );
+                definitions.push(self.definition(&name, &body, enabled));
+            } else {
+                definitions.push(self.definition(&name, &sql, enabled));
+            }
+        }
+        definitions
     }
 }
 
@@ -259,17 +333,13 @@ fn render_difference_sample_sql(request: &DifferenceSampleRequest, dialect: &Dia
     let Some(expected_input) = step.expected_cte_sql.as_deref() else {
         return String::new();
     };
-    let mut cte_state = RenderCteState::new(dialect);
+    let mut cte_state = RenderCteState::new(dialect, std::slice::from_ref(step), &[]);
     let actual_sql = cte_state.actual_step_sql(step, request.sql_analysis_enabled);
     let expected_sql =
         cte_state.expected_step_sql(step, expected_input, request.sql_analysis_enabled);
-    let mut cte_parts: Vec<String> = cte_state
-        .lifted
-        .iter()
-        .map(|(name, sql)| cte_definition_sql(name, sql))
-        .collect();
-    cte_parts.push(cte_definition_sql("__actual", &actual_sql));
-    cte_parts.push(cte_definition_sql("__expected", &expected_sql));
+    let mut cte_parts = cte_state.definitions(request.sql_analysis_enabled);
+    cte_parts.push(cte_state.definition("__actual", &actual_sql, request.sql_analysis_enabled));
+    cte_parts.push(cte_state.definition("__expected", &expected_sql, request.sql_analysis_enabled));
     let (left, right) = match request.direction {
         DifferenceDirection::Unexpected => ("__actual", "__expected"),
         DifferenceDirection::Missing => ("__expected", "__actual"),
@@ -304,7 +374,7 @@ pub(crate) fn render_comparison_sql(request: &RenderRequest, dialect: &Dialect) 
     if request.chain.is_empty() && request.assertions.is_empty() {
         return String::new();
     }
-    let mut cte_state = RenderCteState::new(dialect);
+    let mut cte_state = RenderCteState::new(dialect, &request.chain, &request.assertions);
     let mut comparison_ctes: Vec<String> = Vec::new();
     let mut select_parts: Vec<String> = Vec::new();
     let rendered_steps = rendered_chain_steps(&request.chain, &request.assertions);
@@ -318,7 +388,11 @@ pub(crate) fn render_comparison_sql(request: &RenderRequest, dialect: &Dialect) 
             continue;
         }
         let actual_sql = cte_state.actual_step_sql(step, request.sql_analysis_enabled);
-        comparison_ctes.push(cte_definition_sql(&actual_cte, &actual_sql));
+        comparison_ctes.push(cte_state.definition(
+            &actual_cte,
+            &actual_sql,
+            request.sql_analysis_enabled,
+        ));
         if request.probe_step_index == Some(step_index) {
             probe_actual_cte = Some(actual_cte.clone());
         }
@@ -327,7 +401,11 @@ pub(crate) fn render_comparison_sql(request: &RenderRequest, dialect: &Dialect) 
         };
         let expected_sql =
             cte_state.expected_step_sql(step, expected_input, request.sql_analysis_enabled);
-        comparison_ctes.push(cte_definition_sql(&expected_cte, &expected_sql));
+        comparison_ctes.push(cte_state.definition(
+            &expected_cte,
+            &expected_sql,
+            request.sql_analysis_enabled,
+        ));
         let projection = compared_projection(step);
         select_parts.push(format!(
             "SELECT {step_index} AS step_index, '{}' AS model_name, \
@@ -357,11 +435,16 @@ pub(crate) fn render_comparison_sql(request: &RenderRequest, dialect: &Dialect) 
                         .as_deref()
                         .unwrap_or(&assertion.resolved_sql),
                     request.sql_analysis_enabled,
+                    true,
                 )
             } else {
                 assertion.resolved_sql.clone()
             };
-        comparison_ctes.push(cte_definition_sql(&assertion_cte, &assertion_sql));
+        comparison_ctes.push(cte_state.definition(
+            &assertion_cte,
+            &assertion_sql,
+            request.sql_analysis_enabled,
+        ));
         select_parts.push(format!(
             "SELECT {assertion_index} AS step_index, 'assertion {}' AS model_name, \
              (SELECT COUNT(*) FROM {assertion_cte}) AS actual_count, \
@@ -375,11 +458,7 @@ pub(crate) fn render_comparison_sql(request: &RenderRequest, dialect: &Dialect) 
     if select_parts.is_empty() {
         return String::new();
     }
-    let mut cte_parts: Vec<String> = cte_state
-        .lifted
-        .iter()
-        .map(|(name, sql)| cte_definition_sql(name, sql))
-        .collect();
+    let mut cte_parts = cte_state.definitions(request.sql_analysis_enabled);
     cte_parts.extend(comparison_ctes);
     if request.probe_step_index.is_some() {
         return probe_actual_cte.map_or_else(String::new, |actual_cte| {
@@ -402,7 +481,11 @@ fn existing_cte<'a>(lifted: &'a [(String, String)], name: &str) -> Option<&'a (S
         .find(|(existing, _)| existing.eq_ignore_ascii_case(name))
 }
 
-fn split_top_level_with(sql: &str, dialect: &Dialect) -> Option<(Vec<(String, String)>, String)> {
+fn split_top_level_with(
+    sql: &str,
+    dialect: &Dialect,
+    namespace: Option<&mut CteNamespace>,
+) -> Option<(Vec<(String, String)>, String)> {
     let (protected, identifiers) = protect_backtick_identifiers(sql);
     let mut statements = match dialect.parse(&protected) {
         Ok(statements) => statements,
@@ -412,10 +495,24 @@ fn split_top_level_with(sql: &str, dialect: &Dialect) -> Option<(Vec<(String, St
         return None;
     }
     let mut expression = statements.pop()?;
+    if let Some(namespace) = namespace {
+        expression = match namespace.rewrite(expression, dialect.dialect_type()) {
+            Ok(expression) => expression,
+            Err(_) => return None,
+        };
+    }
     let Expression::Select(select) = &mut expression else {
         return None;
     };
     let with = select.with.take()?;
+    if with.recursive
+        || with.search.is_some()
+        || with.ctes.iter().any(|cte| {
+            !cte.columns.is_empty() || cte.materialized.is_some() || !cte.key_expressions.is_empty()
+        })
+    {
+        return None;
+    }
     let mut ctes = Vec::with_capacity(with.ctes.len());
     for cte in with.ctes {
         let sql = match dialect.generate(&cte.this) {
@@ -464,8 +561,19 @@ fn protect_backtick_identifiers(sql: &str) -> (String, Vec<(String, String)>) {
             }
             cursor = next_identifier + 1;
         }
-        let placeholder = format!("SQB_PROTECTED_IDENTIFIER_{}", identifiers.len());
-        identifiers.push((placeholder.clone(), sql[start - 1..cursor].to_string()));
+        let identifier = &sql[start - 1..cursor];
+        if !identifier[1..identifier.len() - 1].contains(['`', '.']) {
+            protected.push_str(identifier);
+            continue;
+        }
+        let placeholder = match identifiers.iter().find(|(_, value)| value == identifier) {
+            Some((placeholder, _)) => placeholder.clone(),
+            None => {
+                let placeholder = format!("SQB_PROTECTED_IDENTIFIER_{}", identifiers.len());
+                identifiers.push((placeholder.clone(), identifier.to_string()));
+                placeholder
+            }
+        };
         protected.push_str(&placeholder);
     }
     protected.push_str(&sql[cursor..]);

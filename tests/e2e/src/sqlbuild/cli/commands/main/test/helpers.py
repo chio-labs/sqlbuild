@@ -1479,3 +1479,24 @@ def build_declared_window_test(*, window: str, model_name: str) -> dict[str, str
             "SELECT 1\n"
         )
     }
+
+
+def build_cte_scope_project_files(*, queries: tuple[str, ...], expected: str) -> dict[str, str]:
+    """Build a chain with deliberately overlapping model-local CTE names."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            'name = "cte_scope"\nadapter = "duckdb"\n[connection]\ndatabase = "orders.duckdb"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+        ),
+        "tests/unit/chain.sql": (
+            'TEST (name "order_chain");\nWITH '
+            "__source__raw_orders AS (SELECT 1 AS order_id), "
+            f"__expected__orders_{len(queries) - 1} AS ({expected}) SELECT 1"
+        ),
+    }
+    for index, query in enumerate(queries):
+        files[f"models/orders_{index}.sql"] = f"MODEL ();\n{query}"
+    return files

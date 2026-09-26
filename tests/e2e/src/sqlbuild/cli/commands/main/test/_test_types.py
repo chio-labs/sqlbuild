@@ -186,3 +186,11 @@ class SetOperationExpectedE2ETestCase:
     test_files: dict[str, str]
     expected_exit_code: int
     expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ChainCteScopeTestCase:
+    description: str
+    queries: tuple[str, ...]
+    expected_sql: str
+    expected_exit_code: int = 0

@@ -92,7 +92,7 @@ def test_given_adapter_when_building_comparison_sql_then_it_uses_expected_set_di
         BuildComparisonSqlTestCase(
             description="Snowflake comparison lifting preserves STARTSWITH",
             adapter_name="snowflake",
-            expected_fragments=("STARTSWITH(name, 'A')", "picked AS ("),
+            expected_fragments=("STARTSWITH(name, 'A')", "__sqb_cte_0 AS (", "AS picked"),
             expected_absent_fragments=("STARTS_WITH",),
         )
     ],
@@ -205,10 +205,11 @@ def test_given_assertion_step_when_building_comparison_sql_then_it_counts_failin
     "test_case",
     [
         BuildComparisonSqlTestCase(
-            description="matching helper CTEs are lifted once from actual and expected SQL",
+            description="matching helper CTEs retain independent actual and expected scopes",
             adapter_name="duckdb",
             expected_fragments=(
-                "input_values AS",
+                "__sqb_cte_0 AS",
+                "INPUT_VALUES AS",
                 "__actual__orders AS (",
                 "__expected__orders AS (",
             ),
@@ -216,7 +217,7 @@ def test_given_assertion_step_when_building_comparison_sql_then_it_counts_failin
     ],
     ids=lambda case: case.description,
 )
-def test_given_matching_helper_ctes_when_building_comparison_sql_then_lifts_once(
+def test_given_matching_helper_ctes_when_building_comparison_sql_then_keeps_scopes_separate(
     test_case: BuildComparisonSqlTestCase,
 ) -> None:
     adapter: BaseAdapter = build_comparison_test_adapter(test_case.adapter_name)
@@ -254,7 +255,7 @@ def test_given_unasserted_transitive_steps_when_building_comparison_then_emits_o
     for expected_fragment in test_case.expected_fragments:
         assert expected_fragment in comparison_sql
     assert "__actual__stg_orders AS" not in comparison_sql
-    assert comparison_sql.lower().count("shared as") == 1
+    assert comparison_sql.lower().count("__sqb_cte_0 as (") == 1
 
 
 @pytest.mark.parametrize(
@@ -349,9 +350,9 @@ def test_given_preanalyzed_step_with_authored_cte_when_building_comparison_then_
     )
 
     assert (
-        comparison_sql.index("__ref__raw_orders AS") < comparison_sql.index("picked AS")
+        comparison_sql.index("__ref__raw_orders AS") < comparison_sql.index("__sqb_cte_0 AS")
     ) is test_case.expected_result
-    assert comparison_sql.index("picked AS") < comparison_sql.index("__actual__orders AS")
+    assert comparison_sql.index("__sqb_cte_0 AS") < comparison_sql.index("__actual__orders AS")
     assert "__actual__orders AS (\nWITH picked" not in comparison_sql
 
 

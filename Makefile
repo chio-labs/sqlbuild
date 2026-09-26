@@ -142,7 +142,12 @@ E2E_DUCKDB_CLI_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/skills \
 	tests/e2e/src/sqlbuild/cli/commands/main/snowflake \
 	tests/e2e/src/sqlbuild/cli/commands/main/sqlserver \
-	tests/e2e/src/sqlbuild/cli/commands/main/test
+	tests/e2e/src/sqlbuild/cli/commands/main/test/test_chain_cte_scope.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/test/test_cursor_window.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/test/test_helper_scope.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/test/test_set_operation_expected.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/test/test_test.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/test/test_upstream_function_fallback.py
 
 E2E_DUCKDB_VIRTUAL_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/clone \
