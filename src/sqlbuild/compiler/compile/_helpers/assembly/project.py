@@ -255,6 +255,16 @@ def assemble_compiled_project(
         },
     )
     complete_binding_schemas: dict[str, dict[str, str]] = build_complete_binding_schemas(inputs)
+    profile = replace(
+        profile,
+        binding_catalog=create_binding_catalog(
+            dialect=profile.sql_analysis_dialect or "generic",
+            quoted_ignore_case=profile.quoted_identifiers_ignore_case,
+            known_functions=profile.semantic_known_functions,
+            known_types=profile.semantic_known_types,
+            relations={},
+        ),
+    )
     if sql_analysis_enabled:
         for source_input in inputs.source_inputs:
             expression: str | None = source_input.source_entry.expression
@@ -278,16 +288,8 @@ def assemble_compiled_project(
                         ).get(name, InferredNullability.UNKNOWN)
                         for name in shape
                     }
-    profile = replace(
-        profile,
-        binding_catalog=create_binding_catalog(
-            dialect=profile.sql_analysis_dialect or "generic",
-            quoted_ignore_case=profile.quoted_identifiers_ignore_case,
-            known_functions=profile.semantic_known_functions,
-            known_types=profile.semantic_known_types,
-            relations=complete_binding_schemas,
-        ),
-    )
+    profile.binding_catalog.native.update_relations(complete_binding_schemas)
+    profile.binding_catalog.schemas.update(complete_binding_schemas)
     dynamic_contract_analysis_inputs: _DynamicContractAnalysisInputs = (
         _DynamicContractAnalysisInputs(
             families_by_table=dynamic_families_by_table,
