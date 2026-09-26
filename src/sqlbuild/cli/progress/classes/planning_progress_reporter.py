@@ -76,6 +76,7 @@ def _is_planning_completion_message(message: str) -> bool:
             "Built ",
             "Checked ",
             "Compiled ",
+            "Evaluated ",
             "Applied ",
             "Finalized ",
             "Generated ",

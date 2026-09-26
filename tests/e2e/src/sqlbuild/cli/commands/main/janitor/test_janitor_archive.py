@@ -59,7 +59,7 @@ RECENT_ARCHIVE_NAME: str = (
                 "main.customers  ->  main._sqb_archive__",
                 "age 20d, delete after",
                 "main.products  relation is newer than 14 days",
-                "Archived 1 relations.",
+                "Archived 1 relation.",
             ),
             expected_second_run_fragments=(
                 "relations to archive   0",
@@ -405,7 +405,7 @@ def test_given_small_identifier_limit_when_archiving_long_name_then_fits_name_an
             expected_second_stdout_fragments=(
                 "archives to delete     1",
                 "Archives to delete",
-                "Deleted 1 objects",
+                "Deleted 1 object",
             ),
         )
     ],
@@ -486,7 +486,7 @@ def test_given_audit_write_interrupted_after_rename_when_janitor_reruns_then_arc
                 "main.old_orders  ->  main._sqb_archive__",
                 "main.LegacyCustomers  relation name is not a plain lowercase identifier and may "
                 "require quoting; janitor does not act on it",
-                "Archived 1 relations.",
+                "Archived 1 relation.",
             ),
         )
     ],

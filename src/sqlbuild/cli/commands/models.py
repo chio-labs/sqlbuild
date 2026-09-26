@@ -1230,6 +1230,7 @@ class ScopeCommandRequest:
     paths: str = "relative"
     json_output: bool = False
     no_cache: bool = False
+    verbose: bool = False
 
 
 @dataclass(frozen=True)

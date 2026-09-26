@@ -11,8 +11,10 @@ from sqlbuild.cli.progress.classes.native_progress_projector import (
 )
 from sqlbuild.cli.progress.models import NestedProgressChildRow
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.classes.transient_line_coordinator import TransientLineCoordinator
 from sqlbuild.presentation.main.inline_error_lines import format_inline_error_lines
 from sqlbuild.presentation.main.terminal_columns import terminal_columns
+from sqlbuild.presentation.main.transient_line_coordinator import shared_transient_line_coordinator
 from sqlbuild.presentation.main.tree_connector import tree_connector
 
 _LABEL_WIDTH: int = 10
@@ -47,6 +49,7 @@ class NestedCommandProgressCallbacks:
         self._total: int = total
         self._label: str = label
         self._stream: TextIO = stream
+        self._lines: TransientLineCoordinator = shared_transient_line_coordinator()
         self._use_color: bool = use_color
         self._style: CliStyle = CliStyle(use_color=use_color)
         self._name_width: int = max(_NAME_WIDTH, name_width)
@@ -56,7 +59,8 @@ class NestedCommandProgressCallbacks:
         self._active_name: str = ""
         self._active_group_is_new: bool = False
         self._spinner_frame_index: int = 0
-        self._write_lock: threading.Lock = threading.Lock()
+        self._write_lock: threading.RLock = self._lines.lock
+        self._spinner_line_active: bool = False
         self._spinner_stop_event: threading.Event | None = None
         self._spinner_thread: threading.Thread | None = None
         self._cursor_hidden: bool = False
@@ -83,7 +87,10 @@ class NestedCommandProgressCallbacks:
             self._stream.flush()
         if self._is_tty:
             self._hide_cursor()
-            self._write_spinner_line()
+            with self._write_lock:
+                self._spinner_line_active = True
+                self._lines.claim(stream=self._stream, owner=self)
+                self._write_spinner_line()
             self._start_spinner_loop()
 
     def on_item_complete(
@@ -111,6 +118,8 @@ class NestedCommandProgressCallbacks:
         self._stop_spinner_loop()
         if self._is_tty:
             with self._write_lock:
+                self._spinner_line_active = False
+                self._lines.release(owner=self)
                 self._stream.write("\r\033[K")
                 self._stream.flush()
             self._show_cursor()
@@ -162,11 +171,29 @@ class NestedCommandProgressCallbacks:
             else:
                 self._stream.write(f"{continuation_pad}{line}\n")
 
-    def _write_spinner_line(self) -> None:
-        spinner: str = self._style.status(status=_ACTIVE_SPINNER_FRAMES[self._spinner_frame_index])
-        self._spinner_frame_index = (self._spinner_frame_index + 1) % len(_ACTIVE_SPINNER_FRAMES)
-        name: str = self._active_name
+    def clear_transient_line(self) -> None:
+        """Erase the live spinner row so a persistent line can take its place."""
+
         with self._write_lock:
+            self._stream.write("\r\033[K")
+            self._stream.flush()
+
+    def redraw_transient_line(self) -> None:
+        """Draw the live spinner row again below persistent output."""
+
+        self._write_spinner_line()
+
+    def _write_spinner_line(self) -> None:
+        with self._write_lock:
+            if not self._spinner_line_active:
+                return
+            spinner: str = self._style.status(
+                status=_ACTIVE_SPINNER_FRAMES[self._spinner_frame_index]
+            )
+            self._spinner_frame_index = (self._spinner_frame_index + 1) % len(
+                _ACTIVE_SPINNER_FRAMES
+            )
+            name: str = self._active_name
             self._stream.write(
                 f"\r\033[K    {self._label:<{_LABEL_WIDTH}}{name:<{self._name_width}} {spinner}"
             )

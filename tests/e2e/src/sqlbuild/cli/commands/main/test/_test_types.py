@@ -186,3 +186,11 @@ class SetOperationExpectedE2ETestCase:
     test_files: dict[str, str]
     expected_exit_code: int
     expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TerminalTestProgressE2ETestCase:
+    description: str
+    columns: int
+    expected_screen_fragments: tuple[str, ...]
+    expected_summary: str

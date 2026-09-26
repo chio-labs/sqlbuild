@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-
-from sqlbuild.compiler.migrations.types import MigrationDecision, MigrationDiscovery
-from sqlbuild.compiler.planner.models import ModelMigrationPlanEntry, PlanOutput
+from sqlbuild.compiler.planner._helpers.migrations.display import format_model_migrations
+from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.presentation.main.append_overflow_line import append_overflow_line
 from sqlbuild.presentation.main.visible_entries import visible_entries
 from sqlbuild.presentation.models import DisplayOptions
@@ -54,65 +52,4 @@ def format_pre_build_work(
         )
         if entry.irreversible_warning is not None:
             lines.append(f"    WARNING: {entry.irreversible_warning}")
-    return _format_model_migrations(lines=lines, plan=plan, display_options=display_options)
-
-
-def _format_model_migrations(
-    *, lines: list[str], plan: PlanOutput, display_options: DisplayOptions
-) -> list[str]:
-    title: str
-    renamed: bool
-    for title, renamed in (("Migrations", False), ("Renamed", True)):
-        entries: tuple[ModelMigrationPlanEntry, ...] = tuple(
-            entry
-            for entry in plan.migration_entries
-            if (entry.decision == MigrationDecision.RENAMED) is renamed
-        )
-        if not entries:
-            continue
-        lines.append(f"{title} ({len(entries)})")
-        visible: Sequence[ModelMigrationPlanEntry] = visible_entries(
-            entries=entries, options=display_options
-        )
-        entry: ModelMigrationPlanEntry
-        for entry in visible:
-            lines.extend(_migration_lines(entry))
-        lines = append_overflow_line(
-            lines=lines,
-            total_count=len(entries),
-            visible_count=len(visible),
-            indent="  ",
-            options=display_options,
-        )
-    return lines
-
-
-def _migration_lines(entry: ModelMigrationPlanEntry) -> list[str]:
-    origin: str = entry.origin.qualified_name or entry.origin.name
-    destination: str = entry.destination.qualified_name or entry.destination.name
-    if entry.decision == MigrationDecision.RENAMED:
-        return [f"  {entry.model_name}  {origin} -> {destination}  (identity handed over)"]
-    rows: list[str] = [f"  {entry.model_name}  {entry.decision.label}  {origin} -> {destination}"]
-    if entry.decision.checks_compatibility:
-        rows.append(f"    compatibility  {entry.compatibility.value}")
-    if entry.transfer is not None:
-        details: tuple[str | None, ...] = (
-            entry.transfer.label
-            + (
-                ""
-                if entry.transfer_fallback is None
-                else f" ({entry.transfer_fallback.label} if refused)"
-            ),
-            entry.storage_transition,
-            None if entry.promotion is None else f"promote by {entry.promotion.label}",
-        )
-        rows.append(f"    transfer  {', '.join(detail for detail in details if detail)}")
-    if entry.discovery != MigrationDiscovery.MANUAL:
-        rows.append(f"    discovery  {entry.discovery.value}")
-    if entry.completed_at is not None:
-        rows.append(
-            f"    completed  {entry.completed_at.isoformat()} on target "
-            f"'{entry.target_name or 'default'}'"
-        )
-    rows.extend(f"    ! {finding}" for finding in entry.compatibility_findings)
-    return rows
+    return format_model_migrations(lines=lines, plan=plan, display_options=display_options)

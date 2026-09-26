@@ -9,6 +9,8 @@ from contextvars import ContextVar, Token
 from typing import TextIO, cast
 
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.classes.transient_line_coordinator import TransientLineCoordinator
+from sqlbuild.presentation.main.transient_line_coordinator import shared_transient_line_coordinator
 from sqlbuild.runtime.observability.constants import (
     RESOURCE_TERMINALS,
     RETRY_SCHEDULED_EVENT,
@@ -88,6 +90,7 @@ class NativeProgressProjector:
 
     def __init__(self, *, stream: TextIO, use_color: bool) -> None:
         self._stream: TextIO = stream
+        self._lines: TransientLineCoordinator = shared_transient_line_coordinator()
         self._style: CliStyle = CliStyle(use_color=use_color)
         self._is_tty: bool = hasattr(stream, "isatty") and stream.isatty()
         self._lock: threading.RLock = threading.RLock()
@@ -466,8 +469,7 @@ class NativeProgressProjector:
         return f"model={resource_name}  phase={phase}  kind={statement_kind}"
 
     def _write(self, line: str) -> None:
-        self._stream.write(f"{line}\n")
-        self._stream.flush()
+        self._lines.write_persistent(stream=self._stream, text=f"{line}\n")
 
 
 _CURRENT_PROJECTOR: ContextVar[NativeProgressProjector | None] = ContextVar(

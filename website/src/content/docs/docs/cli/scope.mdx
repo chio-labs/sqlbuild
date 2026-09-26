@@ -7,7 +7,9 @@ description: "Inspect declaration visibility, usage, placement, and move impact 
 
 The command is read-only and offline. It does not connect to a warehouse, require warehouse credentials, or inspect relations. It reads the compiler-owned declaration-scope index and reuses a deterministic cache when the relevant source and configuration fingerprint has not changed. Building a cold cache uses the normal compiler expansion path, which loads the configured adapter and may execute authored Python macros; a warm cache hit reconstructs scope facts without importing macro modules.
 
-Text output is deterministic, bounded, and requires no interactive pager.
+Text output is deterministic, bounded, and requires no interactive pager. In a color terminal it
+uses the same color conventions as other commands; redirected output and `NO_COLOR` produce plain
+text.
 
 ## Usage
 
@@ -71,6 +73,7 @@ These identities are for inspection. SQL authored inside the owning model contin
 | `--page-size N` | Return at most `N` declarations per paged section (default: `100`). |
 | `--after CURSOR` | Continue after a declaration identity returned as the previous section's next cursor. |
 | `--paths MODE` | Render paths as `relative`, `compact`, or `none`. |
+| `--verbose`, `-v` | Show each declaration's scope details and column, and keep empty optional sections. |
 | `--json` | Write the canonical versioned JSON report instead of the text tree. |
 
 Filters combine in a fixed order: definition path, kind, glob, then usage. `--dependency-depth`
@@ -88,11 +91,17 @@ The default text report keeps distinct facts in distinct sections:
 - **Scope chain** starts with the resource's owner folder, then shows parent folders and the project
   declaration roles. Its compact labels identify the access rule checked at each path.
 
-Ordinary text rows show each declaration's qualified identity, definition location, visibility,
-reason for appearing, declaration-role root, and safe type or signature metadata where useful.
-`--explain` additionally shows its owning path, narrowest required placement, current consumers,
-dependencies, and the consumers affected by a placement mismatch. JSON includes the complete
-structured declaration report.
+By default, each text row shows a usage marker, the declaration's qualified identity, and its
+`file:line` definition. A one-line legend explains the markers. Empty optional sections
+(**Relationship grants**, **Nearby unavailable**, **Private retained**, **Relationship retained**,
+and **Diagnostics**) are omitted; the core sections are always shown, even when empty.
+
+`--verbose` restores the full rows: kind, visibility, reason for appearing, declaration-role root,
+safe type or signature metadata where useful, and the definition column. It also shows empty
+optional sections. `--explain` always shows the explained declaration in full, plus its owning
+path, narrowest required placement, current consumers, dependencies, and the consumers affected by
+a placement mismatch. JSON includes the complete structured declaration report regardless of
+`--verbose`.
 
 ### See the whole scope at once
 
@@ -142,7 +151,7 @@ Scope
   Path: models/commerce/orders.sql
 
 Used (1)
-  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:5:1
+  └─ ● macro:formatted_order_total  models/commerce/macros/orders.py:5
 
 Scope chain
   ├─ exact-owner-private models/commerce (1)
@@ -150,18 +159,20 @@ Scope chain
   └─ project global (2)
 
 Available (1 of 3, 2 collapsed)
-  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:5:1
+  └─ ● macro:formatted_order_total  models/commerce/macros/orders.py:5
   … 2 globals collapsed; run sqb scope model:orders --globals all
 
-Relationship grants (0 of 0)
-  (none)
+● used by this resource   ○ available but unused   --verbose for scope details
 
-Nearby unavailable (0 of 0)
-  (none)
-
-Diagnostics (0)
-  (none)
 Completeness: complete
+```
+
+With `--verbose`, the same `Used` section shows why each declaration is visible:
+
+```console
+$ sqb scope model:orders --verbose
+Used (1)
+  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:5:1
 ```
 
 This answers several questions without opening declaration files: what the model actually uses,
@@ -184,9 +195,9 @@ Scope
   Path: models/commerce/orders.sql
 
 Used (3)
-  ├─ ● macro:add_tax  [macro; project; dependency; params 1; role macros]  macros/currency.py:1:1
-  ├─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:5:1
-  └─ ● macro:round_money  [macro; project; dependency; params 1; role macros]  macros/currency.py:5:1
+  ├─ ● macro:add_tax  macros/currency.py:1
+  ├─ ● macro:formatted_order_total  models/commerce/macros/orders.py:5
+  └─ ● macro:round_money  macros/currency.py:5
 ```
 
 The remaining report sections follow the `Used` section as usual. The dependency graph comes from

@@ -528,6 +528,7 @@ def _add_inspection_parsers(
     )
     scope_parser.add_argument("--json", action="store_true", default=False)
     scope_parser.add_argument("--no-cache", action="store_true", default=False)
+    scope_parser.add_argument("--verbose", "-v", action="store_true", default=False)
 
     debug_parser: argparse.ArgumentParser = subparsers.add_parser(CliCommand.DEBUG)
     debug_parser.add_argument("--json", action="store_true", default=False)

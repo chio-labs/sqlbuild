@@ -2,14 +2,10 @@ from __future__ import annotations
 
 import json
 import os
-import pty
 import subprocess
-import threading
 from collections.abc import Callable
-from functools import partial
 from pathlib import Path
 from shutil import copytree
-from typing import cast
 
 import pytest
 
@@ -82,66 +78,6 @@ def write_dbt_init_orders_model(*, workspace: Path, amount_cents: int) -> None:
     workspace.joinpath("dbt_project", "models", "dbt_orders.sql").write_text(
         f"select 1 as order_id, {amount_cents} as amount_cents\n",
         encoding="utf-8",
-    )
-
-
-def _capture_pty_output(
-    *, master_fd: int, output_parts: list[bytes], reader_done: threading.Event
-) -> None:
-    try:
-        for chunk in iter(partial(os.read, master_fd, 4096), b""):
-            output_parts.append(chunk)
-    except OSError:
-        return
-    finally:
-        reader_done.set()
-
-
-def run_sqb_with_pty(
-    *, command: tuple[str, ...], project_dir: Path, input_text: str, timeout_seconds: float = 60.0
-) -> subprocess.CompletedProcess[str]:
-    """Run sqb through a real PTY and return captured terminal output."""
-
-    master_fd: int
-    slave_fd: int
-    master_fd, slave_fd = pty.openpty()
-    process_env: dict[str, str] = dict(os.environ)
-    process_env["TERM"] = "xterm-256color"
-    process: subprocess.Popen[bytes] = subprocess.Popen(
-        ["uv", "run", "sqb", "--project-dir", str(project_dir), *command],
-        cwd=REPO_ROOT,
-        stdin=slave_fd,
-        stdout=slave_fd,
-        stderr=slave_fd,
-        env=process_env,
-        close_fds=True,
-    )
-    os.close(slave_fd)
-    output_parts: list[bytes] = []
-    reader_done: threading.Event = threading.Event()
-    reader: threading.Thread = threading.Thread(
-        target=_capture_pty_output,
-        kwargs={"master_fd": master_fd, "output_parts": output_parts, "reader_done": reader_done},
-        daemon=True,
-    )
-    reader.start()
-    try:
-        os.write(master_fd, input_text.encode())
-        process.wait(timeout=timeout_seconds)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait()
-        raise subprocess.TimeoutExpired(command, timeout_seconds) from None
-    finally:
-        reader_done.wait(timeout=1.0)
-        os.close(master_fd)
-        reader.join(timeout=1.0)
-    output: str = b"".join(output_parts).decode(errors="replace")
-    return subprocess.CompletedProcess(
-        args=("sqb", *command),
-        returncode=cast(int, process.returncode),
-        stdout=output,
-        stderr="",
     )
 
 

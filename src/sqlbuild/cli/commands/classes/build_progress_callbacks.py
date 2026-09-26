@@ -50,12 +50,14 @@ from sqlbuild.executor.testing.main.resource_id import sql_test_resource_id
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.classes.transient_line_coordinator import TransientLineCoordinator
 from sqlbuild.presentation.main.coded_error_text import format_coded_error
 from sqlbuild.presentation.main.completion_line import format_completion_line
 from sqlbuild.presentation.main.inline_error_lines import format_inline_error_lines
 from sqlbuild.presentation.main.status_cell import format_status_cell
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
 from sqlbuild.presentation.main.terminal_columns import terminal_columns
+from sqlbuild.presentation.main.transient_line_coordinator import shared_transient_line_coordinator
 from sqlbuild.presentation.main.tree_connector import tree_connector
 from sqlbuild.presentation.types import CompletionState
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
@@ -177,12 +179,13 @@ class BuildProgressCallbacks:
         self._debug: bool = debug
         self._is_tty: bool = hasattr(sys.stdout, "isatty") and sys.stdout.isatty() and not debug
         self._stream = sys.stderr if debug else sys.stdout
+        self._lines: TransientLineCoordinator = shared_transient_line_coordinator()
         self._start_time: float = time.monotonic()
         self._current_node_name: str = ""
         self._current_node_type: ExecutionResourceKind = ExecutionResourceKind.TABLE
         self._current_sub_message: str = ""
         self._spinner_frame_index: int = 0
-        self._write_lock: threading.Lock = threading.Lock()
+        self._spinner_line_active: bool = False
         self._runtime_diagnostic_lock: threading.Lock = threading.Lock()
         self._spinner_stop_event: threading.Event | None = None
         self._spinner_thread: threading.Thread | None = None
@@ -286,7 +289,10 @@ class BuildProgressCallbacks:
         self._current_sub_message = ""
         if self._is_tty:
             self._hide_cursor()
-            self._write_spinner_line()
+            with self._lines.lock:
+                self._spinner_line_active = True
+                self._lines.claim(stream=self._stream, owner=self)
+                self._write_spinner_line()
             self._start_spinner_loop()
 
     def on_sub_progress(self, message: str) -> None:
@@ -320,10 +326,7 @@ class BuildProgressCallbacks:
         _RUNTIME_DIAGNOSTICS_LOGGER.debug(message)
         if self._debug:
             return
-        with self._write_lock:
-            prefix: str = "\r\033[K" if self._is_tty else ""
-            self._stream.write(f"{prefix}{message}\n")
-            self._stream.flush()
+        self._lines.write_persistent(stream=self._stream, text=f"{message}\n")
 
     def _write_runtime_diagnostic_summaries(self) -> None:
         with self._runtime_diagnostic_lock:
@@ -344,7 +347,24 @@ class BuildProgressCallbacks:
                 f"{_query_diagnostic_message(last_query)}"
             )
 
+    def clear_transient_line(self) -> None:
+        """Erase the live spinner row so a persistent line can take its place."""
+
+        with self._lines.lock:
+            self._stream.write("\r\033[K")
+            self._stream.flush()
+
+    def redraw_transient_line(self) -> None:
+        """Draw the live spinner row again below persistent output."""
+
+        self._write_spinner_line()
+
     def _write_spinner_line(self) -> None:
+        with self._lines.lock:
+            if self._spinner_line_active:
+                self._draw_spinner_line()
+
+    def _draw_spinner_line(self) -> None:
         ctr: str = f"{self._counter + 1}/{self._total}".rjust(len(str(self._total)) * 2 + 1)
         display_type: str = materialization_type_display(self._current_node_type)
         status: str = self._style.status(status=_ACTIVE_SPINNER_FRAMES[self._spinner_frame_index])
@@ -357,9 +377,8 @@ class BuildProgressCallbacks:
         max_plain_width: int = max(terminal_columns() - 2, _MIN_NAME_WIDTH)
         if len(plain_part) > max_plain_width:
             plain_part = f"{plain_part[: max_plain_width - 4]}... "
-        with self._write_lock:
-            self._stream.write(f"\r\033[K{plain_part}{status}")
-            self._stream.flush()
+        self._stream.write(f"\r\033[K{plain_part}{status}")
+        self._stream.flush()
 
     def _start_spinner_loop(self) -> None:
         self._stop_spinner_loop()
@@ -388,7 +407,7 @@ class BuildProgressCallbacks:
     def _hide_cursor(self) -> None:
         if self._cursor_hidden:
             return
-        with self._write_lock:
+        with self._lines.lock:
             self._stream.write("\033[?25l")
             self._stream.flush()
         self._cursor_hidden = True
@@ -396,7 +415,7 @@ class BuildProgressCallbacks:
     def _show_cursor(self) -> None:
         if not self._cursor_hidden:
             return
-        with self._write_lock:
+        with self._lines.lock:
             self._stream.write("\033[?25h")
             self._stream.flush()
         self._cursor_hidden = False
@@ -430,7 +449,9 @@ class BuildProgressCallbacks:
 
         self._stop_spinner_loop()
         if self._is_tty:
-            with self._write_lock:
+            with self._lines.lock:
+                self._spinner_line_active = False
+                self._lines.release(owner=self)
                 self._stream.write("\r\033[K")
                 self._stream.flush()
             self._show_cursor()
@@ -660,7 +681,9 @@ class BuildProgressCallbacks:
 
         self._stop_spinner_loop()
         if self._is_tty:
-            with self._write_lock:
+            with self._lines.lock:
+                self._spinner_line_active = False
+                self._lines.release(owner=self)
                 self._stream.write("\r\033[K")
                 self._stream.flush()
             self._show_cursor()

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.constants import (
     PHASE_FAIL_GLYPH,
@@ -25,6 +27,29 @@ def format_surface_header(*, style: CliStyle, title: str, context: str | None = 
     if context:
         rendered = f"{rendered}  {style.muted(context)}"
     return rendered
+
+
+def count_header_style(
+    *, style: CliStyle, title_style: Callable[[str], str] | None = None
+) -> Callable[[str], str]:
+    """Return a header style that renders ``Title (count)`` as a bold title and dim count."""
+
+    resolved_title_style: Callable[[str], str] = title_style or style.section
+
+    def render(text: str) -> str:
+        title, separator, count = text.rpartition(" (")
+        if not separator or not text.endswith(")"):
+            return resolved_title_style(text)
+        return f"{resolved_title_style(title)} {style.muted(f'({count}')}"
+
+    return render
+
+
+def format_count_noun(*, count: int, singular: str, plural: str | None = None) -> str:
+    """Render a count with the singular noun for one and the plural noun otherwise."""
+
+    noun: str = singular if count == 1 else (plural or f"{singular}s")
+    return f"{count} {noun}"
 
 
 def format_phase_line(*, style: CliStyle, ok: bool, label: str, summary: str | None = None) -> str:

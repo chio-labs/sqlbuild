@@ -15,6 +15,8 @@ from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.executor.auditing.main.resource_id import audit_resource_id
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.classes.transient_line_coordinator import TransientLineCoordinator
+from sqlbuild.presentation.main.transient_line_coordinator import shared_transient_line_coordinator
 
 _LABEL_WIDTH: int = 10
 _NAME_WIDTH: int = 50
@@ -34,6 +36,7 @@ class AuditProgressReporter:
         self._entries: tuple[AuditPlanEntry, ...] = entries
         self._worker_limit: int = worker_limit
         self._stream: TextIO = stream
+        self._lines: TransientLineCoordinator = shared_transient_line_coordinator()
         self._style: CliStyle = CliStyle(use_color=use_color)
         self._is_tty: bool = hasattr(stream, "isatty") and stream.isatty()
         self._projector: NativeProgressProjector | None = current_native_progress_projector()
@@ -45,7 +48,8 @@ class AuditProgressReporter:
         self._running: int = 0
         self._completed: int = 0
         self._current_group: str | None = None
-        self._lock: threading.RLock = threading.RLock()
+        self._lock: threading.RLock = self._lines.lock
+        self._closed: bool = False
         self._cursor_hidden: bool = False
         self._on_result: Callable[[AuditExecutionResult], None] | None = None
 
@@ -92,6 +96,8 @@ class AuditProgressReporter:
         """Restore the terminal after the final aggregate update."""
 
         with self._lock:
+            self._closed = True
+            self._lines.release(owner=self)
             if self._is_tty:
                 self._clear_aggregate()
                 if self._cursor_hidden:
@@ -140,9 +146,23 @@ class AuditProgressReporter:
         if self._on_result is not None:
             self._on_result(result)
 
+    def clear_transient_line(self) -> None:
+        """Erase the aggregate row so a persistent line can take its place."""
+
+        with self._lock:
+            self._clear_aggregate()
+            self._stream.flush()
+
+    def redraw_transient_line(self) -> None:
+        """Draw the aggregate row again below persistent output."""
+
+        with self._lock:
+            self._render_aggregate()
+
     def _render_aggregate(self) -> None:
-        if not self._is_tty:
+        if not self._is_tty or self._closed:
             return
+        self._lines.claim(stream=self._stream, owner=self)
         if not self._cursor_hidden:
             self._stream.write("\033[?25l")
             self._cursor_hidden = True

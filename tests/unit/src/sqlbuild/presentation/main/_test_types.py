@@ -26,3 +26,20 @@ class InlineErrorLinesTestCase:
     description: str
     content_width: int
     expected_lines: list[str]
+
+
+@dataclass(frozen=True)
+class CountHeaderTestCase:
+    description: str
+    text: str
+    use_color: bool
+    expected_rendered: str
+
+
+@dataclass(frozen=True)
+class CountNounTestCase:
+    description: str
+    count: int
+    singular: str
+    plural: str | None
+    expected_text: str

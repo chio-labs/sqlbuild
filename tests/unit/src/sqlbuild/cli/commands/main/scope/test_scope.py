@@ -66,6 +66,32 @@ def test_given_scope_index_when_rendering_json_twice_then_bytes_are_deterministi
 
 
 @pytest.mark.parametrize(
+    "test_case", (ScopeCommandCase("verbose json", 0),), ids=lambda case: case.description
+)
+def test_given_verbose_flag_when_rendering_json_then_bytes_match_default_json(
+    test_case: ScopeCommandCase,
+) -> None:
+    index: ScopeIndex = report_scope_lookup(extra_globals=3).index
+    outputs: list[str] = []
+    for verbose in (False, True):
+        stream: StringIO = StringIO()
+        exit_code: int = run_scope_command(
+            request=ScopeCommandRequest(
+                target="model:orders",
+                as_path="models/marts/orders.sql",
+                json_output=True,
+                verbose=verbose,
+            ),
+            load_scope_index=lambda **_kwargs: index,
+            output_stream=stream,
+        )
+        assert exit_code == test_case.expected_exit_code
+        outputs.append(stream.getvalue())
+    assert outputs[0] == outputs[1]
+    assert "\x1b[" not in outputs[0]
+
+
+@pytest.mark.parametrize(
     "test_case", (ScopeCommandCase("partial", 1),), ids=lambda case: case.description
 )
 def test_given_incomplete_index_when_running_then_prints_useful_payload_and_exits_one(

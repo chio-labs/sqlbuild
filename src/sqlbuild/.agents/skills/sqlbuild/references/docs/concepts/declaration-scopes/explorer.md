@@ -75,8 +75,8 @@ Scope
   Path: models/commerce/orders.sql
 
 Used (2)
-  ├─ ● constant:minimum_order_value  [constant; descendant-public; inherited_ancestor; type integer; role models/commerce/constants]  models/commerce/constants/limits.sql:1:1
-  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:4:1
+  ├─ ● constant:minimum_order_value  models/commerce/constants/limits.sql:1
+  └─ ● macro:formatted_order_total  models/commerce/macros/orders.py:4
 
 Scope chain
   ├─ exact-owner-private models/commerce (3)
@@ -84,13 +84,13 @@ Scope chain
   └─ project global (2)
 
 Available (3 of 5, 2 collapsed)
-  ├─ ● constant:minimum_order_value  [constant; descendant-public; inherited_ancestor; type integer; role models/commerce/constants]  models/commerce/constants/limits.sql:1:1
-  ├─ ○ enum:order_status  [enum; descendant-public; inherited_ancestor; members 4; type VARCHAR; role models/commerce/enums]  models/commerce/enums/status.sql:1:1
-  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:4:1
+  ├─ ● constant:minimum_order_value  models/commerce/constants/limits.sql:1
+  ├─ ○ enum:order_status  models/commerce/enums/status.sql:1
+  └─ ● macro:formatted_order_total  models/commerce/macros/orders.py:4
   … 2 globals collapsed; run sqb scope model:orders --globals all
 
-Diagnostics (0)
-  (none)
+● used by this resource   ○ available but unused   --verbose for scope details
+
 Completeness: complete
 ```
 
@@ -98,7 +98,9 @@ Completeness: complete
 dependency when `--dependency-depth` is nonzero. `○` marks a declaration present in the section but
 not in `Used`.
 
-The compact labels translate to ordinary folder rules:
+Add `--verbose` to see each declaration's access details, for example
+`[enum; descendant-public; inherited_ancestor; members 4; type VARCHAR; role models/commerce/enums]`.
+Those labels translate to ordinary folder rules:
 
 | Output label | Meaning in this report |
 |--------------|------------------------|
@@ -122,10 +124,10 @@ declarations. The expanded `Used` section is:
 ```console
 $ sqb scope model:orders --used-only --dependency-depth 1
 Used (4)
-  ├─ ● constant:minimum_order_value  [constant; descendant-public; inherited_ancestor; type integer; role models/commerce/constants]  models/commerce/constants/limits.sql:1:1
-  ├─ ● macro:add_tax  [macro; project; dependency; params 1; role macros]  macros/currency.py:1:1
-  ├─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:4:1
-  └─ ● macro:round_money  [macro; project; dependency; params 1; role macros]  macros/currency.py:5:1
+  ├─ ● constant:minimum_order_value  models/commerce/constants/limits.sql:1
+  ├─ ● macro:add_tax  macros/currency.py:1
+  ├─ ● macro:formatted_order_total  models/commerce/macros/orders.py:4
+  └─ ● macro:round_money  macros/currency.py:5
 ```
 
 SQLBuild derives these edges from actual Python calls, including nested calls and calls reached
@@ -166,6 +168,8 @@ Explanation
      Required path: models/commerce
      Promotion impact: model:orders
 
+● used by this resource   ○ available but unused   --verbose for scope details
+
 Diagnostics (1)
   ERROR S008 models/commerce/macros/orders.py: Declaration 'macro:formatted_order_total' is currently descendant-public at 'models/commerce' (models/commerce/macros/orders.py); required exact-owner-private at 'models/commerce'. Consumers: model:orders. Move it to 'models/commerce/_sqlbuild/_macros/'
 Completeness: complete
@@ -181,8 +185,8 @@ cannot use it. The relevant section is:
 ```console
 $ sqb scope model:orders --include-nearby
 Nearby unavailable (2 of 2)
-  ├─ ○ enum:finance_status  [enum; descendant-public; sibling_scope; members 3; type VARCHAR; role models/finance/enums]  models/finance/enums/status.sql:1:1
-  └─ ○ macro:calculate_margin  [macro; descendant-public; sibling_scope; params 2; role models/finance/macros]  models/finance/macros/margin.py:4:1
+  ├─ ○ enum:finance_status  models/finance/enums/status.sql:1
+  └─ ○ macro:calculate_margin  models/finance/macros/margin.py:4
 ```
 
 The declarations are known, but they belong to a different folder branch. Here, the inspected
@@ -218,13 +222,13 @@ report sections are:
 ```console
 $ sqb scope test:orders__completed_only --used-only
 Used (1)
-  └─ ● enum:order_status  [enum; descendant-public; expected_model through model:orders; members 4; type VARCHAR; role models/commerce/enums]  models/commerce/enums/status.sql:1:1
+  └─ ● enum:order_status  models/commerce/enums/status.sql:1
 
 Relationship grants (1 of 1)
-  └─ ● enum:order_status  [enum; descendant-public; expected_model through model:orders; members 4; type VARCHAR; role models/commerce/enums]  models/commerce/enums/status.sql:1:1
+  └─ ● enum:order_status  models/commerce/enums/status.sql:1
 ```
 
-The compact reason `expected_model through model:orders` means **available through expected output
+With `--verbose`, these rows show the reason `expected_model through model:orders`, which means **available through expected output
 for model `orders`**. With multiple expected models, SQLBuild combines their eligible file-based
 declarations into one deterministic set. Tests include macros in that union; scenarios include only
 enums and constants. Neither receives declarations defined inside a model's `MODEL()` header.
@@ -244,19 +248,15 @@ Move preview
   Destination: models/finance/orders.sql
   Ownership root: models
   Retained (2)
-    ├─ ○ macro:add_tax  [macro; project; global; params 1; role macros]  macros/currency.py:1:1
-    └─ ○ macro:round_money  [macro; project; global; params 1; role macros]  macros/currency.py:5:1
+    ├─ ○ macro:add_tax  macros/currency.py:1
+    └─ ○ macro:round_money  macros/currency.py:5
   Gained (2)
-    ├─ ○ enum:finance_status  [enum; descendant-public; inherited_ancestor; members 3; type VARCHAR; role models/finance/enums]  models/finance/enums/status.sql:1:1
-    └─ ○ macro:calculate_margin  [macro; descendant-public; inherited_ancestor; params 2; role models/finance/macros]  models/finance/macros/margin.py:4:1
+    ├─ ○ enum:finance_status  models/finance/enums/status.sql:1
+    └─ ○ macro:calculate_margin  models/finance/macros/margin.py:4
   Lost (3)
-    ├─ ● constant:minimum_order_value  [constant; descendant-public; inherited_ancestor; type integer; role models/commerce/constants]  models/commerce/constants/limits.sql:1:1
-    ├─ ○ enum:order_status  [enum; descendant-public; inherited_ancestor; members 4; type VARCHAR; role models/commerce/enums]  models/commerce/enums/status.sql:1:1
-    └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:4:1
-  Private retained (0)
-    (none)
-  Relationship retained (0)
-    (none)
+    ├─ ● constant:minimum_order_value  models/commerce/constants/limits.sql:1
+    ├─ ○ enum:order_status  models/commerce/enums/status.sql:1
+    └─ ● macro:formatted_order_total  models/commerce/macros/orders.py:4
   Invalidated usages (2)
     - constant:minimum_order_value
     - macro:formatted_order_total
@@ -287,16 +287,12 @@ Scope chain
   └─ project global (2)
 
 Available (3 of 5, 2 collapsed)
-  ├─ ○ constant:minimum_order_value  [constant; descendant-public; inherited_ancestor; type integer; role models/commerce/constants]  models/commerce/constants/limits.sql:1:1
-  ├─ ○ enum:order_status  [enum; descendant-public; inherited_ancestor; members 4; type VARCHAR; role models/commerce/enums]  models/commerce/enums/status.sql:1:1
-  └─ ○ macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:4:1
+  ├─ ○ constant:minimum_order_value  models/commerce/constants/limits.sql:1
+  ├─ ○ enum:order_status  models/commerce/enums/status.sql:1
+  └─ ○ macro:formatted_order_total  models/commerce/macros/orders.py:4
   … 2 globals collapsed; run sqb scope --at models/commerce/returns/new_return.sql --globals all
 
-Relationship grants (0 of 0)
-  (none)
-
-Nearby unavailable (0 of 0)
-  (none)
+● used by this resource   ○ available but unused   --verbose for scope details
 
 Diagnostics (1)
   ERROR S013 models/commerce/returns/new_return.sql: Runtime usage and relationship facts are unavailable for a prospective path
@@ -327,8 +323,6 @@ Scope folders
      sqb scope model:orders --browse global/macros
      sqb scope model:orders --list global/macros
 
-Diagnostics (0)
-  (none)
 Completeness: complete
 ```
 

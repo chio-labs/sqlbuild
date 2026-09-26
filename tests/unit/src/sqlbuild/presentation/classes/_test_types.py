@@ -38,3 +38,10 @@ class ProgressSpinnersDisabledTestCase:
     description: str
     env_value: str | None
     expected_disabled: bool
+
+
+@dataclass(frozen=True)
+class TransientLineCoordinatorTestCase:
+    description: str
+    persistent_stream_is_tty: bool
+    expected_events: tuple[str, ...]

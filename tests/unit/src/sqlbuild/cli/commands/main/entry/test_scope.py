@@ -65,6 +65,7 @@ def test_given_all_scope_flags_when_dispatching_then_builds_typed_frozen_request
             "compact",
             "--json",
             "--no-cache",
+            "--verbose",
         ),
         handlers=build_handlers(run_scope=record),
     )
@@ -88,6 +89,7 @@ def test_given_all_scope_flags_when_dispatching_then_builds_typed_frozen_request
             paths="compact",
             json_output=True,
             no_cache=True,
+            verbose=True,
         )
     ]
     assert ScopeCommandRequest.__dataclass_params__.frozen is True
