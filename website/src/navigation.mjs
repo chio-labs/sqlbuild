@@ -6,6 +6,7 @@ export const sidebar = [
 			"docs",
 			"docs/quickstart",
 			"docs/feature-comparison",
+			"docs/roadmap",
 			"docs/benchmarks"
 		]
 	},
@@ -27,12 +28,12 @@ export const sidebar = [
 				"collapsed": true,
 				"items": [
 					"docs/concepts/adapters",
+					"docs/concepts/adapters/snowflake",
 					"docs/concepts/adapters/duckdb",
 					"docs/concepts/adapters/motherduck",
-					"docs/concepts/adapters/snowflake",
+					"docs/concepts/adapters/postgres",
 					"docs/concepts/adapters/bigquery",
 					"docs/concepts/adapters/databricks",
-					"docs/concepts/adapters/postgres",
 					"docs/concepts/adapters/sqlserver"
 				]
 			},
