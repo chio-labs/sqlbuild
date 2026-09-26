@@ -299,15 +299,6 @@ impl ProjectCatalog {
         sql: &str,
         schema: &ValidationSchema,
     ) -> Result<ValidationResult, String> {
-        if !self.quoted_ignore_case || !sql.contains('"') {
-            return validation::validation_result(validation::ValidationRequest {
-                sql: sql.to_owned(),
-                dialect: self.dialect.to_string(),
-                schema: schema.clone(),
-                options: self.options.clone(),
-                quoted_ignore_case: false,
-            });
-        }
         let statements = match Dialect::get(self.dialect).parse_with_options(
             sql,
             &polyglot_sql::ParseOptions {
@@ -324,24 +315,40 @@ impl ProjectCatalog {
                 ));
             }
         };
-        let (statements, authored) = identifiers::fold_statements(statements)?;
-        let mut result = polyglot_sql::validation::validate_parsed_with_schema(
-            statements.clone(),
-            self.dialect,
-            schema,
-            &self.options,
-        );
-        if result.valid && validation::may_have_extra_clause_checks(sql) {
+        if statements.iter().any(|statement| !statement.is_statement()) {
+            return Ok(polyglot_sql::validate_with_schema(
+                sql,
+                self.dialect,
+                schema,
+                &self.options,
+            ));
+        }
+        let (statements, authored) = if self.quoted_ignore_case && sql.contains('"') {
+            identifiers::fold_statements(statements)?
+        } else {
+            (statements, Vec::new())
+        };
+        let mut clause_errors: Vec<ValidationError> = Vec::new();
+        if validation::may_have_extra_clause_checks(sql) {
             let mapping = polyglot_sql::mapping_schema_from_validation_schema_with_dialect(
                 schema,
                 self.dialect,
             );
             for statement in &statements {
-                result.errors.extend(validation::missing_clause_columns(
+                clause_errors.extend(validation::missing_clause_columns(
                     &polyglot_sql::build_scope(statement),
                     &mapping,
                 ));
             }
+        }
+        let mut result = polyglot_sql::validation::validate_parsed_with_schema(
+            statements,
+            self.dialect,
+            schema,
+            &self.options,
+        );
+        if result.valid {
+            result.errors.extend(clause_errors);
         }
         for error in &mut result.errors {
             for (normalized, spelling, span) in &authored {
