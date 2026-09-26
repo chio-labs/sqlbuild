@@ -10,7 +10,6 @@ import pytest
 
 from sqlbuild.compiler.compile.models import ExpansionSpan
 from sqlbuild.lint._helpers import native_sql
-from sqlbuild.lint.exceptions import NativeLintError
 from sqlbuild.lint.models import LintBody, LintConfig, LintViolation
 from tests.unit.src.sqlbuild.lint._helpers._test_types import (
     GeneratedRangeFallbackTestCase,
@@ -88,12 +87,16 @@ def test_given_invalid_native_response_when_linting_then_boundary_fails_closed(
         passes=(),
     )
 
-    with pytest.raises(NativeLintError, match=test_case.expected_message):
-        _ = native_sql.run_native_sql_lint(
-            bodies=(body,),
-            contents_by_path={target: "SELECT 1"},
-            config=LintConfig(dialect="duckdb"),
-        )
+    violations: dict[Path, tuple[LintViolation, ...]] = native_sql.run_native_sql_lint(
+        bodies=(body,),
+        contents_by_path={target: "SELECT 1"},
+        config=LintConfig(dialect="duckdb"),
+    )
+    (fault,) = violations[target]
+    assert fault.code == "L003"
+    assert fault.severity == "fault"
+    assert test_case.expected_message in fault.message
+    assert fault.fix is None
 
 
 @pytest.mark.parametrize(

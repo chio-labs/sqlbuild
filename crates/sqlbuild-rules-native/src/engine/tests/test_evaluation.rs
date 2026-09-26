@@ -480,6 +480,49 @@ fn given_dialect_quoting_around_table_functions_when_evaluating_rules_then_model
 }
 
 #[test]
+fn given_unparseable_model_when_evaluating_then_retains_named_rule_fault() -> Result<(), String> {
+    let project_dir = TempDir::new().map_err(|error| error.to_string())?;
+    let test_cases = [test_types::DialectEvaluationTestCase {
+        description: "invalid query is missing evidence rather than a passing contract",
+        dialect: "duckdb",
+        query_sql: "SELECT (",
+        expected_code: "SQBRCONTRACT101",
+    }];
+    for test_case in test_cases {
+        let config = json!({"select": ["SQBRCONTRACT101"], "cache": {"enabled": false}});
+        let mut request: Value = serde_json::from_str(&helpers::request(&project_dir, &config))
+            .map_err(|error| error.to_string())?;
+        request["models"][0]["query_sql"] = json!(test_case.query_sql);
+        request["dialect"] = json!(test_case.dialect);
+        let result: Value = serde_json::from_str(&evaluate_json(&request.to_string())?)
+            .map_err(|error| error.to_string())?;
+        assert_eq!(
+            result["faults"][0]["code"], test_case.expected_code,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            result["faults"][0]["unevaluated"], true,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            result["faults"][0]["path"], request["models"][0]["relative_path"],
+            "{}",
+            test_case.description
+        );
+        assert!(
+            result["faults"][0]["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("could not be evaluated")),
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn given_comment_apostrophes_when_generic_fallback_normalizes_rules_sql_then_model_parses()
 -> Result<(), String> {
     let project_dir = TempDir::new().map_err(|error| error.to_string())?;

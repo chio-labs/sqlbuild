@@ -831,6 +831,17 @@ fn apply_fault_policy(
     evaluated_codes: &[String],
     faults: Vec<Fault>,
 ) -> Result<Vec<Fault>, String> {
+    let unevaluated: BTreeSet<_> = faults
+        .iter()
+        .filter(|fault| fault.unevaluated)
+        .map(|fault| {
+            (
+                fault.code.clone(),
+                fault.path.clone(),
+                fault.message.clone(),
+            )
+        })
+        .collect();
     let findings = faults
         .into_iter()
         .map(fault_to_finding)
@@ -857,15 +868,27 @@ fn apply_fault_policy(
         })
         .collect::<Vec<_>>();
     let grammar = RulesCodeGrammar;
-    apply_suppressions(ApplySuppressionsRequest {
+    let result = apply_suppressions(ApplySuppressionsRequest {
         findings,
         evaluated_codes,
         suppressions: &suppressions,
         scoped_ignores: &scoped_ignores,
         grammar: &grammar,
     })
-    .map(|result| result.findings.into_iter().map(finding_to_fault).collect())
-    .map_err(lifecycle_error)
+    .map_err(lifecycle_error)?;
+    Ok(result
+        .findings
+        .into_iter()
+        .map(|finding| {
+            let mut fault = finding_to_fault(finding);
+            fault.unevaluated = unevaluated.contains(&(
+                fault.code.clone(),
+                fault.path.clone(),
+                fault.message.clone(),
+            ));
+            fault
+        })
+        .collect())
 }
 
 fn fault_to_finding(fault: Fault) -> Result<Finding, String> {
@@ -883,6 +906,7 @@ fn fault_to_finding(fault: Fault) -> Result<Finding, String> {
 
 fn finding_to_fault(finding: Finding) -> Fault {
     Fault {
+        unevaluated: false,
         code: finding.code,
         path: finding.path,
         line: u64::from(finding.line.unwrap_or(1)),
