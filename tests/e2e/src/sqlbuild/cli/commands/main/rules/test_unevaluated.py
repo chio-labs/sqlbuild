@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.rules._test_types import (
+    EvaluatedPredicateCase,
     GroupedRulesCase,
     UnevaluatedResourceCase,
     UnevaluatedRuleCase,
@@ -26,14 +27,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import (
             "models/staging/orders.sql",
             "MODEL ();\nSELECT {expression} AS order_id",
             0,
-        ),
-        UnevaluatedResourceCase(
-            "opaque predicate",
-            "models/staging/orders.sql",
-            "MODEL (database warehouse, schema analytics);\nSELECT 1 AS order_id WHERE NOT SPLIT_PART('orders:pending', ':', 2) LIKE 'pending%'",
-            0,
-            "unsupported syntax: native parser retained an opaque SQL node",
-            "snowflake",
         ),
         UnevaluatedResourceCase(
             "audit guard", "audits/orders.sql", "AUDIT ();\nSELECT {expression} AS order_id"
@@ -87,6 +80,53 @@ def test_given_guarded_resource_when_running_rules_then_reports_failure_and_cove
         item["code"] == "rules-unevaluated" and item["path"] == test_case.path
         for item in diagnostics
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        EvaluatedPredicateCase(
+            "prefix NOT LIKE",
+            "SELECT 1 AS order_id WHERE NOT SPLIT_PART('orders:pending', ':', 2) LIKE 'pending%'",
+        ),
+        EvaluatedPredicateCase(
+            "prefix NOT LIKE inside CASE",
+            "SELECT CASE WHEN NOT SPLIT_PART('orders:pending', ':', 2) LIKE 'pending%' THEN 1 ELSE 0 END AS order_id",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_prefix_not_like_when_running_rules_then_evaluates_the_complete_model(
+    test_case: EvaluatedPredicateCase,
+    tmp_path: Path,
+) -> None:
+    write_unevaluated_rules_project(
+        project_dir=tmp_path,
+        resource_path="models/staging/orders.sql",
+        resource_template="MODEL (database warehouse, schema analytics);\n" + test_case.sql,
+        adapter="snowflake",
+    )
+    for _ in range(2):
+        result: subprocess.CompletedProcess[str] = run_unevaluated_rules_cli(
+            tmp_path,
+            "rules",
+            "--json",
+            "run",
+            "SQBRSQL035",
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        payload: dict[str, Any] = json.loads(result.stdout)
+        assert payload["unevaluated_resources"] == 0
+        assert payload["evaluated_models"] == test_case.expected_evaluated_models
+        assert payload["findings"] == []
+    compiled: subprocess.CompletedProcess[str] = run_unevaluated_rules_cli(
+        tmp_path,
+        "compile",
+        "--no-cache",
+        "--json",
+    )
+    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+    assert json.loads(compiled.stdout)["diagnostics"] == []
 
 
 @pytest.mark.parametrize(

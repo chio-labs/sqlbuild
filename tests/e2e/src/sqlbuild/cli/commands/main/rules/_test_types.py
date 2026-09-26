@@ -4,6 +4,13 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class EvaluatedPredicateCase:
+    description: str
+    sql: str
+    expected_evaluated_models: int = 1
+
+
+@dataclass(frozen=True)
 class GroupedRulesCase:
     description: str
     arguments: tuple[str, ...]
