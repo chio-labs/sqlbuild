@@ -41,6 +41,7 @@ from sqlbuild.lint.models import LintBody, LintConfig, LintEdit, LintViolation
 _NATIVE_LINT_API_VERSION: int = 1
 _NEWLINE_CHARACTER: str = "\n"
 _UNUSED_CTE_CODE: str = "SQBRSQL005"
+_LONG_LITERAL_CODE: str = "SQBRSQL044"
 _PARSE_ERROR_POSITION_PATTERN: re.Pattern[str] = re.compile(
     r"^Parse error at line (?P<line>\d+), column (?P<column>\d+):"
 )
@@ -61,6 +62,8 @@ _SQLBUILD_HARNESS_CTE_PREFIXES: tuple[str, ...] = (
 )
 type _NativeCacheKey = tuple[
     int,
+    int,
+    bool,
     str,
     str,
     tuple[str, ...] | None,
@@ -90,6 +93,8 @@ def run_native_sql_lint(
         if cache_key in requests:
             continue
         payload: dict[str, object] = {
+            "max_literal_length": config.max_literal_length,
+            "header_literals": body.header_literals,
             "max_ranking_order_by": config.max_ranking_order_by,
             "version": _NATIVE_LINT_API_VERSION,
             "sql": body.lint_text,
@@ -149,6 +154,8 @@ def run_native_sql_lint(
 def _native_cache_key(*, body: LintBody, config: LintConfig) -> _NativeCacheKey:
     return (
         config.max_ranking_order_by,
+        config.max_literal_length,
+        body.header_literals,
         body.lint_text,
         config.dialect,
         config.enabled_native_rules,
@@ -259,6 +266,8 @@ def _authored_violation(
     if raw_fix_unavailable_reason is not None and not isinstance(raw_fix_unavailable_reason, str):
         raise NativeLintError("native lint diagnostic has an invalid fix refusal reason")
     mapped: MappedOffset = map_expanded_offset(offset=start, passes=body.passes)
+    if code == _LONG_LITERAL_CODE and mapped.generated:
+        return None
     absolute_offset: int = body.body_start + mapped.offset
     if code == _UNUSED_CTE_CODE and contents.startswith(
         _SQLBUILD_HARNESS_CTE_PREFIXES, absolute_offset

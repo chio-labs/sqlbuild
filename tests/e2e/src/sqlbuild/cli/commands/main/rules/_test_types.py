@@ -19,6 +19,12 @@ class OverrideSettingsCase:
 
 
 @dataclass(frozen=True)
+class LiteralSettingsCase:
+    description: str
+    expected_code: str = "SQBRSQL044"
+
+
+@dataclass(frozen=True)
 class GroupedRulesCase:
     description: str
     arguments: tuple[str, ...]

@@ -26,6 +26,15 @@ class OverridePolicyTestCase:
 
 
 @dataclass(frozen=True)
+class LiteralLimitTestCase:
+    description: str
+    literal: str
+    limit: int
+    expected_status: str
+    expected_compile_exit: int
+
+
+@dataclass(frozen=True)
 class SemanticFixTestCase:
     description: str
     sql: str

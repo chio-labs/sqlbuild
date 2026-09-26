@@ -127,14 +127,13 @@ def evaluate_rules(
         )
         sql_started: float = time.monotonic()
         sql_result: _SqlRulesEvaluation = _run_sql_rules(
-            max_ranking_order_by=effective_config.max_ranking_order_by,
+            config=effective_config,
             rules=native_rules,
             project_dir=resolved_project_dir,
             discovered_inputs=discovered_inputs,
             project=selected_project,
             dialect=dialect,
             selected_model_paths=model_paths,
-            cache_enabled=effective_config.cache.enabled,
             prepared_sql=prepared_sql,
             expansion_reuse=expansion_reuse,
         )
@@ -209,6 +208,7 @@ def prepare_sql_rules(
                 enabled_native_rules=codes,
                 header_rules_enabled=False,
                 max_ranking_order_by=config.max_ranking_order_by,
+                max_literal_length=config.max_literal_length,
             ),
             discovered_inputs=inputs.discovered_inputs,
             compiled_expansions={
@@ -349,8 +349,7 @@ def _run_sql_rules(
     project: CompiledProject,
     dialect: str,
     selected_model_paths: frozenset[str] | None,
-    cache_enabled: bool,
-    max_ranking_order_by: int = 4,
+    config: RulesConfig,
     prepared_sql: PreparedSqlLint | None = None,
     expansion_reuse: SqlExpansionReuse | None = None,
 ) -> _SqlRulesEvaluation:
@@ -363,11 +362,15 @@ def _run_sql_rules(
         if project.settings.sql_analysis and model.config.values.get("sql_analysis") is not False
     }
     bucket: dict[str, dict[str, object]] = (
-        _read_sql_rule_cache(project_dir) if cache_enabled else {}
+        _read_sql_rule_cache(project_dir) if config.cache.enabled else {}
     )
     identities: dict[str, str] = {
         path: _sql_rule_identity(
-            model=model, codes=codes, dialect=dialect, max_ranking_order_by=max_ranking_order_by
+            model=model,
+            codes=codes,
+            dialect=dialect,
+            max_ranking_order_by=config.max_ranking_order_by,
+            max_literal_length=config.max_literal_length,
         )
         for path, model in models_by_path.items()
     }
@@ -402,7 +405,8 @@ def _run_sql_rules(
                 codes=codes,
                 dialect=dialect,
                 sql_expansions=project.sql_expansions,
-                max_ranking_order_by=max_ranking_order_by,
+                max_ranking_order_by=config.max_ranking_order_by,
+                max_literal_length=config.max_literal_length,
             )
             cached_file: tuple[Finding, ...] | None = (
                 None
@@ -422,7 +426,8 @@ def _run_sql_rules(
                 dialect=dialect,
                 enabled_native_rules=codes,
                 header_rules_enabled=False,
-                max_ranking_order_by=max_ranking_order_by,
+                max_ranking_order_by=config.max_ranking_order_by,
+                max_literal_length=config.max_literal_length,
             ),
             selected_paths=frozenset(selected_paths),
             discovered_inputs=discovered_inputs,
@@ -461,7 +466,7 @@ def _run_sql_rules(
         **{path: identities[path] for path in misses},
         **file_identities,
     }
-    if cache_enabled and written_identities:
+    if config.cache.enabled and written_identities:
         by_path: dict[str, list[Finding]] = {path: [] for path in written_identities}
         for finding in evaluated:
             path: str = finding.path.as_posix()
@@ -515,13 +520,19 @@ def _lint_finding(*, violation: LintViolation, project_dir: Path) -> Finding:
 
 
 def _sql_rule_identity(
-    *, model: CompiledModel, codes: tuple[str, ...], dialect: str, max_ranking_order_by: int = 4
+    *,
+    model: CompiledModel,
+    codes: tuple[str, ...],
+    dialect: str,
+    max_ranking_order_by: int = 4,
+    max_literal_length: int = 100,
 ) -> str:
     digest: Any = hashlib.sha256()
     digest.update(_SQL_RULE_CACHE_VERSION.encode())
     digest.update(_SQLBUILD_VERSION.encode())
     digest.update(dialect.encode())
     digest.update(str(max_ranking_order_by).encode())
+    digest.update(f"/{max_literal_length}/".encode())
     digest.update("\0".join(codes).encode())
     digest.update(model.authored_sql.encode())
     digest.update(model.query_sql.encode())
@@ -546,6 +557,7 @@ def _sql_file_rule_identity(
     dialect: str,
     sql_expansions: dict[Path, CompiledSqlExpansion],
     max_ranking_order_by: int = 4,
+    max_literal_length: int = 100,
 ) -> str | None:
     """Identify non-model SQL whose lint depends only on its text; expansions return None."""
 
@@ -559,6 +571,7 @@ def _sql_file_rule_identity(
     for value in (
         _SQL_RULE_CACHE_VERSION,
         str(max_ranking_order_by),
+        str(max_literal_length),
         "file",
         _SQLBUILD_VERSION,
         dialect,

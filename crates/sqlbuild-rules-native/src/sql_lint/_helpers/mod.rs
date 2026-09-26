@@ -4,6 +4,7 @@ pub(crate) mod formatter;
 pub(crate) mod formatter_syntax;
 pub(crate) mod inline_relations;
 pub(crate) mod join_predicates;
+pub(crate) mod literals;
 pub(crate) mod preparation;
 pub(crate) mod ranking;
 pub(crate) mod terminal_shape;

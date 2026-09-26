@@ -26,7 +26,7 @@ from sqlbuild.lint.models import (
 )
 
 _SAFE_RULES: frozenset[str] = frozenset(
-    {"SQBRSQL002", "SQBRSQL003", "SQBRSQL005", "SQBRSQL006", "SQBRSQL008"}
+    {"SQBRSQL002", "SQBRSQL003", "SQBRSQL005", "SQBRSQL006", "SQBRSQL008", "SQBRSQL044"}
 )
 _MAX_PASSES: int = 128
 _APPLIED: str = "applied"

@@ -3,6 +3,15 @@ use std::collections::HashSet;
 use polyglot_sql::tokens::Span;
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct LiteralContext<'a> {
+    pub sql: &'a str,
+    pub tokens: &'a [polyglot_sql::tokens::Token],
+    pub dialect: polyglot_sql::DialectType,
+    pub limit: usize,
+    pub header: bool,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct QueryFacts {
     pub null_comparisons: Vec<Span>,
@@ -75,6 +84,10 @@ pub(crate) struct LintRequest {
     pub allows_empty_fixture_star: bool,
     #[serde(default = "crate::sql_lint::_helpers::ranking::default_limit")]
     pub max_ranking_order_by: usize,
+    #[serde(default = "crate::sql_lint::_helpers::literals::default_limit")]
+    pub max_literal_length: usize,
+    #[serde(default)]
+    pub header_literals: bool,
 }
 
 #[derive(Debug)]

@@ -16,6 +16,7 @@ use crate::sql_lint::models::{
 
 use crate::sql_lint::_helpers::additional::collect_additional_facts;
 use crate::sql_lint::_helpers::inline_relations::collect_inline_query_relation_spans;
+use crate::sql_lint::_helpers::literals::{self, LONG_LITERAL};
 use crate::sql_lint::_helpers::ranking::{self, RANKING_SORT_CAP};
 use crate::sql_lint::_helpers::terminal_shape::collect_terminal_shape_facts;
 
@@ -257,7 +258,7 @@ const DEFAULT_RULES: [&str; 13] = [
     INLINE_QUERY_RELATION.code,
 ];
 
-const ALL_RULE_METADATA: [&LintRuleMetadata; 42] = [
+const ALL_RULE_METADATA: [&LintRuleMetadata; 43] = [
     &NULL_COMPARISON,
     &IMPLICIT_CARTESIAN_JOIN,
     &JOIN_WITHOUT_CONDITION,
@@ -300,6 +301,7 @@ const ALL_RULE_METADATA: [&LintRuleMetadata; 42] = [
     &JOIN_EXPRESSION,
     &FINAL_CTE_NAME,
     &RANKING_SORT_CAP,
+    &LONG_LITERAL,
 ];
 
 fn is_ceremonial_cte_name(name: &str) -> bool {
@@ -365,6 +367,26 @@ pub(crate) fn lint(request: LintRequest) -> Result<LintResponse, String> {
     let tokens = dialect
         .tokenize(&request.sql)
         .map_err(|error| error.to_string())?;
+    if request.max_literal_length == 0 {
+        return Err("max_literal_length must be positive".to_owned());
+    }
+    let literal_diagnostics = if enabled.contains(LONG_LITERAL.code) {
+        literals::diagnostics(crate::sql_lint::models::LiteralContext {
+            sql: &request.sql,
+            tokens: &tokens,
+            dialect: dialect_type,
+            limit: request.max_literal_length,
+            header: request.header_literals,
+        })
+    } else {
+        Vec::new()
+    };
+    if request.header_literals || enabled.len() == 1 && enabled.contains(LONG_LITERAL.code) {
+        return Ok(LintResponse {
+            version: LINT_API_VERSION,
+            diagnostics: literal_diagnostics,
+        });
+    }
     let mut parser = Parser::with_config(
         tokens.clone(),
         ParserConfig {
@@ -417,6 +439,7 @@ pub(crate) fn lint(request: LintRequest) -> Result<LintResponse, String> {
         enabled: &enabled,
     };
     let mut diagnostics = diagnostics(&context);
+    diagnostics.extend(literal_diagnostics);
     if enabled.contains(RANKING_SORT_CAP.code) {
         if request.max_ranking_order_by == 0 {
             return Err("max_ranking_order_by must be positive".to_owned());

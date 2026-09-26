@@ -48,6 +48,7 @@ class LintBody:
     allows_ceremonial_select: bool = False
     allows_dynamic_output_star: bool = False
     allows_empty_fixture_star: bool = False
+    header_literals: bool = False
 
 
 @dataclass(frozen=True)
@@ -113,6 +114,7 @@ class LintConfig:
 
     native_enabled: bool = True
     max_ranking_order_by: int = 4
+    max_literal_length: int = 100
     max_description_lines: int = 10
     line_width: int = 100
     dialect: str = "generic"

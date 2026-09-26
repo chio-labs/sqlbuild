@@ -6,6 +6,8 @@ mod comment_formatter;
 mod empty_fixture_lint;
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/test_literal_limits.rs"]
+mod literal_limits;
 #[path = "tests/test_sql_lint.rs"]
 mod sql_lint;
 #[path = "tests/test_types.rs"]

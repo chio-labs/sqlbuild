@@ -329,6 +329,49 @@ def test_given_multi_branch_boolean_case_when_linting_then_partial_fix_is_withhe
 @pytest.mark.parametrize(
     "test_case",
     [
+        NativeSqlFindingTestCase(
+            description="long literal moved into a macro",
+            sql="SELECT 'pending shipped returned' AS status",
+            selected_rule="SQBRSQL044",
+            expected_violation_count=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_macro_generated_literal_when_linting_then_authored_length_limit_is_satisfied(
+    test_case: NativeSqlFindingTestCase, tmp_path: Path
+) -> None:
+    target: Path = tmp_path / "orders.sql"
+    contents: str = "SELECT __macro('text') AS status"
+    body: LintBody = LintBody(
+        file_path=target,
+        body_start=0,
+        body_end=len(contents),
+        lint_text=test_case.sql,
+        passes=(
+            (
+                ExpansionSpan(
+                    source_start=7,
+                    source_end=21,
+                    output_start=7,
+                    output_end=test_case.sql.index(" AS"),
+                ),
+            ),
+        ),
+    )
+    result: dict[Path, tuple[LintViolation, ...]] = native_sql.run_native_sql_lint(
+        bodies=(body,),
+        contents_by_path={target: contents},
+        config=LintConfig(
+            dialect="duckdb", enabled_native_rules=(test_case.selected_rule,), max_literal_length=8
+        ),
+    )
+    assert sum(len(entries) for entries in result.values()) == test_case.expected_violation_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         NativeSqlFixTestCase(
             description="equal-length expansion wholly inside an unused CTE",
             sql="WITH unused AS (SELECT 42 AS order_id) SELECT 1 AS order_id",

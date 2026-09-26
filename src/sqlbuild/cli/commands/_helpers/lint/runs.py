@@ -24,6 +24,7 @@ from sqlbuild.lint.models import (
 )
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.rule_engine.main.load_config import load_rules_config
+from sqlbuild.rule_engine.models import RulesConfig
 
 
 def resolve_lint_config(*, project_dir: Path) -> LintConfig:
@@ -58,12 +59,12 @@ def resolve_lint_config(*, project_dir: Path) -> LintConfig:
         local_adapter: object = local_payload.get(ADAPTER_CONFIG_KEY)
         if isinstance(local_adapter, str):
             dialect = ADAPTER_DIALECT_TRANSLATIONS.get(local_adapter, local_adapter)
+    rules: RulesConfig = (
+        load_rules_config(project_dir=project_dir) if config_file.is_file() else RulesConfig()
+    )
     return LintConfig(
-        max_ranking_order_by=(
-            load_rules_config(project_dir=project_dir).max_ranking_order_by
-            if config_file.is_file()
-            else 4
-        ),
+        max_literal_length=rules.max_literal_length,
+        max_ranking_order_by=rules.max_ranking_order_by,
         line_width=line_width,
         max_description_lines=max_description_lines,
         dialect=dialect,

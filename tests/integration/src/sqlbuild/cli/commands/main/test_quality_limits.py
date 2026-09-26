@@ -4,11 +4,13 @@ import json
 from pathlib import Path
 from typing import Any
 
+import duckdb
 import pytest
 from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    LiteralLimitTestCase,
     OverridePolicyTestCase,
     RankingLimitTestCase,
 )
@@ -118,6 +120,53 @@ def test_given_project_override_policy_when_compiling_then_local_opt_outs_are_en
     )
     captured: CaptureResult[str] = capsys.readouterr()
     assert test_case.expected_message in captured.out + captured.err
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LiteralLimitTestCase("split at spaces", "'pending shipped returned'", 10, "applied", 0),
+        LiteralLimitTestCase(
+            "regex alternation", "'^(PENDING|SHIPPED|RETURNED)$'", 12, "applied", 0
+        ),
+        LiteralLimitTestCase("doubled quote", "'pending customer''s shipment'", 10, "refused", 1),
+        LiteralLimitTestCase("escape sequence", "'pending\\d shipped returned'", 10, "refused", 1),
+        LiteralLimitTestCase("no split boundary", "'abcdefghijklmnop'", 10, "refused", 1),
+        LiteralLimitTestCase("typed literal", "DATE '2026-01-01'", 8, "refused", 1),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_long_literal_when_fixing_then_preserves_values_or_refuses_with_reason(
+    test_case: LiteralLimitTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = ["SQBRSQL044"]\n'
+        f"max_literal_length = {test_case.limit}\n"
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(f"MODEL (); SELECT {test_case.literal} AS status")
+    assert main(["--project-dir", str(tmp_path), "compile", "--json"]) == 1
+    before: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert any(item["code"] == "SQBRSQL044" for item in before["diagnostics"])
+    assert main(["--project-dir", str(tmp_path), "format", "--fix", "--json"]) == 0
+    fixed: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert any(
+        item["code"] == "SQBRSQL044" and item["status"] == test_case.expected_status
+        for item in fixed["rule_fixes"]
+    )
+    assert (
+        main(["--project-dir", str(tmp_path), "compile", "--json"])
+        == test_case.expected_compile_exit
+    )
+    with duckdb.connect() as connection:
+        expected: list[tuple[Any, ...]] = connection.execute(
+            f"SELECT {test_case.literal}"
+        ).fetchall()
+        actual: list[tuple[Any, ...]] = connection.execute(
+            model.read_text().split(";", 1)[1]
+        ).fetchall()
+    assert actual == expected
 
 
 if __name__ == "__main__":

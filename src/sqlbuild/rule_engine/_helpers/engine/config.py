@@ -33,6 +33,7 @@ def load_rules_config(project_dir: Path) -> RulesConfig:
     if not isinstance(ranking_limit, int) or isinstance(ranking_limit, bool) or ranking_limit < 1:
         raise RulesError("rules.max_ranking_order_by must be a positive integer")
     return RulesConfig(
+        max_literal_length=cast(int, payload.get("max_literal_length", 100)),
         allow_model_overrides=payload.get("allow_model_overrides", True) is True,
         max_ranking_order_by=ranking_limit,
         select=_strings(payload.get("select")),

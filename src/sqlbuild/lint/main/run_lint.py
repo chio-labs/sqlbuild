@@ -78,7 +78,7 @@ def run_lint(
                     contents=contents,
                     headers=headers,
                     context=context,
-                    dialect=config.dialect,
+                    config=config,
                     project_dir=project_dir,
                     allows_dynamic_output_star=file_path.resolve() in dynamic_output_paths,
                     compiled_expansions=compiled_expansions,
@@ -125,12 +125,24 @@ def _prepared_bodies(
     contents: str,
     headers: tuple[HeaderSpan, ...],
     context: SqlExpansionContext,
-    dialect: str,
+    config: LintConfig,
     project_dir: Path,
     allows_dynamic_output_star: bool,
     compiled_expansions: dict[Path, CompiledSqlExpansion] | None,
 ) -> tuple[LintBody, ...]:
     bodies: list[LintBody] = []
+    if any("SQBRSQL044".startswith(code) for code in config.enabled_native_rules or ()):
+        bodies.extend(
+            LintBody(
+                file_path=file_path,
+                body_start=header.start,
+                body_end=header.end,
+                lint_text=contents[header.start : header.end],
+                passes=(),
+                header_literals=True,
+            )
+            for header in headers
+        )
     compiled_expansion: CompiledSqlExpansion | None = (compiled_expansions or {}).get(file_path)
     external_identifiers: tuple[str, ...] = external_identifiers_for_headers(
         contents=contents, headers=headers
@@ -155,7 +167,7 @@ def _prepared_bodies(
                     contents=contents,
                     body_range=(body_start, body_end),
                     context=context,
-                    dialect=dialect,
+                    dialect=config.dialect,
                     external_identifiers=external_identifiers,
                     allows_ceremonial_select=allows_ceremonial_select,
                     allows_dynamic_output_star=allows_dynamic_output_star,

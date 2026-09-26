@@ -104,3 +104,11 @@ pub(crate) struct FunctionDepthFailureTestCase {
     pub expected_code: &'static str,
     pub expected_limit: &'static str,
 }
+pub(super) struct LiteralLimitTestCase {
+    pub description: &'static str,
+    pub sql: &'static str,
+    pub dialect: &'static str,
+    pub header: bool,
+    pub expected_fix: bool,
+    pub expected_text: &'static str,
+}

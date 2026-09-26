@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.rules._test_types import (
+    LiteralSettingsCase,
     OverrideSettingsCase,
     RankingSettingsCase,
 )
@@ -84,6 +85,49 @@ def test_given_cached_suppression_when_overrides_are_forbidden_then_compile_fail
     )
     assert changed.returncode == test_case.expected_exit
     assert test_case.expected_message in changed.stdout + changed.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [LiteralSettingsCase("lowered literal limit and verified repair")],
+    ids=lambda case: case.description,
+)
+def test_given_cached_literal_when_limit_is_lowered_then_fix_restores_compliance(
+    test_case: LiteralSettingsCase, tmp_path: Path
+) -> None:
+    project: Path = tmp_path / "sqlbuild_project.toml"
+    config: str = 'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = ["SQBRSQL044"]\n'
+    project.write_text(config + "max_literal_length = 20\n")
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text("MODEL (); SELECT 'pending shipped' AS status")
+    command: list[str] = [
+        str(Path(sys.executable).with_name("sqb")),
+        "--project-dir",
+        str(tmp_path),
+    ]
+    initial: subprocess.CompletedProcess[str] = subprocess.run(
+        [*command, "compile", "--json"], capture_output=True, text=True, timeout=30, check=False
+    )
+    assert initial.returncode == 0, initial.stdout + initial.stderr
+    project.write_text(config + "max_literal_length = 8\n")
+    changed: subprocess.CompletedProcess[str] = subprocess.run(
+        [*command, "compile", "--json"], capture_output=True, text=True, timeout=30, check=False
+    )
+    assert changed.returncode == 1
+    assert test_case.expected_code in changed.stdout
+    fixed: subprocess.CompletedProcess[str] = subprocess.run(
+        [*command, "format", "--fix", "--json"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert fixed.returncode == 0, fixed.stdout + fixed.stderr
+    final: subprocess.CompletedProcess[str] = subprocess.run(
+        [*command, "compile", "--json"], capture_output=True, text=True, timeout=30, check=False
+    )
+    assert final.returncode == 0, final.stdout + final.stderr
 
 
 if __name__ == "__main__":

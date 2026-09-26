@@ -35,6 +35,9 @@ pub(crate) fn load(project_dir: &Path) -> Result<RulesConfig, String> {
         }
     };
     validate(&config)?;
+    if config.max_literal_length == 0 {
+        return Err("rules.max_literal_length must be a positive integer".to_owned());
+    }
     if !config.allow_model_overrides {
         if let Some(entry) = config.rule_ignores.first() {
             return Err(format!(
@@ -64,6 +67,7 @@ fn validate_raw(value: &toml::Value) -> Result<(), String> {
         .ok_or_else(|| "rules must be a table".to_owned())?;
     let known = [
         "allow_model_overrides",
+        "max_literal_length",
         "max_ranking_order_by",
         "select",
         "ignore",
