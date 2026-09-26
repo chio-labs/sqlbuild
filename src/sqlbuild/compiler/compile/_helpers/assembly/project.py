@@ -61,7 +61,7 @@ from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     binding_schema_for_model,
     build_complete_binding_schemas,
     get_expression_source_shape,
-    inferred_binding_shape,
+    published_model_shape,
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     build_declared_column_types as _build_column_types_by_table,
@@ -1197,11 +1197,12 @@ def _complete_inferred_bindings(
         if analysis.columns and star_known:
             complete_schemas.setdefault(
                 name,
-                inferred_binding_shape(
+                published_model_shape(
                     sql=results[index].cleaned_sql or request.query_sql,
                     profile=inference_profile,
                     columns={column.name: column.type or "UNKNOWN" for column in analysis.columns},
                     inputs={table: complete_schemas.get(table, {}) for table in required_names},
+                    config_values=request.model_input.config.values,
                 ),
             )
     deferred_validation_indices: list[int] = []

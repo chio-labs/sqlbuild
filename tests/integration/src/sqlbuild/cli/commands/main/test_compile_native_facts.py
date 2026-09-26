@@ -15,6 +15,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     BoundProjectionCompileTestCase,
     DerivedNativeCompileTestCase,
     KeywordFunctionCompileTestCase,
+    SnapshotValidityCompileTestCase,
     StarExpansionCompileTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import compile_duckdb_projection
@@ -124,6 +125,62 @@ def test_given_star_over_inferred_upstream_when_compiling_then_downstream_bindin
 
         assert exit_code == test_case.expected_exit_code
         assert tuple(item["code"] for item in diagnostics) == test_case.expected_diagnostics
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SnapshotValidityCompileTestCase(
+            description="default validity columns are readable downstream",
+            snapshot_config="",
+            downstream_sql=(
+                'SELECT customer_id, valid_from FROM __ref("customer_snapshot") '
+                "WHERE valid_to IS NULL"
+            ),
+            expected_exit_code=0,
+            expected_diagnostics=(),
+        ),
+        SnapshotValidityCompileTestCase(
+            description="renamed validity columns are readable downstream",
+            snapshot_config=", valid_from_column active_from, valid_to_column active_to",
+            downstream_sql=(
+                'SELECT customer_id, active_from FROM __ref("customer_snapshot") '
+                "WHERE active_to IS NULL"
+            ),
+            expected_exit_code=0,
+            expected_diagnostics=(),
+        ),
+        SnapshotValidityCompileTestCase(
+            description="unknown snapshot columns are still rejected",
+            snapshot_config="",
+            downstream_sql='SELECT customer_id, missing_column FROM __ref("customer_snapshot")',
+            expected_exit_code=1,
+            expected_diagnostics=("B002",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_snapshot_reader_when_compiling_then_validity_columns_are_known(
+    test_case: SnapshotValidityCompileTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "customer_snapshot.sql").write_text(
+        "MODEL (materialized snapshot, unique_key [customer_id], snapshot_strategy timestamp, "
+        f"updated_at updated_at{test_case.snapshot_config});\n"
+        "SELECT 1 AS customer_id, 'pro' AS plan, TIMESTAMP '2026-01-01' AS updated_at"
+    )
+    (models / "current_customers.sql").write_text(f"MODEL ();\n{test_case.downstream_sql}")
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+    result: dict[str, object] = json.loads(capsys.readouterr().out)
+    diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], result["diagnostics"])
+
+    assert exit_code == test_case.expected_exit_code
+    assert tuple(item["code"] for item in diagnostics) == test_case.expected_diagnostics
 
 
 @pytest.mark.parametrize(
