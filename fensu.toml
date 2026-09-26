@@ -251,6 +251,11 @@ rule = "FPRSR307"
 path = "crates/sqlbuild-rules-native/src/semantic_validation/main.rs"
 reason = "This module owns the existing coarse native schema-validation boundary exposed through PyO3."
 
+[[targets.rust.rule_exceptions]]
+rule = "FPRSS201"
+path = "crates/sqlbuild-rules-native/src/semantic_validation/models.rs"
+reason = "ProjectCatalog implements Debug manually because Polyglot SchemaValidationOptions does not implement Debug; other models derive it."
+
 [targets.rust.rule_options.FPRSL301]
 forbidden_packages = [
     "sqlbuild-structure-checker",

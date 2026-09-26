@@ -16,6 +16,54 @@ use crate::rules::main::{catalogue, selected_codes};
 const SKILL_OWNER: &str = "sqlbuild";
 const SKILL_IDENTITY: &str = "sqlbuild-rules";
 
+#[pyfunction]
+fn normalize_analysis_sql(
+    py: Python<'_>,
+    request: crate::semantic_validation::models::NormalizationInput,
+) -> PyResult<String> {
+    py.detach(|| crate::semantic_validation::main::normalize::normalize_analysis_sql(request))
+        .map_err(value_error)
+}
+
+#[pyfunction]
+fn normalize_dialect_sql(py: Python<'_>, sql: &str, dialect: &str) -> PyResult<String> {
+    py.detach(|| {
+        crate::semantic_validation::main::normalize_dialect::normalize_dialect_sql(sql, dialect)
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
+fn binding_diagnostics(
+    py: Python<'_>,
+    sql: &str,
+    dialect: &str,
+    rows: Vec<(
+        String,
+        String,
+        Option<usize>,
+        Option<usize>,
+        Option<usize>,
+        Option<usize>,
+        String,
+    )>,
+) -> PyResult<
+    Vec<(
+        String,
+        String,
+        Option<usize>,
+        Option<usize>,
+        Option<usize>,
+        Option<usize>,
+        String,
+    )>,
+> {
+    py.detach(|| {
+        crate::semantic_validation::main::diagnostics::binding_diagnostics(sql, dialect, rows)
+    })
+    .map_err(value_error)
+}
+
 fn value_error(error: impl std::fmt::Display) -> PyErr {
     PyValueError::new_err(error.to_string())
 }
@@ -343,6 +391,11 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(finalize_rule_findings_json, module)?)?;
     module.add_function(wrap_pyfunction!(lint_sql_json, module)?)?;
     module.add_function(wrap_pyfunction!(prepare_lint_sql, module)?)?;
+    module.add_class::<crate::semantic_validation::models::ProjectCatalog>()?;
+    module.add_class::<crate::semantic_validation::models::BindingPositions>()?;
+    module.add_function(wrap_pyfunction!(normalize_analysis_sql, module)?)?;
+    module.add_function(wrap_pyfunction!(normalize_dialect_sql, module)?)?;
+    module.add_function(wrap_pyfunction!(binding_diagnostics, module)?)?;
     module.add_function(wrap_pyfunction!(lint_backtick_identifiers, module)?)?;
     module.add_function(wrap_pyfunction!(lint_sql_batch_json, module)?)?;
     module.add_function(wrap_pyfunction!(format_sql_json, module)?)?;
