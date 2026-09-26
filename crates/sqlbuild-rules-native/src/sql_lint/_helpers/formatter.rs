@@ -14,6 +14,8 @@ use crate::sql_lint::models::{FormatRequest, FormatResponse};
 
 const COMMENT_ATTACHMENT_FAILURE: &str =
     "native formatter could not preserve comment token attachments";
+const TOKEN_PRESERVATION_FAILURE: &str =
+    "native formatter would change authored SQL tokens, not only layout";
 const UNSUPPORTED_SQL_FAILURE: &str =
     "native formatter could not safely restore literal or cast spelling";
 
@@ -80,7 +82,11 @@ fn try_format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
         original_tokens: &semantic_tokens,
         comments: &comments,
     };
-    let formatted = format_once(&neutral, &formatted_context)?;
+    let formatted = preserve_authored_tokens(
+        &neutral,
+        format_once(&neutral, &formatted_context)?,
+        &dialect,
+    )?;
     let formatted_tokens = dialect
         .tokenize(&formatted)
         .map_err(|error| error.to_string())?;
@@ -103,12 +109,103 @@ fn try_format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
         original_tokens: &second_semantic_tokens,
         comments: &second_comments,
     };
-    let second_pass = format_once(&second_neutral, &second_context)?;
+    let second_pass = preserve_authored_tokens(
+        &second_neutral,
+        format_once(&second_neutral, &second_context)?,
+        &dialect,
+    )?;
     if second_pass != formatted {
         return Err("native formatter output is not idempotent".to_string());
     }
     let changed = formatted != original;
     response(formatted, changed, true, None)
+}
+
+/// Restores authored token text into generated layout, refusing any structural token change.
+pub(crate) fn preserve_authored_tokens(
+    authored_sql: &str,
+    mut formatted: String,
+    dialect: &Dialect,
+) -> Result<String, String> {
+    let authored = dialect
+        .tokenize(authored_sql)
+        .map_err(|error| error.to_string())?;
+    let generated = dialect
+        .tokenize(&formatted)
+        .map_err(|error| error.to_string())?;
+    let mut replacements: Vec<(usize, usize, String)> = Vec::new();
+    let mut authored_index = 0;
+    let mut generated_index = 0;
+    while authored_index < authored.len() || generated_index < generated.len() {
+        let before = authored.get(authored_index);
+        let after = generated.get(generated_index);
+        match (before, after) {
+            (before, Some(after))
+                if after.token_type == TokenType::As
+                    && before.is_none_or(|token| token.token_type != TokenType::As) =>
+            {
+                generated_index += 1;
+            }
+            (Some(before), Some(after)) if tokens_align(before, after) => {
+                let authored_text = raw_token_text(authored_sql, before)?;
+                let generated_text = raw_token_text(&formatted, after)?;
+                if authored_text != generated_text
+                    && !(is_unquoted_word(&authored_text)
+                        && authored_text.eq_ignore_ascii_case(&generated_text))
+                {
+                    replacements.push((after.span.start, after.span.end, authored_text));
+                }
+                authored_index += 1;
+                generated_index += 1;
+            }
+            (Some(before), after) if is_optional_terminator(&authored, authored_index, before) => {
+                if after.is_some_and(|token| token.token_type == before.token_type) {
+                    generated_index += 1;
+                }
+                authored_index += 1;
+            }
+            (None, Some(after)) if after.token_type == TokenType::Semicolon => {
+                generated_index += 1;
+            }
+            _ => return Err(TOKEN_PRESERVATION_FAILURE.to_string()),
+        }
+    }
+    for (start, end, text) in replacements.into_iter().rev() {
+        let start = char_to_byte(&formatted, start)?;
+        let end = char_to_byte(&formatted, end)?;
+        formatted.replace_range(start..end, &text);
+    }
+    Ok(formatted)
+}
+
+fn tokens_align(before: &Token, after: &Token) -> bool {
+    before.token_type == after.token_type || (is_word_token(before) && is_word_token(after))
+}
+
+fn is_word_token(token: &Token) -> bool {
+    is_unquoted_word(&token.text)
+}
+
+fn is_unquoted_word(text: &str) -> bool {
+    let mut characters = text.chars();
+    characters
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+        && characters
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '$'))
+}
+
+fn is_optional_terminator(tokens: &[Token], index: usize, token: &Token) -> bool {
+    token.token_type == TokenType::Semicolon
+        || (token.token_type == TokenType::Comma
+            && tokens
+                .get(index + 1)
+                .is_some_and(|next| next.token_type == TokenType::From))
+}
+
+fn raw_token_text(sql: &str, token: &Token) -> Result<String, String> {
+    char_slice(sql, token.span.start, token.span.end)
+        .ok_or_else(|| TOKEN_PRESERVATION_FAILURE.to_string())
 }
 
 #[derive(Debug, Clone)]

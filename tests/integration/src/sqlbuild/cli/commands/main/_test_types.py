@@ -150,6 +150,16 @@ class FormatCompileIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class AuthoredSpellingFormatIntegrationTestCase:
+    """One authored function or operator spelling that formatting must keep."""
+
+    description: str
+    adapter: str
+    authored_expression: str
+    expected_expression: str
+
+
+@dataclass(frozen=True)
 class BacktickDialectFormatIntegrationTestCase:
     """One backtick-identifier adapter whose macro call must survive formatting."""
 
