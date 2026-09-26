@@ -27,16 +27,6 @@ _SEMANTIC_HELP: dict[str, str] = {
     "B300": "change the metadata column name to an existing output column",
     "B301": "align this declared metadata or audit value with the column or argument type",
     "B302": "align the SQL-test fixture or expected columns with the tested resource's output",
-    "W210": "check comparison inputs for values that cannot be converted at runtime",
-    "W211": "check arithmetic inputs before relying on implicit numeric conversion",
-    "W212": "validate values before assigning them through an implicit conversion",
-    "W213": "validate the cast input or declare the extension-defined target type",
-    "W214": "validate values converted between these set-operation branches",
-    "W215": "handle NULL explicitly when this predicate must return TRUE or FALSE",
-    "W216": "validate function arguments before their implicit conversion",
-    "W217": "convert aggregate inputs explicitly to the intended result type",
-    "W218": "use a wider numeric type or bound the inputs to avoid overflow",
-    "W219": "use a target type with enough length or precision to avoid truncation",
 }
 
 

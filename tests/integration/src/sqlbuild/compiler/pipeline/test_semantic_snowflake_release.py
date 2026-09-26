@@ -46,9 +46,10 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
             'SELECT (/* output identity */ quantity) AS quantity FROM __source("orders")',
         ),
         SnowflakeSemanticReleaseCase(
-            "runtime set conversion",
+            "implicit set conversion",
             "SELECT 'pending'::VARCHAR AS value UNION ALL SELECT 1",
-            expected_codes=("W214",),
+            expected_codes=("B215",),
+            expected_exit_code=1,
         ),
         SnowflakeSemanticReleaseCase(
             "directional accepted conversion", "SELECT TRUE AS value UNION ALL SELECT 1"

@@ -178,25 +178,24 @@ def test_given_macro_before_invalid_aggregate_when_compiling_then_reports_author
     "test_case",
     [
         SemanticCompileCase(
-            "runtime equality", _UPSTREAM, "SELECT 1 = 'not-a-number' AS result", "W213"
+            "runtime equality", _UPSTREAM, "SELECT 1 = 'not-a-number' AS result", "B218"
         ),
         SemanticCompileCase(
             "runtime cast",
             _UPSTREAM,
             "SELECT CAST(TIMESTAMP '2026-01-01' AS INTEGER) AS result",
-            "W213",
+            "B218",
         ),
         SemanticCompileCase(
-            "identical span-less warnings",
+            "identical span-less conversions are reported once",
             _UPSTREAM,
             "SELECT 1 = 'not-a-number' AS first_result, 2 = 'not-a-number' AS second_result",
-            "W213",
-            expected_warning_count=2,
+            "B218",
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_runtime_conversion_when_compiling_cold_and_warm_then_warnings_do_not_block(
+def test_given_implicit_conversion_when_compiling_cold_and_warm_then_errors_block(
     test_case: SemanticCompileCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     write_semantic_binding_project(
@@ -205,21 +204,19 @@ def test_given_runtime_conversion_when_compiling_cold_and_warm_then_warnings_do_
         downstream_sql=test_case.header + test_case.downstream,
     )
     arguments: list[str] = ["--no-color", "--project-dir", str(tmp_path), "compile", "--json"]
-    assert main(arguments) == 0
+    assert main(arguments) == 1
     cold: dict[str, Any] = json.loads(capsys.readouterr().out)
-    assert main(arguments) == 0
+    assert main(arguments) == 1
     warm: dict[str, Any] = json.loads(capsys.readouterr().out)
     assert cold["diagnostics"] == warm["diagnostics"]
-    assert cold["summary"]["errors"] == 0
-    assert cold["summary"]["warnings"] == test_case.expected_warning_count
-    warnings: list[dict[str, Any]] = cold["diagnostics"]
-    assert test_case.expected_code in {warning["code"] for warning in warnings}
-    assert all(warning["severity"] == "warning" for warning in warnings)
-    assert len(warnings) == test_case.expected_warning_count
-    assert main(arguments[:-1]) == 0
+    assert cold["summary"]["warnings"] == 0
+    errors: list[dict[str, Any]] = cold["diagnostics"]
+    assert cold["summary"]["errors"] == len(errors) == test_case.expected_diagnostic_count
+    assert {error["code"] for error in errors} == {test_case.expected_code}
+    assert all(error["severity"] == "error" for error in errors)
+    assert main(arguments[:-1]) == 1
     human: str = capsys.readouterr().out
-    assert human.count(f"warning[{test_case.expected_code}]") == 1
-    assert f"{test_case.expected_warning_count} warning" in human
+    assert f"error[{test_case.expected_code}]" in human
 
 
 if __name__ == "__main__":

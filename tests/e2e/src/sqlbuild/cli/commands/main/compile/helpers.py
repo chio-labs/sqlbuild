@@ -52,7 +52,7 @@ def semantic_corpus_cases(*, group: str) -> list[dict[str, Any]]:
     outcomes: dict[str, list[str]] = json.loads(
         path.with_name("native_outcomes.json").read_text(encoding="utf-8")
     )
-    resolved: dict[str, list[dict[str, Any]]] = {name: [] for name in (*raw, "warning")}
+    resolved: dict[str, list[dict[str, Any]]] = {name: [] for name in raw}
     overrides: dict[str, tuple[str, str]] = {}
     for outcome, identifiers in outcomes.items():
         destination, code = outcome.split(":")

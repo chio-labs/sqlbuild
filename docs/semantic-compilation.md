@@ -42,12 +42,12 @@ Expression type checks are enabled for **DuckDB (including MotherDuck), PostgreS
 and BigQuery**. Other adapters retain reference and semantic checks without expression type checks.
 `TYPE_CHECKED_DIALECTS` in `compiler/sql_analysis/constants.py` owns this gate.
 
-Only proven bind-time rejections are errors. For example, DuckDB rejects `ordered_at > 5` for a
-TIMESTAMP column, but accepts `ordered_at > '2026-01-01'`. Accepted implicit conversions that may
-fail on data produce **W21x compile warnings**, with source locations and a warning summary count;
-they do not fail compilation. Identical warnings at the same reported location are grouped with
-an occurrence count in human output; JSON and the summary retain every occurrence. Unknown input
-types never cause type errors. Dialect coercions differ: numeric predicates are accepted by DuckDB
+Proven bind-time rejections and implicit conversions are both errors. For example, DuckDB rejects
+`ordered_at > 5` for a TIMESTAMP column. Snowflake accepts `order_id = customer_code` for an
+INTEGER and a VARCHAR column, but the conversion fails on non-numeric values, so SQLBuild reports
+it as a blocking B217 error; write the conversion explicitly. Typed string literals such as
+`ordered_at > '2026-01-01'` remain valid. Columns from `SELECT *` are type-checked through their
+upstream shapes in every query. Unknown input types never cause type errors. Dialect coercions differ: numeric predicates are accepted by DuckDB
 but rejected by PostgreSQL, Snowflake, and BigQuery.
 Snowflake's function catalogue is partial and deliberately does not reject unknown function names.
 Function signatures and overload coverage remain partial; compilation is not a replacement for
@@ -134,9 +134,9 @@ uses a bounded cache of token alignments, shared by all diagnostics on the same 
 
 Snowflake set-operation checks are directional: each branch is compared with the accumulated
 result type, following the query's operator precedence (`INTERSECT` binds more tightly than
-`UNION` and `EXCEPT`). Proven incompatibilities produce B215; supported conversions whose success
-depends on runtime values produce non-blocking W214 warnings. For example, combining a VARCHAR
-branch with a numeric branch can require a value-dependent numeric conversion.
+`UNION` and `EXCEPT`). Proven incompatibilities and implicit conversions whose success depends on
+runtime values both produce blocking B215 errors. For example, combining a VARCHAR branch with a
+numeric branch requires a value-dependent numeric conversion; cast the branch column explicitly.
 
 An unmodelled Snowflake function has an unknown result type rather than inheriting its first
 argument's type. SQLBuild retains the output name and lineage, reports partial type coverage, and
@@ -158,14 +158,21 @@ the notice never reduces them to a count alone.
 | B101 | E202 | Unknown function |
 | B102 | E203 or project declaration | Invalid function arity |
 | B210–B219 | E210–E219 | Proven native type/shape errors on enabled dialects |
+| B211–B218 | W210–W216 | Implicit conversions; blocking, fixed by an explicit `CAST` or comparison |
 | B216 | E216 | Set-operation, subquery, or row arity |
 | B230–B232 | E230–E232 | Grouping, aggregate, and window semantics |
 | B233 | E233 | Duplicate scope names, according to dialect rules |
 | B234 | E234 | Invalid LIMIT/OFFSET bounds |
-| W210–W219 | W210–W219 | Non-blocking runtime-conversion or uncertain-type warnings |
 | B300 | SQLBuild | Unknown metadata/audit column |
 | B301 | SQLBuild | Incompatible declared metadata, audit, or UDF argument type |
 | B302 | SQLBuild | Unknown SQL-test fixture/expected column |
+
+Implicit conversions are enforced rather than reported as warnings. Each native W210–W216
+finding maps to the SQLBuild code of the incompatibility it risks: comparisons to B217, arithmetic
+to B212, assignments to B214, casts and coercible literals to B218, set-operation branches to B215,
+predicates to B211, and function arguments to B213. The remedy is always an explicit conversion,
+for example `order_id = CAST(customer_code AS INTEGER)`, or an explicit comparison such as
+`quantity <> 0`. There is no per-model suppression.
 
 B002–B005 predate these changes and overlap the executor's separately phased build codes. New
 semantic codes use distinct ranges. Authored model diagnostics retain source paths and positions.
