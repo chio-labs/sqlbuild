@@ -47,6 +47,7 @@ from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
     known_function_names,
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
+    binding_relation_names,
     build_complete_binding_schemas,
     get_expression_source_shape,
 )
@@ -149,6 +150,7 @@ from sqlbuild.compiler.sql_analysis.constants import (
     NATIVE_DIALECT_ALIASES,
 )
 from sqlbuild.compiler.sql_analysis.exceptions import SqlAnalysisBoundaryError
+from sqlbuild.compiler.sql_analysis.main._binding_catalog import create_binding_catalog
 from sqlbuild.compiler.sql_analysis.main._identifier_case import ignores_quoted_case
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.models import (
@@ -271,6 +273,16 @@ def assemble_compiled_project(
                         ).get(name, InferredNullability.UNKNOWN)
                         for name in shape
                     }
+    profile = replace(
+        profile,
+        binding_catalog=create_binding_catalog(
+            dialect=profile.sql_analysis_dialect or "generic",
+            quoted_ignore_case=profile.quoted_identifiers_ignore_case,
+            known_functions=profile.semantic_known_functions,
+            known_types=profile.semantic_known_types,
+            relations=complete_binding_schemas,
+        ),
+    )
     dynamic_contract_analysis_inputs: _DynamicContractAnalysisInputs = (
         _DynamicContractAnalysisInputs(
             families_by_table=dynamic_families_by_table,
@@ -346,6 +358,7 @@ def assemble_compiled_project(
         run_id=inputs.run_id,
     )
     project: CompiledProject = CompiledProject(
+        binding_catalog=profile.binding_catalog,
         sql_expansions={
             model_input.model_file.file_path: model_input.sql_expansion
             for model_input in inputs.model_inputs
@@ -1005,6 +1018,7 @@ def _analyze_model_sql_requests(
                             known_functions=inference_profile.semantic_known_functions,
                             known_types=inference_profile.semantic_known_types,
                             quoted_identifiers_ignore_case=inference_profile.quoted_identifiers_ignore_case,
+                            catalog=inference_profile.binding_catalog,
                         )
                         for index in validation_indices
                     )
@@ -1167,6 +1181,7 @@ def _complete_inferred_bindings(
                     },
                 ),
                 quoted_identifiers_ignore_case=inference_profile.quoted_identifiers_ignore_case,
+                catalog=inference_profile.binding_catalog,
             )
         )
     with record_compile_timing("binding_validation_ms"):
@@ -1191,16 +1206,7 @@ def _complete_inferred_bindings(
 def _binding_required_names(model_input: CompileModelInput) -> frozenset[str] | None:
     if not model_input.sql_validation_enabled:
         return None
-    names: set[str] = set()
-    for reference in model_input.references:
-        if reference.ref_kind == SqlReferenceKind.UDF:
-            continue
-        names.add(
-            table_function_analysis_name(reference.ref_name)
-            if reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION
-            else reference.ref_name
-        )
-    return frozenset(names)
+    return binding_relation_names(model_input.references)
 
 
 def _downstream_model_names(

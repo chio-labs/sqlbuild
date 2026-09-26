@@ -7,6 +7,14 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 
 
 @dataclass(frozen=True)
+class NativeCatalogCase:
+    description: str
+    sql: str
+    expected_codes: tuple[str, ...] = ()
+    spelling: str = "MiSsPeLlEd"
+
+
+@dataclass(frozen=True)
 class SemanticCompileCase:
     description: str
     upstream: str

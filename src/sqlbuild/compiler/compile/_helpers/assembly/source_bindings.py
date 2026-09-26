@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Any
 
 from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.analysis.compact import get_complete_schema_binding_request
@@ -13,7 +14,10 @@ from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
     known_declared_types,
     known_function_names,
 )
-from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
+from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
+    binding_relation_names,
+    semantic_shapes,
+)
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
 )
@@ -34,6 +38,12 @@ from sqlbuild.compiler.sql_analysis.constants import BINDING_UNKNOWN_TABLE_INTER
 from sqlbuild.compiler.sql_analysis.main._identifier_case import ignores_quoted_case
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.models import SqlBindingResult, SqlSchemaValidationRequest
+
+
+def _model_shapes(
+    *, model: CompiledModel, shapes: dict[str, dict[str, str]]
+) -> dict[str, dict[str, str]]:
+    return {name: shapes.get(name, {}) for name in binding_relation_names(model.references)}
 
 
 def get_source_binding_diagnostics(
@@ -60,18 +70,26 @@ def get_source_binding_diagnostics(
             for reference in model.references
         ):
             models.append(model)
+    physical_catalog: Any | None = (
+        project.binding_catalog.with_relations(shapes)
+        if project.binding_catalog is not None
+        else None
+    )
+    functions: tuple[str, ...] = known_function_names(project.functions)
+    types: tuple[str, ...] = known_declared_types(functions=project.functions, column_types=shapes)
     requests: tuple[SqlSchemaValidationRequest, ...] = tuple(
         replace(
             get_complete_schema_binding_request(
-                known_functions=known_function_names(project.functions),
-                known_types=known_declared_types(functions=project.functions, column_types=shapes),
+                known_functions=functions,
+                known_types=types,
                 query_sql=cursor_intrinsics_analysis_sql(
                     sql=model.query_sql, cursor_type=model.config.values.get("cursor_type")
                 ),
                 placeholders=_placeholders(model),
                 dialect=profile.sql_analysis_dialect,
-                binding_schema=shapes,
+                binding_schema=_model_shapes(model=model, shapes=shapes),
             ),
+            catalog=physical_catalog,
             quoted_identifiers_ignore_case=ignores_quoted_case(
                 connection=project.effective_connection, dialect=profile.sql_analysis_dialect
             ),

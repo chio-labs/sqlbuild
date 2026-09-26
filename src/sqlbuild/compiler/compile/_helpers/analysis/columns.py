@@ -36,12 +36,6 @@ from sqlbuild.compiler.lineage.types import (
     ColumnTransformKind,
     InferredNullability,
 )
-from sqlbuild.compiler.references.main._quoted_reference_call_pattern import (
-    quoted_reference_call_pattern,
-)
-from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import (
-    reference_call_prefix_pattern_text,
-)
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_AGGREGATE_KINDS as _POLYGLOT_AGGREGATE_KINDS,
@@ -151,26 +145,11 @@ from sqlbuild.compiler.sql_analysis.constants import (
 from sqlbuild.compiler.sql_analysis.constants import (
     TIMESTAMP_WITH_TIME_ZONE_SQL_TYPE_NAME as _TIMESTAMP_WITH_TIME_ZONE_SQL_TYPE_NAME,
 )
-from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
-from sqlbuild.compiler.sql_analysis.main._normalize_for_polyglot import (
-    normalize_sql_for_polyglot,
-)
+from sqlbuild.compiler.sql_analysis.main._normalize_analysis import normalize_analysis_sql
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.compile")
-_REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
-_SEED_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SEED)
-_SOURCE_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SOURCE)
-_DBT_REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.DBT_REF)
-_UDF_PATTERN: re.Pattern[str] = re.compile(
-    rf"{reference_call_prefix_pattern_text(SqlReferenceKind.UDF)}"
-    r'"([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()'
-)
-_TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
-    rf"{reference_call_prefix_pattern_text(SqlReferenceKind.TABLE_FUNCTION)}"
-    r'"([A-Za-z_][A-Za-z0-9_]*)"\)\s*(?=\()'
-)
 _PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(r"@@@(\w+)")
 _QUALIFIED_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(
     r'(?<![A-Za-z0-9_$])(?:"(?P<double>[^"]+)"|`(?P<backtick>[^`]+)`|'
@@ -961,19 +940,7 @@ def _replace_refs_with_stubs(
 ) -> str:
     """Replace SQLBuild marker calls with parseable SQL stubs."""
 
-    stubs: dict[str, str] = relation_stubs or {}
-
-    def relation_stub(match: re.Match[str]) -> str:
-        name: str = match.group(1)
-        return stubs.get(name, name)
-
-    result: str = _REF_PATTERN.sub(relation_stub, query_sql)
-    result = _SEED_PATTERN.sub(relation_stub, result)
-    result = _SOURCE_PATTERN.sub(relation_stub, result)
-    result = _DBT_REF_PATTERN.sub(r"\1", result)
-    result = _UDF_PATTERN.sub(r"__sqlbuild_udf_\1", result)
-    result = _replace_table_function_calls_with_stubs(query_sql=result, relation_stubs=stubs)
-    return normalize_sql_for_polyglot(sql=result, dialect=dialect)
+    return normalize_analysis_sql(sql=query_sql, dialect=dialect, stubs=relation_stubs)
 
 
 def _qualified_reference_names(*, query_sql: str, reference_names: Iterable[str]) -> frozenset[str]:
@@ -991,26 +958,6 @@ def _qualified_reference_names(*, query_sql: str, reference_names: Iterable[str]
         identifier: str = next(value for value in match.groups() if value is not None)
         qualified.update(names_by_normalized.get(identifier.casefold(), ()))
     return frozenset(qualified)
-
-
-def _replace_table_function_calls_with_stubs(
-    *, query_sql: str, relation_stubs: dict[str, str] | None = None
-) -> str:
-    parts: list[str] = []
-    last_index: int = 0
-    match: re.Match[str]
-    for match in _TABLE_FUNCTION_PATTERN.finditer(query_sql):
-        parts.append(query_sql[last_index : match.start()])
-        call_end: int = find_matching_paren(
-            sql=query_sql,
-            open_paren_index=match.end(),
-            context="SQL table function analysis",
-        )
-        table_name: str = table_function_analysis_name(match.group(1))
-        parts.append((relation_stubs or {}).get(table_name, table_name))
-        last_index = call_end + 1
-    parts.append(query_sql[last_index:])
-    return "".join(parts)
 
 
 def _infer_expression_nullability(

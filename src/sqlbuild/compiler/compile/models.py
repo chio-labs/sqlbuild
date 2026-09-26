@@ -1001,6 +1001,7 @@ class CompiledProject:
     effective_target_name: str | None
     effective_connection: dict[str, object]
     effective_vars: dict[str, object]
+    binding_catalog: Any | None = field(default=None, repr=False, compare=False)
     effective_target_database: str | None = None
     effective_target_schema: str | None = None
     sql_analysis_dialect: str | None = None
@@ -1272,6 +1273,7 @@ class CompactBatchPreparation:
     queries: tuple[dict[str, object], ...]
     templates: tuple[dict[str, object], ...]
     projections: tuple[dict[str, object], ...]
+    binding_catalog: Any | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True)

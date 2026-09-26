@@ -734,6 +734,7 @@ def _custom_host_payload(
         return None, None
     serializable_project: CompiledProject = replace(
         project,
+        binding_catalog=None,
         sql_expansions={},
         loaded_macros={},
         loader_functions=(),

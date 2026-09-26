@@ -250,6 +250,7 @@ def _request(
                 for reference in model.references
             },
         ),
+        catalog=project.binding_catalog,
         quoted_identifiers_ignore_case=ignores_quoted_case(
             connection=project.effective_connection, dialect=project.sql_analysis_dialect
         ),
