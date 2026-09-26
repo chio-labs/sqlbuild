@@ -53,6 +53,16 @@ class DerivedNativeCompileTestCase:
 
 
 @dataclass(frozen=True)
+class KeywordFunctionCompileTestCase:
+    """Expected compile result for a DuckDB SQL keyword function projection."""
+
+    description: str
+    projection: str
+    expected_exit_code: int
+    expected_diagnostics: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class CombinedCompilationTestCase:
     """Expected CLI behavior for schema-bound CTE compilation."""
 

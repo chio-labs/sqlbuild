@@ -14,7 +14,9 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     AliasSourceCompileTestCase,
     BoundProjectionCompileTestCase,
     DerivedNativeCompileTestCase,
+    KeywordFunctionCompileTestCase,
 )
+from tests.integration.src.sqlbuild.cli.commands.main.helpers import compile_duckdb_projection
 
 
 @pytest.mark.parametrize(
@@ -77,6 +79,71 @@ def test_given_derived_native_facts_when_compiling_then_contract_and_execution_a
     with duckdb.connect() as connection:
         rows: tuple[tuple[int, ...], ...] = tuple(connection.execute(compiled_sql).fetchall())
     assert rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        KeywordFunctionCompileTestCase(
+            description="keyword timestamps compile and execute",
+            projection=(
+                "CURRENT_TIMESTAMP AS created_at, LOCALTIMESTAMP AS local_created_at, "
+                "CURRENT_TIME AS created_time, LOCALTIME AS local_created_time"
+            ),
+            expected_exit_code=0,
+            expected_diagnostics=(),
+        ),
+        KeywordFunctionCompileTestCase(
+            description="keyword timestamp in a CTE arithmetic filter",
+            projection=(
+                "created_at FROM (SELECT CURRENT_TIMESTAMP AS created_at) AS recent "
+                "WHERE created_at > CURRENT_TIMESTAMP - INTERVAL 1 DAY"
+            ),
+            expected_exit_code=0,
+            expected_diagnostics=(),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_duckdb_keyword_function_when_compiling_then_compiled_sql_executes(
+    test_case: KeywordFunctionCompileTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code, codes = compile_duckdb_projection(
+        tmp_path=tmp_path, capsys=capsys, projection=test_case.projection
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert codes == test_case.expected_diagnostics
+    compiled_sql: str = (tmp_path / "target" / "compiled" / "models" / "orders.sql").read_text()
+    with duckdb.connect() as connection:
+        assert len(connection.execute(compiled_sql).fetchall()) == 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        KeywordFunctionCompileTestCase(
+            description="parenthesized keyword timestamp is still unknown",
+            projection="CURRENT_TIMESTAMP() AS created_at",
+            expected_exit_code=1,
+            expected_diagnostics=("B101",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_invalid_duckdb_keyword_call_when_compiling_then_function_is_rejected(
+    test_case: KeywordFunctionCompileTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code, codes = compile_duckdb_projection(
+        tmp_path=tmp_path, capsys=capsys, projection=test_case.projection
+    )
+
+    assert exit_code == test_case.expected_exit_code
+    assert codes == test_case.expected_diagnostics
 
 
 @pytest.mark.parametrize(
