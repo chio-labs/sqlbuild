@@ -109,7 +109,9 @@ jobs:
                 broad=true
                 ;;
             esac
-          done < <(git diff --name-only -z "${BASE_SHA}" "${HEAD_SHA}")
+          # Three dots: compare with the merge base, so changes that landed on main after the branch
+          # started are not counted as this pull request's changes.
+          done < <(git diff --name-only -z "${BASE_SHA}...${HEAD_SHA}")
 
           if [[ "${changed}" != "true" ]]; then
             write_scope true true true true true true
