@@ -255,7 +255,11 @@ impl ClauseResolver<'_, '_> {
 
     fn source_has_column(&mut self, source_name: &str, column_name: &str) -> bool {
         let Ok(columns) = self.resolver.get_source_columns(source_name) else {
-            return self.scope.sources.keys().any(|name| name.eq_ignore_ascii_case(source_name));
+            return self
+                .scope
+                .sources
+                .keys()
+                .any(|name| name.eq_ignore_ascii_case(source_name));
         };
         if columns.is_empty() {
             return true;
