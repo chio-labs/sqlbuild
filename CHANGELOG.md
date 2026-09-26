@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.119.2](https://github.com/chio-labs/sqlbuild/compare/v0.119.1...v0.119.2) (2026-09-26)
+
+
+### Documentation
+
+* stop mentioning virtual environments on the website ([#830](https://github.com/chio-labs/sqlbuild/issues/830)) ([e28bf2c](https://github.com/chio-labs/sqlbuild/commit/e28bf2c21532bb03315aff1a9ee9df4ca9034558))
+
 ## [0.119.1](https://github.com/chio-labs/sqlbuild/compare/v0.119.0...v0.119.1) (2026-09-25)
 
 
