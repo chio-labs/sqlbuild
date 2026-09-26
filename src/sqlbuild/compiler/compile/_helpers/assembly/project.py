@@ -1112,11 +1112,7 @@ def _complete_inferred_bindings(
     inference_profile: ExpressionInferenceProfile,
     supplied_relations: frozenset[str] = frozenset(),
 ) -> tuple[_ModelSqlAnalysis, ...]:
-    """Bind each scope independently, preserving open inputs as empty tables.
-
-    Relations in ``supplied_relations`` reached native analysis with their complete shapes, so
-    stars over them are already expanded and need no enrichment pass.
-    """
+    """Bind each scope independently, preserving open inputs as empty tables."""
 
     complete_schemas: dict[str, dict[str, str]] = dict(complete_binding_schemas)
     results: list[_ModelSqlAnalysis] = list(analyses)
@@ -1143,7 +1139,8 @@ def _complete_inferred_bindings(
         analysis: PolyglotAnalysisResult = results[index].polyglot_analysis
         inputs_known: bool = bool(required_names) and required_names <= complete_schemas.keys()
         star_pending: bool = analysis.has_star and not analysis.star_resolved and inputs_known
-        if star_pending and analysis.columns and required_names <= supplied_relations:
+        stars_expanded_natively: bool = required_names <= supplied_relations
+        if star_pending and analysis.columns and stars_expanded_natively:
             analysis = replace(analysis, star_resolved=True)
             results[index] = replace(results[index], polyglot_analysis=analysis)
             star_pending = False

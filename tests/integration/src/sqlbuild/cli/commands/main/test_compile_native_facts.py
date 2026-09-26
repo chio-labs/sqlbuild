@@ -172,11 +172,10 @@ def test_given_star_over_derived_table_when_compiling_then_lineage_matches_proje
         compiled_models: list[dict[str, object]] = cast(
             list[dict[str, object]], resources["models"]
         )
-        lineage: dict[str, object] = next(
-            cast(dict[str, object], model["lineage"])
-            for model in compiled_models
-            if model["name"] == "wide_orders"
-        )
+        lineage_by_model: dict[object, dict[str, object]] = {
+            model["name"]: cast(dict[str, object], model["lineage"]) for model in compiled_models
+        }
+        lineage: dict[str, object] = lineage_by_model["wide_orders"]
 
         assert exit_code == 0
         assert result["diagnostics"] == []
