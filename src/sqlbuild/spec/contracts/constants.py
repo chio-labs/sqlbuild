@@ -10,6 +10,7 @@ DEFAULT_SEED_CSV_SETTINGS: SeedCsvSettings = SeedCsvSettings()
 CURSOR_POLICY_DISABLED: str = "disabled"
 ZERO_DAY_CURSOR_DURATION: str = "0d"
 EFFECTIVE_BATCH_SIZE_TOKEN: str = "effective"
+SCENARIO_RUN_NAMESPACE_CONFIG_KEY: str = "run_namespace"
 TIME_TRAVEL_RETENTION_MATERIALIZATIONS: tuple[str, ...] = (
     "table",
     "incremental",

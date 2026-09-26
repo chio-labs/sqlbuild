@@ -23,6 +23,7 @@ from sqlbuild.cli.commands._helpers.scenario_capture.snapshot_limits import (
     build_scenario_snapshot_capture_limits,
     scenario_snapshot_capture_warning,
 )
+from sqlbuild.cli.commands._helpers.scenario_execution.namespace import resolve_scenario_namespace
 from sqlbuild.cli.commands._helpers.scenario_execution.selection import select_scenarios
 from sqlbuild.cli.commands.constants import (
     SCENARIO_CLI_SQL_VALIDATION_REQUIRED,
@@ -79,6 +80,9 @@ def run_scenario_capture(request: ScenarioCaptureCommandRequest) -> int:
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
+    discovered_inputs, namespace = resolve_scenario_namespace(
+        inputs=discovered_inputs, cli_value=request.scenario_namespace
+    )
     _validate_capture_sql_analysis_enabled(discovered_inputs=discovered_inputs)
     adapter_name: str = resolve_effective_adapter_name(
         project_config=discovered_inputs.project_config,
@@ -96,6 +100,9 @@ def run_scenario_capture(request: ScenarioCaptureCommandRequest) -> int:
     )
     use_color: bool = not no_color and supports_color()
     progress_stream: TextIO = sys.stdout
+    progress_stream.write(
+        f"Scenario namespace: {namespace.value or '(unset)'} (source: {namespace.source})\n"
+    )
     target_label: str | None = " ".join(selectors) if selectors else None
     planning_progress: PlanningProgressReporter = PlanningProgressReporter(
         stream=progress_stream,
@@ -154,6 +161,7 @@ def run_scenario_capture(request: ScenarioCaptureCommandRequest) -> int:
             limits=capture_limits,
         ),
         output_context=ScenarioRunOutputContext(
+            namespace=namespace,
             progress_stream=progress_stream,
             use_color=use_color,
         ),

@@ -9,8 +9,14 @@ from sqlbuild.executor.scenario.models import ScenarioRunResult
 
 
 def format_scenario_execution_json(
-    *, results: tuple[ScenarioRunResult, ...], local: bool = False
+    *,
+    results: tuple[ScenarioRunResult, ...],
+    local: bool = False,
+    run_namespace: str | None = None,
+    namespace_source: str = "unset",
 ) -> str:
     """Format scenario test command execution results as JSON."""
 
-    return _format_scenario_execution_json(results=results, local=local)
+    return _format_scenario_execution_json(
+        results=results, local=local, run_namespace=run_namespace, namespace_source=namespace_source
+    )

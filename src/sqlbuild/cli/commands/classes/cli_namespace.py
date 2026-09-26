@@ -113,6 +113,7 @@ _DEFAULT_VALUES: dict[str, object] = {
     "scenario_command": None,
     "scenario_selector": [],
     "scenario_retain": False,
+    "scenario_namespace": None,
     "scenario_local": False,
     "scenario_strict": False,
     "scenario_sync_snapshots": False,
@@ -271,6 +272,7 @@ class CliNamespace:
     scenario_command: str | None
     scenario_selector: list[str]
     scenario_retain: bool
+    scenario_namespace: str | None
     scenario_local: bool
     scenario_strict: bool
     scenario_sync_snapshots: bool

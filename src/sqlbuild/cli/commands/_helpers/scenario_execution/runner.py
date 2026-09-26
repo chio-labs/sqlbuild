@@ -26,6 +26,7 @@ from sqlbuild.cli.commands._helpers.scenario_capture.snapshot_limits import (
     scenario_snapshot_capture_warning,
 )
 from sqlbuild.cli.commands._helpers.scenario_execution.local_run import run_local_scenarios
+from sqlbuild.cli.commands._helpers.scenario_execution.namespace import resolve_scenario_namespace
 from sqlbuild.cli.commands._helpers.scenario_execution.selection import select_scenarios
 from sqlbuild.cli.commands._helpers.scenario_execution.warehouse_run import (
     run_warehouse_scenarios,
@@ -122,6 +123,9 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=effective_project_dir
     )
+    discovered_inputs, namespace = resolve_scenario_namespace(
+        inputs=discovered_inputs, cli_value=request.scenario_namespace
+    )
     if local:
         _validate_local_scenario_sql_analysis_enabled(
             discovered_inputs=discovered_inputs,
@@ -154,6 +158,9 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
     )
     use_color: bool = not no_color and supports_color()
     progress_stream: TextIO = sys.stderr if json_output else sys.stdout
+    progress_stream.write(
+        f"Scenario namespace: {namespace.value or '(unset)'} (source: {namespace.source})\n"
+    )
     target_label: str | None = " ".join(selectors) if selectors else None
     planning_progress: PlanningProgressReporter = PlanningProgressReporter(
         stream=progress_stream,
@@ -214,6 +221,7 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
             ),
             limit_inputs=limit_inputs,
             output_context=ScenarioRunOutputContext(
+                namespace=namespace,
                 progress_stream=progress_stream,
                 use_color=use_color,
                 json_output=json_output,
@@ -224,6 +232,8 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
         if capture_exit_code != 0:
             write_execution_json_output(
                 payload=format_scenario_snapshot_execution_json(
+                    run_namespace=namespace.value,
+                    namespace_source=namespace.source,
                     results=tuple(capture_results),
                     refresh=refresh,
                 ),
@@ -242,6 +252,7 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
             target_dir=effective_project_dir / "target",
             retain=retain,
             output_context=ScenarioRunOutputContext(
+                namespace=namespace,
                 progress_stream=progress_stream,
                 use_color=use_color,
                 json_output=json_output,
@@ -259,6 +270,7 @@ def run_scenario(request: ScenarioTestCommandRequest) -> int:
         capture_dialect=local_capture_dialect,
         target_dir=effective_project_dir / "target",
         output_context=ScenarioRunOutputContext(
+            namespace=namespace,
             progress_stream=progress_stream,
             use_color=use_color,
             json_output=json_output,

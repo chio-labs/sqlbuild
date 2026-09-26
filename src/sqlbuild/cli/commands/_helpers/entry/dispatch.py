@@ -623,6 +623,7 @@ def _dispatch_scenario_command(
             )
         return handlers.run_scenario(
             ScenarioTestCommandRequest(
+                scenario_namespace=args.scenario_namespace,
                 project_dir=project_dir,
                 no_sql_validation=False,
                 no_color=args.no_color,
@@ -647,6 +648,7 @@ def _dispatch_scenario_command(
     if args.scenario_command == SCENARIO_CAPTURE_COMMAND:
         return handlers.run_scenario_capture(
             ScenarioCaptureCommandRequest(
+                scenario_namespace=args.scenario_namespace,
                 project_dir=project_dir,
                 no_sql_validation=False,
                 no_color=args.no_color,
