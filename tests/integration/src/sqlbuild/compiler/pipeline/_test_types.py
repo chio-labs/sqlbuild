@@ -7,6 +7,14 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 
 
 @dataclass(frozen=True)
+class ValidationCacheCase:
+    description: str
+    enabled: bool
+    expected_hits: int
+    expected_bypasses: int
+
+
+@dataclass(frozen=True)
 class NativeCatalogCase:
     description: str
     sql: str

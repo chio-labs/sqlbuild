@@ -14,7 +14,10 @@ from sqlbuild.compiler.compile.main._source_bindings import get_source_binding_d
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject, CompilerDiagnostic
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
-from tests.integration.src.sqlbuild.compiler.pipeline._test_types import NativeCatalogCase
+from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
+    NativeCatalogCase,
+    ValidationCacheCase,
+)
 
 
 @pytest.mark.parametrize(
@@ -181,6 +184,57 @@ def test_given_unquoted_sql_when_case_policy_enabled_then_fused_validation_is_re
     )
     payload: dict[str, Any] = json.loads(capsys.readouterr().out)
     assert tuple(item["code"] for item in payload["diagnostics"]) == test_case.expected_codes
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ValidationCacheCase("enabled target reuses semantic failures", True, 1, 0),
+        ValidationCacheCase("disabled target revalidates unchanged SQL", False, 0, 1),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_target_cache_policy_when_compiling_twice_then_reuses_only_enabled_validation(
+    test_case: ValidationCacheCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "snowflake"\ndefault_target = "local"\n'
+        '[rules]\nselect = []\n[targets.local]\nschema = "preserve"\n'
+        f"compile_cache = {str(test_case.enabled).lower()}\n"
+        "[targets.local.connection]\nsession_parameters = { QUOTED_IDENTIFIERS_IGNORE_CASE = true }\n"
+    )
+    (tmp_path / "models").mkdir()
+    model: Path = tmp_path / "models/orders.sql"
+    model.write_text(
+        'MODEL (database warehouse, schema analytics);\nSELECT SUM("Active") FROM (SELECT TRUE AS "Active") q'
+    )
+    args: list[str] = [
+        "--project-dir",
+        str(tmp_path),
+        "compile",
+        "--lineage-mode",
+        "rich",
+        "--json",
+    ]
+    assert main(args) == 1
+    cold: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert main(args) == 1
+    warm: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert [item["code"] for item in cold["diagnostics"]] == ["B213"]
+    assert warm["diagnostics"] == cold["diagnostics"]
+    assert (
+        warm["compile_timings"]["analysis_batch_cache_hits"]
+        + warm["compile_timings"]["analysis_entry_cache_hits"]
+    ) == test_case.expected_hits
+    assert warm["compile_timings"]["analysis_cache_bypasses"] == test_case.expected_bypasses
+    assert warm["compile_timings"]["analysis_cache_misses"] == 0
+    model.write_text(model.read_text().replace("TRUE", "1"))
+    assert main(args) == 0
+    changed: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert changed["diagnostics"] == []
+    assert changed["compile_timings"]["analysis_batch_cache_hits"] == 0
 
 
 if __name__ == "__main__":
