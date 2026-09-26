@@ -1,0 +1,51 @@
+name: perf-bisect
+
+on:
+  push:
+    branches:
+      - "perf-bisect/**"
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: ${{ matrix.suite }} 3000 (run ${{ matrix.run }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [dense, cold]
+        run: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            Cargo.lock
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Install Python
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: uv sync --locked --all-groups --all-extras
+      - name: Runner CPU
+        run: lscpu | grep -E 'Model name|^CPU\(s\)'; nproc
+      - name: Run guard under 4 GiB
+        env:
+          MEMORY_LIMIT_BYTES: "4294967296"
+          SUITE: ${{ matrix.suite }}
+        run: |
+          sudo systemd-run \
+            --unit="sqlbuild-bisect-${SUITE}-${GITHUB_RUN_ID}-${{ matrix.run }}" \
+            --uid="$(id -u)" --gid="$(id -g)" --same-dir \
+            --setenv="HOME=${HOME}" --setenv="PATH=${PATH}" \
+            --setenv="SQLBUILD_REQUIRE_MEMORY_LIMIT_BYTES=${MEMORY_LIMIT_BYTES}" \
+            --property="MemoryMax=${MEMORY_LIMIT_BYTES}" --property="MemorySwapMax=0" \
+            --wait --collect --pipe \
+            make "test-e2e-${SUITE}-compile-performance" SQLBUILD_BENCHMARK_MODELS=3000 || true
