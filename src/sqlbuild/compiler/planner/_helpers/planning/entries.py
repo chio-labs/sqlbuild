@@ -57,7 +57,6 @@ def build_planner_entry_results(
         cursor_overrides=overrides.cursor_overrides,
         full_refresh=overrides.full_refresh,
         build_inputs=PlanEntryBuildInputs(
-            run_despite_unchanged=pruning.run_despite_unchanged,
             source_freshness_blocked_model_names=(
                 source_freshness.propagation.blocked_model_names
                 if source_freshness.propagation is not None

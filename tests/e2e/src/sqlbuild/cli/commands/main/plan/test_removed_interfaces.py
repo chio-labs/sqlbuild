@@ -84,6 +84,23 @@ def test_given_removed_interface_when_running_cli_then_reports_unknown_argument(
             "virtual_environments",
         ),
         RemovedConfigTestCase(
+            "removed unchanged default",
+            '[defaults]\nrun_despite_unchanged = "always"\n',
+            "run_despite_unchanged",
+        ),
+        RemovedConfigTestCase(
+            "removed unchanged path default",
+            '[path_defaults.staging]\nrun_despite_unchanged = "30d"\n',
+            "run_despite_unchanged",
+        ),
+        RemovedConfigTestCase(
+            "removed unchanged MODEL field",
+            "MODEL (materialized table, run_despite_unchanged always); SELECT 1 AS order_id",
+            "run_despite_unchanged",
+            "models/orders.sql",
+            "",
+        ),
+        RemovedConfigTestCase(
             "disabled virtual setting",
             "[settings]\nvirtual_environments = false\n",
             "virtual_environments",

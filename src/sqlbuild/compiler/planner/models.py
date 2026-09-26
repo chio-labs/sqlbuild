@@ -51,7 +51,6 @@ from sqlbuild.compiler.planner.types import (
     PlanReason,
     RetentionDirection,
     RetentionPlanPhase,
-    RunDespiteUnchangedMode,
     ScenarioArtifactKind,
     SchemaActionKind,
     SchemaChangeKind,
@@ -678,27 +677,6 @@ class BackfillResult:
 
 
 @dataclass(frozen=True)
-class RunDespiteUnchangedDecision:
-    """One model-level changes-only override decision."""
-
-    model_name: str
-    mode: RunDespiteUnchangedMode
-    duration: str | None = None
-    newest_source_name: str | None = None
-    newest_source_data_age_seconds: int | None = None
-
-
-@dataclass(frozen=True)
-class RunDespiteUnchangedPlanningResult:
-    """Planner-time changes-only override roots and propagated stale models."""
-
-    root_model_names: frozenset[str] = frozenset()
-    stale_model_names: frozenset[str] = frozenset()
-    decisions: dict[str, RunDespiteUnchangedDecision] = field(default_factory=dict)
-    downstream_root_causes: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
 class CascadeCause:
     """One upstream model that contributed to a backfill cascade."""
 
@@ -795,7 +773,6 @@ class CursorOverridePair:
 class PlanEntryBuildInputs:
     """Blocked models and cursor overrides for plan entry building."""
 
-    run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = None
     source_freshness_blocked_model_names: frozenset[str] = frozenset()
     external_blocked_model_names: frozenset[str] = frozenset()
     start_cursor_override: str | None = None
@@ -1059,7 +1036,6 @@ class ModelPlanEntry:
     custom_materialization_name: str | None = None
     custom_config: dict[str, object] = field(default_factory=dict)
     custom_placeholders: dict[str, str] = field(default_factory=dict)
-    run_despite_unchanged: RunDespiteUnchangedDecision | None = None
 
 
 @dataclass(frozen=True)
@@ -1522,7 +1498,6 @@ class PlannerScopePruningResult:
     resolved_actions: PlannerResolvedActions
     pruned_direct_model_names: tuple[str, ...]
     direct_identity_stale_model_names: frozenset[str]
-    run_despite_unchanged: RunDespiteUnchangedPlanningResult
 
 
 @dataclass(frozen=True)

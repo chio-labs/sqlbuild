@@ -107,8 +107,6 @@ from sqlbuild.compiler.planner.models import (
     PlannerScope,
     PlanWarning,
     ResolvedModelAction,
-    RunDespiteUnchangedDecision,
-    RunDespiteUnchangedPlanningResult,
     SchemaAction,
     WarehouseSnapshot,
 )
@@ -375,7 +373,6 @@ def build_plan_entries(
             ),
             code=binding_diagnostics[0].code,
         )
-    run_despite_unchanged: RunDespiteUnchangedPlanningResult | None = inputs.run_despite_unchanged
     source_freshness_blocked_model_names: frozenset[str] = (
         inputs.source_freshness_blocked_model_names
     )
@@ -455,12 +452,6 @@ def build_plan_entries(
                 action=PlanAction.SKIP,
                 reason=PlanReason.EXTERNAL_UPSTREAM_FAILED,
             )
-        if run_despite_unchanged is not None:
-            run_decision: RunDespiteUnchangedDecision | None = run_despite_unchanged.decisions.get(
-                entry.name
-            )
-            if run_decision is not None:
-                entry = replace(entry, run_despite_unchanged=run_decision)
         if entry.incremental_mode == IncrementalMode.MICROBATCH:
             entry = replace(
                 entry,

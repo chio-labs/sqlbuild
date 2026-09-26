@@ -7,7 +7,6 @@ from sqlbuild.compiler.planner.models import (
     PlannerScope,
     PlannerScopePruningResult,
     PlannerScopeResolution,
-    RunDespiteUnchangedPlanningResult,
 )
 
 
@@ -26,5 +25,4 @@ def prune_planner_execution_scope(
         resolved_actions=resolved_actions,
         pruned_direct_model_names=(),
         direct_identity_stale_model_names=frozenset(),
-        run_despite_unchanged=RunDespiteUnchangedPlanningResult(),
     )

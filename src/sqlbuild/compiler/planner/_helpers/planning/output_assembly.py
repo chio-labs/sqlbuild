@@ -26,7 +26,6 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     PlanOutputExtras,
     PlanWarning,
-    RunDespiteUnchangedPlanningResult,
 )
 from sqlbuild.compiler.source_freshness.models import DirectSourceFreshnessPlanningResult
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
@@ -147,10 +146,7 @@ def with_plan_metadata(
 
     direct_remaining_stale_model_names: tuple[str, ...] = tuple(
         sorted(
-            (
-                pruning.direct_identity_stale_model_names
-                | pruning.run_despite_unchanged.stale_model_names
-            )
+            pruning.direct_identity_stale_model_names
             - frozenset(
                 key.name
                 for key in pruning.inspection_scope.selected_keys
@@ -166,9 +162,6 @@ def with_plan_metadata(
                 source_freshness
             ),
             "direct_remaining_stale_model_names": direct_remaining_stale_model_names,
-            "direct_run_despite_unchanged": _serialize_run_despite_unchanged_metadata(
-                pruning.run_despite_unchanged
-            ),
             "selection_diagnostics": {
                 "mode": "direct",
                 "enabled": policies.selection_diagnostics,
@@ -222,22 +215,4 @@ def _serialize_direct_source_freshness_metadata(
         "age_error_source_names": age_error_source_names,
         "stale_model_names": stale_model_names,
         "blocked_model_names": blocked_model_names,
-    }
-
-
-def _serialize_run_despite_unchanged_metadata(
-    run_despite_unchanged: RunDespiteUnchangedPlanningResult,
-) -> dict[str, object]:
-    return {
-        "root_model_names": tuple(sorted(run_despite_unchanged.root_model_names)),
-        "stale_model_names": tuple(sorted(run_despite_unchanged.stale_model_names)),
-        "decisions": {
-            model_name: {
-                "mode": decision.mode.value,
-                "duration": decision.duration,
-                "newest_source_name": decision.newest_source_name,
-                "newest_source_data_age_seconds": (decision.newest_source_data_age_seconds),
-            }
-            for model_name, decision in sorted(run_despite_unchanged.decisions.items())
-        },
     }

@@ -43,7 +43,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     StaleWarningMessageTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
-    build_run_despite_unchanged_model,
+    build_selection_model,
 )
 
 MODEL_KEY: CompiledObjectKey = CompiledObjectKey(
@@ -66,11 +66,10 @@ def test_given_complete_change_results_when_building_stale_warnings_then_models_
     test_case: CompleteModelChangesWorkTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    model: CompiledModel = build_run_despite_unchanged_model(
+    model: CompiledModel = build_selection_model(
         key=MODEL_KEY,
         name=MODEL_KEY.name,
         materialized="table",
-        run_despite_unchanged=None,
     )
     scope: PlannerScope = PlannerScope(
         upstream_deps={MODEL_KEY: ()},
@@ -181,35 +180,31 @@ def test_given_partial_selection_when_resolving_scopes_then_inspects_only_upstre
         resource_type=CompiledResourceType.MODEL,
         name="unrelated",
     )
-    root: CompiledModel = build_run_despite_unchanged_model(
+    root: CompiledModel = build_selection_model(
         key=root_key,
         name=root_key.name,
         materialized="table",
-        run_despite_unchanged=None,
     )
     middle: CompiledModel = replace(
-        build_run_despite_unchanged_model(
+        build_selection_model(
             key=middle_key,
             name=middle_key.name,
             materialized="table",
-            run_despite_unchanged=None,
         ),
         deps=(root_key,),
     )
     leaf: CompiledModel = replace(
-        build_run_despite_unchanged_model(
+        build_selection_model(
             key=leaf_key,
             name=leaf_key.name,
             materialized="table",
-            run_despite_unchanged=None,
         ),
         deps=(middle_key,),
     )
-    unrelated: CompiledModel = build_run_despite_unchanged_model(
+    unrelated: CompiledModel = build_selection_model(
         key=unrelated_key,
         name=unrelated_key.name,
         materialized="table",
-        run_despite_unchanged=None,
     )
     project: CompiledProject = CompiledProject(
         run_id="run",

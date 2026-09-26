@@ -55,7 +55,6 @@ from sqlbuild.compiler.planner.models import (
     PlannerSelection,
     PlanOutput,
 )
-from sqlbuild.compiler.planner.types import WorkSelectionPolicy
 from sqlbuild.compiler.python_nodes.main._run_selection import (
     resolve_python_sql_run_selection_from_inputs,
 )
@@ -247,7 +246,6 @@ def _build_result(
         plan_output=plan_output,
         run_selection=run_selection,
         selected_python_node_names=selected_python_node_names,
-        work_selection_policy=WorkSelectionPolicy.ALL_SELECTED,
     )
 
     return CompilePipelineResult(

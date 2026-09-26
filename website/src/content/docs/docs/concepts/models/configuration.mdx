@@ -41,7 +41,7 @@ configuration.
 
 | Field | Description |
 |-------|-------------|
-| `run_despite_unchanged` | Table-only change-aware policy. `always` rebuilds whenever selected. A duration such as `30d`, `12h`, or `90m` rebuilds while the newest timestamp-based upstream source observation is within that age; it is not a periodic schedule. |
+| `run_despite_unchanged` | Removed with virtual environments. It is rejected in MODEL headers, project defaults, and path defaults. |
 
 Table promotion mode is a project setting rather than a `MODEL()` field. Staged promotion is the default. Immediate promotion is incompatible with model type enforcement and exact contracts; see [Materializations](/docs/concepts/models/materializations#table).
 

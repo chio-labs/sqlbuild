@@ -50,6 +50,7 @@ from sqlbuild.spec.contracts.models import (
 )
 
 _MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
+_REMOVED_MODEL_KEYS: frozenset[str] = frozenset({"run_despite_unchanged"})
 
 
 def _contains_template_data_cached(*, value: object, cache: IdentityPresenceCache | None) -> bool:
@@ -133,7 +134,14 @@ def build_layered_model_values(
     values: dict[str, object] = project_defaults_to_mapping(defaults)
     if matched_path_default is not None:
         values = _merged_with_tag_union(base=values, overlay=path_defaults[matched_path_default])
-    return _merged_with_tag_union(base=values, overlay=model_header_values)
+    values = _merged_with_tag_union(base=values, overlay=model_header_values)
+    removed: list[str] = sorted(_REMOVED_MODEL_KEYS.intersection(values))
+    if removed:
+        raise CompileInputError(
+            f"MODEL option(s) {', '.join(removed)} were removed with virtual environments; "
+            "projects run in direct mode"
+        )
+    return values
 
 
 def _merged_with_tag_union(
@@ -584,8 +592,6 @@ def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
         values["unaccounted_partition_policy"] = defaults.unaccounted_partition_policy
     if defaults.replay_on_change is not None:
         values["replay_on_change"] = defaults.replay_on_change
-    if defaults.run_despite_unchanged is not None:
-        values["run_despite_unchanged"] = defaults.run_despite_unchanged
     if defaults.row_diff_exclude_columns:
         values["row_diff_exclude_columns"] = defaults.row_diff_exclude_columns
     if defaults.row_diff_tolerances:

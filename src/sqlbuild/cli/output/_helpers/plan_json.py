@@ -20,7 +20,6 @@ from sqlbuild.compiler.planner.models import (
     PlanOutput,
     PlanProviderUsage,
     PlanWarning,
-    RunDespiteUnchangedDecision,
     SeedPlanEntry,
     SourceLoadPlanEntry,
 )
@@ -192,14 +191,6 @@ def _serialize_model_entry(entry: ModelPlanEntry) -> dict[str, object]:
 
     if entry.destination.qualified_name is not None:
         model["qualified_name"] = entry.destination.qualified_name
-    if entry.run_despite_unchanged is not None:
-        decision: RunDespiteUnchangedDecision = entry.run_despite_unchanged
-        model["run_despite_unchanged"] = {
-            "mode": decision.mode.value,
-            "duration": decision.duration,
-            "newest_source_name": decision.newest_source_name,
-            "newest_source_data_age_seconds": decision.newest_source_data_age_seconds,
-        }
 
     return model
 
