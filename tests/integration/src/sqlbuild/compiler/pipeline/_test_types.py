@@ -12,6 +12,10 @@ class NativeCteSlotCase:
     sql: str
     expected_unused: tuple[tuple[str, int], ...]
     dialect: str = "duckdb"
+    strict: bool = False
+    expected_valid: bool = True
+    expected_partial_ctes: tuple[int, ...] = ()
+    expected_local_reads: tuple[tuple[int, int], ...] = ()
 
 
 @dataclass(frozen=True)

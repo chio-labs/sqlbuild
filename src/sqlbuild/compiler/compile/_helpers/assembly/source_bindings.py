@@ -35,8 +35,8 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.constants import BINDING_UNKNOWN_TABLE_INTERNAL_CODE
-from sqlbuild.compiler.sql_analysis.main._identifier_case import ignores_quoted_case
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
+from sqlbuild.compiler.sql_analysis.main.identifier_case import ignores_quoted_case
 from sqlbuild.compiler.sql_analysis.models import SqlBindingResult, SqlSchemaValidationRequest
 
 

@@ -175,7 +175,10 @@ def _prepared_bodies(
                 ),
                 allows_empty_fixture_star=allows_empty_fixture_star,
                 allows_dynamic_output_star=allows_dynamic_output_star,
-                cte_output_context=any(header.kind in {HEADER_KIND_MODEL, HEADER_KIND_TEST, HEADER_KIND_SCENARIO} for header in headers),
+                cte_output_context=any(
+                    header.kind in {HEADER_KIND_MODEL, HEADER_KIND_TEST, HEADER_KIND_SCENARIO}
+                    for header in headers
+                ),
             )
         )
     return tuple(bodies)

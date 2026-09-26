@@ -27,7 +27,7 @@ fn fold_with(with: &mut With, authored: &RefCell<AuthoredNames>) {
     }
 }
 
-pub(super) fn fold_statements(
+pub(crate) fn fold_statements(
     statements: Vec<Expression>,
 ) -> Result<(Vec<Expression>, AuthoredNames), String> {
     let authored = RefCell::new(Vec::new());

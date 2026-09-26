@@ -1,5 +1,7 @@
 pub(crate) const API_VERSION: u32 = 1;
 pub(crate) const CTE_ROOT_SCOPE: &str = "root";
+pub(crate) const CTE_SET_OPERATION_KIND: &str = "SetOperation";
+pub(crate) const CTE_DEFINITION_KIND: &str = "Cte";
 pub(crate) const CTE_USAGE_MAX_FUNCTION_DEPTH: usize = 128;
 pub(crate) const SCOPE_METADATA_SCHEMA_VERSION: u32 = 2;
 pub(crate) const BUILT_IN_RULE_NAMESPACE: &str = "SQBR";

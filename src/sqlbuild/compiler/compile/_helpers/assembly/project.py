@@ -153,8 +153,8 @@ from sqlbuild.compiler.sql_analysis.constants import (
 )
 from sqlbuild.compiler.sql_analysis.exceptions import SqlAnalysisBoundaryError
 from sqlbuild.compiler.sql_analysis.main._binding_catalog import create_binding_catalog
-from sqlbuild.compiler.sql_analysis.main._identifier_case import ignores_quoted_case
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
+from sqlbuild.compiler.sql_analysis.main.identifier_case import ignores_quoted_case
 from sqlbuild.compiler.sql_analysis.models import (
     SqlBindingDiagnostic,
     SqlBindingResult,

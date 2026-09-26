@@ -114,6 +114,7 @@ class FormatChange:
 class LintConfig:
     """Resolved lint and format configuration for one run."""
 
+    quoted_identifiers_ignore_case: bool = False
     native_enabled: bool = True
     max_ranking_order_by: int = 4
     max_literal_length: int = 100

@@ -62,6 +62,7 @@ _SQLBUILD_HARNESS_CTE_PREFIXES: tuple[str, ...] = (
 )
 type _NativeCacheKey = tuple[
     bool,
+    bool,
     tuple[tuple[str, tuple[str, ...]], ...],
     int,
     int,
@@ -95,6 +96,7 @@ def run_native_sql_lint(
         if cache_key in requests:
             continue
         payload: dict[str, object] = {
+            "quoted_ignore_case": config.quoted_identifiers_ignore_case,
             "cte_output_context": body.cte_output_context,
             "max_literal_length": config.max_literal_length,
             "header_literals": body.header_literals,
@@ -161,6 +163,7 @@ def run_native_sql_lint(
 
 def _native_cache_key(*, body: LintBody, config: LintConfig) -> _NativeCacheKey:
     return (
+        config.quoted_identifiers_ignore_case,
         body.cte_output_context,
         body.relation_columns,
         config.max_ranking_order_by,

@@ -17,7 +17,7 @@ const CEREMONIAL_SELECT_LITERAL: &str = "1";
 pub(super) const UNUSED_CTE_OUTPUT: LintRuleMetadata = LintRuleMetadata {
     code: "SQBRSQL042",
     message: "CTE output column is never read by a later query scope",
-    remediation: "Remove the unused output column with format --fix. Keep grouping expressions in GROUP BY; restructure dependencies when no safe edit is available.",
+    remediation: "Remove the unused output column with format --fix. Keep grouping expressions in GROUP BY; restructure dependencies when no safe edit is available. Unknown star expansions are left untouched while named outputs remain checked.",
 };
 
 pub(super) fn unused_cte_spans(tokens: &[Token], unused_names: &[String]) -> Vec<Span> {
@@ -65,8 +65,11 @@ pub(super) fn unused_outputs(
     for statement in context.statements {
         for cte in crate::query_analysis::cte_usage::analyze_with_exemptions(
             statement,
-            context.schema,
-            context.dialect,
+            crate::query_analysis::models::CteBindingOptions {
+                schema: context.schema,
+                dialect: context.dialect,
+                quoted_ignore_case: context.quoted_ignore_case,
+            },
             |cte| {
                 context.fixtures && is_ceremonial_cte_name(&cte.alias.name.to_ascii_lowercase())
                     || dependency_import(&cte.this, &context)
@@ -188,7 +191,14 @@ fn locate_cte<'a>(
     let tokens = context.tokens;
     let candidates: Vec<&CteBodyLocation> = locations
         .iter()
-        .filter(|location| location.name == normalize_identifier(cte.original.alias.clone(), get_normalization_strategy(Some(context.dialect))).name)
+        .filter(|location| {
+            location.name
+                == normalize_identifier(
+                    cte.original.alias.clone(),
+                    get_normalization_strategy(Some(context.dialect)),
+                )
+                .name
+        })
         .collect();
     if candidates.len() == 1 {
         return candidates.first().copied();
@@ -237,6 +247,11 @@ fn output_edit(
     }
     if !cte.original.columns.is_empty() {
         return Err("Remove the corresponding explicit CTE column alias together with this output");
+    }
+    if cte.slots.get(ordinal).is_some_and(|slot| slot.locally_read) {
+        return Err(
+            "This output alias is read in its own scope; restructure its local consumers before removing it",
+        );
     }
     let Expression::Select(select) = &cte.original.this else {
         return Err("This CTE does not have an editable SELECT projection");

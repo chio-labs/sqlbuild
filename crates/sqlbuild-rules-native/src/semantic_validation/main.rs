@@ -19,6 +19,29 @@ const MINIMUM_USING_SOURCE_COUNT: usize = 2;
 const MAX_VALIDATION_WORKERS: usize = 4;
 const VALIDATION_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
 
+pub(crate) fn binding_occurrences(
+    expression: &Expression,
+    schema: &ValidationSchema,
+    dialect: DialectType,
+    quoted_ignore_case: bool,
+) -> Result<polyglot_sql::validation::binding_facts::ValidationBindingFacts, String> {
+    let statements = if quoted_ignore_case {
+        crate::semantic_validation::_helpers::identifiers::fold_statements(vec![
+            expression.clone(),
+        ])?
+        .0
+    } else {
+        vec![expression.clone()]
+    };
+    Ok(
+        polyglot_sql::validation::validate_parsed_with_binding_facts(
+            statements,
+            dialect,
+            schema,
+            &SchemaValidationOptions::default(),
+        ),
+    )
+}
 #[derive(Deserialize)]
 pub(super) struct ValidationRequest {
     pub(super) sql: String,

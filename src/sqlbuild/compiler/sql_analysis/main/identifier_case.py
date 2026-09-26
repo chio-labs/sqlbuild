@@ -1,4 +1,4 @@
-"""Resolve the effective connection's quoted-identifier binding policy."""
+"""Publish the effective connection's quoted-identifier binding policy."""
 
 from sqlbuild.compiler.sql_analysis._helpers.identifier_case import (
     ignores_quoted_case as _ignores_quoted_case,

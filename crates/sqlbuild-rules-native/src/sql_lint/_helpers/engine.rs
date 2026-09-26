@@ -440,9 +440,12 @@ pub(crate) fn lint(request: LintRequest) -> Result<LintResponse, String> {
         enabled: &enabled,
     };
     let mut diagnostics = diagnostics(&context);
-    if request.cte_output_context && enabled.contains(crate::sql_lint::_helpers::terminal_shape::UNUSED_CTE_OUTPUT.code) {
+    if request.cte_output_context
+        && enabled.contains(crate::sql_lint::_helpers::terminal_shape::UNUSED_CTE_OUTPUT.code)
+    {
         diagnostics.extend(crate::sql_lint::_helpers::terminal_shape::unused_outputs(
             crate::sql_lint::models::UnusedOutputContext {
+                quoted_ignore_case: request.quoted_ignore_case,
                 sql: &request.sql,
                 tokens: &tokens,
                 statements: &statements,

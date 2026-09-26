@@ -14,6 +14,7 @@ pub(crate) struct LiteralContext<'a> {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct UnusedOutputContext<'a> {
+    pub quoted_ignore_case: bool,
     pub sql: &'a str,
     pub tokens: &'a [polyglot_sql::tokens::Token],
     pub statements: &'a [polyglot_sql::Expression],
@@ -111,6 +112,8 @@ pub(crate) struct LintRequest {
     pub header_literals: bool,
     #[serde(default = "crate::sql_lint::_helpers::terminal_shape::default_cte_output_context")]
     pub cte_output_context: bool,
+    #[serde(default)]
+    pub quoted_ignore_case: bool,
 }
 
 #[derive(Debug)]

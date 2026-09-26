@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -10,10 +12,95 @@ import duckdb
 import pytest
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild.lint._helpers import fixes
+from sqlbuild.lint.models import LintRunResult, LintViolation
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     FormatCompileIntegrationTestCase,
     SemanticFixTestCase,
 )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [FormatCompileIntegrationTestCase("unrelated unchecked model", "UNION DISTINCT")],
+    ids=lambda case: case.description,
+)
+def test_given_unrelated_unanalysed_model_when_fixing_then_verified_model_can_change(
+    test_case: FormatCompileIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "customers.sql").write_text(
+        'MODEL (description "Customers", sql_analysis false);\nSELECT 1 AS customer_id\n'
+    )
+    model: Path = models / "orders.sql"
+    model.write_text(
+        'MODEL (description "Orders");\nSELECT 1 AS order_id UNION SELECT 2 AS order_id\n'
+    )
+    assert main(["--project-dir", str(tmp_path), "format", "--fix", "--json"]) == 0
+    payload: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert any(
+        fix["code"] == "SQBRSQL008" and fix["status"] == "applied" for fix in payload["rule_fixes"]
+    )
+    assert test_case.expected_literal in model.read_text()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [FormatCompileIntegrationTestCase("unsafe proposal beside verified peer", "UNION DISTINCT")],
+    ids=lambda case: case.description,
+)
+def test_given_type_changing_proposal_when_fixing_then_refuses_it_and_applies_verified_peer(
+    test_case: FormatCompileIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    for name in ("orders", "customers"):
+        (models / f"{name}.sql").write_text(
+            'MODEL (description "Example");\nSELECT 1 AS order_id UNION SELECT 2 AS order_id\n'
+        )
+    original_lint: Callable[..., LintRunResult] = fixes.run_lint
+
+    def propose_type_change(**kwargs: Any) -> LintRunResult:
+        result: LintRunResult = original_lint(**kwargs)
+        violations: list[LintViolation] = list(result.violations)
+        indexes: dict[tuple[str, str], int] = {
+            (violation.file_path.name, violation.code): index
+            for index, violation in enumerate(violations)
+        }
+        index: int = indexes[("orders.sql", "SQBRSQL008")]
+        violation: LintViolation = violations[index]
+        assert violation.fix is not None
+        contents: str = kwargs["source_files"][violation.file_path]
+        violations[index] = replace(
+            violation,
+            fix=replace(
+                violation.fix,
+                start=contents.index("SELECT"),
+                end=len(contents),
+                replacement="SELECT 'changed' AS order_id\n",
+            ),
+        )
+        return replace(result, violations=tuple(violations))
+
+    monkeypatch.setattr(fixes, "run_lint", propose_type_change)
+    assert main(["--project-dir", str(tmp_path), "format", "--fix", "--json"]) == 0
+    payload: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert any(
+        fix["status"] == "refused" and fix["code"] == "SQBRSQL008" for fix in payload["rule_fixes"]
+    )
+    assert any(
+        fix["status"] == "applied" and fix["code"] == "SQBRSQL008" for fix in payload["rule_fixes"]
+    )
+    assert "changed" not in (models / "orders.sql").read_text()
+    assert test_case.expected_literal in (models / "customers.sql").read_text()
 
 
 @pytest.mark.parametrize(
@@ -63,10 +150,10 @@ def test_given_null_comparison_when_fixing_then_refuses_semantics_change(
 
 @pytest.mark.parametrize(
     "test_case",
-    [FormatCompileIntegrationTestCase("unanalysed model", "format-fix-verification-failed")],
+    [FormatCompileIntegrationTestCase("unanalysed model", "SQBRSQL005")],
     ids=lambda case: case.description,
 )
-def test_given_unanalysed_model_when_fixing_then_verification_preserves_original_file(
+def test_given_unanalysed_model_when_fixing_then_verification_preserves_original_query(
     test_case: FormatCompileIntegrationTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
@@ -81,10 +168,13 @@ def test_given_unanalysed_model_when_fixing_then_verification_preserves_original
         "WITH unused AS (SELECT 2 AS customer_id) SELECT 1 AS order_id\n"
     )
     model.write_text(original)
-    assert main(["--project-dir", str(tmp_path), "format", "--fix", "--json"]) == 1
+    assert main(["--project-dir", str(tmp_path), "format", "--fix", "--json"]) == 0
     payload: dict[str, Any] = json.loads(capsys.readouterr().out)
-    assert model.read_text() == original
-    assert any(v["code"] == test_case.expected_literal for v in payload["violations"])
+    assert "unused AS" in model.read_text()
+    assert any(
+        fix["code"] == test_case.expected_literal and fix["status"] == "refused"
+        for fix in payload["rule_fixes"]
+    )
 
 
 @pytest.mark.parametrize(

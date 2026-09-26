@@ -15,6 +15,43 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import CteOutp
     "test_case",
     [
         CteOutputRuleTestCase(
+            "case insensitive quoted session",
+            'WITH imported AS (SELECT * FROM __ref("customers")), prepared AS (SELECT "priority", 2 AS unused FROM imported), final AS (SELECT "PRIORITY" FROM prepared) SELECT * FROM final',
+            1,
+            0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_case_insensitive_quoted_session_when_running_rule_then_reuses_compiler_bindings(
+    test_case: CteOutputRuleTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "snowflake"\n[connection]\nsession_parameters = { QUOTED_IDENTIFIERS_IGNORE_CASE = true }\n'
+    )
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "customers.sql").write_text(
+        'MODEL (description "Customers", database example, schema analytics);\nSELECT 1 AS priority\n'
+    )
+    (models / "orders.sql").write_text(
+        'MODEL (description "Orders", database example, schema analytics);\n' + test_case.sql
+    )
+    _ = main(["--project-dir", str(tmp_path), "rules", "--json", "run", "SQBRSQL042"])
+    payload: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert payload["unevaluated_resources"] == 0
+    assert (
+        sum(finding["code"] == "SQBRSQL042" for finding in payload["findings"])
+        == test_case.expected_findings
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CteOutputRuleTestCase(
             "unused intermediate column",
             "WITH prepared AS (SELECT 1 AS a, 2 AS b), final AS (SELECT a FROM prepared) SELECT * FROM final",
             1,

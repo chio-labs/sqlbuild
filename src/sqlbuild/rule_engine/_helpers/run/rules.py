@@ -25,6 +25,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.sql_analysis.main.identifier_case import ignores_quoted_case
 from sqlbuild.lint.constants import TEMPLATE_INTERPOLATION_START
 from sqlbuild.lint.exceptions import NativeLintError
 from sqlbuild.lint.main.build_expansion_context import build_expansion_context
@@ -372,8 +373,13 @@ def _run_sql_rules(
         for model in project.models
         if project.settings.sql_analysis and model.config.values.get("sql_analysis") is not False
     }
+    quoted_ignore_case: bool = ignores_quoted_case(
+        connection=project.effective_connection, dialect=dialect
+    )
     schema_fingerprint: str = hashlib.sha256(
-        json.dumps(sorted(relation_columns.items(), key=lambda item: str(item[0]))).encode()
+        json.dumps(
+            (quoted_ignore_case, sorted(relation_columns.items(), key=lambda item: str(item[0])))
+        ).encode()
     ).hexdigest()
     bucket: dict[str, dict[str, object]] = (
         _read_sql_rule_cache(project_dir) if config.cache.enabled else {}
@@ -439,6 +445,7 @@ def _run_sql_rules(
         _run_prepared_lint(
             project_dir=project_dir,
             config=LintConfig(
+                quoted_identifiers_ignore_case=quoted_ignore_case,
                 relation_columns=relation_columns,
                 dialect=dialect,
                 enabled_native_rules=codes,
