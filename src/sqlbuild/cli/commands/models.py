@@ -1231,6 +1231,7 @@ class ScopeCommandRequest:
     json_output: bool = False
     no_cache: bool = False
     verbose: bool = False
+    no_color: bool = False
 
 
 @dataclass(frozen=True)

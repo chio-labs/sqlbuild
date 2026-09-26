@@ -34,7 +34,7 @@ from sqlbuild.presentation.main.count_noun import format_count_noun
 _USED_MARKER: str = "●"
 _UNUSED_MARKER: str = "○"
 _LEGEND_MARKERS: str = (
-    f"{_USED_MARKER} used by this resource   {_UNUSED_MARKER} available but unused"
+    f"{_USED_MARKER} used by this resource   {_UNUSED_MARKER} not used by this resource"
 )
 _LEGEND_VERBOSE_HINT: str = "--verbose for scope details"
 

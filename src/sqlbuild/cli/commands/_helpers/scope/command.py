@@ -111,7 +111,7 @@ def run_scope_command(
         else render_scope_result(
             result=result,
             request=request,
-            use_color=output_stream is None and supports_color(),
+            use_color=output_stream is None and not request.no_color and supports_color(),
         )
     )
     stream.write(output)

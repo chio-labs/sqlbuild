@@ -42,7 +42,7 @@ _MOVE_REQUEST: ScopeCommandRequest = ScopeCommandRequest(
                 "--as-path models/marts/orders.sql --globals all\n",
                 "  Lost (1)\n    └─ ● enum:order_status  models/staging/enums/order_status.sql:1\n",
                 "  Invalidated usages (1)\n    - enum:order_status\n",
-                "● used by this resource   ○ available but unused   --verbose for scope details\n",
+                "● used by this resource   ○ not used by this resource   --verbose for scope details\n",
                 "Completeness: complete\n",
             ),
             unexpected_fragments=(

@@ -35,6 +35,7 @@ def test_given_all_scope_flags_when_dispatching_then_builds_typed_frozen_request
 
     exit_code: int = _main_with_dependencies(
         argv=(
+            "--no-color",
             "scope",
             "model:orders",
             "--as-path",
@@ -90,6 +91,7 @@ def test_given_all_scope_flags_when_dispatching_then_builds_typed_frozen_request
             json_output=True,
             no_cache=True,
             verbose=True,
+            no_color=True,
         )
     ]
     assert ScopeCommandRequest.__dataclass_params__.frozen is True

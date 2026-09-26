@@ -89,7 +89,7 @@ Available (3 of 5, 2 collapsed)
   └─ ● macro:formatted_order_total  models/commerce/macros/orders.py:4
   … 2 globals collapsed; run sqb scope model:orders --globals all
 
-● used by this resource   ○ available but unused   --verbose for scope details
+● used by this resource   ○ not used by this resource   --verbose for scope details
 
 Completeness: complete
 ```
@@ -168,7 +168,7 @@ Explanation
      Required path: models/commerce
      Promotion impact: model:orders
 
-● used by this resource   ○ available but unused   --verbose for scope details
+● used by this resource   ○ not used by this resource   --verbose for scope details
 
 Diagnostics (1)
   ERROR S008 models/commerce/macros/orders.py: Declaration 'macro:formatted_order_total' is currently descendant-public at 'models/commerce' (models/commerce/macros/orders.py); required exact-owner-private at 'models/commerce'. Consumers: model:orders. Move it to 'models/commerce/_sqlbuild/_macros/'
@@ -292,7 +292,7 @@ Available (3 of 5, 2 collapsed)
   └─ ○ macro:formatted_order_total  models/commerce/macros/orders.py:4
   … 2 globals collapsed; run sqb scope --at models/commerce/returns/new_return.sql --globals all
 
-● used by this resource   ○ available but unused   --verbose for scope details
+● used by this resource   ○ not used by this resource   --verbose for scope details
 
 Diagnostics (1)
   ERROR S013 models/commerce/returns/new_return.sql: Runtime usage and relationship facts are unavailable for a prospective path

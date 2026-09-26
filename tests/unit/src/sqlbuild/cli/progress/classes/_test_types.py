@@ -56,3 +56,10 @@ class StatementMonitorRaceCase:
     description: str
     query_id: str
     expected_submission_count: int
+
+
+@dataclass(frozen=True)
+class LockOrderCase:
+    description: str
+    timeout_seconds: float
+    expected_alive_threads: int

@@ -93,7 +93,7 @@ class NativeProgressProjector:
         self._lines: TransientLineCoordinator = shared_transient_line_coordinator()
         self._style: CliStyle = CliStyle(use_color=use_color)
         self._is_tty: bool = hasattr(stream, "isatty") and stream.isatty()
-        self._lock: threading.RLock = threading.RLock()
+        self._lock: threading.RLock = self._lines.lock
         self._seen_event_ids: set[str] = set()
         self._resource_ordinals: dict[str, int] = {}
         self._resource_total: int = 0

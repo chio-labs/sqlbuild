@@ -8,6 +8,7 @@ from io import StringIO
 import pytest
 
 from sqlbuild.cli.commands._helpers.runtime import adapter_context, connection
+from sqlbuild.cli.commands._helpers.scope import command as scope_command
 from sqlbuild.cli.commands._helpers.scope.command import run_scope_command
 from sqlbuild.cli.commands.models import ScopeCommandRequest
 from sqlbuild.compiler.scopes.models import ScopeCompleteness, ScopeIndex
@@ -89,6 +90,28 @@ def test_given_verbose_flag_when_rendering_json_then_bytes_match_default_json(
         outputs.append(stream.getvalue())
     assert outputs[0] == outputs[1]
     assert "\x1b[" not in outputs[0]
+
+
+@pytest.mark.parametrize(
+    "test_case", (ScopeCommandCase("no color flag", 0),), ids=lambda case: case.description
+)
+def test_given_no_color_flag_when_rendering_text_to_color_terminal_then_output_is_plain(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    test_case: ScopeCommandCase,
+) -> None:
+    monkeypatch.setattr(scope_command, "supports_color", lambda: True)
+    index: ScopeIndex = report_scope_lookup().index
+    outputs: list[str] = []
+    for no_color in (False, True):
+        exit_code: int = run_scope_command(
+            request=ScopeCommandRequest(target="model:orders", no_color=no_color),
+            load_scope_index=lambda **_kwargs: index,
+        )
+        assert exit_code == test_case.expected_exit_code
+        outputs.append(capsys.readouterr().out)
+    assert "\x1b[" in outputs[0]
+    assert "\x1b[" not in outputs[1]
 
 
 @pytest.mark.parametrize(
