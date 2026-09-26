@@ -61,6 +61,8 @@ _SQLBUILD_HARNESS_CTE_PREFIXES: tuple[str, ...] = (
     TABLE_FN_EXPECTED_TEST_CTE_NAME,
 )
 type _NativeCacheKey = tuple[
+    bool,
+    tuple[tuple[str, tuple[str, ...]], ...],
     int,
     int,
     bool,
@@ -93,6 +95,7 @@ def run_native_sql_lint(
         if cache_key in requests:
             continue
         payload: dict[str, object] = {
+            "cte_output_context": body.cte_output_context,
             "max_literal_length": config.max_literal_length,
             "header_literals": body.header_literals,
             "max_ranking_order_by": config.max_ranking_order_by,
@@ -100,6 +103,11 @@ def run_native_sql_lint(
             "sql": body.lint_text,
             "dialect": config.dialect,
         }
+        if body.relation_columns:
+            tables: list[dict[str, object]] = []
+            for name, columns in body.relation_columns:
+                tables.append({"name": name, "columns": [{"name": column} for column in columns]})
+            payload["schema"] = {"tables": tables}
         if config.enabled_native_rules is not None:
             payload["enabled_rules"] = list(config.enabled_native_rules)
         if config.ignored_native_rules:
@@ -153,6 +161,8 @@ def run_native_sql_lint(
 
 def _native_cache_key(*, body: LintBody, config: LintConfig) -> _NativeCacheKey:
     return (
+        body.cte_output_context,
+        body.relation_columns,
         config.max_ranking_order_by,
         config.max_literal_length,
         body.header_literals,

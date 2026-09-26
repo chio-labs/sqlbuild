@@ -15,6 +15,7 @@ from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.lint._helpers.native_format import with_newline_style
 from sqlbuild.lint.constants import LINT_ENGINE_NATIVE, VIOLATION_SEVERITY_FAULT
 from sqlbuild.lint.exceptions import ProjectCompileError
+from sqlbuild.lint.main.build_relation_catalog import build_relation_catalog
 from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import (
     FormatChange,
@@ -26,7 +27,15 @@ from sqlbuild.lint.models import (
 )
 
 _SAFE_RULES: frozenset[str] = frozenset(
-    {"SQBRSQL002", "SQBRSQL003", "SQBRSQL005", "SQBRSQL006", "SQBRSQL008", "SQBRSQL044"}
+    {
+        "SQBRSQL002",
+        "SQBRSQL003",
+        "SQBRSQL005",
+        "SQBRSQL006",
+        "SQBRSQL008",
+        "SQBRSQL042",
+        "SQBRSQL044",
+    }
 )
 _MAX_PASSES: int = 128
 _APPLIED: str = "applied"
@@ -96,8 +105,15 @@ def plan_rule_fixes(
     current: dict[Path, str] = dict(files)
     inputs: DiscoveredProjectInputs = discovered_inputs
     reports: list[RuleFixResult] = []
+    unavailable: dict[Path, RuleFixResult] = {}
     model_paths: frozenset[Path] = frozenset(model.file_path for model in inputs.model_files)
     baseline: CompiledProject | None = None
+    try:
+        baseline = compile_project(discovered_inputs=inputs, adapter=adapter)
+    except Exception:
+        baseline = None
+    if baseline is not None:
+        config = replace(config, relation_columns=build_relation_catalog(project=baseline))
     seen: set[tuple[tuple[Path, str], ...]] = set()
     for _ in range(_MAX_PASSES):
         state: tuple[tuple[Path, str], ...] = tuple(sorted(current.items()))
@@ -106,16 +122,27 @@ def plan_rule_fixes(
         seen.add(state)
         result: LintRunResult = run_lint(
             project_dir=project_dir,
-            config=replace(config, enabled_native_rules=("SQBRSQL",)),
+            config=replace(config, enabled_native_rules=("SQBRSQL",), header_rules_enabled=False),
             value_renderer=adapter,
             discovered_inputs=inputs,
             source_files=current,
             selected_paths=frozenset(current),
         )
+        if result.faults:
+            if any(current[fault.file_path] != files[fault.file_path] for fault in result.faults):
+                return _decline(files=files, reports=reports,
+                                reason="Rule analysis failed after an automatic edit")
+            for fault in result.faults:
+                unavailable[fault.file_path] = RuleFixResult(
+                    file_path=fault.file_path, code=fault.code, line=fault.line,
+                    status="unavailable", reason=f"SQL Rule analysis is unavailable: {fault.message}",
+                )
         edits: dict[Path, list[LintEdit]] = {}
         pending: list[RuleFixResult] = []
         remaining: list[RuleFixResult] = []
         for violation in result.violations:
+            if violation.file_path in unavailable:
+                continue
             if not violation.code.startswith("SQBRSQL"):
                 continue
             reason: str | None = violation.fix_unavailable_reason
@@ -153,7 +180,7 @@ def plan_rule_fixes(
                 )
             )
         if not edits:
-            return current, tuple(reports + remaining), []
+            return current, tuple([*reports, *remaining, *unavailable.values()]), []
         candidate: dict[Path, str] = dict(current)
         for path, path_edits in edits.items():
             contents: str = candidate[path]

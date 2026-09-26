@@ -25,6 +25,12 @@ class LiteralSettingsCase:
 
 
 @dataclass(frozen=True)
+class CteOutputSettingsCase:
+    description: str
+    expected_code: str = "SQBRSQL042"
+
+
+@dataclass(frozen=True)
 class GroupedRulesCase:
     description: str
     arguments: tuple[str, ...]

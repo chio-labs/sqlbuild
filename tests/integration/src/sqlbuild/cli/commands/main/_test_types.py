@@ -35,6 +35,15 @@ class LiteralLimitTestCase:
 
 
 @dataclass(frozen=True)
+class CteOutputRuleTestCase:
+    description: str
+    sql: str
+    expected_findings: int
+    expected_applied: int
+    expected_remaining: int = 0
+
+
+@dataclass(frozen=True)
 class SemanticFixTestCase:
     description: str
     sql: str

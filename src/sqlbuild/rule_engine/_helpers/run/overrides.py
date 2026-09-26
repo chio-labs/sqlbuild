@@ -22,8 +22,10 @@ def override_findings(
                     path=model.relative_path,
                     line=1,
                     column=1,
-                    message="MODEL (sql_analysis false) is forbidden by allow_model_overrides = false",
-                    remediation="Remove the MODEL sql_analysis override and resolve compiler findings.",
+                    message=(
+                        "MODEL (sql_analysis false) is forbidden by allow_model_overrides = false"
+                    ),
+                    remediation="Remove the MODEL sql_analysis override and resolve the findings.",
                 )
             )
     files: dict[Path, str] = collect_project_files(project_dir=project_dir, selected_paths=None)

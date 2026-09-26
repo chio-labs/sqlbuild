@@ -65,7 +65,7 @@ pub(super) fn diagnostics(context: LiteralContext<'_>) -> Vec<LintDiagnostic> {
             };
             Some(LintDiagnostic {
                 code: LONG_LITERAL.code,
-                message: LONG_LITERAL.message,
+                message: LONG_LITERAL.message.to_owned(),
                 remediation: LONG_LITERAL.remediation,
                 start: token.span.start,
                 end: token.span.end,

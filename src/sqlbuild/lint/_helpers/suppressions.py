@@ -8,6 +8,7 @@ from pathlib import Path
 
 from sqlbuild.lint.constants import LINT_ENGINE_NATIVE, VIOLATION_SEVERITY_WARNING
 from sqlbuild.lint.models import LintEdit, LintViolation
+from sqlbuild.lint.types import LintSeverity
 
 _SUPPRESSION_PREFIX: str = "sqb: ignore"
 _SUPPRESSION_PATTERN: re.Pattern[str] = re.compile(
@@ -39,7 +40,7 @@ def find_suppression_overrides(*, contents_by_path: dict[Path, str]) -> tuple[Li
                         f"Inline suppression '{directive.code}' is forbidden by "
                         "allow_model_overrides = false"
                     ),
-                    severity="fault",
+                    severity=LintSeverity.FAULT,
                     engine=LINT_ENGINE_NATIVE,
                     remediation="Remove the inline suppression and comply with the project Rule.",
                 )

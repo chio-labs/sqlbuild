@@ -36,12 +36,13 @@ from sqlbuild.lint._helpers.sqlbuild_tokens import (
 from sqlbuild.lint.constants import TEMPLATE_INTERPOLATION_START
 from sqlbuild.lint.exceptions import ProjectCompileError
 from sqlbuild.lint.models import InterpolationSite, LintBody
+from sqlbuild.lint.types import LintRelationCatalog
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
 
 _DEPENDENCY_INTRINSIC_PATTERN: re.Pattern[str] = re.compile(
-    r"^__(?:ref|source)\s*\(", re.IGNORECASE
+    r"^__(?:ref|source|seed)\s*\(", re.IGNORECASE
 )
 
 _CTE_DEFINITION_PATTERN: re.Pattern[str] = re.compile(
@@ -118,6 +119,25 @@ def build_lint_expansion_context(
         ) from error
 
 
+def _bound_relation_columns(
+    *, sites: tuple[InterpolationSite, ...], catalog: LintRelationCatalog
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    if not catalog:
+        return ()
+    bindings: list[tuple[str, tuple[str, ...]]] = []
+    for site in sites:
+        references: list[tuple[str, str, str | None, int | None]] | None = (
+            _native.extract_static_sql_references(site.original_text)
+        )
+        if references is None or len(references) != 1:
+            continue
+        kind, name, package, _ = references[0]
+        columns: tuple[str, ...] = catalog.get((kind, name, package), ())
+        if columns:
+            bindings.append((site.sentinel, columns))
+    return tuple(bindings)
+
+
 def _resolve_value_renderer(
     *, project_dir: Path, discovered_inputs: DiscoveredProjectInputs
 ) -> TypedSqlValueRenderer:
@@ -140,7 +160,7 @@ def prepare_lint_body(
     dialect: str,
     external_identifiers: tuple[str, ...] = (),
     allows_ceremonial_select: bool = False,
-    allows_dynamic_output_star: bool = False,
+    relation_columns: LintRelationCatalog | None = None,
     compiled_expansion: CompiledSqlExpansion | None = None,
 ) -> LintBody:
     """Expand one authored body and neutralize whatever interpolation remains."""
@@ -226,7 +246,7 @@ def prepare_lint_body(
         dependency_identifiers=dependency_identifiers,
         externally_referenced_ctes=externally_referenced_ctes,
         allows_ceremonial_select=allows_ceremonial_select,
-        allows_dynamic_output_star=allows_dynamic_output_star,
+        relation_columns=_bound_relation_columns(sites=sites, catalog=relation_columns or {}),
     )
 
 

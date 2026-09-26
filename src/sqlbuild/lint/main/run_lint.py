@@ -19,7 +19,7 @@ from sqlbuild.lint._helpers.native import external_identifiers_for_headers, lint
 from sqlbuild.lint._helpers.native_sql import run_native_sql_lint
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
 from sqlbuild.lint._helpers.suppressions import apply_suppressions
-from sqlbuild.lint.constants import HEADER_KIND_SCENARIO, HEADER_KIND_TEST
+from sqlbuild.lint.constants import HEADER_KIND_MODEL, HEADER_KIND_SCENARIO, HEADER_KIND_TEST
 from sqlbuild.lint.models import HeaderSpan, LintBody, LintConfig, LintRunResult, LintViolation
 
 
@@ -170,10 +170,12 @@ def _prepared_bodies(
                     dialect=config.dialect,
                     external_identifiers=external_identifiers,
                     allows_ceremonial_select=allows_ceremonial_select,
-                    allows_dynamic_output_star=allows_dynamic_output_star,
+                    relation_columns=config.relation_columns,
                     compiled_expansion=compiled_expansion,
                 ),
                 allows_empty_fixture_star=allows_empty_fixture_star,
+                allows_dynamic_output_star=allows_dynamic_output_star,
+                cte_output_context=any(header.kind in {HEADER_KIND_MODEL, HEADER_KIND_TEST, HEADER_KIND_SCENARIO} for header in headers),
             )
         )
     return tuple(bodies)

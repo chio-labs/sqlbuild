@@ -49,7 +49,7 @@ pub(super) fn diagnostics(
                     .map(|token| token.span);
                 findings.push(LintDiagnostic {
                     code: RANKING_SORT_CAP.code,
-                    message: RANKING_SORT_CAP.message,
+                    message: RANKING_SORT_CAP.message.to_owned(),
                     remediation: RANKING_SORT_CAP.remediation,
                     start: span.map_or(0, |span| span.start),
                     end: span.map_or(0, |span| span.end),

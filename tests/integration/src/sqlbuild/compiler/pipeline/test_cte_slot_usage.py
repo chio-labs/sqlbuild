@@ -34,6 +34,12 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import NativeC
             (("root.ctes[0]", 1),),
             "snowflake",
         ),
+        NativeCteSlotCase(
+            "Snowflake lateral output and captured input slots",
+            "WITH items AS (SELECT 1 AS x, 2 AS y, 3 AS unused) SELECT f.value FROM items, LATERAL FLATTEN(INPUT => ARRAY_CONSTRUCT(items.x, items.y)) f",
+            (("root.ctes[0]", 2),),
+            "snowflake",
+        ),
     ],
     ids=lambda case: case.description,
 )
