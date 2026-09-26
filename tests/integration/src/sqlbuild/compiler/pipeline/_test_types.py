@@ -11,6 +11,7 @@ class NativeCteSlotCase:
     description: str
     sql: str
     expected_unused: tuple[tuple[str, int], ...]
+    dialect: str = "duckdb"
 
 
 @dataclass(frozen=True)

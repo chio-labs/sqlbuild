@@ -22,6 +22,18 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import NativeC
             "WITH items AS (SELECT 1 AS order_id, 2 AS unused) SELECT order_id FROM items",
             (("root.ctes[0]", 1),),
         ),
+        NativeCteSlotCase(
+            "Snowflake normalizes CTE declarations and reads together",
+            "WITH staged AS (SELECT 1 AS order_id, 2 AS priority), projected AS (SELECT order_id FROM staged WHERE priority > 0) SELECT order_id FROM projected",
+            (),
+            "snowflake",
+        ),
+        NativeCteSlotCase(
+            "Snowflake relation alias binds its consumed output",
+            "WITH items AS (SELECT 1 AS order_id, 2 AS unused) SELECT t.order_id FROM items AS t",
+            (("root.ctes[0]", 1),),
+            "snowflake",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -33,7 +45,7 @@ def test_given_slot_queries_when_crossing_native_boundary_then_compact_facts_are
             json.dumps(
                 {
                     "requests": [
-                        {"sql": test_case.sql, "dialect": "duckdb"},
+                        {"sql": test_case.sql, "dialect": test_case.dialect},
                         {"sql": "SELECT (", "dialect": "duckdb"},
                     ]
                 }

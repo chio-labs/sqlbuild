@@ -2,7 +2,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use polyglot_sql::expressions::Column;
-use polyglot_sql::optimizer::normalize_identifiers::normalize_identifiers;
+use polyglot_sql::optimizer::normalize_identifiers::{
+    get_normalization_strategy, normalize_identifier, normalize_identifiers,
+};
 use polyglot_sql::optimizer::qualify_columns::{QualifyColumnsOptions, qualify_columns};
 use polyglot_sql::resolver::Resolver;
 use polyglot_sql::schema::MappingSchema;
@@ -90,7 +92,7 @@ pub(crate) fn analyze(
         schema.unwrap_or(&empty),
         dialect,
     );
-    let normalized = normalize_identifiers(expression.clone(), Some(dialect));
+    let normalized = normalize_scoped_identifiers(expression.clone(), dialect)?;
     let original = build_scope(&normalized);
     let normalized = complete_alias_lists(normalized)?;
     let qualified = qualify_columns(
@@ -412,6 +414,35 @@ fn complete_alias_lists(expression: Expression) -> Result<Expression, String> {
                             .extend(names.into_iter().skip(cte.columns.len()));
                     }
                 }
+            }
+            Ok(Some(node))
+        })
+        .map_err(|error| error.to_string())
+}
+
+fn normalize_scoped_identifiers(
+    expression: Expression,
+    dialect: DialectType,
+) -> Result<Expression, String> {
+    let strategy = get_normalization_strategy(Some(dialect));
+    expression
+        .transform_owned(|node| {
+            let mut node = normalize_identifiers(node, Some(dialect));
+            let with = match &mut node {
+                Expression::Select(select) => select.with.as_mut(),
+                Expression::Union(set) => set.with.as_mut(),
+                Expression::Intersect(set) => set.with.as_mut(),
+                Expression::Except(set) => set.with.as_mut(),
+                _ => None,
+            };
+            for cte in with.into_iter().flat_map(|with| &mut with.ctes) {
+                cte.alias = normalize_identifier(cte.alias.clone(), strategy);
+                cte.columns = cte
+                    .columns
+                    .iter()
+                    .cloned()
+                    .map(|column| normalize_identifier(column, strategy))
+                    .collect();
             }
             Ok(Some(node))
         })
