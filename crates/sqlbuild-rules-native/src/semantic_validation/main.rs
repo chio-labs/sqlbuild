@@ -257,6 +257,10 @@ impl ClauseResolver<'_, '_> {
         let Ok(columns) = self.resolver.get_source_columns(source_name) else {
             return false;
         };
+        // An empty shape is an open input, not proof that a column is absent.
+        if columns.is_empty() {
+            return true;
+        }
         columns
             .iter()
             .any(|name| name.eq_ignore_ascii_case(column_name))
