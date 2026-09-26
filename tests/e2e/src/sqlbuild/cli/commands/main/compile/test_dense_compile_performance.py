@@ -1,6 +1,5 @@
 """Fresh-process guards for dense query graphs and the complete built-in ruleset."""
 
-import logging
 from itertools import filterfalse
 from operator import attrgetter
 from pathlib import Path
@@ -26,7 +25,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     measure_model_sql_bytes,
 )
 
-_LOGGER: logging.Logger = logging.getLogger(__name__)
 _GIB: int = 1024 * 1024 * 1024
 
 
@@ -93,14 +91,11 @@ def test_given_dense_project_when_compiling_cold_then_preserves_rules_semantics_
         expected_max_wall_seconds=test_case.expected_max_wall_seconds,
         compile_args=("--no-cache",),
     )
-    _LOGGER.info(
-        "dense compile models=%d builtin_rules=%d wall=%.3fs peak_rss_bytes=%d fingerprint=%s timings=%s",
-        test_case.model_count,
-        len(builtin_codes),
-        result.elapsed_seconds,
-        result.peak_rss_bytes,
-        result.semantic_fingerprint,
-        result.payload["compile_timings"],
+    print(
+        f"dense compile models={test_case.model_count} builtin_rules={len(builtin_codes)} "
+        f"wall={result.elapsed_seconds:.3f}s peak_rss_bytes={result.peak_rss_bytes} "
+        f"fingerprint={result.semantic_fingerprint} timings={result.payload['compile_timings']}",
+        flush=True,
     )
     assert result.payload["diagnostics"] == []
     assert result.payload["has_errors"] is False
