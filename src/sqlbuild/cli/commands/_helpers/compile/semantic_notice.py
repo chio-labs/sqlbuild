@@ -19,9 +19,14 @@ _ACTIONS: dict[str, str] = {
 
 
 def selected_semantic_coverage(
-    *, project: CompiledProject, selected_keys: frozenset[CompiledObjectKey] | None
+    *,
+    project: CompiledProject,
+    selected_keys: frozenset[CompiledObjectKey] | None,
+    sql_validation_enabled: bool = True,
 ) -> dict[str, tuple[str, ...]]:
     """Report coverage for the compile selection rather than unanalyzed sibling models."""
+    if not sql_validation_enabled:
+        return {}
     reasons: dict[str, tuple[str, ...]] = get_semantic_coverage(project)
     if selected_keys is None:
         return reasons
@@ -32,11 +37,16 @@ def selected_semantic_coverage(
 
 
 def semantic_coverage_notice(
-    *, project: CompiledProject, selected_keys: frozenset[CompiledObjectKey] | None = None
+    *,
+    project: CompiledProject,
+    selected_keys: frozenset[CompiledObjectKey] | None = None,
+    sql_validation_enabled: bool = True,
 ) -> str | None:
     """Summarize partial checks without increasing the diagnostic warning count."""
     reasons: dict[str, tuple[str, ...]] = selected_semantic_coverage(
-        project=project, selected_keys=selected_keys
+        project=project,
+        selected_keys=selected_keys,
+        sql_validation_enabled=sql_validation_enabled,
     )
     if not reasons:
         return None

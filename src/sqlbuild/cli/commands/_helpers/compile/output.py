@@ -61,6 +61,7 @@ def format_compile_text(
     lineage_mode: CompileLineageMode = CompileLineageMode.FAST,
     use_color: bool,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
+    sql_validation_enabled: bool = True,
 ) -> str:
     """Format human-readable compile output."""
 
@@ -100,7 +101,9 @@ def format_compile_text(
         lines.append("  " + style.muted("Use --json for the full compile report."))
     lines.append("")
     notice: str | None = semantic_coverage_notice(
-        project=graph.project, selected_keys=selected_keys
+        project=graph.project,
+        selected_keys=selected_keys,
+        sql_validation_enabled=sql_validation_enabled,
     )
     if notice:
         lines.append(notice)
@@ -180,6 +183,7 @@ def format_compile_json(
     diagnostics: tuple[CompilerDiagnostic, ...],
     lineage_mode: CompileLineageMode = CompileLineageMode.FAST,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
+    sql_validation_enabled: bool = True,
 ) -> str:
     """Serialize the offline compile report as JSON."""
 
@@ -195,7 +199,9 @@ def format_compile_json(
         ),
         "diagnostics": [_diagnostic_to_json(diagnostic) for diagnostic in diagnostics],
         "semantic_checks_partial": selected_semantic_coverage(
-            project=graph.project, selected_keys=selected_keys
+            project=graph.project,
+            selected_keys=selected_keys,
+            sql_validation_enabled=sql_validation_enabled,
         ),
         "compile_timings": timings_ms,
         "lineage_mode": lineage_mode.value,
