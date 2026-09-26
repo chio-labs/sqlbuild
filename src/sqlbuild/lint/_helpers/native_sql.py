@@ -325,6 +325,21 @@ def _authored_fix(*, raw_fix: object, code: str, body: LintBody) -> LintEdit | N
         or end > len(body.lint_text)
     ):
         raise NativeLintError("native lint diagnostic has an invalid fix edit")
+    region_start: int = start
+    region_end: int = end
+    for spans in reversed(body.passes):
+        if any(
+            region_start < span.output_end
+            and span.output_start < region_end
+            or (
+                span.output_start == span.output_end
+                and region_start <= span.output_start < region_end
+            )
+            for span in spans
+        ):
+            return None
+        region_start = map_expanded_offset(offset=region_start, passes=(spans,)).offset
+        region_end = map_expanded_offset(offset=region_end, passes=(spans,)).offset
     mapped_start: MappedOffset = map_expanded_offset(offset=start, passes=body.passes)
     mapped_last: MappedOffset = map_expanded_offset(offset=end - 1, passes=body.passes)
     if (

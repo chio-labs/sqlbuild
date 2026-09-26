@@ -7,6 +7,7 @@ from pathlib import Path
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.classes.fixture_null_autofix import FixtureNullAutofix
+from sqlbuild.lint._helpers.fixes import finalize_fix_reports, persist_changes, plan_rule_fixes
 from sqlbuild.lint._helpers.headers import scan_headers
 from sqlbuild.lint._helpers.native import (
     format_native_headers,
@@ -15,10 +16,7 @@ from sqlbuild.lint._helpers.native import (
     reject_unparseable_header_rewrites,
     safe_format_files,
 )
-from sqlbuild.lint._helpers.native_format import (
-    format_native_sql_bodies,
-    with_newline_style,
-)
+from sqlbuild.lint._helpers.native_format import format_native_sql_bodies
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
 from sqlbuild.lint._helpers.suppressions import apply_suppressions
 from sqlbuild.lint.constants import VIOLATION_SEVERITY_WARNING
@@ -40,6 +38,7 @@ def run_format(
     discovered_inputs: DiscoveredProjectInputs | None = None,
     fixtures_only: bool = False,
     write: bool = True,
+    fix: bool = False,
 ) -> LintRunResult:
     """Format all DSL files in place and report the violations that remain."""
 
@@ -47,6 +46,14 @@ def run_format(
         project_dir=project_dir, selected_paths=selected_paths
     )
     safe_files, newline_by_path = safe_format_files(files=files, config=config)
+    safe_files, rule_fixes, rule_faults = plan_rule_fixes(
+        project_dir=project_dir,
+        files=safe_files,
+        config=config,
+        adapter=value_renderer,
+        discovered_inputs=discovered_inputs,
+        enabled=fix,
+    )
     updated_contents, format_faults = _apply_fixes(
         files=safe_files,
         config=config,
@@ -54,34 +61,15 @@ def run_format(
         discovered_inputs=discovered_inputs,
         fixtures_only=fixtures_only,
     )
+    format_faults.extend(rule_faults)
+    updated_contents: dict[Path, str] = {**safe_files, **updated_contents}
     declined_paths: set[Path] = {fault.file_path for fault in format_faults}
     updated_contents: dict[Path, str] = {
         path: contents for path, contents in updated_contents.items() if path not in declined_paths
     }
-    formatted: list[Path] = []
-    changes: list[FormatChange] = []
-    file_path: Path
-    new_contents: str
-    for file_path, new_contents in updated_contents.items():
-        rendered_contents: str = with_newline_style(
-            contents=new_contents, newline=newline_by_path[file_path]
-        )
-        original_contents: str = with_newline_style(
-            contents=files[file_path], newline=newline_by_path[file_path]
-        )
-        if rendered_contents == original_contents:
-            continue
-        changes.append(
-            FormatChange(
-                file_path=file_path,
-                before=original_contents,
-                after=rendered_contents,
-            )
-        )
-        if write:
-            with file_path.open("w", encoding="utf-8", newline="") as handle:
-                _ = handle.write(rendered_contents)
-        formatted.append(file_path)
+    changes: tuple[FormatChange, ...] = persist_changes(
+        files=files, updated=updated_contents, newlines=newline_by_path, write=write
+    )
     violations: list[LintViolation] = (
         []
         if fixtures_only
@@ -105,8 +93,9 @@ def run_format(
                 contents_by_path=final_contents,
             )
         ),
-        formatted_files=tuple(sorted(formatted)),
-        format_changes=tuple(sorted(changes, key=lambda change: change.file_path)),
+        formatted_files=tuple(change.file_path for change in changes),
+        format_changes=changes,
+        rule_fixes=finalize_fix_reports(reports=rule_fixes, declined_paths=declined_paths),
         source_texts=final_contents,
     )
 

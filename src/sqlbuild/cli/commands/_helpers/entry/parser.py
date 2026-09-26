@@ -319,6 +319,12 @@ def _add_quality_parsers(
     format_parser.add_argument("--check", dest="format_check", action="store_true")
     format_parser.add_argument("--diff", dest="format_diff", action="store_true")
     format_parser.add_argument(
+        "--fix",
+        dest="format_fix",
+        action="store_true",
+        help="apply compiler-verified meaning-preserving Rule fixes",
+    )
+    format_parser.add_argument(
         "--fixtures-only",
         dest="format_fixtures_only",
         action="store_true",

@@ -612,6 +612,8 @@ def _dispatch_lint_format_command(
     """Route the source-formatting command to its handler."""
     if args.format_diff and args.json:
         raise CliUserError("format --diff cannot be combined with --json", code="C112")
+    if args.format_fix and args.format_fixtures_only:
+        raise CliUserError("format --fix cannot be combined with --fixtures-only", code="C112")
     path_selectors: tuple[str, ...] = format_path_selectors(
         paths=tuple(args.format_paths), project_dir=project_dir, cwd=Path.cwd()
     )
@@ -622,6 +624,7 @@ def _dispatch_lint_format_command(
         check=args.format_check,
         diff=args.format_diff,
         fixtures_only=args.format_fixtures_only,
+        fix=args.format_fix,
         json_output=args.json,
         no_color=args.no_color,
     )

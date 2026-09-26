@@ -89,6 +89,8 @@ def render_lint_result(
     if result.violations:
         print("\n\n".join(format_lint_diagnostics(result=result, root=root, use_color=use_color)))
         print()
+    for fix in result.rule_fixes:
+        print(f"{fix.status.upper()}  {fix.code}  {fix.file_path}:{fix.line}: {fix.reason}")
     summary: str = (
         f"Completed.  FAULT={len(result.faults)}  WARN={len(result.warnings)}  "
         f"FILES={result.files_checked}"
@@ -105,6 +107,16 @@ def render_lint_result_json(*, result: LintRunResult) -> None:
                 "faults": len(result.faults),
                 "files_checked": result.files_checked,
                 "formatted_files": [str(path) for path in result.formatted_files],
+                "rule_fixes": [
+                    {
+                        "file": str(fix.file_path),
+                        "code": fix.code,
+                        "line": fix.line,
+                        "status": fix.status,
+                        "reason": fix.reason,
+                    }
+                    for fix in result.rule_fixes
+                ],
                 "violations": [
                     {
                         "code": violation.code,

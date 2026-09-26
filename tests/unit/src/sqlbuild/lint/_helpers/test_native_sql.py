@@ -329,6 +329,52 @@ def test_given_multi_branch_boolean_case_when_linting_then_partial_fix_is_withhe
 @pytest.mark.parametrize(
     "test_case",
     [
+        NativeSqlFixTestCase(
+            description="equal-length expansion wholly inside an unused CTE",
+            sql="WITH unused AS (SELECT 42 AS order_id) SELECT 1 AS order_id",
+            expected_code="SQBRSQL005",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_generated_interior_with_authored_boundaries_when_linting_then_fix_is_refused(
+    test_case: NativeSqlFixTestCase, tmp_path: Path
+) -> None:
+    target: Path = tmp_path / "orders.sql"
+    start: int = test_case.sql.index("42")
+    body: LintBody = LintBody(
+        file_path=target,
+        body_start=0,
+        body_end=len(test_case.sql),
+        lint_text=test_case.sql,
+        passes=(
+            (
+                ExpansionSpan(
+                    source_start=start,
+                    source_end=start + 2,
+                    output_start=start,
+                    output_end=start + 2,
+                ),
+            ),
+        ),
+    )
+    result: dict[Path, tuple[LintViolation, ...]] = native_sql.run_native_sql_lint(
+        bodies=(body,),
+        contents_by_path={target: test_case.sql.replace("42", "__")},
+        config=LintConfig(dialect="duckdb", enabled_native_rules=(test_case.expected_code,)),
+    )
+    violation: LintViolation = result[target][0]
+    assert violation.code == test_case.expected_code
+    assert violation.fix is None
+    assert (
+        violation.fix_unavailable_reason
+        == "fix overlaps generated SQL or a non-contiguous authored region"
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         NativeSqlFindingTestCase(
             description="cross joined relation used by filter is not reported as unused",
             sql=(

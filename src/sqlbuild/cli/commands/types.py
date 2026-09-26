@@ -160,6 +160,7 @@ class FormatCommandHandler(Protocol):
         check: bool,
         diff: bool,
         fixtures_only: bool,
+        fix: bool,
         json_output: bool,
         no_color: bool,
     ) -> int: ...

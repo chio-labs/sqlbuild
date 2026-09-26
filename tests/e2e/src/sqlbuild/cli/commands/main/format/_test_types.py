@@ -6,6 +6,25 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class RuleFixTestCase:
+    description: str
+    sql: str
+    expected_status: str
+    expected_code: str
+    expected_returncode: int
+    expected_unchanged: bool
+    expected_with: bool
+
+
+@dataclass(frozen=True)
+class RuleFixPerformanceTestCase:
+    description: str
+    width: int
+    depth: int
+    expected_with: bool = False
+
+
+@dataclass(frozen=True)
 class FormatPerformanceGuardTestCase:
     """One generated format workload and its performance budgets."""
 
