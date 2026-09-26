@@ -170,3 +170,13 @@ jobs:
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${head_sha}" \
             -f state=success -f context=Verify \
             -f description="Product changes passed verification before release metadata update" >/dev/null
+
+      - name: Enable release pull request auto-merge
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          # The delivery app merges, so the resulting push to main starts the tag and publish runs.
+          GH_TOKEN: ${{ steps.delivery-token.outputs.token }}
+          RELEASE_PRS: ${{ steps.release.outputs.prs }}
+        run: |
+          release_pr="$(jq -r '.[0].number // empty' <<< "${RELEASE_PRS}")"
+          gh pr merge "${release_pr}" --repo "${GITHUB_REPOSITORY}" --auto --squash
