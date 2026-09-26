@@ -154,7 +154,9 @@ def _run_compile_with_status(
 
     if json_output:
         notice: str | None = semantic_coverage_notice(
-            project=analysis.graph.project, selected_keys=analysis.selected_keys
+            project=analysis.graph.project,
+            selected_keys=analysis.selected_keys,
+            sql_validation_enabled=not request.no_sql_validation,
         )
         if notice:
             print(notice, file=sys.stderr)
@@ -168,6 +170,7 @@ def _run_compile_with_status(
                 lineage_mode=lineage_mode,
                 diagnostics=diagnostics,
                 selected_keys=analysis.selected_keys,
+                sql_validation_enabled=not request.no_sql_validation,
             )
         )
         return exit_code
@@ -182,6 +185,7 @@ def _run_compile_with_status(
             diagnostics=diagnostics,
             selected_keys=analysis.selected_keys,
             use_color=(not no_color) and supports_color(),
+            sql_validation_enabled=not request.no_sql_validation,
         )
     )
     return exit_code
