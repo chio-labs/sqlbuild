@@ -308,7 +308,6 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 origin_target_name=args.from_target,
                 destination_target_name=args.to_target,
                 hard_copy=args.hard_copy,
-                skip_locked=args.skip_locked,
                 select=select,
                 exclude=tuple(args.exclude),
                 verbose=args.verbose,

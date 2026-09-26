@@ -341,7 +341,6 @@ def _add_data_parsers(
     clone_parser.add_argument("--from", dest="from_target", required=True)
     clone_parser.add_argument("--to", dest="to_target", default=None)
     clone_parser.add_argument("--hard-copy", action="store_true", default=False)
-    clone_parser.add_argument("--skip-locked", action="store_true", default=False)
     clone_parser.add_argument("--verbose", "-v", action="store_true", default=False)
     _ = add_select_args(clone_parser)
     _ = add_vars_args(clone_parser)
