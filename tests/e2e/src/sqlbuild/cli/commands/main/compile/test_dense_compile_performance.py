@@ -93,9 +93,7 @@ def test_given_dense_project_when_compiling_cold_then_preserves_rules_semantics_
     )
     print(
         f"dense compile models={test_case.model_count} builtin_rules={len(builtin_codes)} "
-        f"wall={result.elapsed_seconds:.3f}s peak_rss_bytes={result.peak_rss_bytes} "
-        f"cpu={result.cpu_seconds:.3f}s cpu_utilization={result.cpu_seconds / result.elapsed_seconds:.2f} "
-        f"fingerprint={result.semantic_fingerprint} timings={result.payload['compile_timings']}",
+        f"fingerprint={result.semantic_fingerprint}",
         flush=True,
     )
     assert result.payload["diagnostics"] == []
