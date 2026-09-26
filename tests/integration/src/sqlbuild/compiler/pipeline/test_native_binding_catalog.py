@@ -145,11 +145,14 @@ def test_given_catalog_when_rebinding_physical_shapes_then_does_not_reuse_stale_
     [
         NativeCatalogCase(
             "unquoted type error with quoted-case policy", "SELECT SUM(TRUE) AS total", ("B213",)
-        )
+        ),
+        NativeCatalogCase(
+            "quoted type error with quoted-case policy", 'SELECT SUM(TRUE) AS "total"', ("B213",)
+        ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_unquoted_sql_when_case_policy_enabled_then_fused_validation_is_reused(
+def test_given_sql_when_case_policy_enabled_then_fused_validation_is_reused(
     test_case: NativeCatalogCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -235,6 +238,54 @@ def test_given_target_cache_policy_when_compiling_twice_then_reuses_only_enabled
     changed: dict[str, Any] = json.loads(capsys.readouterr().out)
     assert changed["diagnostics"] == []
     assert changed["compile_timings"]["analysis_batch_cache_hits"] == 0
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativeCatalogCase(
+            "quoted bound CTE lineage",
+            'WITH q AS (SELECT id, CASE WHEN id > 0 THEN amount ELSE 0 END AS total FROM __source("raw_orders")) SELECT id AS "ORDER_ID", total FROM q',
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_quoted_catalog_binding_when_compiling_then_preserves_bound_expression_lineage(
+    test_case: NativeCatalogCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "snowflake"\n[rules]\nselect = []\n'
+        "[connection]\nsession_parameters = { QUOTED_IDENTIFIERS_IGNORE_CASE = true }\n"
+    )
+    (tmp_path / "sources").mkdir()
+    (tmp_path / "sources/orders.yml").write_text(
+        "sources:\n  - name: raw_orders\n    expression: SELECT 1 AS id, 2 AS amount\n"
+    )
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models/orders.sql").write_text(
+        "MODEL (database warehouse, schema analytics); " + test_case.sql
+    )
+    assert (
+        main(
+            [
+                "--project-dir",
+                str(tmp_path),
+                "compile",
+                "--lineage-mode",
+                "rich",
+                "--no-cache",
+                "--json",
+            ]
+        )
+        == 0
+    )
+    payload: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert tuple(item["code"] for item in payload["diagnostics"]) == test_case.expected_codes
+    (model,) = payload["resources"]["models"]
+    assert model["column_count"] == 2
+    assert model["lineage"]["edge_count"] == 3
 
 
 if __name__ == "__main__":
