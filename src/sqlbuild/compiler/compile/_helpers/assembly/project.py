@@ -1110,8 +1110,13 @@ def _complete_inferred_bindings(
     analyses: tuple[_ModelSqlAnalysis, ...],
     complete_binding_schemas: dict[str, dict[str, str]],
     inference_profile: ExpressionInferenceProfile,
+    supplied_relations: frozenset[str] = frozenset(),
 ) -> tuple[_ModelSqlAnalysis, ...]:
-    """Bind each scope independently, preserving open inputs as empty tables."""
+    """Bind each scope independently, preserving open inputs as empty tables.
+
+    Relations in ``supplied_relations`` reached native analysis with their complete shapes, so
+    stars over them are already expanded and need no enrichment pass.
+    """
 
     complete_schemas: dict[str, dict[str, str]] = dict(complete_binding_schemas)
     results: list[_ModelSqlAnalysis] = list(analyses)
@@ -1136,17 +1141,16 @@ def _complete_inferred_bindings(
         if required_names is None:
             continue
         analysis: PolyglotAnalysisResult = results[index].polyglot_analysis
+        inputs_known: bool = bool(required_names) and required_names <= complete_schemas.keys()
+        star_pending: bool = analysis.has_star and not analysis.star_resolved and inputs_known
+        if star_pending and analysis.columns and required_names <= supplied_relations:
+            analysis = replace(analysis, star_resolved=True)
+            results[index] = replace(results[index], polyglot_analysis=analysis)
+            star_pending = False
         if (
             not results[index].cached
             and required_names
-            and (
-                any(column.type is None for column in analysis.columns or ())
-                or (
-                    analysis.has_star
-                    and not analysis.columns
-                    and required_names <= complete_schemas.keys()
-                )
-            )
+            and (any(column.type is None for column in analysis.columns or ()) or star_pending)
             and not re.search(r"\b(?:UNION|INTERSECT|EXCEPT)\b", request.query_sql, re.IGNORECASE)
         ):
             input_schemas: dict[str, dict[str, str]] = {
@@ -1168,22 +1172,29 @@ def _complete_inferred_bindings(
                 allow_compact_analysis=True,
                 recover_cte_facts=_should_recover_cte_facts(request.model_input),
             )
-            enriched_types: dict[str, str | None] = {
-                column.name: column.type for column in enriched.columns or ()
+            recovered_types: dict[str, str | None] = {
+                column.name: column.type
+                for column in (*(enriched.columns or ()), *(analysis.columns or ()))
+                if column.type is not None
             }
-            if not analysis.columns and enriched.analysis_succeeded:
-                analysis = enriched
+            star_expanded: bool = star_pending and enriched.analysis_succeeded
+            if (not analysis.columns or star_expanded) and enriched.analysis_succeeded:
+                analysis = replace(
+                    enriched,
+                    binding_diagnostics=analysis.binding_diagnostics,
+                    binding_validated=analysis.binding_validated,
+                )
             analysis = replace(
                 analysis,
                 columns=tuple(
-                    replace(column, type=column.type or enriched_types.get(column.name))
+                    replace(column, type=column.type or recovered_types.get(column.name))
                     for column in analysis.columns or ()
                 ),
+                star_resolved=analysis.star_resolved or star_expanded,
             )
             results[index] = replace(results[index], polyglot_analysis=analysis)
-        if analysis.columns and (
-            not analysis.has_star or (required_names and required_names <= complete_schemas.keys())
-        ):
+        star_known: bool = not analysis.has_star or (analysis.star_resolved and inputs_known)
+        if analysis.columns and star_known:
             complete_schemas.setdefault(
                 name,
                 inferred_binding_shape(
