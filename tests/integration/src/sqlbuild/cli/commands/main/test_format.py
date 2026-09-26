@@ -10,6 +10,7 @@ from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    AuthoredSpellingFormatIntegrationTestCase,
     BacktickDialectFormatIntegrationTestCase,
     CanonicalFixtureFormatIntegrationTestCase,
     DescriptionFormatIntegrationTestCase,
@@ -30,6 +31,65 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
 )
 
 _UNFORMATTED_ORDERS_SQL: str = "MODEL (materialized table);\nselect   1 as order_id\n"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AuthoredSpellingFormatIntegrationTestCase(
+            "Snowflake STARTSWITH is not renamed",
+            "snowflake",
+            "STARTSWITH(order_code, 'EU')",
+            "STARTSWITH(order_code, 'EU')",
+        ),
+        AuthoredSpellingFormatIntegrationTestCase(
+            "Snowflake SUBSTR synonym is kept",
+            "snowflake",
+            "SUBSTR(order_code, 1, 2)",
+            "SUBSTR(order_code, 1, 2)",
+        ),
+        AuthoredSpellingFormatIntegrationTestCase(
+            "Snowflake TIMESTAMPDIFF synonym is kept",
+            "snowflake",
+            "TIMESTAMPDIFF(day, ordered_at, shipped_at)",
+            "TIMESTAMPDIFF(DAY, ordered_at, shipped_at)",
+        ),
+        AuthoredSpellingFormatIntegrationTestCase(
+            "Snowflake TRY_TO_DECIMAL synonym is kept",
+            "snowflake",
+            "TRY_TO_DECIMAL(amount_text, 10, 2)",
+            "TRY_TO_DECIMAL(amount_text, 10, 2)",
+        ),
+        AuthoredSpellingFormatIntegrationTestCase(
+            "DuckDB IFNULL and != spellings are kept",
+            "duckdb",
+            "IFNULL(status, 'open') != 'x'",
+            "IFNULL(status, 'open') != 'x'",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_authored_function_spelling_when_formatting_then_only_layout_changes(
+    test_case: AuthoredSpellingFormatIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Formatting must never rewrite a function name, including to one the warehouse rejects."""
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "orders"\nadapter = "{test_case.adapter}"\n'
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        'MODEL (description "Order flags");\n'
+        f'select   {test_case.authored_expression} as order_flag from __source("raw_orders")\n'
+    )
+    assert main(["--project-dir", str(tmp_path), "format", "--json"]) == 0
+    capsys.readouterr()
+    formatted: str = model.read_text()
+    assert f"  {test_case.expected_expression} AS order_flag\n" in formatted
+    assert main(["--project-dir", str(tmp_path), "format", "--check", "--json"]) == 0
+    assert model.read_text() == formatted
 
 
 @pytest.mark.parametrize(

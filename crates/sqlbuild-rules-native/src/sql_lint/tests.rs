@@ -1,3 +1,5 @@
+#[path = "tests/test_authored_tokens.rs"]
+mod authored_tokens;
 #[path = "tests/test_batch_lint.rs"]
 mod batch_lint;
 #[path = "tests/test_comment_formatter.rs"]

@@ -104,3 +104,11 @@ pub(crate) struct FunctionDepthFailureTestCase {
     pub expected_code: &'static str,
     pub expected_limit: &'static str,
 }
+
+pub(crate) struct AuthoredTokenTestCase {
+    pub description: &'static str,
+    pub authored: &'static str,
+    pub generated: &'static str,
+    /// `None` when the formatter must refuse the change.
+    pub expected_sql: Option<&'static str>,
+}
