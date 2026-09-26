@@ -381,3 +381,18 @@ def dropped_relation_microbatch_sql(*, batch_concurrency: int) -> str:
         'SELECT id, ordered_at FROM __source("raw_orders")\n'
         "WHERE id >= __cursor_start() AND id < __cursor_end()\n"
     )
+
+
+def compile_duckdb_projection(
+    *, tmp_path: Path, capsys: pytest.CaptureFixture[str], projection: str
+) -> tuple[int, tuple[object, ...]]:
+    """Compile one DuckDB model projection and return the exit and diagnostic codes."""
+
+    (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "orders.sql").write_text(f"MODEL ();\nSELECT {projection}")
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+    result: dict[str, object] = json.loads(capsys.readouterr().out)
+    diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], result["diagnostics"])
+    return exit_code, tuple(item["code"] for item in diagnostics)

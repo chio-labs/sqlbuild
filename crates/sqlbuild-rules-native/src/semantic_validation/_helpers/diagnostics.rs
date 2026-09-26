@@ -12,6 +12,13 @@ use std::collections::HashSet;
 use std::sync::LazyLock;
 
 const UNKNOWN_COLUMN: &str = "E201";
+const UNKNOWN_FUNCTION: &str = "E202";
+const DUCKDB_KEYWORD_FUNCTIONS: [&str; 4] = [
+    "CURRENT_TIME",
+    "CURRENT_TIMESTAMP",
+    "LOCALTIME",
+    "LOCALTIMESTAMP",
+];
 const ORDER_BY: &str = "ORDER BY";
 const ERROR: &str = "error";
 static COLUMN: LazyLock<Result<Regex, String>> = LazyLock::new(|| {
@@ -20,6 +27,9 @@ static COLUMN: LazyLock<Result<Regex, String>> = LazyLock::new(|| {
 });
 static ALIAS: LazyLock<Result<Regex, String>> = LazyLock::new(|| {
     Regex::new(r"^(?:Unknown column '([^']+)'(?: in table '[^']+'| \(not found in any referenced table\))|Ambiguous unqualified column '([^']+)' found in [0-9]+ referenced tables)$").map_err(|error| error.to_string())
+});
+static FUNCTION: LazyLock<Result<Regex, String>> = LazyLock::new(|| {
+    Regex::new(r"^Unknown function '([^']+)' for dialect ").map_err(|error| error.to_string())
 });
 static VALUES: LazyLock<Result<Regex, String>> = LazyLock::new(|| {
     Regex::new(r"(?i)^Unknown column '(column([1-9][0-9]*))'$").map_err(|error| error.to_string())
@@ -61,6 +71,11 @@ struct DiagnosticContext<'a> {
 }
 
 impl DiagnosticContext<'_> {
+    fn parsed(&mut self) -> &polyglot_sql::Result<Vec<Expression>> {
+        self.statements
+            .get_or_insert_with(|| Dialect::get(self.dialect).parse(self.sql))
+    }
+
     fn map(&mut self, mut error: ValidationError) -> Result<Option<ValidationError>, String> {
         if error.code.starts_with('B') {
             return Ok(Some(error));
@@ -81,10 +96,7 @@ impl DiagnosticContext<'_> {
                     .map_err(Clone::clone)?
                     .is_match(&error.message))
         {
-            let parsed = self
-                .statements
-                .get_or_insert_with(|| Dialect::get(self.dialect).parse(self.sql));
-            for expression in parsed.iter().flatten() {
+            for expression in self.parsed().iter().flatten() {
                 for node in expression.dfs() {
                     if let Expression::Select(select) = node
                         && select_proves(select, &error)?
@@ -93,6 +105,19 @@ impl DiagnosticContext<'_> {
                     }
                 }
             }
+        }
+        if self.dialect == DialectType::DuckDB
+            && error.code == UNKNOWN_FUNCTION
+            && let Some(captures) = FUNCTION
+                .as_ref()
+                .map_err(Clone::clone)?
+                .captures(&error.message)
+            && DUCKDB_KEYWORD_FUNCTIONS
+                .iter()
+                .any(|keyword| keyword.eq_ignore_ascii_case(&captures[1]))
+            && keyword_calls_only(self.parsed(), &captures[1])
+        {
+            return Ok(None);
         }
         if let Some(captures) = column_pattern()?.captures(&error.message) {
             let name = captures[1].rsplit('.').next().unwrap_or(&captures[1]);
@@ -218,6 +243,21 @@ fn unqualified(expression: &Expression, name: &str) -> bool {
         .children()
         .iter()
         .any(|child| unqualified(child, name))
+}
+
+fn keyword_calls_only(parsed: &polyglot_sql::Result<Vec<Expression>>, name: &str) -> bool {
+    let mut calls = parsed
+        .iter()
+        .flatten()
+        .flat_map(|expression| expression.dfs())
+        .filter_map(|node| match node {
+            Expression::Function(function) if function.name.eq_ignore_ascii_case(name) => {
+                Some(function.no_parens)
+            }
+            _ => None,
+        })
+        .peekable();
+    calls.peek().is_some() && calls.all(|no_parens| no_parens)
 }
 
 fn select_proves(select: &Select, error: &ValidationError) -> Result<bool, String> {
