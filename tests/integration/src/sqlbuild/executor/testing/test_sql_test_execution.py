@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from sqlbuild.adapter.contract.types import StatementSizeLimit
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.planner.models import ChainStep, SqlTestPlanEntry
@@ -39,8 +40,8 @@ from tests.integration.src.sqlbuild.executor.testing.helpers import (
 
 
 class TinySqlLimitDuckDbAdapter(DuckDbAdapter):
-    def recommended_max_sql_length(self) -> int | None:
-        return 80
+    def max_statement_size(self) -> StatementSizeLimit | None:
+        return (80, "bytes")
 
 
 class FailingDifferenceSampleDuckDbAdapter(DuckDbAdapter):
@@ -692,6 +693,8 @@ def test_given_oversized_unit_test_sql_when_executing_then_it_returns_clear_erro
 
     assert result.outcome == test_case.expected_outcome
     assert result.error_message is not None
-    assert "recommended maximum" in result.error_message
+    assert result.error_code == "T001"
+    assert result.step_results[0].error_code == "T001"
+    assert "maximum of 80 bytes" in result.error_message
     assert "scenario test" in result.error_message
     verify_test_result(result=result, test_case=test_case)

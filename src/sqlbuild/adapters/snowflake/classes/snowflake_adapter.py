@@ -75,6 +75,7 @@ from sqlbuild.adapter.contract.types import (
     RetentionScope,
     SnapshotLatestVersionStyle,
     SnapshotUpdateStyle,
+    StatementSizeLimit,
     TablePromotionMode,
 )
 from sqlbuild.adapter.relations.main.relation_age_timestamp import relation_age_timestamp_utc
@@ -739,10 +740,10 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def supports_unqualified_function_fingerprints(self) -> bool:
         return False
 
-    def recommended_max_sql_length(self) -> int | None:
-        """Return the recommended maximum SQL length for lightweight unit-test queries."""
+    def max_statement_size(self) -> StatementSizeLimit | None:
+        """1 MB truncates metadata, not execution: https://docs.snowflake.com/en/user-guide/query-size-limits."""
 
-        return 256_000
+        return None
 
     def maximum_identifier_length(self) -> int:
         """Return the maximum unqualified identifier length supported by the adapter."""

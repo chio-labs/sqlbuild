@@ -26,6 +26,7 @@ from sqlbuild.adapter.contract.types import (
     FrameworkType,
     LoaderLogicalType,
     PromotionStrategy,
+    StatementSizeLimit,
     TablePromotionMode,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
@@ -89,8 +90,8 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def recommended_max_sql_length(self) -> int | None:
-        """Return the recommended maximum SQL length for lightweight queries."""
+    def max_statement_size(self) -> StatementSizeLimit | None:
+        """Return the hard SQL text limit and unit, or None; bytes mean UTF-8."""
         ...
 
     @abstractmethod
