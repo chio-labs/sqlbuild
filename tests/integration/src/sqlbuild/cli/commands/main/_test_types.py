@@ -74,6 +74,15 @@ class StarExpansionCompileTestCase:
 
 
 @dataclass(frozen=True)
+class StarLineageCompileTestCase:
+    """Expected compile-report lineage for a star over a derived table."""
+
+    description: str
+    star_model_sql: str
+    expected_edge_count: int
+
+
+@dataclass(frozen=True)
 class SnapshotValidityCompileTestCase:
     """Expected diagnostics for a model reading a snapshot relation."""
 

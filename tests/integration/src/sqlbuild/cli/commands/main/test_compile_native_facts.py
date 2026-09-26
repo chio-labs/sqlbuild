@@ -17,6 +17,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     KeywordFunctionCompileTestCase,
     SnapshotValidityCompileTestCase,
     StarExpansionCompileTestCase,
+    StarLineageCompileTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import compile_duckdb_projection
 
@@ -125,6 +126,63 @@ def test_given_star_over_inferred_upstream_when_compiling_then_downstream_bindin
 
         assert exit_code == test_case.expected_exit_code
         assert tuple(item["code"] for item in diagnostics) == test_case.expected_diagnostics
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        StarLineageCompileTestCase(
+            description="star over a joined derived table omits unprojected seed columns",
+            star_model_sql=(
+                "SELECT * FROM (SELECT input.order_id, amount "
+                'FROM __ref("staged_orders") AS input '
+                'LEFT JOIN __seed("order_labels") AS labels '
+                "ON labels.order_id = input.order_id) AS nested_orders"
+            ),
+            expected_edge_count=2,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_star_over_derived_table_when_compiling_then_lineage_matches_projection(
+    test_case: StarLineageCompileTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
+    seeds: Path = tmp_path / "seeds"
+    seeds.mkdir()
+    (seeds / "order_labels.csv").write_text("order_id,label\n1,first\n")
+    (seeds / "order_labels.yml").write_text(
+        "seeds:\n  - name: order_labels\n    columns:\n"
+        "      - name: order_id\n        type: INTEGER\n"
+        "      - name: label\n        type: VARCHAR\n"
+    )
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "staged_orders.sql").write_text(
+        "MODEL ();\nSELECT 1 AS order_id, CAST(10 AS DOUBLE) AS amount"
+    )
+    (models / "wide_orders.sql").write_text(f"MODEL ();\n{test_case.star_model_sql}")
+
+    for _ in ("cold", "warm"):
+        exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
+        result: dict[str, object] = json.loads(capsys.readouterr().out)
+        resources: dict[str, object] = cast(dict[str, object], result["resources"])
+        compiled_models: list[dict[str, object]] = cast(
+            list[dict[str, object]], resources["models"]
+        )
+        lineage: dict[str, object] = next(
+            cast(dict[str, object], model["lineage"])
+            for model in compiled_models
+            if model["name"] == "wide_orders"
+        )
+
+        assert exit_code == 0
+        assert result["diagnostics"] == []
+        # order_id and amount each trace to staged_orders; the joined seed's label is
+        # not projected by the derived table, so it contributes no edge.
+        assert lineage["edge_count"] == test_case.expected_edge_count
 
 
 @pytest.mark.parametrize(
