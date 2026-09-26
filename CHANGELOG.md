@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.119.3](https://github.com/chio-labs/sqlbuild/compare/v0.119.2...v0.119.3) (2026-09-26)
+
+
+### Bug Fixes
+
+* qualify Snowflake function discovery by database ([#842](https://github.com/chio-labs/sqlbuild/issues/842)) ([264f84c](https://github.com/chio-labs/sqlbuild/commit/264f84ccabffd68f1b5c66e87cf9db08f375aad4))
+
 ## [0.119.2](https://github.com/chio-labs/sqlbuild/compare/v0.119.1...v0.119.2) (2026-09-26)
 
 
