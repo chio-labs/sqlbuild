@@ -35,6 +35,9 @@ pub(crate) fn load(project_dir: &Path) -> Result<RulesConfig, String> {
         }
     };
     validate(&config)?;
+    if config.max_ranking_order_by == 0 {
+        return Err("rules.max_ranking_order_by must be a positive integer".to_owned());
+    }
     Ok(config)
 }
 
@@ -43,6 +46,7 @@ fn validate_raw(value: &toml::Value) -> Result<(), String> {
         .as_table()
         .ok_or_else(|| "rules must be a table".to_owned())?;
     let known = [
+        "max_ranking_order_by",
         "select",
         "ignore",
         "thresholds",

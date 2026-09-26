@@ -73,6 +73,8 @@ pub(crate) struct LintRequest {
     pub allows_dynamic_output_star: bool,
     #[serde(default)]
     pub allows_empty_fixture_star: bool,
+    #[serde(default = "crate::sql_lint::_helpers::ranking::default_limit")]
+    pub max_ranking_order_by: usize,
 }
 
 #[derive(Debug)]

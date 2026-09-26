@@ -16,6 +16,7 @@ use crate::sql_lint::models::{
 
 use crate::sql_lint::_helpers::additional::collect_additional_facts;
 use crate::sql_lint::_helpers::inline_relations::collect_inline_query_relation_spans;
+use crate::sql_lint::_helpers::ranking::{self, RANKING_SORT_CAP};
 use crate::sql_lint::_helpers::terminal_shape::collect_terminal_shape_facts;
 
 const NULL_COMPARISON: LintRuleMetadata = LintRuleMetadata {
@@ -256,7 +257,7 @@ const DEFAULT_RULES: [&str; 13] = [
     INLINE_QUERY_RELATION.code,
 ];
 
-const ALL_RULE_METADATA: [&LintRuleMetadata; 41] = [
+const ALL_RULE_METADATA: [&LintRuleMetadata; 42] = [
     &NULL_COMPARISON,
     &IMPLICIT_CARTESIAN_JOIN,
     &JOIN_WITHOUT_CONDITION,
@@ -298,6 +299,7 @@ const ALL_RULE_METADATA: [&LintRuleMetadata; 41] = [
     &INLINE_QUERY_RELATION,
     &JOIN_EXPRESSION,
     &FINAL_CTE_NAME,
+    &RANKING_SORT_CAP,
 ];
 
 fn is_ceremonial_cte_name(name: &str) -> bool {
@@ -415,6 +417,16 @@ pub(crate) fn lint(request: LintRequest) -> Result<LintResponse, String> {
         enabled: &enabled,
     };
     let mut diagnostics = diagnostics(&context);
+    if enabled.contains(RANKING_SORT_CAP.code) {
+        if request.max_ranking_order_by == 0 {
+            return Err("max_ranking_order_by must be positive".to_owned());
+        }
+        diagnostics.extend(ranking::diagnostics(
+            &statements,
+            &tokens,
+            request.max_ranking_order_by,
+        ));
+    }
     let depths = token_depths(&tokens);
     if enabled.contains(JOIN_EXPRESSION.code) {
         diagnostics.extend(diagnostics_for_spans(

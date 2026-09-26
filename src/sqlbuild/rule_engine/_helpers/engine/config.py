@@ -29,7 +29,11 @@ def load_rules_config(project_dir: Path) -> RulesConfig:
     """Load configuration validated and normalized by the native engine."""
 
     payload: dict[str, object] = load_native_config(project_dir)
+    ranking_limit: object = payload.get("max_ranking_order_by", 4)
+    if not isinstance(ranking_limit, int) or isinstance(ranking_limit, bool) or ranking_limit < 1:
+        raise RulesError("rules.max_ranking_order_by must be a positive integer")
     return RulesConfig(
+        max_ranking_order_by=ranking_limit,
         select=_strings(payload.get("select")),
         ignore=_strings(payload.get("ignore")),
         thresholds=_integers(payload.get("thresholds")),

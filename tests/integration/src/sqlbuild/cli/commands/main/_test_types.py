@@ -8,6 +8,15 @@ from sqlbuild.compiler.planner.models import CursorOverrides
 
 
 @dataclass(frozen=True)
+class RankingLimitTestCase:
+    description: str
+    expression: str
+    limit: int
+    expected_exit_code: int
+    suffix: str = ""
+
+
+@dataclass(frozen=True)
 class SemanticFixTestCase:
     description: str
     sql: str

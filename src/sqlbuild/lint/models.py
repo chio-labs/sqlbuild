@@ -112,6 +112,7 @@ class LintConfig:
     """Resolved lint and format configuration for one run."""
 
     native_enabled: bool = True
+    max_ranking_order_by: int = 4
     max_description_lines: int = 10
     line_width: int = 100
     dialect: str = "generic"

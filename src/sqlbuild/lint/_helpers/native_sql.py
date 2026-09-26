@@ -60,6 +60,7 @@ _SQLBUILD_HARNESS_CTE_PREFIXES: tuple[str, ...] = (
     TABLE_FN_EXPECTED_TEST_CTE_NAME,
 )
 type _NativeCacheKey = tuple[
+    int,
     str,
     str,
     tuple[str, ...] | None,
@@ -89,6 +90,7 @@ def run_native_sql_lint(
         if cache_key in requests:
             continue
         payload: dict[str, object] = {
+            "max_ranking_order_by": config.max_ranking_order_by,
             "version": _NATIVE_LINT_API_VERSION,
             "sql": body.lint_text,
             "dialect": config.dialect,
@@ -146,6 +148,7 @@ def run_native_sql_lint(
 
 def _native_cache_key(*, body: LintBody, config: LintConfig) -> _NativeCacheKey:
     return (
+        config.max_ranking_order_by,
         body.lint_text,
         config.dialect,
         config.enabled_native_rules,

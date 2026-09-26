@@ -121,6 +121,7 @@ def evaluate_rules(
         )
         sql_started: float = time.monotonic()
         sql_result: _SqlRulesEvaluation = _run_sql_rules(
+            max_ranking_order_by=effective_config.max_ranking_order_by,
             rules=native_rules,
             project_dir=resolved_project_dir,
             discovered_inputs=discovered_inputs,
@@ -198,7 +199,10 @@ def prepare_sql_rules(
             _prepare_sql_lint,
             project_dir=project_dir,
             config=LintConfig(
-                dialect=dialect, enabled_native_rules=codes, header_rules_enabled=False
+                dialect=dialect,
+                enabled_native_rules=codes,
+                header_rules_enabled=False,
+                max_ranking_order_by=config.max_ranking_order_by,
             ),
             discovered_inputs=inputs.discovered_inputs,
             compiled_expansions={
@@ -340,6 +344,7 @@ def _run_sql_rules(
     dialect: str,
     selected_model_paths: frozenset[str] | None,
     cache_enabled: bool,
+    max_ranking_order_by: int = 4,
     prepared_sql: PreparedSqlLint | None = None,
     expansion_reuse: SqlExpansionReuse | None = None,
 ) -> _SqlRulesEvaluation:
@@ -355,7 +360,9 @@ def _run_sql_rules(
         _read_sql_rule_cache(project_dir) if cache_enabled else {}
     )
     identities: dict[str, str] = {
-        path: _sql_rule_identity(model=model, codes=codes, dialect=dialect)
+        path: _sql_rule_identity(
+            model=model, codes=codes, dialect=dialect, max_ranking_order_by=max_ranking_order_by
+        )
         for path, model in models_by_path.items()
     }
     findings: list[Finding] = []
@@ -389,6 +396,7 @@ def _run_sql_rules(
                 codes=codes,
                 dialect=dialect,
                 sql_expansions=project.sql_expansions,
+                max_ranking_order_by=max_ranking_order_by,
             )
             cached_file: tuple[Finding, ...] | None = (
                 None
@@ -405,7 +413,10 @@ def _run_sql_rules(
         _run_prepared_lint(
             project_dir=project_dir,
             config=LintConfig(
-                dialect=dialect, enabled_native_rules=codes, header_rules_enabled=False
+                dialect=dialect,
+                enabled_native_rules=codes,
+                header_rules_enabled=False,
+                max_ranking_order_by=max_ranking_order_by,
             ),
             selected_paths=frozenset(selected_paths),
             discovered_inputs=discovered_inputs,
@@ -497,11 +508,14 @@ def _lint_finding(*, violation: LintViolation, project_dir: Path) -> Finding:
     )
 
 
-def _sql_rule_identity(*, model: CompiledModel, codes: tuple[str, ...], dialect: str) -> str:
+def _sql_rule_identity(
+    *, model: CompiledModel, codes: tuple[str, ...], dialect: str, max_ranking_order_by: int = 4
+) -> str:
     digest: Any = hashlib.sha256()
     digest.update(_SQL_RULE_CACHE_VERSION.encode())
     digest.update(_SQLBUILD_VERSION.encode())
     digest.update(dialect.encode())
+    digest.update(str(max_ranking_order_by).encode())
     digest.update("\0".join(codes).encode())
     digest.update(model.authored_sql.encode())
     digest.update(model.query_sql.encode())
@@ -525,6 +539,7 @@ def _sql_file_rule_identity(
     codes: tuple[str, ...],
     dialect: str,
     sql_expansions: dict[Path, CompiledSqlExpansion],
+    max_ranking_order_by: int = 4,
 ) -> str | None:
     """Identify non-model SQL whose lint depends only on its text; expansions return None."""
 
@@ -537,6 +552,7 @@ def _sql_file_rule_identity(
     digest: Any = hashlib.sha256()
     for value in (
         _SQL_RULE_CACHE_VERSION,
+        str(max_ranking_order_by),
         "file",
         _SQLBUILD_VERSION,
         dialect,

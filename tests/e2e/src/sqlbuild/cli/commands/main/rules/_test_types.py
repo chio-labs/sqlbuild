@@ -4,6 +4,14 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class RankingSettingsCase:
+    description: str
+    next_limit: int
+    expected_exit: int
+    expected_message: str
+
+
+@dataclass(frozen=True)
 class GroupedRulesCase:
     description: str
     arguments: tuple[str, ...]

@@ -282,6 +282,7 @@ class LayoutConfig:
 
 @dataclass(frozen=True)
 class RulesConfig:
+    max_ranking_order_by: int = 4
     select: tuple[str, ...] = ()
     ignore: tuple[str, ...] = ()
     thresholds: dict[str, int] = field(default_factory=dict)
