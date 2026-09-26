@@ -6,21 +6,27 @@
 
 Online: https://sqlbuild.com/docs/cli/diff/
 
-Compares schemas and optionally row-level data between two targets (e.g. `prod:dev`). See [Data Diffs](../concepts/diff.md) for detailed usage.
+Compares schemas and optionally row-level data between two targets (e.g. `prod:dev`), or between two read-only SQL queries. See [Data Diffs](../concepts/diff.md) for detailed usage.
 
 ## Usage
 
 ```bash
-sqb diff <FROM>:<TO> <mode> [flags]
+# Model mode
+sqb diff <FROM>:<TO> <mode> --select <models> [flags]
+
+# Query mode
+sqb diff --left-query <sql> --right-query <sql> (--key <column> | --unkeyed) [flags]
 ```
 
-The first argument is a positional `FROM:TO` range. Exactly one mode is required: `--full`, `--schema-only`, or `--bounded <duration>`.
+In model mode, the first argument is a positional `FROM:TO` range, `--select` is required, and exactly one mode is required: `--full`, `--schema-only`, or `--bounded <duration>`.
 
 `FROM` and `TO` are configured target names. Their database/schema namespaces remain
 authoritative, while the `TO` target's named connection executes the complete comparison and must
 be able to read both namespaces.
 
-Full and bounded row comparisons require the model to define `unique_key`. Bounded mode uses the model's cursor and falls back to a full row comparison when no cursor is configured.
+Full and bounded row comparisons match rows on the model's `unique_key`, or on `--key` columns when given; use `--unkeyed` for an exact full-row comparison. Bounded mode uses the model's cursor and falls back to a full row comparison when no cursor is configured.
+
+In query mode, omit `FROM:TO` and model selectors; each query identifies its own input and the active target's connection (or `--target`) runs both. A full comparison is the default, `--schema-only` is also available, and `--bounded` is model-only.
 
 ## Flags
 
@@ -51,7 +57,7 @@ Full and bounded row comparisons require the model to define `unique_key`. Bound
 | `--no-example-values` | Keep keys and counts but hide example values |
 | `--full-example-values` | Show complete example values |
 | `--json` | Print one JSON document to stdout |
-| `--select`, `-s` | Select specific models to diff (required in v1) |
+| `--select`, `-s` | Select specific models to diff (required in model mode) |
 | `--exclude` | Exclude specific models from diffing |
 
 ## Examples
@@ -71,8 +77,11 @@ sqb diff prod:dev --bounded 14d --sample-rows 50000 --sample-seed 7 --select ord
 
 # Force exhaustive comparison despite inherited sampling defaults
 sqb diff prod:dev --bounded 14d --exhaustive --select order_lines
+
+# Compare two queries on a key
+sqb diff --left-query-file queries/orders_before.sql --right-query-file queries/orders_after.sql --key order_id
 ```
 
 ## Exit codes
 
-Returns `0` when all selected models have no differences, `1` when any model has schema or row differences.
+Returns `0` when all selected models have no differences, `1` when any model has schema or row differences. Query mode also returns `2` when a safety, schema, or key check prevented a complete comparison, and `3` when setup, execution, or cleanup failed; see [Query output and exit codes](../concepts/diff.md#query-output-and-exit-codes).
