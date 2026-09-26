@@ -192,5 +192,8 @@ class SetOperationExpectedE2ETestCase:
 class TerminalTestProgressE2ETestCase:
     description: str
     columns: int
+    concurrency_levels: tuple[int, ...]
+    expected_group_headers: tuple[str, ...]
+    expected_test_row_count: int
     expected_screen_fragments: tuple[str, ...]
     expected_summary: str

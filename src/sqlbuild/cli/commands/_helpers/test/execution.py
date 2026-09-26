@@ -68,6 +68,7 @@ def prepare_test_execution(
         stream=invocation.progress_stream,
         use_color=invocation.use_color,
         name_width=resolve_test_name_width(pipeline_result.plan_output.test_entries),
+        concurrency=worker_count,
     )
     projector: NativeProgressProjector | None = current_native_progress_projector()
     if projector is not None:

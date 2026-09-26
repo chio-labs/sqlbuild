@@ -53,6 +53,7 @@ from tests.unit.src.sqlbuild.cli.commands.shared._helpers._test_types import (
     BuildProgressSqlTestRowsTestCase,
     ExecutionHeaderTestCase,
     NestedProgressChildRowsTestCase,
+    NestedProgressConcurrentTestCase,
     RuntimeDiagnosticsTestCase,
     TruncateNameTestCase,
 )
@@ -304,6 +305,43 @@ def test_given_child_rows_when_completing_nested_progress_then_renders_aligned_e
     unexpected_fragment: str
     for unexpected_fragment in test_case.unexpected_fragments:
         assert unexpected_fragment not in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NestedProgressConcurrentTestCase(
+            description="concurrent items print each group header with its completed row",
+            concurrency=2,
+            expected_output=(
+                "stg_orders\n"
+                "    test      test_stg_orders" + " " * 35 + " PASS\n"
+                "\n"
+                "fact_orders\n"
+                "    test      test_fact_orders" + " " * 34 + " PASS\n"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_overlapping_items_when_completing_out_of_order_then_headers_follow_results(
+    test_case: NestedProgressConcurrentTestCase,
+) -> None:
+    stream: StringIO = StringIO()
+    callbacks: NestedCommandProgressCallbacks = NestedCommandProgressCallbacks(
+        total=2, label="test", stream=stream, use_color=False, concurrency=test_case.concurrency
+    )
+
+    callbacks.on_item_start(group_name="fact_orders", item_name="test_fact_orders")
+    callbacks.on_item_start(group_name="stg_orders", item_name="test_stg_orders")
+    callbacks.on_item_complete(
+        group_name="stg_orders", item_name="test_stg_orders", status_text="PASS"
+    )
+    callbacks.on_item_complete(
+        group_name="fact_orders", item_name="test_fact_orders", status_text="PASS"
+    )
+
+    assert stream.getvalue() == test_case.expected_output
 
 
 @pytest.mark.parametrize(
