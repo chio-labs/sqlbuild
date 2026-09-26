@@ -736,6 +736,29 @@ class CompileModelInput:
 
 
 @dataclass(frozen=True)
+class ModelSqlAnalysis:
+    """Completed model analysis and its in-memory binding proof."""
+
+    polyglot_analysis: PolyglotAnalysisResult
+    placeholders: dict[str, str] | None
+    cached: bool = False
+    fused_binding_validated: bool = False
+    cleaned_sql: str | None = None
+    validated_schema: dict[str, dict[str, str]] | None = None
+
+
+@dataclass(frozen=True)
+class ModelSqlAnalysisRequest:
+    """Inputs to one model's SQL analysis."""
+
+    model_input: CompileModelInput
+    query_sql: str
+    placeholders: dict[str, str] | None
+    cache_key: str | None
+    binding_schema: dict[str, dict[str, str]] | None
+
+
+@dataclass(frozen=True)
 class CompileSeedInput:
     """One discovered seed file with its attached seed metadata."""
 
