@@ -22,6 +22,9 @@ manifest files and no paid tier.
   <img src="https://raw.githubusercontent.com/chio-labs/sqlbuild/main/.github/demos/rename.gif" alt="Moving and renaming an incremental model: sqb plan migrates the existing table instead of rebuilding it" width="100%">
 </p>
 
+Move an incremental model to a new folder and name, and `sqb plan` migrates its table instead of
+rebuilding it.
+
 ## Quick start
 
 ```bash
@@ -71,12 +74,47 @@ The playground runs on local DuckDB, with no warehouse credentials.
 - **Tidy up safely.** The [janitor](https://sqlbuild.com/docs/cli/janitor/) archives stale tables
   before anything is deleted.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/chio-labs/sqlbuild/main/.github/demos/scope.gif" alt="sqb scope previews a move: the enum and macro the model uses would be lost, so the move is flagged before anything breaks" width="100%">
-</p>
-
 Ingestion with Python loaders, and Python tasks, assets and checks, run in the same graph as your SQL
 models. See the [docs](https://sqlbuild.com/docs/) for everything else.
+
+## In the terminal
+
+Each demo runs on local DuckDB with the projects in [`website/examples`](website/examples). The
+tapes that record them are in [`website/recordings`](website/recordings).
+
+### A renamed column breaks the contract
+
+`daily_revenue` declares `contract enforced`. Renaming `waffles_sold` to `units_sold` in the
+`SELECT` fails at compile time, before anything reaches the warehouse.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/chio-labs/sqlbuild/main/.github/demos/contract.gif" alt="sqb compile fails because units_sold is not in the enforced contract and the declared waffles_sold column is missing" width="100%">
+</p>
+
+Both sides are reported: the new column isn't in the contract, and the declared one is gone.
+
+### Your own conventions as compile errors
+
+The project's rule says marts must read sources through staging. A mart that reads
+`__source("raw__payments")` directly fails, and so does the unit test that has no mock for it.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/chio-labs/sqlbuild/main/.github/demos/rules.gif" alt="sqb compile reports the custom rule XSQBRARCH001 on the line that reads a raw source, and a unit test with no mock for that source" width="100%">
+</p>
+
+The rule is [a short Python function](website/examples/waffle-shop/rules/layers.py). See
+[rules](https://sqlbuild.com/docs/concepts/rules/).
+
+### See what a move would break
+
+`sqb scope --as-path` previews moving a model before you move it.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/chio-labs/sqlbuild/main/.github/demos/scope.gif" alt="sqb scope previews moving daily_revenue: the enum and macro it uses would be lost, so both usages are invalidated" width="100%">
+</p>
+
+Look at `Lost` and `Invalidated usages`: the model uses an enum and a macro that are private to
+`models/marts`, so moving it would break both.
 
 ## Example
 

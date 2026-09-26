@@ -7,18 +7,21 @@ scripts are the source; the rendered GIF, MP4 and PNG files go to `out/`, which 
 | Demo | Shows |
 |------|-------|
 | `rename` | A model is moved and renamed, and `sqb plan` migrates the existing table. |
-| `compile` | `sqb compile` catches an unknown column and a type mismatch. |
+| `contract` | A renamed column fails `sqb compile` against an enforced contract. |
+| `rules` | A custom rule and a missing test mock fail `sqb compile`. |
 | `scope` | `sqb scope --as-path` previews what a move would lose. |
 | `janitor` | `sqb janitor` archives a stale table before anything is deleted. |
-| `quickstart` | The playground: `sqb playground`, `sqb build` and `sqb test`. |
+| `compile` | `sqb compile` catches an unknown column and a type mismatch. Not used yet: the column checks it shows are unreleased. |
 
-The README uses `rename.gif` and `scope.gif`, copied into `.github/demos/`. Each demo runs locally on DuckDB, using the projects in [`../examples`](../examples).
+The README uses `rename`, `contract`, `rules` and `scope`, copied into `.github/demos/`. Each demo
+runs locally on DuckDB, using the projects in [`../examples`](../examples).
 
 ## Requirements
 
 - `vhs`, `ttyd` and `ffmpeg` on `PATH`, plus a Chromium or Chrome that VHS can find (it downloads
   one if none is on `PATH`).
 - DejaVu Sans Mono, the font the tapes use.
+- `tree` (the rename and scope tapes show folder trees).
 - `sqb` on `PATH`, or `SQB_BIN` pointing at a directory that contains the `sqb` to record.
 
 ## Record
