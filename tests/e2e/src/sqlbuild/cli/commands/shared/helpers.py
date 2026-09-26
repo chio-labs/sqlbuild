@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
+import fcntl
 import os
+import pty
 import re
+import struct
 import subprocess
+import termios
+import threading
 from collections.abc import Callable, Mapping
+from functools import partial
 from pathlib import Path
 from shutil import copytree
-from typing import Any
+from typing import Any, cast
 
 REPO_ROOT: Path = Path(__file__).resolve().parents[7]
 WAFFLE_SHOP_DIR: Path = REPO_ROOT / "tests" / "e2e" / "fixtures" / "waffle_shop"
+SPINNER_GLYPHS: tuple[str, ...] = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 SOURCE_LOADER_STRATEGIES_DIR: Path = (
     REPO_ROOT / "tests" / "e2e" / "fixtures" / "source_loader_strategies"
 )
@@ -211,6 +218,145 @@ def run_sqb(
         env=process_env,
         check=False,
     )
+
+
+def run_sqb_with_pty(
+    *,
+    command: tuple[str, ...],
+    project_dir: Path,
+    input_text: str = "",
+    timeout_seconds: float = 60.0,
+    columns: int = 120,
+) -> subprocess.CompletedProcess[str]:
+    """Run sqb through a real PTY of the given width and return the raw terminal output."""
+
+    master_fd: int
+    slave_fd: int
+    master_fd, slave_fd = pty.openpty()
+    fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 40, columns, 0, 0))
+    process_env: dict[str, str] = dict(os.environ)
+    for variable in _PTY_UNSET_ENVIRONMENT_VARIABLES:
+        process_env.pop(variable, None)
+    process_env["TERM"] = "xterm-256color"
+    process: subprocess.Popen[bytes] = subprocess.Popen(
+        ["uv", "run", "sqb", "--project-dir", str(project_dir), *command],
+        cwd=REPO_ROOT,
+        stdin=slave_fd,
+        stdout=slave_fd,
+        stderr=slave_fd,
+        env=process_env,
+        close_fds=True,
+    )
+    os.close(slave_fd)
+    output_parts: list[bytes] = []
+    reader_done: threading.Event = threading.Event()
+    reader: threading.Thread = threading.Thread(
+        target=_capture_pty_output,
+        kwargs={"master_fd": master_fd, "output_parts": output_parts, "reader_done": reader_done},
+        daemon=True,
+    )
+    reader.start()
+    try:
+        os.write(master_fd, input_text.encode())
+        process.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+        raise subprocess.TimeoutExpired(command, timeout_seconds) from None
+    finally:
+        reader_done.wait(timeout=1.0)
+        os.close(master_fd)
+        reader.join(timeout=1.0)
+    output: str = b"".join(output_parts).decode(errors="replace")
+    return subprocess.CompletedProcess(
+        args=("sqb", *command),
+        returncode=cast(int, process.returncode),
+        stdout=output,
+        stderr="",
+    )
+
+
+_PTY_UNSET_ENVIRONMENT_VARIABLES: frozenset[str] = frozenset(
+    {"COLUMNS", "LINES", "NO_COLOR", "SQLBUILD_NO_PROGRESS"}
+)
+
+
+def _capture_pty_output(
+    *, master_fd: int, output_parts: list[bytes], reader_done: threading.Event
+) -> None:
+    try:
+        for chunk in iter(partial(os.read, master_fd, 4096), b""):
+            output_parts.append(chunk)
+    except OSError:
+        return
+    finally:
+        reader_done.set()
+
+
+_TERMINAL_TOKEN_PATTERN: re.Pattern[str] = re.compile(
+    r"(?P<control>\x1b\[(?P<parameters>[?0-9;]*)(?P<command>[A-Za-z]))"
+    r"|(?P<carriage_return>\r)|(?P<line_feed>\n)|(?P<character>[^\x1b\r\n])"
+)
+
+
+class _TerminalScreen:
+    """Minimal auto-wrapping terminal that understands the progress control sequences."""
+
+    def __init__(self, *, columns: int) -> None:
+        self.columns: int = columns
+        self.rows: list[list[str]] = [[]]
+        self.row: int = 0
+        self.column: int = 0
+
+    def carriage_return(self, match: re.Match[str]) -> None:
+        del match
+        self.column = 0
+
+    def line_feed(self, match: re.Match[str]) -> None:
+        del match
+        self._move_to_row(self.row + 1)
+        self.column = 0
+
+    def character(self, match: re.Match[str]) -> None:
+        wrap: bool = self.column >= self.columns
+        self._move_to_row(self.row + int(wrap))
+        self.column *= int(not wrap)
+        line: list[str] = self.rows[self.row]
+        line.extend(" " for _ in range(self.column + 1 - len(line)))
+        line[self.column] = match.group(0)
+        self.column += 1
+
+    def control(self, match: re.Match[str]) -> None:
+        handlers: dict[str, Callable[[str], None]] = {
+            "A": self._cursor_up,
+            "K": self._erase_line,
+        }
+        handlers.get(match.group("command"), self._ignore)(match.group("parameters"))
+
+    def lines(self) -> tuple[str, ...]:
+        return tuple("".join(line).rstrip() for line in self.rows)
+
+    def _move_to_row(self, row: int) -> None:
+        self.row = row
+        self.rows.extend([] for _ in range(row + 1 - len(self.rows)))
+
+    def _cursor_up(self, parameters: str) -> None:
+        self.row = max(self.row - int(parameters or "1"), 0)
+
+    def _erase_line(self, parameters: str) -> None:
+        del self.rows[self.row][self.column * int(parameters != "2") :]
+
+    def _ignore(self, parameters: str) -> None:
+        del parameters
+
+
+def render_terminal_screen(*, output: str, columns: int) -> tuple[str, ...]:
+    """Replay raw terminal output on a minimal emulator and return the visible final lines."""
+
+    screen: _TerminalScreen = _TerminalScreen(columns=columns)
+    for match in _TERMINAL_TOKEN_PATTERN.finditer(output):
+        getattr(screen, str(match.lastgroup))(match)
+    return screen.lines()
 
 
 def query_duckdb(*, db_path: Path, sql: str) -> list[tuple[Any, ...]]:

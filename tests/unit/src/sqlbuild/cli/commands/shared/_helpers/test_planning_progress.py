@@ -72,6 +72,11 @@ def test_given_planning_messages_when_reporting_then_writes_expected_output(
             message="Finalized dbt run.",
             expected_is_completion=True,
         ),
+        PlanningCompletionMessageTestCase(
+            description="treats evaluated rules as completion",
+            message="Evaluated rules. (built-in 0.00s, custom 0.00s)",
+            expected_is_completion=True,
+        ),
     ],
     ids=lambda case: case.description,
 )

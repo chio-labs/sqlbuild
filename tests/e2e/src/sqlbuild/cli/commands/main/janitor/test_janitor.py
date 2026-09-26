@@ -94,7 +94,7 @@ def test_given_default_config_when_running_janitor_then_it_reports_disabled(
                 "main.partition_state  relation matches exclude pattern 'partition_*'",
                 "main._sqlbuild_fingerprints  relation matches exclude pattern",
                 "main._sqlbuild_microbatches  relation matches exclude pattern",
-                "Archived 1 relations.",
+                "Archived 1 relation.",
             ),
             expected_existing_tables=(
                 "orders",
@@ -622,7 +622,7 @@ def test_given_virtual_checkpoint_refs_when_janitor_then_preserves_physical_vers
                 "expired VDEs pruned",
                 "Eligible expired VDEs",
                 "pr  expired virtual environment",
-                "Deleted 0 objects, deleted 1 state items, and pruned 0 direct state tables.",
+                "Deleted 0 objects, deleted 1 state item, and pruned 0 direct state tables.",
             ),
             expected_virtual_environment_names_after=("dev",),
         )
@@ -998,7 +998,7 @@ def test_given_virtual_checkpoints_over_limit_when_running_janitor_then_it_prune
                 "detached VDEs pruned",
                 "Eligible detached VDEs",
                 "dev  detached virtual environment",
-                "Deleted 1 objects, deleted 1 state items, and pruned 0 direct state tables.",
+                "Deleted 1 object, deleted 1 state item, and pruned 0 direct state tables.",
             ),
             expected_virtual_environment_count_after=0,
             expected_ref_count_after=0,
@@ -1110,7 +1110,7 @@ def test_given_detached_vde_when_running_janitor_then_it_cleans_refs_and_physica
                 "detached VDEs pruned",
                 "Eligible detached VDEs",
                 "dev  detached virtual environment",
-                "Deleted 0 objects, deleted 1 state items, and pruned 0 direct state tables.",
+                "Deleted 0 objects, deleted 1 state item, and pruned 0 direct state tables.",
             ),
             expected_virtual_environment_count_after=0,
         )

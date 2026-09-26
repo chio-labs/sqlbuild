@@ -17,6 +17,7 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.executor.janitor.models import JanitorExecutionResult, JanitorPlan
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.count_noun import format_count_noun
 
 
 def write_janitor_disabled(*, invocation: JanitorInvocation) -> None:
@@ -121,7 +122,11 @@ def write_janitor_completion(
 
 
 def _deleted_message(*, result: JanitorExecutionResult) -> str:
-    archived_prefix: str = f"Archived {len(result.archived)} relations. " if result.archived else ""
+    archived_prefix: str = (
+        f"Archived {format_count_noun(count=len(result.archived), singular='relation')}. "
+        if result.archived
+        else ""
+    )
     return archived_prefix + _deletion_summary(result=result)
 
 
@@ -138,19 +143,21 @@ def _deletion_summary(*, result: JanitorExecutionResult) -> str:
         + len(result.deleted_archives)
         + len(result.deleted_query_diff_artifacts)
     )
+    objects: str = format_count_noun(count=deleted_object_count, singular="object")
     pruned_state_count: int = len(result.pruned_direct_state) + len(result.pruned_virtual_state)
     non_checkpoint_state_count: int = deleted_state_count - len(result.deleted_checkpoints)
     if non_checkpoint_state_count or pruned_state_count:
         pruned_state_label: str = (
-            "state tables" if result.pruned_virtual_state else "direct state tables"
+            "state table" if result.pruned_virtual_state else "direct state table"
         )
         return (
-            f"Deleted {deleted_object_count} objects, deleted {deleted_state_count} "
-            f"state items, and pruned {pruned_state_count} {pruned_state_label}."
+            f"Deleted {objects}, deleted "
+            f"{format_count_noun(count=deleted_state_count, singular='state item')}, and pruned "
+            f"{format_count_noun(count=pruned_state_count, singular=pruned_state_label)}."
         )
     if result.deleted_checkpoints:
-        return (
-            f"Deleted {deleted_object_count} objects and "
-            f"{len(result.deleted_checkpoints)} checkpoints."
+        checkpoints: str = format_count_noun(
+            count=len(result.deleted_checkpoints), singular="checkpoint"
         )
-    return f"Deleted {deleted_object_count} objects."
+        return f"Deleted {objects} and {checkpoints}."
+    return f"Deleted {objects}."

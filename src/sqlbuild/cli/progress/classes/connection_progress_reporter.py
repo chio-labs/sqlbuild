@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import TextIO
 
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.classes.transient_line_coordinator import TransientLineCoordinator
 from sqlbuild.presentation.main.phase_line import format_phase_line
+from sqlbuild.presentation.main.transient_line_coordinator import shared_transient_line_coordinator
 
 
 class ConnectionProgressReporter:
@@ -22,14 +24,14 @@ class ConnectionProgressReporter:
     ) -> None:
         self._adapter_name: str = adapter_name
         self._stream: TextIO = stream
+        self._lines: TransientLineCoordinator = shared_transient_line_coordinator()
         self._blank_line_before_start: bool = blank_line_before_start
         self._blank_line_after_complete: bool = blank_line_after_complete
         self._style: CliStyle = CliStyle(use_color=use_color)
 
     def on_connection_start(self, connection_count: int) -> None:
         if self._blank_line_before_start:
-            self._stream.write("\n")
-            self._stream.flush()
+            self._write("")
         self._write(self._style.muted(self._start_message(connection_count)))
 
     def on_connection_complete(self, *, connection_count: int, elapsed_seconds: float) -> None:
@@ -60,5 +62,4 @@ class ConnectionProgressReporter:
         return f"Connecting to {self._adapter_name} ({connection_count} connections)..."
 
     def _write(self, message: str) -> None:
-        self._stream.write(f"{message}\n")
-        self._stream.flush()
+        self._lines.write_persistent(stream=self._stream, text=f"{message}\n")

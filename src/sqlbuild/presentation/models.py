@@ -39,6 +39,7 @@ class CliTheme:
     label: TextStyle
     value: TextStyle
     accent: TextStyle
+    accent_strong: TextStyle
     plan_section: TextStyle
     object_name: TextStyle
     command: TextStyle

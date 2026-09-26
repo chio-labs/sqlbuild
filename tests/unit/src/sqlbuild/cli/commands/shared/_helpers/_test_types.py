@@ -169,3 +169,10 @@ class PlanningFinishTestCase:
     blank_line_after: bool
     messages_after_finish: tuple[str, ...]
     expected_output: str
+
+
+@dataclass(frozen=True)
+class NestedProgressConcurrentTestCase:
+    description: str
+    concurrency: int
+    expected_output: str

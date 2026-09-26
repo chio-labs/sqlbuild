@@ -44,7 +44,9 @@ Common questions:
 
 Report sections: **Used**, **Scope chain** (owner folder, parents, project globals), **Available**
 (globals collapsed; `--globals all` expands them), **Relationship grants** (tests and scenarios),
-**Nearby unavailable**, **Diagnostics**. Use `--json` for machine-readable output.
+**Nearby unavailable**, **Diagnostics**. Rows show each declaration's identity and `file:line`, and
+empty optional sections are hidden; add `--verbose` for each declaration's access details and every
+section. Use `--json` for machine-readable output.
 
 Placement rules the scope report reflects:
 

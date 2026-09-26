@@ -28,6 +28,7 @@ from sqlbuild.compiler.scopes.models import (
     ScopeReportFilters,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, DiagnosticSeverity
+from sqlbuild.presentation.main.supports_color import supports_color
 
 
 def run_scope_command(
@@ -107,7 +108,11 @@ def run_scope_command(
     output: str = (
         serialize_scope_report(report=result)
         if request.json_output
-        else render_scope_result(result=result, request=request)
+        else render_scope_result(
+            result=result,
+            request=request,
+            use_color=output_stream is None and not request.no_color and supports_color(),
+        )
     )
     stream.write(output)
     return 1 if _failed(result=result) else 0

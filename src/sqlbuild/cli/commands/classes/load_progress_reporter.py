@@ -14,8 +14,10 @@ from sqlbuild.cli.progress.classes.native_progress_projector import (
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.classes.transient_line_coordinator import TransientLineCoordinator
 from sqlbuild.presentation.main.completion_line import format_completion_line
 from sqlbuild.presentation.main.summary_footer import format_summary_footer
+from sqlbuild.presentation.main.transient_line_coordinator import shared_transient_line_coordinator
 from sqlbuild.presentation.types import CompletionState
 from sqlbuild.spec.contracts.models import SourceEntry
 
@@ -46,6 +48,7 @@ class LoadProgressReporter:
         total_count: int,
     ) -> None:
         self._stream: TextIO = stream
+        self._lines: TransientLineCoordinator = shared_transient_line_coordinator()
         self._style: CliStyle = CliStyle(use_color=use_color)
         self._source_order: dict[str, int] = source_order
         self._total_count: int = total_count
@@ -55,7 +58,8 @@ class LoadProgressReporter:
         self._spinner_frame_index: int = 0
         self._spinner_stop_event: threading.Event | None = None
         self._spinner_thread: threading.Thread | None = None
-        self._write_lock: threading.Lock = threading.Lock()
+        self._write_lock: threading.RLock = self._lines.lock
+        self._spinner_line_active: bool = False
         self._cursor_hidden: bool = False
         self._projector: NativeProgressProjector | None = current_native_progress_projector()
         if self._projector is not None:
@@ -69,7 +73,10 @@ class LoadProgressReporter:
         self._current_source = source
         self._current_sub_message = ""
         self._hide_cursor()
-        self._write_spinner_line()
+        with self._write_lock:
+            self._spinner_line_active = True
+            self._lines.claim(stream=self._stream, owner=self)
+            self._write_spinner_line()
         self._start_spinner_loop()
 
     def on_progress(self, *, source: SourceEntry, message: str) -> None:
@@ -92,6 +99,8 @@ class LoadProgressReporter:
         self._stop_spinner_loop()
         if self._is_tty:
             with self._write_lock:
+                self._spinner_line_active = False
+                self._lines.release(owner=self)
                 self._stream.write("\r\033[K")
                 self._stream.flush()
             self._show_cursor()
@@ -123,7 +132,24 @@ class LoadProgressReporter:
             self._stream.write(self._style.error(f"    {result.error_message}\n"))
         self._stream.flush()
 
+    def clear_transient_line(self) -> None:
+        """Erase the live spinner row so a persistent line can take its place."""
+
+        with self._write_lock:
+            self._stream.write("\r\033[K")
+            self._stream.flush()
+
+    def redraw_transient_line(self) -> None:
+        """Draw the live spinner row again below persistent output."""
+
+        self._write_spinner_line()
+
     def _write_spinner_line(self) -> None:
+        with self._write_lock:
+            if self._spinner_line_active:
+                self._draw_spinner_line()
+
+    def _draw_spinner_line(self) -> None:
         source: SourceEntry | None = self._current_source
         if source is None:
             return
@@ -139,9 +165,8 @@ class LoadProgressReporter:
         line: str = (
             f"  {ordinal}/{self._total_count}  {resource_kind:<10}{name_display:<48} {status}"
         )
-        with self._write_lock:
-            self._stream.write(f"\r\033[K{line}")
-            self._stream.flush()
+        self._stream.write(f"\r\033[K{line}")
+        self._stream.flush()
 
     def _start_spinner_loop(self) -> None:
         self._stop_spinner_loop()

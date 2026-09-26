@@ -89,6 +89,8 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 paths=args.scope_paths,
                 json_output=args.json,
                 no_cache=args.no_cache,
+                verbose=args.verbose,
+                no_color=args.no_color,
             )
         )
 

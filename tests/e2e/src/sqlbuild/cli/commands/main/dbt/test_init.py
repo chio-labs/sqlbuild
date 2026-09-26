@@ -13,10 +13,13 @@ from tests.e2e.src.sqlbuild.cli.commands.main.dbt._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.dbt.helpers import (
     prepare_dbt_init_duckdb_workspace,
-    run_sqb_with_pty,
     skip_unless_dbt_is_runnable,
 )
-from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb, run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    query_duckdb,
+    run_sqb,
+    run_sqb_with_pty,
+)
 
 pytestmark: pytest.MarkDecorator = pytest.mark.dbt
 

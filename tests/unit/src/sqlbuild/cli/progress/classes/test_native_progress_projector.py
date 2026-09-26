@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import replace
 from io import StringIO
 from threading import Event, Thread
@@ -17,9 +18,11 @@ from sqlbuild.observability import (
     invocation_scope,
     run_scope,
 )
+from sqlbuild.presentation.main.transient_line_coordinator import shared_transient_line_coordinator
 from sqlbuild.runtime.observability.classes.operation_lifecycle import publish_retry_scheduled
 from tests.unit.src.sqlbuild.cli.progress.classes._test_types import (
     CursorCleanupCase,
+    LockOrderCase,
     NativeProjectionCase,
     RetryProjectionCase,
     StartFlushCase,
@@ -734,3 +737,53 @@ def test_given_many_runtime_schema_events_when_projected_then_output_does_not_gr
     projector.consume(second_terminal)
 
     assert stream.getvalue() == test_case.expected_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        LockOrderCase(
+            description="reporter holding the line lock claims a terminal",
+            timeout_seconds=5.0,
+            expected_alive_threads=0,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_line_lock_held_when_projector_writes_concurrently_then_no_deadlock(
+    test_case: LockOrderCase,
+) -> None:
+    projector: NativeProgressProjector = NativeProgressProjector(stream=StringIO(), use_color=False)
+    line_lock_held: Event = Event()
+
+    def project_resource() -> None:
+        dispatcher: EventDispatcher = EventDispatcher()
+        dispatcher.subscribe_lifecycle(subscriber=projector.consume, accepts_opaque=False)
+        line_lock_held.wait()
+        with (
+            invocation_scope("inv-lock-order"),
+            run_scope("run-lock-order"),
+            dispatcher_scope(dispatcher),
+            ResourceAttemptLifecycle(
+                resource_id="task:writer", resource_kind="task", resource_name="writer"
+            ) as lifecycle,
+        ):
+            lifecycle.skipped(skip_code="scheduler")
+
+    def claim_terminal_under_line_lock() -> None:
+        with shared_transient_line_coordinator().lock:
+            line_lock_held.set()
+            time.sleep(0.2)
+            projector.consume_resource_terminal(resource_name="writer")
+
+    threads: tuple[Thread, ...] = (
+        Thread(target=project_resource, daemon=True),
+        Thread(target=claim_terminal_under_line_lock, daemon=True),
+    )
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=test_case.timeout_seconds)
+
+    alive: int = sum(thread.is_alive() for thread in threads)
+    assert alive == test_case.expected_alive_threads

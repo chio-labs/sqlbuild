@@ -61,3 +61,12 @@ class VirtualSourceFreshnessPlanE2ETestCase:
     include_freshness: bool = True
     source_freshness_type: str = "timestamp"
     warehouse_column_type: str = "TIMESTAMP"
+
+
+@dataclass(frozen=True)
+class TerminalPlanProgressE2ETestCase:
+    description: str
+    runs: int
+    columns: int
+    expected_screen_fragments: tuple[str, ...]
+    expected_raw_fragments: tuple[str, ...]

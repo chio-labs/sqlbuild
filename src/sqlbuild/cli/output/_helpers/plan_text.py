@@ -50,6 +50,7 @@ from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.aligned_name_value import format_aligned_name_value
 from sqlbuild.presentation.main.append_overflow_line import append_overflow_line
+from sqlbuild.presentation.main.count_header import count_header_style
 from sqlbuild.presentation.main.resolve_name_column_width import resolve_name_column_width
 from sqlbuild.presentation.main.surface_header import format_surface_header
 from sqlbuild.presentation.main.tree_connector import tree_connector
@@ -112,7 +113,9 @@ def format_plan(
 
     resolved_display_options: DisplayOptions = display_options or DisplayOptions()
     style: CliStyle = CliStyle(use_color=True)
-    resolved_section_header_style: Callable[[str], str] = section_header_style or style.plan_section
+    resolved_section_header_style: Callable[[str], str] = count_header_style(
+        style=style, title_style=section_header_style or style.plan_section
+    )
 
     active_model_entries: tuple[ModelPlanEntry, ...] = tuple(
         entry for entry in plan.model_entries if entry.action != PlanAction.SKIP

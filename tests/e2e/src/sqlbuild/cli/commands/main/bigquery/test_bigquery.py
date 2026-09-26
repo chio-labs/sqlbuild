@@ -645,7 +645,7 @@ def test_given_stateless_table_when_adopting_and_detaching_on_bigquery_then_tabl
                 "detached VDEs pruned",
                 "Eligible detached VDEs",
                 "dev  detached virtual environment",
-                "state items",
+                "state item",
             ),
             expected_virtual_environment_count_after=0,
             expected_ref_count_after=0,

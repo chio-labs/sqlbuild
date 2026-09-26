@@ -35,6 +35,7 @@ def test_given_all_scope_flags_when_dispatching_then_builds_typed_frozen_request
 
     exit_code: int = _main_with_dependencies(
         argv=(
+            "--no-color",
             "scope",
             "model:orders",
             "--as-path",
@@ -65,6 +66,7 @@ def test_given_all_scope_flags_when_dispatching_then_builds_typed_frozen_request
             "compact",
             "--json",
             "--no-cache",
+            "--verbose",
         ),
         handlers=build_handlers(run_scope=record),
     )
@@ -88,6 +90,8 @@ def test_given_all_scope_flags_when_dispatching_then_builds_typed_frozen_request
             paths="compact",
             json_output=True,
             no_cache=True,
+            verbose=True,
+            no_color=True,
         )
     ]
     assert ScopeCommandRequest.__dataclass_params__.frozen is True

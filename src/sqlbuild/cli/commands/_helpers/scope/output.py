@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import PurePosixPath
 from shlex import quote
 
@@ -25,133 +27,198 @@ from sqlbuild.compiler.scopes.models import (
     ScopeSection,
     SourceLocation,
 )
+from sqlbuild.compiler.scopes.types import DiagnosticSeverity
+from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.count_noun import format_count_noun
+
+_USED_MARKER: str = "●"
+_UNUSED_MARKER: str = "○"
+_LEGEND_MARKERS: str = (
+    f"{_USED_MARKER} used by this resource   {_UNUSED_MARKER} not used by this resource"
+)
+_LEGEND_VERBOSE_HINT: str = "--verbose for scope details"
+
+
+@dataclass(frozen=True)
+class _ScopeText:
+    """Styling and detail options shared by one scope text rendering."""
+
+    request: ScopeCommandRequest
+    style: CliStyle
+
+    @property
+    def verbose(self) -> bool:
+        return self.request.verbose
 
 
 def render_scope_result(
-    *, result: ScopeReport | ScopeBrowseResult | ScopeListResult, request: ScopeCommandRequest
+    *,
+    result: ScopeReport | ScopeBrowseResult | ScopeListResult,
+    request: ScopeCommandRequest,
+    use_color: bool = False,
 ) -> str:
     """Render one compiler-owned scope result without deriving scope facts."""
 
+    text: _ScopeText = _ScopeText(request=request, style=CliStyle(use_color=use_color))
     if isinstance(result, ScopeBrowseResult):
-        return _render_browse(result=result, request=request)
+        return _render_browse(result=result, text=text)
     if isinstance(result, ScopeListResult):
-        return _render_list(result=result, request=request)
-    return _render_report(report=result, request=request)
+        return _render_list(result=result, text=text)
+    return _render_report(report=result, text=text)
 
 
-def _render_report(*, report: ScopeReport, request: ScopeCommandRequest) -> str:
+def _render_report(*, report: ScopeReport, text: _ScopeText) -> str:
+    request: ScopeCommandRequest = text.request
+    style: CliStyle = text.style
     resource: ScopeResourceReport = report.resource
-    lines: list[str] = ["Scope", f"  Target: {resource.target}"]
+    lines: list[str] = [
+        style.section("Scope"),
+        _field(label="Target", value=resource.target, text=text),
+    ]
     if resource.identity is not None:
-        lines.append(f"  Resource: {resource.identity}")
+        lines.append(_field(label="Resource", value=resource.identity, text=text))
     if resource.path is not None:
-        lines.append(f"  Path: {_path(value=resource.path, mode=request.paths)}")
+        lines.append(
+            _field(label="Path", value=_path(value=resource.path, mode=request.paths), text=text)
+        )
     labels: list[str] = []
     if resource.prospective:
         labels.append("prospective")
     if resource.directory:
         labels.append("directory")
     if resource.duplicate_count:
-        labels.append(f"{resource.duplicate_count} matches")
-    if labels:
-        lines.append(f"  Status: {', '.join(labels)}")
-    lines.extend(["", f"Used ({len(report.used)})"])
-    lines.extend(
-        _declaration_lines(
-            declarations=report.used,
-            request=request,
-            used=frozenset(item.identity for item in report.used),
+        labels.append(
+            format_count_noun(count=resource.duplicate_count, singular="match", plural="matches")
         )
-    )
-    lines.extend(["", "Scope chain"])
+    if labels:
+        lines.append(_field(label="Status", value=", ".join(labels), text=text))
+    used: frozenset[str] = frozenset(item.identity for item in report.used)
+    lines.extend(["", _header(title="Used", count=f"({len(report.used)})", text=text)])
+    lines.extend(_declaration_lines(declarations=report.used, text=text, used=used))
+    lines.extend(["", style.section("Scope chain")])
     if report.scope_chain:
         for index, entry in enumerate(report.scope_chain):
-            connector: str = "└─" if index == len(report.scope_chain) - 1 else "├─"
+            chain_path: str = _path(value=entry.path, mode=request.paths)
             lines.append(
-                f"  {connector} {_scope_label(entry.kind)} "
-                f"{_path(value=entry.path, mode=request.paths)} "
-                f"({entry.declaration_count})"
+                f"  {_connector(last=index == len(report.scope_chain) - 1, text=text)} "
+                f"{_scope_label(entry.kind)} "
+                f"{style.muted(f'{chain_path} ({entry.declaration_count})')}"
             )
     else:
-        lines.append("  (none)")
-    used: frozenset[str] = frozenset(item.identity for item in report.used)
-    for title, declarations, section in (
-        ("Available", report.available, _section(report=report, name="available")),
+        lines.append(f"  {style.muted('(none)')}")
+    for title, declarations, section, optional in (
+        ("Available", report.available, _section(report=report, name="available"), False),
         (
             "Relationship grants",
             report.relationship_scope,
             _section(report=report, name="relationship_scope"),
+            True,
         ),
         (
             "Nearby unavailable",
             report.nearby_unavailable,
             _section(report=report, name="nearby_unavailable"),
+            True,
         ),
     ):
-        lines.extend(["", _section_title(title=title, section=section, count=len(declarations))])
-        lines.extend(_declaration_lines(declarations=declarations, request=request, used=used))
-        if section is not None and section.collapsed_count:
+        collapsed_count: int = section.collapsed_count if section is not None else 0
+        if optional and not text.verbose and not declarations and not collapsed_count:
+            continue
+        lines.extend(
+            [
+                "",
+                _header(
+                    title=title,
+                    count=_section_count(section=section, count=len(declarations)),
+                    text=text,
+                ),
+            ]
+        )
+        lines.extend(_declaration_lines(declarations=declarations, text=text, used=used))
+        if collapsed_count:
+            global_count: str = format_count_noun(count=collapsed_count, singular="global")
             lines.append(
-                f"  … {section.collapsed_count} globals collapsed; run "
-                f"{_follow_up(request=request, globals_all=True)}"
-            )
-    if report.explanation is not None:
-        lines.extend(["", "Explanation"])
-        if report.explanation.declaration is None:
-            lines.append("  (declaration not resolved)")
-        else:
-            lines.extend(
-                _explanation_lines(
-                    declaration=report.explanation.declaration,
-                    request=request,
-                    used=used,
+                "  "
+                + style.muted(
+                    f"… {global_count} collapsed; run "
+                    f"{_follow_up(request=request, globals_all=True)}"
                 )
             )
+    if report.explanation is not None:
+        lines.extend(["", style.section("Explanation")])
+        if report.explanation.declaration is None:
+            lines.append(f"  {style.muted('(declaration not resolved)')}")
+        else:
+            lines.extend(
+                _explanation_lines(declaration=report.explanation.declaration, text=text, used=used)
+            )
     if report.move_preview is not None:
-        lines.extend(["", *_move_lines(move=report.move_preview, request=request, used=used)])
-    lines.extend(["", *_diagnostic_lines(report.diagnostics), _completeness_line(report.complete)])
+        lines.extend(["", *_move_lines(move=report.move_preview, text=text, used=used)])
+    if not text.verbose:
+        lines.extend(["", style.muted(f"{_LEGEND_MARKERS}   {_LEGEND_VERBOSE_HINT}")])
+    lines.extend(
+        [
+            "",
+            *_diagnostic_lines(diagnostics=report.diagnostics, text=text),
+            _completeness_line(complete=report.complete, text=text),
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 
-def _render_browse(*, result: ScopeBrowseResult, request: ScopeCommandRequest) -> str:
+def _render_browse(*, result: ScopeBrowseResult, text: _ScopeText) -> str:
+    request: ScopeCommandRequest = text.request
+    style: CliStyle = text.style
     lines: list[str] = [
-        "Scope folders",
-        f"  Path: {_path(value=result.folder, mode=request.paths)}",
+        style.section("Scope folders"),
+        _field(label="Path", value=_path(value=result.folder, mode=request.paths), text=text),
         "",
     ]
     if not result.folders:
-        lines.append("  (none)")
+        lines.append(f"  {style.muted('(none)')}")
     for index, folder in enumerate(result.folders):
-        connector: str = "└─" if index == len(result.folders) - 1 else "├─"
         kinds: str = (
             ", ".join(f"{kind} {count}" for kind, count in folder.kind_counts) or "no declarations"
         )
-        lines.append(
-            f"  {connector} {folder.name}/  {folder.descendant_count} declarations, "
-            f"{folder.used_count} used, {folder.child_count} children; {kinds}"
+        counts: str = (
+            f"{format_count_noun(count=folder.descendant_count, singular='declaration')}, "
+            f"{folder.used_count} used, "
+            f"{format_count_noun(count=folder.child_count, singular='child', plural='children')}; "
+            f"{kinds}"
         )
-        lines.append(f"     {_follow_up(request=request, browse=folder.path)}")
-        lines.append(f"     {_follow_up(request=request, list_path=folder.path)}")
-    lines.extend(["", *_diagnostic_lines(result.diagnostics), _completeness_line(result.complete)])
+        lines.append(
+            f"  {_connector(last=index == len(result.folders) - 1, text=text)} "
+            f"{folder.name}/  {style.muted(counts)}"
+        )
+        lines.append(f"     {style.muted(_follow_up(request=request, browse=folder.path))}")
+        lines.append(f"     {style.muted(_follow_up(request=request, list_path=folder.path))}")
+    lines.extend(
+        [
+            "",
+            *_diagnostic_lines(diagnostics=result.diagnostics, text=text),
+            _completeness_line(complete=result.complete, text=text),
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 
-def _render_list(*, result: ScopeListResult, request: ScopeCommandRequest) -> str:
+def _render_list(*, result: ScopeListResult, text: _ScopeText) -> str:
+    request: ScopeCommandRequest = text.request
+    style: CliStyle = text.style
     section: ScopeSection = result.section
     lines: list[str] = [
-        "Scope declarations",
-        f"  Path: {_path(value=result.folder, mode=request.paths)}",
-        f"  Showing: {section.returned} of {section.total}",
+        style.section("Scope declarations"),
+        _field(label="Path", value=_path(value=result.folder, mode=request.paths), text=text),
+        _field(label="Showing", value=f"{section.returned} of {section.total}", text=text),
         "",
     ]
-    lines.extend(
-        _declaration_lines(declarations=result.declarations, request=request, used=frozenset())
-    )
+    lines.extend(_declaration_lines(declarations=result.declarations, text=text, used=frozenset()))
     if section.next_cursor is not None:
         lines.extend(
             [
                 "",
-                "Continue: "
+                style.muted("Continue:")
+                + " "
                 + _follow_up(
                     request=request,
                     list_path=result.folder,
@@ -159,40 +226,69 @@ def _render_list(*, result: ScopeListResult, request: ScopeCommandRequest) -> st
                 ),
             ]
         )
-    lines.extend(["", *_diagnostic_lines(result.diagnostics), _completeness_line(section.complete)])
+    if not text.verbose and result.declarations:
+        lines.extend(["", style.muted(_LEGEND_VERBOSE_HINT)])
+    lines.extend(
+        [
+            "",
+            *_diagnostic_lines(diagnostics=result.diagnostics, text=text),
+            _completeness_line(complete=section.complete, text=text),
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 
 def _declaration_lines(
     *,
     declarations: tuple[DeclarationReport, ...],
-    request: ScopeCommandRequest,
+    text: _ScopeText,
     used: frozenset[str],
+    used_marker_style: Callable[[str], str] | None = None,
+    name_style: Callable[[str], str] | None = None,
+    detailed: bool | None = None,
 ) -> list[str]:
+    style: CliStyle = text.style
     if not declarations:
-        return ["  (none)"]
+        return [f"  {style.muted('(none)')}"]
+    show_details: bool = text.verbose if detailed is None else detailed
+    resolved_used_marker_style: Callable[[str], str] = used_marker_style or style.success
+    resolved_name_style: Callable[[str], str] = name_style or style.object_name
     lines: list[str] = []
     for index, declaration in enumerate(declarations):
-        connector: str = "└─" if index == len(declarations) - 1 else "├─"
-        marker: str = "●" if declaration.identity in used else "○"
-        details: list[str] = [declaration.kind, _scope_label(declaration.scope)]
-        if declaration.visibility is not None:
-            provenance: str = declaration.visibility.reason
-            if declaration.visibility.through is not None:
-                provenance += f" through {declaration.visibility.through}"
-            details.append(provenance)
-        if declaration.inaccessible_reason is not None:
-            details.append(declaration.inaccessible_reason)
-        details.extend(_metadata_parts(declaration))
-        line = f"  {connector} {marker} {declaration.identity}  [{'; '.join(details)}]"
-        if request.paths != SCOPE_PATH_NONE:
+        marker: str = (
+            resolved_used_marker_style(_USED_MARKER)
+            if declaration.identity in used
+            else style.muted(_UNUSED_MARKER)
+        )
+        line: str = (
+            f"  {_connector(last=index == len(declarations) - 1, text=text)} {marker} "
+            f"{resolved_name_style(declaration.identity)}"
+        )
+        if show_details:
+            line += f"  {style.muted(f'[{"; ".join(_declaration_details(declaration))}]')}"
+        if text.request.paths != SCOPE_PATH_NONE:
             location: SourceLocation = declaration.definition
-            line += (
-                f"  {_path(value=location.path, mode=request.paths)}:"
-                f"{location.line}:{location.column}"
+            position: str = (
+                f"{location.line}:{location.column}" if show_details else f"{location.line}"
+            )
+            line += "  " + style.muted(
+                f"{_path(value=location.path, mode=text.request.paths)}:{position}"
             )
         lines.append(line)
     return lines
+
+
+def _declaration_details(declaration: DeclarationReport) -> list[str]:
+    details: list[str] = [declaration.kind, _scope_label(declaration.scope)]
+    if declaration.visibility is not None:
+        provenance: str = declaration.visibility.reason
+        if declaration.visibility.through is not None:
+            provenance += f" through {declaration.visibility.through}"
+        details.append(provenance)
+    if declaration.inaccessible_reason is not None:
+        details.append(declaration.inaccessible_reason)
+    details.extend(_metadata_parts(declaration))
+    return details
 
 
 def _scope_label(scope: str) -> str:
@@ -233,9 +329,12 @@ def _metadata_parts(declaration: DeclarationReport) -> list[str]:
 
 
 def _explanation_lines(
-    *, declaration: DeclarationReport, request: ScopeCommandRequest, used: frozenset[str]
+    *, declaration: DeclarationReport, text: _ScopeText, used: frozenset[str]
 ) -> list[str]:
-    lines: list[str] = _declaration_lines(declarations=(declaration,), request=request, used=used)
+    style: CliStyle = text.style
+    lines: list[str] = _declaration_lines(
+        declarations=(declaration,), text=text, used=used, detailed=True
+    )
     required_scope: str | None = (
         _scope_label(declaration.required_scope) if declaration.required_scope is not None else None
     )
@@ -250,52 +349,115 @@ def _explanation_lines(
         ("Promotion impact", declaration.promotion_impact),
     )
     for label, value in facts:
+        rendered: str
         if isinstance(value, tuple):
-            rendered: str = ", ".join(value) if value else "(none)"
+            rendered = ", ".join(value) if value else style.muted("(none)")
         else:
-            rendered = str(value) if value is not None else "(none)"
-        lines.append(f"     {label}: {rendered}")
+            rendered = str(value) if value is not None else style.muted("(none)")
+        lines.append(f"     {style.muted(f'{label}:')} {rendered}")
     return lines
 
 
-def _move_lines(
-    *, move: MovePreview, request: ScopeCommandRequest, used: frozenset[str]
-) -> list[str]:
+def _move_lines(*, move: MovePreview, text: _ScopeText, used: frozenset[str]) -> list[str]:
+    request: ScopeCommandRequest = text.request
+    style: CliStyle = text.style
     lines: list[str] = [
-        "Move preview",
-        f"  Resource: {move.resource}",
-        f"  Destination: {_path(value=move.destination, mode=request.paths)}",
-        f"  Ownership root: {_path(value=move.new_ownership_root, mode=request.paths)}",
+        style.section("Move preview"),
+        _field(label="Resource", value=move.resource, text=text),
+        _field(
+            label="Destination", value=_path(value=move.destination, mode=request.paths), text=text
+        ),
+        _field(
+            label="Ownership root",
+            value=_path(value=move.new_ownership_root, mode=request.paths),
+            text=text,
+        ),
     ]
-    for title, values in (
-        ("Retained", move.retained),
-        ("Gained", move.gained),
-        ("Lost", move.lost),
-        ("Private retained", move.private_retained),
-        ("Relationship retained", move.relationship_retained),
-    ):
-        lines.append(f"  {title} ({len(values)})")
+    lost_warning: bool = bool(move.lost)
+    sections: tuple[
+        tuple[
+            str,
+            tuple[DeclarationReport, ...],
+            bool,
+            Callable[[str], str] | None,
+            Callable[[str], str] | None,
+            Callable[[str], str] | None,
+        ],
+        ...,
+    ] = (
+        ("Retained", move.retained, False, None, None, None),
+        ("Gained", move.gained, False, None, None, style.success),
+        (
+            "Lost",
+            move.lost,
+            False,
+            style.warning_strong if lost_warning else None,
+            style.error,
+            None,
+        ),
+        ("Private retained", move.private_retained, True, None, None, None),
+        ("Relationship retained", move.relationship_retained, True, None, None, None),
+    )
+    for title, values, optional, title_style, used_marker_style, name_style in sections:
+        if optional and not text.verbose and not values:
+            continue
+        header: str = _header(
+            title=title,
+            count=f"({len(values)})",
+            text=text,
+            title_style=title_style,
+            count_style=style.warning if title_style is not None else None,
+        )
+        lines.append(f"  {header}")
         lines.extend(
             "  " + line
-            for line in _declaration_lines(declarations=values, request=request, used=used)
+            for line in _declaration_lines(
+                declarations=values,
+                text=text,
+                used=used,
+                used_marker_style=used_marker_style,
+                name_style=name_style,
+            )
         )
-    lines.append(f"  Invalidated usages ({len(move.invalidated_usages)})")
-    lines.extend(f"    - {identity}" for identity in move.invalidated_usages)
-    if not move.invalidated_usages:
-        lines.append("    (none)")
+    invalidated: tuple[str, ...] = move.invalidated_usages
+    invalidated_header: str = _header(
+        title="Invalidated usages",
+        count=f"({len(invalidated)})",
+        text=text,
+        title_style=style.error_strong if invalidated else None,
+        count_style=style.error if invalidated else None,
+    )
+    lines.append(f"  {invalidated_header}")
+    lines.extend(f"    {style.error(f'- {identity}')}" for identity in invalidated)
+    if not invalidated:
+        lines.append(f"    {style.muted('(none)')}")
     return lines
 
 
-def _diagnostic_lines(diagnostics: tuple[ScopeDiagnostic, ...]) -> list[str]:
-    lines: list[str] = [f"Diagnostics ({len(diagnostics)})"]
-    if not diagnostics:
-        lines.append("  (none)")
-    for diagnostic in diagnostics:
-        location: str = f" {diagnostic.path}" if diagnostic.path is not None else ""
-        lines.append(
-            f"  {diagnostic.severity.value.upper()} {diagnostic.code.value}{location}: "
-            f"{diagnostic.message}"
+def _diagnostic_lines(*, diagnostics: tuple[ScopeDiagnostic, ...], text: _ScopeText) -> list[str]:
+    style: CliStyle = text.style
+    if not diagnostics and not text.verbose:
+        return []
+    lines: list[str] = [
+        _header(
+            title="Diagnostics",
+            count=f"({len(diagnostics)})",
+            text=text,
+            title_style=style.error_strong if diagnostics else None,
+            count_style=style.error if diagnostics else None,
         )
+    ]
+    if not diagnostics:
+        lines.append(f"  {style.muted('(none)')}")
+    for diagnostic in diagnostics:
+        severity: str = diagnostic.severity.value.upper()
+        severity_text: str = (
+            style.error_strong(severity)
+            if diagnostic.severity is DiagnosticSeverity.ERROR
+            else style.warning_strong(severity)
+        )
+        location: str = f" {style.muted(diagnostic.path)}" if diagnostic.path is not None else ""
+        lines.append(f"  {severity_text} {diagnostic.code.value}{location}: {diagnostic.message}")
     return lines
 
 
@@ -303,15 +465,37 @@ def _section(*, report: ScopeReport, name: str) -> ScopeSection | None:
     return next((section for section in report.sections if section.name == name), None)
 
 
-def _section_title(*, title: str, section: ScopeSection | None, count: int) -> str:
+def _section_count(*, section: ScopeSection | None, count: int) -> str:
     if section is None:
-        return f"{title} ({count})"
+        return f"({count})"
     suffix: str = f", {section.collapsed_count} collapsed" if section.collapsed_count else ""
-    return f"{title} ({section.returned} of {section.total}{suffix})"
+    return f"({section.returned} of {section.total}{suffix})"
 
 
-def _completeness_line(complete: bool) -> str:
-    return f"Completeness: {'complete' if complete else 'partial'}"
+def _header(
+    *,
+    title: str,
+    count: str,
+    text: _ScopeText,
+    title_style: Callable[[str], str] | None = None,
+    count_style: Callable[[str], str] | None = None,
+) -> str:
+    style: CliStyle = text.style
+    return f"{(title_style or style.section)(title)} {(count_style or style.muted)(count)}"
+
+
+def _field(*, label: str, value: str, text: _ScopeText) -> str:
+    return f"  {text.style.muted(f'{label}:')} {value}"
+
+
+def _connector(*, last: bool, text: _ScopeText) -> str:
+    return text.style.muted("└─" if last else "├─")
+
+
+def _completeness_line(*, complete: bool, text: _ScopeText) -> str:
+    style: CliStyle = text.style
+    state: str = style.success("complete") if complete else style.warning("partial")
+    return f"{style.muted('Completeness:')} {state}"
 
 
 def _path(*, value: str | None, mode: str) -> str:
@@ -370,6 +554,8 @@ def _follow_up(
         args.extend(("--globals", request.globals))
     if request.paths != SCOPE_PATH_RELATIVE:
         args.extend(("--paths", request.paths))
+    if request.verbose:
+        args.append("--verbose")
     if request.no_cache:
         args.append("--no-cache")
     return " ".join(quote(item) for item in args)
