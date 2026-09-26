@@ -443,8 +443,22 @@ def _prepare_compact_analysis_batch(
         )
     prepared: list[str] = []
     if binding_catalog is not None:
+        required_tables: set[str] = {
+            _analysis_reference_name(reference)
+            for query_references in references
+            for reference in query_references
+        }
         binding_catalog.prepare_analysis(
-            types=column_types_by_table, nullability=column_nullability_by_table
+            types={
+                name: column_types_by_table[name]
+                for name in required_tables
+                if name in column_types_by_table
+            },
+            nullability={
+                name: column_nullability_by_table[name]
+                for name in required_tables
+                if name in column_nullability_by_table
+            },
         )
     queries: list[dict[str, object]] = []
     query_indexes: dict[tuple[str, str, bytes | None, bytes | None], int] = {}
@@ -1033,8 +1047,10 @@ def _compact_projected_analysis_result(
                 raise SqlAnalysisBoundaryError(
                     "native compact analysis returned invalid upstream lineage"
                 )
-            if not all(
-                isinstance(value, int) and not isinstance(value, bool) for value in raw_source
+            if (
+                type(raw_source[0]) is not int
+                or type(raw_source[1]) is not int
+                or type(raw_source[2]) is not int
             ):
                 raise SqlAnalysisBoundaryError(
                     "native compact analysis returned invalid upstream indexes"
