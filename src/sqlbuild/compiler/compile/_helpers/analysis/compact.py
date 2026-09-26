@@ -151,8 +151,9 @@ from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_PAYLOAD_COLUMN as _POLYGLOT_PAYLOAD_COLUMN,
 )
 from sqlbuild.compiler.sql_analysis.exceptions import SqlAnalysisBoundaryError
+from sqlbuild.compiler.sql_analysis.main._binding_catalog import create_binding_catalog
 from sqlbuild.compiler.sql_analysis.main._decode_schema_validation import decode_schema_validation
-from sqlbuild.compiler.sql_analysis.main._prepare_schema_validation import prepare_schema_validation
+from sqlbuild.compiler.sql_analysis.main._normalize_analysis import normalize_analysis_sql
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.compiler.sql_analysis.models import (
@@ -430,7 +431,20 @@ def _prepare_compact_analysis_batch(
     binding_schemas: tuple[dict[str, dict[str, str]] | None, ...] | None = None,
 ) -> CompactBatchPreparation:
     dialect: str | None = inference_profile.sql_analysis_dialect
+    binding_catalog: Any | None = inference_profile.binding_catalog
+    if binding_catalog is None and binding_schemas is not None:
+        binding_catalog = create_binding_catalog(
+            dialect=dialect or "generic",
+            quoted_ignore_case=inference_profile.quoted_identifiers_ignore_case,
+            known_functions=inference_profile.semantic_known_functions,
+            known_types=inference_profile.semantic_known_types,
+            relations=column_types_by_table,
+        )
     prepared: list[str] = []
+    if binding_catalog is not None:
+        binding_catalog.prepare_analysis(
+            types=column_types_by_table, nullability=column_nullability_by_table
+        )
     queries: list[dict[str, object]] = []
     query_indexes: dict[tuple[str, str, bytes | None, bytes | None], int] = {}
     templates: list[dict[str, object]] = []
@@ -499,37 +513,50 @@ def _prepare_compact_analysis_batch(
             "sql": analysis_sql,
             "dialect": dialect or "generic",
         }
-        schema: dict[str, object] | None = _compact_analysis_schema(
-            column_nullability_by_table=column_nullability_by_table,
-            column_types_by_table=column_types_by_table,
-            table_names=frozenset(
-                _analysis_reference_name(reference) for reference in query_references
-            ),
-            table_name_aliases=canonical_stubs,
-        )
+        schema: dict[str, object] | None = None
+        if binding_catalog is not None:
+            query["analysis_references"] = [
+                (name, canonical_stubs.get(name, name))
+                for name in sorted(
+                    lineage_references, key=lambda name: canonical_stubs.get(name, name)
+                )
+            ]
+        else:
+            schema = _compact_analysis_schema(
+                column_nullability_by_table=column_nullability_by_table,
+                column_types_by_table=column_types_by_table,
+                table_names=frozenset(
+                    _analysis_reference_name(reference) for reference in query_references
+                ),
+                table_name_aliases=canonical_stubs,
+            )
         if schema is not None:
             query["schema"] = schema
         binding_payload: dict[str, object] | None = None
         if binding_schema is not None:
-            binding_payload = prepare_schema_validation(
-                request=SqlSchemaValidationRequest(
-                    sql=cleaned_sql,
-                    dialect=dialect,
-                    schema=binding_schema,
-                    known_functions=inference_profile.semantic_known_functions,
-                    known_types=inference_profile.semantic_known_types,
-                    quoted_identifiers_ignore_case=inference_profile.quoted_identifiers_ignore_case,
-                )
-            )
-            query["binding_schema"] = binding_payload["schema"]
-            if not inference_profile.quoted_identifiers_ignore_case:
-                query["binding_options"] = binding_payload["options"]
+            if binding_catalog is None:
+                raise SqlAnalysisBoundaryError("binding schemas require a native project catalog")
+            _, binding_references, overrides = binding_catalog.prepare(
+                [
+                    SqlSchemaValidationRequest(
+                        sql=cleaned_sql,
+                        dialect=dialect,
+                        schema=binding_schema,
+                    )
+                ]
+            )[0]
+            binding_payload = {"references": binding_references}
+            query["binding_references"] = binding_references
+            if overrides:
+                override_id: int = binding_catalog.native.register_override(overrides)
+                query["binding_override"] = override_id
+                binding_payload["override"] = override_id
         query_key: tuple[str, str, bytes | None, bytes | None] = (
             analysis_sql,
             dialect or "generic",
-            (orjson.dumps(schema, option=orjson.OPT_SORT_KEYS) if schema is not None else None),
+            (orjson.dumps(schema or query.get("analysis_references"), option=orjson.OPT_SORT_KEYS)),
             (
-                orjson.dumps(binding_payload["schema"], option=orjson.OPT_SORT_KEYS)
+                orjson.dumps(binding_payload, option=orjson.OPT_SORT_KEYS)
                 if binding_payload is not None
                 else None
             ),
@@ -600,6 +627,7 @@ def _prepare_compact_analysis_batch(
         queries=tuple(queries),
         templates=tuple(templates),
         projections=tuple(projections),
+        binding_catalog=binding_catalog,
     )
 
 
@@ -612,6 +640,19 @@ def _run_compact_analysis_batch(*, preparation: CompactBatchPreparation) -> obje
         >= _LARGE_COMPACT_SQL_BYTES
     )
     workers: int = 1 if large_project else 4
+    if preparation.binding_catalog is not None:
+        return orjson.loads(
+            preparation.binding_catalog.native.analyze_compact(
+                orjson.dumps(
+                    {
+                        "queries": preparation.queries,
+                        "templates": preparation.templates,
+                        "projections": preparation.projections,
+                        "workers": workers,
+                    }
+                )
+            )
+        )
     return orjson.loads(
         cast(NativeQueryAnalysisModule, _native).analyze_project_queries_compact_json(
             orjson.dumps(
@@ -1019,17 +1060,9 @@ def _cleaned_analysis_sql(
     dialect: str | None,
     relation_stubs: dict[str, str] | None = None,
 ) -> str:
-    cleaned_sql: str = _replace_refs_with_stubs(
-        query_sql=query_sql,
-        dialect=dialect,
-        relation_stubs=relation_stubs,
+    return normalize_analysis_sql(
+        sql=query_sql, dialect=dialect, stubs=relation_stubs, placeholders=placeholders
     )
-    if placeholders:
-        cleaned_sql = substitute_placeholder_defaults(
-            query_sql=cleaned_sql,
-            placeholders=placeholders,
-        )
-    return cleaned_sql
 
 
 def get_complete_schema_binding_request(
@@ -1043,12 +1076,9 @@ def get_complete_schema_binding_request(
 ) -> SqlSchemaValidationRequest:
     """Build one stable native schema-validation request."""
 
-    cleaned_sql: str = _replace_refs_with_stubs(query_sql=query_sql, dialect=dialect)
-    if placeholders:
-        cleaned_sql = substitute_placeholder_defaults(
-            query_sql=cleaned_sql,
-            placeholders=placeholders,
-        )
+    cleaned_sql: str = normalize_analysis_sql(
+        sql=query_sql, dialect=dialect, placeholders=placeholders
+    )
     return SqlSchemaValidationRequest(
         sql=cleaned_sql,
         dialect=dialect,

@@ -15,12 +15,23 @@ from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,
     CompileProjectInputs,
+    CompileSqlReference,
     PolyglotAnalysisResult,
 )
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.constants import NATIVE_DIALECT_ALIASES
 from sqlbuild.spec.contracts.models import SourceEntry
+
+
+def binding_relation_names(references: tuple[CompileSqlReference, ...]) -> frozenset[str]:
+    return frozenset(
+        table_function_analysis_name(reference.ref_name)
+        if reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION
+        else reference.ref_name
+        for reference in references
+        if reference.ref_kind != SqlReferenceKind.UDF
+    )
 
 
 def build_declared_column_types(inputs: CompileProjectInputs) -> dict[str, dict[str, str]]:

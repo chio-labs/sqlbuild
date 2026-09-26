@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -36,3 +37,4 @@ class SqlSchemaValidationRequest:
     known_functions: tuple[str, ...] = ()
     known_types: tuple[str, ...] = ()
     quoted_identifiers_ignore_case: bool = False
+    catalog: Any | None = field(default=None, repr=False, compare=False)

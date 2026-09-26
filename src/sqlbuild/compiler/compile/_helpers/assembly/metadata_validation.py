@@ -196,6 +196,7 @@ def _audit_errors(
                             dialect=profile.sql_analysis_dialect,
                             schema={"output": shape},
                             known_functions=known_function_names(project.functions),
+                            catalog=project.binding_catalog,
                             quoted_identifiers_ignore_case=profile.quoted_identifiers_ignore_case,
                             known_types=known_declared_types(
                                 functions=project.functions, column_types=shapes
