@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.executor.testing._helpers.difference_samples import add_difference_samples
 from sqlbuild.executor.testing._helpers.expected_column_probe import (
@@ -49,16 +50,10 @@ def execute_sql_test(
             sql=comparison_sql,
             adapter=adapter,
             test_name=test_entry.name,
+            model_name=error_model_name,
         )
-    except Exception:
-        error_message: str = (
-            f"Combined unit test SQL for '{test_entry.name}' including '{error_model_name}' "
-            f"is {len(comparison_sql)} "
-            f"characters, which exceeds the recommended maximum of "
-            f"{adapter.recommended_max_sql_length()} for this adapter. This test is too "
-            "large for a single lightweight unit query. Consider splitting it into smaller "
-            "unit tests or moving it to a scenario test."
-        )
+    except CompileInputError as error:
+        error_message: str = str(error)
         return SqlTestExecutionResult(
             test_name=test_entry.name,
             outcome=SqlTestOutcome.ERROR,

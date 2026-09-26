@@ -79,6 +79,7 @@ from sqlbuild.adapter.contract.types import (
     RetentionScope,
     SnapshotLatestVersionStyle,
     SnapshotUpdateStyle,
+    StatementSizeLimit,
     TablePromotionMode,
 )
 from sqlbuild.adapter.relations.main.get_columns_for_relations import (
@@ -1089,8 +1090,10 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def supports_relation_age_metadata(self) -> bool:
         return True
 
-    def recommended_max_sql_length(self) -> int | None:
-        return 256_000
+    def max_statement_size(self) -> StatementSizeLimit | None:
+        """16 MiB query text cap: https://docs.databricks.com/api/statement-execution/v1/execute-statement."""
+
+        return (16 * 1_048_576, "bytes")
 
     def connect(self, config: dict[str, Any]) -> _DatabricksConnection:
         """Open a Databricks SQL connection from the resolved config."""

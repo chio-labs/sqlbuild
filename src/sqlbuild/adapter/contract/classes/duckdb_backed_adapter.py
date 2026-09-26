@@ -64,6 +64,7 @@ from sqlbuild.adapter.contract.types import (
     LoaderLogicalType,
     MigrationTransfer,
     PromotionStrategy,
+    StatementSizeLimit,
     TablePromotionMode,
 )
 from sqlbuild.adapter.relations.main.get_columns_for_relations import (
@@ -626,10 +627,10 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
             invalidate_hard_deletes=invalidate_hard_deletes,
         )
 
-    def recommended_max_sql_length(self) -> int | None:
-        """DuckDB uses the framework default recommendation for lightweight unit-test SQL."""
+    def max_statement_size(self) -> StatementSizeLimit | None:
+        """No practical SQL text cap: https://duckdb.org/docs/stable/operations_manual/limits."""
 
-        return 256_000
+        return None
 
     def default_schema(self) -> str:
         """DuckDB uses 'main' as its default schema."""
