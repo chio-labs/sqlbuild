@@ -9,7 +9,7 @@ const PANIC_MESSAGE: &str = "NativeCompilerError: native SQL compilation panicke
 
 pub(crate) fn compiler_error(error: impl std::fmt::Display) -> PyErr {
     let message = error.to_string();
-    if message == PANIC_MESSAGE {
+    if is_compiler_panic(&message) {
         NativeCompilerError::new_err(message)
     } else {
         PyValueError::new_err(message)
@@ -33,9 +33,19 @@ impl CompilerDetach for Python<'_> {
         self,
         operation: F,
     ) -> Result<T, String> {
-        self.detach(|| match catch_unwind(AssertUnwindSafe(operation)) {
-            Ok(result) => result,
-            Err(_) => Err(PANIC_MESSAGE.to_owned()),
-        })
+        self.detach(|| catch_compiler_panic(operation))
     }
+}
+
+pub(crate) fn catch_compiler_panic<T>(
+    operation: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    match catch_unwind(AssertUnwindSafe(operation)) {
+        Ok(result) => result,
+        Err(_) => Err(PANIC_MESSAGE.to_owned()),
+    }
+}
+
+pub(crate) fn is_compiler_panic(message: &str) -> bool {
+    message == PANIC_MESSAGE
 }
