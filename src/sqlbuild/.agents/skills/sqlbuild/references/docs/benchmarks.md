@@ -4,7 +4,7 @@
 
 > Complete compiler performance on projects with thousands of models, SQL tests, and audit attachments.
 
-Online: https://docs.sqlbuild.com/benchmarks
+Online: https://sqlbuild.com/docs/benchmarks/
 
 ## Contents
 

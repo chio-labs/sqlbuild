@@ -3,40 +3,25 @@
 </p>
 
 <p align="center">
-  Verify early. Test properly. Deploy reversibly. SQL pipelines with the rigor of real software.
+  <strong>The refactorable warehouse.</strong> Verify early, test properly, and refactor safely.
 </p>
 
-**Valid isn't the same as correct.** Your SQL compiles, runs, and returns rows; none of that means the number is right, and a silently-wrong number a stakeholder already trusted is the bug that actually hurts.
+<p align="center">
+  <a href="https://sqlbuild.com">Website</a> ·
+  <a href="https://sqlbuild.com/docs/">Docs</a> ·
+  <a href="https://sqlbuild.com/docs/quickstart/">Quickstart</a> ·
+  <a href="https://sqlbuild.com/docs/roadmap/">Roadmap</a>
+</p>
 
-SQLBuild brings software-engineering rigor to SQL pipelines: catch errors before the warehouse runs them, test your logic locally, and opt into change-aware execution when you need it. It is a standalone, open-source framework for building SQL and Python data pipelines.
-
-All state is persisted as append-only tables in the warehouse alongside your data: no external state database, no manifest files, no paid add-on. Start with straightforward SQL models, then add ingestion, Python nodes, and opt-in virtual environments as your project grows.
-
-## Key features
-
-- **Test your logic, not just your columns.** Multi-model SQL tests resolve every intermediate model from its real SQL, plus end-to-end scenarios with local DuckDB replay for fast CI with no warehouse. Catch wrong logic before it ships, not just nulls.
-- **Verify early.** Define models as SQL files with `MODEL()` headers. SQLBuild resolves references, validates SQL, infers columns, checks contracts, and computes column lineage before anything runs, all offline. It fails at compile, not halfway through a warehouse run.
-- **Fast and open static analysis.** SQL parsing, validation, column inference, lineage, and transpilation run on [Polyglot](https://github.com/tobilg/polyglot), a Rust SQL engine (MIT, 32+ dialects), so compile stays fast on large projects. The analysis is part of the Apache-2.0 core: no proprietary engine, no login, no paid tier.
-- **Audits that block bad data.** Audits run before data reaches the target table. Full table builds materialize into a staging table and only promote if audits pass; incremental models validate each batch before DML.
-- **Deploy reversibly (opt-in).** Virtual environments add instant low-copy branching, partial promotion, rollback, checkpoints, and reconciliation. Opt-in, not a tax you pay upfront.
-- **Opt-in change-aware execution.** Models, seeds, UDFs, and Python nodes are fingerprinted, and source freshness is tracked. In virtual environments, pass `--changes-only` or set `changes_only = true` to skip work that is already current; commands otherwise run the full selected scope.
-- **Warehouse-native state.** All change-tracking state lives in append-only tables (`_sqlbuild_fingerprints`, `_sqlbuild_source_freshness`, `_sqlbuild_node_results`) in your warehouse schemas. No external state machine, no corruption risk.
-- **Cursor-based incremental processing.** Automatic gap detection and resume, with microbatch mode for large ranges. No external checkpoint to maintain.
-- **Ingestion and Python nodes.** Load external data with Python `@loader` functions, and run `@task`, `@asset`, and `@check` nodes as first-class members of the same DAG as your SQL models.
-
-See the [documentation](https://docs.sqlbuild.com) for the full feature set, including providers, lifecycle hooks, Python macros, UDFs, custom materializations, data diffs, zero-copy cloning, and virtual environments. To coordinate dbt and SQLBuild projects, see the [dbt compatibility guide](https://docs.sqlbuild.com/concepts/dbt-compatibility/overview).
+Change your warehouse as often as your code. SQLBuild brings compile-time checks, tests and diffs to
+your SQL, so change is safe. It is a free, open-source framework for SQL and Python data pipelines,
+and it keeps its state in append-only tables in your own warehouse: no external state database, no
+manifest files and no paid tier.
 
 ## Quick start
 
 ```bash
 pip install sqlbuild
-# or
-uv pip install sqlbuild
-```
-
-Create and run the included playground project:
-
-```bash
 sqb playground waffle-shop
 cd waffle-shop
 sqb plan
@@ -44,9 +29,50 @@ sqb build
 sqb test
 ```
 
+The playground runs on local DuckDB, with no warehouse credentials.
+
+## What it does
+
+### Catch mistakes before anything runs
+
+- **Compile-time checks.** SQLBuild resolves references, validates SQL, infers column types, checks
+  [contracts](https://sqlbuild.com/docs/concepts/models/contracts/) and computes column lineage,
+  all offline. A typo'd column fails in seconds, not halfway through a warehouse run.
+- **Your conventions as rules.** Built-in and custom Python
+  [rules](https://sqlbuild.com/docs/concepts/rules/) turn review comments into compile errors: for
+  example, marts can't read sources directly, or every final model declares its key.
+
+### Prove it works
+
+- **Tests across models.** SQL [tests](https://sqlbuild.com/docs/concepts/testing/) mock the
+  sources and check the result through every model in between, with macros as test helpers. Macro,
+  UDF and table-function tests are built in.
+- **End-to-end scenarios.** Build the real graph against fixture data, capture fixtures from the
+  warehouse, and replay them locally on DuckDB in CI.
+  See [scenarios](https://sqlbuild.com/docs/concepts/scenarios/).
+- **Audits and diffs.** Audits run before data reaches the target table, and
+  [data diffs](https://sqlbuild.com/docs/concepts/diff/) compare dev against prod or any query.
+
+### Change it without rebuilding everything
+
+- **Renames keep their history.** Rename or move an incremental or snapshot model and SQLBuild
+  [migrates](https://sqlbuild.com/docs/concepts/models/migrations/) the existing table instead of
+  rebuilding it.
+- **Replay on change.** When a model's SQL changes, choose how far back to reprocess, from only the
+  new data to the last 14 days to a full rebuild, with
+  [`replay_on_change`](https://sqlbuild.com/docs/concepts/incremental/#replay-on-change).
+- **Macros don't have to be global.** Keep macros, enums and constants next to the models that use
+  them, and preview what a move would break with `sqb scope`. See
+  [declaration scopes](https://sqlbuild.com/docs/concepts/declaration-scopes/).
+- **Tidy up safely.** The [janitor](https://sqlbuild.com/docs/cli/janitor/) archives stale tables
+  before anything is deleted.
+
+Ingestion with Python loaders, and Python tasks, assets and checks, run in the same graph as your SQL
+models. See the [docs](https://sqlbuild.com/docs/) for everything else.
+
 ## Example
 
-A model is a SQL file with a `MODEL()` header and a `SELECT`. References use `__ref()` and `__source()`, and configuration, schema, and audits are declared inline:
+A model is a SQL file with a `MODEL()` header and a `SELECT`:
 
 ```sql
 MODEL (
@@ -65,7 +91,8 @@ FROM __ref("stg_orders") o
 JOIN __ref("stg_payments") p USING (order_id)
 ```
 
-A unit test mocks sources and asserts on the model, resolving every intermediate model automatically:
+A test mocks the sources and asserts on the model, resolving every model in between from its real
+SQL:
 
 ```sql
 TEST();
@@ -87,230 +114,30 @@ __expected__fact_orders AS (
 SELECT 1
 ```
 
-Relation fixtures can omit a column when the compiled test or scenario closure requires it and
-SQLBuild knows its adapter type, unless the column is explicitly non-nullable. SQLBuild completes
-that test-only fixture column with a typed null such as `CAST(NULL AS VARCHAR)`; it never changes
-model SQL or warehouse defaults. Required columns declared with `nullable false` and columns with
-unknown types must be supplied explicitly. When the relation's complete column set is authoritative,
-misspelled or unknown supplied fixture columns are rejected.
+## Warehouses
 
-A direct `NULL AS column_name` projection receives the authoritative relation type in compiled test
-SQL, including expected-output CTEs for contracted models. To represent a contracted upstream with
-no rows, use `SELECT * FROM __empty_fixture()` as the complete body of a `__ref__`, `__source__`, or
-`__seed__` fixture CTE, or a contracted `__expected__` CTE. SQLBuild expands it to the relation's
-full typed schema with a false filter.
-
-See the [documentation](https://docs.sqlbuild.com) for incremental models, scenarios, loaders, and more.
-
-### Python project layout
-
-Project-owned Python must live in a supported extension location such as `factories/`, `libs/`,
-`macros/`, `providers/`, or another documented Python resource root. Factory locations contain
-normal Python: constants, classes, undecorated helper functions, and modules such as `_helpers.py`
-are allowed, while decorators determine which functions become SQLBuild resources. Compilation
-rejects Python under invented project roots so indirectly importable modules cannot create an
-unofficial project structure. Keep repository pytest tests outside the SQLBuild project's `tests/`
-directory, which is reserved for SQLBuild SQL tests and scenarios. Documented integration paths
-such as `dagster/`, `rivers_pipeline/`, and their `definitions.py` modules are also supported.
-
-### Python macro declaration context
-
-Python SQL macros receive the constants and enums visible to the SQL resource that calls them.
-Use the typed mappings for Python control flow, and use the rendering methods when inserting a
-declaration into generated SQL so quoting and collection syntax follow the active adapter:
-
-```python
-def minimum_order_filter(ctx) -> str:
-    minimum = ctx.constants["minimum_order_value"]
-    if minimum is None:  # The visible declaration explicitly has a NULL value.
-        return "TRUE"
-    return f"order_value >= {ctx.render_constant('minimum_order_value')}"
-
-
-def active_status_filter(ctx) -> str:
-    status = ctx.render_enum_member(enum_name="order_status", member_name="active")
-    return f"status = {status}"
-```
-
-Callers can still pass explicit `@const(...)` or `@enum(...)` values as macro arguments. Context
-lookups are intended for policy owned by the macro; both forms use the caller's declaration scope.
-
-## Grouped declarations
-
-Keep folder-scoped macros, enums, and constants together without mixing declaration directories into
-resource listings:
-
-```text
-models/orders/
-├── _sqlbuild/
-│   ├── macros/       # visible in orders/ and its descendants
-│   ├── enums/
-│   ├── constants/
-│   ├── _macros/      # visible only to resources directly in orders/
-│   ├── _enums/
-│   └── _constants/
-├── intermediate/
-└── mart/
-```
-
-The containing `orders/` directory remains the declaration owner. Existing declaration directories
-directly below an owner remain supported. Placement diagnostics recommend the grouped layout.
-`_sqlbuild/` is reserved for the six declaration-role directories shown above; other direct entries
-are rejected rather than silently treated as resources. A grouped directory must sit below a
-concrete owner: `models/_sqlbuild/` is invalid because declarations at that boundary belong in the
-project-wide `macros/`, `enums/`, or `constants/` roots.
-
-SQL tests retain their own lexical declaration scope and also receive the deterministic union of
-file-based declarations visible to their inferred tested resources. This lets model and macro tests
-exercise scoped production macros without promoting those macros globally. Mock fixture resources
-do not broaden test visibility.
-
-## Compiler-integrated Rules
-
-Rules turn repeatable SQL and project review decisions into compile-time diagnostics. Mandatory
-compiler correctness still runs first. SQLBuild then evaluates selected native built-ins, followed by
-selected custom Python rules, before completing compile artifacts. `sqb compile` is authoritative;
-build and execution commands enforce the same configuration. Rules report findings and never rewrite
-SQL. `sqb format` remains a separate source-rewriting command.
-
-Long model and scenario descriptions are reflowed deterministically. Ordinary authored line breaks
-are normalized as spaces, while blank lines preserve paragraph boundaries. Configure the maximum
-physical line width in `sqlbuild_project.toml` (the default is `100`):
-
-```toml
-[format]
-line_width = 100
-```
-
-Prefer family selection in `sqlbuild_project.toml` over hand-maintained lists of exact codes:
-
-```toml
-[rules]
-select = ["SQBRSQL", "SQBRMODEL", "SQBRGRAPH", "XSQBRARCH"]
-ignore = ["SQBRSQL004"]
-```
-
-Built-in codes use `SQBR<FAMILY><three digits>`, such as `SQBRSQL001` and
-`SQBRGRAPH101`. Custom codes use `XSQBR<optional family><three digits>`, such as
-`XSQBRARCH001`. A family is always the code with its final three digits removed.
-
-Family selectors automatically include new built-in rules on upgrade. Exact-code lists retain
-their current membership and must be updated manually. In particular, selecting `SQBRSQL` enables
-`SQBRSQL040` (plain JOIN predicates) and `SQBRSQL041` (terminal CTE naming); existing projects may
-need to extract computed join keys into input CTEs and rename their last CTE to `final`.
-See the [SQL rule conventions](https://sqlbuild.com/docs/concepts/rules/configuration-and-selection/#join-keys-and-final-cte-names)
-for their exact scope and relationship to `SQBRSQL035`.
-
-`sqb format` reports a file-specific `format-unsafe` fault whenever a SQL body cannot be safely
-formatted, including parser, comment-attachment, interpolation-restoration, and idempotence
-failures. The entire original file is retained (including its headers and fixtures), the reason
-appears in human and JSON output, and both
-formatting and `sqb format --check` exit nonzero. A declined body is never counted as canonical.
-
-Formatting preserves authored cast types, postfix casts, quoted literals, variant paths, typed
-lambda parameters, and supported SQL function spellings while applying canonical layout. It uses
-the compiler's trusted-SQL function-depth budget and does not impose the separate browser-oriented
-UNION-chain limit from Polyglot's convenience formatting API. SQLBuild calls retain their authored
-spelling, including zero-argument cursor and empty-fixture intrinsics. CTE-producing macros remain
-authored calls rather than expanded project SQL, with each call on its own CTE-list line and
-leading comments attached to the node they describe.
-
-Custom rules are ordinary Python beneath `rules/**/*.py`. Only `@rule` functions register; helper
-functions, constants, dataclasses, classes, and nested packages remain ordinary Python. Typed,
-keyword-only parameters determine whether a rule runs once per model or once per project:
-
-```python
-from sqlbuild.rules import Finding, Model, RuleContext, rule
-
-
-@rule(
-    code="XSQBRARCH001",
-    message="Final models must declare an order identifier",
-    remediation="Declare order_id in the model contract.",
-)
-def final_order_identifier(*, model: Model, ctx: RuleContext) -> list[Finding]:
-    declared = {column.name for column in ctx.columns.declared(model)}
-    return [] if "order_id" in declared else [ctx.finding(subject=model)]
-```
-
-Use `Project` instead of `Model` for an invariant with no natural model subject. A model rule can
-still inspect project-wide facts. `RuleContext` exposes compiler-owned SQL, graph, columns,
-contracts, tests, audits, declarations, project metadata, and a deterministic project tree. Common
-SQL facts are typed and lazy; the full Polyglot AST is an explicit escape hatch at
-`ctx.sql.for_model(model).expanded.polyglot_ast()`.
-
-Custom rules are deterministic and cacheable. Environment, network, subprocess, time, randomness,
-and untracked filesystem access are rejected. Tracked project text must be read through
-`ctx.project.tree`, and implementation, options, subject facts, helper code, project observations,
-and backend compatibility participate in cache identity.
-
-Inspect and run focused selections with:
-
-```bash
-sqb rules list
-sqb rules show SQBRSQL001
-sqb rules run SQBRSQL
-sqb rules run XSQBRARCH --select customer_orders
-sqb rules skills --check
-```
-
-Test custom rules through the real discovery and compiler path with `RuleCase` and `evaluate_rule`
-from `sqlbuild.rules.testing`.
-
-The neutral large-project benchmark supports 1,000, 3,000, 5,000, and 10,000-model profiles and
-reports repeated median/p95 timings with cache accounting and phase breakdowns:
-
-```bash
-uv run python -m scripts.benchmark_rules --models 3000 --iterations 5
-uv run python -m scripts.benchmark_rules --models 5000 --iterations 5
-```
-
-## Supported adapters
-
-| Adapter | Status |
-|---------|--------|
+| Warehouse | Status |
+|-----------|--------|
+| Snowflake | Supported |
 | DuckDB | Supported |
 | MotherDuck | Supported |
-| Snowflake | Supported |
-| BigQuery | Supported |
-| Databricks | Supported |
 | PostgreSQL | Supported |
-| SQL Server | Supported |
+| BigQuery | Beta |
+| Databricks | Beta |
+| SQL Server | Beta |
 
-ClickHouse, Redshift, Trino, Spark, and Athena are on the way.
+Snowflake is the main target. Beta adapters build, test and plan, but have had less production use
+so far. See [adapters](https://sqlbuild.com/docs/concepts/adapters/).
 
-## Snowflake cost estimates
+## Free and independent
 
-Native Snowflake builds automatically show a compact per-run busy-compute estimate. SQLBuild
-attributes visible overlapping query intervals fairly across active queries, converts attributed
-seconds using the warehouse-size credit rate, and estimates USD from the configured rate:
-
-```toml
-[cost]
-usd_per_credit = 3.00
-```
-
-The default is `3.00` USD per credit and is visibly marked as a default. Configure the value with
-your Snowflake contract rate. Use `sqb cost`, `sqb cost latest`, `sqb cost <run_id>`, or
-`sqb cost history --since 7d` to inspect persisted records. `--json` and `--json-output PATH`
-provide a versioned, decimal-safe output contract. Pending detail records are refreshed from
-Snowflake when inspected again.
-
-These values are attributed compute credits and estimated cost, not Snowflake-billed credits or
-invoice reconciliation. The estimate uses only query history visible to the executing role and
-does not reconstruct invisible concurrent work, warehouse resume or idle tail, the 60-second
-minimum, cloud-services credits, contract adjustments, or multi-cluster billing. Run metadata and
-query IDs are stored under `target/executions/<run_id>/`; that statement ledger stores only an SQL
-digest, not SQL text. Executed SQL artifacts are stored separately under the sensitive
-`target/run/` tree.
-
-## Documentation
-
-Full documentation is available at [docs.sqlbuild.com](https://docs.sqlbuild.com).
+SQLBuild is Apache 2.0 and will stay free: no paid tier, no commercial edition, and no feature held
+back for one. Its state lives in your warehouse, next to your data. See the
+[roadmap](https://sqlbuild.com/docs/roadmap/) for what's next.
 
 ## Contributing
 
-We welcome contributions. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

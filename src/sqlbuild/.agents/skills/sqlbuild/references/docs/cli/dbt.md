@@ -1,12 +1,10 @@
 <!-- generated-by: sqlbuild skills -->
 
-# dbt
+# sqb dbt
 
 > Coordinate dbt and SQLBuild projects.
 
-Online: https://docs.sqlbuild.com/cli/dbt
-
-# sqb dbt
+Online: https://sqlbuild.com/docs/cli/dbt/
 
 Orchestrate dbt and SQLBuild together. Each subcommand runs dbt first, then SQLBuild, with selection logic across both project graphs. dbt remains responsible for dbt-owned models; SQLBuild validates and executes SQLBuild-owned models downstream. See [Using SQLBuild with dbt](../concepts/dbt-compatibility/overview.md) for scope and selection behavior.
 

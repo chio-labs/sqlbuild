@@ -4,7 +4,7 @@
 
 > Canonical names for SQLBuild resources, selectors, state, and integrations.
 
-Online: https://docs.sqlbuild.com/concepts/resource-identities
+Online: https://sqlbuild.com/docs/concepts/resource-identities/
 
 SQLBuild resource identities use lowercase ASCII snake_case. A name must start with a lowercase
 letter, end with a lowercase letter or digit, and contain only lowercase letters, digits, and

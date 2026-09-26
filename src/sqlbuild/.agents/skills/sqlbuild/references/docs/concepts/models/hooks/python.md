@@ -4,7 +4,7 @@
 
 > Define Python lifecycle hooks with runtime context, providers, SQL access, and skips.
 
-Online: https://docs.sqlbuild.com/concepts/models/hooks/python
+Online: https://sqlbuild.com/docs/concepts/models/hooks/python/
 
 Python hooks run model lifecycle logic that needs Python control flow, providers, warehouse queries, logging, or explicit skip decisions.
 

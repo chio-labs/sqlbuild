@@ -4,7 +4,7 @@
 
 > Trace individual columns through your SQL pipeline - understand where data comes from and where it goes.
 
-Online: https://docs.sqlbuild.com/concepts/column-lineage
+Online: https://sqlbuild.com/docs/concepts/column-lineage/
 
 ## Contents
 

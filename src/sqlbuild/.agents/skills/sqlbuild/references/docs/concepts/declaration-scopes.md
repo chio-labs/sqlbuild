@@ -4,7 +4,7 @@
 
 > Limit enums, constants, and macros to the parts of a project that use them.
 
-Online: https://docs.sqlbuild.com/concepts/declaration-scopes
+Online: https://sqlbuild.com/docs/concepts/declaration-scopes/
 
 Most projects can keep enums, constants, and macros in their ordinary top-level directories. Those
 declarations are available throughout the project.

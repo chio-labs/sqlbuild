@@ -1,10 +1,10 @@
 <!-- generated-by: sqlbuild skills -->
 
-# dag
+# sqb dag
 
 > Generate the static DAG artifact for Dagster and other integrations.
 
-Online: https://docs.sqlbuild.com/cli/dag
+Online: https://sqlbuild.com/docs/cli/dag/
 
 ## Contents
 
@@ -13,8 +13,6 @@ Online: https://docs.sqlbuild.com/cli/dag
 - Generating via compile
 - Output format
 - Examples
-
-# sqb dag
 
 Compiles the project and outputs the static DAG artifact. The artifact contains every node (source, seed, model, function), dependency edge, and check (test, audit, scenario) in your project as structured JSON. It is the bridge between SQLBuild and external orchestrators like Dagster.
 

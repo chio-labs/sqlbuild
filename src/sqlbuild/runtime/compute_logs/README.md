@@ -16,4 +16,4 @@ ownership and the process umask. It is host-local and may contain sensitive outp
 provide object storage, lifecycle authority, or a cross-host log service.
 
 Operator documentation is at
-[docs.sqlbuild.com/concepts/observability](https://docs.sqlbuild.com/concepts/observability).
+[sqlbuild.com/docs/concepts/observability](https://sqlbuild.com/docs/concepts/observability/).

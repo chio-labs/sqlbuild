@@ -4,7 +4,7 @@
 
 > Understand Rule enforcement order, focused runs, and dependency-aware reuse.
 
-Online: https://docs.sqlbuild.com/concepts/rules/execution-and-caching
+Online: https://sqlbuild.com/docs/concepts/rules/execution-and-caching/
 
 SQLBuild evaluates a project in this order:
 

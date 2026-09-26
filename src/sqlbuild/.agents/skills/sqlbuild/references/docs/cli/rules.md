@@ -1,12 +1,10 @@
 <!-- generated-by: sqlbuild skills -->
 
-# rules
+# sqb rules
 
 > List, inspect, or run compiler-integrated Rules and generate project guidance.
 
-Online: https://docs.sqlbuild.com/cli/rules
-
-# sqb rules
+Online: https://sqlbuild.com/docs/cli/rules/
 
 Configured Rules run automatically through `sqb compile` and build planning. The `rules` command
 provides focused catalogue, inspection, execution, and guidance operations.

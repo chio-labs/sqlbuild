@@ -1,12 +1,10 @@
 <!-- generated-by: sqlbuild skills -->
 
-# skills
+# sqb skills
 
 > Install SQLBuild skill files for AI coding agents.
 
-Online: https://docs.sqlbuild.com/cli/skills
-
-# sqb skills
+Online: https://sqlbuild.com/docs/cli/skills/
 
 Install or update SQLBuild skill files so AI coding agents (Claude Code, OpenCode, Cursor, etc.) understand your project's framework, syntax, and conventions.
 

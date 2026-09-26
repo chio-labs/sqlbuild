@@ -4,7 +4,7 @@
 
 > Tasks, assets, loaders, and checks as first-class nodes in the SQLBuild graph.
 
-Online: https://docs.sqlbuild.com/concepts/python-nodes/overview
+Online: https://sqlbuild.com/docs/concepts/python-nodes/overview/
 
 ## Contents
 
@@ -125,7 +125,7 @@ Downstream nodes run only if at least one upstream succeeded. If all upstreams a
 
 ## Result persistence
 
-Node results (payload, metadata, status, errors) are persisted after each execution. In direct mode, results are stored in `_sqlbuild_node_results` in the warehouse alongside your data. In virtual mode, results are stored in the VDE state backend scoped per environment. Results persist across runs, so they are available for observability, debugging, and downstream consumption.
+Node results (payload, metadata, status, errors) are persisted after each execution. Results are stored in `_sqlbuild_node_results` in the warehouse alongside your data. Results persist across runs, so they are available for observability, debugging, and downstream consumption.
 
 ## Selection
 

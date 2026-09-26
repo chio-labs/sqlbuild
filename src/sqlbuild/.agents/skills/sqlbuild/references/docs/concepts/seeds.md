@@ -4,7 +4,7 @@
 
 > Load static CSV data into your pipeline as tables.
 
-Online: https://docs.sqlbuild.com/concepts/seeds
+Online: https://sqlbuild.com/docs/concepts/seeds/
 
 ## Contents
 

@@ -4,7 +4,7 @@
 
 > Validate project configuration and test the warehouse connection.
 
-Online: https://docs.sqlbuild.com/cli/debug
+Online: https://sqlbuild.com/docs/cli/debug/
 
 Checks that your project config is valid, the adapter is resolvable, and the warehouse connection works. Useful for diagnosing setup issues.
 

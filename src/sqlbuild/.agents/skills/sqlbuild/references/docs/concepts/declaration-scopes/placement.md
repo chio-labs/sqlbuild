@@ -4,7 +4,7 @@
 
 > Choose the narrowest folder that contains every real use.
 
-Online: https://docs.sqlbuild.com/concepts/declaration-scopes/placement
+Online: https://sqlbuild.com/docs/concepts/declaration-scopes/placement/
 
 Start with the ordinary project-wide directories unless you have a reason to limit access:
 

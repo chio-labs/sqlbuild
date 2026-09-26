@@ -4,7 +4,7 @@
 
 > Get a SQLBuild project running locally with DuckDB in under a minute.
 
-Online: https://docs.sqlbuild.com/quickstart
+Online: https://sqlbuild.com/docs/quickstart/
 
 ## Contents
 
@@ -39,7 +39,7 @@ The playground creates the shared `sqlbuild_project.toml`; that is sufficient fo
 quickstart. In a team project, you can additionally create a gitignored
 `sqlbuild_local.toml` to select your usual target and override your personal development
 schema or credentials without changing the committed project config. See
-[Project Configuration](concepts/project-configuration.md#sqlbuild_local-toml).
+[Project Configuration](concepts/project-configuration.md#sqlbuild_localtoml).
 
 ## 2. Plan
 

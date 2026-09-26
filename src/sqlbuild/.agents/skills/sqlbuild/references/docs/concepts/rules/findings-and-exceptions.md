@@ -4,7 +4,7 @@
 
 > Understand Rule diagnostics and record intentional exceptions safely.
 
-Online: https://docs.sqlbuild.com/concepts/rules/findings-and-exceptions
+Online: https://sqlbuild.com/docs/concepts/rules/findings-and-exceptions/
 
 A Rule finding identifies an exact code, project-relative path, line, column, message, and
 remediation. Error findings make compilation fail and prevent artifact completion.

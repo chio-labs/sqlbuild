@@ -4,7 +4,7 @@
 
 > SQL model anatomy, references, dependencies, and the model documentation guide.
 
-Online: https://docs.sqlbuild.com/concepts/models
+Online: https://sqlbuild.com/docs/concepts/models/
 
 A model is a SQL file that defines one transformation step and produces a table or view in the warehouse.
 

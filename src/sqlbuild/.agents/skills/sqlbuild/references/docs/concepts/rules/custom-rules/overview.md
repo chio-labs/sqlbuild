@@ -4,7 +4,7 @@
 
 > Define repository-owned checks with one typed Python API.
 
-Online: https://docs.sqlbuild.com/concepts/rules/custom-rules/overview
+Online: https://sqlbuild.com/docs/concepts/rules/custom-rules/overview/
 
 Custom Rules are ordinary Python under `rules/**/*.py`. Only functions decorated with `@rule`
 register; helpers, constants, dataclasses, and classes remain ordinary Python.

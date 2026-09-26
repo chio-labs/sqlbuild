@@ -4,7 +4,7 @@
 
 > Inspect declaration visibility, usage, placement, and move impact offline.
 
-Online: https://docs.sqlbuild.com/cli/scope
+Online: https://sqlbuild.com/docs/cli/scope/
 
 ## Contents
 

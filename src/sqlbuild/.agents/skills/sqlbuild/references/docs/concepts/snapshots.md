@@ -4,7 +4,7 @@
 
 > Preserve row history over time using SCD Type 2 semantics with timestamp or check-based change detection.
 
-Online: https://docs.sqlbuild.com/concepts/snapshots
+Online: https://sqlbuild.com/docs/concepts/snapshots/
 
 ## Contents
 

@@ -4,7 +4,7 @@
 
 > Generate Python nodes programmatically with @factory.
 
-Online: https://docs.sqlbuild.com/concepts/python-nodes/factories
+Online: https://sqlbuild.com/docs/concepts/python-nodes/factories/
 
 A factory is a function that **generates** Python nodes instead of authoring them one at a time. Use `@factory` when you want to create many similar [tasks](tasks.md), [assets](assets.md), [loaders](loaders.md), or [checks](checks.md) from a list, a config, or a loop, rather than hand-writing each one.
 

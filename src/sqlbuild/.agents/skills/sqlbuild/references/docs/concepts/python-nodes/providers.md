@@ -4,7 +4,7 @@
 
 > Shared runtime services for Python nodes and hooks.
 
-Online: https://docs.sqlbuild.com/concepts/python-nodes/providers
+Online: https://sqlbuild.com/docs/concepts/python-nodes/providers/
 
 ## Contents
 

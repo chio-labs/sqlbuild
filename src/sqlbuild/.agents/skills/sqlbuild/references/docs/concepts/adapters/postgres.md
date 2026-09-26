@@ -4,7 +4,7 @@
 
 > PostgreSQL adapter configuration for SQLBuild.
 
-Online: https://docs.sqlbuild.com/concepts/adapters/postgres
+Online: https://sqlbuild.com/docs/concepts/adapters/postgres/
 
 PostgreSQL requires the optional `psycopg` dependency:
 

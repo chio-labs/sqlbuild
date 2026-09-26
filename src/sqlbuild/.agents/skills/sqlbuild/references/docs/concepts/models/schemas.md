@@ -4,7 +4,7 @@
 
 > Declare model columns inline or reuse canonical inherited schemas.
 
-Online: https://docs.sqlbuild.com/concepts/models/schemas
+Online: https://sqlbuild.com/docs/concepts/models/schemas/
 
 ## Contents
 

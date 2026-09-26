@@ -4,7 +4,7 @@
 
 > How SQLBuild processes variables, context, and dynamic content in SQL and config.
 
-Online: https://docs.sqlbuild.com/concepts/interpolation
+Online: https://sqlbuild.com/docs/concepts/interpolation/
 
 ## Contents
 

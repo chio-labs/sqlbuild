@@ -4,7 +4,7 @@
 
 > Dagster integration classes, decorators, and translator hooks.
 
-Online: https://docs.sqlbuild.com/integrations/dagster-reference
+Online: https://sqlbuild.com/docs/integrations/dagster-reference/
 
 ## Contents
 

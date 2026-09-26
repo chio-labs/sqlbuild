@@ -1,12 +1,10 @@
 <!-- generated-by: sqlbuild skills -->
 
-# query
+# sqb query
 
 > Run ad hoc SQL queries against the project database.
 
-Online: https://docs.sqlbuild.com/cli/query
-
-# sqb query
+Online: https://sqlbuild.com/docs/cli/query/
 
 Execute ad hoc SQL against the active project connection. Useful for inspecting data, debugging models, or running one-off queries without leaving the SQLBuild CLI.
 

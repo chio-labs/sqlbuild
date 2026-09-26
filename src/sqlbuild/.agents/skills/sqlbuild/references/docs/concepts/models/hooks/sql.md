@@ -4,7 +4,7 @@
 
 > Define, parameterize, compile, and invoke reusable or inline SQL lifecycle hooks.
 
-Online: https://docs.sqlbuild.com/concepts/models/hooks/sql
+Online: https://sqlbuild.com/docs/concepts/models/hooks/sql/
 
 ## Contents
 

@@ -4,7 +4,7 @@
 
 > Define a fixed set of named string or integer values and use them safely in SQL.
 
-Online: https://docs.sqlbuild.com/concepts/enums
+Online: https://sqlbuild.com/docs/concepts/enums/
 
 Enums give a name to a fixed set of allowed values. SQLBuild checks the enum and every member
 reference during compilation, then renders the selected value as a safe SQL literal.

@@ -4,7 +4,7 @@
 
 > Choose how SQLBuild persists model output.
 
-Online: https://docs.sqlbuild.com/concepts/models/materializations
+Online: https://sqlbuild.com/docs/concepts/models/materializations/
 
 The `materialized` field selects how a model becomes a warehouse relation.
 

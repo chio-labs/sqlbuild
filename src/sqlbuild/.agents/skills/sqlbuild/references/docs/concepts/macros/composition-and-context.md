@@ -4,7 +4,7 @@
 
 > Compose macros through Python, use compile context, and understand scoped imports.
 
-Online: https://docs.sqlbuild.com/concepts/macros/composition-and-context
+Online: https://sqlbuild.com/docs/concepts/macros/composition-and-context/
 
 ## Contents
 
@@ -137,3 +137,24 @@ def schema_qualified(ctx, table: str) -> str:
 
 Use context when generated SQL genuinely differs by adapter or target. Prefer ordinary parameters
 for values that the SQL caller should choose explicitly.
+
+### Constants and enums
+
+Python SQL macros receive the constants and enums visible to the SQL resource that calls them. Use
+the typed mappings for Python control flow, and use the rendering methods when inserting a
+declaration into generated SQL so quoting and collection syntax follow the active adapter:
+
+```python
+def minimum_order_filter(ctx) -> str:
+    minimum = ctx.constants["minimum_order_value"]
+    if minimum is None:  # The visible declaration explicitly has a NULL value.
+        return "TRUE"
+    return f"order_value >= {ctx.render_constant('minimum_order_value')}"
+
+def active_status_filter(ctx) -> str:
+    status = ctx.render_enum_member(enum_name="order_status", member_name="active")
+    return f"status = {status}"
+```
+
+Callers can still pass explicit `@const(...)` or `@enum(...)` values as macro arguments. Context
+lookups are intended for policy owned by the macro; both forms use the caller's declaration scope.

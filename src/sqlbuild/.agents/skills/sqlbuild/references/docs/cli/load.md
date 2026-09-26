@@ -1,12 +1,10 @@
 <!-- generated-by: sqlbuild skills -->
 
-# load
+# sqb load
 
 > Load managed sources into the warehouse.
 
-Online: https://docs.sqlbuild.com/cli/load
-
-# sqb load
+Online: https://sqlbuild.com/docs/cli/load/
 
 Runs source loader functions and writes data into their target tables using the configured write strategy.
 

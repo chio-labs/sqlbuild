@@ -122,4 +122,4 @@ never copied into the integration stream. They remain available through final ag
 compute logs after process exit.
 
 Operator documentation is at
-[docs.sqlbuild.com/concepts/observability](https://docs.sqlbuild.com/concepts/observability).
+[sqlbuild.com/docs/concepts/observability](https://sqlbuild.com/docs/concepts/observability/).

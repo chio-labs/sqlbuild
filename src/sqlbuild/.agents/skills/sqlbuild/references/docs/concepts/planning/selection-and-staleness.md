@@ -4,7 +4,7 @@
 
 > How selection interacts with change detection, and the stale warnings that stop silent partial rebuilds.
 
-Online: https://docs.sqlbuild.com/concepts/planning/selection-and-staleness
+Online: https://sqlbuild.com/docs/concepts/planning/selection-and-staleness/
 
 Change detection is selection-aware. When you scope a run with `--select`, SQLBuild only runs (and only displays) the resources you selected, but it still reasons about the *whole* graph to keep the result honest. The key case it handles: a selected model whose upstream changed but is **not** in the selection.
 

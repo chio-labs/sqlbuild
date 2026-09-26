@@ -4,7 +4,7 @@
 
 > Test custom findings and keep implementations safe for dependency-aware caching.
 
-Online: https://docs.sqlbuild.com/concepts/rules/custom-rules/testing-and-determinism
+Online: https://sqlbuild.com/docs/concepts/rules/custom-rules/testing-and-determinism/
 
 ## Test Rules
 

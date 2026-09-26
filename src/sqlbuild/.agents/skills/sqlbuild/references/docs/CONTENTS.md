@@ -6,9 +6,10 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 
 ## Getting Started
 
-- [Introduction](index.md) (`index`) - Verify early, test properly, and deploy reversibly. SQL pipelines with the rigor of real software - free and open source.
+- [Introduction](index.md) (`index`) - The refactorable warehouse. Verify early, test properly, and refactor safely.
 - [Quickstart](quickstart.md) (`quickstart`) - Get a SQLBuild project running locally with DuckDB in under a minute.
 - [Feature Comparison](feature-comparison.md) (`feature-comparison`) - Feature comparison between SQLBuild, dbt, and SQLMesh.
+- [Roadmap](roadmap.md) (`roadmap`) - What's coming next in SQLBuild.
 - [Benchmarks](benchmarks.md) (`benchmarks`) - Complete compiler performance on projects with thousands of models, SQL tests, and audit attachments.
 
 ## dbt Compatibility
@@ -22,12 +23,12 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [Project Configuration](concepts/project-configuration.md) (`concepts/project-configuration`) - Configure your SQLBuild project with sqlbuild_project.toml and sqlbuild_local.toml.
 - [Resource Identities](concepts/resource-identities.md) (`concepts/resource-identities`) - Canonical names for SQLBuild resources, selectors, state, and integrations.
 - [Overview](concepts/adapters.md) (`concepts/adapters`) - Supported database engines and their connection configuration.
+- [Snowflake](concepts/adapters/snowflake.md) (`concepts/adapters/snowflake`) - Snowflake adapter configuration for SQLBuild.
 - [DuckDB](concepts/adapters/duckdb.md) (`concepts/adapters/duckdb`) - DuckDB adapter configuration for SQLBuild.
 - [MotherDuck](concepts/adapters/motherduck.md) (`concepts/adapters/motherduck`) - MotherDuck adapter configuration for SQLBuild.
-- [Snowflake](concepts/adapters/snowflake.md) (`concepts/adapters/snowflake`) - Snowflake adapter configuration for SQLBuild.
+- [PostgreSQL](concepts/adapters/postgres.md) (`concepts/adapters/postgres`) - PostgreSQL adapter configuration for SQLBuild.
 - [BigQuery](concepts/adapters/bigquery.md) (`concepts/adapters/bigquery`) - BigQuery adapter configuration for SQLBuild.
 - [Databricks](concepts/adapters/databricks.md) (`concepts/adapters/databricks`) - Databricks adapter configuration for SQLBuild.
-- [PostgreSQL](concepts/adapters/postgres.md) (`concepts/adapters/postgres`) - PostgreSQL adapter configuration for SQLBuild.
 - [SQL Server](concepts/adapters/sqlserver.md) (`concepts/adapters/sqlserver`) - Microsoft SQL Server adapter configuration for SQLBuild.
 - [Sources](concepts/sources.md) (`concepts/sources`) - Declare external data inputs for your pipeline.
 - [Seeds](concepts/seeds.md) (`concepts/seeds`) - Load static CSV data into your pipeline as tables.
@@ -65,12 +66,13 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [Scenarios](concepts/scenarios.md) (`concepts/scenarios`) - End-to-end tests that build real project graphs against coherent fixture data.
 - [Selectors](concepts/selectors.md) (`concepts/selectors`) - Target specific models, paths, tags, or DAG subsets with select and exclude flags.
 - [Column Lineage](concepts/column-lineage.md) (`concepts/column-lineage`) - Trace individual columns through your SQL pipeline - understand where data comes from and where it goes.
-- [Data Diffs](concepts/diff.md) (`concepts/diff`) - Compare schemas and data between targets or virtual environments to validate changes before promotion.
+- [Data Diffs](concepts/diff.md) (`concepts/diff`) - Compare schemas and data between targets to validate changes before they reach production.
 
 ## Advanced Concepts
 
 - [Execution Observability](concepts/observability.md) (`concepts/observability`) - Choose authoritative lifecycle facts, readable logs, or command-output records.
 - [Typed Sinks](concepts/observability/sinks.md) (`concepts/observability/sinks`) - Export lifecycle facts and command output through project-owned providers.
+- [Execution history](concepts/observability/execution-history.md) (`concepts/observability/execution-history`) - Store and query lifecycle events and run history from Python, with SQLite locally or PostgreSQL when deployed.
 - [Overview](concepts/declaration-scopes.md) (`concepts/declaration-scopes`) - Limit enums, constants, and macros to the parts of a project that use them.
 - [How Visibility Works](concepts/declaration-scopes/visibility.md) (`concepts/declaration-scopes/visibility`) - See which enums, constants, and macros are available to each SQL file.
 - [Where to Put Declarations](concepts/declaration-scopes/placement.md) (`concepts/declaration-scopes/placement`) - Choose the narrowest folder that contains every real use.
@@ -90,21 +92,6 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [Providers](concepts/python-nodes/providers.md) (`concepts/python-nodes/providers`) - Shared runtime services for Python nodes and hooks.
 - [SQL References](concepts/python-nodes/sql-references.md) (`concepts/python-nodes/sql-references`) - Read SQL models and sources from Python nodes without creating SQL dependencies.
 
-## Virtual Environments (Alpha)
-
-- [Overview](concepts/virtual-environments.md) (`concepts/virtual-environments`) - Version-controlled SQL pipeline environments with instant promotion and rollback.
-- [Setup](concepts/virtual-environments/setup.md) (`concepts/virtual-environments/setup`) - Configure virtual environments and initialize the state store.
-- [Building](concepts/virtual-environments/building.md) (`concepts/virtual-environments/building`) - Virtual builds, VDE creation, partial builds, and seeded incrementals.
-- [Promotion](concepts/virtual-environments/promotion.md) (`concepts/virtual-environments/promotion`) - Promote VDE refs and diff virtual environments.
-- [Rollback](concepts/virtual-environments/rollback.md) (`concepts/virtual-environments/rollback`) - Checkpoints and rollback for virtual environments.
-- [Adopt and Detach](concepts/virtual-environments/adopt-detach.md) (`concepts/virtual-environments/adopt-detach`) - Migrate existing projects to and from virtual mode.
-- [Clone](concepts/virtual-environments/clone.md) (`concepts/virtual-environments/clone`) - Hydrate physical versions from a source warehouse.
-- [Diff](concepts/virtual-environments/diff.md) (`concepts/virtual-environments/diff`) - Compare virtual data environments.
-- [Reconcile](concepts/virtual-environments/reconcile.md) (`concepts/virtual-environments/reconcile`) - Diagnose and repair drift between state and warehouse.
-- [Locks](concepts/virtual-environments/locks.md) (`concepts/virtual-environments/locks`) - Advisory locks for concurrent access control.
-- [Janitor](concepts/virtual-environments/janitor.md) (`concepts/virtual-environments/janitor`) - Cleanup of virtual environment artifacts and retention policies.
-- [Recovery](concepts/virtual-environments/recovery.md) (`concepts/virtual-environments/recovery`) - Diagnosing and recovering from failures in virtual mode.
-
 ## Integrations
 
 - [Overview](integrations/dagster.md) (`integrations/dagster`) - Orchestrate SQLBuild pipelines with Dagster scheduling, retries, and asset UI.
@@ -115,36 +102,32 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 
 ## CLI Reference
 
-- [init](cli/init.md) (`cli/init`) - Scaffold a new SQLBuild project.
-- [playground](cli/playground.md) (`cli/playground`) - Create a self-contained SQLBuild project to explore locally.
-- [skills](cli/skills.md) (`cli/skills`) - Install SQLBuild skill files for AI coding agents.
-- [compile](cli/compile.md) (`cli/compile`) - Compile models into resolved SQL, validate contracts, and write target artifacts - fully offline.
-- [format](cli/format.md) (`cli/format`) - Apply canonical SQLBuild SQL formatting.
-- [contract](cli/contract.md) (`cli/contract`) - Compare or generate repository contracts from physical warehouse schemas.
+- [sqb init](cli/init.md) (`cli/init`) - Scaffold a new SQLBuild project.
+- [sqb playground](cli/playground.md) (`cli/playground`) - Create a self-contained SQLBuild project to explore locally.
+- [sqb skills](cli/skills.md) (`cli/skills`) - Install SQLBuild skill files for AI coding agents.
+- [sqb compile](cli/compile.md) (`cli/compile`) - Compile models into resolved SQL, validate contracts, and write target artifacts - fully offline.
+- [sqb format](cli/format.md) (`cli/format`) - Apply canonical SQLBuild SQL formatting.
+- [sqb contract](cli/contract.md) (`cli/contract`) - Compare or generate repository contracts from physical warehouse schemas.
 - [scope](cli/scope.md) (`cli/scope`) - Inspect declaration visibility, usage, placement, and move impact offline.
-- [rules](cli/rules.md) (`cli/rules`) - List, inspect, or run compiler-integrated Rules and generate project guidance.
-- [plan](cli/plan.md) (`cli/plan`) - Preview what SQLBuild will do before executing.
-- [build](cli/build.md) (`cli/build`) - Compile, plan, and execute the selected build lifecycle.
-- [load](cli/load.md) (`cli/load`) - Load managed sources into the warehouse.
-- [seed](cli/seed.md) (`cli/seed`) - Load seed CSV files into the warehouse.
-- [test](cli/test.md) (`cli/test`) - Run SQL unit tests and multi-model tests in isolation.
-- [scenario](cli/scenario.md) (`cli/scenario`) - Run end-to-end scenario tests against the warehouse or locally with DuckDB.
-- [audit](cli/audit.md) (`cli/audit`) - Run data quality audits in isolation.
-- [freshness](cli/freshness.md) (`cli/freshness`) - Observe source freshness without writing state.
-- [check](cli/check.md) (`cli/check`) - Run Python checks against tasks, assets, and loaders.
-- [clone](cli/clone.md) (`cli/clone`) - Copy model relations between configured targets.
-- [diff](cli/diff.md) (`cli/diff`) - Compare schemas and data between targets or virtual environments.
+- [sqb rules](cli/rules.md) (`cli/rules`) - List, inspect, or run compiler-integrated Rules and generate project guidance.
+- [sqb plan](cli/plan.md) (`cli/plan`) - Preview what SQLBuild will do before executing.
+- [sqb build](cli/build.md) (`cli/build`) - Compile, plan, and execute the selected build lifecycle.
+- [sqb load](cli/load.md) (`cli/load`) - Load managed sources into the warehouse.
+- [sqb seed](cli/seed.md) (`cli/seed`) - Load seed CSV files into the warehouse.
+- [sqb test](cli/test.md) (`cli/test`) - Run SQL unit tests and multi-model tests in isolation.
+- [sqb scenario](cli/scenario.md) (`cli/scenario`) - Run end-to-end scenario tests against the warehouse or locally with DuckDB.
+- [sqb audit](cli/audit.md) (`cli/audit`) - Run data quality audits in isolation.
+- [sqb freshness](cli/freshness.md) (`cli/freshness`) - Observe source freshness without writing state.
+- [sqb check](cli/check.md) (`cli/check`) - Run Python checks against tasks, assets, and loaders.
+- [sqb clone](cli/clone.md) (`cli/clone`) - Copy model relations between configured targets.
+- [diff](cli/diff.md) (`cli/diff`) - Compare schemas and data between targets.
 - [lineage](cli/lineage.md) (`cli/lineage`) - Explore model and column-level dependency graphs from the command line.
-- [dag](cli/dag.md) (`cli/dag`) - Generate the static DAG artifact for Dagster and other integrations.
-- [query](cli/query.md) (`cli/query`) - Run ad hoc SQL queries against the project database.
+- [sqb dag](cli/dag.md) (`cli/dag`) - Generate the static DAG artifact for Dagster and other integrations.
+- [sqb query](cli/query.md) (`cli/query`) - Run ad hoc SQL queries against the project database.
 - [debug](cli/debug.md) (`cli/debug`) - Validate project configuration and test the warehouse connection.
-- [janitor](cli/janitor.md) (`cli/janitor`) - Archive and then delete stale warehouse relations.
-- [clean](cli/clean.md) (`cli/clean`) - Remove compiled artifacts from the target directory.
-- [dbt](cli/dbt.md) (`cli/dbt`) - Coordinate dbt and SQLBuild projects.
-- [state](cli/state.md) (`cli/state`) - Manage the virtual mode state store.
-- [promote](cli/promote.md) (`cli/promote`) - Promote VDE refs from one virtual environment to another.
-- [rollback](cli/rollback.md) (`cli/rollback`) - Roll back a VDE to a prior finalized checkpoint.
-- [reconcile](cli/reconcile.md) (`cli/reconcile`) - Diagnose and repair drift between virtual state and warehouse.
+- [sqb janitor](cli/janitor.md) (`cli/janitor`) - Archive and then delete stale warehouse relations.
+- [sqb clean](cli/clean.md) (`cli/clean`) - Remove compiled artifacts from the target directory.
+- [sqb dbt](cli/dbt.md) (`cli/dbt`) - Coordinate dbt and SQLBuild projects.
 
 ## Other pages
 

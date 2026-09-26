@@ -4,9 +4,9 @@
 
 > Read SQL models and sources from Python nodes without creating SQL dependencies.
 
-Online: https://docs.sqlbuild.com/concepts/python-nodes/sql-references
+Online: https://sqlbuild.com/docs/concepts/python-nodes/sql-references/
 
-Python nodes can **read** SQL models and sources at runtime, but they cannot depend on them as graph edges (see the [SQL boundary](overview.md#the-sql-boundary)). Typed references make this read-only access explicit and safe across direct and virtual modes.
+Python nodes can **read** SQL models and sources at runtime, but they cannot depend on them as graph edges (see the [SQL boundary](overview.md#the-sql-boundary)). Typed references make this read-only access explicit and safe.
 
 ## Declaring a reference
 
@@ -46,13 +46,13 @@ def export_orders(ctx):
 
 `ctx.relation(...)` returns the adapter-qualified relation name for the current run. Passing a reference that was not declared in `depends_on` raises an error.
 
-Do not hardcode model or source names in raw SQL. In virtual mode a model resolves to a versioned VDE relation (for example `marts__feature_x.fact_orders`), not the bare name. A query like `ctx.query("SELECT * FROM fact_orders")` will fail or read the wrong relation. Always use `ctx.relation(model("fact_orders"))`.
+Do not hardcode model or source names in raw SQL. A model's relation depends on the target, its schema and any deferral, so a query like `ctx.query("SELECT * FROM fact_orders")` can fail or read the wrong relation. Always use `ctx.relation(model("fact_orders"))`.
 
 ## model vs source
 
 | Reference | Resolves to |
 |-----------|-------------|
-| `model("name")` | The built model relation (the VDE logical relation in virtual mode) |
+| `model("name")` | The built model relation |
 | `source("name")` | The source read relation, following deferred-source semantics |
 
 `source(...)` respects `defer_sources_to`, so a node reading a source in `dev` can read the deferred target's data just like SQL models do.

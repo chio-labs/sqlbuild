@@ -4,7 +4,7 @@
 
 > End-to-end tests that build real project graphs against coherent fixture data.
 
-Online: https://docs.sqlbuild.com/concepts/scenarios
+Online: https://sqlbuild.com/docs/concepts/scenarios/
 
 ## Contents
 

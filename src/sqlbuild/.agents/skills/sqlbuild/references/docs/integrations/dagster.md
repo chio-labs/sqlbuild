@@ -4,7 +4,7 @@
 
 > Orchestrate SQLBuild pipelines with Dagster scheduling, retries, and asset UI.
 
-Online: https://docs.sqlbuild.com/integrations/dagster
+Online: https://sqlbuild.com/docs/integrations/dagster/
 
 ## Contents
 

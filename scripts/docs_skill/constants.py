@@ -1,12 +1,15 @@
 """Stable constants for SQLBuild docs reference generation."""
 
-import tempfile
 from pathlib import Path
 
-DEFAULT_REPO_URL: str = "https://github.com/chio-labs/sqlbuild-docs"
-DEFAULT_CLONE_DIR: Path = Path(tempfile.gettempdir()) / "sqlbuild-docs-skill-source"
+DEFAULT_DOCS_ROOT: Path = Path(__file__).resolve().parents[2] / "website/src/content/docs/docs"
 DEFAULT_OUTPUT_DIR: Path = Path("src/sqlbuild/.agents/skills/sqlbuild/references/docs")
-DOCS_BASE_URL: str = "https://docs.sqlbuild.com"
+SITE_BASE_URL: str = "https://sqlbuild.com"
+DOCS_BASE_URL: str = f"{SITE_BASE_URL}/docs"
+DOCS_SLUG: str = "docs"
+DOCS_URL_PATH: str = f"/{DOCS_SLUG}"
+INDEX_PAGE: str = "index"
+COMPONENT_TAG_END: str = ">"
 GENERATED_MARKER: str = "<!-- generated-by: sqlbuild skills -->"
 INDEX_FILENAME: str = "CONTENTS.md"
 FRONTMATTER_DELIMITER: str = "---"

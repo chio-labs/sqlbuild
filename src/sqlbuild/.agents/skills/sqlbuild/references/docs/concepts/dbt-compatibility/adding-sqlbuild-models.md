@@ -4,7 +4,7 @@
 
 > Grow into SQLBuild's own models, tests, audits, and scenarios downstream of your dbt project.
 
-Online: https://docs.sqlbuild.com/concepts/dbt-compatibility/adding-sqlbuild-models
+Online: https://sqlbuild.com/docs/concepts/dbt-compatibility/adding-sqlbuild-models/
 
 The dbt compatibility bridge does not require SQLBuild models. You can optionally add SQLBuild models, tests, audits, and scenarios downstream of dbt outputs.
 

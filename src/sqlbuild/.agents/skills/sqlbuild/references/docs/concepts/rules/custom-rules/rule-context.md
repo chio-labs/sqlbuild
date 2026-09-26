@@ -4,7 +4,7 @@
 
 > Inspect stable compiler-owned facts and opt into lazy SQL AST access.
 
-Online: https://docs.sqlbuild.com/concepts/rules/custom-rules/rule-context
+Online: https://sqlbuild.com/docs/concepts/rules/custom-rules/rule-context/
 
 `RuleContext` exposes typed, read-only views over the compiled project:
 

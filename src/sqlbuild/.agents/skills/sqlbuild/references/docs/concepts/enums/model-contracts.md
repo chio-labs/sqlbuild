@@ -4,7 +4,7 @@
 
 > Use an enum as a portable model-column domain with generated accepted-value validation.
 
-Online: https://docs.sqlbuild.com/concepts/enums/model-contracts
+Online: https://sqlbuild.com/docs/concepts/enums/model-contracts/
 
 An enum can describe the allowed domain of a model column as well as provide individual SQL
 literals.

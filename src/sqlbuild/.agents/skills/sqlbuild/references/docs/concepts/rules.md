@@ -4,7 +4,7 @@
 
 > Turn repeated SQL and project review decisions into compiler-enforced requirements.
 
-Online: https://docs.sqlbuild.com/concepts/rules
+Online: https://sqlbuild.com/docs/concepts/rules/
 
 ## Contents
 

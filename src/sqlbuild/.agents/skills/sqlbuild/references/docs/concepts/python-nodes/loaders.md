@@ -4,7 +4,7 @@
 
 > Load external data into source tables with Python functions.
 
-Online: https://docs.sqlbuild.com/concepts/python-nodes/loaders
+Online: https://sqlbuild.com/docs/concepts/python-nodes/loaders/
 
 ## Contents
 

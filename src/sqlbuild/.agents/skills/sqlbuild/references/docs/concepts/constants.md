@@ -4,7 +4,7 @@
 
 > Define reusable compiler-validated values and reference them safely from SQL.
 
-Online: https://docs.sqlbuild.com/concepts/constants
+Online: https://sqlbuild.com/docs/concepts/constants/
 
 Constants give a name to a value used in SQL. SQLBuild validates the value during compilation and
 asks the active adapter to render it safely for its SQL dialect. Constant values are data, never raw

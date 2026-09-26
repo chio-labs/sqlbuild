@@ -1,10 +1,10 @@
 <!-- generated-by: sqlbuild skills -->
 
-# compile
+# sqb compile
 
 > Compile models into resolved SQL, validate contracts, and write target artifacts - fully offline.
 
-Online: https://docs.sqlbuild.com/cli/compile
+Online: https://sqlbuild.com/docs/cli/compile/
 
 ## Contents
 
@@ -16,8 +16,6 @@ Online: https://docs.sqlbuild.com/cli/compile
 - Output
 - Column lineage modes
 - Examples
-
-# sqb compile
 
 Discovers the complete project, resolves references, expands macros, validates SQL, checks column contracts, computes column lineage, and writes compiled artifacts to `target/`. The compile command is fully offline—it does not connect to the warehouse.
 

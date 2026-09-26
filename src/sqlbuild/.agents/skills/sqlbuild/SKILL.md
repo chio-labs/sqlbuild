@@ -163,4 +163,4 @@ diff.
 - Full documentation for this SQLBuild version: [references/docs/CONTENTS.md](references/docs/CONTENTS.md)
   lists every page; open only the page you need, for example `references/docs/cli/build.md` or
   `references/docs/concepts/snapshots.md`. The same pages are online at
-  https://docs.sqlbuild.com if you need a newer version.
+  https://sqlbuild.com/docs/ if you need a newer version.
