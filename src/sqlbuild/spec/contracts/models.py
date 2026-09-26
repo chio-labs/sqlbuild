@@ -345,6 +345,7 @@ class ScenarioSnapshotLimitsConfig:
 class ScenarioConfig:
     """Scenario command configuration."""
 
+    run_namespace: str | None = None
     local_type_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
     snapshot_limits: ScenarioSnapshotLimitsConfig = field(
         default_factory=ScenarioSnapshotLimitsConfig

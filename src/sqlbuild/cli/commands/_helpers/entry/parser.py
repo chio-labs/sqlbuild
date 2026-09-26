@@ -710,6 +710,7 @@ def _add_workspace_parsers(
     scenario_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]
     scenario_subparsers = scenario_parser.add_subparsers(dest="scenario_command")
     scenario_test_parser: argparse.ArgumentParser = scenario_subparsers.add_parser("test")
+    scenario_test_parser.add_argument("--scenario-namespace", metavar="NAMESPACE")
     scenario_test_parser.add_argument("scenario_selector", nargs="*", metavar="scenario")
     scenario_test_parser.add_argument("--retain", dest="scenario_retain", action="store_true")
     scenario_test_parser.add_argument("--local", dest="scenario_local", action="store_true")
@@ -726,6 +727,7 @@ def _add_workspace_parsers(
     scenario_snapshot_group.add_argument("--refresh", dest="scenario_refresh", action="store_true")
     _ = add_scenario_snapshot_safety_args(scenario_test_parser)
     scenario_capture_parser: argparse.ArgumentParser = scenario_subparsers.add_parser("capture")
+    scenario_capture_parser.add_argument("--scenario-namespace", metavar="NAMESPACE")
     scenario_capture_parser.add_argument("scenario_selector", nargs="*", metavar="scenario")
     scenario_capture_parser.add_argument("--retain", dest="scenario_retain", action="store_true")
     _ = add_select_args(scenario_capture_parser)

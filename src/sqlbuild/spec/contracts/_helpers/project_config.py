@@ -49,6 +49,11 @@ def resolve_effective_scenario_config(
     project_limits: ScenarioSnapshotLimitsConfig = project_config.scenario.snapshot_limits
     local_limits: ScenarioSnapshotLimitsConfig = local_config.scenario.snapshot_limits
     return ScenarioConfig(
+        run_namespace=(
+            local_config.scenario.run_namespace
+            if local_config.scenario.run_namespace is not None
+            else project_config.scenario.run_namespace
+        ),
         local_type_overrides=local_type_overrides,
         snapshot_limits=ScenarioSnapshotLimitsConfig(
             max_rows_per_relation=_resolve_optional_int_override(

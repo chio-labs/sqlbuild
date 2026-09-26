@@ -50,6 +50,7 @@ def build_cli_scenario_plan(
     hash_index: dict[str, str] = build_scenario_hash_index(
         project_name=project_name,
         scenarios=pipeline_result.project.sql_scenarios,
+        run_namespace=pipeline_result.project.scenario.run_namespace,
     )
     relation_map: ScenarioRelationMap = build_scenario_relation_map(
         scenario_name=scenario.name,

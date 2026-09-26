@@ -1074,11 +1074,20 @@ class AdapterConnectionContext:
 
 
 @dataclass(frozen=True)
+class ScenarioRunNamespace:
+    """Effective artifact namespace and its configuration source."""
+
+    value: str | None = None
+    source: str = "unset"
+
+
+@dataclass(frozen=True)
 class ScenarioRunOutputContext:
     """Progress stream and JSON output settings for one scenario CLI run."""
 
     progress_stream: TextIO
     use_color: bool
+    namespace: ScenarioRunNamespace = ScenarioRunNamespace()
     json_output: bool = False
     json_output_path: Path | None = None
 
@@ -1099,6 +1108,7 @@ class ScenarioTestCommandRequest:
     """CLI inputs for one `sqb scenario test` invocation."""
 
     project_dir: Path | None = None
+    scenario_namespace: str | None = None
     no_sql_validation: bool = False
     no_color: bool = False
     selectors: tuple[str, ...] = ()
@@ -1118,6 +1128,7 @@ class ScenarioCaptureCommandRequest:
     """CLI inputs for one `sqb scenario capture` invocation."""
 
     project_dir: Path | None = None
+    scenario_namespace: str | None = None
     no_sql_validation: bool = False
     no_color: bool = False
     selectors: tuple[str, ...] = ()

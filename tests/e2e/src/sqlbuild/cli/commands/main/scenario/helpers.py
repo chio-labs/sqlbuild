@@ -8,7 +8,55 @@ from collections import defaultdict
 from pathlib import Path
 from typing import cast
 
-from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb, run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    prepare_inline_project,
+    query_duckdb,
+    run_sqb,
+)
+
+
+def prepare_namespace_project(tmp_path: Path) -> Path:
+    """Create the shared-schema namespace test project."""
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="scenario_namespaces",
+        repo_files=build_scenario_project_files(),
+    )
+
+
+def change_namespace_fixture(project: Path) -> None:
+    """Give the second job different inputs and an independently correct expectation."""
+    scenario: Path = project / "tests/scenarios/order_totals_pass.sql"
+    scenario.write_text(
+        scenario.read_text()
+        .replace("10 AS amount", "22 AS amount")
+        .replace("15 AS total_amount", "27 AS total_amount")
+    )
+
+
+def run_namespaced_scenario(project: Path, namespace: str, *, retain: bool = False) -> None:
+    """Run the real CLI and verify machine output and progress attribution."""
+    retain_args: tuple[str, ...] = {True: ("--retain",), False: ()}[retain]
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        project_dir=project,
+        command=(
+            "--no-color",
+            "scenario",
+            "test",
+            "order_totals_pass",
+            "--scenario-namespace",
+            namespace,
+            "--json",
+            *retain_args,
+        ),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload: dict[str, object] = json.loads(result.stdout)
+    assert payload["execution"] == {
+        "scenario_namespace": namespace,
+        "scenario_namespace_source": "cli",
+    }
+    assert f"Scenario namespace: {namespace} (source: cli)" in result.stderr
 
 
 def build_scenario_project_files() -> dict[str, str]:

@@ -133,13 +133,54 @@ Scenario artifacts are physically isolated from production:
 
 ### Execution flow
 
-1. Clean any existing scenario artifacts from a previous run
+1. Clean any existing scenario artifacts from a previous run in the effective run namespace
 2. Materialize source, ref, and seed fixtures as physical tables
 3. Load required project seeds
 4. Build required models in dependency order (incremental models run as full-refresh in scenarios)
 5. Run expected-output comparisons (order-insensitive)
 6. Run zero-row assertions
-7. Clean up all scenario-owned artifacts (unless `--retain`)
+7. Clean up this namespace's scenario-owned artifacts (unless `--retain`)
+
+### Parallel CI runs
+
+Give each concurrent CI job a unique scenario run namespace when jobs share a warehouse schema:
+
+```bash
+export SQLBUILD_SCENARIO_NAMESPACE="ci-${CI_RUN_ID}-${CI_JOB_ID}"
+sqb scenario test
+# The same option applies to warehouse fixture capture:
+sqb scenario capture --scenario-namespace "ci-${CI_RUN_ID}-${CI_JOB_ID}"
+```
+
+Use a unique job/run identifier, including an attempt or matrix identifier when necessary.
+A pull-request identifier is suitable only when there is at most one active run for that identifier.
+Concurrent runs with the **same namespace** are unsupported; namespaces do not add locking.
+Keep separate working directories for concurrent jobs: namespaces isolate warehouse relation names,
+not local snapshot files or `target/run/scenarios/` output paths.
+
+The precedence is `--scenario-namespace` > `SQLBUILD_SCENARIO_NAMESPACE` >
+`sqlbuild_local.toml` > `sqlbuild_project.toml`. Both config files accept:
+
+```toml
+[scenario]
+run_namespace = "orders-job-123"
+```
+
+Values must contain 1–128 ASCII letters, digits, hyphens, underscores, or periods.
+Empty or invalid values fail before warehouse work; values are case-sensitive and are not trimmed.
+The effective namespace and its source appear in run output, including JSON output.
+
+With a namespace, the artifact prefix is the first 12 hexadecimal characters of
+SHA-256 of `project_name:namespace:scenario_name`. Only the hash enters identifiers, so identifier
+length limits are unchanged. Without a namespace, SQLBuild keeps the existing hash of
+`project_name:scenario_name` and all existing physical names. Prefix collisions are checked among
+the project's scenarios within the effective namespace.
+
+Preparation, normal teardown, and failure cleanup affect only the current namespace's relations.
+`--retain` keeps that namespace's artifacts for inspection. The janitor still recognizes artifacts
+from every namespace, including crashed CI jobs, and applies the existing age/retention policy
+without needing their namespace values. Choose retention longer than active scenario jobs.
+For SQLBuild versions without namespace support, use a separate warehouse schema per CI job.
 
 ### Inspecting with `--retain`
 

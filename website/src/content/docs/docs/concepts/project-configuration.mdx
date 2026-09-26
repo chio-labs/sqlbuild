@@ -375,9 +375,12 @@ See [janitor](/docs/cli/janitor) for the archive and delete lifecycle.
 
 ## Scenario
 
-Configuration for scenario snapshot capture safety limits and local type overrides:
+Configuration for scenario run isolation, snapshot capture safety limits, and local type overrides:
 
 ```toml
+[scenario]
+run_namespace = "orders-job-123" # Optional; omit to preserve existing scenario relation names
+
 [scenario.snapshot_limits]
 max_rows_per_relation = 10000
 max_total_rows = 50000
@@ -388,6 +391,7 @@ max_total_bytes = 52428800
 | Field | Default | Description |
 |-------|---------|-------------|
 | `max_rows_per_relation` | none | Maximum rows per captured relation |
+| `scenario.run_namespace` | unset | Optional 1–128-character namespace using ASCII letters, digits, `-`, `_`, or `.`. CLI `--scenario-namespace` overrides `SQLBUILD_SCENARIO_NAMESPACE`, then local config, then project config. |
 | `max_total_rows` | none | Maximum total rows across all relations in one scenario |
 | `max_bytes_per_relation` | none | Maximum JSONL bytes per relation file |
 | `max_total_bytes` | none | Maximum total JSONL bytes per scenario |

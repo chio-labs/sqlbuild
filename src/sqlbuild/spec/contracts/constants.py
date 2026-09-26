@@ -11,6 +11,7 @@ CHANGES_ONLY_SETTING_OVERRIDE_KEY: str = "changes_only"
 CURSOR_POLICY_DISABLED: str = "disabled"
 ZERO_DAY_CURSOR_DURATION: str = "0d"
 EFFECTIVE_BATCH_SIZE_TOKEN: str = "effective"
+SCENARIO_RUN_NAMESPACE_CONFIG_KEY: str = "run_namespace"
 TIME_TRAVEL_RETENTION_MATERIALIZATIONS: tuple[str, ...] = (
     "table",
     "incremental",

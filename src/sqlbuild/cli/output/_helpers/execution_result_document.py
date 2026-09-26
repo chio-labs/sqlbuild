@@ -507,7 +507,11 @@ def format_audit_execution_json(
 
 
 def format_scenario_execution_json(
-    *, results: tuple[ScenarioRunResult, ...], local: bool = False
+    *,
+    results: tuple[ScenarioRunResult, ...],
+    local: bool = False,
+    run_namespace: str | None = None,
+    namespace_source: str = "unset",
 ) -> str:
     """Format scenario test command execution results as JSON."""
 
@@ -523,6 +527,10 @@ def format_scenario_execution_json(
         checks.extend(_format_scenario_checks(result))
     return _format_execution_json(
         command="scenario test",
+        execution={
+            "scenario_namespace": run_namespace,
+            "scenario_namespace_source": namespace_source,
+        },
         status=BuildStatus.SUCCESS.value if fail_count == 0 else BuildStatus.FAILED.value,
         assets=tuple(assets),
         checks=tuple(checks),
@@ -536,13 +544,21 @@ def format_scenario_execution_json(
 
 
 def format_scenario_snapshot_execution_json(
-    *, results: tuple[ScenarioSnapshotCaptureRunResult, ...], refresh: bool = False
+    *,
+    results: tuple[ScenarioSnapshotCaptureRunResult, ...],
+    refresh: bool = False,
+    run_namespace: str | None = None,
+    namespace_source: str = "unset",
 ) -> str:
     """Format scenario snapshot sync/refresh execution results as JSON."""
 
     fail_count: int = sum(1 for result in results if result.status == ExecutionStatus.FAILED)
     return _format_execution_json(
         command="scenario snapshot refresh" if refresh else "scenario snapshot sync",
+        execution={
+            "scenario_namespace": run_namespace,
+            "scenario_namespace_source": namespace_source,
+        },
         status=BuildStatus.SUCCESS.value if fail_count == 0 else BuildStatus.FAILED.value,
         assets=(),
         checks=(),

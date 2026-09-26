@@ -545,6 +545,7 @@ class ScenarioHashPrefixTestCase:
     project_name: str
     scenario_name: str
     expected_hash_prefix: str
+    run_namespace: str | None = None
 
 
 @dataclass(frozen=True)
@@ -553,6 +554,7 @@ class ScenarioHashCollisionTestCase:
     scenario_names: tuple[str, ...]
     prefix_length: int
     expected_error_fragment: str
+    run_namespace: str | None = None
 
 
 @dataclass(frozen=True)

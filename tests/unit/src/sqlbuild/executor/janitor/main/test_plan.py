@@ -5,6 +5,10 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+from sqlbuild.compiler.planner._helpers.scenario.artifacts import (
+    build_scenario_artifact_name,
+    compute_scenario_hash_prefix,
+)
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.executor.janitor.main.execute import execute_janitor_plan
 from sqlbuild.executor.janitor.main.plan import build_janitor_plan
@@ -30,6 +34,13 @@ from tests.unit.src.sqlbuild.executor.janitor.main.helpers import (
 
 OLD_TIME: datetime = datetime.now(UTC) - timedelta(days=30)
 NEW_TIME: datetime = datetime.now(UTC) - timedelta(days=1)
+NAMESPACED_ARTIFACT: str = build_scenario_artifact_name(
+    hash_prefix=compute_scenario_hash_prefix(
+        project_name="orders", scenario_name="totals", run_namespace="job-1"
+    ),
+    kind="model",
+    logical_name="orders",
+)
 
 
 @pytest.mark.parametrize(
@@ -134,6 +145,19 @@ NEW_TIME: datetime = datetime.now(UTC) - timedelta(days=1)
             ),
             delete_tracked_only=True,
             expected_candidate_names=("__sqb_a13f09c2e7b8__model__daily_revenue",),
+        ),
+        JanitorPlanTestCase(
+            description="old namespaced scenario artifact is eligible without namespace knowledge",
+            relation_infos=(relation_info(NAMESPACED_ARTIFACT, created_at=OLD_TIME),),
+            delete_tracked_only=True,
+            expected_candidate_names=(NAMESPACED_ARTIFACT,),
+        ),
+        JanitorPlanTestCase(
+            description="recent namespaced scenario artifact is protected by retention",
+            relation_infos=(relation_info(NAMESPACED_ARTIFACT, created_at=NEW_TIME),),
+            delete_tracked_only=True,
+            expected_candidate_names=(),
+            expected_skipped_relation_reasons=("relation is newer than 7 days",),
         ),
         JanitorPlanTestCase(
             description="dbt scenario artifact is eligible when tracked-only is enabled",

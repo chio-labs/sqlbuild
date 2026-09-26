@@ -37,9 +37,12 @@ from sqlbuild.cost.constants import USD_PER_CREDIT_CONFIG_KEY
 from sqlbuild.cursor_algebra.constants import DURATION_DAY_UNIT
 from sqlbuild.cursor_algebra.models import Duration
 from sqlbuild.spec.contracts.constants import (
+    SCENARIO_RUN_NAMESPACE_CONFIG_KEY,
     TIME_TRAVEL_RETENTION_MATERIALIZATIONS,
     ZERO_DAY_CURSOR_DURATION,
 )
+from sqlbuild.spec.contracts.exceptions import SpecConfigError
+from sqlbuild.spec.contracts.main.parse_scenario_run_namespace import parse_scenario_run_namespace
 from sqlbuild.spec.contracts.models import (
     AuthoredTimeTravelRetention,
     ClonePolicy,
@@ -1515,7 +1518,9 @@ def _load_scenario(*, payload: object, file_path: Path) -> ScenarioConfig:
     )
     _validate_allowed_keys(
         mapping=mapping,
-        allowed_keys=frozenset({"local_type_overrides", "snapshot_limits"}),
+        allowed_keys=frozenset(
+            {"local_type_overrides", "snapshot_limits", SCENARIO_RUN_NAMESPACE_CONFIG_KEY}
+        ),
         label="scenario",
         file_path=file_path,
     )
@@ -1536,7 +1541,14 @@ def _load_scenario(*, payload: object, file_path: Path) -> ScenarioConfig:
             payload=rules_payload,
             file_path=file_path,
         )
+    run_namespace: str | None = None
+    if SCENARIO_RUN_NAMESPACE_CONFIG_KEY in mapping:
+        try:
+            run_namespace = parse_scenario_run_namespace(mapping[SCENARIO_RUN_NAMESPACE_CONFIG_KEY])
+        except SpecConfigError as exc:
+            raise ProjectConfigError(f"{file_path} {exc}") from exc
     return ScenarioConfig(
+        run_namespace=run_namespace,
         local_type_overrides=local_type_overrides,
         snapshot_limits=_load_scenario_snapshot_limits(
             payload=mapping.get("snapshot_limits"),

@@ -29,6 +29,7 @@ def compute_scenario_hash_prefix(
     *,
     project_name: str,
     scenario_name: str,
+    run_namespace: str | None = None,
     prefix_length: int = SCENARIO_HASH_PREFIX_LENGTH,
 ) -> str:
     """Return a stable scenario artifact hash prefix."""
@@ -39,6 +40,8 @@ def compute_scenario_hash_prefix(
             code=SCENARIO_PLAN_INVALID_HASH_PREFIX,
         )
     hash_input: str = f"{project_name}:{scenario_name}"
+    if run_namespace is not None:
+        hash_input = f"{project_name}:{run_namespace}:{scenario_name}"
     return hashlib.sha256(hash_input.encode("utf-8")).hexdigest()[:prefix_length]
 
 
@@ -46,6 +49,7 @@ def build_scenario_hash_index(
     *,
     project_name: str,
     scenarios: tuple[CompiledSqlScenario, ...],
+    run_namespace: str | None = None,
     prefix_length: int = SCENARIO_HASH_PREFIX_LENGTH,
 ) -> dict[str, str]:
     """Return scenario name to hash prefix, failing clearly on prefix collisions."""
@@ -57,6 +61,7 @@ def build_scenario_hash_index(
         prefix: str = compute_scenario_hash_prefix(
             project_name=project_name,
             scenario_name=scenario.name,
+            run_namespace=run_namespace,
             prefix_length=prefix_length,
         )
         existing: CompiledSqlScenario | None = by_prefix.get(prefix)

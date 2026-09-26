@@ -7,6 +7,29 @@ from pathlib import Path
 
 
 @dataclass(frozen=True)
+class ScenarioNamespaceE2ETestCase:
+    description: str
+    namespace_a: str = "job-a"
+    namespace_b: str = "job-b"
+    expected_total: int = 15
+    expected_other_total: int = 27
+    expected_exit_code: int = 0
+    expected_relation_count: int = 3
+    expected_error: str = "C458"
+
+
+@dataclass(frozen=True)
+class ScenarioNamespaceSourceE2ETestCase:
+    description: str
+    expected_namespace: str | None
+    expected_source: str
+    project_config: str = ""
+    local_config: str = ""
+    environment: tuple[tuple[str, str], ...] = ()
+    cli_args: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class ScenarioCliE2ETestCase:
     """Test case for sqb scenario command e2e verification."""
 

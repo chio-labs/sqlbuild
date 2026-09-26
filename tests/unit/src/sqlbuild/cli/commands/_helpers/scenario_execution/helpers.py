@@ -12,7 +12,8 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlScenario,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.models import DiscoveredSqlScenarioFile
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlScenarioFile
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 
 class ScenarioProgressStream(StringIO):
@@ -30,8 +31,10 @@ def configure_scenario_runner(
     stream: ScenarioProgressStream,
     compile_project: Any,
 ) -> None:
-    discovered_inputs: Mock = Mock()
-    discovered_inputs.project_config.name = "project"
+    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
+        project_config=ProjectConfig(name="project", adapter="duckdb"),
+        local_config=LocalConfig(),
+    )
     monkeypatch.setattr(runner.sys, "stdout", stream)
     monkeypatch.setattr(runner, "supports_color", lambda: False)
     monkeypatch.setattr(runner, "discover_project_inputs", lambda **_: discovered_inputs)
