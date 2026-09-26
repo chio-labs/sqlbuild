@@ -16,7 +16,7 @@ from contextlib import contextmanager, redirect_stdout
 from io import StringIO
 from pathlib import Path
 from types import FrameType
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, cast
 
 import pytest
 
@@ -77,6 +77,18 @@ class FreshProcessCompileBenchmarkResult(NamedTuple):
     semantic_fingerprint: str
     payload: dict[str, object]
     cpu_seconds: float
+    major_page_faults: int
+    minor_page_faults: int
+
+    def __repr__(self) -> str:
+        return (
+            f"FreshProcessCompileBenchmarkResult(elapsed_seconds={self.elapsed_seconds}, "
+            f"cpu_seconds={self.cpu_seconds}, peak_rss_bytes={self.peak_rss_bytes}, "
+            f"major_page_faults={self.major_page_faults}, "
+            f"minor_page_faults={self.minor_page_faults}, "
+            f"semantic_fingerprint={self.semantic_fingerprint!r}, "
+            f"compile_timings={self.payload.get('compile_timings')!r})"
+        )
 
 
 class FreshProcessCompileCacheBenchmarkResult(NamedTuple):
@@ -559,7 +571,7 @@ def _run_fresh_process_compile_benchmark(
         "--output",
         str(measurement_path),
         "--format",
-        "%e %M %U %S",
+        "%e %M %U %S %F %R",
         str(Path(sys.executable).with_name("sqb")),
         "--project-dir",
         str(project_dir),
@@ -568,30 +580,36 @@ def _run_fresh_process_compile_benchmark(
         "--json",
         *compile_args,
     ]
-    with (
-        output_path.open("wb") as output_file,
-        stderr_path.open("wb") as stderr_file,
-    ):
-        with subprocess.Popen(
-            command,
-            stdout=output_file,
-            stderr=stderr_file,
-            start_new_session=True,
-        ) as process:
-            try:
-                returncode: int = process.wait(timeout=expected_max_wall_seconds + 10.0)
-            except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGKILL)
-                process.wait()
-                raise
+    started: float = time.monotonic()
+    try:
+        with (
+            output_path.open("wb") as output_file,
+            stderr_path.open("wb") as stderr_file,
+        ):
+            with subprocess.Popen(
+                command,
+                stdout=output_file,
+                stderr=stderr_file,
+                start_new_session=True,
+            ) as process:
+                try:
+                    returncode: int = process.wait(timeout=expected_max_wall_seconds + 10.0)
+                except subprocess.TimeoutExpired:
+                    os.killpg(process.pid, signal.SIGKILL)
+                    process.wait()
+                    raise
+    finally:
+        payload_object, measurement = _read_and_report_compile_measurement(
+            label=label,
+            measurement_path=measurement_path,
+            output_path=output_path,
+            elapsed_seconds=time.monotonic() - started,
+        )
     assert returncode == 0, stderr_path.read_text(encoding="utf-8")
-    elapsed_text, peak_rss_kib_text, user_text, system_text = measurement_path.read_text(
-        encoding="utf-8"
-    ).split()
+    elapsed_text, peak_rss_kib_text, user_text, system_text, major_text, minor_text = measurement
     elapsed_seconds: float = float(elapsed_text)
-    payload_object: object = json.loads(output_path.read_bytes())
     assert isinstance(payload_object, dict)
-    payload: dict[str, object] = payload_object
+    payload: dict[str, object] = cast(dict[str, object], payload_object)
     peak_rss_bytes: int = int(peak_rss_kib_text) * 1024
     compiled_dir: Path = project_dir / "target" / "compiled"
     semantic_fingerprint: str = semantic_compile_fingerprint(
@@ -603,7 +621,52 @@ def _run_fresh_process_compile_benchmark(
         semantic_fingerprint=semantic_fingerprint,
         payload=payload,
         cpu_seconds=float(user_text) + float(system_text),
+        major_page_faults=int(major_text),
+        minor_page_faults=int(minor_text),
     )
+
+
+def _read_and_report_compile_measurement(
+    *, label: str, measurement_path: Path, output_path: Path, elapsed_seconds: float
+) -> tuple[object, list[str]]:
+    measurement: list[str] = []
+    if measurement_path.exists():
+        lines: list[str] = measurement_path.read_text(encoding="utf-8").splitlines()
+        if lines:
+            measurement = lines[-1].split()
+    payload: object = None
+    if output_path.exists():
+        try:
+            payload = json.loads(output_path.read_bytes())
+        except json.JSONDecodeError:
+            payload = None
+    report: dict[str, object] = {
+        "label": label,
+        "wall_seconds": elapsed_seconds,
+        "cpu_seconds": None,
+        "cpu_utilization": None,
+        "peak_rss_bytes": None,
+        "major_page_faults": None,
+        "minor_page_faults": None,
+        "compile_timings": payload.get("compile_timings") if isinstance(payload, dict) else None,
+    }
+    if len(measurement) == 6:
+        wall, rss, user, system, major, minor = measurement
+        try:
+            report.update(
+                wall_seconds=float(wall),
+                cpu_seconds=float(user) + float(system),
+                cpu_utilization=(float(user) + float(system)) / float(wall)
+                if float(wall)
+                else None,
+                peak_rss_bytes=int(rss) * 1024,
+                major_page_faults=int(major),
+                minor_page_faults=int(minor),
+            )
+        except ValueError:
+            measurement = []
+    print("compile measurement " + json.dumps(report, sort_keys=True), flush=True)
+    return payload, measurement
 
 
 def _append_benchmark_edit(path: Path, label: str) -> None:
