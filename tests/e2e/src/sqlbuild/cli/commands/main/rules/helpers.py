@@ -1,5 +1,6 @@
 """Compiler Rules end-to-end fixture helpers."""
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -15,11 +16,12 @@ def write_unevaluated_rules_project(
     model_options: str = "",
     configuration: str = "",
     adapter: str = "duckdb",
+    selected_rules: tuple[str, ...] = ("SQBRSQL035",),
     resource_path: str = "models/staging/orders.sql",
     resource_template: str = "MODEL ({options});\nSELECT {expression} AS order_id",
 ) -> None:
     (project_dir / "sqlbuild_project.toml").write_text(
-        f'name = "orders"\nadapter = "{adapter}"\n[rules]\nselect = ["SQBRSQL035"]\n'
+        f'name = "orders"\nadapter = "{adapter}"\n[rules]\nselect = {json.dumps(selected_rules)}\n'
         + configuration
     )
     models: Path = project_dir / "models/staging"

@@ -219,6 +219,7 @@ class Finding:
     message: str
     remediation: str
     unevaluated: bool = False
+    affected_rules: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

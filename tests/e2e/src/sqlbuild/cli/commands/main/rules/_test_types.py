@@ -4,6 +4,15 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class GroupedRulesCase:
+    description: str
+    arguments: tuple[str, ...]
+    result_key: str
+    expected_rules: tuple[str, ...]
+    configuration: str = ""
+
+
+@dataclass(frozen=True)
 class UnevaluatedRuleCase:
     description: str
     model_options: str = ""

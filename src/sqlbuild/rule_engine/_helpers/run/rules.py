@@ -40,6 +40,7 @@ from sqlbuild.rule_engine._helpers.engine.native import (
     finalize_native_findings,
     native_catalogue,
 )
+from sqlbuild.rule_engine._helpers.run.findings import group_unevaluated_findings
 from sqlbuild.rule_engine.constants import TYPE_PROOF_RULE_CODES
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.main.load_config import load_rules_config
@@ -148,10 +149,7 @@ def evaluate_rules(
     )
     findings: tuple[Finding, ...] = tuple(
         sorted(
-            (
-                replace(item, code="rules-unevaluated") if item.unevaluated else item
-                for item in finalized
-            ),
+            group_unevaluated_findings(finalized),
             key=lambda item: (item.path.as_posix(), item.line, item.column, item.code),
         )
     )
