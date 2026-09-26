@@ -361,7 +361,7 @@ def build_partial_ref_fixture_project_files() -> dict[str, str]:
 
 
 def build_open_schema_ref_fixture_project_files() -> dict[str, str]:
-    """Build a fixture with a required column beyond a partial star-model contract."""
+    """Build a fixture with a required column beyond a partial star-model schema."""
 
     return {
         "sqlbuild_project.toml": (
@@ -372,7 +372,6 @@ def build_open_schema_ref_fixture_project_files() -> dict[str, str]:
         ),
         "models/stg_orders.sql": (
             "MODEL (\n"
-            "  contract enforced,\n"
             "  columns (\n"
             "    order_id (type INTEGER),\n"
             "  ),\n"
