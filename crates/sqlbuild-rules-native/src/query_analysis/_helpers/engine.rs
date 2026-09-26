@@ -531,8 +531,6 @@ fn try_borrowed_query(
         if matches!(&expression, polyglot_sql::Expression::Select(select)
             if select.from.as_ref().is_some_and(|from| matches!(from.expressions.as_slice(), [polyglot_sql::Expression::Subquery(_)])))
         {
-            // Complete derived stars with the same resolver previously used by
-            // Python enrichment. Project-only resolution loses expression lineage.
             work.project_projections = false;
         }
         return Err(Box::new(work));

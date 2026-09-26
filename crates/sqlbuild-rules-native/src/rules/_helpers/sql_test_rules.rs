@@ -32,8 +32,6 @@ pub(crate) fn evaluate_project(
     });
     let mut scenarios: Vec<&SqlScenarioFact> = evaluation.request.sql_scenarios.iter().collect();
     scenarios.sort_by(|left, right| left.source_path.cmp(&right.source_path));
-    // Eligibility depends on fixture content and this evaluation's fixed dialect,
-    // not on the Rule or the resource that happens to reuse that content.
     let mut fixture_eligibility: HashMap<&str, Result<(), String>> = HashMap::new();
 
     for rule in evaluation.selected.values().filter(|rule| {

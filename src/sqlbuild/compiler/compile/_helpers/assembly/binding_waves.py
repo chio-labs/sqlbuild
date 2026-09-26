@@ -68,10 +68,10 @@ def analyze_binding_waves(
         wave: list[_ModelSqlAnalysisRequest] = []
         for name in ready:
             request: _ModelSqlAnalysisRequest = by_name[name]
-            if request.cache_key is not None and any(
-                parent in changed for parent in dependencies[name]
-            ):
-                reusable.pop(request.cache_key, None)
+            if any(parent in changed for parent in dependencies[name]):
+                changed.add(name)
+                if request.cache_key is not None:
+                    reusable.pop(request.cache_key, None)
             bindings: dict[str, dict[str, str]] | None = (
                 None
                 if request.binding_schema is None
@@ -82,6 +82,9 @@ def analyze_binding_waves(
             )
             wave.append(replace(request, binding_schema=bindings))
         wave_requests: tuple[_ModelSqlAnalysisRequest, ...] = tuple(wave)
+        wave_names: set[str] = set(ready)
+        for request in wave_requests:
+            wave_names.update(binding_relation_names(request.model_input.references))
         analyses: tuple[_ModelSqlAnalysis, ...] = complete(
             requests=wave_requests,
             analyses=analyze(
@@ -90,14 +93,14 @@ def analyze_binding_waves(
                 column_types_by_table=available_types,
                 column_nullability_by_table=available_nullability,
             ),
-            complete_binding_schemas=complete_shapes,
+            complete_binding_schemas={
+                name: complete_shapes[name] for name in wave_names if name in complete_shapes
+            },
         )
         for name, request, result in zip(ready, wave_requests, analyses, strict=True):
             results[name] = result
             analysis: PolyglotAnalysisResult = result.polyglot_analysis
-            if not result.cached and model_analysis_output_signature(
-                analysis
-            ) != previous_signatures.get(name):
+            if model_analysis_output_signature(analysis) != previous_signatures.get(name):
                 changed.add(name)
             required: frozenset[str] = binding_relation_names(request.model_input.references)
             if analysis.columns and (not analysis.has_star or required <= complete_shapes.keys()):

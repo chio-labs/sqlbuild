@@ -6,9 +6,9 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import Any
 from graphlib import CycleError, TopologicalSorter
 from pathlib import Path
+from typing import Any
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.contract.types import BuiltinAdapter
@@ -793,22 +793,6 @@ def _analyze_model_sql_in_parallel(
             for cache_key, analysis in compact_cached_analyses.items()
         }
     )
-    record_analysis_cache_metrics(
-        batch_hits=compact_batch_hit_count
-        + (entry_cache_hit_count if dependency_ordered and compact_batch_plan is not None else 0),
-        entry_hits=0
-        if dependency_ordered and compact_batch_plan is not None
-        else entry_cache_hit_count,
-        misses=(
-            sum(
-                request.cache_key is None or request.cache_key not in cached_analyses
-                for request in requests
-            )
-            if analysis_cache is not None
-            else 0
-        ),
-        bypasses=(len(requests) if analysis_cache is None else 0),
-    )
     analyses: tuple[_ModelSqlAnalysis, ...]
     if dependency_ordered:
         analyses, cached_analyses = analyze_binding_waves(
@@ -833,6 +817,9 @@ def _analyze_model_sql_in_parallel(
                 inference_profile=inference_profile,
             ),
         )
+        if compact_batch_plan is not None:
+            compact_batch_hit_count = sum(analysis.cached for analysis in analyses)
+            entry_cache_hit_count -= compact_batch_hit_count
     else:
         analyses = _analyze_model_sql_requests(
             requests=requests,
@@ -851,13 +838,23 @@ def _analyze_model_sql_in_parallel(
                 else None
             ),
         )
-    analyses = _complete_inferred_bindings(
-        known_functions=known_functions,
-        known_types=known_types,
-        requests=requests,
-        analyses=analyses,
-        complete_binding_schemas=complete_binding_schemas,
-        inference_profile=inference_profile,
+        analyses = _complete_inferred_bindings(
+            known_functions=known_functions,
+            known_types=known_types,
+            requests=requests,
+            analyses=analyses,
+            complete_binding_schemas=complete_binding_schemas,
+            inference_profile=inference_profile,
+        )
+    record_analysis_cache_metrics(
+        batch_hits=compact_batch_hit_count,
+        entry_hits=entry_cache_hit_count,
+        misses=(
+            len(requests) - compact_batch_hit_count - entry_cache_hit_count
+            if analysis_cache is not None
+            else 0
+        ),
+        bypasses=(len(requests) if analysis_cache is None else 0),
     )
     if analysis_cache is None:
         return {
@@ -900,7 +897,7 @@ def _analyze_model_sql_in_parallel(
         model_inputs=model_inputs,
         changed_names=changed_signature_names,
     )
-    if invalidated_names:
+    if invalidated_names and not dependency_ordered:
         invalidated_requests: tuple[_ModelSqlAnalysisRequest, ...] = tuple(
             request
             for request in requests
