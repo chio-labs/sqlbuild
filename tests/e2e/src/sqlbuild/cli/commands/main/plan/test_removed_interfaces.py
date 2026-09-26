@@ -16,6 +16,11 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
 @pytest.mark.parametrize(
     "test_case",
     [
+        RemovedInterfaceTestCase(
+            "clone lock flag removed",
+            ("clone", "--from", "local", "--skip-locked"),
+            "unrecognized arguments: --skip-locked",
+        ),
         RemovedInterfaceTestCase("promote removed", ("promote",), "invalid choice: 'promote'"),
         RemovedInterfaceTestCase("rollback removed", ("rollback",), "invalid choice: 'rollback'"),
         RemovedInterfaceTestCase(

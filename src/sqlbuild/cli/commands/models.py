@@ -332,7 +332,6 @@ class CloneCommandRequest:
     origin_target_name: str
     destination_target_name: str | None
     hard_copy: bool
-    skip_locked: bool = False
     select: tuple[str, ...] = ()
     exclude: tuple[str, ...] = ()
     verbose: bool = False

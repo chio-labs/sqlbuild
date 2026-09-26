@@ -48,7 +48,6 @@ _DEFAULT_VALUES: dict[str, object] = {
     "fail_fast": False,
     "full_refresh": False,
     "as_target": None,
-    "skip_locked": False,
     "include_python": True,
     "load_sources": None,
     "reload": False,
@@ -206,7 +205,6 @@ class CliNamespace:
     fail_fast: bool
     full_refresh: bool
     as_target: str | None
-    skip_locked: bool
     selection_diagnostics: bool
     include_python: bool
     load_sources: bool | None
