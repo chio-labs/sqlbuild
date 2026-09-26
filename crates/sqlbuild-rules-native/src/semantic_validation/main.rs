@@ -1,5 +1,11 @@
 //! Stable SQLBuild boundary around Polyglot schema-aware validation.
 
+pub(crate) mod diagnostics;
+pub(crate) mod map_diagnostics;
+pub(crate) mod normalize;
+pub(crate) mod normalize_dialect;
+use crate::semantic_validation::models::ProjectCatalog;
+
 use polyglot_sql::{
     Dialect, DialectType, Expression, ExpressionWalk, Resolver, SchemaValidationOptions,
     ValidationError, ValidationResult, ValidationSchema, build_scope,
@@ -13,13 +19,15 @@ const MAX_VALIDATION_WORKERS: usize = 4;
 const VALIDATION_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Deserialize)]
-struct ValidationRequest {
-    sql: String,
+pub(super) struct ValidationRequest {
+    pub(super) sql: String,
     #[serde(default = "default_dialect")]
-    dialect: String,
-    schema: ValidationSchema,
+    pub(super) dialect: String,
+    pub(super) schema: ValidationSchema,
     #[serde(default)]
-    options: SchemaValidationOptions,
+    pub(super) options: SchemaValidationOptions,
+    #[serde(default)]
+    pub(super) quoted_ignore_case: bool,
 }
 
 #[derive(Debug)]
@@ -63,13 +71,17 @@ pub(crate) fn validations_json(request_json: &str) -> Result<String, String> {
     serde_json::to_string(&results?).map_err(|error| error.to_string())
 }
 
-fn validation_result(request: ValidationRequest) -> Result<ValidationResult, String> {
+pub(super) fn validation_result(request: ValidationRequest) -> Result<ValidationResult, String> {
     let dialect: DialectType = request.dialect.parse().map_err(|error| {
         format!(
             "unsupported Polyglot dialect '{}': {error}",
             request.dialect
         )
     })?;
+    if request.quoted_ignore_case {
+        return ProjectCatalog::with_options(dialect, request.options, true)
+            .validate(&request.sql, &request.schema);
+    }
     let mut result = validate_with_schema(
         request.sql.as_str(),
         dialect,
@@ -78,7 +90,12 @@ fn validation_result(request: ValidationRequest) -> Result<ValidationResult, Str
     );
     if result.valid && may_have_extra_clause_checks(&request.sql) {
         let statements = Dialect::get(dialect)
-            .parse(&request.sql)
+            .parse_with_options(
+                &request.sql,
+                &polyglot_sql::ParseOptions {
+                    complexity_guard: request.options.complexity_guard,
+                },
+            )
             .map_err(|error| error.to_string())?;
         let schema = mapping_schema_from_validation_schema_with_dialect(&request.schema, dialect);
         for statement in statements {
@@ -101,7 +118,7 @@ fn validation_result(request: ValidationRequest) -> Result<ValidationResult, Str
     Ok(result)
 }
 
-fn may_have_extra_clause_checks(sql: &str) -> bool {
+pub(super) fn may_have_extra_clause_checks(sql: &str) -> bool {
     sql.as_bytes()
         .windows(5)
         .any(|word| word.eq_ignore_ascii_case(b"using"))
@@ -146,7 +163,7 @@ pub(crate) fn complete_parsed_validation(
     Ok(result)
 }
 
-fn missing_clause_columns(
+pub(super) fn missing_clause_columns(
     scope: &polyglot_sql::Scope,
     schema: &polyglot_sql::MappingSchema,
 ) -> Vec<ValidationError> {

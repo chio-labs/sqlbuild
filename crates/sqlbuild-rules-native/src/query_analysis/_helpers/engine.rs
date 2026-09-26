@@ -36,6 +36,14 @@ struct AnalysisRequest {
     binding_schema: Option<ValidationSchema>,
     #[serde(default)]
     binding_options: Option<BindingOptions>,
+    #[serde(default)]
+    binding_references: Option<Vec<(String, bool)>>,
+    #[serde(default)]
+    binding_override: Option<usize>,
+    #[serde(default)]
+    analysis_references: Option<Vec<(String, String)>>,
+    #[serde(default)]
+    sqlbuild_diagnostics: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -303,8 +311,36 @@ pub(crate) fn analyze_project_json(request_json: &str) -> Result<String, String>
 }
 
 pub(crate) fn analyze_project_compact_json(request_json: &str) -> Result<String, String> {
-    let request: CompactProjectAnalysisBatchRequest =
+    analyze_project_compact_with_catalog(request_json, None)
+}
+
+pub(crate) fn analyze_project_compact_with_catalog(
+    request_json: &str,
+    catalog: Option<&crate::semantic_validation::models::ProjectCatalog>,
+) -> Result<String, String> {
+    let mut request: CompactProjectAnalysisBatchRequest =
         serde_json::from_str(request_json).map_err(|error| error.to_string())?;
+    for query in &mut request.queries {
+        query.sqlbuild_diagnostics = catalog.is_some();
+        if let Some(references) = &query.analysis_references {
+            query.schema = catalog
+                .ok_or("analysis references require a native project catalog")?
+                .analysis_schema(references);
+        }
+        if let Some(references) = &query.binding_references {
+            let catalog = catalog.ok_or("binding references require a native project catalog")?;
+            query.binding_schema =
+                Some(catalog.reference_schema(references, query.binding_override)?);
+            if !catalog.quoted_ignore_case {
+                query.binding_options = Some(BindingOptions {
+                    check_types: catalog.options.check_types,
+                    semantic: catalog.options.semantic,
+                    known_functions: catalog.options.known_functions.clone(),
+                    known_types: catalog.options.known_types.clone(),
+                });
+            }
+        }
+    }
     let workers = request.workers.clamp(1, MAX_WORKERS);
     if request
         .templates
@@ -413,6 +449,25 @@ pub(crate) fn analyze_project_compact_json(request_json: &str) -> Result<String,
 }
 
 fn analyze_compact_query_work(work: CompactQueryWork) -> CompiledQueryWorkResult {
+    let diagnostic_sql = work
+        .query
+        .sqlbuild_diagnostics
+        .then(|| work.query.sql.clone());
+    let dialect = work.query.dialect.parse::<DialectType>();
+    let mut result = analyze_compact_query_work_inner(work);
+    if let (Some(sql), Ok(dialect)) = (diagnostic_sql, dialect) {
+        if let Some(validation) = result.validation.take() {
+            result.validation = Some(validation.and_then(|value| {
+                crate::semantic_validation::main::map_diagnostics::map_diagnostics(
+                    &sql, dialect, value,
+                )
+            }));
+        }
+    }
+    result
+}
+
+fn analyze_compact_query_work_inner(work: CompactQueryWork) -> CompiledQueryWorkResult {
     let work = match try_borrowed_query(work) {
         Ok(result) => return result,
         Err(work) => *work,
