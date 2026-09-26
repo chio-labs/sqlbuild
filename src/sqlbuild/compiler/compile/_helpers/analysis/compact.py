@@ -772,7 +772,14 @@ def _project_compact_analysis_batch(
             )
             if not (
                 isinstance(template, list)
-                and (len(template) == COMPACT_ANALYSIS_RESPONSE_LENGTH or legacy_type_recovery)
+                and (
+                    len(template) == COMPACT_ANALYSIS_RESPONSE_LENGTH
+                    or legacy_type_recovery
+                    or (
+                        len(template) == COMPACT_ANALYSIS_LEGACY_RESPONSE_LENGTH
+                        and isinstance(template[2], bool)
+                    )
+                )
                 and isinstance(template[0], list)
                 and isinstance(template[1], bool)
             ):
@@ -804,7 +811,13 @@ def _project_compact_analysis_batch(
             results.append(
                 NativeCompactAnalysis(
                     cleaned_sql=cleaned_sql,
-                    analysis=None if legacy_type_recovery else {"hasStar": template[1]},
+                    analysis=None
+                    if legacy_type_recovery
+                    else {
+                        "hasStar": template[1],
+                        "starResolved": len(template) == COMPACT_ANALYSIS_LEGACY_RESPONSE_LENGTH
+                        and template[2] is True,
+                    },
                     projected=not legacy_type_recovery,
                     compact_rows=cast(list[object], template[0]),
                     compact_fact_rows=cast(list[object], raw_facts),
@@ -889,6 +902,7 @@ def _projected_analysis_result(*, request: ProjectedAnalysisRequest) -> Polyglot
         columns=tuple(columns),
         lineage_columns=tuple(lineage_columns),
         has_star=bool(analysis.get("hasStar")),
+        star_resolved=bool(analysis.get("starResolved")),
         binding_diagnostics=request.binding_diagnostics,
         binding_validated=request.binding_validated,
     )
@@ -911,6 +925,7 @@ def _compact_projected_analysis_result(
                 resource_name_indexes=request.resource_name_indexes,
             ),
             has_star=bool(request.analysis and request.analysis.get("hasStar")),
+            star_resolved=bool(request.analysis and request.analysis.get("starResolved")),
             binding_diagnostics=request.binding_diagnostics,
             binding_validated=request.binding_validated,
         )
@@ -1051,6 +1066,7 @@ def _compact_projected_analysis_result(
             resource_name_indexes=request.resource_name_indexes,
         ),
         has_star=bool(request.analysis and request.analysis.get("hasStar")),
+        star_resolved=bool(request.analysis and request.analysis.get("starResolved")),
         binding_diagnostics=request.binding_diagnostics,
         binding_validated=request.binding_validated,
     )

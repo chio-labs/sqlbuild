@@ -255,7 +255,7 @@ pub(crate) fn compact_project_query_interns_repeated_lineage_strings() -> bool {
         json!(["model", "orders", "order_id", "BIGINT"])
     );
     assert_eq!(response["facts"][0], json!([2, 3, 1, 0, 1, [[0, 1, 2]]]));
-    assert_eq!(response["templates"][0], json!([[0], false]));
+    assert_eq!(response["templates"][0], json!([[0], false, false]));
     assert_eq!(response["analyses"][0], json!([0, [[1, 1]]]));
     true
 }

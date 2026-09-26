@@ -68,7 +68,7 @@ def build_fast_project_column_lineage(
             continue
         if model.fast_lineage_columns is not None:
             columns: Sequence[CompiledLineageColumnFact] = model.fast_lineage_columns
-            if model.fast_lineage_has_star:
+            if model.fast_lineage_has_star and not model.fast_lineage_star_resolved:
                 normalized_sql: str
                 physical_resources: tuple[PhysicalResource, ...]
                 normalized_sql, physical_resources = _normalize_sqlbuild_refs(model.query_sql)
@@ -147,7 +147,7 @@ def _build_polyglot_fast_model_column_lineage(
                     confidence=fact.confidence,
                 )
             )
-        if model.fast_lineage_has_star:
+        if model.fast_lineage_has_star and not model.fast_lineage_star_resolved:
             normalized_sql: str
             physical_resources: tuple[PhysicalResource, ...]
             normalized_sql, physical_resources = _normalize_sqlbuild_refs(model.query_sql)

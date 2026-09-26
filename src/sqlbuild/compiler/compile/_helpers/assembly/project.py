@@ -502,6 +502,7 @@ def _assemble_compiled_model(
     inferred_columns: tuple[InferredColumn, ...] | None = None
     fast_lineage_columns: Sequence[CompiledLineageColumnFact] | None = None
     fast_lineage_has_star: bool = False
+    fast_lineage_star_resolved: bool = False
     placeholders: dict[str, str] | None = (
         sql_analysis.placeholders if sql_analysis is not None else _model_placeholders(model_input)
     )
@@ -533,6 +534,7 @@ def _assemble_compiled_model(
             inferred_columns = polyglot_analysis.columns
             fast_lineage_columns = polyglot_analysis.lineage_columns
             fast_lineage_has_star = polyglot_analysis.has_star
+            fast_lineage_star_resolved = polyglot_analysis.star_resolved
         else:
             if model_input.sql_validation_enabled:
                 validate_sql_syntax(
@@ -598,6 +600,7 @@ def _assemble_compiled_model(
         inferred_columns=inferred_columns,
         fast_lineage_columns=fast_lineage_columns,
         fast_lineage_has_star=fast_lineage_has_star,
+        fast_lineage_star_resolved=fast_lineage_star_resolved,
         authored_sql=model_input.model_file.contents,
         authored_query_sql=model_input.model_file.query_sql,
         output_column_locations=model_input.model_file.output_column_locations,

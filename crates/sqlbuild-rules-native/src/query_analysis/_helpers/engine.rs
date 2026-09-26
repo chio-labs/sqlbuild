@@ -1019,7 +1019,7 @@ struct CompactProjectBatch {
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
 enum CompactProjectResponse {
-    Success((Vec<usize>, bool)),
+    Success((Vec<usize>, bool, bool)),
     LegacyTypeRecovery((Vec<usize>, bool, &'static str)),
     Failure(String),
 }
@@ -1119,7 +1119,11 @@ impl CompactProjectAccumulator {
                     "native project type recovery requires legacy fallback",
                 ))
             } else {
-                CompactProjectResponse::Success((columns, analysis.has_star))
+                CompactProjectResponse::Success((
+                    columns,
+                    analysis.has_star,
+                    analysis.preserve_fallback_lineage,
+                ))
             },
         )
     }
