@@ -183,7 +183,7 @@ SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] 
             "local_model_error",
             "ERROR",
             "error[X608]:",
-            "missing_function",
+            "not_a_number_",
             "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
         ),
         retained_duckdb_relative_path=Path("target/run/scenarios/local_model_error/local.duckdb"),
@@ -193,7 +193,7 @@ SCENARIO_LOCAL_DUCKDB_CASE_FIXTURES: tuple[ScenarioLocalRetainE2ETestCase, ...] 
             (
                 "models/local_model_error.sql",
                 "MODEL (materialized table);\n\n"
-                "SELECT missing_function(amount) AS bad_value\n"
+                "SELECT CAST('not_a_number_' || amount AS INTEGER) AS bad_value\n"
                 'FROM __source("raw_orders")\n',
             ),
             (
@@ -889,7 +889,7 @@ def test_given_missing_snapshot_when_running_local_scenario_then_reports_expecte
                 "local_model_error",
                 "ERROR",
                 "error[X608]:",
-                "missing_function",
+                "not_a_number_",
                 "PASS=0  FAIL=0  ERROR=1  SKIP=0  TOTAL=1",
             ),
             retained_duckdb_relative_path=Path(
@@ -901,7 +901,7 @@ def test_given_missing_snapshot_when_running_local_scenario_then_reports_expecte
                 (
                     "models/local_model_error.sql",
                     "MODEL (materialized table);\n\n"
-                    "SELECT missing_function(amount) AS bad_value\n"
+                    "SELECT CAST('not_a_number_' || amount AS INTEGER) AS bad_value\n"
                     'FROM __source("raw_orders")\n',
                 ),
                 (
