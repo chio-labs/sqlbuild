@@ -2794,8 +2794,8 @@ def test_given_timestamp_snapshot_project_when_rerunning_build_then_tracks_histo
             command=("--no-color", "build"),
             expected_exit_code=1,
             expected_output_fragments=(
-                "customer_snapshot",
-                "query output is missing required columns: customer_id",
+                "error[B300]: [B300] models/customer_snapshot.sql:3:15:",
+                "unique_key references unknown column 'customer_id'",
             ),
         ),
     ],

@@ -21,7 +21,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     "test_case",
     [
         CliFailureBuildE2ETestCase(
-            description="bad mapped cursor input column fails during planning validation",
+            description="bad mapped cursor input column fails during compile validation",
             repo_files={
                 "sqlbuild_project.toml": (
                     'name = "cursor_runtime_project"\n'
@@ -73,9 +73,8 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             command=("--no-color", "build", "--select", "+customer_status_snapshot"),
             expected_exit_code=1,
             expected_stderr_fragments=(
-                "error[S302]: model 'customer_status_snapshot': cursor_inputs "
-                "watermark references 'fact_orders' column 'missing_column', but its enforced contract "
-                "does not expose the column. Declared contract columns: order_id, ordered_at",
+                "error[B300]: [B300] models/customer_status_snapshot.sql:9:17: cursor_inputs "
+                "fact_orders references unknown column 'missing_column'",
             ),
             verification_sql="SELECT COUNT(*) FROM main.customer_status_snapshot",
             expected_verification_rows=((0,),),
