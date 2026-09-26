@@ -197,3 +197,11 @@ class TerminalTestProgressE2ETestCase:
     expected_test_row_count: int
     expected_screen_fragments: tuple[str, ...]
     expected_summary: str
+
+
+@dataclass(frozen=True)
+class ChainCteScopeTestCase:
+    description: str
+    queries: tuple[str, ...]
+    expected_sql: str
+    expected_exit_code: int = 0
