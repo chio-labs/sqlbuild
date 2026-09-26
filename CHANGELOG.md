@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.119.2](https://github.com/chio-labs/sqlbuild/compare/v0.119.1...v0.119.2) (2026-09-26)
+
+
+### Bug Fixes
+
+* colour plan migrations and scope output and stop progress lines merging ([#837](https://github.com/chio-labs/sqlbuild/issues/837)) ([87ac2ef](https://github.com/chio-labs/sqlbuild/commit/87ac2ef1181287c683abdfc74c47f9a75dcaeabd))
+
 ## [0.119.1](https://github.com/chio-labs/sqlbuild/compare/v0.119.0...v0.119.1) (2026-09-25)
 
 
