@@ -35,6 +35,23 @@ pub(crate) fn load(project_dir: &Path) -> Result<RulesConfig, String> {
         }
     };
     validate(&config)?;
+    if !config.allow_model_overrides {
+        if let Some(entry) = config.rule_ignores.first() {
+            return Err(format!(
+                "rules-model-override: rules.rule_ignores {:?} is forbidden by allow_model_overrides = false",
+                entry.rules
+            ));
+        }
+        if let Some(entry) = config.rule_exceptions.first() {
+            return Err(format!(
+                "rules-model-override: rules.rule_exceptions {} at {} is forbidden by allow_model_overrides = false",
+                entry.rule, entry.path
+            ));
+        }
+        if !config.select_star_allow.is_empty() {
+            return Err("rules-model-override: rules.select_star_allow is forbidden by allow_model_overrides = false".to_owned());
+        }
+    }
     if config.max_ranking_order_by == 0 {
         return Err("rules.max_ranking_order_by must be a positive integer".to_owned());
     }
@@ -46,6 +63,7 @@ fn validate_raw(value: &toml::Value) -> Result<(), String> {
         .as_table()
         .ok_or_else(|| "rules must be a table".to_owned())?;
     let known = [
+        "allow_model_overrides",
         "max_ranking_order_by",
         "select",
         "ignore",

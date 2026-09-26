@@ -137,6 +137,7 @@ impl Default for LayoutConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct RulesConfig {
+    pub allow_model_overrides: bool,
     pub max_ranking_order_by: usize,
     pub select: Vec<String>,
     pub ignore: Vec<String>,
@@ -159,6 +160,7 @@ impl Default for RulesConfig {
     fn default() -> Self {
         Self {
             max_ranking_order_by: 4,
+            allow_model_overrides: true,
             select: vec![],
             ignore: vec![],
             thresholds: BTreeMap::new(),

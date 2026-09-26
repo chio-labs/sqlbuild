@@ -17,6 +17,15 @@ class RankingLimitTestCase:
 
 
 @dataclass(frozen=True)
+class OverridePolicyTestCase:
+    description: str
+    configuration: str
+    sql: str
+    expected_exit_code: int
+    expected_message: str
+
+
+@dataclass(frozen=True)
 class SemanticFixTestCase:
     description: str
     sql: str

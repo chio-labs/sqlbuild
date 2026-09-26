@@ -282,6 +282,7 @@ class LayoutConfig:
 
 @dataclass(frozen=True)
 class RulesConfig:
+    allow_model_overrides: bool = True
     max_ranking_order_by: int = 4
     select: tuple[str, ...] = ()
     ignore: tuple[str, ...] = ()

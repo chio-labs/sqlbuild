@@ -41,6 +41,7 @@ from sqlbuild.rule_engine._helpers.engine.native import (
     native_catalogue,
 )
 from sqlbuild.rule_engine._helpers.run.findings import group_unevaluated_findings
+from sqlbuild.rule_engine._helpers.run.overrides import override_findings
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.models import (
@@ -78,6 +79,11 @@ def evaluate_rules(
     expansion_reuse: SqlExpansionReuse | None = None,
 ) -> RulesRunResult:
     """Evaluate independent rule phases concurrently, then finalize their combined findings."""
+    forbidden: tuple[Finding, ...] = override_findings(
+        config=config, discovered_inputs=discovered_inputs, project_dir=project_dir
+    )
+    if forbidden:
+        return RulesRunResult(findings=forbidden, evaluated_models=0, built_in_ms=0, custom_ms=0)
     effective_config: RulesConfig = resolve_rule_ignore_selectors(
         config=config, project=graph.project
     )

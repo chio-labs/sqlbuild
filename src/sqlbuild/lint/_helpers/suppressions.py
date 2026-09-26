@@ -23,6 +23,31 @@ class _Suppression:
     target_line: int
 
 
+def find_suppression_overrides(*, contents_by_path: dict[Path, str]) -> tuple[LintViolation, ...]:
+    """Locate directives using the same parser that owns inline suppression behavior."""
+    violations: list[LintViolation] = []
+    for path, contents in contents_by_path.items():
+        suppressions, invalid = _parse_suppressions(file_path=path, contents=contents)
+        for directive in suppressions:
+            violations.append(
+                LintViolation(
+                    file_path=path,
+                    line=directive.directive_line,
+                    column=1,
+                    code="rules-model-override",
+                    message=(
+                        f"Inline suppression '{directive.code}' is forbidden by "
+                        "allow_model_overrides = false"
+                    ),
+                    severity="fault",
+                    engine=LINT_ENGINE_NATIVE,
+                    remediation="Remove the inline suppression and comply with the project Rule.",
+                )
+            )
+        violations.extend(invalid)
+    return tuple(violations)
+
+
 def apply_suppressions(
     *, violations: list[LintViolation], contents_by_path: dict[Path, str]
 ) -> list[LintViolation]:

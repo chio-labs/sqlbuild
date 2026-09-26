@@ -12,6 +12,13 @@ class RankingSettingsCase:
 
 
 @dataclass(frozen=True)
+class OverrideSettingsCase:
+    description: str
+    expected_exit: int = 1
+    expected_message: str = "rules-model-override"
+
+
+@dataclass(frozen=True)
 class GroupedRulesCase:
     description: str
     arguments: tuple[str, ...]

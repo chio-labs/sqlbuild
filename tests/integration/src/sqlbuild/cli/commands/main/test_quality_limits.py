@@ -5,9 +5,13 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
-from tests.integration.src.sqlbuild.cli.commands.main._test_types import RankingLimitTestCase
+from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
+    OverridePolicyTestCase,
+    RankingLimitTestCase,
+)
 
 
 @pytest.mark.parametrize(
@@ -50,6 +54,70 @@ def test_given_ranking_limit_when_compiling_then_enforces_expression_count(
     assert any(item["code"] == "SQBRSQL043" for item in payload["diagnostics"]) == bool(
         test_case.expected_exit_code
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        OverridePolicyTestCase(
+            "default permits model opt-out",
+            "",
+            "MODEL (sql_analysis false); SELECT 1 AS order_id",
+            0,
+            "",
+        ),
+        OverridePolicyTestCase(
+            "closed policy rejects model opt-out without selected Rules",
+            "allow_model_overrides = false",
+            "MODEL (sql_analysis false); SELECT 1 AS order_id",
+            1,
+            "MODEL (sql_analysis false)",
+        ),
+        OverridePolicyTestCase(
+            "closed policy rejects inline directive",
+            "allow_model_overrides = false",
+            "MODEL ();\n-- sqb: ignore SQBRSQL001 because example\nSELECT 1 AS order_id",
+            1,
+            "Inline suppression 'SQBRSQL001'",
+        ),
+        OverridePolicyTestCase(
+            "closed policy accepts compliant model",
+            "allow_model_overrides = false",
+            "MODEL (); SELECT 1 AS order_id",
+            0,
+            "",
+        ),
+        OverridePolicyTestCase(
+            "closed policy rejects path ignore",
+            'allow_model_overrides = false\n[[rules.rule_ignores]]\nrules = ["SQBRSQL001"]\npaths = ["models/**"]\nreason = "example"',
+            "MODEL (); SELECT 1 AS order_id",
+            1,
+            "rules.rule_ignores",
+        ),
+        OverridePolicyTestCase(
+            "closed policy rejects exact exemption",
+            'allow_model_overrides = false\n[[rules.rule_exceptions]]\nrule = "SQBRSQL001"\npath = "models/orders.sql"\nreason = "example"',
+            "MODEL (); SELECT 1 AS order_id",
+            1,
+            "rules.rule_exceptions",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_project_override_policy_when_compiling_then_local_opt_outs_are_enforced(
+    test_case: OverridePolicyTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n[rules]\n' + test_case.configuration + "\n"
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(test_case.sql)
+    assert (
+        main(["--project-dir", str(tmp_path), "compile", "--json"]) == test_case.expected_exit_code
+    )
+    captured: CaptureResult[str] = capsys.readouterr()
+    assert test_case.expected_message in captured.out + captured.err
 
 
 if __name__ == "__main__":
