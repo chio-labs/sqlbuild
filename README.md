@@ -18,6 +18,10 @@ your SQL, so change is safe. It is a free, open-source framework for SQL and Pyt
 and it keeps its state in append-only tables in your own warehouse: no external state database, no
 manifest files and no paid tier.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/chio-labs/sqlbuild/main/.github/demos/rename.gif" alt="Moving and renaming an incremental model: sqb plan migrates the existing table instead of rebuilding it" width="100%">
+</p>
+
 ## Quick start
 
 ```bash
@@ -66,6 +70,10 @@ The playground runs on local DuckDB, with no warehouse credentials.
   [declaration scopes](https://sqlbuild.com/docs/concepts/declaration-scopes/).
 - **Tidy up safely.** The [janitor](https://sqlbuild.com/docs/cli/janitor/) archives stale tables
   before anything is deleted.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/chio-labs/sqlbuild/main/.github/demos/scope.gif" alt="sqb scope previews a move: the enum and macro the model uses would be lost, so the move is flagged before anything breaks" width="100%">
+</p>
 
 Ingestion with Python loaders, and Python tasks, assets and checks, run in the same graph as your SQL
 models. See the [docs](https://sqlbuild.com/docs/) for everything else.
