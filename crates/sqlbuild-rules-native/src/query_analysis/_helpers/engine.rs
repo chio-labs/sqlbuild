@@ -458,14 +458,12 @@ fn analyze_compact_query_work(
         .then(|| work.query.sql.clone());
     let dialect = work.query.dialect.parse::<DialectType>();
     let mut result = analyze_compact_query_work_inner(work, catalog);
-    if let (Some(sql), Ok(dialect)) = (diagnostic_sql, dialect) {
-        if let Some(validation) = result.validation.take() {
-            result.validation = Some(validation.and_then(|value| {
-                crate::semantic_validation::main::map_diagnostics::map_diagnostics(
-                    &sql, dialect, value,
-                )
-            }));
-        }
+    if let (Some(sql), Ok(dialect)) = (diagnostic_sql, dialect)
+        && let Some(validation) = result.validation.take()
+    {
+        result.validation = Some(validation.and_then(|value| {
+            crate::semantic_validation::main::map_diagnostics::map_diagnostics(&sql, dialect, value)
+        }));
     }
     result
 }
