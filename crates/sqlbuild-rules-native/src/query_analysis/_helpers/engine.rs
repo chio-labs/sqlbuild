@@ -481,7 +481,7 @@ fn analyze_compact_query_work_inner(work: CompactQueryWork) -> CompiledQueryWork
 
 /// Fold fully bound lexical query graphs; unsupported shapes retain the existing resolver.
 fn try_borrowed_query(
-    work: CompactQueryWork,
+    mut work: CompactQueryWork,
 ) -> Result<CompiledQueryWorkResult, Box<CompactQueryWork>> {
     if work.query.schema.is_none()
         || (work.query.binding_schema.is_none()
@@ -525,8 +525,16 @@ fn try_borrowed_query(
         return Err(Box::new(work));
     }
     if matches!(&expression, polyglot_sql::Expression::Select(select)
-        if select.with.is_none() && select.expressions.iter().any(|projection| super::borrowed_facts::projection_star(projection).is_some()))
+        if select.with.is_none()
+            && select.expressions.iter().any(|projection| super::borrowed_facts::projection_star(projection).is_some()))
     {
+        if matches!(&expression, polyglot_sql::Expression::Select(select)
+            if select.from.as_ref().is_some_and(|from| matches!(from.expressions.as_slice(), [polyglot_sql::Expression::Subquery(_)])))
+        {
+            // Complete derived stars with the same resolver previously used by
+            // Python enrichment. Project-only resolution loses expression lineage.
+            work.project_projections = false;
+        }
         return Err(Box::new(work));
     }
     if !matches!(
