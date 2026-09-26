@@ -34,6 +34,20 @@ fn normalize_dialect_sql(py: Python<'_>, sql: &str, dialect: &str) -> PyResult<S
 }
 
 #[pyfunction]
+fn normalize_analysis_sqls(
+    py: Python<'_>,
+    dialect: &str,
+    requests: Vec<(String, std::collections::HashMap<String, String>)>,
+) -> PyResult<Vec<String>> {
+    py.detach(|| {
+        crate::semantic_validation::main::normalize_batch::normalize_analysis_sqls(
+            dialect, requests,
+        )
+    })
+    .map_err(value_error)
+}
+
+#[pyfunction]
 fn binding_diagnostics(
     py: Python<'_>,
     sql: &str,
@@ -394,6 +408,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<crate::semantic_validation::models::ProjectCatalog>()?;
     module.add_class::<crate::semantic_validation::models::BindingPositions>()?;
     module.add_function(wrap_pyfunction!(normalize_analysis_sql, module)?)?;
+    module.add_function(wrap_pyfunction!(normalize_analysis_sqls, module)?)?;
     module.add_function(wrap_pyfunction!(normalize_dialect_sql, module)?)?;
     module.add_function(wrap_pyfunction!(binding_diagnostics, module)?)?;
     module.add_function(wrap_pyfunction!(lint_backtick_identifiers, module)?)?;

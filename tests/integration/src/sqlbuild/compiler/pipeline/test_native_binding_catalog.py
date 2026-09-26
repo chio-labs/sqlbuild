@@ -9,6 +9,7 @@ import pytest
 from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProfile
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild.compiler.compile._helpers.assembly import project as assembly
 from sqlbuild.compiler.compile.main._source_bindings import get_source_binding_diagnostics
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject, CompilerDiagnostic
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -134,6 +135,52 @@ def test_given_catalog_when_rebinding_physical_shapes_then_does_not_reuse_stale_
     assert tuple(item.code for item in missing) == test_case.expected_codes
     assert present == ()
     assert repeated == missing
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativeCatalogCase(
+            "unquoted type error with quoted-case policy", "SELECT SUM(TRUE) AS total", ("B213",)
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unquoted_sql_when_case_policy_enabled_then_fused_validation_is_reused(
+    test_case: NativeCatalogCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "snowflake"\n[rules]\nselect = []\n'
+        "[connection]\nsession_parameters = { QUOTED_IDENTIFIERS_IGNORE_CASE = true }\n"
+    )
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models/orders.sql").write_text(
+        "MODEL (database warehouse, schema analytics);\n" + test_case.sql
+    )
+
+    def repeated_binding(**kwargs: Any) -> None:
+        raise AssertionError("already validated SQL was normalized and bound again")
+
+    monkeypatch.setattr(assembly, "get_complete_schema_binding_request", repeated_binding)
+    assert (
+        main(
+            [
+                "--project-dir",
+                str(tmp_path),
+                "compile",
+                "--lineage-mode",
+                "rich",
+                "--no-cache",
+                "--json",
+            ]
+        )
+        == 1
+    )
+    payload: dict[str, Any] = json.loads(capsys.readouterr().out)
+    assert tuple(item["code"] for item in payload["diagnostics"]) == test_case.expected_codes
 
 
 if __name__ == "__main__":

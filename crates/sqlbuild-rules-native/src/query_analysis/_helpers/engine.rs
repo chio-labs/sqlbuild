@@ -331,7 +331,7 @@ pub(crate) fn analyze_project_compact_with_catalog(
             let catalog = catalog.ok_or("binding references require a native project catalog")?;
             query.binding_schema =
                 Some(catalog.reference_schema(references, query.binding_override)?);
-            if !catalog.quoted_ignore_case {
+            if !catalog.quoted_ignore_case || !query.sql.contains('"') {
                 query.binding_options = Some(BindingOptions {
                     check_types: catalog.options.check_types,
                     semantic: catalog.options.semantic,
