@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
+    FactoryModuleNodePlanTestCase,
     PythonProjectLayoutCompileTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
@@ -311,7 +312,7 @@ def test_given_python_root_project_when_compiling_and_building_then_nodes_run_wi
 @pytest.mark.parametrize(
     "test_case",
     (
-        PythonProjectLayoutCompileTestCase(
+        FactoryModuleNodePlanTestCase(
             description="factory returning its module-level task registers one node",
             repo_files={
                 "sqlbuild_project.toml": 'name = "factory_layout"\nadapter = "duckdb"\n',
@@ -326,9 +327,37 @@ def test_given_python_root_project_when_compiling_and_building_then_nodes_run_wi
                     "    return orders\n"
                 ),
             },
-            expected_exit_code=0,
-            expected_stderr_fragments=(),
+            expected_python_node_names=("orders",),
         ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_factory_returning_module_node_when_planning_then_node_registers_once(
+    test_case: FactoryModuleNodePlanTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="factory_layout",
+        repo_files=test_case.repo_files,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("plan", "--json"),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload: dict[str, list[dict[str, object]]] = json.loads(result.stdout)
+    assert (
+        tuple(entry["name"] for entry in payload["python_nodes"])
+        == test_case.expected_python_node_names
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
         PythonProjectLayoutCompileTestCase(
             description="factory returning a distinct same-name task still conflicts",
             repo_files={
@@ -353,7 +382,7 @@ def test_given_python_root_project_when_compiling_and_building_then_nodes_run_wi
     ),
     ids=lambda case: case.description,
 )
-def test_given_factory_returning_module_node_when_planning_then_node_registers_once(
+def test_given_factory_returning_distinct_same_name_node_when_planning_then_conflict_is_reported(
     test_case: PythonProjectLayoutCompileTestCase,
     tmp_path: Path,
 ) -> None:
@@ -370,9 +399,6 @@ def test_given_factory_returning_module_node_when_planning_then_node_registers_o
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
     assert all(fragment in result.stderr for fragment in test_case.expected_stderr_fragments)
-    if result.returncode == 0:
-        payload: dict[str, list[dict[str, object]]] = json.loads(result.stdout)
-        assert [entry["name"] for entry in payload["python_nodes"]] == ["orders"]
 
 
 if __name__ == "__main__":

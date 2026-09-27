@@ -29,4 +29,5 @@ class WrapperPlaygroundSkillsTestCase:
     description: str
     template: str
     project_subdir: str
-    skill_file: str
+    expected_skill_file: str
+    expected_stale_message: str = "SQLBuild skill files are out of date"

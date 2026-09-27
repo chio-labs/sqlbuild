@@ -1406,7 +1406,13 @@ def _import_python_root_module(*, file_path: Path, project_dir: Path) -> ModuleT
 def _is_python_root_module_function(*, function: Callable[..., object], node_root: Path) -> bool:
     """Return whether direct discovery registers this callable from its own python/ module."""
 
-    if not any(kind != "factory" for kind in _python_node_definition_names(function)):
+    node_definitions: tuple[object | None, ...] = (
+        read_loader_definition(function),
+        read_task_definition(function),
+        read_asset_definition(function),
+        read_check_definition(function),
+    )
+    if all(definition is None for definition in node_definitions):
         return False
     module: ModuleType | None = sys.modules.get(getattr(function, "__module__", ""))
     if module is None or vars(module).get(getattr(function, "__name__", "")) is not function:

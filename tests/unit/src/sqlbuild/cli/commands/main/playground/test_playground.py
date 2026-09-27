@@ -491,13 +491,13 @@ def test_given_color_terminal_when_running_playground_command_then_it_styles_key
             description="dagster playground installs skills maintained from the nested project",
             template="dagster",
             project_subdir="waffle_shop",
-            skill_file=".agents/skills/sqlbuild/SKILL.md",
+            expected_skill_file=".agents/skills/sqlbuild/SKILL.md",
         ),
         WrapperPlaygroundSkillsTestCase(
             description="rivers playground installs skills maintained from the nested project",
             template="rivers",
             project_subdir="waffle_shop",
-            skill_file=".claude/skills/sqlbuild/SKILL.md",
+            expected_skill_file=".claude/skills/sqlbuild/SKILL.md",
         ),
     ],
     ids=lambda case: case.description,
@@ -515,11 +515,11 @@ def test_given_wrapper_playground_when_maintaining_skills_then_nested_project_se
     project_dir: Path = wrapper_dir / test_case.project_subdir
 
     fresh: SkillMaintenanceResult = maintain_sqlbuild_skills(project_dir=project_dir)
-    installed_skill: Path = project_dir / test_case.skill_file
+    installed_skill: Path = project_dir / test_case.expected_skill_file
     installed_skill.write_text("edited\n", encoding="utf-8")
     stale: SkillMaintenanceResult = maintain_sqlbuild_skills(project_dir=project_dir)
 
     assert exit_code == 0
-    assert not (wrapper_dir / test_case.skill_file).exists()
+    assert not (wrapper_dir / test_case.expected_skill_file).exists()
     assert fresh.message == ""
-    assert "SQLBuild skill files are out of date" in stale.message
+    assert test_case.expected_stale_message in stale.message

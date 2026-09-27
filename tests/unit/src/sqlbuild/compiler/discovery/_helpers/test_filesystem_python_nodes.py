@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -26,6 +27,32 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     PythonRootHelperIdentityTestCase,
     PythonRootProjectIsolationTestCase,
 )
+
+_HELPER_PACKAGE_FILES: dict[str, str] = {
+    "python/helpers/__init__.py": "",
+    "python/helpers/values.py": """
+from pathlib import Path
+
+Path(__file__).resolve().parents[2].joinpath("init_count.txt").open("a").write("values\\n")
+STATUS = "shipped"
+""",
+    "python/helpers/clean.py": """
+from .values import STATUS
+
+
+def normalize_status(value):
+    return f"{value.strip().lower()}:{STATUS}"
+""",
+    "python/orders.py": """
+import python.helpers.clean
+from sqlbuild.tasks import task
+
+
+@task
+def orders(ctx):
+    return python.helpers.clean.normalize_status(" Shipped ")
+""",
+}
 
 
 @pytest.mark.parametrize(
@@ -357,42 +384,6 @@ def test_given_python_root_when_discovering_python_nodes_then_decorators_define_
     assert discovered == test_case.expected_nodes
 
 
-_HELPER_PACKAGE_FILES: dict[str, str] = {
-    "python/helpers/__init__.py": "",
-    "python/helpers/values.py": """
-from pathlib import Path
-
-Path(__file__).resolve().parents[2].joinpath("init_count.txt").open("a").write("values\\n")
-STATUS = "shipped"
-""",
-    "python/helpers/clean.py": """
-from .values import STATUS
-
-
-def normalize_status(value):
-    return f"{value.strip().lower()}:{STATUS}"
-""",
-    "python/orders.py": """
-import python.helpers.clean
-from sqlbuild.tasks import task
-
-
-@task
-def orders(ctx):
-    return python.helpers.clean.normalize_status(" Shipped ")
-""",
-}
-
-
-def _write_files(*, root: Path, files: dict[str, str]) -> None:
-    relative_path: str
-    contents: str
-    for relative_path, contents in files.items():
-        file_path: Path = root / relative_path
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_path.write_text(contents, encoding="utf-8")
-
-
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -438,8 +429,9 @@ def second_task(ctx):
 def test_given_python_root_helpers_when_discovering_then_modules_import_under_package_names(
     test_case: DiscoverPythonRootImportTestCase,
     tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
-    _write_files(root=tmp_path, files=test_case.files)
+    write_repo_files(tmp_path, test_case.files)
 
     result: DiscoveredPythonNodeFunctions = discover_python_node_functions(project_dir=tmp_path)
 
@@ -487,11 +479,12 @@ def orders(ctx):
 def test_given_two_projects_when_discovering_sequentially_then_python_modules_are_isolated(
     test_case: PythonRootProjectIsolationTestCase,
     tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     first_dir: Path = tmp_path / "first"
     second_dir: Path = tmp_path / "second"
-    _write_files(root=first_dir, files=test_case.first_files)
-    _write_files(root=second_dir, files=test_case.second_files)
+    write_repo_files(first_dir, test_case.first_files)
+    write_repo_files(second_dir, test_case.second_files)
 
     first: DiscoveredPythonNodeFunctions = discover_python_node_functions(project_dir=first_dir)
     second: DiscoveredPythonNodeFunctions = discover_python_node_functions(project_dir=second_dir)
@@ -517,8 +510,9 @@ def test_given_two_projects_when_discovering_sequentially_then_python_modules_ar
 def test_given_python_root_helper_edit_when_rediscovering_then_node_identity_changes(
     test_case: PythonRootHelperIdentityTestCase,
     tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
-    _write_files(root=tmp_path, files=test_case.files)
+    write_repo_files(tmp_path, test_case.files)
     before_task: DiscoveredTaskFunction = discover_python_node_functions(
         project_dir=tmp_path
     ).tasks[0]
