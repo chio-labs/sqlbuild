@@ -353,3 +353,12 @@ class ReshapedStarLineageIntegrationTestCase:
     description: str
     query_sql: str
     expected_sources: tuple[frozenset[tuple[str, str]], ...]
+
+
+@dataclass(frozen=True)
+class SharedBindingQueryCase:
+    description: str
+    orders_summary_sql: str
+    customers_summary_sql: str
+    expected_shared_queries: int
+    expected_codes: tuple[str, ...] = ()

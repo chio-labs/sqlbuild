@@ -298,6 +298,20 @@ impl ProjectCatalog {
         }
         Ok(schema)
     }
+    /// Rename `reference_schema` tables to the relation stubs of canonical SQL.
+    pub(crate) fn alias_reference_schema(
+        &self,
+        schema: &mut ValidationSchema,
+        references: &[(String, bool)],
+        aliases: &HashMap<String, String>,
+    ) {
+        for ((name, _), table) in references.iter().zip(&mut schema.tables) {
+            if let Some(alias) = aliases.get(name) {
+                table.name = self.schema_name(alias.clone());
+            }
+        }
+    }
+
     fn table(&self, name: &str, columns: Columns) -> SchemaTable {
         let columns: Vec<_> = columns
             .0

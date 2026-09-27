@@ -1299,6 +1299,40 @@ class CompactBatchPreparation:
     templates: tuple[dict[str, object], ...]
     projections: tuple[dict[str, object], ...]
     binding_catalog: Any | None = field(default=None, repr=False, compare=False)
+    shared_query_indexes: frozenset[int] = frozenset()
+
+
+@dataclass(frozen=True)
+class CompactMemberReanalysis:
+    """Original per-model inputs of one compact batch, for exact recomputation."""
+
+    query_sqls: tuple[str, ...]
+    references: tuple[tuple[CompileSqlReference, ...], ...]
+    placeholders: tuple[dict[str, str] | None, ...]
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]]
+    column_types_by_table: dict[str, dict[str, str]]
+    inference_profile: Any
+    recover_cte_facts: tuple[bool, ...]
+    rich_type_inference: bool
+    binding_schemas: tuple[dict[str, dict[str, str]] | None, ...] | None
+
+
+@dataclass(frozen=True)
+class SharedBindingQuery:
+    """Relation-stubbed binding query shared by models with identical input shapes."""
+
+    sql: str
+    stubs: dict[str, str]
+    key: tuple[object, ...]
+
+
+@dataclass(frozen=True)
+class PreparedBindingQuery:
+    """Native binding references for one model and its optional shared form."""
+
+    references: list[tuple[str, bool]]
+    overrides: dict[str, Mapping[str, str]]
+    shared: SharedBindingQuery | None = None
 
 
 @dataclass(frozen=True)

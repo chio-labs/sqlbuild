@@ -40,6 +40,9 @@ struct AnalysisRequest {
     binding_references: Option<Vec<(String, bool)>>,
     #[serde(default)]
     binding_override: Option<usize>,
+    /// Relation stubs in `sql` that rename the catalog relations of the binding schema.
+    #[serde(default)]
+    binding_aliases: Option<HashMap<String, String>>,
     #[serde(default)]
     analysis_references: Option<Vec<(String, String)>>,
     #[serde(default)]
@@ -329,8 +332,11 @@ pub(crate) fn analyze_project_compact_with_catalog(
         }
         if let Some(references) = &query.binding_references {
             let catalog = catalog.ok_or("binding references require a native project catalog")?;
-            query.binding_schema =
-                Some(catalog.reference_schema(references, query.binding_override)?);
+            let mut schema = catalog.reference_schema(references, query.binding_override)?;
+            if let Some(aliases) = &query.binding_aliases {
+                catalog.alias_reference_schema(&mut schema, references, aliases);
+            }
+            query.binding_schema = Some(schema);
             if !catalog.quoted_ignore_case || !query.sql.contains('"') {
                 query.binding_options = Some(BindingOptions {
                     check_types: catalog.options.check_types,
@@ -608,7 +614,6 @@ fn try_borrowed_query(
         })
         .collect();
     if unannotated_outputs.is_none() {
-        // Validation annotates its own bound copy of the authored statement.
         if needs_validation {
             validation_expression = Some(expression.clone());
         }
@@ -725,8 +730,6 @@ fn try_borrowed_query(
             if !needs_validation {
                 return Ok(ValidationResult::with_errors(Vec::new()));
             }
-            // Only the extra clause checks read the statement after validation;
-            // otherwise the unannotated statement moves into validation.
             let retain_expression =
                 crate::semantic_validation::main::may_have_extra_clause_checks(&work.query.sql);
             let validation_expression = validation_expression.take().unwrap_or_else(|| {
