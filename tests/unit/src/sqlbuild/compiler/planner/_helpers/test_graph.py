@@ -246,6 +246,13 @@ def test_given_injected_edge_cycle_when_ordering_topologically_then_error_names_
                 "audit 'stg_payments_audit' on 'stg_payments' reads 'raw_orders'",
             ),
         ),
+        ExecutionEdgeOriginsTestCase(
+            description="records no audit origin for a read that is already a lineage edge",
+            model_deps={"stg_payments": ("raw_payments",)},
+            source_names=("raw_payments",),
+            audit_model_source_deps={"stg_payments": ("raw_payments",)},
+            expected_origin_fragments=(),
+        ),
     ],
     ids=lambda case: case.description,
 )

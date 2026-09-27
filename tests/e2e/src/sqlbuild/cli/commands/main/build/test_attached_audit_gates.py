@@ -12,6 +12,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     AttachedAuditGateCycleE2ETestCase,
     AttachedAuditGateNoAuditsE2ETestCase,
     AttachedAuditGatePartialBuildE2ETestCase,
+    AuditReadPlanE2ETestCase,
     NestedSourceGateE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
@@ -19,6 +20,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     build_asset_names,
     build_check_outcomes,
     prepare_attached_audit_gate_project,
+    prepare_audit_read_plan_project,
     prepare_nested_source_gate_project,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
@@ -315,3 +317,40 @@ def test_given_source_audit_triggered_by_audit_read_when_building_concurrently_t
         table_exists(db_path=project_dir / ATTACHED_AUDIT_GATE_DATABASE, table_name="orders")
         is test_case.expected_orders_built
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AuditReadPlanE2ETestCase(
+            description="planning a model whose audit reads an unbuilt seed names the audit",
+            select="stg_orders",
+            expected_error_fragment=(
+                "error[S301]: cannot build selected scope: audit 'relationships' on "
+                "'stg_orders' reads 'waffle_types', which is not selected and does not exist in "
+                "the warehouse; select it or build it first"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_audit_read_missing_from_warehouse_when_planning_then_s301_names_the_audit(
+    test_case: AuditReadPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_audit_read_plan_project(tmp_path=tmp_path)
+
+    missing: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "-s", test_case.select), project_dir=project_dir
+    )
+    seeded: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "seed"), project_dir=project_dir
+    )
+    planned: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "-s", test_case.select), project_dir=project_dir
+    )
+
+    assert missing.returncode != 0, missing.stdout + missing.stderr
+    assert test_case.expected_error_fragment in missing.stdout + missing.stderr
+    assert seeded.returncode == 0, seeded.stdout + seeded.stderr
+    assert planned.returncode == 0, planned.stdout + planned.stderr

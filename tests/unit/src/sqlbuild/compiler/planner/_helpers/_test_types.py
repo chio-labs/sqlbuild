@@ -913,3 +913,11 @@ class PlannerStaleWarningScopeTestCase:
     selected_model_name: str
     expected_inspected_names: frozenset[str]
     expected_execution_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MissingUpstreamMessageTestCase:
+    description: str
+    missing: tuple[MissingUpstream, ...]
+    edge_origins: dict[tuple[CompiledObjectKey, CompiledObjectKey], str]
+    expected_message: str

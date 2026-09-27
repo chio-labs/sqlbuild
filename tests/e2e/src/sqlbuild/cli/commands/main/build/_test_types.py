@@ -1002,3 +1002,10 @@ class AuditExecutionErrorTerminalE2ETestCase:
     description: str
     audit_kind: str
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AuditReadPlanE2ETestCase:
+    description: str
+    select: str
+    expected_error_fragment: str

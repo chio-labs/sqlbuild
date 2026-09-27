@@ -657,3 +657,28 @@ def build_asset_statuses(stdout: str) -> dict[str, str]:
     """Map asset names to their status in build JSON output."""
 
     return {asset["name"]: asset["status"] for asset in json.loads(stdout)["assets"]}
+
+
+def prepare_audit_read_plan_project(*, tmp_path: Path) -> Path:
+    """Write a project whose stg_orders column audit reads a seed its SQL does not read."""
+
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="plan_shop",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "plan_shop"\nadapter = "duckdb"\n\n'
+                '[connection]\ndatabase = "plan_shop.duckdb"\n'
+            ),
+            "seeds/waffle_types.yml": (
+                "seeds:\n  - name: waffle_types\n    columns:\n"
+                "      - name: waffle_type_id\n        type: INTEGER\n"
+            ),
+            "seeds/waffle_types.csv": "waffle_type_id\n1\n",
+            "models/stg_orders.sql": (
+                "MODEL (\n  materialized table,\n  columns (\n    waffle_type_id (\n"
+                '      audits [relationships (to __seed("waffle_types"), field waffle_type_id)],\n'
+                "    ),\n  ),\n);\n\nSELECT 1 AS waffle_type_id\n"
+            ),
+        },
+    )
