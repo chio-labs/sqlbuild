@@ -46,7 +46,9 @@ sqb --project-dir <path> compile [flags]
 3. **SQL validation** - validates SQL syntax (when SQL analysis is enabled)
 4. **Column lineage** - analyzes column-level dependencies across models (fast mode by default)
 5. **Contract validation** - checks declared column contracts against inferred query output
-6. **Rules** - evaluates selected native built-ins, then selected custom Python Rules
+6. **Rules** - evaluates selected native built-ins, then selected custom Python Rules. Rules that
+   need inferred type proofs, such as `SQBRCONTRACT105`, are skipped when SQL analysis is disabled,
+   and compile prints one note naming them
 7. **Artifact write** - writes compiled SQL to `target/compiled/` when Rules pass
 
 ## Focused compilation
