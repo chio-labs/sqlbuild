@@ -33,9 +33,7 @@ class BindingCatalog:
         self.dialect: str = dialect
         self.quoted_ignore_case: bool = quoted_ignore_case
         self.analysis_shapes: dict[str, tuple[Mapping[str, str], Mapping[str, str]]] = {}
-        self.expression_shapes: dict[
-            tuple[str, str | None, bool, tuple[tuple[str, str], ...]], dict[str, str] | None
-        ] = {}
+        self.expression_shapes: dict[str, dict[str, str] | None] = {}
         self.native: NativeProjectCatalog = cast(NativeCatalogModule, _native).ProjectCatalog(
             {
                 "dialect": dialect,

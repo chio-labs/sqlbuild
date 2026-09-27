@@ -8,7 +8,7 @@ from dataclasses import dataclass, replace
 from functools import partial
 from graphlib import CycleError, TopologicalSorter
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.contract.types import BuiltinAdapter
@@ -60,7 +60,7 @@ from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     binding_required_names,
     binding_schema_for_model,
     build_complete_binding_schemas,
-    get_expression_source_shape,
+    get_expression_source_shapes,
     published_model_shape,
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
@@ -260,28 +260,35 @@ def assemble_compiled_project(
     )
     profile = replace(profile, binding_catalog=binding_catalog)
     if sql_analysis_enabled:
-        for source_input in inputs.source_inputs:
-            expression: str | None = source_input.source_entry.expression
-            if expression:
-                shape: dict[str, str] | None = get_expression_source_shape(
-                    expression=expression, profile=profile
+        expression_sources: tuple[CompileSourceInput, ...] = tuple(
+            source_input
+            for source_input in inputs.source_inputs
+            if source_input.source_entry.expression
+        )
+        expression_shapes: tuple[dict[str, str] | None, ...] = get_expression_source_shapes(
+            expressions=tuple(
+                cast(str, source_input.source_entry.expression)
+                for source_input in expression_sources
+            ),
+            profile=profile,
+        )
+        for source_input, shape in zip(expression_sources, expression_shapes, strict=True):
+            if shape is not None:
+                declared_types: dict[str, str] = column_types_by_table.get(
+                    source_input.source_entry.name, {}
                 )
-                if shape is not None:
-                    declared_types: dict[str, str] = column_types_by_table.get(
-                        source_input.source_entry.name, {}
+                declared_shape: dict[str, str] = {
+                    name: declared_types.get(name, column_type)
+                    for name, column_type in shape.items()
+                }
+                complete_binding_schemas[source_input.source_entry.name] = declared_shape
+                column_types_by_table[source_input.source_entry.name] = declared_shape
+                column_nullability_by_table[source_input.source_entry.name] = {
+                    name: column_nullability_by_table.get(source_input.source_entry.name, {}).get(
+                        name, InferredNullability.UNKNOWN
                     )
-                    shape = {
-                        name: declared_types.get(name, column_type)
-                        for name, column_type in shape.items()
-                    }
-                    complete_binding_schemas[source_input.source_entry.name] = shape
-                    column_types_by_table[source_input.source_entry.name] = shape
-                    column_nullability_by_table[source_input.source_entry.name] = {
-                        name: column_nullability_by_table.get(
-                            source_input.source_entry.name, {}
-                        ).get(name, InferredNullability.UNKNOWN)
-                        for name in shape
-                    }
+                    for name in declared_shape
+                }
     binding_catalog.native.update_relations(complete_binding_schemas)
     binding_catalog.schemas.update(complete_binding_schemas)
     dynamic_contract_analysis_inputs: _DynamicContractAnalysisInputs = (

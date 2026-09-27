@@ -14,6 +14,14 @@ class ExpressionMemoCase:
 
 
 @dataclass(frozen=True)
+class ExpressionBatchCase:
+    description: str
+    orders_expression: str
+    customers_expression: str
+    expected_batches: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
 class ShapeCacheCase:
     description: str
     sql: str

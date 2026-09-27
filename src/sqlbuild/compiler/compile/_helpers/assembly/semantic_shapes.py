@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.analysis.columns import table_function_analysis_name
@@ -183,6 +183,7 @@ def semantic_shapes(
             shapes[table_function_analysis_name(function.name)] = {
                 column.name: column.type for column in function.return_columns
             }
+    expression_sources: list[tuple[str, str]] = []
     for source in project.sources:
         entry: SourceEntry = source.source_entry
         if entry.contract == ContractPolicy.ENFORCED:
@@ -190,11 +191,13 @@ def semantic_shapes(
                 column.name: column.type or "UNKNOWN" for column in entry.columns
             }
         elif entry.expression:
-            source_shape: dict[str, str] | None = get_expression_source_shape(
-                expression=entry.expression, profile=profile
-            )
-            if source_shape is not None:
-                shapes[source.name] = source_shape
+            expression_sources.append((source.name, entry.expression))
+    source_shapes: tuple[dict[str, str] | None, ...] = get_expression_source_shapes(
+        expressions=tuple(expression for _, expression in expression_sources), profile=profile
+    )
+    for (source_name, _), source_shape in zip(expression_sources, source_shapes, strict=True):
+        if source_shape is not None:
+            shapes[source_name] = source_shape
     pending: list[CompiledModel] = list(project.models)
     while pending:
         remaining: list[CompiledModel] = []
@@ -247,10 +250,10 @@ def semantic_shapes(
     return shapes
 
 
-def get_expression_source_shape(
-    *, expression: str, profile: ExpressionInferenceProfile | None
-) -> dict[str, str] | None:
-    """Infer an expression source's closed output without declaring partial columns complete."""
+def get_expression_source_shapes(
+    *, expressions: tuple[str, ...], profile: ExpressionInferenceProfile | None
+) -> tuple[dict[str, str] | None, ...]:
+    """Infer expression-source shapes in one native batch, reusing the compile catalog's answers."""
     effective_profile: ExpressionInferenceProfile = profile or ExpressionInferenceProfile()
     effective_profile = replace(
         effective_profile,
@@ -259,44 +262,50 @@ def get_expression_source_shape(
             effective_profile.sql_analysis_dialect,
         ),
     )
-    key: tuple[str, str | None, bool, tuple[tuple[str, str], ...]] = (
-        expression,
-        effective_profile.sql_analysis_dialect,
-        effective_profile.quoted_identifiers_ignore_case,
-        tuple(sorted(effective_profile.function_return_types.items())),
-    )
     catalog: Any = effective_profile.binding_catalog
-    if catalog is not None and key in catalog.expression_shapes:
-        cached: dict[str, str] | None = catalog.expression_shapes[key]
-        return None if cached is None else dict(cached)
-    prepared: tuple[NativeCompactAnalysis, ...] = analyze_queries_with_compact_polyglot_batch(
-        query_sqls=(expression,),
-        references=((),),
-        placeholders=(None,),
-        column_nullability_by_table={},
-        column_types_by_table={},
-        inference_profile=effective_profile,
-        recover_cte_facts=(True,),
-        rich_type_inference=True,
+    cache: dict[str, dict[str, str] | None] = (
+        catalog.expression_shapes if catalog is not None else {}
     )
+    pending: tuple[str, ...] = tuple(
+        dict.fromkeys(expression for expression in expressions if expression not in cache)
+    )
+    if pending:
+        prepared: tuple[NativeCompactAnalysis, ...] = analyze_queries_with_compact_polyglot_batch(
+            query_sqls=pending,
+            references=tuple(() for _ in pending),
+            placeholders=tuple(None for _ in pending),
+            column_nullability_by_table={},
+            column_types_by_table={},
+            inference_profile=effective_profile,
+            recover_cte_facts=tuple(True for _ in pending),
+            rich_type_inference=True,
+        )
+        for expression, precomputed in zip(pending, prepared, strict=True):
+            cache[expression] = _expression_source_shape(
+                expression=expression, profile=effective_profile, precomputed=precomputed
+            )
+    return tuple(
+        None if cache[expression] is None else dict(cast(dict[str, str], cache[expression]))
+        for expression in expressions
+    )
+
+
+def _expression_source_shape(
+    *, expression: str, profile: ExpressionInferenceProfile, precomputed: NativeCompactAnalysis
+) -> dict[str, str] | None:
     analysis: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
         query_sql=expression,
         references=(),
-        inference_profile=effective_profile,
+        inference_profile=profile,
         allow_compact_analysis=True,
         recover_cte_facts=True,
-        precomputed=prepared[0],
+        precomputed=precomputed,
     )
-    shape: dict[str, str] | None = (
-        None
-        if not analysis.columns or analysis.has_star
-        else inferred_binding_shape(
-            sql=expression,
-            profile=effective_profile,
-            columns={column.name: column.type or "UNKNOWN" for column in analysis.columns},
-            inputs={},
-        )
+    if not analysis.columns or analysis.has_star:
+        return None
+    return inferred_binding_shape(
+        sql=expression,
+        profile=profile,
+        columns={column.name: column.type or "UNKNOWN" for column in analysis.columns},
+        inputs={},
     )
-    if catalog is not None:
-        catalog.expression_shapes[key] = shape
-    return None if shape is None else dict(shape)
