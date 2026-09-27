@@ -75,7 +75,7 @@ def test_given_logically_attached_audit_when_planning_then_scheduling_and_identi
         source_map={},
         adapter=PlannerTestAdapter(),
         lineage_upstream_deps=upstream,
-        downstream_deps=downstream,
+        lineage_downstream_deps=downstream,
         model_materializations={test_case.attached_target_name: "incremental"},
     )
 
@@ -155,7 +155,7 @@ def test_given_audit_when_planning_then_resolves_sql(
         source_map=source_map,
         adapter=PlannerTestAdapter(),
         lineage_upstream_deps={},
-        downstream_deps={},
+        lineage_downstream_deps={},
         model_materializations={},
     )
 
@@ -194,6 +194,6 @@ def test_given_audit_with_unresolved_marker_when_planning_then_it_raises_clear_e
             source_map=source_map,
             adapter=PlannerTestAdapter(),
             lineage_upstream_deps={},
-            downstream_deps={},
+            lineage_downstream_deps={},
             model_materializations={},
         )

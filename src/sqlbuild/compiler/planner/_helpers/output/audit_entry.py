@@ -35,7 +35,7 @@ def plan_audit(
     source_map: dict[str, SourceEntry],
     adapter: BaseAdapter,
     lineage_upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    lineage_downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     model_materializations: dict[str, str],
 ) -> AuditPlanEntry:
     """Build an audit plan entry with refs and sources resolved."""
@@ -69,7 +69,7 @@ def plan_audit(
     attached_target_name: str | None
     attachment_kind, attached_target_name = resolve_attachment_kind(
         audit=audit,
-        downstream_deps=downstream_deps,
+        downstream_deps=lineage_downstream_deps,
     )
 
     attached_materialization: str | None = None

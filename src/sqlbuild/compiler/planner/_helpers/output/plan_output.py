@@ -20,6 +20,9 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
+from sqlbuild.compiler.graph.main._build_lineage_downstream_deps import (
+    build_lineage_downstream_deps,
+)
 from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import build_lineage_upstream_deps
 from sqlbuild.compiler.planner._helpers.fixtures.completion import (
     build_relation_fixture_context,
@@ -423,6 +426,9 @@ def build_selected_audit_entries(
     lineage_upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
         build_lineage_upstream_deps(project)
     )
+    lineage_downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
+        build_lineage_downstream_deps(lineage_upstream_deps)
+    )
     audit: CompiledAudit
     for audit in project.audits:
         if not audit_is_selected(audit=audit, selected_keys=scope.selected_keys):
@@ -435,7 +441,7 @@ def build_selected_audit_entries(
                 source_map=relations.source_read_map,
                 adapter=adapter,
                 lineage_upstream_deps=lineage_upstream_deps,
-                downstream_deps=scope.downstream_deps,
+                lineage_downstream_deps=lineage_downstream_deps,
                 model_materializations=model_materializations,
             )
         )
