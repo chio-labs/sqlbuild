@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.120.0](https://github.com/chio-labs/sqlbuild/compare/v0.119.5...v0.120.0) (2026-09-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* Python nodes and their helper modules must live under python/ (for example python/tasks/orders.py, imported as python.tasks.orders). Python under tasks/, assets/, checks/, loaders/, factories/, libs/, dagster/, rivers_pipeline/, or a root definitions.py now fails compilation with D016. Python path selectors use python/... instead of tasks/, assets/, checks/, or loaders/.
+
+### Features
+
+* merge Python node folders into python/ ([#850](https://github.com/chio-labs/sqlbuild/issues/850)) ([cbaa787](https://github.com/chio-labs/sqlbuild/commit/cbaa78714a0bd9e8508d8d75d97c998c91c87bfc))
+
 ## [0.119.5](https://github.com/chio-labs/sqlbuild/compare/v0.119.4...v0.119.5) (2026-09-27)
 
 
