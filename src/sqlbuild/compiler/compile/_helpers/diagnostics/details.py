@@ -188,6 +188,16 @@ def update_binding_models(
     return tuple(updated)
 
 
+def _binary_at(*, sql: str, offset: int) -> re.Match[str] | None:
+    """Matches are ordered and disjoint, so none after the offset can contain it."""
+    for match in _BINARY.finditer(sql):
+        if match.start() > offset:
+            return None
+        if offset < match.end():
+            return match
+    return None
+
+
 def _explain_model(
     *,
     diagnostic: CompilerDiagnostic,
@@ -243,14 +253,7 @@ def _explain_model(
             + location.column
             - 1
         )
-        binary: re.Match[str] | None = next(
-            (
-                match
-                for match in _BINARY.finditer(model.authored_sql)
-                if match.start() <= offset < match.end()
-            ),
-            None,
-        )
+        binary: re.Match[str] | None = _binary_at(sql=model.authored_sql, offset=offset)
         if binary:
             left: str = binary.group("left")
             right: str = binary.group("right")

@@ -17,8 +17,7 @@ pub(crate) struct CteNamespace {
 }
 
 impl CteNamespace {
-    /// Reserve names from all steps, including fixtures and queries not yet rendered.
-    /// Only tokens with the generated-name prefix can collide, so only those are kept.
+    /// Reserve generated-prefix names from all steps; no other token can collide.
     pub(crate) fn reserve(&mut self, sql: &str) {
         self.occupied.extend(
             sql.split(|c: char| !c.is_alphanumeric() && c != '_')
