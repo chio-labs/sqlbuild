@@ -11,6 +11,7 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FactoryModuleNodePlanTestCase,
     PythonProjectLayoutCompileTestCase,
+    UnrelatedPythonPackageBuildTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
@@ -329,6 +330,24 @@ def test_given_python_root_project_when_compiling_and_building_then_nodes_run_wi
             },
             expected_python_node_names=("orders",),
         ),
+        FactoryModuleNodePlanTestCase(
+            description="factory binding its generated task to a module global registers it",
+            repo_files={
+                "sqlbuild_project.toml": 'name = "factory_layout"\nadapter = "duckdb"\n',
+                "python/factories/orders.py": (
+                    "from sqlbuild.factories import factory\n"
+                    "from sqlbuild.tasks import task\n\n\n"
+                    "@factory\n"
+                    "def order_nodes():\n"
+                    "    global orders\n\n"
+                    "    @task\n"
+                    "    def orders(ctx):\n"
+                    "        return None\n\n"
+                    "    return orders\n"
+                ),
+            },
+            expected_python_node_names=("orders",),
+        ),
     ),
     ids=lambda case: case.description,
 )
@@ -399,6 +418,61 @@ def test_given_factory_returning_distinct_same_name_node_when_planning_then_conf
 
     assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
     assert all(fragment in result.stderr for fragment in test_case.expected_stderr_fragments)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        UnrelatedPythonPackageBuildTestCase(
+            description="project python helpers win over an unrelated python package on PYTHONPATH",
+            unrelated_files={
+                "python/__init__.py": "UNRELATED = True\n",
+                "python/helpers.py": "raise RuntimeError('unrelated python package imported')\n",
+            },
+            repo_files={
+                "sqlbuild_project.toml": 'name = "python_collision"\nadapter = "duckdb"\n',
+                "python/helpers/__init__.py": "",
+                "python/helpers/values.py": "STATUS = 'shipped'\n",
+                "python/helpers/clean.py": (
+                    "from .values import STATUS\n\n\ndef label():\n    return STATUS\n"
+                ),
+                "python/orders.py": (
+                    "import python.helpers.clean\n"
+                    "from sqlbuild.tasks import task\n\n\n"
+                    "@task\n"
+                    "def orders(ctx):\n"
+                    "    return ctx.result(payload={'status': python.helpers.clean.label()})\n"
+                ),
+            },
+            expected_build_fragments=("orders", "\u2713 Completed successfully"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_unrelated_python_package_on_path_when_building_then_project_python_is_used(
+    test_case: UnrelatedPythonPackageBuildTestCase,
+    tmp_path: Path,
+) -> None:
+    site_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="site",
+        repo_files=test_case.unrelated_files,
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="python_collision",
+        repo_files=test_case.repo_files,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+        env={"PYTHONPATH": str(site_dir)},
+    )
+
+    output: str = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert all(fragment in output for fragment in test_case.expected_build_fragments)
 
 
 if __name__ == "__main__":

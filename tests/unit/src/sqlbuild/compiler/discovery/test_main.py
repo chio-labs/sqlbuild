@@ -488,6 +488,28 @@ def order_nodes():
             expected_task_names=("orders",),
         ),
         DiscoverFactoryValidationTestCase(
+            description="factory binding its generated node to a module global registers it once",
+            repo_files=base_repo_files()
+            | {
+                "python/factories/orders.py": """
+from sqlbuild.factories import factory
+from sqlbuild.tasks import task
+
+
+@factory
+def order_nodes():
+    global orders
+
+    @task
+    def orders(ctx):
+        return None
+
+    return orders
+""",
+            },
+            expected_task_names=("orders",),
+        ),
+        DiscoverFactoryValidationTestCase(
             description="factory returning an imported python module node registers it once",
             repo_files=base_repo_files()
             | {
@@ -513,7 +535,7 @@ def prepare_orders(ctx):
     return None
 """,
             },
-            expected_task_names=("publish_orders", "prepare_orders"),
+            expected_task_names=("prepare_orders", "publish_orders"),
         ),
         DiscoverFactoryValidationTestCase(
             description="factory can import ordinary private helper module",

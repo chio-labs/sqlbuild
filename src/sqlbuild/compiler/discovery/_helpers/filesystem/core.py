@@ -124,6 +124,8 @@ from sqlbuild.runtime.event_exporting.models import LifecycleEventSinkDefinition
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import SchemaModelEntry, SchemaSeedEntry
 
+_PROJECT_PYTHON_PACKAGE_MARKER: str = "__sqlbuild_project_python__"
+
 
 @dataclass
 class _PythonNodeDiscoveryBucket:
@@ -1357,33 +1359,102 @@ def _discover_python_node_functions(
     node_root: Path = project_dir / PYTHON_NODE_ROOT
     if not node_root.is_dir():
         return bucket
-    _evict_python_root_modules()
-    importlib.invalidate_caches()
-    file_path: Path
-    for file_path in sorted(node_root.rglob("*.py")):
-        if file_path.stem == PYTHON_INIT_MODULE_STEM:
-            continue
-        module: ModuleType = _import_python_root_module(
-            file_path=file_path, project_dir=project_dir
+    saved_modules: dict[str, ModuleType] = _install_python_root_package(
+        node_root=node_root, project_dir=project_dir
+    )
+    try:
+        modules: tuple[tuple[Path, ModuleType], ...] = tuple(
+            (file_path, _import_python_root_module(file_path=file_path, project_dir=project_dir))
+            for file_path in sorted(node_root.rglob("*.py"))
+            if file_path.stem != PYTHON_INIT_MODULE_STEM
         )
-        _append_module_python_nodes(
-            bucket=bucket,
-            module=module,
-            file_path=file_path,
-            project_dir=project_dir,
-            node_root=node_root,
-            provider_by_name=provider_by_name,
-        )
+        direct_functions: dict[int, Callable[..., object]] = {}
+        file_path: Path
+        module: ModuleType
+        for file_path, module in modules:
+            direct_functions.update(
+                (id(function), function)
+                for function in _append_module_direct_nodes(
+                    bucket=bucket,
+                    module=module,
+                    file_path=file_path,
+                    project_dir=project_dir,
+                    provider_by_name=provider_by_name,
+                )
+            )
+        for file_path, module in modules:
+            _append_module_factory_nodes(
+                bucket=bucket,
+                module=module,
+                file_path=file_path,
+                project_dir=project_dir,
+                provider_by_name=provider_by_name,
+                direct_functions=direct_functions,
+            )
+    finally:
+        _restore_python_root_modules(saved_modules=saved_modules)
     return bucket
 
 
-def _evict_python_root_modules() -> None:
-    """Drop python.* modules so each discovery pass imports the current project afresh."""
+def _python_root_module_names() -> tuple[str, ...]:
+    return tuple(
+        module_name
+        for module_name in sys.modules
+        if module_name == PYTHON_NODE_ROOT or module_name.startswith(f"{PYTHON_NODE_ROOT}.")
+    )
 
+
+def _install_python_root_package(*, node_root: Path, project_dir: Path) -> dict[str, ModuleType]:
+    """Bind python to this project's python/ folder and return displaced unrelated modules."""
+
+    existing: ModuleType | None = sys.modules.get(PYTHON_NODE_ROOT)
+    owned: bool = existing is None or bool(getattr(existing, _PROJECT_PYTHON_PACKAGE_MARKER, False))
+    saved_modules: dict[str, ModuleType] = {}
     module_name: str
-    for module_name in tuple(sys.modules):
-        if module_name == PYTHON_NODE_ROOT or module_name.startswith(f"{PYTHON_NODE_ROOT}."):
-            sys.modules.pop(module_name, None)
+    for module_name in _python_root_module_names():
+        module: ModuleType | None = sys.modules.pop(module_name, None)
+        if not owned and module is not None:
+            saved_modules[module_name] = module
+    importlib.invalidate_caches()
+    init_file: Path = node_root / f"{PYTHON_INIT_MODULE_STEM}.py"
+    spec: ModuleSpec | None = (
+        importlib.util.spec_from_file_location(
+            PYTHON_NODE_ROOT, init_file, submodule_search_locations=[str(node_root)]
+        )
+        if init_file.is_file()
+        else ModuleSpec(PYTHON_NODE_ROOT, None, is_package=True)
+    )
+    if spec is None:
+        raise PythonNodeDiscoveryError(f"Could not load Python node package {node_root}")
+    spec.submodule_search_locations = [str(node_root)]
+    package: ModuleType = importlib.util.module_from_spec(spec)
+    setattr(package, _PROJECT_PYTHON_PACKAGE_MARKER, True)
+    sys.modules[PYTHON_NODE_ROOT] = package
+    if spec.loader is None:
+        return saved_modules
+    old_path: list[str] = list(sys.path)
+    sys.path.insert(0, str(project_dir))
+    try:
+        spec.loader.exec_module(package)
+    except Exception as error:
+        _restore_python_root_modules(saved_modules=saved_modules)
+        raise PythonNodeDiscoveryError(
+            f"Failed to import Python node file {init_file.relative_to(project_dir)}: {error}"
+        ) from error
+    finally:
+        sys.path = old_path
+    return saved_modules
+
+
+def _restore_python_root_modules(*, saved_modules: dict[str, ModuleType]) -> None:
+    """Put back an unrelated python package that discovery displaced."""
+
+    if not saved_modules:
+        return
+    module_name: str
+    for module_name in _python_root_module_names():
+        sys.modules.pop(module_name, None)
+    sys.modules.update(saved_modules)
 
 
 def _import_python_root_module(*, file_path: Path, project_dir: Path) -> ModuleType:
@@ -1403,51 +1474,44 @@ def _import_python_root_module(*, file_path: Path, project_dir: Path) -> ModuleT
         sys.path = old_path
 
 
-def _is_python_root_module_function(*, function: Callable[..., object], node_root: Path) -> bool:
-    """Return whether direct discovery registers this callable from its own python/ module."""
-
-    node_definitions: tuple[object | None, ...] = (
-        read_loader_definition(function),
-        read_task_definition(function),
-        read_asset_definition(function),
-        read_check_definition(function),
-    )
-    if all(definition is None for definition in node_definitions):
-        return False
-    module: ModuleType | None = sys.modules.get(getattr(function, "__module__", ""))
-    if module is None or vars(module).get(getattr(function, "__name__", "")) is not function:
-        return False
-    module_file: object = getattr(module, "__file__", None)
-    if not isinstance(module_file, str) or Path(module_file).stem == PYTHON_INIT_MODULE_STEM:
-        return False
-    return _is_relative_to(path=Path(module_file).resolve(), parent=node_root.resolve())
-
-
-def _append_module_python_nodes(
+def _append_module_direct_nodes(
     *,
     bucket: _PythonNodeDiscoveryBucket,
     module: ModuleType,
     file_path: Path,
     project_dir: Path,
-    node_root: Path,
     provider_by_name: dict[str, DiscoveredProvider],
-) -> None:
+) -> tuple[Callable[..., object], ...]:
     _append_module_audit_factories(
         bucket=bucket,
         module=module,
         file_path=file_path,
         project_dir=project_dir,
     )
+    registered: list[Callable[..., object]] = []
     for _, value in inspect.getmembers(module, inspect.isfunction):
         if value.__module__ != module.__name__:
             continue
-        _append_python_node_function(
+        if _append_python_node_function(
             bucket=bucket,
             function=value,
             file_path=file_path,
             project_dir=project_dir,
             provider_by_name=provider_by_name,
-        )
+        ):
+            registered.append(value)
+    return tuple(registered)
+
+
+def _append_module_factory_nodes(
+    *,
+    bucket: _PythonNodeDiscoveryBucket,
+    module: ModuleType,
+    file_path: Path,
+    project_dir: Path,
+    provider_by_name: dict[str, DiscoveredProvider],
+    direct_functions: dict[int, Callable[..., object]],
+) -> None:
     for _, value in inspect.getmembers(module, inspect.isfunction):
         if value.__module__ != module.__name__:
             continue
@@ -1463,7 +1527,7 @@ def _append_module_python_nodes(
         index: int
         generated_function: Callable[..., object]
         for index, generated_function in enumerate(generated_functions):
-            if _is_python_root_module_function(function=generated_function, node_root=node_root):
+            if direct_functions.get(id(generated_function)) is generated_function:
                 continue
             if not _append_python_node_function(
                 bucket=bucket,

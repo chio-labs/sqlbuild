@@ -831,6 +831,15 @@ class PythonRootHelperIdentityTestCase:
 
 
 @dataclass(frozen=True)
+class UnrelatedPythonPackageTestCase:
+    description: str
+    unrelated_files: dict[str, str]
+    project_files: dict[str, str]
+    expected_task_names: tuple[str, ...]
+    expected_task_result: object
+
+
+@dataclass(frozen=True)
 class ExpectedBooleanTestCase:
     description: str
     expected_result: bool

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
+import sys
 from collections.abc import Callable
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -26,6 +29,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DiscoverTaskAssetFunctionsTestCase,
     PythonRootHelperIdentityTestCase,
     PythonRootProjectIsolationTestCase,
+    UnrelatedPythonPackageTestCase,
 )
 
 _HELPER_PACKAGE_FILES: dict[str, str] = {
@@ -544,3 +548,44 @@ def test_given_python_root_helper_edit_when_rediscovering_then_node_identity_cha
         dependency.source_path for dependency in after.dependencies
     }
     assert test_case.edited_text in after.metadata_json
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        UnrelatedPythonPackageTestCase(
+            description="project python package wins over an imported unrelated python package",
+            unrelated_files={
+                "site/python/__init__.py": "UNRELATED = True\n",
+                "site/python/other.py": "VALUE = 'unrelated'\n",
+            },
+            project_files=_HELPER_PACKAGE_FILES,
+            expected_task_names=("orders",),
+            expected_task_result="shipped:shipped",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unrelated_python_package_when_discovering_then_project_resolves_and_package_returns(
+    test_case: UnrelatedPythonPackageTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    write_repo_files(tmp_path, test_case.unrelated_files)
+    write_repo_files(project_dir, test_case.project_files)
+    monkeypatch.delitem(sys.modules, "python", raising=False)
+    monkeypatch.delitem(sys.modules, "python.other", raising=False)
+    monkeypatch.syspath_prepend(str(tmp_path / "site"))
+    unrelated: ModuleType = importlib.import_module("python")
+    unrelated_other: ModuleType = importlib.import_module("python.other")
+    monkeypatch.setitem(sys.modules, "python", unrelated)
+    monkeypatch.setitem(sys.modules, "python.other", unrelated_other)
+
+    result: DiscoveredPythonNodeFunctions = discover_python_node_functions(project_dir=project_dir)
+
+    assert tuple(node.name for node in result.tasks) == test_case.expected_task_names
+    assert result.tasks[0].function(None) == test_case.expected_task_result
+    assert sys.modules["python"] is unrelated
+    assert sys.modules["python.other"] is unrelated_other
