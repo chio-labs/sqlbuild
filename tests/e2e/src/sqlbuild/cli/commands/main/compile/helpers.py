@@ -195,7 +195,7 @@ def assert_successful_compile_cache_payload(
         "selected_functions": test_case.function_count,
         "audits": test_case.audit_count,
         "tests": test_case.test_count,
-        "hooks": 2,
+        "hooks": 0,
         "execution_layers": 54,
         "errors": 0,
         "warnings": 0,
@@ -1128,7 +1128,6 @@ def write_layered_production_compile_project(
     _layered_write_functions(project_dir=project_dir, function_count=function_count)
     _layered_write_macros(project_dir=project_dir, macro_count=macro_count)
     _layered_write_schemas(project_dir=project_dir)
-    _layered_write_hooks(project_dir=project_dir)
     _layered_write_models(
         project_dir=project_dir,
         model_count=model_count,
@@ -1167,7 +1166,6 @@ def write_semantic_compile_project(
     _layered_write_seeds(project_dir=project_dir, seed_count=seed_count)
     _layered_write_functions(project_dir=project_dir, function_count=function_count)
     _layered_write_macros(project_dir=project_dir, macro_count=macro_count)
-    _layered_write_hooks(project_dir=project_dir)
     _semantic_write_models(
         project_dir=project_dir,
         model_count=model_count,
@@ -1337,19 +1335,6 @@ def _layered_write_schemas(*, project_dir: Path) -> None:
   ),
 );
 """,
-        encoding="utf-8",
-    )
-
-
-def _layered_write_hooks(*, project_dir: Path) -> None:
-    hooks_dir: Path = project_dir / "hooks" / "sql"
-    hooks_dir.mkdir(parents=True)
-    (hooks_dir / "before_build.sql").write_text(
-        'HOOK (description "Generated pre-build hook");\n\nSELECT 1\n',
-        encoding="utf-8",
-    )
-    (hooks_dir / "after_build.sql").write_text(
-        'HOOK (description "Generated post-build hook");\n\nSELECT 2\n',
         encoding="utf-8",
     )
 

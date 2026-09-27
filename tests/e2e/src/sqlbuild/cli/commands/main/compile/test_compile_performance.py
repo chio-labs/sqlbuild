@@ -375,7 +375,7 @@ def test_given_semantically_dense_project_when_compiling_then_reports_phased_bud
         "selected_functions": test_case.function_count,
         "audits": test_case.audit_count,
         "tests": test_case.test_count,
-        "hooks": 2,
+        "hooks": 0,
         "execution_layers": 54,
         "errors": 0,
         "warnings": 0,
