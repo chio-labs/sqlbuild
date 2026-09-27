@@ -595,6 +595,11 @@ fn container_limit(evaluation: &ProjectEvaluationRequest<'_>, kind: &Declaration
         DeclarationKind::Macro => "max_macro_container_files",
         DeclarationKind::Constant => "max_constant_container_files",
         DeclarationKind::Enum => "max_enum_container_files",
+        DeclarationKind::Audit
+        | DeclarationKind::SingularAudit
+        | DeclarationKind::Schema
+        | DeclarationKind::SqlHook
+        | DeclarationKind::PythonHook => return DEFAULT_MAX_CONTAINER_FILES,
     };
     threshold(evaluation, name, DEFAULT_MAX_CONTAINER_FILES)
 }

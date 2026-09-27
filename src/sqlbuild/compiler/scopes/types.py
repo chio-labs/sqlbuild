@@ -21,10 +21,9 @@ class ResourceKind(StrEnum):
     MODEL = "model"
     TEST = "test"
     SCENARIO = "scenario"
-    HOOK = "hook"
     FUNCTION = "function"
-    AUDIT = "audit"
     SOURCE = "source"
+    SEED = "seed"
 
 
 class DeclarationKind(StrEnum):
@@ -33,6 +32,11 @@ class DeclarationKind(StrEnum):
     MACRO = "macro"
     ENUM = "enum"
     CONSTANT = "constant"
+    AUDIT = "audit"
+    SINGULAR_AUDIT = "singular_audit"
+    SCHEMA = "schema"
+    SQL_HOOK = "sql_hook"
+    PYTHON_HOOK = "python_hook"
 
 
 class ScopeKind(StrEnum):

@@ -31,8 +31,17 @@ def resolve_attachment_kind(
 
     if audit.attached_target_kind == AttachedAuditTargetKind.SOURCE:
         _validate_source_attached_audit(audit=audit)
-        if _source_lifecycle_attachment_is_safe(audit=audit):
+        if _target_lifecycle_attachment_is_safe(
+            audit=audit, target_kind=AttachedAuditTargetKind.SOURCE
+        ):
             return AuditAttachmentKind.SOURCE, audit.attached_target_name
+        return AuditAttachmentKind.END, audit.attached_target_name
+
+    if audit.attached_target_kind == AttachedAuditTargetKind.SEED:
+        if _target_lifecycle_attachment_is_safe(
+            audit=audit, target_kind=AttachedAuditTargetKind.SEED
+        ):
+            return AuditAttachmentKind.SEED, audit.attached_target_name
         return AuditAttachmentKind.END, audit.attached_target_name
 
     if audit.attached_target_kind == AttachedAuditTargetKind.MODEL:
@@ -82,15 +91,18 @@ def _validate_source_attached_audit(*, audit: CompiledAudit) -> None:
             )
 
 
-def _source_lifecycle_attachment_is_safe(*, audit: CompiledAudit) -> bool:
-    """Return whether an attached audit only depends on its target source."""
+def _target_lifecycle_attachment_is_safe(
+    *, audit: CompiledAudit, target_kind: AttachedAuditTargetKind
+) -> bool:
+    """Return whether a source- or seed-attached audit only depends on its target."""
 
     if audit.attached_target_name is None:
         raise PlannerInputError(
-            f"audit '{audit.name}': source-attached audit is missing an attached source name"
+            f"audit '{audit.name}': {target_kind.value}-attached audit is missing an attached "
+            f"{target_kind.value} name"
         )
     attached_key: CompiledObjectKey = CompiledObjectKey(
-        resource_type=CompiledResourceType.SOURCE,
+        resource_type=target_kind.resource_type,
         name=audit.attached_target_name,
     )
     return all(dep_key == attached_key for dep_key in audit.scope_deps)

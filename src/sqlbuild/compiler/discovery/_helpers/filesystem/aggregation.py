@@ -239,6 +239,9 @@ def build_tolerant_scope_discovery(*, project_dir: Path) -> TolerantScopeDiscove
     audits, audit_faults = _discover_category(
         function=discover_audit_files, project_dir=project_dir
     )
+    model_schemas, model_schema_faults = _discover_category(
+        function=discover_model_schema_files, project_dir=project_dir
+    )
     discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
         project_config=project_config,
         local_config=local_config,
@@ -248,6 +251,7 @@ def build_tolerant_scope_discovery(*, project_dir: Path) -> TolerantScopeDiscove
         constant_files=constants,
         sql_function_files=sql_functions,
         sql_hook_files=sql_hooks,
+        model_schema_files=model_schemas,
         source_files=sources,
         test_files=tests,
         scenario_files=scenarios,
@@ -263,7 +267,7 @@ def build_tolerant_scope_discovery(*, project_dir: Path) -> TolerantScopeDiscove
             *source_faults,
             *audit_faults,
         ),
-        declaration_faults=declaration_faults,
+        declaration_faults=(*declaration_faults, *model_schema_faults),
         relationship_faults=relationship_faults,
         config_faults=config_faults,
     )

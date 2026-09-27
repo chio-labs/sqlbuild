@@ -52,6 +52,16 @@ _PROJECT_YML_IMMEDIATE: str = (
     'table_promotion_mode = "immediate"\n'
 )
 
+_RAW_ORDERS_WITH_NOT_NULL_AUDIT: str = (
+    "sources:\n"
+    "  - name: raw_orders\n"
+    "    schema: main\n"
+    "    table: raw_orders\n"
+    "    columns:\n"
+    "      - name: id\n"
+    "        audits:\n"
+    "          - not_null\n"
+)
 _NOT_NULL_AUDIT: str = 'AUDIT ();\n\nSELECT @column FROM __ref("@model") WHERE @column IS NULL'
 _TABLE_WITH_ID_NOT_NULL_AUDIT: str = (
     "MODEL (materialized table, columns (id (audits [not_null])));\n\n"
@@ -371,12 +381,7 @@ _FAILING_TEST_SQL: str = (
                 "models/orders.sql": (
                     'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")'
                 ),
-                "sources/raw.yml": (
-                    "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
-                ),
-                "audits/singular/source_check.sql": (
-                    'AUDIT ();\n\nSELECT id FROM __source("raw_orders") WHERE id IS NULL'
-                ),
+                "sources/raw.yml": _RAW_ORDERS_WITH_NOT_NULL_AUDIT,
             },
             setup_sql=("CREATE TABLE main.raw_orders AS SELECT NULL AS id",),
             expected_status=BuildStatus.SUCCESS,
@@ -412,13 +417,7 @@ _FAILING_TEST_SQL: str = (
                     'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")'
                 ),
                 "models/payments.sql": ("MODEL (materialized table);\n\nSELECT 1 AS payment_id"),
-                "sources/raw.yml": (
-                    "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
-                ),
-                "audits/generic/not_null.sql": _NOT_NULL_AUDIT,
-                "audits/singular/source_check.sql": (
-                    'AUDIT ();\n\nSELECT id FROM __source("raw_orders") WHERE id IS NULL'
-                ),
+                "sources/raw.yml": _RAW_ORDERS_WITH_NOT_NULL_AUDIT,
                 "audits/singular/cross_check.sql": (
                     'AUDIT ();\n\nSELECT o.id FROM __ref("orders") o CROSS JOIN __ref("payments") p'
                 ),
@@ -959,12 +958,7 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
                 "models/orders.sql": (
                     'MODEL (materialized table);\n\nSELECT id FROM __source("raw_orders")'
                 ),
-                "sources/raw.yml": (
-                    "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
-                ),
-                "audits/singular/source_check.sql": (
-                    'AUDIT ();\n\nSELECT id FROM __source("raw_orders") WHERE id IS NULL'
-                ),
+                "sources/raw.yml": _RAW_ORDERS_WITH_NOT_NULL_AUDIT,
             },
             setup_sql=("CREATE TABLE main.raw_orders AS SELECT NULL AS id",),
             expected_status=BuildStatus.FAILED,
@@ -984,12 +978,7 @@ def test_given_view_with_run_audits_false_when_executing_then_succeeds(
                 "models/orders.sql": (
                     'MODEL (materialized table);\n\nSELECT id FROM __ref("stg_orders")'
                 ),
-                "sources/raw.yml": (
-                    "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
-                ),
-                "audits/singular/source_check.sql": (
-                    'AUDIT ();\n\nSELECT id FROM __source("raw_orders") WHERE id IS NULL'
-                ),
+                "sources/raw.yml": _RAW_ORDERS_WITH_NOT_NULL_AUDIT,
             },
             setup_sql=("CREATE TABLE main.raw_orders AS SELECT NULL AS id",),
             expected_status=BuildStatus.FAILED,

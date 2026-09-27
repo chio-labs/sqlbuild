@@ -183,6 +183,7 @@ class BuildIndexes:
     )
     test_entries_by_key: dict[CompiledObjectKey, SqlTestPlanEntry] = field(default_factory=dict)
     source_audits_by_source: dict[str, tuple[AuditPlanEntry, ...]] = field(default_factory=dict)
+    seed_audits_by_seed: dict[str, tuple[AuditPlanEntry, ...]] = field(default_factory=dict)
     model_audits_by_model: dict[str, tuple[AuditPlanEntry, ...]] = field(default_factory=dict)
     end_audits: tuple[AuditPlanEntry, ...] = field(default_factory=tuple)
 

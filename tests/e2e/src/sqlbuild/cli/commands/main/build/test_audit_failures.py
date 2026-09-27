@@ -230,10 +230,12 @@ def test_given_audit_failure_projects_when_running_build_then_cli_reports_failur
                     '[connection]\ndatabase = "measurement.duckdb"\n'
                 ),
                 "models/orders.sql": ("MODEL (materialized table); SELECT 1 AS order_id"),
-                "audits/rate.sql": (
+                "models/customers.sql": ("MODEL (materialized table); SELECT 1 AS order_id"),
+                "audits/singular/rate.sql": (
                     "AUDIT (evaluation measurement, value rate, "
                     "thresholds (error (below 90))); "
-                    'MEASURE (SELECT 80.0 AS rate FROM __ref("orders") LIMIT 1);'
+                    'MEASURE (SELECT 80.0 AS rate FROM __ref("orders") '
+                    'JOIN __ref("customers") USING (order_id) LIMIT 1);'
                 ),
             },
             command=("--no-color", "audit"),

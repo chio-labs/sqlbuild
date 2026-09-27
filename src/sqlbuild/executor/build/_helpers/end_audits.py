@@ -1,4 +1,4 @@
-"""End audit execution after model completion."""
+"""Execution of audits scheduled outside a model lifecycle: seed audits and end audits."""
 
 from __future__ import annotations
 
@@ -29,8 +29,9 @@ def run_end_audits(
     seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     run_id: str,
+    quality_scope: str = "end",
 ) -> tuple[AuditExecutionResult, ...]:
-    """Execute all end audits and return results."""
+    """Execute audits in order and return results; seed audits pass quality_scope="seed"."""
 
     results: list[AuditExecutionResult] = []
     audit: AuditPlanEntry
@@ -56,7 +57,7 @@ def run_end_audits(
                 source_map=source_map,
                 relation_overrides=None,
                 run_scope_phase=AuditRunScope.FINAL,
-                quality_scope="end",
+                quality_scope=quality_scope,
             )
             if result.outcome == AuditOutcome.ERROR:
                 lifecycle.failed()

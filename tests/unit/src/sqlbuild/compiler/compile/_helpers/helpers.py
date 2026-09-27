@@ -245,3 +245,23 @@ def _compiled_model_empty_names(payload: object) -> tuple[str, ...]:
 
 def _compiled_direct_tested_names(payload: object) -> tuple[str, ...]:
     return cast(CompiledDirectLogicSqlTestPayload, payload).tested_resource_names
+
+
+def singular_audit_files(*, base: dict[str, str], sql: str) -> dict[str, str]:
+    """Return project files with one top-level singular audit over the given SQL."""
+
+    return base | {"audits/singular/check.sql": f"AUDIT ();\n{sql}"}
+
+
+def model_header(*, key: str, value: str) -> str:
+    """Return a one-column model whose header sets one key."""
+
+    return f"MODEL ({key} {value});\nSELECT 1 AS order_id"
+
+
+def compile_and_assemble(*, project_dir: Path) -> CompiledProject:
+    """Attach and assemble a DuckDB fixture so scope placement is validated."""
+
+    return assemble_project(
+        inputs=compile_project_inputs(project_dir=project_dir), skip_column_inference=True
+    )

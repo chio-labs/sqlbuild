@@ -34,6 +34,8 @@ from sqlbuild.compiler.scopes.types import (
     VisibilityReason,
 )
 
+_DECLARATION_STEM: str = "__declaration__.sql"
+
 
 def query_target(
     *, lookup: ScopeLookup, target: ResourceIdentity | DeclarationIdentity | str | PurePath
@@ -130,6 +132,28 @@ def resolve_path_visibility(
         )
         target.append(declaration)
     return tuple(visible), tuple(inaccessible)
+
+
+def declaration_lexical_path(*, record: DeclarationRecord) -> str:
+    """Return the authored path whose folder controls what a declaration file can use."""
+
+    return f"{record.owning_path or CURRENT_PATH_COMPONENT}{PATH_SEPARATOR}{_DECLARATION_STEM}"
+
+
+def path_visibility_reason(
+    *, declaration: DeclarationRecord, path: str | PurePath
+) -> VisibilityReason | None:
+    """Return why a public declaration is visible from an authored path, if it is."""
+
+    normalized_path: str = normalize_path(path=path)
+    return _visibility_reason(
+        resource=ResourceRecord(
+            identity=ResourceIdentity(ResourceKind.MODEL, f"<path:{normalized_path}>"),
+            path=normalized_path,
+            ownership_root=OwnershipRoot(path=CURRENT_PATH_COMPONENT),
+        ),
+        declaration=declaration,
+    )
 
 
 def _visibility_reason(

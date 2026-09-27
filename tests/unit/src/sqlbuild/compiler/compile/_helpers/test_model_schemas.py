@@ -154,7 +154,7 @@ def test_given_inherited_model_schemas_when_compiling_then_attaches_resolved_con
         tmp_path,
         {
             "sqlbuild_project.toml": _PROJECT_FILE,
-            "models/_enums/order_status.sql": "ENUM (name order_status, members [OPEN, CLOSED]);",
+            "enums/order_status.sql": "ENUM (name order_status, members [OPEN, CLOSED]);",
             "schemas/orders/base.sql": """
 SCHEMA (
   name order,

@@ -289,9 +289,9 @@ def test_given_inaccessible_or_unknown_declaration_when_compiling_then_diagnosti
         ScopedDeclarationSurfaceTestCase(
             "named hook definition path",
             {
-                "hooks/sql/domain/_constants/value.sql": "CONSTANT (name value, value 12);",
-                "hooks/sql/domain/typed.sql": 'HOOK ();\nSELECT @const("value")',
-                "models/orders.sql": 'MODEL (post_hooks [sql("typed")]);\nSELECT 1',
+                "models/domain/_sqlbuild/_constants/value.sql": "CONSTANT (name value, value 12);",
+                "models/domain/_sqlbuild/_hooks/sql/typed.sql": 'HOOK ();\nSELECT @const("value")',
+                "models/domain/orders.sql": 'MODEL (post_hooks [sql("typed")]);\nSELECT 1',
             },
             lambda inputs: (
                 cast(list[SqlHookEntry], inputs.model_inputs[0].config.values["post_hooks"])[
@@ -313,21 +313,27 @@ def test_given_inaccessible_or_unknown_declaration_when_compiling_then_diagnosti
         ScopedDeclarationSurfaceTestCase(
             "standalone audit definition path",
             {
-                "audits/domain/_constants/value.sql": "CONSTANT (name value, value 15);",
-                "audits/domain/check.sql": 'AUDIT ();\nSELECT @const("value")',
-                "models/orders.sql": "MODEL ();\nSELECT 1",
+                "models/domain/_sqlbuild/_constants/value.sql": "CONSTANT (name value, value 15);",
+                "models/domain/_sqlbuild/audits/singular/check.sql": (
+                    'AUDIT ();\nSELECT @const("value") FROM __ref("orders") '
+                    'JOIN __ref("customers") ON TRUE'
+                ),
+                "models/domain/orders.sql": "MODEL ();\nSELECT 1",
+                "models/domain/customers.sql": "MODEL ();\nSELECT 1",
             },
             lambda inputs: inputs.audit_inputs[0].sql_body,
-            "SELECT 15",
+            'SELECT 15 FROM __ref("orders") JOIN __ref("customers") ON TRUE',
         ),
         ScopedDeclarationSurfaceTestCase(
             "generic audit definition path",
             {
-                "audits/generic/domain/_constants/value.sql": ("CONSTANT (name value, value 18);"),
-                "audits/generic/domain/scoped.sql": (
+                "models/domain/_sqlbuild/_constants/value.sql": (
+                    "CONSTANT (name value, value 18);"
+                ),
+                "models/domain/_sqlbuild/_audits/generic/scoped.sql": (
                     'AUDIT ();\nSELECT * FROM __ref("@model") WHERE @const("value") = 18'
                 ),
-                "models/orders.sql": "MODEL (audits [scoped]);\nSELECT 1",
+                "models/domain/orders.sql": "MODEL (audits [scoped]);\nSELECT 1",
             },
             lambda inputs: inputs.audit_inputs[0].sql_body,
             'SELECT * FROM __ref("orders") WHERE 18 = 18',

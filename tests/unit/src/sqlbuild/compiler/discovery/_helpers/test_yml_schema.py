@@ -5,10 +5,16 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.discovery._helpers.yml.schema import parse_schema_yml
-from sqlbuild.spec.contracts.models import SchemaModelEntry, SchemaSeedEntry, SeedCsvSettings
+from sqlbuild.spec.contracts.models import (
+    SchemaColumn,
+    SchemaModelEntry,
+    SchemaSeedEntry,
+    SeedCsvSettings,
+)
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseSchemaYamlErrorTestCase,
     ParseSchemaYamlTestCase,
+    ParseSeedAuditsYamlTestCase,
     ParseSeedCsvSettingsYamlTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import expected_or_actual
@@ -375,6 +381,43 @@ def test_given_seed_csv_settings_when_parsing_then_it_returns_normalized_setting
         """,
             expected_error_fragment="csv_settings 'na_values' must be a list or mapping",
         ),
+        ParseSchemaYamlErrorTestCase(
+            description="raises when a seed entry has an unknown key",
+            contents="""
+        seeds:
+          - name: country_codes
+            tests: [not_null]
+            columns:
+              - name: country_code
+                type: VARCHAR
+        """,
+            expected_error_fragment="seed has unknown keys: tests",
+        ),
+        ParseSchemaYamlErrorTestCase(
+            description="raises when a seed column has an unknown key",
+            contents="""
+        seeds:
+          - name: country_codes
+            columns:
+              - name: country_code
+                type: VARCHAR
+                checks: [not_null]
+        """,
+            expected_error_fragment="seed column has unknown keys: checks",
+        ),
+        ParseSchemaYamlErrorTestCase(
+            description="raises when a seed file has an unknown top-level key",
+            contents="""
+        models: []
+        extras: true
+        seeds:
+          - name: country_codes
+            columns:
+              - name: country_code
+                type: VARCHAR
+        """,
+            expected_error_fragment="seed file has unknown keys: extras, models",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -383,3 +426,44 @@ def test_given_invalid_schema_yaml_when_parsing_then_it_raises_clear_errors(
 ) -> None:
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
         parse_schema_yml(contents=test_case.contents, file_path=Path("seeds/lookups.yml"))
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseSeedAuditsYamlTestCase(
+            description="parses seed table and column audits",
+            contents="""
+        seeds:
+          - name: country_codes
+            audits:
+              - expression_is_true:
+                  expression: "country_code <> ''"
+                  severity: error
+            columns:
+              - name: country_code
+                type: VARCHAR
+                audits: [not_null, unique]
+        """,
+            expected_table_audits=("expression_is_true",),
+            expected_column_audits=(("not_null", "unique"),),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_seed_audits_when_parsing_then_table_and_column_audits_are_kept(
+    test_case: ParseSeedAuditsYamlTestCase,
+) -> None:
+    seed_entries: tuple[SchemaSeedEntry, ...]
+    _models, seed_entries = parse_schema_yml(
+        contents=test_case.contents, file_path=Path("seeds/lookups.yml")
+    )
+
+    table_audits: tuple[str, ...] = tuple(audit.definition_name for audit in seed_entries[0].audits)
+    column_audits: list[tuple[str, ...]] = []
+    column: SchemaColumn
+    for column in seed_entries[0].columns:
+        column_audits.append(tuple(audit.definition_name for audit in column.audits))
+
+    assert table_audits == test_case.expected_table_audits
+    assert tuple(column_audits) == test_case.expected_column_audits

@@ -8,6 +8,7 @@ from sqlbuild.compiler.scopes._helpers.lookup import identity_key
 from sqlbuild.compiler.scopes._helpers.paths import normalize_path
 from sqlbuild.compiler.scopes.constants import (
     DECLARATION_GROUP_DIRECTORY,
+    DECLARATION_ROLE_PARTS,
     DEFAULT_ENUM_MEMBER_PREVIEW,
     SCOPE_METADATA_SCHEMA_VERSION,
 )
@@ -246,13 +247,15 @@ def _declaration_container(
     }[record.scope]
     if record.scope is ScopeKind.PRIVATE:
         return None, visibility, None, None
-    role: str = f"{record.identity.kind.value}s"
+    role_parts: tuple[str, ...] = DECLARATION_ROLE_PARTS[record.identity.kind]
+    role: str = "/".join(role_parts)
     parts: tuple[str, ...] = tuple(safe_scope_path(path=record.path).split("/"))
     role_index: int = len(record.owning_path.split("/")) if record.owning_path else 0
     if parts[role_index] == DECLARATION_GROUP_DIRECTORY:
         role_index += 1
-    role_root: str = "/".join(parts[: role_index + 1])
-    bucket: str = "/".join(parts[role_index + 1 : -1])
+    role_end: int = role_index + len(role_parts)
+    role_root: str = "/".join(parts[:role_end])
+    bucket: str = "/".join(parts[role_end:-1])
     return role, visibility, role_root, bucket or None
 
 

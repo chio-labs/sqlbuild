@@ -10,9 +10,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
     validate_resource_identity,
 )
-from sqlbuild.compiler.scopes.types import ScopeKind
-
-_GENERIC_AUDIT_PATH_PREFIX: tuple[str, str] = ("audits", "generic")
+from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
 
 
 @dataclass(frozen=True)
@@ -81,7 +79,7 @@ def _identity_candidates(
         yield _IdentityCandidate(scenario_file.name, "scenario", scenario_file.relative_path)
     for audit_file in discovered_inputs.audit_files:
         for block in audit_file.blocks:
-            is_generic: bool = audit_file.relative_path.parts[:2] == _GENERIC_AUDIT_PATH_PREFIX
+            is_generic: bool = audit_file.declaration_kind is DeclarationKind.AUDIT
             yield _IdentityCandidate(
                 (
                     audit_file.relative_path.stem

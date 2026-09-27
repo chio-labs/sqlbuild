@@ -11,6 +11,7 @@ def build_execution_indexes(plan: PlanOutput) -> BuildIndexes:
     """Build all lookup indexes from a plan output."""
 
     source_audits: dict[str, list[AuditPlanEntry]] = {}
+    seed_audits: dict[str, list[AuditPlanEntry]] = {}
     model_audits: dict[str, list[AuditPlanEntry]] = {}
     end_audits: list[AuditPlanEntry] = []
 
@@ -19,6 +20,8 @@ def build_execution_indexes(plan: PlanOutput) -> BuildIndexes:
         if audit.attachment_kind == AuditAttachmentKind.SOURCE:
             source_name: str = audit.attached_target_name or ""
             source_audits.setdefault(source_name, []).append(audit)
+        elif audit.attachment_kind == AuditAttachmentKind.SEED:
+            seed_audits.setdefault(audit.attached_target_name or "", []).append(audit)
         elif audit.attachment_kind == AuditAttachmentKind.MODEL:
             model_name: str = audit.attached_target_name or ""
             model_audits.setdefault(model_name, []).append(audit)
@@ -32,6 +35,7 @@ def build_execution_indexes(plan: PlanOutput) -> BuildIndexes:
         source_load_entries_by_key={entry.key: entry for entry in plan.source_load_entries},
         test_entries_by_key={entry.key: entry for entry in plan.test_entries},
         source_audits_by_source={k: tuple(v) for k, v in source_audits.items()},
+        seed_audits_by_seed={k: tuple(v) for k, v in seed_audits.items()},
         model_audits_by_model={k: tuple(v) for k, v in model_audits.items()},
         end_audits=tuple(end_audits),
     )

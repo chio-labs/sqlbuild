@@ -70,11 +70,9 @@ from tests.unit.src.sqlbuild.compiler.scopes.helpers import (
         ResourceExpectation(
             "scenario", "scenario", "checkout", "tests/scenarios/checkout.sql", "tests/scenarios"
         ),
-        ResourceExpectation("hook", "hook", "grant", "hooks/sql/grant.sql", "hooks/sql"),
         ResourceExpectation(
             "function", "function", "tax", "functions/sql/tax.sql", "functions/sql"
         ),
-        ResourceExpectation("audit", "audit", "fresh", "audits/fresh.sql", "audits"),
         ResourceExpectation("source", "source", "raw_orders", "sources/raw.yml", "sources"),
     ],
     ids=lambda case: case.description,

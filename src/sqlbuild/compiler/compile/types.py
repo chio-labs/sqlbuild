@@ -40,6 +40,13 @@ class CompileInputsReadyCallback(Protocol):
 class AttachedAuditTargetKind(StrEnum):
     MODEL = "model"
     SOURCE = "source"
+    SEED = "seed"
+
+    @property
+    def resource_type(self) -> CompiledResourceType:
+        """Return the compiled resource type of the attached target."""
+
+        return CompiledResourceType(self.value)
 
 
 class CompileContextKey(StrEnum):

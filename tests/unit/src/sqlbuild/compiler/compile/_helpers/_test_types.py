@@ -892,3 +892,30 @@ class SetOperationExpectedTestCase:
     sql: str
     expected_payload_type: str = ""
     expected_error_template: str = ""
+
+
+@dataclass(frozen=True)
+class NamedDeclarationAcceptedTestCase:
+    """A valid audit, schema, or hook layout."""
+
+    description: str
+    files: dict[str, str]
+    expected_diagnostic_codes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class NamedDeclarationErrorTestCase:
+    """An invalid audit, schema, or hook layout and the diagnostic fragments it must produce."""
+
+    description: str
+    files: dict[str, str]
+    expected_error_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NamedDeclarationWarningTestCase:
+    """A misplaced declaration compiled with advisory placement."""
+
+    description: str
+    files: dict[str, str]
+    expected_code: str

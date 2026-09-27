@@ -32,6 +32,8 @@ from sqlbuild.compiler.discovery.models import (
     ModelSchemaDeclaration,
 )
 from sqlbuild.compiler.planner.types import ContractPolicy
+from sqlbuild.compiler.scopes.main._declaration_lexical_path import declaration_lexical_path
+from sqlbuild.compiler.scopes.main._declaration_visibility import declaration_visibility
 from sqlbuild.compiler.scopes.main._resolve_scope_path_visibility import (
     resolve_scope_path_visibility,
 )
@@ -47,7 +49,13 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityRecord,
     VisibilityResolution,
 )
-from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind, UsageKind
+from sqlbuild.compiler.scopes.types import (
+    DeclarationKind,
+    ResourceKind,
+    ScopeKind,
+    UsageKind,
+    VisibilityReason,
+)
 from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
 from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
@@ -69,6 +77,7 @@ _DECLARATION_SCAN_SPECIAL: re.Pattern[str] = re.compile(r"['\"`$@/-]")
 _CONTEXT: str = "Enum and constant expansion"
 _ACCEPTED_VALUES_AUDIT: str = "accepted_values"
 _ENUM_REFERENCE_KIND: str = "enum"
+_PATH_CACHE_PREFIX: str = "<path>"
 
 
 def build_public_declaration_indexes(
@@ -181,6 +190,13 @@ def resolve_declaration_context(
         cached: DeclarationResolutionContext | None = resolver.contexts_by_directory.get(cache_key)
         if cached is not None:
             return _rebind_declaration_context(context=cached, consumer=resources[0].identity)
+    elif not resources and resource is None:
+        cache_key = (_PATH_CACHE_PREFIX, target_path.as_posix())
+        cached_path_context: DeclarationResolutionContext | None = (
+            resolver.contexts_by_directory.get(cache_key)
+        )
+        if cached_path_context is not None:
+            return cached_path_context
     resolution: VisibilityResolution = resolve_scope_visibility(
         lookup=resolver.lookup, target=resource or target_path
     )
@@ -193,21 +209,10 @@ def resolve_declaration_context(
     inaccessible_macros: dict[str, DeclarationRecord] = {}
     visibility_by_declaration: dict[DeclarationIdentity, list[VisibilityRecord]] = {}
     if resolution.target.unknown:
-        lexical_target_path: Path = target_path
-        definition_record: DeclarationRecord | None = next(
-            (
-                record
-                for record in resolver.lookup.index.declarations
-                if record.path == target_path.as_posix()
-                and record.identity.kind is DeclarationKind.MACRO
-            ),
-            None,
+        visible_records, inaccessible_records, path_visibility = _declaration_path_visibility(
+            resolver=resolver, target_path=target_path
         )
-        if definition_record is not None:
-            lexical_target_path = Path(definition_record.owning_path or ".") / "__macro__.sql"
-        visible_records, inaccessible_records = resolve_scope_path_visibility(
-            lookup=resolver.lookup, path=lexical_target_path
-        )
+        visibility_by_declaration.update(path_visibility)
     else:
         visible_records: tuple[DeclarationRecord, ...] = tuple(
             resolver.lookup.declarations[item.declaration][0] for item in resolution.visible
@@ -269,6 +274,47 @@ def resolve_declaration_context(
     if cache_key is not None:
         resolver.cache_context(key=cache_key, context=context)
     return context
+
+
+def _declaration_path_visibility(
+    *, resolver: DeclarationScopeResolver, target_path: Path
+) -> tuple[
+    tuple[DeclarationRecord, ...],
+    tuple[DeclarationRecord, ...],
+    dict[DeclarationIdentity, list[VisibilityRecord]],
+]:
+    """Resolve visibility for a path that is not an indexed resource, such as a declaration file."""
+
+    lexical_target_path: Path = target_path
+    definition_record: DeclarationRecord | None = next(
+        (
+            record
+            for record in resolver.lookup.index.declarations
+            if record.path == target_path.as_posix() and record.scope is not ScopeKind.PRIVATE
+        ),
+        None,
+    )
+    if definition_record is not None:
+        lexical_target_path = Path(declaration_lexical_path(record=definition_record))
+    visible_records: tuple[DeclarationRecord, ...]
+    inaccessible_records: tuple[DeclarationRecord, ...]
+    visible_records, inaccessible_records = resolve_scope_path_visibility(
+        lookup=resolver.lookup, path=lexical_target_path
+    )
+    path_resource: ResourceIdentity = ResourceIdentity(
+        ResourceKind.MODEL, f"<path:{lexical_target_path.as_posix()}>"
+    )
+    visibility: dict[DeclarationIdentity, list[VisibilityRecord]] = {}
+    path_visible: DeclarationRecord
+    for path_visible in visible_records:
+        reason: VisibilityReason | None = declaration_visibility(
+            declaration=path_visible, consumer=lexical_target_path
+        )
+        if reason is not None:
+            visibility[path_visible.identity] = [
+                VisibilityRecord(path_resource, path_visible.identity, reason)
+            ]
+    return visible_records, inaccessible_records, visibility
 
 
 def _rebind_declaration_context(

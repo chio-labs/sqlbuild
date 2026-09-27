@@ -41,6 +41,23 @@ _SEED_CSV_SETTING_KEYS: frozenset[str] = frozenset(
         "keep_default_na",
     }
 )
+_SEED_FILE_KEYS: frozenset[str] = frozenset({"seeds"})
+_SEED_ENTRY_KEYS: frozenset[str] = frozenset(
+    {
+        "name",
+        "description",
+        "database",
+        "schema",
+        "meta",
+        "csv_settings",
+        "columns",
+        "tags",
+        "audits",
+    }
+)
+_SEED_COLUMN_KEYS: frozenset[str] = frozenset(
+    {"name", "type", "nullable", "description", "meta", "audits"}
+)
 _SEED_CSV_STRING_SETTINGS: frozenset[str] = frozenset(
     {"delimiter", "quotechar", "escapechar", "lineterminator", "encoding"}
 )
@@ -101,6 +118,10 @@ def _parse_seed_entries(
     if raw_seeds and SEEDS_DIRECTORY_NAME not in file_path.parts:
         raise SchemaParseError(
             f"{file_path} declares seeds, but seed declarations must live under seeds/**/*.yml"
+        )
+    if SEEDS_DIRECTORY_NAME in file_path.parts:
+        _reject_unknown_keys(
+            mapping=payload, allowed=_SEED_FILE_KEYS, file_path=file_path, label="seed file"
         )
     seed_mappings: tuple[dict[str, object], ...] = _parse_named_mapping_list(
         raw_value=raw_seeds,
@@ -176,9 +197,21 @@ def _parse_model_entry(*, entry: dict[str, object], file_path: Path) -> SchemaMo
     )
 
 
+def _reject_unknown_keys(
+    *, mapping: dict[str, object], allowed: frozenset[str], file_path: Path, label: str
+) -> None:
+    unknown: tuple[str, ...] = tuple(sorted(str(key) for key in mapping if key not in allowed))
+    if unknown:
+        raise SchemaParseError(
+            f"{file_path} {label} has unknown keys: {', '.join(unknown)}; allowed keys: "
+            f"{', '.join(sorted(allowed))}"
+        )
+
+
 def _parse_seed_entry(*, entry: dict[str, object], file_path: Path) -> SchemaSeedEntry:
+    _reject_unknown_keys(mapping=entry, allowed=_SEED_ENTRY_KEYS, file_path=file_path, label="seed")
     columns: tuple[SchemaColumn, ...] = _parse_columns(
-        entry=entry, file_path=file_path, label="seed"
+        entry=entry, file_path=file_path, label="seed", allowed_column_keys=_SEED_COLUMN_KEYS
     )
     if not columns:
         raise SchemaParseError(f"{file_path} seed must declare at least one column")
@@ -227,6 +260,13 @@ def _parse_seed_entry(*, entry: dict[str, object], file_path: Path) -> SchemaSee
         ),
         csv_settings=_parse_seed_csv_settings(entry=entry, file_path=file_path),
         columns=columns,
+        audits=parse_audit_instances(
+            raw_audits=entry.get("audits", []),
+            file_path=file_path,
+            label="seed",
+            error_class=SchemaParseError,
+            null_as_empty=False,
+        ),
     )
 
 
@@ -307,6 +347,7 @@ def _parse_columns(
     entry: dict[str, object],
     file_path: Path,
     label: str,
+    allowed_column_keys: frozenset[str] | None = None,
 ) -> tuple[SchemaColumn, ...]:
     raw_columns: object = entry.get("columns", [])
     if not isinstance(raw_columns, list):
@@ -319,6 +360,10 @@ def _parse_columns(
             raise SchemaParseError(f"{file_path} {label} columns must contain only mappings")
         column: dict[str, object] = cast(dict[str, object], raw_column)
         column_label: str = f"{label} column"
+        if allowed_column_keys is not None:
+            _reject_unknown_keys(
+                mapping=column, allowed=allowed_column_keys, file_path=file_path, label=column_label
+            )
         column_name: str = require_non_empty_string(
             entry=column,
             key="name",

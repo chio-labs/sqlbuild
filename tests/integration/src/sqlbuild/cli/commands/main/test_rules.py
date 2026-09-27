@@ -1394,7 +1394,12 @@ def test_given_invocation_dependent_shapes_when_running_output_shape_rule_then_s
     model: Path = tmp_path / "models" / "order_totals.sql"
     model.parent.mkdir()
     model.write_text(
-        """MODEL (description "Dynamic order totals", database analytics, schema reporting);
+        """MODEL (
+  description "Dynamic order totals",
+  database analytics,
+  schema reporting,
+  audits [recent_orders],
+);
 SELECT *
 FROM (
   SELECT 1 AS customer_id, 'books' AS category, 25 AS amount
@@ -2058,16 +2063,22 @@ def test_given_non_model_sql_violation_when_compiling_then_compile_is_authoritat
     model: Path = tmp_path / "models" / "orders.sql"
     model.parent.mkdir()
     model.write_text("MODEL ();\nSELECT 1 AS order_id\n", encoding="utf-8")
-    audit: Path = tmp_path / "audits" / "order_sample.sql"
-    audit.parent.mkdir()
-    audit.write_text('AUDIT ();\nSELECT * FROM __ref("orders") LIMIT 1\n', encoding="utf-8")
+    (tmp_path / "models" / "customers.sql").write_text(
+        "MODEL ();\nSELECT 1 AS order_id\n", encoding="utf-8"
+    )
+    audit: Path = tmp_path / "audits" / "singular" / "order_sample.sql"
+    audit.parent.mkdir(parents=True)
+    audit.write_text(
+        'AUDIT ();\nSELECT * FROM __ref("orders") JOIN __ref("customers") USING (order_id) LIMIT 1\n',
+        encoding="utf-8",
+    )
 
     exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
     payload: dict[str, object] = json.loads(capsys.readouterr().out)
 
     assert exit_code == test_case.expected_exit_code
     assert payload["diagnostics"][0]["code"] == test_case.expected_code
-    assert payload["diagnostics"][0]["path"] == "audits/order_sample.sql"
+    assert payload["diagnostics"][0]["path"] == "audits/singular/order_sample.sql"
 
 
 @pytest.mark.parametrize(

@@ -885,3 +885,13 @@ class DiscoverModuleImportFailureTestCase:
     broken_file: str
     expected_error_type: type[Exception]
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ParseSeedAuditsYamlTestCase:
+    """Seed YAML with table and column audits."""
+
+    description: str
+    contents: str
+    expected_table_audits: tuple[str, ...]
+    expected_column_audits: tuple[tuple[str, ...], ...]

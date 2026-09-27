@@ -21,24 +21,25 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_source_names,
     validate_audit_references,
 )
+from sqlbuild.compiler.compile._helpers.named_declarations.core import (
+    declaration_file_expansion,
+    named_declaration_usages,
+)
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile._helpers.render.arguments import (
     render_parameterized_sql,
 )
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
-from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_expansion
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
     expand_authored_sql_result,
 )
-from sqlbuild.compiler.compile.constants import (
-    AUDIT_DIRECTORY_NAME,
-    GENERIC_AUDIT_DIRECTORY_NAME,
-)
+from sqlbuild.compiler.compile.constants import SINGULAR_AUDIT_NOT_CROSS_RESOURCE_CODE
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
     CompileAuditInput,
     CompileModelInput,
+    CompileSeedInput,
     CompileSourceInput,
     CompileSqlReference,
     DeclarationExpansionContext,
@@ -54,14 +55,28 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.compiler.scopes.models import ResourceIdentity
-from sqlbuild.compiler.scopes.types import ResourceKind
+from sqlbuild.compiler.scopes.models import (
+    DeclarationIdentity,
+    ResourceIdentity,
+    UsageRecord,
+)
+from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind
 from sqlbuild.spec.contracts.models import (
     SchemaAuditInstance,
     SchemaColumn,
     SettingsConfig,
     SourceColumnEntry,
 )
+
+_CROSS_MODEL_MINIMUM: int = 2
+
+
+@dataclass(frozen=True)
+class _AuditConsumer:
+    """The resource that attaches a generic audit, used for scope visibility and placement."""
+
+    identity: ResourceIdentity
+    path: Path
 
 
 @dataclass(frozen=True)
@@ -78,14 +93,14 @@ class _AuditAttachmentContext:
     effective_vars: dict[str, object]
     macro_context: MacroContext
     declaration_expansion: DeclarationExpansionContext
-    scoped_declarations: dict[tuple[Path, ResourceIdentity], DeclarationExpansionContext] = field(
-        default_factory=dict, compare=False, repr=False
+    scoped_declarations: dict[tuple[Path, DeclarationIdentity], DeclarationExpansionContext] = (
+        field(default_factory=dict, compare=False, repr=False)
     )
 
     def remember_scoped_declarations(
         self,
         *,
-        key: tuple[Path, ResourceIdentity],
+        key: tuple[Path, DeclarationIdentity],
         declarations: DeclarationExpansionContext,
     ) -> None:
         """Retain one resolved audit scope for reuse in this compile invocation."""
@@ -105,6 +120,7 @@ def build_audit_inputs(
     declaration_expansion: DeclarationExpansionContext,
     generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]]
     | None = None,
+    seed_inputs: tuple[CompileSeedInput, ...] = (),
 ) -> tuple[CompileAuditInput, ...]:
     """Build compile-time audit inputs from discovered SQL audit blocks."""
 
@@ -134,14 +150,14 @@ def build_audit_inputs(
             continue
         audit_block: DiscoveredAuditBlock
         for audit_block in audit_file.blocks:
-            audit_resource: ResourceIdentity = ResourceIdentity(
-                ResourceKind.AUDIT,
+            audit_identity: DeclarationIdentity = DeclarationIdentity(
+                DeclarationKind.SINGULAR_AUDIT,
                 audit_block.name or audit_file.relative_path.stem,
             )
             scoped_declarations: DeclarationExpansionContext = _scoped_audit_declarations(
                 context=attachment_context,
                 file_path=audit_file.file_path,
-                resource=audit_resource,
+                consumer=audit_identity,
             )
             expansion: AuthoredSqlExpansionResult = expand_authored_sql_result(
                 sql=audit_block.sql_body,
@@ -188,6 +204,11 @@ def build_audit_inputs(
                 known_model_names=known_model_names,
                 known_seed_names=known_seed_names,
                 known_source_names=known_source_names,
+            )
+            referenced_resources: tuple[ResourceIdentity, ...] = singular_audit_resources(
+                references=references,
+                audit_file=audit_file,
+                audit_name=audit_identity.name,
             )
             header_severity: str | None = _str_from_dict(
                 values=audit_block.header_values, key="severity"
@@ -254,6 +275,10 @@ def build_audit_inputs(
                     declaration_usages=(
                         expansion.usages
                         + (() if evidence_expansion is None else evidence_expansion.usages)
+                        + tuple(
+                            UsageRecord(consumer=resource, declaration=audit_identity)
+                            for resource in referenced_resources
+                        )
                     ),
                 )
             )
@@ -275,6 +300,11 @@ def build_audit_inputs(
                 context=attachment_context,
             )
         )
+    seed_input: CompileSeedInput
+    for seed_input in seed_inputs:
+        audit_inputs.extend(
+            build_seed_attached_audit_inputs(seed_input=seed_input, context=attachment_context)
+        )
     return tuple(audit_inputs)
 
 
@@ -294,6 +324,10 @@ def build_model_attached_audit_inputs(
         model_input.schema_file.relative_path
         if model_input.schema_file is not None
         else model_input.model_file.relative_path
+    )
+    model_consumer: _AuditConsumer = _AuditConsumer(
+        identity=ResourceIdentity(ResourceKind.MODEL, model_input.model_file.file_path.stem),
+        path=model_input.model_file.relative_path,
     )
     attached_audit_inputs: list[CompileAuditInput] = []
     audit_instance: SchemaAuditInstance
@@ -316,6 +350,7 @@ def build_model_attached_audit_inputs(
                 attached_target_name=model_input.model_file.file_path.stem,
                 attached_column_name=attached_column_name,
                 context=context,
+                consumer=model_consumer,
             )
         )
     column_entry: SchemaColumn
@@ -345,6 +380,7 @@ def build_model_attached_audit_inputs(
                     attached_target_name=model_input.model_file.file_path.stem,
                     attached_column_name=column_entry.name,
                     context=context,
+                    consumer=model_consumer,
                 )
             )
     return tuple(attached_audit_inputs)
@@ -357,6 +393,10 @@ def build_source_attached_audit_inputs(
 ) -> tuple[CompileAuditInput, ...]:
     """Render source-attached audits into compile audit inputs."""
 
+    source_consumer: _AuditConsumer = _AuditConsumer(
+        identity=ResourceIdentity(ResourceKind.SOURCE, source_input.source_entry.name),
+        path=source_input.source_file.relative_path,
+    )
     attached_audit_inputs: list[CompileAuditInput] = []
     audit_instance: SchemaAuditInstance
     for audit_instance in source_input.source_entry.audits:
@@ -375,6 +415,7 @@ def build_source_attached_audit_inputs(
                 attached_target_name=source_input.source_entry.name,
                 attached_column_name=None,
                 context=context,
+                consumer=source_consumer,
             )
         )
     column_entry: SourceColumnEntry
@@ -396,8 +437,56 @@ def build_source_attached_audit_inputs(
                     attached_target_name=source_input.source_entry.name,
                     attached_column_name=column_entry.name,
                     context=context,
+                    consumer=source_consumer,
                 )
             )
+    return tuple(attached_audit_inputs)
+
+
+def build_seed_attached_audit_inputs(
+    *,
+    seed_input: CompileSeedInput,
+    context: _AuditAttachmentContext,
+) -> tuple[CompileAuditInput, ...]:
+    """Render seed-attached table and column audits into compile audit inputs."""
+
+    seed_name: str = seed_input.schema_entry.name
+    seed_consumer: _AuditConsumer = _AuditConsumer(
+        identity=ResourceIdentity(ResourceKind.SEED, seed_name),
+        path=seed_input.seed_file.relative_path,
+    )
+    implicit_arguments: dict[str, object] = {
+        "seed": seed_name,
+        "relation": SqlReferenceKind.SEED.example_call(seed_name, quote='"'),
+    }
+    attached_audit_inputs: list[CompileAuditInput] = [
+        build_attached_audit_input(
+            audit_instance=audit_instance,
+            owner_file=seed_input.schema_file.relative_path,
+            implicit_arguments=implicit_arguments,
+            attached_target_kind=AttachedAuditTargetKind.SEED,
+            attached_target_name=seed_name,
+            attached_column_name=_explicit_audit_column_name(audit_instance=audit_instance),
+            context=context,
+            consumer=seed_consumer,
+        )
+        for audit_instance in seed_input.schema_entry.audits
+    ]
+    column_entry: SchemaColumn
+    for column_entry in seed_input.schema_entry.columns:
+        attached_audit_inputs.extend(
+            build_attached_audit_input(
+                audit_instance=audit_instance,
+                owner_file=seed_input.schema_file.relative_path,
+                implicit_arguments={**implicit_arguments, "column": column_entry.name},
+                attached_target_kind=AttachedAuditTargetKind.SEED,
+                attached_target_name=seed_name,
+                attached_column_name=column_entry.name,
+                context=context,
+                consumer=seed_consumer,
+            )
+            for audit_instance in column_entry.audits
+        )
     return tuple(attached_audit_inputs)
 
 
@@ -410,16 +499,16 @@ def _explicit_audit_column_name(
 
 
 def _scoped_audit_declarations(
-    *, context: _AuditAttachmentContext, file_path: Path, resource: ResourceIdentity
+    *, context: _AuditAttachmentContext, file_path: Path, consumer: DeclarationIdentity
 ) -> DeclarationExpansionContext:
-    key: tuple[Path, ResourceIdentity] = (file_path, resource)
+    key: tuple[Path, DeclarationIdentity] = (file_path, consumer)
     cached: DeclarationExpansionContext | None = context.scoped_declarations.get(key)
     if cached is not None:
         return cached
-    resolved: DeclarationExpansionContext = resolve_declaration_expansion(
+    resolved: DeclarationExpansionContext = declaration_file_expansion(
         context=context.declaration_expansion,
         file_path=file_path,
-        resource=resource,
+        consumer=consumer,
     )
     context.remember_scoped_declarations(key=key, declarations=resolved)
     return resolved
@@ -434,6 +523,7 @@ def build_attached_audit_input(
     attached_target_name: str,
     attached_column_name: str | None,
     context: _AuditAttachmentContext,
+    consumer: _AuditConsumer,
 ) -> CompileAuditInput:
     """Render one attached generic audit instance into a compile audit input."""
 
@@ -444,6 +534,13 @@ def build_attached_audit_input(
         raise CompileInputError(
             f"{owner_file} references unknown generic audit '{audit_instance.definition_name}'"
         )
+    attachment_usages: tuple[UsageRecord, ...] = named_declaration_usages(
+        resolver=context.declaration_expansion.resolver,
+        kind=DeclarationKind.AUDIT,
+        name=audit_instance.definition_name,
+        consumer=consumer.identity,
+        consumer_path=consumer.path,
+    )
     evaluation_mode: AuditEvaluationMode = definition[1].evaluation_mode
     if evaluation_mode == AuditEvaluationMode.MEASUREMENT:
         if audit_instance.severity is not None:
@@ -481,14 +578,10 @@ def build_attached_audit_input(
             owner_file=owner_file,
             definition_name=audit_instance.definition_name,
         )
-    audit_resource: ResourceIdentity = ResourceIdentity(
-        ResourceKind.AUDIT,
-        definition[1].name or definition[0].relative_path.stem,
-    )
     scoped_declarations: DeclarationExpansionContext = _scoped_audit_declarations(
         context=context,
         file_path=definition[0].file_path,
-        resource=audit_resource,
+        consumer=DeclarationIdentity(DeclarationKind.AUDIT, audit_instance.definition_name),
     )
     expansion: AuthoredSqlExpansionResult = expand_authored_sql_result(
         sql=rendered_sql_body,
@@ -579,7 +672,9 @@ def build_attached_audit_input(
         run_scope=resolved_run_scope,
         always_run=audit_instance.always_run,
         declaration_usages=(
-            expansion.usages + (() if evidence_expansion is None else evidence_expansion.usages)
+            attachment_usages
+            + expansion.usages
+            + (() if evidence_expansion is None else evidence_expansion.usages)
         ),
     )
 
@@ -587,7 +682,7 @@ def build_attached_audit_input(
 def index_generic_audit_definitions(
     audit_files: tuple[DiscoveredAuditFile, ...],
 ) -> dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]]:
-    """Index generic audit definitions discovered under audits/generic/."""
+    """Index project-wide and scoped generic audit definitions by name."""
 
     definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = {}
     audit_file: DiscoveredAuditFile
@@ -611,7 +706,8 @@ def index_generic_audit_definitions(
         definition_name: str = audit_file.file_path.stem
         if definition_name in definitions:
             raise CompileInputError(
-                f"Duplicate generic audit definition found for '{definition_name}'"
+                f"Duplicate generic audit definition found for '{definition_name}' in "
+                f"{definitions[definition_name][0].relative_path} and {audit_file.relative_path}"
             )
         definitions[definition_name] = (audit_file, audit_file.blocks[0])
     return definitions
@@ -620,9 +716,68 @@ def index_generic_audit_definitions(
 def is_generic_audit_file(audit_file: DiscoveredAuditFile) -> bool:
     """Return whether a discovered audit file is a generic definition."""
 
-    return audit_file.relative_path.parts[:2] == (
-        AUDIT_DIRECTORY_NAME,
-        GENERIC_AUDIT_DIRECTORY_NAME,
+    return audit_file.declaration_kind is DeclarationKind.AUDIT
+
+
+def singular_audit_resources(
+    *,
+    references: tuple[CompileSqlReference, ...],
+    audit_file: DiscoveredAuditFile,
+    audit_name: str,
+) -> tuple[ResourceIdentity, ...]:
+    """Require a singular audit to check more than one resource and return what it references."""
+
+    model_names: frozenset[str] = frozenset(
+        reference.ref_name for reference in references if reference.ref_kind == SqlReferenceKind.REF
+    )
+    companion_kinds: dict[SqlReferenceKind, ResourceKind] = {
+        SqlReferenceKind.SOURCE: ResourceKind.SOURCE,
+        SqlReferenceKind.SEED: ResourceKind.SEED,
+        SqlReferenceKind.TABLE_FUNCTION: ResourceKind.FUNCTION,
+    }
+    companions: frozenset[ResourceIdentity] = frozenset(
+        ResourceIdentity(companion_kinds[SqlReferenceKind(reference.ref_kind)], reference.ref_name)
+        for reference in references
+        if reference.ref_kind in companion_kinds
+    )
+    label: str = f"Singular audit '{audit_name}' in {audit_file.relative_path}"
+    if len(model_names) >= _CROSS_MODEL_MINIMUM or (model_names and companions):
+        return tuple(
+            sorted(
+                {
+                    *(ResourceIdentity(ResourceKind.MODEL, name) for name in model_names),
+                    *companions,
+                }
+            )
+        )
+    if len(model_names) == 1:
+        model_name: str = next(iter(model_names))
+        raise CompileInputError(
+            f"{label} checks only model '{model_name}'; singular audits must be cross-resource",
+            code=SINGULAR_AUDIT_NOT_CROSS_RESOURCE_CODE,
+            help=(
+                f"attach a generic audit to '{model_name}' instead: write it in an "
+                "audits/generic/ role and select FROM @relation, joining @relation to itself for "
+                "self-join checks"
+            ),
+        )
+    if companions:
+        raise CompileInputError(
+            f"{label} checks only sources or seeds; singular audits must reference at least one "
+            "model",
+            code=SINGULAR_AUDIT_NOT_CROSS_RESOURCE_CODE,
+            help="attach YAML audits to the source or seed instead",
+        )
+    raise CompileInputError(
+        f"{label} references no SQLBuild resource; singular audits must reference two or more "
+        f"models, or a model plus a source, seed, or table function via "
+        f"{SqlReferenceKind.REF.placeholder_call()}, {SqlReferenceKind.SOURCE.placeholder_call()}, "
+        f"or {SqlReferenceKind.SEED.placeholder_call()}",
+        code=SINGULAR_AUDIT_NOT_CROSS_RESOURCE_CODE,
+        help=(
+            "reference resources through SQLBuild calls instead of hard-coded relation names, or "
+            "attach a generic audit to the resource being checked"
+        ),
     )
 
 

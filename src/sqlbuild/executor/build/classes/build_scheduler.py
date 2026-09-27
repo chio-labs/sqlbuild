@@ -19,6 +19,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.contract.types import TablePromotionMode
+from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
@@ -1158,6 +1159,8 @@ class BuildScheduler:
             if self._on_node_complete is not None:
                 self._on_node_complete(result)
             failed = result.status == ExecutionStatus.FAILED
+            if result.status == ExecutionStatus.SUCCESS and self._run_seed_audits(key=key):
+                failed = True
 
         elif isinstance(result, SqlTestExecutionResult):
             self._test_results.append(result)
@@ -1208,6 +1211,27 @@ class BuildScheduler:
             if self._fail_fast:
                 self._stop = True
         self._mark_complete(key)
+
+    def _run_seed_audits(self, *, key: CompiledObjectKey) -> bool:
+        """Run a loaded seed's audits and return whether an error-severity audit failed."""
+
+        if not self._run_audits:
+            return False
+        audits: tuple[AuditPlanEntry, ...] = self._indexes.seed_audits_by_seed.get(key.name, ())
+        if not audits:
+            return False
+        results: tuple[AuditExecutionResult, ...] = run_end_audits(
+            end_audits=audits,
+            adapter=self._adapter,
+            connection=self._scheduler_connection,
+            model_locations=self._plan.model_locations,
+            seed_locations=self._plan.seed_locations,
+            source_map=self._plan.source_map,
+            run_id=self._run_id,
+            quality_scope="seed",
+        )
+        self._source_audit_results.extend(results)
+        return any(result.outcome == AuditOutcome.ERROR for result in results)
 
     def _mark_complete(self, key: CompiledObjectKey) -> None:
         """Mark a key complete and enqueue any downstream that become ready."""

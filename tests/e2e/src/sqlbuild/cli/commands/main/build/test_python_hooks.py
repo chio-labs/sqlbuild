@@ -24,6 +24,13 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     table_exists,
 )
 
+_FAIL_HOOK_SOURCE: str = (
+    "from sqlbuild.hooks import hook\n\n\n"
+    "@hook\n"
+    "def fail_hook(ctx, message):\n"
+    "    raise RuntimeError(message)\n"
+)
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -709,6 +716,7 @@ def test_given_python_post_hook_failure_when_building_graph_then_downstream_is_b
             ),
             expected_present_tables=(),
             expected_absent_tables=("orders",),
+            hook_files={"hooks/python/lifecycle.py": _FAIL_HOOK_SOURCE},
         ),
         PythonHookFailureBuildE2ETestCase(
             description="pre hook failure shows failing SQL hook row",
@@ -753,17 +761,7 @@ def test_given_pre_hook_failure_when_building_then_cli_shows_failing_hook_row(
                 """
             ).strip()
             + "\n",
-            "hooks/python/lifecycle.py": dedent(
-                """
-                from sqlbuild.hooks import hook
-
-
-                @hook
-                def fail_hook(ctx, message):
-                    raise RuntimeError(message)
-                """
-            ).strip()
-            + "\n",
+            **test_case.hook_files,
             "models/orders.sql": test_case.model_sql,
         },
     )

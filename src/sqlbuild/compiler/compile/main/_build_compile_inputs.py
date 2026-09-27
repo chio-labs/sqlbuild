@@ -199,6 +199,7 @@ def build_compile_inputs(
         loaded_macros=declaration_scope.loaded_macros,
         declaration_expansion=model_context.declaration_expansion,
         generic_audit_definitions=generic_audit_definitions,
+        seed_inputs=seed_inputs,
     )
     return CompileProjectInputs(
         project_config=discovered_inputs.project_config,

@@ -29,7 +29,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import (
             0,
         ),
         UnevaluatedResourceCase(
-            "audit guard", "audits/orders.sql", "AUDIT ();\nSELECT {expression} AS order_id"
+            "audit guard",
+            "models/staging/_sqlbuild/audits/singular/orders.sql",
+            "AUDIT ();\nSELECT {expression} AS order_id "
+            'FROM __ref("orders") JOIN __ref("customers") USING (order_id)',
+            expected_evaluated_models=2,
+            extra_files=(("models/staging/customers.sql", "MODEL ();\nSELECT 1 AS order_id\n"),),
         ),
         UnevaluatedResourceCase(
             "SQL-test guard",
@@ -48,6 +53,7 @@ def test_given_guarded_resource_when_running_rules_then_reports_failure_and_cove
         resource_path=test_case.path,
         resource_template=test_case.template,
         adapter=test_case.adapter,
+        extra_files=test_case.extra_files,
     )
     for _ in range(2):
         result: subprocess.CompletedProcess[str] = run_unevaluated_rules_cli(

@@ -193,7 +193,15 @@ def test_given_attached_audit_reads_downstream_model_when_building_and_auditing_
         ),
         encoding="utf-8",
     )
-    audit_path: Path = project_dir / "audits" / "generic" / "cross_model_consistency.sql"
+    audit_path: Path = (
+        project_dir
+        / "models"
+        / "staging"
+        / "_sqlbuild"
+        / "_audits"
+        / "generic"
+        / "cross_model_consistency.sql"
+    )
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     audit_path.write_text(
         'AUDIT (name "cross_model_consistency");\n\n'

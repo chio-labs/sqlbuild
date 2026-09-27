@@ -1874,13 +1874,8 @@ def audit_is_selected(
     """Return whether an audit belongs to the selected logical target scope."""
 
     if audit.attached_target_kind is not None and audit.attached_target_name is not None:
-        resource_type: CompiledResourceType = (
-            CompiledResourceType.SOURCE
-            if audit.attached_target_kind == AttachedAuditTargetKind.SOURCE
-            else CompiledResourceType.MODEL
-        )
         target_key: CompiledObjectKey = CompiledObjectKey(
-            resource_type=resource_type,
+            resource_type=AttachedAuditTargetKind(audit.attached_target_kind).resource_type,
             name=audit.attached_target_name,
         )
         return target_key in selected_keys
