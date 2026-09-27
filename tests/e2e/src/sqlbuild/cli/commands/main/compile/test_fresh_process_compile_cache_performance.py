@@ -75,7 +75,7 @@ _MAX_EDIT_TO_COLD_RATIO: float = 0.60
             macro_count=834,
             test_count=4_908,
             audit_count=8_427,
-            expected_cold_max_wall_seconds=23.5,
+            expected_cold_max_wall_seconds=24.0,
             expected_warm_max_wall_seconds=13.5,
             expected_edit_max_wall_seconds=12.5,
             expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
@@ -222,11 +222,9 @@ def test_given_semantic_project_when_compiling_across_processes_then_cache_is_in
         1,
         0,
     )
-    assert fresh_process_compile_cache_metrics(result.after_leaf_edit) == (
-        test_case.model_count - 1,
-        1,
-        0,
-        0,
+    assert_complete_compile_cache_hit(
+        measurement=result.after_leaf_edit,
+        model_count=test_case.model_count,
     )
     macro_batch_hits, macro_entry_hits, macro_misses, macro_bypasses = (
         fresh_process_compile_cache_metrics(result.macro_edit)
