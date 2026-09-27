@@ -81,6 +81,7 @@ E2E_DUCKDB_BUILD_CORE_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_reusable_model_schemas.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_runtime_artifact_preservation.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_schema_backfill_behavior.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_scoped_declarations.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_selector_surface.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_table_function_dependency.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_template_expressions.py \
