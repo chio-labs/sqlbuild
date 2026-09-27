@@ -25,6 +25,7 @@ from sqlbuild.rule_engine.main.build_catalogue import build_catalogue
 from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.main.render_result import format_result
 from sqlbuild.rule_engine.main.render_rule import format_rule
+from sqlbuild.rule_engine.main.render_skipped_rules import format_skipped_type_proof_rules
 from sqlbuild.rule_engine.main.run_rules import run_rules
 from sqlbuild.rule_engine.main.skills import install_skills
 from sqlbuild.rule_engine.models import Rule, RulesConfig, RulesResult, RulesRunResult
@@ -151,6 +152,11 @@ def _run_rule_selection(
         dialect=adapter.sql_analysis_dialect() or "generic",
         selected_keys=selected_keys if request.select or request.exclude else None,
     )
+    skipped_rules_note: str | None = format_skipped_type_proof_rules(
+        codes=result.skipped_type_proof_rules
+    )
+    if skipped_rules_note is not None:
+        print(f"note: {skipped_rules_note}", file=sys.stderr)
     print(
         format_result(
             result=RulesResult(

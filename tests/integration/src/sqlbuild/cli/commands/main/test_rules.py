@@ -19,6 +19,8 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     DynamicPivotRulesIntegrationTestCase,
     ExplicitContractOutputRuleIntegrationTestCase,
+    ImplicitAliasRuleIntegrationTestCase,
+    NumericRangeDecisionIntegrationTestCase,
     RulePassIntegrationTestCase,
     RulesIntegrationTestCase,
     TypedContractRuleIntegrationTestCase,
@@ -155,6 +157,83 @@ def test_given_exact_internal_edge_exception_when_compiling_then_live_edge_passe
     assert any(
         diagnostic["code"] == test_case.expected_code and "stale" in str(diagnostic["message"])
         for diagnostic in cast(list[dict[str, object]], stale_result["diagnostics"])
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NumericRangeDecisionIntegrationTestCase(
+            description="literal between bounds and value list are reported",
+            predicate=(
+                "TRY_CAST(code AS INTEGER) BETWEEN 30 AND 61\n"
+                "  OR TRY_CAST(code AS INTEGER) NOT IN (30, 31, 45)"
+            ),
+            expected_findings=(
+                (
+                    "non-canonical numeric comparison: TRY_CAST(code AS INTEGER) BETWEEN 30 AND 61",
+                    "Declare the threshold as a CONSTANT and compare through "
+                    '@const("<name>"); only -1, 0, and 1 are self-explanatory.',
+                ),
+                (
+                    "non-canonical numeric comparison: "
+                    "TRY_CAST(code AS INTEGER) NOT IN (30, 31, 45)",
+                    "Declare the values as a list or set CONSTANT and compare through "
+                    '[NOT] IN @const("<name>"); only -1, 0, and 1 are self-explanatory.',
+                ),
+            ),
+            expected_exit_code=1,
+        ),
+        NumericRangeDecisionIntegrationTestCase(
+            description="constant-backed between bounds and value list pass",
+            predicate=(
+                'TRY_CAST(code AS INTEGER) BETWEEN @const("_low_code") AND @const("_high_code")\n'
+                '  OR TRY_CAST(code AS INTEGER) NOT IN @const("_held_codes")'
+            ),
+            expected_findings=(),
+            expected_exit_code=0,
+            constants="  constants (_low_code 30, _high_code 61, _held_codes [30, 31, 45]),\n",
+        ),
+        NumericRangeDecisionIntegrationTestCase(
+            description="canonical between bounds and value list pass",
+            predicate=(
+                "TRY_CAST(code AS INTEGER) BETWEEN 0 AND 1\n"
+                "  OR TRY_CAST(code AS INTEGER) IN (-1, 0, 1)"
+            ),
+            expected_findings=(),
+            expected_exit_code=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_numeric_range_or_value_list_when_compiling_then_literal_decisions_are_reported(
+    test_case: NumericRangeDecisionIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """BETWEEN bounds and IN members follow the same named-decision rule as comparisons."""
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRDECLARATION102"]\n',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        "MODEL (\n"
+        '  description "Orders",\n' + test_case.constants + ");\n\n"
+        "SELECT code\n"
+        "FROM (SELECT '31' AS code) AS items\n"
+        f"WHERE {test_case.predicate}\n",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
+    result: dict[str, object] = json.loads(capsys.readouterr().out)
+    diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], result["diagnostics"])
+
+    assert exit_code == test_case.expected_exit_code
+    assert tuple((diagnostic["message"], diagnostic["help"]) for diagnostic in diagnostics) == (
+        test_case.expected_findings
     )
 
 
@@ -954,6 +1033,87 @@ CROSS JOIN __table_fn("expand_order")(source_orders.order_id) AS expanded
     assert exit_code == test_case.expected_exit_code
     payload: dict[str, object] = json.loads(capsys.readouterr().out)
     assert payload["findings"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ImplicitAliasRuleIntegrationTestCase(
+            description="unused implicit join alias is reported",
+            query_sql=(
+                "SELECT o.order_id\n"
+                'FROM __ref("orders") o\n'
+                'INNER JOIN __ref("customers") c ON o.customer_id = o.order_id\n'
+            ),
+            expected_locations=((4, 31),),
+        ),
+        ImplicitAliasRuleIntegrationTestCase(
+            description="unused implicit subquery alias is reported",
+            query_sql='SELECT order_id\nFROM (SELECT order_id FROM __ref("orders")) recent\n',
+            expected_locations=((3, 45),),
+        ),
+        ImplicitAliasRuleIntegrationTestCase(
+            description="implicit and explicit unused aliases are reported alike",
+            query_sql='SELECT order_id\nFROM __ref("orders") AS o, __ref("customers") c\n',
+            expected_locations=((3, 22), (3, 47)),
+        ),
+        ImplicitAliasRuleIntegrationTestCase(
+            description="whole-row alias uses are clean",
+            query_sql=(
+                "SELECT to_json(o) AS payload, c\n"
+                'FROM __ref("orders") o\n'
+                'INNER JOIN __ref("customers") AS c ON o.customer_id = c.customer_id\n'
+            ),
+            expected_locations=(),
+        ),
+        ImplicitAliasRuleIntegrationTestCase(
+            description="join modifiers after unaliased relations are clean",
+            query_sql='SELECT *\nFROM __ref("orders") POSITIONAL JOIN __ref("customers")\n',
+            expected_locations=(),
+        ),
+        ImplicitAliasRuleIntegrationTestCase(
+            description="used implicit aliases are clean",
+            query_sql=(
+                "SELECT o.order_id, c.customer_id\n"
+                'FROM __ref("orders") o\n'
+                'INNER JOIN __ref("customers") c ON o.customer_id = c.customer_id\n'
+            ),
+            expected_locations=(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_implicit_table_alias_when_running_alias_rule_then_usage_decides_finding(
+    test_case: ImplicitAliasRuleIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Implicit aliases are held to the same unused-alias contract as AS aliases."""
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "orders.sql").write_text(
+        'MODEL (description "Orders");\nSELECT 1 AS order_id, 2 AS customer_id\n',
+        encoding="utf-8",
+    )
+    (models / "customers.sql").write_text(
+        'MODEL (description "Customers");\nSELECT 2 AS customer_id\n', encoding="utf-8"
+    )
+    (models / "order_customers.sql").write_text(
+        'MODEL (description "Order customers");\n' + test_case.query_sql, encoding="utf-8"
+    )
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "rules", "--json", "run", "SQBRSQL023"])
+
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    findings: list[dict[str, object]] = cast(list[dict[str, object]], payload["findings"])
+    assert exit_code == int(bool(test_case.expected_locations))
+    assert tuple((finding["line"], finding["column"]) for finding in findings) == (
+        test_case.expected_locations
+    )
+    assert {finding["path"] for finding in findings} <= {"models/order_customers.sql"}
 
 
 @pytest.mark.parametrize(

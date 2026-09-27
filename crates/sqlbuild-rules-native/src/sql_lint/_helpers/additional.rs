@@ -10,6 +10,7 @@ use crate::sql_lint::_helpers::engine::{
     direct_indices, is_comment, is_layout, is_query_from, query_end, significant_after,
     significant_before, token_depths,
 };
+use crate::sql_lint::constants::RELATION_MODIFIER_KEYWORDS;
 use crate::sql_lint::models::{AdditionalFactOptions, AdditionalQueryFacts};
 
 const COUNT_ONE_LITERAL: &str = "1";
@@ -1242,32 +1243,90 @@ fn unused_alias_spans(query: &QuerySlice<'_>) -> Vec<Span> {
     let query_end = *query_end;
     let depth = *depth;
     let mut spans: Vec<Span> = Vec::new();
-    for window in relation_clause.windows(2) {
-        if tokens[window[0]].token_type != TokenType::As || !is_identifier(&tokens[window[1]]) {
-            continue;
-        }
-        if significant_after(tokens, window[1])
+    for (span_start, alias_index) in relation_alias_positions(tokens, relation_clause) {
+        if significant_after(tokens, alias_index)
             .is_some_and(|index| tokens[index].token_type == TokenType::LParen)
         {
             continue;
         }
-        let alias = &tokens[window[1]].text;
+        let alias = &tokens[alias_index].text;
+        let relation_name = significant_before(tokens, span_start);
         let used = (query_start..query_end).any(|index| {
-            depths[index] >= depth
+            index != alias_index
+                && Some(index) != relation_name
+                && depths[index] >= depth
+                && is_identifier(&tokens[index])
                 && tokens[index].text.eq_ignore_ascii_case(alias)
+                && significant_before(tokens, index).is_none_or(|previous| {
+                    !matches!(tokens[previous].token_type, TokenType::Dot | TokenType::As)
+                })
                 && significant_after(tokens, index)
-                    .is_some_and(|next| tokens[next].token_type == TokenType::Dot)
+                    .is_none_or(|next| tokens[next].token_type != TokenType::LParen)
         });
         if !used {
             spans.push(Span {
-                start: tokens[window[0]].span.start,
-                end: tokens[window[1]].span.end,
-                line: tokens[window[0]].span.line,
-                column: tokens[window[0]].span.column,
+                start: tokens[span_start].span.start,
+                end: tokens[alias_index].span.end,
+                line: tokens[span_start].span.line,
+                column: tokens[span_start].span.column,
             });
         }
     }
     spans
+}
+
+fn relation_alias_positions(tokens: &[Token], relation_clause: &[usize]) -> Vec<(usize, usize)> {
+    let mut aliases: Vec<(usize, usize)> = Vec::new();
+    let mut segment_start = 0_usize;
+    let mut in_condition = false;
+    for (position, &index) in relation_clause.iter().enumerate() {
+        if matches!(tokens[index].token_type, TokenType::Join | TokenType::Comma) {
+            segment_start = position + 1;
+            in_condition = false;
+            continue;
+        }
+        if in_condition || is_relation_condition_start(&tokens[index]) {
+            in_condition = true;
+            continue;
+        }
+        if tokens[index].token_type == TokenType::As {
+            if let Some(&alias) = relation_clause.get(position + 1)
+                && is_identifier(&tokens[alias])
+            {
+                aliases.push((index, alias));
+            }
+            continue;
+        }
+        if is_implicit_relation_alias(
+            tokens,
+            &relation_clause[segment_start..],
+            position - segment_start,
+        ) {
+            aliases.push((index, index));
+        }
+    }
+    aliases
+}
+
+fn is_implicit_relation_alias(tokens: &[Token], segment: &[usize], position: usize) -> bool {
+    let candidate = &tokens[segment[position]];
+    if position == 0
+        || !is_identifier(candidate)
+        || candidate.token_type != TokenType::QuotedIdentifier
+            && RELATION_MODIFIER_KEYWORDS
+                .iter()
+                .any(|keyword| candidate.text.eq_ignore_ascii_case(keyword))
+    {
+        return false;
+    }
+    let previous = &tokens[segment[position - 1]];
+    if previous.token_type == TokenType::LParen {
+        return true;
+    }
+    is_identifier(previous)
+        && position
+            .checked_sub(QUALIFIER_PAIR_LENGTH)
+            .is_none_or(|before| tokens[segment[before]].token_type == TokenType::Dot)
 }
 
 fn null_rejected_left_join_spans(

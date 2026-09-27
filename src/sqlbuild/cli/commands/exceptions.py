@@ -15,6 +15,13 @@ class CliUserError(Exception):
         self.help = help
 
 
+class QueryExecutionError(CliUserError):
+    """The warehouse rejected or failed an ad hoc query."""
+
+    code: str = "C108"
+    exit_code: int = 2
+
+
 class QueryDiffOutcomeError(CliUserError):
     """Expected query-diff failure with an explicit outcome and exit code."""
 

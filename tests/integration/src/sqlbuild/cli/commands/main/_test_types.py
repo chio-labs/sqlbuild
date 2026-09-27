@@ -72,6 +72,35 @@ class RulesIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class DollarQuotedLiteralBuildTestCase:
+    """One model projection with dollar-quoted literals and its built rows."""
+
+    description: str
+    projection: str
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ImplicitAliasRuleIntegrationTestCase:
+    """One model query and its expected unused-alias finding locations."""
+
+    description: str
+    query_sql: str
+    expected_locations: tuple[tuple[int, int], ...]
+
+
+@dataclass(frozen=True)
+class NumericRangeDecisionIntegrationTestCase:
+    """One numeric range or value-list predicate and its expected rule findings."""
+
+    description: str
+    predicate: str
+    expected_findings: tuple[tuple[str, str], ...]
+    expected_exit_code: int
+    constants: str = ""
+
+
+@dataclass(frozen=True)
 class RulePassIntegrationTestCase:
     """One compiler-integrated Rules command expected to pass."""
 

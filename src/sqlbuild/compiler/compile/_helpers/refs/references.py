@@ -34,7 +34,7 @@ _REFERENCE_PREFIXES: tuple[tuple[str, SqlReferenceKind], ...] = (
 _REFERENCE_PREFIX_BY_KIND: dict[SqlReferenceKind, str] = {
     ref_kind: prefix[:-1] for prefix, ref_kind in _REFERENCE_PREFIXES
 }
-_REFERENCE_SCAN_PATTERN: re.Pattern[str] = re.compile(r"__|--|/\*|'|\"|`")
+_REFERENCE_SCAN_PATTERN: re.Pattern[str] = re.compile(r"__|--|/\*|'|\"|`|\$")
 
 
 def extract_sql_references(sql: str) -> tuple[CompileSqlReference, ...]:

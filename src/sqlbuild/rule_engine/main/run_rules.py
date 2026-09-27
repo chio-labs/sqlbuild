@@ -24,6 +24,7 @@ def run_rules(
     selected_keys: frozenset[CompiledObjectKey] | None = None,
     prepared_sql: PreparedSqlLint | None = None,
     expansion_reuse: SqlExpansionReuse | None = None,
+    no_sql_analysis: bool = False,
 ) -> RulesRunResult:
     """Run selected native built-ins before selected custom Python rules."""
 
@@ -36,4 +37,5 @@ def run_rules(
         selected_keys=selected_keys,
         prepared_sql=prepared_sql,
         expansion_reuse=expansion_reuse,
+        no_sql_analysis=no_sql_analysis,
     )

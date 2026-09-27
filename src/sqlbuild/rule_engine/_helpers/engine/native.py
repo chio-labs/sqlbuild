@@ -48,6 +48,7 @@ from sqlbuild.rule_engine.constants import (
     RULE_CONTEXT_PROJECT_FACT,
     RULE_CONTEXT_TESTS_FACT,
     RULES_NATIVE_API_VERSION,
+    TYPE_PROOF_RULE_CODES,
 )
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.models import (
@@ -61,7 +62,6 @@ from sqlbuild.sql_values.types import SqlValueKind
 
 _CUSTOM_HOST_REQUIRED: str = "selected custom rules require a custom host"
 _NATIVE_CACHE_MISSES_PATTERN: re.Pattern[str] = re.compile(r"native_cache_misses=(\d+)")
-_EXPLICIT_OUTPUT_TYPES_RULE: str = "SQBRCONTRACT105"
 
 
 def evaluate_native(
@@ -89,7 +89,9 @@ def evaluate_native(
         "models": _model_payloads(
             project=project,
             dialect=dialect,
-            include_type_proof=_rule_selected(config=config, code=_EXPLICIT_OUTPUT_TYPES_RULE),
+            include_type_proof=any(
+                _rule_selected(config=config, code=code) for code in TYPE_PROOF_RULE_CODES
+            ),
         ),
         "sql_tests": _sql_test_payloads(project),
         "sql_scenarios": _sql_scenario_payloads(project),

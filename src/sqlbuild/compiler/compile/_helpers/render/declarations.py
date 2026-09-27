@@ -65,7 +65,7 @@ _CONSTANT_REFERENCE_PATTERN: re.Pattern[str] = re.compile(
     r"(?P=quote)\s*\)"
 )
 _DECLARATION_REFERENCE_START_PATTERN: re.Pattern[str] = re.compile(r"@(?P<kind>enum|const)\b")
-_DECLARATION_SCAN_SPECIAL: re.Pattern[str] = re.compile(r"['\"`@/-]")
+_DECLARATION_SCAN_SPECIAL: re.Pattern[str] = re.compile(r"['\"`$@/-]")
 _CONTEXT: str = "Enum and constant expansion"
 _ACCEPTED_VALUES_AUDIT: str = "accepted_values"
 _ENUM_REFERENCE_KIND: str = "enum"

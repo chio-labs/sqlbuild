@@ -67,6 +67,14 @@ pub(crate) fn comments_and_quoted_text_hide_references() -> bool {
         == Some(vec![("ref".to_owned(), "orders".to_owned(), None, None)])
 }
 
+pub(crate) fn dollar_quoted_text_hides_references() -> bool {
+    extract(concat!(
+        "SELECT $$Customer's order -- __ref(\"ignored\") $5$$ AS label, ",
+        "$tag$ $$ __seed(\"also_ignored\") $tag$ AS note, price$1$ ",
+        "FROM __ref(orders)"
+    )) == Some(vec![("ref".to_owned(), "orders".to_owned(), None, None)])
+}
+
 pub(crate) fn complex_or_malformed_sql_requests_fallback() -> bool {
     [
         "SELECT * FROM __table_fn(\"orders\")(1)",
@@ -74,6 +82,7 @@ pub(crate) fn complex_or_malformed_sql_requests_fallback() -> bool {
         "SELECT * FROM __ref(\"orders\"",
         "SELECT * FROM __ref(\"orders\") /* unterminated",
         "SELECT * FROM __ref(\"orders\") WHERE note = 'unterminated",
+        "SELECT * FROM __ref(\"orders\") WHERE note = $$unterminated",
         "SELECT * FROM __ref(örders)",
     ]
     .into_iter()

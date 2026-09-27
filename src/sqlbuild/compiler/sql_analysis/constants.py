@@ -4,6 +4,7 @@ from __future__ import annotations
 
 SQL_ESCAPABLE_QUOTE_CHARACTERS: frozenset[str] = frozenset({"'", '"'})
 SQL_QUOTE_CHARACTERS: frozenset[str] = frozenset({*SQL_ESCAPABLE_QUOTE_CHARACTERS, "`"})
+SQL_TEXT_START_CHARACTERS: frozenset[str] = frozenset({*SQL_QUOTE_CHARACTERS, "$"})
 SQL_OPEN_PARENTHESIS: str = "("
 SQL_CLOSE_PARENTHESIS: str = ")"
 SQL_OPEN_BRACKET: str = "["
@@ -11,6 +12,7 @@ SQL_CLOSE_BRACKET: str = "]"
 SQL_STRING_QUOTE_CHARACTER: str = "'"
 SQL_ESCAPE_CHARACTER: str = "\\"
 SQL_DOLLAR_QUOTE_DELIMITER: str = "$$"
+SQL_DOLLAR_QUOTE_CHARACTER: str = "$"
 SQL_IDENTIFIER_PREFIX: str = "_"
 SQL_NULL_KEYWORD: str = "NULL"
 SNOWFLAKE_DIALECT_NAME: str = "snowflake"

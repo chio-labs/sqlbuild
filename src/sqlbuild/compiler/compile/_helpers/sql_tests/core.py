@@ -72,6 +72,7 @@ _CONTEXT: str = "SQL test"
 _SQL_TEST_WITH_REQUIREMENT: str = "mock CTEs and one __expected__<model> CTE"
 _DIRECT_DEPENDENCY_PATH_LENGTH: int = 2
 _SQL_IDENTIFIER_QUOTE_TOKENS: frozenset[str] = frozenset({'"', "`"})
+_SQL_STRING_QUOTE_TOKENS: frozenset[str] = frozenset({SQL_SINGLE_QUOTE_TOKEN, "$"})
 
 
 @dataclass(frozen=True)
@@ -1000,7 +1001,7 @@ def _known_cte_identifier_references(*, sql: str, names_by_key: dict[str, str]) 
         if sql.startswith("/*", index):
             index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
             continue
-        if sql[index] == SQL_SINGLE_QUOTE_TOKEN:
+        if sql[index] in _SQL_STRING_QUOTE_TOKENS:
             index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
             continue
         if sql[index] in _SQL_IDENTIFIER_QUOTE_TOKENS:

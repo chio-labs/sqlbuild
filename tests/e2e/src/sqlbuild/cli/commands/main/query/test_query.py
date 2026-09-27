@@ -7,6 +7,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.query._test_types import (
     QueryCliTestCase,
+    QueryExecutionErrorCliTestCase,
     QueryFileCliTestCase,
     QueryFileErrorCliTestCase,
 )
@@ -164,3 +165,84 @@ def test_given_invalid_query_file_input_when_running_query_then_reports_actionab
 
     assert result.returncode == 1
     assert test_case.expected_stderr_fragment in result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        QueryExecutionErrorCliTestCase(
+            description="reports a missing relation as a CLI error",
+            command=("query", "SELECT * FROM missing_orders"),
+            expected_stderr_fragment=(
+                "error[C108]: Catalog Error: Table with name missing_orders does not exist!"
+            ),
+        ),
+        QueryExecutionErrorCliTestCase(
+            description="reports a syntax error as a CLI error",
+            command=("query", "SELECT FROM WHERE"),
+            expected_stderr_fragment="error[C108]: Parser Error: syntax error",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_warehouse_rejects_query_when_running_query_then_reports_cli_error(
+    tmp_path: Path,
+    test_case: QueryExecutionErrorCliTestCase,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="query_error_project",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "query_error_project"\nadapter = "duckdb"\n\n'
+                '[connection]\ndatabase = "query.duckdb"\n'
+            ),
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_returncode
+    assert test_case.expected_stderr_fragment in result.stderr
+    assert "Traceback" not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        QueryExecutionErrorCliTestCase(
+            description="keeps machine-readable stdout empty when the query fails",
+            command=("query", "SELECT * FROM missing_orders", "--format", "json"),
+            expected_stderr_fragment=(
+                "error[C108]: Catalog Error: Table with name missing_orders does not exist!"
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_json_query_fails_when_running_query_then_stdout_stays_empty(
+    tmp_path: Path,
+    test_case: QueryExecutionErrorCliTestCase,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="query_json_error_project",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "query_json_error_project"\nadapter = "duckdb"\n\n'
+                '[connection]\ndatabase = "query.duckdb"\n'
+            ),
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command,
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_returncode
+    assert test_case.expected_stderr_fragment in result.stderr
+    assert result.stdout == ""

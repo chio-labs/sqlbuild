@@ -170,7 +170,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
         SqlScannerTestCase {
             description: "dollar quote",
             fragment: "$$ ) $$",
-            expected_compiler_paren: Ok(4),
+            expected_compiler_paren: Ok(10),
             expected_table_function: "SELECT * FROM __table_fn(\"o\", $$ ) $$ x)(1)",
             expected_table_function_token: "SELECT $$ ) $$ __table_fn(\"o\", 1)",
             expected_snowflake_exclude: "SELECT *               $$ x) , a FROM t",

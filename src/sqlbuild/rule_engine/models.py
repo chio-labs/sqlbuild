@@ -341,6 +341,7 @@ class RulesRunResult:
     custom_ms: int
     cache_hits: int = 0
     cache_misses: int = 0
+    skipped_type_proof_rules: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

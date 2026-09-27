@@ -27,7 +27,24 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
                 (SqlReferenceKind.SOURCE, "orders", None),
                 (SqlReferenceKind.DBT_REF, "customers", "shop"),
             ),
-        )
+        ),
+        SqlReferenceExtractionTestCase(
+            description="dollar-quoted text hides embedded references",
+            sql=(
+                'SELECT $$Customer\'s order -- __ref("ignored") $5$$ AS order_label, '
+                "$note$ $$ __seed('ignored') $note$ AS order_note "
+                'FROM __ref("orders")'
+            ),
+            expected_references=((SqlReferenceKind.REF, "orders", None),),
+        ),
+        SqlReferenceExtractionTestCase(
+            description="general scanner hides references in dollar-quoted text",
+            sql=(
+                'SELECT $$Customer\'s order __ref("ignored")$$ AS order_label '
+                'FROM __table_fn("expand_orders")(1)'
+            ),
+            expected_references=((SqlReferenceKind.TABLE_FUNCTION, "expand_orders", None),),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -66,6 +83,11 @@ def test_given_simple_references_when_extracting_then_returns_authored_order(
         SqlReferenceExtractionErrorTestCase(
             description="unclosed quoted string preserves diagnostic",
             sql='SELECT * FROM __ref("orders") WHERE note = \'unterminated',
+            expected_error="unclosed quoted string",
+        ),
+        SqlReferenceExtractionErrorTestCase(
+            description="unclosed dollar-quoted string preserves diagnostic",
+            sql='SELECT * FROM __ref("orders") WHERE note = $$customer\'s',
             expected_error="unclosed quoted string",
         ),
     ],

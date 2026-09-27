@@ -46,7 +46,7 @@ from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_com
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
 from sqlbuild.sql_values.types import CollectionRendering
 
-_SQL_INTERPOLATION_SPECIAL: re.Pattern[str] = re.compile(r"['\"`\-/@]")
+_SQL_INTERPOLATION_SPECIAL: re.Pattern[str] = re.compile(r"['\"`$\-/@]")
 
 _CONTEXT: str = "SQL interpolation"
 _NATIVE_UNCHANGED: int = 0
