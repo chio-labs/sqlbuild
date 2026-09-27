@@ -30,10 +30,7 @@ my-project/
   schemas/
   sources/
   seeds/
-  loaders/
-  tasks/
-  assets/
-  checks/
+  python/
   hooks/
     sql/
     python/

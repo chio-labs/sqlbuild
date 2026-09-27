@@ -369,16 +369,16 @@ def build_source_load_nodes_project() -> CompiledProject:
         ),
         loader_functions=(
             DiscoveredLoaderFunction(
-                file_path=Path("loaders/raw.py"),
-                relative_path=Path("loaders/raw.py"),
+                file_path=Path("python/loaders/raw.py"),
+                relative_path=Path("python/loaders/raw.py"),
                 name="fetch_orders",
                 function=fetch_orders,
                 destination="staging_fetch_orders",
                 write_strategy=SourceWriteStrategy.TABLE,
             ),
             DiscoveredLoaderFunction(
-                file_path=Path("loaders/raw.py"),
-                relative_path=Path("loaders/raw.py"),
+                file_path=Path("python/loaders/raw.py"),
+                relative_path=Path("python/loaders/raw.py"),
                 name="load_orders",
                 function=load_orders,
                 depends_on=(fetch_orders,),

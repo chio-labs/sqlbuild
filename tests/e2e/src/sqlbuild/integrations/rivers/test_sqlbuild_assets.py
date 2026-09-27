@@ -180,14 +180,13 @@ def test_given_generated_rivers_playground_when_materializing_assets_then_build_
         )
         == 0
     )
-    project_dir: Path = tmp_path / playground_name
+    orchestrator_dir: Path = tmp_path / playground_name
+    project_dir: Path = orchestrator_dir / "waffle_shop"
     sqb_bin_dir: Path = REPO_ROOT / ".venv" / "bin"
     monkeypatch.setenv("RIVERS_DEPLOYMENT", "dev")
     monkeypatch.setenv("PATH", f"{sqb_bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
 
-    generated_defs: dict[str, object] = runpy.run_path(
-        str(project_dir / "rivers_pipeline" / "definitions.py")
-    )
+    generated_defs: dict[str, object] = runpy.run_path(str(orchestrator_dir / "definitions.py"))
     repo: Any = generated_defs["repo"]
     sqlbuild_project: SqlBuildProject = generated_defs["SQLBUILD_PROJECT"]  # type: ignore[assignment]
 

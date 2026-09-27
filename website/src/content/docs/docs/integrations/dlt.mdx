@@ -132,7 +132,7 @@ SELECT id, title, state FROM __source("raw_github_issues")
 When you need dlt capabilities beyond the declarative surface (custom transforms, `delete_insert`, sources not covered above), wrap a dlt pipeline in a [source loader](/docs/concepts/python-nodes/loaders). The loader calls `dlt.pipeline(...).run(...)` and returns `None`; dlt handles the writes and SQLBuild treats the source as loaded.
 
 ```python
-# loaders/github_sources.py
+# python/loaders/github_sources.py
 import dlt
 from dlt.sources.rest_api import rest_api_source
 from sqlbuild.loaders import loader

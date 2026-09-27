@@ -209,7 +209,7 @@ def test_given_managed_source_without_observation_when_planning_then_matches_bui
                 '[targets.dev]\nschema = "dev"\n\n',
                 '[targets.dev]\nschema = "dev"\ndefer_sources_to = "dev"\n\n',
             ),
-            "loaders/raw.py": (
+            "python/loaders/raw.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader\n"
                 "def raw_orders(ctx):\n"

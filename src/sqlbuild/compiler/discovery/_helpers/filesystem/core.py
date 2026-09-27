@@ -38,10 +38,8 @@ from sqlbuild.compiler.discovery._helpers.yml.sources import parse_sources_yml
 from sqlbuild.compiler.discovery.constants import (
     CANONICAL_AUTHORED_ROOTS,
     MODEL_SCHEMAS_DIRECTORY_NAME,
-    PYTHON_FACTORY_FOLDER,
     PYTHON_INIT_MODULE_STEM,
-    PYTHON_LOADER_FOLDER,
-    PYTHON_NODE_KIND_VOWELS,
+    PYTHON_NODE_ROOT,
     SCHEMA_FILE_NAME,
     SEED_FILE_SUFFIX,
     SQL_TESTS_OWNERSHIP_ROOT,
@@ -50,7 +48,6 @@ from sqlbuild.compiler.discovery.constants import (
 from sqlbuild.compiler.discovery.exceptions import (
     DeclarationParseError,
     EventExporterDiscoveryError,
-    LoaderDiscoveryError,
     ModelSqlParseError,
     ProviderDiscoveryError,
     PythonNodeDiscoveryError,
@@ -127,14 +124,7 @@ from sqlbuild.runtime.event_exporting.models import LifecycleEventSinkDefinition
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import SchemaModelEntry, SchemaSeedEntry
 
-_PYTHON_NODE_KIND_FOLDERS: tuple[str, ...] = ("loaders", "tasks", "assets", "checks")
-_PYTHON_NODE_FACTORY_FOLDERS: tuple[str, ...] = (*_PYTHON_NODE_KIND_FOLDERS, "factories")
-_PYTHON_NODE_KIND_BY_FOLDER: dict[str, str] = {
-    "loaders": "loader",
-    "tasks": "task",
-    "assets": "asset",
-    "checks": "check",
-}
+_PROJECT_PYTHON_PACKAGE_MARKER: str = "__sqlbuild_project_python__"
 
 
 @dataclass
@@ -896,7 +886,7 @@ def discover_materialization_files(
 def discover_python_node_functions(
     *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] = ()
 ) -> DiscoveredPythonNodeFunctions:
-    """Discover decorated Python DAG node functions under node folders."""
+    """Discover decorated Python DAG node functions under python/."""
 
     bucket: _PythonNodeDiscoveryBucket = _discover_python_node_functions(
         project_dir=project_dir,
@@ -930,7 +920,6 @@ def discover_hook_functions(
         module: ModuleType = _load_python_node_module(
             file_path=file_path,
             project_dir=project_dir,
-            node_folder="hooks/python",
         )
         for _, value in inspect.getmembers(module, inspect.isfunction):
             if value.__module__ != module.__name__:
@@ -1367,63 +1356,162 @@ def _discover_python_node_functions(
 ) -> _PythonNodeDiscoveryBucket:
     bucket: _PythonNodeDiscoveryBucket = _PythonNodeDiscoveryBucket()
     provider_by_name: dict[str, DiscoveredProvider] = _provider_by_name(providers)
-    node_folder: str
-    for node_folder in _PYTHON_NODE_FACTORY_FOLDERS:
-        node_root: Path = project_dir / node_folder
-        if not node_root.is_dir():
-            continue
+    node_root: Path = project_dir / PYTHON_NODE_ROOT
+    if not node_root.is_dir():
+        return bucket
+    saved_modules: dict[str, ModuleType] = _install_python_root_package(
+        node_root=node_root, project_dir=project_dir
+    )
+    try:
+        modules: tuple[tuple[Path, ModuleType], ...] = tuple(
+            (file_path, _import_python_root_module(file_path=file_path, project_dir=project_dir))
+            for file_path in sorted(node_root.rglob("*.py"))
+            if file_path.stem != PYTHON_INIT_MODULE_STEM
+        )
+        direct_functions: dict[int, Callable[..., object]] = {}
         file_path: Path
-        for file_path in sorted(node_root.rglob("*.py")):
-            if file_path.stem == PYTHON_INIT_MODULE_STEM:
-                continue
-            module: ModuleType = (
-                _load_loader_module(file_path=file_path, project_dir=project_dir)
-                if node_folder == PYTHON_LOADER_FOLDER
-                else _load_python_node_module(
+        module: ModuleType
+        for file_path, module in modules:
+            direct_functions.update(
+                (id(function), function)
+                for function in _append_module_direct_nodes(
+                    bucket=bucket,
+                    module=module,
                     file_path=file_path,
                     project_dir=project_dir,
-                    node_folder=node_folder,
+                    provider_by_name=provider_by_name,
                 )
             )
-            _append_module_python_nodes(
+        for file_path, module in modules:
+            _append_module_factory_nodes(
                 bucket=bucket,
                 module=module,
                 file_path=file_path,
                 project_dir=project_dir,
-                node_folder=node_folder,
                 provider_by_name=provider_by_name,
+                direct_functions=direct_functions,
             )
+    finally:
+        _restore_python_root_modules(saved_modules=saved_modules)
     return bucket
 
 
-def _append_module_python_nodes(
+def _python_root_module_names() -> tuple[str, ...]:
+    return tuple(
+        module_name
+        for module_name in sys.modules
+        if module_name == PYTHON_NODE_ROOT or module_name.startswith(f"{PYTHON_NODE_ROOT}.")
+    )
+
+
+def _install_python_root_package(*, node_root: Path, project_dir: Path) -> dict[str, ModuleType]:
+    """Bind python to this project's python/ folder and return displaced unrelated modules."""
+
+    existing: ModuleType | None = sys.modules.get(PYTHON_NODE_ROOT)
+    owned: bool = existing is None or bool(getattr(existing, _PROJECT_PYTHON_PACKAGE_MARKER, False))
+    saved_modules: dict[str, ModuleType] = {}
+    module_name: str
+    for module_name in _python_root_module_names():
+        module: ModuleType | None = sys.modules.pop(module_name, None)
+        if not owned and module is not None:
+            saved_modules[module_name] = module
+    importlib.invalidate_caches()
+    init_file: Path = node_root / f"{PYTHON_INIT_MODULE_STEM}.py"
+    spec: ModuleSpec | None = (
+        importlib.util.spec_from_file_location(
+            PYTHON_NODE_ROOT, init_file, submodule_search_locations=[str(node_root)]
+        )
+        if init_file.is_file()
+        else ModuleSpec(PYTHON_NODE_ROOT, None, is_package=True)
+    )
+    if spec is None:
+        raise PythonNodeDiscoveryError(f"Could not load Python node package {node_root}")
+    spec.submodule_search_locations = [str(node_root)]
+    package: ModuleType = importlib.util.module_from_spec(spec)
+    setattr(package, _PROJECT_PYTHON_PACKAGE_MARKER, True)
+    sys.modules[PYTHON_NODE_ROOT] = package
+    if spec.loader is None:
+        return saved_modules
+    old_path: list[str] = list(sys.path)
+    sys.path.insert(0, str(project_dir))
+    try:
+        spec.loader.exec_module(package)
+    except Exception as error:
+        _restore_python_root_modules(saved_modules=saved_modules)
+        raise PythonNodeDiscoveryError(
+            f"Failed to import Python node file {init_file.relative_to(project_dir)}: {error}"
+        ) from error
+    finally:
+        sys.path = old_path
+    return saved_modules
+
+
+def _restore_python_root_modules(*, saved_modules: dict[str, ModuleType]) -> None:
+    """Put back an unrelated python package that discovery displaced."""
+
+    if not saved_modules:
+        return
+    module_name: str
+    for module_name in _python_root_module_names():
+        sys.modules.pop(module_name, None)
+    sys.modules.update(saved_modules)
+
+
+def _import_python_root_module(*, file_path: Path, project_dir: Path) -> ModuleType:
+    """Import a python/ module under its package name, reusing it within a discovery pass."""
+
+    relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
+    module_name: str = ".".join(relative_path.with_suffix("").parts)
+    old_path: list[str] = list(sys.path)
+    sys.path.insert(0, str(project_dir))
+    try:
+        return importlib.import_module(module_name)
+    except Exception as error:
+        raise PythonNodeDiscoveryError(
+            f"Failed to import Python node file {relative_path}: {error}"
+        ) from error
+    finally:
+        sys.path = old_path
+
+
+def _append_module_direct_nodes(
     *,
     bucket: _PythonNodeDiscoveryBucket,
     module: ModuleType,
     file_path: Path,
     project_dir: Path,
-    node_folder: str,
     provider_by_name: dict[str, DiscoveredProvider],
-) -> None:
+) -> tuple[Callable[..., object], ...]:
     _append_module_audit_factories(
         bucket=bucket,
         module=module,
         file_path=file_path,
         project_dir=project_dir,
-        node_folder=node_folder,
     )
-    if node_folder != PYTHON_FACTORY_FOLDER:
-        for _, value in inspect.getmembers(module, inspect.isfunction):
-            if value.__module__ != module.__name__:
-                continue
-            _append_python_node_function(
-                bucket=bucket,
-                function=value,
-                file_path=file_path,
-                project_dir=project_dir,
-                expected_kind=_PYTHON_NODE_KIND_BY_FOLDER.get(node_folder),
-                provider_by_name=provider_by_name,
-            )
+    registered: list[Callable[..., object]] = []
+    for _, value in inspect.getmembers(module, inspect.isfunction):
+        if value.__module__ != module.__name__:
+            continue
+        if _append_python_node_function(
+            bucket=bucket,
+            function=value,
+            file_path=file_path,
+            project_dir=project_dir,
+            provider_by_name=provider_by_name,
+        ):
+            registered.append(value)
+    return tuple(registered)
+
+
+def _append_module_factory_nodes(
+    *,
+    bucket: _PythonNodeDiscoveryBucket,
+    module: ModuleType,
+    file_path: Path,
+    project_dir: Path,
+    provider_by_name: dict[str, DiscoveredProvider],
+    direct_functions: dict[int, Callable[..., object]],
+) -> None:
     for _, value in inspect.getmembers(module, inspect.isfunction):
         if value.__module__ != module.__name__:
             continue
@@ -1439,13 +1527,13 @@ def _append_module_python_nodes(
         index: int
         generated_function: Callable[..., object]
         for index, generated_function in enumerate(generated_functions):
+            if direct_functions.get(id(generated_function)) is generated_function:
+                continue
             if not _append_python_node_function(
                 bucket=bucket,
                 function=generated_function,
                 file_path=file_path,
                 project_dir=project_dir,
-                expected_kind=_PYTHON_NODE_KIND_BY_FOLDER.get(node_folder),
-                factory_definition=factory_definition,
                 provider_by_name=provider_by_name,
             ):
                 raise PythonNodeDiscoveryError(
@@ -1461,7 +1549,6 @@ def _append_module_audit_factories(
     module: ModuleType,
     file_path: Path,
     project_dir: Path,
-    node_folder: str,
 ) -> None:
     """Collect audit factories without routing them through Python-node discovery."""
 
@@ -1472,10 +1559,6 @@ def _append_module_audit_factories(
         if definition is None:
             continue
         relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
-        if node_folder != PYTHON_FACTORY_FOLDER:
-            raise PythonNodeDiscoveryError(
-                f"Audit factory '{definition.name}' in {relative_path} must live under factories/"
-            )
         if _python_node_definition_names(value):
             kinds: str = ", ".join(_python_node_definition_names(value))
             raise PythonNodeDiscoveryError(
@@ -1559,21 +1642,11 @@ def _append_python_node_function(
     function: Callable[..., object],
     file_path: Path,
     project_dir: Path,
-    expected_kind: str | None = None,
-    factory_definition: FactoryDefinition | None = None,
     provider_by_name: dict[str, DiscoveredProvider] | None = None,
 ) -> bool:
     resolved_provider_by_name: dict[str, DiscoveredProvider] = provider_by_name or {}
     loader_definition: LoaderDefinition | None = read_loader_definition(function)
     if loader_definition is not None:
-        _validate_python_node_kind(
-            actual_kind="loader",
-            expected_kind=expected_kind,
-            function_name=loader_definition.name,
-            factory_definition=factory_definition,
-            file_path=file_path,
-            project_dir=project_dir,
-        )
         bucket.add_loader(
             DiscoveredLoaderFunction(
                 file_path=file_path,
@@ -1596,14 +1669,6 @@ def _append_python_node_function(
         return True
     task_definition: TaskDefinition | None = read_task_definition(function)
     if task_definition is not None:
-        _validate_python_node_kind(
-            actual_kind="task",
-            expected_kind=expected_kind,
-            function_name=task_definition.name,
-            factory_definition=factory_definition,
-            file_path=file_path,
-            project_dir=project_dir,
-        )
         bucket.add_task(
             DiscoveredTaskFunction(
                 file_path=file_path,
@@ -1625,14 +1690,6 @@ def _append_python_node_function(
         return True
     asset_definition: AssetDefinition | None = read_asset_definition(function)
     if asset_definition is not None:
-        _validate_python_node_kind(
-            actual_kind="asset",
-            expected_kind=expected_kind,
-            function_name=asset_definition.name,
-            factory_definition=factory_definition,
-            file_path=file_path,
-            project_dir=project_dir,
-        )
         bucket.add_asset(
             DiscoveredAssetFunction(
                 file_path=file_path,
@@ -1656,14 +1713,6 @@ def _append_python_node_function(
         return True
     check_definition: CheckDefinition | None = read_check_definition(function)
     if check_definition is not None:
-        _validate_python_node_kind(
-            actual_kind="check",
-            expected_kind=expected_kind,
-            function_name=check_definition.name,
-            factory_definition=factory_definition,
-            file_path=file_path,
-            project_dir=project_dir,
-        )
         bucket.add_check(
             DiscoveredCheckFunction(
                 file_path=file_path,
@@ -1684,31 +1733,6 @@ def _append_python_node_function(
         )
         return True
     return False
-
-
-def _validate_python_node_kind(
-    *,
-    actual_kind: str,
-    expected_kind: str | None,
-    function_name: str,
-    factory_definition: FactoryDefinition | None,
-    file_path: Path,
-    project_dir: Path,
-) -> None:
-    if expected_kind is None or actual_kind == expected_kind:
-        return
-    relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
-    folder: str = relative_path.parts[0]
-    if factory_definition is None:
-        article: str = "an" if actual_kind[0] in PYTHON_NODE_KIND_VOWELS else "a"
-        raise PythonNodeDiscoveryError(
-            f"Python node '{function_name}' in {folder}/ is {article} {actual_kind}; "
-            f"{actual_kind}s must live in {actual_kind}s/ or be generated from factories/."
-        )
-    raise PythonNodeDiscoveryError(
-        f"Factory {factory_definition.name} in {folder}/ returned a {actual_kind} "
-        f"'{function_name}'; mixed-kind factories must live in factories/."
-    )
 
 
 def _call_factory(
@@ -1768,20 +1792,7 @@ def _normalize_factory_result(
     return tuple(functions)
 
 
-def _load_loader_module(*, file_path: Path, project_dir: Path) -> ModuleType:
-    return _exec_project_module(
-        module_name="sqlbuild_project_loader_"
-        + "_".join(
-            _project_relative_path(path=file_path, project_dir=project_dir).with_suffix("").parts
-        ),
-        file_path=file_path,
-        project_dir=project_dir,
-        file_label="source loader",
-        error_type=LoaderDiscoveryError,
-    )
-
-
-def _load_python_node_module(*, file_path: Path, project_dir: Path, node_folder: str) -> ModuleType:
+def _load_python_node_module(*, file_path: Path, project_dir: Path) -> ModuleType:
     return _exec_project_module(
         module_name="sqlbuild_project_python_node_"
         + "_".join(

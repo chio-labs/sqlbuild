@@ -40,7 +40,7 @@ def test_given_virtual_python_identity_when_recording_then_reads_previous_finger
     identity: PythonNodeIdentity = PythonNodeIdentity(
         node_type=test_case.expected_node_type,
         node_name=test_case.expected_node_name,
-        source_path="tasks/orders.py",
+        source_path="python/tasks/orders.py",
         source_hash="source-hash",
         definition_hash="definition-hash",
         version_hash=test_case.expected_version_hash,

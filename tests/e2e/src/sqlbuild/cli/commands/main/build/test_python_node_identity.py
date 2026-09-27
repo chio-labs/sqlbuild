@@ -10,6 +10,7 @@ from textwrap import dedent
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
+    PythonHelperPackageIdentityE2ETestCase,
     PythonNodeIdentityBuildE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
@@ -18,8 +19,8 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 
-_LOADERS_PATH: str = "loaders/orders.py"
-_ASSETS_PATH: str = "assets/exports.py"
+_LOADERS_PATH: str = "python/loaders/orders.py"
+_ASSETS_PATH: str = "python/assets/exports.py"
 _ORIGINAL_COLUMNS: str = 'LoaderColumnSpec(name="order_id", type="INTEGER")'
 _ORIGINAL_RETRY: str = "RetryPolicy(max_attempts=2, retry_on=RuntimeError)"
 
@@ -143,6 +144,97 @@ def test_given_built_python_nodes_when_editing_decorator_inputs_then_identity_tr
             "WHERE node_type = 'loader' AND node_name = 'staged_orders'"
         ),
     ) == [(test_case.expected_loader_version_count,)]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonHelperPackageIdentityE2ETestCase(
+            description="relative-import helper edit changes the dependent task identity",
+            edited_path="python/helpers/clean.py",
+            original_text="value.strip().lower()",
+            edited_text="value.strip().upper()",
+            expected_identity_status="changed",
+            expected_version_count=2,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_helper_package_with_relative_imports_when_editing_helper_then_task_identity_changes(
+    test_case: PythonHelperPackageIdentityE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="python_helper_package_project",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "python_helper_package_project"
+                adapter = "duckdb"
+
+                [connection]
+                database = "warehouse.duckdb"
+                """
+            ).strip()
+            + "\n",
+            "python/helpers/__init__.py": "",
+            "python/helpers/values.py": 'STATUS = "shipped"\n',
+            "python/helpers/clean.py": dedent(
+                """
+                from .values import STATUS
+
+
+                def normalize_status(value):
+                    return f"{value.strip().lower()}:{STATUS}"
+                """
+            ).lstrip(),
+            "python/orders.py": dedent(
+                """
+                import python.helpers.clean
+                from sqlbuild.tasks import task
+
+
+                @task
+                def orders(ctx):
+                    return ctx.result(
+                        payload={"status": python.helpers.clean.normalize_status(" Shipped ")}
+                    )
+                """
+            ).lstrip(),
+        },
+    )
+    first_build: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert first_build.returncode == 0, first_build.stdout + first_build.stderr
+
+    edited: Path = project_dir / test_case.edited_path
+    edited.write_text(
+        edited.read_text(encoding="utf-8").replace(test_case.original_text, test_case.edited_text),
+        encoding="utf-8",
+    )
+    plan: subprocess.CompletedProcess[str] = run_sqb(
+        command=("plan", "--json"), project_dir=project_dir
+    )
+    second_build: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+
+    assert plan.returncode == 0, plan.stdout + plan.stderr
+    assert second_build.returncode == 0, second_build.stdout + second_build.stderr
+    payload: dict[str, object] = json.loads(plan.stdout)
+    statuses_by_name: dict[str, str] = {
+        str(entry["name"]): str(entry["identity_status"]) for entry in payload["python_nodes"]
+    }
+    assert statuses_by_name["orders"] == test_case.expected_identity_status
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb",
+        sql=(
+            "SELECT COUNT(DISTINCT version_hash) FROM main._sqlbuild_fingerprints "
+            "WHERE node_type = 'task' AND node_name = 'orders'"
+        ),
+    ) == [(test_case.expected_version_count,)]
 
 
 if __name__ == "__main__":

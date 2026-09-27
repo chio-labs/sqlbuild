@@ -48,7 +48,7 @@ SELECT 2 AS id, -10 AS amount
 AUDIT ();
 SELECT * FROM __ref("@model") WHERE NOT (@expression)
 """,
-            "factories/quality.py": """
+            "python/factories/quality.py": """
 from sqlbuild.audits import AuditCase, AuditSeverity, audit_factory
 
 @audit_factory

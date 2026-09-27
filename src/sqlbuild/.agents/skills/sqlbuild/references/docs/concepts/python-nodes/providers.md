@@ -202,8 +202,9 @@ my-project/
       record_notification.sql
     python/
       notify.py
-  loaders/
-    load_orders.py
-  tasks/
-    export_orders.py
+  python/
+    loaders/
+      load_orders.py
+    tasks/
+      export_orders.py
 ```

@@ -20,10 +20,10 @@ Assets are Python nodes that produce or observe an external artifact - an export
 
 ## Defining an asset
 
-Place Python files under `assets/` and decorate functions with `@asset`:
+Place Python files under `python/` (the playgrounds use `python/assets/`) and decorate functions with `@asset`:
 
 ```python
-# assets/exports.py
+# python/assets/exports.py
 from sqlbuild.assets import asset, AssetContext
 
 @asset
@@ -57,7 +57,7 @@ Assets declare dependencies with `depends_on` (a single function, tuple, or list
 
 ```python
 from sqlbuild.assets import asset
-from tasks.orders import export_orders
+from python.tasks.orders import export_orders
 
 @asset(depends_on=export_orders)
 def orders_dashboard(ctx):

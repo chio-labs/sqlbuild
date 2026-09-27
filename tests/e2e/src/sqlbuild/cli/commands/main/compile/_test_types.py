@@ -237,3 +237,18 @@ class TypeProofRuleCompileTestCase:
     expected_returncode: int
     expected_rule_findings: int
     expected_note_count: int
+
+
+@dataclass(frozen=True)
+class FactoryModuleNodePlanTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_python_node_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class UnrelatedPythonPackageBuildTestCase:
+    description: str
+    unrelated_files: dict[str, str]
+    repo_files: dict[str, str]
+    expected_build_fragments: tuple[str, ...]

@@ -144,8 +144,8 @@ def failing_source_node_test_loader(_ctx: object) -> list[dict[str, object]]:
 
 def build_discovered_source_loader(*, loader_name: str) -> DiscoveredLoaderFunction:
     return DiscoveredLoaderFunction(
-        file_path=Path("loaders/raw.py"),
-        relative_path=Path("loaders/raw.py"),
+        file_path=Path("python/loaders/raw.py"),
+        relative_path=Path("python/loaders/raw.py"),
         name=loader_name,
         function=source_node_test_loader,
     )
@@ -153,8 +153,8 @@ def build_discovered_source_loader(*, loader_name: str) -> DiscoveredLoaderFunct
 
 def build_failing_discovered_source_loader(*, loader_name: str) -> DiscoveredLoaderFunction:
     return DiscoveredLoaderFunction(
-        file_path=Path("loaders/raw.py"),
-        relative_path=Path("loaders/raw.py"),
+        file_path=Path("python/loaders/raw.py"),
+        relative_path=Path("python/loaders/raw.py"),
         name=loader_name,
         function=failing_source_node_test_loader,
     )

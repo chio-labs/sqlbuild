@@ -21,3 +21,13 @@ class RunPlaygroundTestCase:
     expected_stdout_fragments: tuple[str, ...]
     template: str = "waffle_shop"
     expected_color_fragments: tuple[str, ...] = ()
+    project_subdir: str = ""
+
+
+@dataclass(frozen=True)
+class WrapperPlaygroundSkillsTestCase:
+    description: str
+    template: str
+    project_subdir: str
+    expected_skill_file: str
+    expected_stale_message: str = "SQLBuild skill files are out of date"

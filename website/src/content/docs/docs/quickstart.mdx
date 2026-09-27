@@ -208,8 +208,9 @@ waffle-shop/
   sqlbuild_project.toml         # project config
   sources/
     raw.yml                     # source declarations (loader-managed and expression-backed)
-  loaders/
-    waffle_sources.py           # Python loaders for raw__customers and raw__orders
+  python/
+    loaders/
+      waffle_sources.py         # Python loaders for raw__customers and raw__orders
   seeds/
     waffle_types.csv            # seed data
     lookups.yml                 # seed declarations

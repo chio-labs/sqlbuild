@@ -147,7 +147,7 @@ def prepare_python_lifecycle_plan_project(*, tmp_path: Path) -> Path:
                 "[connection]\n"
                 'database = "warehouse.duckdb"\n'
             ),
-            "loaders/window.py": (
+            "python/loaders/window.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(\n"
                 "    destination='window_orders',\n"
@@ -157,15 +157,15 @@ def prepare_python_lifecycle_plan_project(*, tmp_path: Path) -> Path:
                 "def load_window_orders(ctx):\n"
                 "    return [{'order_id': 7}]\n"
             ),
-            "tasks/prepare.py": (
-                "from loaders.window import load_window_orders\n"
+            "python/tasks/prepare.py": (
+                "from python.loaders.window import load_window_orders\n"
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=load_window_orders)\n"
                 "def prepare_orders(ctx):\n"
                 "    return ctx.result(payload={'order_id': 7})\n"
             ),
-            "assets/prepare.py": (
-                "from tasks.prepare import prepare_orders\n"
+            "python/assets/prepare.py": (
+                "from python.tasks.prepare import prepare_orders\n"
                 "from sqlbuild.assets import asset\n\n"
                 "@asset(depends_on=prepare_orders)\n"
                 "def publish_prepared_orders(ctx):\n"
@@ -174,8 +174,8 @@ def prepare_python_lifecycle_plan_project(*, tmp_path: Path) -> Path:
                 " materialized=True\n"
                 "    )\n"
             ),
-            "loaders/raw.py": (
-                "from assets.prepare import publish_prepared_orders\n"
+            "python/loaders/raw.py": (
+                "from python.assets.prepare import publish_prepared_orders\n"
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(depends_on=(publish_prepared_orders,))\n"
                 "def raw_orders(ctx):\n"
@@ -193,15 +193,15 @@ def prepare_python_lifecycle_plan_project(*, tmp_path: Path) -> Path:
             "models/fact_orders.sql": (
                 'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
             ),
-            "tasks/profile.py": (
+            "python/tasks/profile.py": (
                 "from sqlbuild.refs import model\n"
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=model('fact_orders'))\n"
                 "def profile_fact_orders(ctx):\n"
                 "    return ctx.result(payload={'rows': 1})\n"
             ),
-            "tasks/notify.py": (
-                "from tasks.profile import profile_fact_orders\n"
+            "python/tasks/notify.py": (
+                "from python.tasks.profile import profile_fact_orders\n"
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=profile_fact_orders)\n"
                 "def notify_fact_orders(ctx):\n"

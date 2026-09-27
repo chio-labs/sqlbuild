@@ -6,6 +6,10 @@ from pathlib import Path
 
 from sqlbuild.cli.commands._helpers.playground.copy import create_playground_project
 from sqlbuild.cli.commands._helpers.skills.update import update_sqlbuild_skills
+from sqlbuild.cli.commands.constants import (
+    PLAYGROUND_ORCHESTRATED_PROJECT_DIR,
+    PLAYGROUND_ORCHESTRATED_TEMPLATES,
+)
 from sqlbuild.cli.commands.models import (
     PlaygroundCommandRequest,
     PlaygroundTarget,
@@ -30,4 +34,12 @@ def write_playground_project(*, target: PlaygroundTarget) -> None:
     """Create the playground project files and refresh bundled skills."""
 
     create_playground_project(target_dir=target.target_dir, template=target.template.value)
-    _ = update_sqlbuild_skills(project_dir=target.target_dir)
+    _ = update_sqlbuild_skills(project_dir=_playground_project_dir(target=target))
+
+
+def _playground_project_dir(*, target: PlaygroundTarget) -> Path:
+    """Return the SQLBuild project directory inside a generated playground."""
+
+    if target.template in PLAYGROUND_ORCHESTRATED_TEMPLATES:
+        return target.target_dir / PLAYGROUND_ORCHESTRATED_PROJECT_DIR
+    return target.target_dir

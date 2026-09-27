@@ -77,14 +77,14 @@ def prepare_python_dag_project(root: Path) -> Path:
     """Create a local project with Python tasks, assets, and checks."""
 
     project_dir: Path = prepare_static_dag_project(root)
-    tasks_dir: Path = project_dir / "tasks"
-    assets_dir: Path = project_dir / "assets"
-    loaders_dir: Path = project_dir / "loaders"
-    checks_dir: Path = project_dir / "checks"
-    tasks_dir.mkdir()
-    assets_dir.mkdir()
-    loaders_dir.mkdir()
-    checks_dir.mkdir()
+    tasks_dir: Path = project_dir / "python" / "tasks"
+    assets_dir: Path = project_dir / "python" / "assets"
+    loaders_dir: Path = project_dir / "python" / "loaders"
+    checks_dir: Path = project_dir / "python" / "checks"
+    tasks_dir.mkdir(parents=True)
+    assets_dir.mkdir(parents=True)
+    loaders_dir.mkdir(parents=True)
+    checks_dir.mkdir(parents=True)
     (tasks_dir / "prepare_orders.py").write_text(
         "\n".join(
             (
@@ -108,7 +108,7 @@ def prepare_python_dag_project(root: Path) -> Path:
         "\n".join(
             (
                 "from sqlbuild.loaders import loader",
-                "from tasks.prepare_orders import prepare_orders",
+                "from python.tasks.prepare_orders import prepare_orders",
                 "",
                 "@loader(",
                 "    depends_on=(prepare_orders,),",
@@ -125,8 +125,8 @@ def prepare_python_dag_project(root: Path) -> Path:
         "\n".join(
             (
                 "from sqlbuild.assets import asset",
-                "from loaders.warehouse_export import warehouse_export",
-                "from tasks.prepare_orders import prepare_orders",
+                "from python.loaders.warehouse_export import warehouse_export",
+                "from python.tasks.prepare_orders import prepare_orders",
                 "",
                 "@asset(",
                 "    depends_on=(prepare_orders, warehouse_export),",
@@ -150,9 +150,9 @@ def prepare_python_dag_project(root: Path) -> Path:
         "\n".join(
             (
                 "from sqlbuild.checks import check",
-                "from assets.orders_export import orders_export",
-                "from loaders.warehouse_export import warehouse_export",
-                "from tasks.prepare_orders import prepare_orders",
+                "from python.assets.orders_export import orders_export",
+                "from python.loaders.warehouse_export import warehouse_export",
+                "from python.tasks.prepare_orders import prepare_orders",
                 "",
                 "@check(",
                 "    depends_on=(orders_export, prepare_orders, warehouse_export),",
@@ -172,7 +172,7 @@ def prepare_python_dag_project(root: Path) -> Path:
         "\n".join(
             (
                 "from sqlbuild.checks import check",
-                "from loaders.warehouse_export import warehouse_export",
+                "from python.loaders.warehouse_export import warehouse_export",
                 "",
                 "@check(depends_on=warehouse_export, tags=['loader'])",
                 "def check_loader_export(ctx):",

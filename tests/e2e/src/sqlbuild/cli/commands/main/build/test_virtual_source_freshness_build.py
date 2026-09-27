@@ -480,12 +480,12 @@ def test_given_virtual_managed_source_freshness_when_unchanged_then_build_skips_
             "sqlbuild_project.toml": build_virtual_plan_project_toml().replace(
                 "[targets.dev]\n", '[targets.dev]\ndefer_sources_to = "dev"\n'
             ),
-            "loaders/raw.py": (
+            "python/loaders/raw.py": (
                 "from pathlib import Path\n"
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader\n"
                 "def raw_orders(ctx):\n"
-                "    marker = Path(__file__).parents[1].joinpath('raw_order_id.txt')\n"
+                "    marker = Path(__file__).parents[2].joinpath('raw_order_id.txt')\n"
                 "    return [{'id': int(marker.read_text())}]\n"
             ),
             "sources/raw.yml": (
@@ -551,12 +551,12 @@ def test_given_virtual_managed_source_configured_freshness_when_building_then_re
             "sqlbuild_project.toml": build_virtual_plan_project_toml().replace(
                 "[targets.dev]\n", '[targets.dev]\ndefer_sources_to = "dev"\n'
             ),
-            "loaders/raw.py": (
+            "python/loaders/raw.py": (
                 "from pathlib import Path\n"
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader\n"
                 "def raw_orders(ctx):\n"
-                "    root = Path(__file__).parents[1]\n"
+                "    root = Path(__file__).parents[2]\n"
                 "    return [{\n"
                 "        'id': int(root.joinpath('raw_order_id.txt').read_text()),\n"
                 "        'data_version': int(root.joinpath('raw_data_version.txt').read_text()),\n"

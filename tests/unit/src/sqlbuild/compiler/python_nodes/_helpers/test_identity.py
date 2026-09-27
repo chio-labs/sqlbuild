@@ -26,7 +26,7 @@ from tests.unit.src.sqlbuild.compiler.python_nodes._helpers.helpers import (
         PythonNodeIdentityTestCase(
             description="includes same-file helper dependency",
             repo_files={
-                "tasks/orders.py": """
+                "python/tasks/orders.py": """
 def normalize_order(value):
     return value.strip().lower()
 
@@ -36,10 +36,10 @@ def build_orders(ctx):
 """.strip()
                 + "\n",
             },
-            entry_module_path="tasks/orders.py",
+            entry_module_path="python/tasks/orders.py",
             function_name="build_orders",
             node_type="task",
-            expected_source_path="tasks/orders.py",
+            expected_source_path="python/tasks/orders.py",
             expected_dependency_qualnames=("normalize_order",),
             expected_definition_fragments=("def build_orders(ctx):", "source_text"),
             expected_metadata_fragments=("def normalize_order(value):", "source_text"),
@@ -47,32 +47,32 @@ def build_orders(ctx):
         PythonNodeIdentityTestCase(
             description="includes transitive imported first-party helper dependencies",
             repo_files={
-                "tasks/orders.py": """
-from libs.cleaning import normalize_orders
+                "python/tasks/orders.py": """
+from python.helpers.cleaning import normalize_orders
 
 
 def build_orders(ctx):
     return normalize_orders(ctx)
 """.strip()
                 + "\n",
-                "libs/cleaning.py": """
-from libs.status import clean_status
+                "python/helpers/cleaning.py": """
+from python.helpers.status import clean_status
 
 
 def normalize_orders(ctx):
     return clean_status(" Pending ")
 """.strip()
                 + "\n",
-                "libs/status.py": """
+                "python/helpers/status.py": """
 def clean_status(value):
     return value.strip().lower()
 """.strip()
                 + "\n",
             },
-            entry_module_path="tasks/orders.py",
+            entry_module_path="python/tasks/orders.py",
             function_name="build_orders",
             node_type="task",
-            expected_source_path="tasks/orders.py",
+            expected_source_path="python/tasks/orders.py",
             expected_dependency_qualnames=("normalize_orders", "clean_status"),
             expected_definition_fragments=("def build_orders(ctx):", "source_text"),
             expected_metadata_fragments=(
@@ -84,7 +84,7 @@ def clean_status(value):
         PythonNodeIdentityTestCase(
             description="excludes helpers loaded from venv under git root",
             repo_files={
-                "tasks/orders.py": """
+                "python/tasks/orders.py": """
 import vendor_helpers
 
 
@@ -98,10 +98,10 @@ def normalize_order(value):
 """.strip()
                 + "\n",
             },
-            entry_module_path="tasks/orders.py",
+            entry_module_path="python/tasks/orders.py",
             function_name="build_orders",
             node_type="task",
-            expected_source_path="tasks/orders.py",
+            expected_source_path="python/tasks/orders.py",
             expected_dependency_qualnames=(),
             expected_definition_fragments=("def build_orders(ctx):", "source_text"),
             expected_metadata_fragments=("dependencies",),
@@ -111,7 +111,7 @@ def normalize_order(value):
         PythonNodeIdentityTestCase(
             description="excludes helpers loaded from external third-party path",
             repo_files={
-                "tasks/orders.py": """
+                "python/tasks/orders.py": """
 import external_vendor_helpers
 
 
@@ -125,10 +125,10 @@ def normalize_order(value):
 """.strip()
                 + "\n",
             },
-            entry_module_path="tasks/orders.py",
+            entry_module_path="python/tasks/orders.py",
             function_name="build_orders",
             node_type="task",
-            expected_source_path="tasks/orders.py",
+            expected_source_path="python/tasks/orders.py",
             expected_dependency_qualnames=(),
             expected_definition_fragments=("def build_orders(ctx):", "source_text"),
             expected_metadata_fragments=("dependencies",),
@@ -138,7 +138,7 @@ def normalize_order(value):
         PythonNodeIdentityTestCase(
             description="ignores stdlib builtins and dynamic references without crashing",
             repo_files={
-                "tasks/orders.py": """
+                "python/tasks/orders.py": """
 import json
 
 
@@ -153,10 +153,10 @@ def build_orders(ctx):
 """.strip()
                 + "\n",
             },
-            entry_module_path="tasks/orders.py",
+            entry_module_path="python/tasks/orders.py",
             function_name="build_orders",
             node_type="task",
-            expected_source_path="tasks/orders.py",
+            expected_source_path="python/tasks/orders.py",
             expected_dependency_qualnames=(),
             expected_definition_fragments=("def build_orders(ctx):", "source_text"),
             expected_metadata_fragments=("dependencies",),
@@ -165,15 +165,15 @@ def build_orders(ctx):
         PythonNodeIdentityTestCase(
             description="terminates cyclic helper traversal",
             repo_files={
-                "tasks/orders.py": """
-from libs.cycle import helper_a
+                "python/tasks/orders.py": """
+from python.helpers.cycle import helper_a
 
 
 def build_orders(ctx):
     return helper_a(" Pending ")
 """.strip()
                 + "\n",
-                "libs/cycle.py": """
+                "python/helpers/cycle.py": """
 def helper_a(value):
     return helper_b(value)
 
@@ -183,10 +183,10 @@ def helper_b(value):
 """.strip()
                 + "\n",
             },
-            entry_module_path="tasks/orders.py",
+            entry_module_path="python/tasks/orders.py",
             function_name="build_orders",
             node_type="task",
-            expected_source_path="tasks/orders.py",
+            expected_source_path="python/tasks/orders.py",
             expected_dependency_qualnames=("helper_a", "helper_b"),
             expected_definition_fragments=("def build_orders(ctx):", "source_text"),
             expected_metadata_fragments=("def helper_a(value):", "def helper_b(value):"),
@@ -194,24 +194,24 @@ def helper_b(value):
         PythonNodeIdentityTestCase(
             description="includes first-party module attribute helper dependency",
             repo_files={
-                "tasks/orders.py": """
-from libs import cleaning
+                "python/tasks/orders.py": """
+from python.helpers import cleaning
 
 
 def build_orders(ctx):
     return cleaning.normalize_order(" Pending ")
 """.strip()
                 + "\n",
-                "libs/cleaning.py": """
+                "python/helpers/cleaning.py": """
 def normalize_order(value):
     return value.strip().lower()
 """.strip()
                 + "\n",
             },
-            entry_module_path="tasks/orders.py",
+            entry_module_path="python/tasks/orders.py",
             function_name="build_orders",
             node_type="task",
-            expected_source_path="tasks/orders.py",
+            expected_source_path="python/tasks/orders.py",
             expected_dependency_qualnames=("normalize_order",),
             expected_definition_fragments=("def build_orders(ctx):", "source_text"),
             expected_metadata_fragments=("def normalize_order(value):", "source_text"),
@@ -219,7 +219,7 @@ def normalize_order(value):
         PythonNodeIdentityTestCase(
             description="includes first-party class constructor dependency",
             repo_files={
-                "tasks/orders.py": """
+                "python/tasks/orders.py": """
 class Cleaner:
     def clean(self, value):
         return value.strip().lower()
@@ -230,10 +230,10 @@ def build_orders(ctx):
 """.strip()
                 + "\n",
             },
-            entry_module_path="tasks/orders.py",
+            entry_module_path="python/tasks/orders.py",
             function_name="build_orders",
             node_type="task",
-            expected_source_path="tasks/orders.py",
+            expected_source_path="python/tasks/orders.py",
             expected_dependency_qualnames=("Cleaner",),
             expected_definition_fragments=("def build_orders(ctx):", "source_text"),
             expected_metadata_fragments=("class Cleaner:", "source_text"),
@@ -241,7 +241,7 @@ def build_orders(ctx):
         PythonNodeIdentityTestCase(
             description="includes first-party class method dependency",
             repo_files={
-                "tasks/orders.py": """
+                "python/tasks/orders.py": """
 class Cleaner:
     @staticmethod
     def clean(value):
@@ -253,10 +253,10 @@ def build_orders(ctx):
 """.strip()
                 + "\n",
             },
-            entry_module_path="tasks/orders.py",
+            entry_module_path="python/tasks/orders.py",
             function_name="build_orders",
             node_type="task",
-            expected_source_path="tasks/orders.py",
+            expected_source_path="python/tasks/orders.py",
             expected_dependency_qualnames=("Cleaner.clean",),
             expected_definition_fragments=("def build_orders(ctx):", "source_text"),
             expected_metadata_fragments=("def clean(value):", "source_text"),
@@ -264,30 +264,30 @@ def build_orders(ctx):
         PythonNodeIdentityTestCase(
             description="sorts dependencies deterministically by source path and qualname",
             repo_files={
-                "tasks/orders.py": """
-from libs.z_helpers import z_clean
-from libs.a_helpers import a_clean
+                "python/tasks/orders.py": """
+from python.helpers.z_helpers import z_clean
+from python.helpers.a_helpers import a_clean
 
 
 def build_orders(ctx):
     return z_clean(a_clean(" Pending "))
 """.strip()
                 + "\n",
-                "libs/z_helpers.py": """
+                "python/helpers/z_helpers.py": """
 def z_clean(value):
     return value.strip()
 """.strip()
                 + "\n",
-                "libs/a_helpers.py": """
+                "python/helpers/a_helpers.py": """
 def a_clean(value):
     return value.lower()
 """.strip()
                 + "\n",
             },
-            entry_module_path="tasks/orders.py",
+            entry_module_path="python/tasks/orders.py",
             function_name="build_orders",
             node_type="task",
-            expected_source_path="tasks/orders.py",
+            expected_source_path="python/tasks/orders.py",
             expected_dependency_qualnames=("a_clean", "z_clean"),
             expected_definition_fragments=("def build_orders(ctx):", "source_text"),
             expected_metadata_fragments=("def a_clean(value):", "def z_clean(value):"),
@@ -295,16 +295,16 @@ def a_clean(value):
         PythonNodeIdentityTestCase(
             description="stores decorator config in definition payload",
             repo_files={
-                "tasks/orders.py": """
+                "python/tasks/orders.py": """
 def build_orders(ctx):
     return None
 """.strip()
                 + "\n",
             },
-            entry_module_path="tasks/orders.py",
+            entry_module_path="python/tasks/orders.py",
             function_name="build_orders",
             node_type="task",
-            expected_source_path="tasks/orders.py",
+            expected_source_path="python/tasks/orders.py",
             expected_dependency_qualnames=(),
             expected_definition_fragments=("orders", "daily", "source_text"),
             expected_metadata_fragments=("dependencies",),
@@ -379,7 +379,7 @@ def test_given_python_node_when_building_identity_then_includes_expected_first_p
         PythonNodeIdentityChangeTestCase(
             description="nested function source changes update body and version identity",
             before_repo_files={
-                "tasks/orders.py": """
+                "python/tasks/orders.py": """
 def build_orders(ctx):
     def normalize_order(value):
         return value.strip().lower()
@@ -389,7 +389,7 @@ def build_orders(ctx):
                 + "\n",
             },
             after_repo_files={
-                "tasks/orders.py": """
+                "python/tasks/orders.py": """
 def build_orders(ctx):
     def normalize_order(value):
         return value.strip().upper()
@@ -398,7 +398,7 @@ def build_orders(ctx):
 """.strip()
                 + "\n",
             },
-            entry_module_path="tasks/orders.py",
+            entry_module_path="python/tasks/orders.py",
             function_name="build_orders",
             node_type="task",
             expected_definition_hash_changed=True,
@@ -407,36 +407,36 @@ def build_orders(ctx):
         PythonNodeIdentityChangeTestCase(
             description="first-party helper source changes update version identity only",
             before_repo_files={
-                "tasks/orders.py": """
-from libs.cleaning import normalize_order
+                "python/tasks/orders.py": """
+from python.helpers.cleaning import normalize_order
 
 
 def build_orders(ctx):
     return normalize_order(" Pending ")
 """.strip()
                 + "\n",
-                "libs/cleaning.py": """
+                "python/helpers/cleaning.py": """
 def normalize_order(value):
     return value.strip().lower()
 """.strip()
                 + "\n",
             },
             after_repo_files={
-                "tasks/orders.py": """
-from libs.cleaning import normalize_order
+                "python/tasks/orders.py": """
+from python.helpers.cleaning import normalize_order
 
 
 def build_orders(ctx):
     return normalize_order(" Pending ")
 """.strip()
                 + "\n",
-                "libs/cleaning.py": """
+                "python/helpers/cleaning.py": """
 def normalize_order(value):
     return value.strip().upper()
 """.strip()
                 + "\n",
             },
-            entry_module_path="tasks/orders.py",
+            entry_module_path="python/tasks/orders.py",
             function_name="build_orders",
             node_type="task",
             expected_definition_hash_changed=False,
@@ -445,20 +445,20 @@ def normalize_order(value):
         PythonNodeIdentityChangeTestCase(
             description="decorator config changes update body and version identity",
             before_repo_files={
-                "tasks/orders.py": """
+                "python/tasks/orders.py": """
 def build_orders(ctx):
     return None
 """.strip()
                 + "\n",
             },
             after_repo_files={
-                "tasks/orders.py": """
+                "python/tasks/orders.py": """
 def build_orders(ctx):
     return None
 """.strip()
                 + "\n",
             },
-            entry_module_path="tasks/orders.py",
+            entry_module_path="python/tasks/orders.py",
             function_name="build_orders",
             node_type="task",
             expected_definition_hash_changed=True,

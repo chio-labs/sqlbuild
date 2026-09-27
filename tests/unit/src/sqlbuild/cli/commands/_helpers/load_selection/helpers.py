@@ -49,20 +49,20 @@ def build_load_selection_inputs() -> DiscoveredProjectInputs:
         ),
         loader_functions=(
             DiscoveredLoaderFunction(
-                file_path=Path("loaders/loaders.py"),
-                relative_path=Path("loaders/loaders.py"),
+                file_path=Path("python/loaders/loaders.py"),
+                relative_path=Path("python/loaders/loaders.py"),
                 name="fetch_orders",
                 function=fetch_orders,
             ),
             DiscoveredLoaderFunction(
-                file_path=Path("loaders/loaders.py"),
-                relative_path=Path("loaders/loaders.py"),
+                file_path=Path("python/loaders/loaders.py"),
+                relative_path=Path("python/loaders/loaders.py"),
                 name="refresh_orders",
                 function=refresh_orders,
             ),
             DiscoveredLoaderFunction(
-                file_path=Path("loaders/loaders.py"),
-                relative_path=Path("loaders/loaders.py"),
+                file_path=Path("python/loaders/loaders.py"),
+                relative_path=Path("python/loaders/loaders.py"),
                 name="load_raw_orders",
                 function=load_raw_orders,
                 depends_on=(fetch_orders,),

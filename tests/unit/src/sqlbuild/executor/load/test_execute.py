@@ -92,8 +92,8 @@ def test_given_loader_generator_when_staging_consumes_it_then_terminal_follows_e
                 write_strategy=SourceWriteStrategy.TABLE,
             ),
             loader_function=DiscoveredLoaderFunction(
-                file_path=Path("loaders/raw.py"),
-                relative_path=Path("loaders/raw.py"),
+                file_path=Path("python/loaders/raw.py"),
+                relative_path=Path("python/loaders/raw.py"),
                 name="raw_orders_loader",
                 function=raw_orders_loader,
             ),
@@ -155,8 +155,8 @@ def test_given_loader_generator_failure_when_staging_consumes_it_then_failed_ter
                 write_strategy=SourceWriteStrategy.TABLE,
             ),
             loader_function=DiscoveredLoaderFunction(
-                file_path=Path("loaders/raw.py"),
-                relative_path=Path("loaders/raw.py"),
+                file_path=Path("python/loaders/raw.py"),
+                relative_path=Path("python/loaders/raw.py"),
                 name="raw_orders_loader",
                 function=failing_loader,
             ),
@@ -229,8 +229,8 @@ def test_given_source_loader_when_executing_then_context_includes_runtime_metada
                 cursor_column="updated_at",
             ),
             loader_function=DiscoveredLoaderFunction(
-                file_path=Path("loaders/raw.py"),
-                relative_path=Path("loaders/raw.py"),
+                file_path=Path("python/loaders/raw.py"),
+                relative_path=Path("python/loaders/raw.py"),
                 name=test_case.loader_name,
                 function=raw_orders_loader,
             ),
@@ -324,8 +324,8 @@ def test_given_provider_parameter_when_executing_source_loader_then_provider_is_
             meta={"sqlbuild_loader_node": True},
         ),
         loader_function=DiscoveredLoaderFunction(
-            file_path=Path("loaders/raw.py"),
-            relative_path=Path("loaders/raw.py"),
+            file_path=Path("python/loaders/raw.py"),
+            relative_path=Path("python/loaders/raw.py"),
             name=test_case.loader_name,
             function=raw_orders_loader,
             destination="staging_raw_orders",
@@ -401,8 +401,8 @@ def test_given_provider_container_when_executing_source_loader_then_context_expo
             meta={"sqlbuild_loader_node": True},
         ),
         loader_function=DiscoveredLoaderFunction(
-            file_path=Path("loaders/raw.py"),
-            relative_path=Path("loaders/raw.py"),
+            file_path=Path("python/loaders/raw.py"),
+            relative_path=Path("python/loaders/raw.py"),
             name=test_case.loader_name,
             function=raw_orders_loader,
             destination="staging_raw_orders",
@@ -469,8 +469,8 @@ def test_given_missing_provider_container_when_executing_source_loader_then_fail
             meta={"sqlbuild_loader_node": True},
         ),
         loader_function=DiscoveredLoaderFunction(
-            file_path=Path("loaders/raw.py"),
-            relative_path=Path("loaders/raw.py"),
+            file_path=Path("python/loaders/raw.py"),
+            relative_path=Path("python/loaders/raw.py"),
             name=test_case.loader_name,
             function=raw_orders_loader,
             destination="staging_raw_orders",
@@ -550,8 +550,8 @@ def test_given_provider_parameter_when_executing_external_source_loader_then_pro
                 loader=test_case.loader_name,
             ),
             loader_function=DiscoveredLoaderFunction(
-                file_path=Path("loaders/raw.py"),
-                relative_path=Path("loaders/raw.py"),
+                file_path=Path("python/loaders/raw.py"),
+                relative_path=Path("python/loaders/raw.py"),
                 name=test_case.loader_name,
                 function=raw_orders_loader,
                 connection_mode=LoaderConnectionMode.EXTERNAL,
@@ -607,8 +607,8 @@ def test_given_external_loader_generator_when_validating_return_then_fails_witho
         result: LoadExecutionResult = execute_source_load(
             source_entry=SourceEntry(name="raw_orders", table="orders", loader="external"),
             loader_function=DiscoveredLoaderFunction(
-                file_path=Path("loaders/external.py"),
-                relative_path=Path("loaders/external.py"),
+                file_path=Path("python/loaders/external.py"),
+                relative_path=Path("python/loaders/external.py"),
                 name="external",
                 function=external_generator,
                 connection_mode=LoaderConnectionMode.EXTERNAL,
@@ -667,8 +667,8 @@ def test_given_external_loader_node_envelope_when_validating_return_then_operati
         result: LoadExecutionResult = execute_source_load(
             source_entry=SourceEntry(name="raw_orders", table="orders", loader="external"),
             loader_function=DiscoveredLoaderFunction(
-                file_path=Path("loaders/external.py"),
-                relative_path=Path("loaders/external.py"),
+                file_path=Path("python/loaders/external.py"),
+                relative_path=Path("python/loaders/external.py"),
                 name="external",
                 function=external_envelope,
                 connection_mode=LoaderConnectionMode.EXTERNAL,
@@ -747,8 +747,8 @@ def test_given_provider_container_when_executing_external_loader_then_context_ex
             loader=test_case.loader_name,
         ),
         loader_function=DiscoveredLoaderFunction(
-            file_path=Path("loaders/raw.py"),
-            relative_path=Path("loaders/raw.py"),
+            file_path=Path("python/loaders/raw.py"),
+            relative_path=Path("python/loaders/raw.py"),
             name=test_case.loader_name,
             function=raw_orders_loader,
             connection_mode=LoaderConnectionMode.EXTERNAL,
@@ -809,8 +809,8 @@ def test_given_self_managed_intermediate_loader_when_returning_none_then_applies
             meta={"sqlbuild_loader_node": True},
         ),
         loader_function=DiscoveredLoaderFunction(
-            file_path=Path("loaders/raw.py"),
-            relative_path=Path("loaders/raw.py"),
+            file_path=Path("python/loaders/raw.py"),
+            relative_path=Path("python/loaders/raw.py"),
             name=test_case.loader_name,
             function=fetch_orders,
             destination=test_case.loader_target,

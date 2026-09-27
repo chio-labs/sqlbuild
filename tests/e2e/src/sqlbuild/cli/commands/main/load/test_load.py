@@ -623,7 +623,7 @@ def test_given_source_loader_reads_unselected_task_payload_when_loading_then_run
     test_case: SourceOnlyComplexIngressE2ETestCase,
 ) -> None:
     assert test_case.expected_error_fragment is not None
-    dependency_file: str = f"{test_case.dependency_dir}/prepare.py"
+    dependency_file: str = f"python/{test_case.dependency_dir}/prepare.py"
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
         project_name="source_loader_schema_behavior",
@@ -640,7 +640,7 @@ def test_given_source_loader_reads_unselected_task_payload_when_loading_then_run
                 ),
                 loader_py=(
                     "from sqlbuild.loaders import loader\n"
-                    f"from {test_case.dependency_dir}.prepare import prepare_events\n\n"
+                    f"from python.{test_case.dependency_dir}.prepare import prepare_events\n\n"
                     "@loader(depends_on=[prepare_events])\n"
                     "def raw_events(ctx):\n"
                     "    payload = ctx.result_of(node_function=prepare_events).payload\n"

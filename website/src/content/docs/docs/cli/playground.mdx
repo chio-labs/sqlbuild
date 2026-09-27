@@ -20,8 +20,8 @@ The positional argument is the directory to create (default `sqlbuild-playground
 | Template | Description |
 |----------|-------------|
 | `waffle_shop` | Default. DuckDB-backed project with models, tests, scenarios, and macros. |
-| `dagster` | Waffle shop project plus a `dagster/` directory with a ready-to-run `definitions.py`. |
-| `rivers` | Waffle shop project plus a `rivers_pipeline/` directory with a Rivers repository definition. |
+| `dagster` | A Dagster code location: a ready-to-run `definitions.py` next to the waffle shop SQLBuild project in `waffle_shop/`. |
+| `rivers` | A Rivers code repository: a `definitions.py` repository definition next to the waffle shop SQLBuild project in `waffle_shop/`. |
 | `python_nodes` | A small DuckDB project demonstrating [Python nodes](/docs/concepts/python-nodes/overview): a task feeding a loader, a model read by a Python asset through `ctx.relation(model(...))`, a soft-skip fan-in, `materialized=False`, and a Python check. |
 
 ## What it creates
@@ -30,6 +30,7 @@ A complete DuckDB-backed project with:
 
 - Staging views, fact/dimension tables, and incremental models
 - Sources with inline expression data (no external setup)
+- Python source loaders in `python/loaders/`
 - Seeds, SQL functions, and a custom materialization
 - Built-in and custom audits
 - SQL unit tests and multi-model tests
@@ -37,14 +38,20 @@ A complete DuckDB-backed project with:
 - Python macros
 - AI agent skill files (auto-installed for OpenCode, Claude Code, and other agents)
 
-The `dagster` template adds:
+The `dagster` and `rivers` templates keep orchestrator code outside the SQLBuild project:
 
-- `dagster/definitions.py` - Dagster definitions with `sqlbuild_assets`, `sqlbuild_scenario_checks`, and `SqlBuildCliResource`
-- `dagster/README.md` - Setup instructions
+```text
+sqlbuild-playground/
+  definitions.py     # Dagster or Rivers definitions pointing at waffle_shop/
+  README.md          # setup instructions
+  waffle_shop/       # the waffle shop SQLBuild project, including agent skill files
+```
+
+The Dagster `definitions.py` uses `sqlbuild_assets`, `sqlbuild_scenario_checks`, and `SqlBuildCliResource`; the Rivers `definitions.py` defines a `waffle_shop` job. Run `sqb` commands from `waffle_shop/` and the orchestrator from the top-level directory. Agent skill files are installed in `waffle_shop/`, where `sqb skills` and stale-skill checks maintain them.
 
 The `python_nodes` template instead creates a focused Python-nodes project:
 
-- `tasks/orders.py`, `loaders/orders.py`, `assets/orders_export.py`, `checks/orders_export.py`
+- `python/tasks/orders.py`, `python/loaders/orders.py`, `python/assets/orders_export.py`, `python/checks/orders_export.py`
 - A `fact_orders` SQL model over a managed `raw_orders` source
 - Examples of the SQL boundary, `ctx.relation(model(...))`, soft-skip fan-in, and a Python check
 
@@ -60,13 +67,13 @@ sqb build
 sqb playground --template dagster
 cd sqlbuild-playground
 uv pip install 'sqlbuild[dagster]'
-dagster dev -f dagster/definitions.py
+dagster dev -f definitions.py
 
 # With Rivers integration
 sqb playground --template rivers
 cd sqlbuild-playground
 uv pip install 'sqlbuild[rivers]'
-uv run rivers dev rivers_pipeline.definitions
+uv run rivers dev definitions
 
 # With Python nodes
 sqb playground --template python_nodes

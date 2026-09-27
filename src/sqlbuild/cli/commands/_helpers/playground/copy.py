@@ -6,13 +6,19 @@ from importlib.resources import files
 from importlib.resources.abc import Traversable
 from pathlib import Path
 
-from sqlbuild.cli.commands.constants import PLAYGROUND_TEMPLATE_VALUES
+from sqlbuild.cli.commands.constants import (
+    PLAYGROUND_ORCHESTRATED_PROJECT_DIR,
+    PLAYGROUND_TEMPLATE_VALUES,
+)
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.types import PlaygroundTemplate
+from sqlbuild.compiler.discovery.constants import PYTHON_NODE_ROOT
 
 _TEMPLATE_PACKAGE: str = "sqlbuild.cli.commands._helpers.playground"
 _WAFFLE_SHOP_TEMPLATE: str = "templates/waffle_shop"
 _LOADER_WAFFLE_SHOP_TEMPLATE: str = "templates/loader_waffle_shop"
+_ORCHESTRATOR_DEFINITIONS_FILE: str = "definitions.py"
+_ORCHESTRATOR_README_FILE: str = "README.md"
 
 _PYTHON_NODES_PROJECT_TOML: str = """name = "python_nodes_demo"
 adapter = "duckdb"
@@ -112,7 +118,7 @@ def export_window(ctx):
 _PYTHON_NODES_LOADERS_PY: str = '''"""Loader examples for the Python nodes playground."""
 
 from sqlbuild.loaders import loader
-from tasks.orders import prepare_raw_orders
+from python.tasks.orders import prepare_raw_orders
 
 
 @loader(depends_on=(prepare_raw_orders,))
@@ -132,7 +138,7 @@ _PYTHON_NODES_ASSETS_PY: str = '''"""Asset examples for the Python nodes playgro
 from sqlbuild.assets import asset
 from sqlbuild.refs import model
 
-from tasks.orders import export_window, optional_partner_feed
+from python.tasks.orders import export_window, optional_partner_feed
 
 
 @asset(
@@ -159,7 +165,7 @@ _PYTHON_NODES_CHECKS_PY: str = '''"""Check examples for the Python nodes playgro
 
 from sqlbuild.checks import check
 
-from assets.orders_export import orders_export
+from python.assets.orders_export import orders_export
 
 
 @check(depends_on=orders_export, tags=["quality"], group="exports")
@@ -423,7 +429,7 @@ from sqlbuild.integrations.dagster import (
     sqlbuild_scenario_checks,
 )
 
-PROJECT_DIR = Path(__file__).resolve().parent.parent
+PROJECT_DIR = Path(__file__).resolve().parent / "waffle_shop"
 SQLBUILD_PROJECT = SqlBuildProject(project_dir=PROJECT_DIR)
 
 SQLBUILD_PROJECT.prepare_if_dev()
@@ -455,21 +461,22 @@ defs = dg.Definitions(
 
 _DAGSTER_README: str = """# SQLBuild + Dagster playground
 
-This directory contains a Dagster definitions file for the generated SQLBuild waffle shop project.
+This directory is a Dagster code location. `definitions.py` orchestrates the SQLBuild waffle
+shop project in `waffle_shop/`, which stays a plain SQLBuild project with no Dagster code inside.
 
 ## Run Dagster
 
-Install SQLBuild with the Dagster extra, then start Dagster from the project root:
+Install SQLBuild with the Dagster extra, then start Dagster from this directory:
 
 ```bash
 uv add "sqlbuild[dagster]"
-DAGSTER_IS_DEV_CLI=1 uv run dagster dev -f dagster/definitions.py
+DAGSTER_IS_DEV_CLI=1 uv run dagster dev -f definitions.py
 ```
 
 Open the Dagster UI, materialize the `waffle_shop_assets` asset group, then run the scenario checks.
 
-The definitions use `SqlBuildProject.prepare_if_dev()` to generate `target/sqlbuild_dag.json`
-when Dagster starts in dev mode.
+The definitions use `SqlBuildProject.prepare_if_dev()` to generate
+`waffle_shop/target/sqlbuild_dag.json` when Dagster starts in dev mode.
 """
 
 _RIVERS_DEFINITIONS: str = '''"""Rivers definitions for the SQLBuild waffle shop playground."""
@@ -485,7 +492,7 @@ import rivers as rs
 
 from sqlbuild.integrations.rivers import SqlBuildProject, sqlbuild_assets
 
-PROJECT_DIR = Path(__file__).resolve().parent.parent
+PROJECT_DIR = Path(__file__).resolve().parent / "waffle_shop"
 SQLBUILD_PROJECT = SqlBuildProject(project_dir=PROJECT_DIR)
 
 if __name__ == "__main__":
@@ -529,28 +536,28 @@ if __name__ == "__main__":
 
 _RIVERS_README: str = """# SQLBuild + Rivers playground
 
-This directory contains a Rivers repository definition for the generated SQLBuild
-waffle shop project.
+This directory is a Rivers code repository. `definitions.py` orchestrates the SQLBuild waffle
+shop project in `waffle_shop/`, which stays a plain SQLBuild project with no Rivers code inside.
 
 ## Run Rivers
 
-Install SQLBuild with the Rivers extra, then start Rivers from the project root:
+Install SQLBuild with the Rivers extra, then start Rivers from this directory:
 
 ```bash
 uv add "sqlbuild[rivers]"
-uv run rivers dev rivers_pipeline.definitions
+uv run rivers dev definitions
 ```
 
 You can also run a local materialization directly:
 
 ```bash
-uv run python rivers_pipeline/definitions.py
+uv run python definitions.py
 ```
 
 The repository defines a `waffle_shop` job for UI-triggered materialization.
 
-The definitions use `SqlBuildProject.prepare_if_dev()` to generate `target/sqlbuild_dag.json`
-when `rivers dev` starts with `RIVERS_DEPLOYMENT=dev`.
+The definitions use `SqlBuildProject.prepare_if_dev()` to generate
+`waffle_shop/target/sqlbuild_dag.json` when `rivers dev` starts with `RIVERS_DEPLOYMENT=dev`.
 """
 
 
@@ -589,11 +596,23 @@ def create_playground_project(
             code="C702",
             help="reinstall SQLBuild or report a packaging issue",
         )
-    _copy_tree(source=template_root, target=target_dir)
     if resolved_template == PlaygroundTemplate.DAGSTER:
-        _write_dagster_template_files(target_dir=target_dir)
+        _write_orchestrator_template_files(
+            template_root=template_root,
+            target_dir=target_dir,
+            definitions=_DAGSTER_DEFINITIONS,
+            readme=_DAGSTER_README,
+        )
+        return
     if resolved_template == PlaygroundTemplate.RIVERS:
-        _write_rivers_template_files(target_dir=target_dir)
+        _write_orchestrator_template_files(
+            template_root=template_root,
+            target_dir=target_dir,
+            definitions=_RIVERS_DEFINITIONS,
+            readme=_RIVERS_README,
+        )
+        return
+    _copy_tree(source=template_root, target=target_dir)
     if resolved_template == PlaygroundTemplate.VIRTUAL:
         _write_virtual_template_files(target_dir=target_dir)
 
@@ -615,21 +634,12 @@ def _generated_name(template_name: str) -> str:
     return template_name
 
 
-def _write_dagster_template_files(*, target_dir: Path) -> None:
-    dagster_dir: Path = target_dir / "dagster"
-    dagster_dir.mkdir()
-    (dagster_dir / "definitions.py").write_text(_DAGSTER_DEFINITIONS, encoding="utf-8")
-    (dagster_dir / "README.md").write_text(_DAGSTER_README, encoding="utf-8")
-
-
-def _write_rivers_template_files(*, target_dir: Path) -> None:
-    rivers_dir: Path = target_dir / "rivers_pipeline"
-    rivers_dir.mkdir()
-    (rivers_dir / "__init__.py").write_text(
-        '"""Rivers playground definitions package."""\n', encoding="utf-8"
-    )
-    (rivers_dir / "definitions.py").write_text(_RIVERS_DEFINITIONS, encoding="utf-8")
-    (rivers_dir / "README.md").write_text(_RIVERS_README, encoding="utf-8")
+def _write_orchestrator_template_files(
+    *, template_root: Traversable, target_dir: Path, definitions: str, readme: str
+) -> None:
+    _copy_tree(source=template_root, target=target_dir / PLAYGROUND_ORCHESTRATED_PROJECT_DIR)
+    (target_dir / _ORCHESTRATOR_DEFINITIONS_FILE).write_text(definitions, encoding="utf-8")
+    (target_dir / _ORCHESTRATOR_README_FILE).write_text(readme, encoding="utf-8")
 
 
 def _write_python_nodes_template_files(*, target_dir: Path) -> None:
@@ -648,18 +658,18 @@ def _write_python_nodes_template_files(*, target_dir: Path) -> None:
         _PYTHON_NODES_FACT_ORDERS_SQL,
         encoding="utf-8",
     )
-    tasks_dir: Path = target_dir / "tasks"
-    tasks_dir.mkdir()
-    (tasks_dir / "orders.py").write_text(_PYTHON_NODES_TASKS_PY, encoding="utf-8")
-    loaders_dir: Path = target_dir / "loaders"
-    loaders_dir.mkdir()
-    (loaders_dir / "orders.py").write_text(_PYTHON_NODES_LOADERS_PY, encoding="utf-8")
-    assets_dir: Path = target_dir / "assets"
-    assets_dir.mkdir()
-    (assets_dir / "orders_export.py").write_text(_PYTHON_NODES_ASSETS_PY, encoding="utf-8")
-    checks_dir: Path = target_dir / "checks"
-    checks_dir.mkdir()
-    (checks_dir / "orders_export.py").write_text(_PYTHON_NODES_CHECKS_PY, encoding="utf-8")
+    python_files: tuple[tuple[str, str], ...] = (
+        ("tasks/orders.py", _PYTHON_NODES_TASKS_PY),
+        ("loaders/orders.py", _PYTHON_NODES_LOADERS_PY),
+        ("assets/orders_export.py", _PYTHON_NODES_ASSETS_PY),
+        ("checks/orders_export.py", _PYTHON_NODES_CHECKS_PY),
+    )
+    relative_path: str
+    contents: str
+    for relative_path, contents in python_files:
+        python_file: Path = target_dir / PYTHON_NODE_ROOT / relative_path
+        python_file.parent.mkdir(parents=True, exist_ok=True)
+        python_file.write_text(contents, encoding="utf-8")
     for hook_language in ("sql", "python"):
         hook_dir: Path = target_dir / "hooks" / hook_language
         hook_dir.mkdir(parents=True)

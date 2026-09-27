@@ -155,21 +155,21 @@ def test_given_virtual_python_nodes_when_building_then_runs_loader_and_read_side
                 "[targets.dev.state.connection]\n"
                 'database = "state.duckdb"\n'
             ),
-            "tasks/prepare.py": (
+            "python/tasks/prepare.py": (
                 "from pathlib import Path\n"
                 "from sqlbuild.tasks import task\n\n"
                 "@task\n"
                 "def prepare_orders(ctx):\n"
-                "    Path(__file__).parents[1].joinpath('prepared.txt').write_text('7')\n"
+                "    Path(__file__).parents[2].joinpath('prepared.txt').write_text('7')\n"
                 "    return ctx.result(payload={'order_id': 7})\n"
             ),
-            "loaders/raw.py": (
+            "python/loaders/raw.py": (
                 "from pathlib import Path\n"
                 "from sqlbuild.loaders import loader\n"
-                "from tasks.prepare import prepare_orders\n\n"
+                "from python.tasks.prepare import prepare_orders\n\n"
                 "@loader(depends_on=(prepare_orders,))\n"
                 "def raw_orders(ctx):\n"
-                "    marker = Path(__file__).parents[1].joinpath('prepared.txt')\n"
+                "    marker = Path(__file__).parents[2].joinpath('prepared.txt')\n"
                 "    return [{'order_id': int(marker.read_text())}]\n"
             ),
             "sources/raw.yml": (
@@ -184,7 +184,7 @@ def test_given_virtual_python_nodes_when_building_then_runs_loader_and_read_side
             "models/fact_orders.sql": (
                 'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
             ),
-            "tasks/profile.py": (
+            "python/tasks/profile.py": (
                 "from pathlib import Path\n"
                 "from sqlbuild.refs import model, source\n"
                 "from sqlbuild.tasks import task\n\n"
@@ -192,14 +192,14 @@ def test_given_virtual_python_nodes_when_building_then_runs_loader_and_read_side
                 "def profile_fact_orders(ctx):\n"
                 "    relation = ctx.relation(model('fact_orders'))\n"
                 "    rows = ctx.query(f'SELECT COUNT(*) FROM {relation}').fetchall()[0][0]\n"
-                "    Path(__file__).parents[1].joinpath('profile.txt').write_text(str(rows))\n"
+                "    Path(__file__).parents[2].joinpath('profile.txt').write_text(str(rows))\n"
                 "    return ctx.result(payload={'rows': rows})\n"
                 "\n"
                 "@task(depends_on=source('raw_orders'))\n"
                 "def profile_raw_orders(ctx):\n"
                 "    relation = ctx.relation(source('raw_orders'))\n"
                 "    rows = ctx.query(f'SELECT COUNT(*) FROM {relation}').fetchall()[0][0]\n"
-                "    output = Path(__file__).parents[1].joinpath('source_profile.txt')\n"
+                "    output = Path(__file__).parents[2].joinpath('source_profile.txt')\n"
                 "    output.write_text(str(rows))\n"
                 "    return ctx.result(payload={'rows': rows})\n"
             ),
@@ -283,7 +283,7 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                 "[targets.dev.state.connection]\n"
                 'database = "state.duckdb"\n'
             ),
-            "loaders/orders.py": (
+            "python/loaders/orders.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader\n"
                 "def raw_orders(ctx):\n"
@@ -298,9 +298,9 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                 "      - name: value\n"
                 "        type: INTEGER\n"
             ),
-            "tasks/results.py": (
+            "python/tasks/results.py": (
                 "from pathlib import Path\n"
-                "from loaders.orders import raw_orders\n"
+                "from python.loaders.orders import raw_orders\n"
                 "from sqlbuild.refs import model\n"
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=model('orders'))\n"
@@ -311,20 +311,20 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                 "def summarize_loader(ctx):\n"
                 "    result = ctx.result_of(node_function=raw_orders)\n"
                 "    history = ctx.results_of(node_function=raw_orders, limit=1)\n"
-                "    output = Path(__file__).parents[1].joinpath('loader_result.txt')\n"
+                "    output = Path(__file__).parents[2].joinpath('loader_result.txt')\n"
                 "    output.write_text(\n"
                 "        f\"{result.metadata['loader_name']}:{result.metadata['source_name']}:\"\n"
                 "        f\"{result.metadata['rows_loaded']}\"\n"
                 "    )\n"
-                "    history_output = Path(__file__).parents[1].joinpath('history_result.txt')\n"
+                "    history_output = Path(__file__).parents[2].joinpath('history_result.txt')\n"
                 "    history_output.write_text(\n"
                 "        f\"{ctx.result_of(node_function=produce_result).payload['value']}:{len(history)}\"\n"
                 "    )\n"
                 "    return ctx.result(metadata={'summarized': True})\n"
             ),
-            "assets/results.py": (
+            "python/assets/results.py": (
                 "from sqlbuild.assets import asset\n"
-                "from tasks.results import produce_result\n\n"
+                "from python.tasks.results import produce_result\n\n"
                 "@asset(depends_on=produce_result)\n"
                 "def publish_result(ctx):\n"
                 "    payload = ctx.result_of(node_function=produce_result).payload\n"
@@ -333,10 +333,10 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
             "models/orders.sql": (
                 'MODEL (materialized table);\n\nSELECT value FROM __source("raw_orders")\n'
             ),
-            "checks/results.py": (
+            "python/checks/results.py": (
                 "from sqlbuild.checks import check\n"
-                "from assets.results import publish_result\n"
-                "from tasks.results import produce_result, summarize_loader\n\n"
+                "from python.assets.results import publish_result\n"
+                "from python.tasks.results import produce_result, summarize_loader\n\n"
                 "@check(depends_on=(publish_result, summarize_loader))\n"
                 "def check_produce_result(ctx):\n"
                 "    return (\n"
@@ -431,7 +431,7 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                 ).strip()
                 + "\n",
                 "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
-                "tasks/results.py": (
+                "python/tasks/results.py": (
                     "from sqlbuild.refs import model\n"
                     "from sqlbuild.tasks import task\n\n"
                     "@task(depends_on=model('orders'))\n"
@@ -472,16 +472,16 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                 ).strip()
                 + "\n",
                 "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
-                "tasks/results.py": (
+                "python/tasks/results.py": (
                     "from sqlbuild.refs import model\n"
                     "from sqlbuild.tasks import task\n\n"
                     "@task(depends_on=model('orders'))\n"
                     "def produce_result(ctx):\n"
                     "    return ctx.result(payload={'value': 1})\n"
                 ),
-                "checks/results.py": (
+                "python/checks/results.py": (
                     "from sqlbuild.checks import check\n"
-                    "from tasks.results import produce_result\n\n"
+                    "from python.tasks.results import produce_result\n\n"
                     "@check(depends_on=produce_result)\n"
                     "def check_produce_result(ctx):\n"
                     "    return False\n"
@@ -523,7 +523,7 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                 ).strip()
                 + "\n",
                 "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
-                "tasks/results.py": (
+                "python/tasks/results.py": (
                     "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
                     "from sqlbuild.refs import model\n"
                     "from sqlbuild.tasks import task\n\n"
@@ -565,15 +565,15 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                 """
                 ).strip()
                 + "\n",
-                "tasks/prepare.py": (
+                "python/tasks/prepare.py": (
                     "from sqlbuild.compiler.python_nodes.types import SkipMode\n"
                     "from sqlbuild.tasks import task\n\n"
                     "@task\n"
                     "def prepare_events(ctx):\n"
                     "    return ctx.skip(reason='no input', mode=SkipMode.HARD)\n"
                 ),
-                "loaders/events.py": (
-                    "from tasks.prepare import prepare_events\n"
+                "python/loaders/events.py": (
+                    "from python.tasks.prepare import prepare_events\n"
                     "from sqlbuild.loaders import loader\n\n"
                     "@loader(depends_on=(prepare_events,))\n"
                     "def raw_events(ctx):\n"
@@ -628,7 +628,7 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                 ).strip()
                 + "\n",
                 "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
-                "tasks/results.py": (
+                "python/tasks/results.py": (
                     "from sqlbuild.refs import model\n"
                     "from sqlbuild.tasks import task\n\n"
                     "@task(depends_on=model('orders'))\n"
@@ -669,7 +669,7 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                 ).strip()
                 + "\n",
                 "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS id\n",
-                "tasks/results.py": (
+                "python/tasks/results.py": (
                     "from sqlbuild.refs import model\n"
                     "from sqlbuild.tasks import task\n\n"
                     "@task(depends_on=model('orders'))\n"
@@ -774,21 +774,21 @@ def test_given_virtual_python_identities_when_replanning_then_reads_virtual_stat
                 "[targets.dev.state.connection]\n"
                 'database = "state.duckdb"\n'
             ),
-            "tasks/prepare.py": (
+            "python/tasks/prepare.py": (
                 "from pathlib import Path\n"
                 "from sqlbuild.tasks import task\n\n"
                 "@task\n"
                 "def prepare_orders(ctx):\n"
-                "    Path(__file__).parents[1].joinpath('prepared.txt').write_text('7')\n"
+                "    Path(__file__).parents[2].joinpath('prepared.txt').write_text('7')\n"
                 "    return ctx.result(payload={'order_id': 7})\n"
             ),
-            "loaders/raw.py": (
+            "python/loaders/raw.py": (
                 "from pathlib import Path\n"
                 "from sqlbuild.loaders import loader\n"
-                "from tasks.prepare import prepare_orders\n\n"
+                "from python.tasks.prepare import prepare_orders\n\n"
                 "@loader(depends_on=(prepare_orders,))\n"
                 "def raw_orders(ctx):\n"
-                "    marker = Path(__file__).parents[1].joinpath('prepared.txt')\n"
+                "    marker = Path(__file__).parents[2].joinpath('prepared.txt')\n"
                 "    return [{'order_id': int(marker.read_text())}]\n"
             ),
             "sources/raw.yml": (
@@ -803,7 +803,7 @@ def test_given_virtual_python_identities_when_replanning_then_reads_virtual_stat
             "models/fact_orders.sql": (
                 'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
             ),
-            "tasks/profile.py": (
+            "python/tasks/profile.py": (
                 "from pathlib import Path\n"
                 "from sqlbuild.refs import model\n"
                 "from sqlbuild.tasks import task\n\n"
@@ -811,7 +811,7 @@ def test_given_virtual_python_identities_when_replanning_then_reads_virtual_stat
                 "def profile_fact_orders(ctx):\n"
                 "    relation = ctx.relation(model('fact_orders'))\n"
                 "    rows = ctx.query(f'SELECT COUNT(*) FROM {relation}').fetchall()[0][0]\n"
-                "    Path(__file__).parents[1].joinpath('profile.txt').write_text(str(rows))\n"
+                "    Path(__file__).parents[2].joinpath('profile.txt').write_text(str(rows))\n"
                 "    return ctx.result(payload={'rows': rows})\n"
             ),
         },
@@ -843,12 +843,12 @@ def test_given_virtual_python_identities_when_replanning_then_reads_virtual_stat
         ),
     ) == [(test_case.expected_warehouse_fingerprint_table_count,)]
 
-    (project_dir / "tasks" / "prepare.py").write_text(
+    (project_dir / "python" / "tasks" / "prepare.py").write_text(
         "from pathlib import Path\n"
         "from sqlbuild.tasks import task\n\n"
         "@task\n"
         "def prepare_orders(ctx):\n"
-        "    Path(__file__).parents[1].joinpath('prepared.txt').write_text('8')\n"
+        "    Path(__file__).parents[2].joinpath('prepared.txt').write_text('8')\n"
         "    return ctx.result(payload={'order_id': 8})\n",
         encoding="utf-8",
     )
@@ -908,7 +908,7 @@ def test_given_virtual_read_side_python_failure_when_building_then_prints_python
                 'database = "state.duckdb"\n'
             ),
             "models/fact_orders.sql": "MODEL (materialized table);\n\nSELECT 7 AS order_id\n",
-            "tasks/profile.py": (
+            "python/tasks/profile.py": (
                 "from sqlbuild.refs import model\n"
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=model('fact_orders'))\n"
@@ -975,7 +975,7 @@ def test_given_virtual_read_side_python_skip_when_building_then_prints_python_sk
                 'database = "state.duckdb"\n'
             ),
             "models/fact_orders.sql": "MODEL (materialized table);\n\nSELECT 7 AS order_id\n",
-            "tasks/profile.py": (
+            "python/tasks/profile.py": (
                 "from sqlbuild.refs import model\n"
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=model('fact_orders'))\n"
@@ -1041,21 +1041,21 @@ def test_given_virtual_python_nodes_when_no_python_then_only_loader_side_python_
                 "[targets.dev.state.connection]\n"
                 'database = "state.duckdb"\n'
             ),
-            "tasks/prepare.py": (
+            "python/tasks/prepare.py": (
                 "from pathlib import Path\n"
                 "from sqlbuild.tasks import task\n\n"
                 "@task\n"
                 "def prepare_orders(ctx):\n"
-                "    Path(__file__).parents[1].joinpath('prepared.txt').write_text('7')\n"
+                "    Path(__file__).parents[2].joinpath('prepared.txt').write_text('7')\n"
                 "    return ctx.result(payload={'order_id': 7})\n"
             ),
-            "loaders/raw.py": (
+            "python/loaders/raw.py": (
                 "from pathlib import Path\n"
                 "from sqlbuild.loaders import loader\n"
-                "from tasks.prepare import prepare_orders\n\n"
+                "from python.tasks.prepare import prepare_orders\n\n"
                 "@loader(depends_on=(prepare_orders,))\n"
                 "def raw_orders(ctx):\n"
-                "    marker = Path(__file__).parents[1].joinpath('prepared.txt')\n"
+                "    marker = Path(__file__).parents[2].joinpath('prepared.txt')\n"
                 "    return [{'order_id': int(marker.read_text())}]\n"
             ),
             "sources/raw.yml": (
@@ -1070,13 +1070,13 @@ def test_given_virtual_python_nodes_when_no_python_then_only_loader_side_python_
             "models/fact_orders.sql": (
                 'MODEL (materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
             ),
-            "tasks/profile.py": (
+            "python/tasks/profile.py": (
                 "from pathlib import Path\n"
                 "from sqlbuild.refs import model\n"
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=model('fact_orders'))\n"
                 "def profile_fact_orders(ctx):\n"
-                "    Path(__file__).parents[1].joinpath('profile.txt').write_text('ran')\n"
+                "    Path(__file__).parents[2].joinpath('profile.txt').write_text('ran')\n"
                 "    return ctx.result()\n"
             ),
         },

@@ -21,7 +21,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
         AuditFactoryDiscoveryTestCase(
             description="audit and node factories coexist",
             files={
-                "factories/quality.py": """
+                "python/factories/quality.py": """
 from sqlbuild.audits import AuditCase, audit_factory
 from sqlbuild.factories import factory
 from sqlbuild.tasks import task
@@ -40,7 +40,26 @@ def generated_nodes():
             },
             expected_factory_names=("quality_checks",),
             expected_task_names=("refresh_quality",),
-        )
+        ),
+        AuditFactoryDiscoveryTestCase(
+            description="audit factory beside a direct task outside a factories folder",
+            files={
+                "python/quality.py": """
+from sqlbuild.audits import AuditCase, audit_factory
+from sqlbuild.tasks import task
+
+@audit_factory
+def quality_checks():
+    return [AuditCase(name="positive_amount", definition="expression_is_true", arguments={"expression": "amount > 0"})]
+
+@task(name="refresh_quality")
+def refresh(ctx):
+    return None
+""",
+            },
+            expected_factory_names=("quality_checks",),
+            expected_task_names=("refresh_quality",),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -57,7 +76,7 @@ def test_given_audit_and_node_factories_when_discovering_then_both_are_collected
         test_case.expected_factory_names
     )
     assert discovered.audit_factories[0].cases[0].name == "positive_amount"
-    assert discovered.audit_factories[0].relative_path == Path("factories/quality.py")
+    assert discovered.audit_factories[0].relative_path == Path(next(iter(test_case.files)))
     assert discovered.audit_factories[0].line > 0
     assert tuple(task.name for task in discovered.tasks) == test_case.expected_task_names
 
@@ -90,7 +109,7 @@ def test_given_invalid_audit_factory_when_discovering_then_clear_error_is_raised
     write_repo_files(
         tmp_path,
         {
-            "factories/quality.py": f"""
+            "python/factories/quality.py": f"""
 from sqlbuild.audits import audit_factory
 
 @audit_factory
@@ -127,7 +146,7 @@ def duplicate_factory():
 """
     write_repo_files(
         tmp_path,
-        {"factories/a.py": source, "factories/nested/b.py": source},
+        {"python/factories/a.py": source, "python/factories/nested/b.py": source},
     )
 
     with pytest.raises(PythonNodeDiscoveryError, match=test_case.expected_error_fragment):

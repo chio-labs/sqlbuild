@@ -11,7 +11,7 @@ Project metadata and DAG artifact preparation.
 from sqlbuild.integrations.dagster import SqlBuildProject
 
 project = SqlBuildProject(
-    project_dir=".",
+    project_dir="my_sqlbuild_project",
     target_path="target",
     dag_filename="sqlbuild_dag.json",
     sqb_command=("sqb",),
@@ -43,13 +43,13 @@ Dagster `ConfigurableResource` that shells out to the SQLBuild CLI.
 from sqlbuild.integrations.dagster import SqlBuildCliResource, SqlBuildProject
 
 # From a project
-resource = SqlBuildCliResource(SqlBuildProject(project_dir="."))
+resource = SqlBuildCliResource(SqlBuildProject(project_dir="my_sqlbuild_project"))
 
 # Or with explicit paths
 resource = SqlBuildCliResource(
-    project_dir=".",
+    project_dir="my_sqlbuild_project",
     sqb_command=["sqb"],
-    dag_path="target/sqlbuild_dag.json",
+    dag_path="my_sqlbuild_project/target/sqlbuild_dag.json",
 )
 ```
 

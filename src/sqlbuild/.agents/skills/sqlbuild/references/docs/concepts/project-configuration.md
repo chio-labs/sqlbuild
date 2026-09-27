@@ -531,16 +531,32 @@ See [skills CLI reference](../cli/skills.md) for usage details.
 
 ## Project Python
 
-Project-owned Python must live in a supported extension location such as `factories/`, `libs/`,
-`macros/`, `providers/`, or another documented Python resource root. Factory locations contain
-normal Python: constants, classes, undecorated helper functions, and modules such as `_helpers.py`
-are allowed, while decorators determine which functions become SQLBuild resources. Compilation
-rejects Python under unsupported project roots, so indirectly importable modules cannot create an
-unofficial project structure.
+Project-owned Python lives in a small set of roots. Anything that runs as part of the pipeline graph
+goes in `python/`: loaders, tasks, assets, checks, factories, and the helper modules they import.
+Modules under `python/` are normal Python: constants, classes, undecorated helper functions, and
+helper-only modules such as `python/_helpers.py` are allowed, while decorators determine which
+functions become graph nodes. See [Python nodes](python-nodes/overview.md#the-python-folder).
+
+Code that extends SQLBuild itself keeps its own root:
+
+| Location | Holds |
+|----------|-------|
+| `rules/` | Custom project rules |
+| `materializations/` | Custom materializations |
+| `adapters/`, `adapter.py` | Custom adapters |
+| `providers/` | Runtime providers |
+| `sinks/` | Lifecycle event and command output sinks |
+| `hooks/python/` | Python model lifecycle hooks |
+| `functions/python/` | Python UDFs |
+| `macros/`, `enums/`, `constants/` and scoped `_macros/`, `_enums/`, `_constants/` | Python macros and declarations |
+
+Compilation rejects Python anywhere else with `D016`, so indirectly importable modules cannot create
+an unofficial project structure.
 
 Keep repository pytest tests outside the SQLBuild project's `tests/` directory, which is reserved for
-SQLBuild SQL tests and scenarios. Documented integration paths such as `dagster/`,
-`rivers_pipeline/`, and their `definitions.py` modules are also supported.
+SQLBuild SQL tests and scenarios. Orchestrator code such as Dagster or Rivers definitions lives outside
+the SQLBuild project directory and points at it; see [Dagster](../integrations/dagster.md) and
+[Rivers](../integrations/rivers.md).
 
 ## sqlbuild_local.toml
 

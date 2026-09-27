@@ -6,8 +6,7 @@ from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.cursor_algebra.types import BoundSentinel
 
 PATH_SELECTOR_EXPLICIT_ROOT_ERROR: str = (
-    "path selectors require an explicit root: use 'models/', 'tasks/', 'assets/', "
-    "'checks/', or 'loaders/'"
+    "path selectors require an explicit root: use 'models/' or 'python/'"
 )
 EMPTY_FINGERPRINT_METADATA_JSON: str = "{}"
 RECORDED_RELATION_MISSING_WARNING_CODE: str = "RECORDED_RELATION_MISSING"

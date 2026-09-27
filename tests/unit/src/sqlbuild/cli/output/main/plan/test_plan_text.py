@@ -726,9 +726,9 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                         {
                             "dependencies": [
                                 {
-                                    "module": "tasks.helpers",
+                                    "module": "python.tasks.helpers",
                                     "qualname": "order_label",
-                                    "source_path": "tasks/helpers.py",
+                                    "source_path": "python/tasks/helpers.py",
                                     "source_text": "def order_label():\n    return 'old'\n",
                                 }
                             ]
@@ -739,9 +739,9 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                         {
                             "dependencies": [
                                 {
-                                    "module": "tasks.helpers",
+                                    "module": "python.tasks.helpers",
                                     "qualname": "order_label",
-                                    "source_path": "tasks/helpers.py",
+                                    "source_path": "python/tasks/helpers.py",
                                     "source_text": "def order_label():\n    return 'new'\n",
                                 }
                             ]
@@ -759,7 +759,7 @@ from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import (
                 "dependency diff:",
                 "-    return 1",
                 "+    return 2",
-                "tasks/helpers.py :: tasks.helpers :: order_label",
+                "python/tasks/helpers.py :: python.tasks.helpers :: order_label",
                 "-    return 'old'",
                 "+    return 'new'",
             ),
@@ -1592,9 +1592,9 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
                         {
                             "dependencies": [
                                 {
-                                    "module": "tasks.helpers",
+                                    "module": "python.tasks.helpers",
                                     "qualname": "order_label",
-                                    "source_path": "tasks/helpers.py",
+                                    "source_path": "python/tasks/helpers.py",
                                     "source_text": "def order_label():\n    return 'old'\n",
                                 }
                             ]
@@ -1605,9 +1605,9 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
                         {
                             "dependencies": [
                                 {
-                                    "module": "tasks.helpers",
+                                    "module": "python.tasks.helpers",
                                     "qualname": "order_label",
-                                    "source_path": "tasks/helpers.py",
+                                    "source_path": "python/tasks/helpers.py",
                                     "source_text": "def order_label():\n    return 'new'\n",
                                 }
                             ]
@@ -1617,7 +1617,7 @@ def test_given_plan_output_when_formatting_then_contains_expected_fragments(
                 ),
             ),
             expected_fragments=(
-                "\033[2m         # tasks/helpers.py :: tasks.helpers :: order_label\033[0m",
+                "\033[2m         # python/tasks/helpers.py :: python.tasks.helpers :: order_label\033[0m",
                 "\033[38;5;167m      -    return 'old'\033[0m",
                 "\033[32m      +    return 'new'\033[0m",
             ),

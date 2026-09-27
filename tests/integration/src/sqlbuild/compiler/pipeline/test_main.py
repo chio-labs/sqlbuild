@@ -416,7 +416,7 @@ def test_given_project_files_when_running_compile_pipeline_then_produces_valid_o
             project_files={
                 "sqlbuild_project.toml": _PROJECT_TOML,
                 "models/orders.sql": "MODEL (materialized table);\n\nSELECT 1 AS order_id",
-                "tasks/orders.py": (
+                "python/tasks/orders.py": (
                     "from sqlbuild.tasks import task\n\n"
                     "@task\n"
                     "def prepare_orders(ctx):\n"

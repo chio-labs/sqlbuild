@@ -100,7 +100,7 @@ sources:
         type: VARCHAR
 """.strip()
     + "\n",
-    "loaders/raw_orders.py": """
+    "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -138,7 +138,9 @@ schema = "prod"
 """.strip()
     + "\n",
     "sources/raw.yml": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES["sources/raw.yml"],
-    "loaders/raw_orders.py": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES["loaders/raw_orders.py"],
+    "python/loaders/raw_orders.py": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES[
+        "python/loaders/raw_orders.py"
+    ],
     "models/stg_orders.sql": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES["models/stg_orders.sql"],
 }
 
@@ -277,7 +279,7 @@ sources:
         type: VARCHAR
 """.strip()
     + "\n",
-    "loaders/raw_orders.py": """
+    "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader(
@@ -328,7 +330,9 @@ sources:
         type: VARCHAR
 """.strip()
     + "\n",
-    "loaders/raw_orders.py": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES["loaders/raw_orders.py"],
+    "python/loaders/raw_orders.py": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES[
+        "python/loaders/raw_orders.py"
+    ],
     "models/stg_orders.sql": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES["models/stg_orders.sql"],
 }
 
@@ -369,7 +373,9 @@ sources:
         type: VARCHAR
 """.strip()
     + "\n",
-    "loaders/raw_orders.py": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES["loaders/raw_orders.py"],
+    "python/loaders/raw_orders.py": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES[
+        "python/loaders/raw_orders.py"
+    ],
     "models/stg_orders.sql": _BUILD_RUN_AUTO_LOAD_PROJECT_FILES["models/stg_orders.sql"],
 }
 
@@ -479,7 +485,7 @@ _BUILD_RUN_AUTO_LOAD_SELECTION_PROJECT_FILES: dict[str, str] = {
 
 _BUILD_RUN_AUTO_LOAD_FAILURE_PROJECT_FILES: dict[str, str] = {
     **_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
-    "loaders/raw_orders.py": """
+    "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -490,7 +496,7 @@ def raw_orders(ctx):
 
 _BUILD_RUN_AUTO_LOAD_RELOAD_PROJECT_FILES: dict[str, str] = {
     **_BUILD_RUN_AUTO_LOAD_PROJECT_FILES,
-    "loaders/raw_orders.py": """
+    "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -522,7 +528,7 @@ sources:
         type: VARCHAR
 """.strip()
     + "\n",
-    "loaders/raw_customers.py": """
+    "python/loaders/raw_customers.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -547,7 +553,7 @@ sources:
         type: VARCHAR
 """.strip()
     + "\n",
-    "loaders/raw_orders.py": """
+    "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -581,7 +587,7 @@ sources:
         type: VARCHAR
 """.strip()
             + "\n",
-            "loaders/raw_orders.py": """
+            "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -634,14 +640,14 @@ sources:
     write_strategy: table
 """.strip()
             + "\n",
-            "loaders/raw_orders.py": """
+            "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
     return [{"order_id": 3, "status": "selected"}]
 """,
-            "loaders/raw_events.py": """
+            "python/loaders/raw_events.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -689,7 +695,7 @@ sources:
         type: VARCHAR
 """.strip()
             + "\n",
-            "loaders/raw_orders.py": """
+            "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -1849,7 +1855,7 @@ sources:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "loaders/raw_orders.py": """
+                "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -1902,14 +1908,14 @@ sources:
     write_strategy: table
 """.strip()
                 + "\n",
-                "loaders/raw_orders.py": """
+                "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
     return [{"order_id": 3, "status": "selected"}]
 """,
-                "loaders/raw_events.py": """
+                "python/loaders/raw_events.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -1957,7 +1963,7 @@ sources:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "loaders/raw_orders.py": """
+                "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -2061,7 +2067,7 @@ sources:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "loaders/raw_orders.py": """
+                "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -2114,14 +2120,14 @@ sources:
     write_strategy: table
 """.strip()
                 + "\n",
-                "loaders/raw_orders.py": """
+                "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
     return [{"order_id": 3, "status": "selected"}]
 """,
-                "loaders/raw_events.py": """
+                "python/loaders/raw_events.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -2169,7 +2175,7 @@ sources:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "loaders/raw_orders.py": """
+                "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -2311,7 +2317,7 @@ sources:
         type: VARCHAR
 """.strip()
             + "\n",
-            "loaders/raw.py": """
+            "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -2345,7 +2351,7 @@ sources:
         type: INTEGER
 """.strip()
             + "\n",
-            "loaders/raw.py": """
+            "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -2388,7 +2394,7 @@ sources:
         type: INTEGER
 """.strip()
             + "\n",
-            "loaders/raw.py": """
+            "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -2423,7 +2429,7 @@ sources:
         type: VARCHAR
 """.strip()
             + "\n",
-            "loaders/raw.py": """
+            "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -2468,7 +2474,7 @@ sources:
         type: VARCHAR
 """.strip()
             + "\n",
-            "loaders/raw.py": """
+            "python/loaders/raw.py": """
 from datetime import datetime
 
 from sqlbuild.loaders import loader
@@ -2516,7 +2522,7 @@ sources:
         type: VARCHAR
 """.strip()
             + "\n",
-            "loaders/raw.py": """
+            "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -2551,7 +2557,7 @@ sources:
         type: VARCHAR
 """.strip()
             + "\n",
-            "loaders/raw.py": """
+            "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 run_count = 0
@@ -2583,7 +2589,7 @@ sources:
         type: VARCHAR
 """.strip()
             + "\n",
-            "loaders/raw.py": """
+            "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -2613,7 +2619,7 @@ sources:
         type: VARCHAR
 """.strip()
             + "\n",
-            "loaders/raw.py": """
+            "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -2641,7 +2647,7 @@ sources:
         type: BOOLEAN
 """.strip()
     + "\n",
-    "loaders/raw.py": """
+    "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -2668,7 +2674,7 @@ sources:
         type: VARCHAR
 """.strip()
     + "\n",
-    "loaders/raw.py": """
+    "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -2703,7 +2709,7 @@ sources:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -2737,7 +2743,7 @@ sources:
         type: INTEGER
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -2780,7 +2786,7 @@ sources:
         type: INTEGER
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -2815,7 +2821,7 @@ sources:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -2860,7 +2866,7 @@ sources:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from datetime import datetime
 
 from sqlbuild.loaders import loader
@@ -2908,7 +2914,7 @@ sources:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -3210,7 +3216,7 @@ sources:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 run_count = 0
@@ -3242,7 +3248,7 @@ sources:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -3272,7 +3278,7 @@ sources:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -3504,7 +3510,7 @@ sources:
         type: BIGINT
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 import threading
 import time
 
@@ -3605,7 +3611,7 @@ sources:
         type: INTEGER
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 import threading
 import time
 
@@ -3728,7 +3734,7 @@ sources:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from datetime import date, datetime
 
 from sqlbuild.loaders import loader
@@ -3822,7 +3828,7 @@ sources:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -3876,7 +3882,7 @@ sources:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -3970,7 +3976,7 @@ sources:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -4002,7 +4008,7 @@ sources:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -4032,7 +4038,7 @@ sources:
         type: INTEGER
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -4062,7 +4068,7 @@ sources:
         type: INTEGER
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -4093,7 +4099,7 @@ sources:
         type: INTEGER
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -4182,7 +4188,7 @@ sources:
         type: INTEGER
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -4245,7 +4251,7 @@ sources:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -4301,7 +4307,7 @@ sources:
         type: INTEGER
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -4351,7 +4357,7 @@ sources:
     write_strategy: table
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -4375,7 +4381,7 @@ sources:
     managed: true
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -4397,7 +4403,7 @@ sources:
     write_strategy: table
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -4443,7 +4449,7 @@ sources:
     load_batch_size: 1
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -4473,7 +4479,7 @@ sources:
     load_batch_size: 1
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -4501,7 +4507,7 @@ sources:
         type: INTEGER
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -4537,7 +4543,7 @@ sources:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -4573,7 +4579,7 @@ sources:
         type: VARCHAR
 """.strip()
                 + "\n",
-                "loaders/raw.py": """
+                "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -4656,7 +4662,7 @@ sources:
     write_strategy: table
 """.strip()
                 + "\n",
-                "loaders/raw_orders.py": _RAW_ORDERS_LOADER,
+                "python/loaders/raw_orders.py": _RAW_ORDERS_LOADER,
             },
             select=("missing_source",),
             exclude=(),
@@ -4692,7 +4698,7 @@ sources:
     write_strategy: table
 """.strip()
                 + "\n",
-                "loaders/raw_orders.py": _RAW_ORDERS_LOADER,
+                "python/loaders/raw_orders.py": _RAW_ORDERS_LOADER,
             },
             select=(),
             exclude=("missing_source",),
@@ -4713,7 +4719,7 @@ sources:
     expression: SELECT 1 AS customer_id
 """.strip()
                 + "\n",
-                "loaders/raw_orders.py": _RAW_ORDERS_LOADER,
+                "python/loaders/raw_orders.py": _RAW_ORDERS_LOADER,
             },
             select=(),
             exclude=("raw_customers",),
@@ -4779,7 +4785,7 @@ sources:
     write_strategy: table
 """.strip()
                 + "\n",
-                "loaders/raw_orders.py": _RAW_ORDERS_LOADER,
+                "python/loaders/raw_orders.py": _RAW_ORDERS_LOADER,
             },
             select=(),
             exclude=("raw_orders",),

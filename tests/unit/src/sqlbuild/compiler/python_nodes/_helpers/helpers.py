@@ -101,7 +101,7 @@ def build_external_loader_python_node_graph() -> PythonNodeGraph:
             loader_functions=(
                 DiscoveredLoaderFunction(
                     file_path=Path("/project/loaders/events.py"),
-                    relative_path=Path("loaders/events.py"),
+                    relative_path=Path("python/loaders/events.py"),
                     name="load_events",
                     function=load_events,
                     connection_mode=LoaderConnectionMode.EXTERNAL,
@@ -120,7 +120,7 @@ def build_terminal_loader_python_node_graph() -> PythonNodeGraph:
             loader_functions=(
                 DiscoveredLoaderFunction(
                     file_path=Path("/project/loaders/orders.py"),
-                    relative_path=Path("loaders/orders.py"),
+                    relative_path=Path("python/loaders/orders.py"),
                     name="raw_orders",
                     function=raw_orders,
                 ),
@@ -137,7 +137,7 @@ def build_orders_python_node_graph() -> PythonNodeGraph:
             loader_functions=(
                 DiscoveredLoaderFunction(
                     file_path=Path("/project/loaders/events.py"),
-                    relative_path=Path("loaders/events.py"),
+                    relative_path=Path("python/loaders/events.py"),
                     name="load_events",
                     function=load_events,
                     depends_on=(prepare_orders,),
@@ -146,7 +146,7 @@ def build_orders_python_node_graph() -> PythonNodeGraph:
             task_functions=(
                 DiscoveredTaskFunction(
                     file_path=Path("/project/tasks/orders.py"),
-                    relative_path=Path("tasks/orders.py"),
+                    relative_path=Path("python/tasks/orders.py"),
                     name="prepare_orders",
                     function=prepare_orders,
                     tags=("orders", "daily"),
@@ -155,7 +155,7 @@ def build_orders_python_node_graph() -> PythonNodeGraph:
             asset_functions=(
                 DiscoveredAssetFunction(
                     file_path=Path("/project/assets/orders.py"),
-                    relative_path=Path("assets/orders.py"),
+                    relative_path=Path("python/assets/orders.py"),
                     name="export_orders",
                     function=export_orders,
                     depends_on=(imported_prepare_orders,),
@@ -169,7 +169,7 @@ def build_orders_python_node_graph() -> PythonNodeGraph:
             check_functions=(
                 DiscoveredCheckFunction(
                     file_path=Path("/project/checks/orders.py"),
-                    relative_path=Path("checks/orders.py"),
+                    relative_path=Path("python/checks/orders.py"),
                     name="check_orders_export",
                     function=check_orders_export,
                     depends_on=(export_orders,),
@@ -260,7 +260,7 @@ def build_sql_ref_python_node_graph(*, dependency: SqlResourceRef) -> PythonNode
             task_functions=(
                 DiscoveredTaskFunction(
                     file_path=Path("/project/tasks/orders.py"),
-                    relative_path=Path("tasks/orders.py"),
+                    relative_path=Path("python/tasks/orders.py"),
                     name="profile_orders",
                     function=prepare_orders,
                     depends_on=(dependency,),
@@ -278,7 +278,7 @@ def build_sql_downstream_task_to_loader_python_node_graph() -> PythonNodeGraph:
             loader_functions=(
                 DiscoveredLoaderFunction(
                     file_path=Path("/project/loaders/orders.py"),
-                    relative_path=Path("loaders/orders.py"),
+                    relative_path=Path("python/loaders/orders.py"),
                     name="load_events",
                     function=load_events,
                     depends_on=(prepare_orders,),
@@ -287,7 +287,7 @@ def build_sql_downstream_task_to_loader_python_node_graph() -> PythonNodeGraph:
             task_functions=(
                 DiscoveredTaskFunction(
                     file_path=Path("/project/tasks/orders.py"),
-                    relative_path=Path("tasks/orders.py"),
+                    relative_path=Path("python/tasks/orders.py"),
                     name="prepare_orders",
                     function=prepare_orders,
                     depends_on=(model_ref("orders"),),
@@ -362,13 +362,13 @@ def _build_loader_dependency_python_node_graph(
     intermediate_loaders: tuple[DiscoveredLoaderFunction, ...] = (
         DiscoveredLoaderFunction(
             file_path=Path("/project/loaders/events.py"),
-            relative_path=Path("loaders/events.py"),
+            relative_path=Path("python/loaders/events.py"),
             name="fetch_pages",
             function=fetch_pages,
         ),
         DiscoveredLoaderFunction(
             file_path=Path("/project/loaders/events.py"),
-            relative_path=Path("loaders/events.py"),
+            relative_path=Path("python/loaders/events.py"),
             name="load_events",
             function=load_events,
             depends_on=(fetch_pages,),
@@ -377,7 +377,7 @@ def _build_loader_dependency_python_node_graph(
     terminal_loaders: tuple[DiscoveredLoaderFunction, ...] = (
         DiscoveredLoaderFunction(
             file_path=Path("/project/loaders/events.py"),
-            relative_path=Path("loaders/events.py"),
+            relative_path=Path("python/loaders/events.py"),
             name="raw_orders",
             function=raw_orders,
         ),
@@ -390,7 +390,7 @@ def _build_loader_dependency_python_node_graph(
     task_functions: tuple[DiscoveredTaskFunction, ...] = (
         DiscoveredTaskFunction(
             file_path=Path("/project/tasks/orders.py"),
-            relative_path=Path("tasks/orders.py"),
+            relative_path=Path("python/tasks/orders.py"),
             name="summarize_orders",
             function=summarize_orders,
             depends_on=(dependency_function,),
@@ -399,7 +399,7 @@ def _build_loader_dependency_python_node_graph(
     asset_functions: tuple[DiscoveredAssetFunction, ...] = (
         DiscoveredAssetFunction(
             file_path=Path("/project/assets/orders.py"),
-            relative_path=Path("assets/orders.py"),
+            relative_path=Path("python/assets/orders.py"),
             name="export_orders",
             function=export_orders,
             depends_on=(dependency_function,),
@@ -408,7 +408,7 @@ def _build_loader_dependency_python_node_graph(
     check_functions: tuple[DiscoveredCheckFunction, ...] = (
         DiscoveredCheckFunction(
             file_path=Path("/project/checks/orders.py"),
-            relative_path=Path("checks/orders.py"),
+            relative_path=Path("python/checks/orders.py"),
             name="check_loaded_orders",
             function=check_loaded_orders,
             depends_on=(dependency_function,),

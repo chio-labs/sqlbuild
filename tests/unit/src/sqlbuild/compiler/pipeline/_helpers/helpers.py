@@ -72,7 +72,7 @@ def build_previous_python_identity_map(
             definition='{"source_text": "def prepare_orders(ctx):\\n    return old_helper()\\n"}',
             metadata_json=(
                 '{"dependencies": [{"module": "tasks.helpers", '
-                '"qualname": "old_helper", "source_path": "tasks/helpers.py", '
+                '"qualname": "old_helper", "source_path": "python/tasks/helpers.py", '
                 '"source_text": "def old_helper():\\n    return 1\\n"}]}'
             ),
             ts=datetime(2026, 1, 15, 12, 0, 0),

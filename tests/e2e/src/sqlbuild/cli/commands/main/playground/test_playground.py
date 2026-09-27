@@ -8,6 +8,7 @@ import pytest
 from sqlbuild.cli.commands.main.workspace._playground import run_playground
 from sqlbuild.cli.commands.models import PlaygroundCommandRequest
 from tests.e2e.src.sqlbuild.cli.commands.main.playground._test_types import (
+    PlaygroundCompileBuildTestCase,
     PythonNodesPlaygroundLifecycleTestCase,
     VirtualPlaygroundLifecycleTestCase,
 )
@@ -222,3 +223,62 @@ def test_given_python_nodes_playground_when_running_lifecycle_then_it_succeeds(
     assert check_result.returncode == 0
     for expected_fragment in test_case.expected_check_fragments:
         assert expected_fragment in check_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PlaygroundCompileBuildTestCase(
+            description="waffle shop playground loaders under python compile and build",
+            template="waffle_shop",
+            project_subdir="",
+            expected_build_fragments=("raw__customers", "raw__orders", "fact_orders"),
+        ),
+        PlaygroundCompileBuildTestCase(
+            description="loader waffle shop playground loaders under python compile and build",
+            template="loader_waffle_shop",
+            project_subdir="",
+            expected_build_fragments=("raw_orders", "raw_customers", "fact_waffle_orders"),
+        ),
+        PlaygroundCompileBuildTestCase(
+            description="dagster playground nested SQLBuild project compiles and builds",
+            template="dagster",
+            project_subdir="waffle_shop",
+            expected_build_fragments=("raw__customers", "raw__orders", "fact_orders"),
+        ),
+        PlaygroundCompileBuildTestCase(
+            description="rivers playground nested SQLBuild project compiles and builds",
+            template="rivers",
+            project_subdir="waffle_shop",
+            expected_build_fragments=("raw__customers", "raw__orders", "fact_orders"),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_playground_template_when_compiling_and_building_then_it_succeeds(
+    test_case: PlaygroundCompileBuildTestCase,
+    tmp_path: Path,
+) -> None:
+    assert (
+        run_playground(
+            PlaygroundCommandRequest(
+                project_dir=tmp_path, target_path="playground", template=test_case.template
+            )
+        )
+        == 0
+    )
+    project_dir: Path = tmp_path / "playground" / test_case.project_subdir
+
+    compile_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "compile"), project_dir=project_dir
+    )
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+
+    assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
+    build_output: str = build_result.stdout + build_result.stderr
+    assert build_result.returncode == 0, build_output
+    expected_fragment: str
+    for expected_fragment in (*test_case.expected_build_fragments, "\u2713 Completed successfully"):
+        assert expected_fragment in build_output

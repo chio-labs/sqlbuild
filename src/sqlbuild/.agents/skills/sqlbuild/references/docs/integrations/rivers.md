@@ -34,10 +34,10 @@ This installs `rivers` alongside SQLBuild.
 ```bash
 sqb playground --template rivers
 cd sqlbuild-playground
-uv run rivers dev rivers_pipeline.definitions
+uv run rivers dev definitions
 ```
 
-This creates the waffle shop project with a `rivers_pipeline/definitions.py` that includes asset definitions and a configured job. Open the Rivers UI to inspect assets and trigger materializations.
+This creates a Rivers code repository with a `definitions.py` that includes asset definitions and a configured job, next to the waffle shop SQLBuild project in `waffle_shop/`. Rivers code stays outside the SQLBuild project directory. Open the Rivers UI to inspect assets and trigger materializations.
 
 ## How it works
 
@@ -60,7 +60,7 @@ import rivers as rs
 
 from sqlbuild.integrations.rivers import SqlBuildProject, sqlbuild_assets
 
-PROJECT_DIR = Path(__file__).resolve().parent.parent
+PROJECT_DIR = Path(__file__).resolve().parent / "my_sqlbuild_project"
 SQLBUILD_PROJECT = SqlBuildProject(project_dir=PROJECT_DIR)
 SQLBUILD_PROJECT.prepare_if_dev()
 
@@ -90,12 +90,14 @@ repo = rs.CodeRepository(
 )
 ```
 
+`definitions.py` belongs to your Rivers code repository and sits next to the SQLBuild project directory (`my_sqlbuild_project/` here), not inside it. SQLBuild projects contain no orchestrator code.
+
 ## SqlBuildProject
 
 `SqlBuildProject` manages paths and DAG artifact generation:
 
 ```python
-project = SqlBuildProject(project_dir=Path("."))
+project = SqlBuildProject(project_dir=Path("my_sqlbuild_project"))
 ```
 
 | Field | Default | Description |
@@ -171,11 +173,11 @@ def my_assets(context):
 Run the pipeline directly without the Rivers UI:
 
 ```bash
-uv run python rivers_pipeline/definitions.py
+uv run python definitions.py
 ```
 
 Or start the Rivers development server:
 
 ```bash
-uv run rivers dev rivers_pipeline.definitions
+uv run rivers dev definitions
 ```

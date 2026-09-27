@@ -189,7 +189,7 @@ def test_given_concurrent_provider_backed_loaders_when_executing_then_share_prov
                 """
             ).strip()
             + "\n",
-            "loaders/events.py": dedent(
+            "python/loaders/events.py": dedent(
                 """
                 from providers.concurrent_marker import ConcurrentMarkerProvider
                 from sqlbuild.loaders import loader

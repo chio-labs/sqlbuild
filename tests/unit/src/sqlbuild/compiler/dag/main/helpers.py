@@ -106,14 +106,14 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
         effective_target_schema="raw",
         loader_functions=(
             DiscoveredLoaderFunction(
-                file_path=Path("loaders/orders.py"),
-                relative_path=Path("loaders/orders.py"),
+                file_path=Path("python/loaders/orders.py"),
+                relative_path=Path("python/loaders/orders.py"),
                 name="shared_order_feed",
                 function=shared_order_feed,
             ),
             DiscoveredLoaderFunction(
-                file_path=Path("loaders/orders.py"),
-                relative_path=Path("loaders/orders.py"),
+                file_path=Path("python/loaders/orders.py"),
+                relative_path=Path("python/loaders/orders.py"),
                 name="raw_orders_loader",
                 function=raw_orders_loader,
                 depends_on=(shared_order_feed,),

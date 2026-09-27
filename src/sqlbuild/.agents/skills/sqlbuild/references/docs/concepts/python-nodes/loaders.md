@@ -26,7 +26,7 @@ Loaders are Python functions that load data into source tables. They replace exp
 
 ## How it works
 
-1. Write a Python function under `loaders/` decorated with `@loader`
+1. Write a Python function under `python/` decorated with `@loader`
 2. Declare a managed source in `sources/*.yml` with `managed: true` and **the same name as the loader function**
 3. SQLBuild calls the function, writes returned rows to a staging table, then applies the configured write strategy to the target
 
@@ -34,10 +34,10 @@ Loaders participate in the build lifecycle. When `sqb build` runs, managed sourc
 
 ## Defining a loader
 
-Place Python files under `loaders/` in your project directory. Each file can contain one or more loader functions:
+Place Python files under `python/` in your project directory (the playgrounds use `python/loaders/`). Each file can contain one or more loader functions:
 
 ```python
-# loaders/raw_sources.py
+# python/loaders/raw_sources.py
 from sqlbuild.loaders import loader
 from sqlbuild.executor.load.models import LoaderContext
 
@@ -357,9 +357,10 @@ When a loader returns rows with columns not present in the existing target table
 
 ```
 my-project/
-  loaders/
-    raw_sources.py          # loader functions
-    api_sources.py           # more loader functions
+  python/
+    loaders/
+      raw_sources.py         # loader functions
+      api_sources.py         # more loader functions
   sources/
     raw.yml                  # managed source declarations (managed: true)
   models/
@@ -367,7 +368,7 @@ my-project/
       stg_customers.sql      # __source("raw_customers")
 ```
 
-SQLBuild discovers all `.py` files under `loaders/` recursively (excluding `__init__.py` and files starting with `_`). Each file is scanned for functions decorated with `@loader`.
+SQLBuild imports all `.py` files under `python/` recursively (excluding `__init__.py`). Functions decorated with `@loader` become loaders; undecorated helpers do not become nodes.
 
 ## Config reference
 

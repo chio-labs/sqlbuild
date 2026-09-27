@@ -400,7 +400,7 @@ def prepare_sqlserver_source_loader_strategies(
         source_path.read_text(encoding="utf-8").replace("type: TIMESTAMP", "type: DATETIME2"),
         encoding="utf-8",
     )
-    loader_path: Path = project_dir / "loaders" / "strategy_sources.py"
+    loader_path: Path = project_dir / "python" / "loaders" / "strategy_sources.py"
     old_sql: str = (
         'f"CREATE TABLE {ctx.destination} AS "\n'
         "        \"SELECT 1 AS status_id, 'loaded' AS status_name, "
