@@ -49,6 +49,10 @@ def test_given_waffle_shop_selector_when_resolving_in_dagster_then_models_match_
     )
     assert dag_result.returncode == 0, dag_result.stdout + dag_result.stderr
     dag: Mapping[str, Any] = json.loads(dag_result.stdout)
+    seed_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("seed",), project_dir=project_dir
+    )
+    assert seed_result.returncode == 0, seed_result.stdout + seed_result.stderr
     plan_result: subprocess.CompletedProcess[str] = run_sqb(
         command=("plan", "--select", test_case.select, "--json"), project_dir=project_dir
     )
