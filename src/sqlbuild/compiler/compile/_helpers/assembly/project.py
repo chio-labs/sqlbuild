@@ -95,6 +95,7 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
     find_macro_call_names,
 )
 from sqlbuild.compiler.compile._helpers.render.templating import expand_template_data
+from sqlbuild.compiler.compile._helpers.sharing.binding import shareable_binding_prekeys
 from sqlbuild.compiler.compile._helpers.sql_tests.core import extract_assertion_target_model_names
 from sqlbuild.compiler.compile._helpers.sql_tests.identity import (
     build_sql_test_case_fingerprint,
@@ -814,6 +815,7 @@ def _analyze_model_sql_in_parallel(
                 inference_profile=inference_profile,
                 allow_compact_analysis=allow_compact_analysis,
                 rich_type_inference=rich_type_inference,
+                shareable_prekeys=shareable_binding_prekeys(requests=requests),
             ),
             complete=partial(
                 _complete_inferred_bindings,
@@ -842,6 +844,7 @@ def _analyze_model_sql_in_parallel(
                 if compact_batch_plan is not None and not cached_analyses
                 else None
             ),
+            shareable_prekeys=shareable_binding_prekeys(requests=requests),
         )
         analyses = _complete_inferred_bindings(
             known_functions=known_functions,
@@ -1001,6 +1004,7 @@ def _analyze_model_sql_requests(
     rich_type_inference: bool,
     cached_compact_batch: tuple[CompactBatchPreparation, object] | None = None,
     on_compact_response: CompactBatchResponseCallback | None = None,
+    shareable_prekeys: frozenset[str] | None = None,
 ) -> tuple[_ModelSqlAnalysis, ...]:
     if allow_compact_analysis:
         uncached: tuple[tuple[int, _ModelSqlAnalysisRequest], ...] = tuple(
@@ -1037,6 +1041,7 @@ def _analyze_model_sql_requests(
                         binding_schemas=tuple(
                             request.binding_schema for _, request in batch_requests
                         ),
+                        shareable_prekeys=shareable_prekeys,
                     ),
                 )
             )

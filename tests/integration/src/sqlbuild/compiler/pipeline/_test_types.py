@@ -362,3 +362,6 @@ class SharedBindingQueryCase:
     customers_summary_sql: str
     expected_shared_queries: int
     expected_codes: tuple[str, ...] = ()
+    later_models: tuple[tuple[str, str], ...] = ()
+    expected_lineage: tuple[tuple[str, str], ...] = ()
+    expected_findings: tuple[tuple[str, str], ...] = ()

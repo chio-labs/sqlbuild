@@ -188,6 +188,8 @@ def write_shared_binding_project(*, project_dir: Path, test_case: SharedBindingQ
     (models / "customers.sql").write_text(_SHARED_BINDING_UPSTREAM_SQL)
     (models / "orders_summary.sql").write_text(test_case.orders_summary_sql)
     (models / "customers_summary.sql").write_text(test_case.customers_summary_sql)
+    for name, sql in test_case.later_models:
+        (models / f"{name}.sql").write_text(sql)
 
 
 def trace_native_compact_batches(monkeypatch: pytest.MonkeyPatch) -> list[CompactBatchPreparation]:

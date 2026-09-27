@@ -524,6 +524,7 @@ class CompactLineageFacts(Sequence[CompiledLineageColumnFact]):
         ...,
     ]
     resource_name_indexes: dict[int, int] = field(default_factory=dict)
+    resource_names: dict[int, str] = field(default_factory=dict)
     _cache: dict[int, CompiledLineageColumnFact] = field(
         default_factory=dict,
         init=False,
@@ -579,6 +580,9 @@ class CompactLineageFacts(Sequence[CompiledLineageColumnFact]):
     def resource_name(self, index: int) -> str:
         """Resolve a canonical native relation index to this model's resource name."""
 
+        name: str | None = self.resource_names.get(index)
+        if name is not None:
+            return name
         return self.string_pool[self.resource_name_indexes.get(index, index)]
 
     @staticmethod
@@ -1288,6 +1292,7 @@ class CompactBatchExecutionOptions:
 
     binding_schemas: tuple[dict[str, dict[str, str]] | None, ...] | None = None
     on_response: CompactBatchResponseCallback | None = None
+    shareable_prekeys: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -1303,8 +1308,8 @@ class CompactBatchPreparation:
 
 
 @dataclass(frozen=True)
-class CompactMemberReanalysis:
-    """Original per-model inputs of one compact batch, for exact recomputation."""
+class CompactBatchInputs:
+    """Ordered per-model inputs of one compact native analysis batch."""
 
     query_sqls: tuple[str, ...]
     references: tuple[tuple[CompileSqlReference, ...], ...]
@@ -1315,6 +1320,15 @@ class CompactMemberReanalysis:
     recover_cte_facts: tuple[bool, ...]
     rich_type_inference: bool
     binding_schemas: tuple[dict[str, dict[str, str]] | None, ...] | None
+
+
+@dataclass(frozen=True)
+class CompactBatchContext:
+    """Binding catalog, cleaned SQL, and binding references prepared for one batch."""
+
+    binding_catalog: Any | None
+    normalized_sqls: list[str]
+    binding_queries: tuple[PreparedBindingQuery | None, ...]
 
 
 @dataclass(frozen=True)
@@ -1421,6 +1435,7 @@ class ProjectedAnalysisRequest:
     caches: CompactProjectionCaches = field(default_factory=CompactProjectionCaches)
     template_index: int | None = None
     resource_name_indexes: dict[int, int] = field(default_factory=dict)
+    resource_names: dict[int, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -1445,6 +1460,7 @@ class NativeCompactAnalysis:
         | None
     ) = None
     resource_name_indexes: dict[int, int] = field(default_factory=dict)
+    resource_names: dict[int, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
