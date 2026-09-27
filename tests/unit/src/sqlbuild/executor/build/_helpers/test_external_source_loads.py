@@ -103,8 +103,8 @@ def test_given_external_source_load_when_preloading_then_records_progress_and_no
             ),
             loader_functions=(
                 DiscoveredLoaderFunction(
-                    file_path=Path("loaders/raw.py"),
-                    relative_path=Path("loaders/raw.py"),
+                    file_path=Path("python/loaders/raw.py"),
+                    relative_path=Path("python/loaders/raw.py"),
                     name=test_case.loader_name,
                     function=external_loader,
                     connection_mode=LoaderConnectionMode.EXTERNAL,

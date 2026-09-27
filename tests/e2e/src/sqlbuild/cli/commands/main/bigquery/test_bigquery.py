@@ -177,15 +177,15 @@ def test_given_python_result_when_running_check_on_bigquery_then_persists_node_r
                 project_name="bigquery_node_results",
                 dataset_name=dataset_name,
             ),
-            "tasks/results.py": (
+            "python/tasks/results.py": (
                 "from sqlbuild.tasks import task\n\n"
                 "@task\n"
                 "def produce_result(ctx):\n"
                 "    return ctx.result(payload={'value': 42}, metadata={'source': 'bigquery'})\n"
             ),
-            "checks/results.py": (
+            "python/checks/results.py": (
                 "from sqlbuild.checks import check\n"
-                "from tasks.results import produce_result\n\n"
+                "from python.tasks.results import produce_result\n\n"
                 "@check(depends_on=produce_result)\n"
                 "def check_produce_result(ctx):\n"
                 "    return ctx.result_of(node_function=produce_result).payload['value'] == 42\n"
@@ -991,7 +991,7 @@ def test_given_source_deferral_env_when_building_on_bigquery_then_reads_prod_and
                 "      - name: status\n"
                 "        type: STRING\n"
             ),
-            "loaders/raw_orders.py": (
+            "python/loaders/raw_orders.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader\n"
                 "def raw_orders(ctx):\n"

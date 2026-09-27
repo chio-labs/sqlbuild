@@ -194,7 +194,7 @@ def test_given_noncanonical_name_when_validating_resource_identity_then_coded_er
         DiscoveredResourceIdentityErrorTestCase(
             description="Python task name",
             project_files={
-                "tasks/orders.py": (
+                "python/tasks/orders.py": (
                     "from sqlbuild.tasks import task\n\n"
                     "@task\n"
                     "def DailyTask(ctx):\n"

@@ -47,7 +47,7 @@ def test_given_factory_attachment_when_building_inputs_then_cases_append_with_pr
             "sqlbuild_project.toml": _PROJECT_FILE,
             "models/orders.sql": f"MODEL ({test_case.model_header}); SELECT 1 AS amount",
             "audits/generic/expression_is_true.sql": _AUDIT_FILE,
-            "factories/quality.py": """
+            "python/factories/quality.py": """
 from sqlbuild.audits import AuditCase, AuditSeverity, audit_factory
 
 @audit_factory
@@ -72,7 +72,7 @@ def unused_quality():
     assert tuple(audit.name for audit in schema_entry.audits) == test_case.expected_audit_names
     location: SourceLocation | None = schema_entry.audits[0].location
     assert location is not None
-    assert location.path == Path("factories/quality.py")
+    assert location.path == Path("python/factories/quality.py")
     assert location.line > 0
     assert "audit_factories" not in inputs.model_inputs[0].config.values
     assert test_case.expected_warning_code in tuple(
@@ -114,7 +114,7 @@ def test_given_invalid_factory_attachment_when_building_inputs_then_compile_erro
         {
             "sqlbuild_project.toml": _PROJECT_FILE,
             "models/orders.sql": f"MODEL ({test_case.model_header}); SELECT 1 AS amount",
-            "factories/quality.py": f"""
+            "python/factories/quality.py": f"""
 from sqlbuild.audits import AuditCase, audit_factory
 
 @audit_factory

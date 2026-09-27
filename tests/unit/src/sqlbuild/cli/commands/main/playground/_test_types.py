@@ -21,3 +21,4 @@ class RunPlaygroundTestCase:
     expected_stdout_fragments: tuple[str, ...]
     template: str = "waffle_shop"
     expected_color_fragments: tuple[str, ...] = ()
+    project_subdir: str = ""

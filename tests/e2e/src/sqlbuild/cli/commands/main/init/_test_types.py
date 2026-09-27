@@ -13,3 +13,13 @@ class InitE2ETestCase:
     expected_exit_code: int
     expected_paths: tuple[str, ...]
     expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class InitPythonRootE2ETestCase:
+    """Test case for building Python nodes added to an initialized project."""
+
+    description: str
+    project_files: dict[str, str]
+    unexpected_paths: tuple[str, ...]
+    expected_build_fragments: tuple[str, ...]

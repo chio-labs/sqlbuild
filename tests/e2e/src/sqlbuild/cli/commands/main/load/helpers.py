@@ -33,7 +33,7 @@ def assert_source_only_ingress_dependency_case(
                 source_yaml=("sources:\n  - name: raw_events\n    managed: true\n"),
                 loader_py=(
                     "from sqlbuild.loaders import loader\n"
-                    "from tasks.prepare import prepare_events\n\n"
+                    "from python.tasks.prepare import prepare_events\n\n"
                     "@loader(depends_on=[prepare_events], write_strategy='table', columns=[\n"
                     "    {'name': 'event_id', 'type': 'INTEGER'},\n"
                     "    {'name': 'load_seq', 'type': 'INTEGER'},\n"
@@ -50,7 +50,7 @@ def assert_source_only_ingress_dependency_case(
                     "SELECT event_id FROM {events.destination}')\n"
                 ),
             ),
-            "tasks/prepare.py": (
+            "python/tasks/prepare.py": (
                 "from pathlib import Path\n"
                 "from sqlbuild.tasks import task\n\n"
                 "@task\n"
@@ -156,7 +156,7 @@ def build_schema_behavior_project_files(*, source_yaml: str, loader_py: str) -> 
             'database = "source_loader_schema_behavior.duckdb"\n'
         ),
         "sources/raw.yml": source_yaml,
-        "loaders/source_rows.py": loader_py,
+        "python/loaders/source_rows.py": loader_py,
     }
 
 
@@ -260,7 +260,7 @@ def build_loader_waffle_shop_project_files(*, project_toml: str | None = None) -
             "      - name: load_seq\n"
             "        type: INTEGER\n"
         ),
-        "loaders/waffle_loaders.py": (
+        "python/loaders/waffle_loaders.py": (
             "from sqlbuild.loaders import loader\n\n"
             "@loader(write_strategy='append', cursor_column='load_seq', columns=[\n"
             "    {'name': 'order_id', 'type': 'INTEGER'},\n"

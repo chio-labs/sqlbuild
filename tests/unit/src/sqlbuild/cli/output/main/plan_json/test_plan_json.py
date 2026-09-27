@@ -576,7 +576,7 @@ def test_given_direct_diagnostics_policy_when_formatting_plan_json_then_evidence
                                 {
                                     "module": "tasks.helpers",
                                     "qualname": "order_label",
-                                    "source_path": "tasks/helpers.py",
+                                    "source_path": "python/tasks/helpers.py",
                                     "source_text": "def order_label():\n    return 'old'\n",
                                 }
                             ]
@@ -589,7 +589,7 @@ def test_given_direct_diagnostics_policy_when_formatting_plan_json_then_evidence
                                 {
                                     "module": "tasks.helpers",
                                     "qualname": "order_label",
-                                    "source_path": "tasks/helpers.py",
+                                    "source_path": "python/tasks/helpers.py",
                                     "source_text": "def order_label():\n    return 'new'\n",
                                 }
                             ]
@@ -605,7 +605,7 @@ def test_given_direct_diagnostics_policy_when_formatting_plan_json_then_evidence
                 '"dependency_diff"',
                 '"-    return 1"',
                 '"+    return 2"',
-                "tasks/helpers.py :: tasks.helpers :: order_label",
+                "python/tasks/helpers.py :: tasks.helpers :: order_label",
                 "\"-    return 'old'\"",
                 "\"+    return 'new'\"",
             ),

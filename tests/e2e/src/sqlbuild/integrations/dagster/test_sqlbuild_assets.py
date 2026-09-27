@@ -537,7 +537,7 @@ def test_given_chained_source_loader_when_dagster_selects_source_then_reuses_int
                 "[connection]\n"
                 'database = "dagster_chained_source_loader.duckdb"\n'
             ),
-            "loaders/raw.py": (
+            "python/loaders/raw.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(write_strategy='table', columns=[\n"
                 "    {'name': 'event_id', 'type': 'INTEGER'},\n"
@@ -628,7 +628,7 @@ def test_given_chained_source_loader_when_dagster_selects_source_without_interme
                 "[connection]\n"
                 'database = "dagster_missing_intermediate_source_loader.duckdb"\n'
             ),
-            "loaders/raw.py": (
+            "python/loaders/raw.py": (
                 "from sqlbuild.loaders import loader\n\n"
                 "@loader(write_strategy='table', columns=[\n"
                 "    {'name': 'event_id', 'type': 'INTEGER'},\n"
@@ -702,14 +702,13 @@ def test_given_generated_dagster_playground_when_materializing_assets_then_build
         )
         == 0
     )
-    project_dir: Path = tmp_path / playground_name
+    orchestrator_dir: Path = tmp_path / playground_name
+    project_dir: Path = orchestrator_dir / "waffle_shop"
     sqb_bin_dir: Path = REPO_ROOT / ".venv" / "bin"
     monkeypatch.setenv("DAGSTER_IS_DEV_CLI", "1")
     monkeypatch.setenv("PATH", f"{sqb_bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
 
-    generated_defs: dict[str, object] = runpy.run_path(
-        str(project_dir / "dagster" / "definitions.py")
-    )
+    generated_defs: dict[str, object] = runpy.run_path(str(orchestrator_dir / "definitions.py"))
     waffle_shop_assets: object = generated_defs["waffle_shop_assets"]
     sqlbuild_project: SqlBuildProject = generated_defs["SQLBUILD_PROJECT"]  # type: ignore[assignment]
 

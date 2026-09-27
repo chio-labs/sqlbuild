@@ -24,7 +24,7 @@ adapter = "duckdb"
 [connection]
 database = "python_check_project.duckdb"
 """,
-            "tasks/orders.py": """
+            "python/tasks/orders.py": """
 from sqlbuild.tasks import task
 
 
@@ -37,19 +37,19 @@ def export_orders(ctx):
 def export_customers(ctx):
     return ctx.result(payload={"rows": 2}, metadata={"rows": 2})
 """,
-            "assets/orders.py": """
+            "python/assets/orders.py": """
 from sqlbuild.assets import asset
-from tasks.orders import export_orders
+from python.tasks.orders import export_orders
 
 
 @asset(depends_on=export_orders)
 def orders_asset(ctx):
     return ctx.result(payload={"asset_rows": 3}, metadata={"asset_rows": 3})
 """,
-            "checks/orders.py": """
+            "python/checks/orders.py": """
 from sqlbuild.checks import check
-from assets.orders import orders_asset
-from tasks.orders import export_customers, export_orders
+from python.assets.orders import orders_asset
+from python.tasks.orders import export_customers, export_orders
 
 
 @check(depends_on=export_orders)
@@ -106,7 +106,7 @@ adapter = "duckdb"
 [connection]
 database = "terminal_loader_check_project.duckdb"
 """,
-            "loaders/raw.py": """
+            "python/loaders/raw.py": """
 from sqlbuild.loaders import loader
 
 
@@ -123,9 +123,9 @@ sources:
       - name: order_id
         type: INTEGER
 """,
-            "checks/raw.py": """
+            "python/checks/raw.py": """
 from sqlbuild.checks import check
-from loaders.raw import raw_orders
+from python.loaders.raw import raw_orders
 
 
 @check(depends_on=raw_orders)
@@ -155,7 +155,7 @@ MODEL (materialized table);
 
 SELECT 1 AS order_id
 """,
-            "assets/orders.py": """
+            "python/assets/orders.py": """
 from sqlbuild.assets import asset
 from sqlbuild.refs import model
 
@@ -166,9 +166,9 @@ def orders_export(ctx):
     row = ctx.query(f"SELECT COUNT(*) AS order_count FROM {relation}").fetchone()
     return ctx.result(payload={"order_count": row[0]}, materialized=False)
 """,
-            "checks/orders.py": """
+            "python/checks/orders.py": """
 from sqlbuild.checks import check
-from assets.orders import orders_export
+from python.assets.orders import orders_export
 
 
 @check(depends_on=orders_export)
@@ -208,7 +208,7 @@ schema = "sqlbuild_state"
 database = "state.duckdb"
 """,
             "models/stg_orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
-            "tasks/export.py": """
+            "python/tasks/export.py": """
 from sqlbuild.refs import model
 from sqlbuild.tasks import task
 
@@ -217,9 +217,9 @@ from sqlbuild.tasks import task
 def export_virtual_orders(ctx):
     return ctx.result(metadata={"rows": 1})
 """,
-            "checks/export.py": """
+            "python/checks/export.py": """
 from sqlbuild.checks import check
-from tasks.export import export_virtual_orders
+from python.tasks.export import export_virtual_orders
 
 
 @check(depends_on=export_virtual_orders)
@@ -259,7 +259,7 @@ schema = "sqlbuild_state"
 database = "state.duckdb"
 """,
             "models/stg_orders.sql": "MODEL ();\n\nSELECT 1 AS id\n",
-            "tasks/export.py": """
+            "python/tasks/export.py": """
 from sqlbuild.refs import model
 from sqlbuild.tasks import task
 
@@ -268,9 +268,9 @@ from sqlbuild.tasks import task
 def export_virtual_orders(ctx):
     return ctx.result(metadata={"rows": 1})
 """,
-            "checks/export.py": """
+            "python/checks/export.py": """
 from sqlbuild.checks import check
-from tasks.export import export_virtual_orders
+from python.tasks.export import export_virtual_orders
 
 
 @check(depends_on=export_virtual_orders)

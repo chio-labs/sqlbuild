@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild.cli.commands.constants import PLAYGROUND_ORCHESTRATED_PROJECT_DIR
 from sqlbuild.cli.commands.models import (
     PlaygroundCommandRequest,
     PlaygroundTarget,
@@ -37,7 +38,11 @@ def render_playground_completion_text(
 
 
 def _suggested_commands(*, template: PlaygroundTemplate, display_path: str) -> tuple[str, ...]:
-    commands: list[str] = [f"cd {display_path}"]
+    orchestrated: bool = template in (PlaygroundTemplate.DAGSTER, PlaygroundTemplate.RIVERS)
+    project_path: str = (
+        f"{display_path}/{PLAYGROUND_ORCHESTRATED_PROJECT_DIR}" if orchestrated else display_path
+    )
+    commands: list[str] = [f"cd {project_path}"]
     if template == PlaygroundTemplate.VIRTUAL:
         commands.extend(
             [
@@ -61,10 +66,12 @@ def _suggested_commands(*, template: PlaygroundTemplate, display_path: str) -> t
         )
     else:
         commands.extend(["sqb compile", "sqb build", "sqb test", "sqb audit"])
+    if orchestrated:
+        commands.append("cd ..")
     if template == PlaygroundTemplate.DAGSTER:
-        commands.append("DAGSTER_IS_DEV_CLI=1 dagster dev -f dagster/definitions.py")
+        commands.append("DAGSTER_IS_DEV_CLI=1 dagster dev -f definitions.py")
     if template == PlaygroundTemplate.RIVERS:
-        commands.append("rivers dev rivers_pipeline.definitions")
+        commands.append("rivers dev definitions")
     return tuple(commands)
 
 

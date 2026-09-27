@@ -26,11 +26,11 @@ def prepare_python_nodes_integration_project(root: Path) -> Path:
 
     project_dir: Path = root / "python_nodes_project"
     models_dir: Path = project_dir / "models"
-    tasks_dir: Path = project_dir / "tasks"
-    factories_dir: Path = project_dir / "factories"
-    assets_dir: Path = project_dir / "assets"
-    loaders_dir: Path = project_dir / "loaders"
-    checks_dir: Path = project_dir / "checks"
+    tasks_dir: Path = project_dir / "python" / "tasks"
+    factories_dir: Path = project_dir / "python" / "factories"
+    assets_dir: Path = project_dir / "python" / "assets"
+    loaders_dir: Path = project_dir / "python" / "loaders"
+    checks_dir: Path = project_dir / "python" / "checks"
     for directory in (models_dir, tasks_dir, factories_dir, assets_dir, loaders_dir, checks_dir):
         directory.mkdir(parents=True)
     (project_dir / "sqlbuild_project.toml").write_text(

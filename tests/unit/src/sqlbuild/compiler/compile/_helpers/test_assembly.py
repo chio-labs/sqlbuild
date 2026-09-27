@@ -340,7 +340,7 @@ sources:
     write_strategy: table
 """.strip()
                 + "\n",
-                "loaders/raw_orders.py": """
+                "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader

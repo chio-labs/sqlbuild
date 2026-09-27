@@ -20,18 +20,11 @@ from sqlbuild.compiler.scopes.constants import (
 _DIRECT_PYTHON_ROOTS: frozenset[str] = frozenset(
     {
         "adapters",
-        "assets",
-        "checks",
-        "dagster",
-        "factories",
-        "loaders",
-        "libs",
-        "rules",
         "materializations",
         "providers",
-        "rivers_pipeline",
+        "python",
+        "rules",
         "sinks",
-        "tasks",
     }
 )
 _LANGUAGE_PYTHON_ROOTS: frozenset[tuple[str, str]] = frozenset(
@@ -39,7 +32,7 @@ _LANGUAGE_PYTHON_ROOTS: frozenset[tuple[str, str]] = frozenset(
 )
 _IGNORED_ROOTS: frozenset[str] = frozenset({"logs", "target", "tests", "venv"})
 _LEGACY_DIAGNOSTIC_ROOTS: frozenset[str] = frozenset({"event_exporters"})
-_SUPPORTED_ROOT_FILES: frozenset[Path] = frozenset({Path("adapter.py"), Path("definitions.py")})
+_SUPPORTED_ROOT_FILES: frozenset[Path] = frozenset({Path("adapter.py")})
 _SCOPED_DECLARATION_DIRECTORIES: frozenset[str] = (
     INHERITED_DECLARATION_DIRECTORIES | LOCAL_DECLARATION_DIRECTORIES
 )
@@ -55,8 +48,8 @@ def validate_project_python_paths(*, project_dir: Path) -> None:
     raise ProjectPythonPathError(
         f"Unsupported project Python path(s): {rendered_paths}",
         help=(
-            "Move project Python under a documented resource, library, or integration path. "
-            "Factory support modules, including factories/**/_helpers.py, are allowed."
+            "Move pipeline Python nodes and the helper modules they import under python/, "
+            "or move SQLBuild extensions under their documented extension path."
         ),
     )
 

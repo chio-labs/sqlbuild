@@ -298,7 +298,7 @@ def test_given_invalid_origin_connection_when_exact_cloning_then_destination_ses
                     """
                 ).strip()
                 + "\n",
-                "loaders/raw.py": dedent(
+                "python/loaders/raw.py": dedent(
                     """
                     from sqlbuild.loaders import loader
 
@@ -378,7 +378,7 @@ def test_given_invalid_origin_connection_when_exact_cloning_then_destination_ses
                     """
                 ).strip()
                 + "\n",
-                "loaders/raw.py": dedent(
+                "python/loaders/raw.py": dedent(
                     """
                     from sqlbuild.loaders import loader
 
@@ -753,7 +753,7 @@ def test_given_destination_source_deferral_when_cloning_then_function_reads_defe
                 """
             ).strip()
             + "\n",
-            "loaders/raw.py": dedent(
+            "python/loaders/raw.py": dedent(
                 """
                 from sqlbuild.loaders import loader
 

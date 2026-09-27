@@ -31,7 +31,7 @@ from tests.unit.src.sqlbuild.compiler.python_nodes._helpers.helpers import (
         ),
         PythonSqlSelectorTestCase(
             description="selects expanded Python asset path for run",
-            select=("+path:assets",),
+            select=("+path:python/assets",),
             exclude=(),
             expected_sql_names=frozenset(),
             expected_python_node_names=frozenset({"prepare_orders", "export_orders"}),
@@ -82,7 +82,7 @@ def test_given_run_selectors_when_resolving_then_excludes_python_checks(
         ),
         PythonSqlSelectorErrorTestCase(
             description="rejects direct asset path with unselected Python dependency for run",
-            select=("path:assets",),
+            select=("path:python/assets",),
             exclude=(),
             expected_error_type=ValueError,
             expected_error_fragment=(

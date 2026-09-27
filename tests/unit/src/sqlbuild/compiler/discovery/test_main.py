@@ -6,6 +6,7 @@ from unittest.mock import call, patch
 
 import pytest
 
+from sqlbuild.compiler.discovery.exceptions import ProjectPythonPathError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.observability import EventDispatcher, LifecycleEvent, dispatcher_scope
@@ -63,30 +64,30 @@ SELECT 1
 """,
                 "audits/generic/not_null.sql": "AUDIT ();\nSELECT 1\n",
                 "macros/name_helpers.py": "def slug() -> str:\n    return 'slug'\n",
-                "loaders/raw_orders.py": """
+                "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader(name="raw_orders")
 def fetch_orders(ctx):
     return []
 """,
-                "tasks/windows.py": """
+                "python/tasks/windows.py": """
 from sqlbuild.tasks import task
 
 @task(tags=("api",), group="ingestion")
 def fetch_window(ctx):
     return {"window": "today"}
 """,
-                "assets/exports.py": """
+                "python/assets/exports.py": """
 from sqlbuild.assets import asset
 
 @asset(columns=[{"name": "customer_id", "type": "string"}])
 def export_customers(ctx):
     return {"uri": "s3://exports/customers.parquet"}
 """,
-                "checks/exports.py": """
+                "python/checks/exports.py": """
 from sqlbuild.checks import check
-from assets.exports import export_customers
+from python.assets.exports import export_customers
 
 @check(depends_on=export_customers, severity="warn")
 def export_customers_exists(ctx):
@@ -341,7 +342,7 @@ def test_given_valid_sql_and_failing_python_import_when_discovering_then_phases_
         base_repo_files()
         | {
             "models/orders.sql": "MODEL ();\n\nSELECT 1 AS order_id\n",
-            "tasks/broken.py": "import dependency_that_does_not_exist\n",
+            "python/tasks/broken.py": "import dependency_that_does_not_exist\n",
         },
     )
     events: list[LifecycleEvent] = []
@@ -404,7 +405,7 @@ def test_given_ignored_siblings_when_discovering_then_count_uses_relevant_collec
             repo_files=base_repo_files()
             | {
                 "sources/raw.yml": "sources:\n  - name: raw_orders\n    managed: true\n",
-                "loaders/generated.py": """
+                "python/loaders/generated.py": """
 from sqlbuild.factories import factory
 from sqlbuild.loaders import loader
 
@@ -423,7 +424,7 @@ def generated_loaders():
             description="generated task and asset dependency validates",
             repo_files=base_repo_files()
             | {
-                "factories/generated.py": """
+                "python/factories/generated.py": """
 from sqlbuild.assets import asset
 from sqlbuild.factories import factory
 from sqlbuild.tasks import task
@@ -449,7 +450,7 @@ def generated_nodes():
             description="single-kind factory validates in factories folder",
             repo_files=base_repo_files()
             | {
-                "factories/generated_tasks.py": """
+                "python/factories/generated_tasks.py": """
 from sqlbuild.factories import factory
 from sqlbuild.tasks import task
 
@@ -469,9 +470,9 @@ def generated_tasks():
             description="factory can import ordinary private helper module",
             repo_files=base_repo_files()
             | {
-                "factories/orders/_helpers.py": "TASK_NAME = 'prepare_orders'\n",
-                "factories/orders/generated.py": """
-from factories.orders._helpers import TASK_NAME
+                "python/factories/orders/_helpers.py": "TASK_NAME = 'prepare_orders'\n",
+                "python/factories/orders/generated.py": """
+from python.factories.orders._helpers import TASK_NAME
 from sqlbuild.factories import factory
 from sqlbuild.tasks import task
 
@@ -511,18 +512,19 @@ def test_given_generated_factory_nodes_when_discovering_inputs_then_validates_ex
     "test_case",
     (
         ProjectPythonPathAcceptanceTestCase(
-            description="documented integration Python paths",
+            description="undecorated helper modules under python root",
             repo_files={
-                "definitions.py": "ROOT_DEFINITIONS = True\n",
-                "dagster/definitions.py": "DAGSTER_DEFINITIONS = True\n",
-                "rivers_pipeline/definitions.py": "RIVERS_DEFINITIONS = True\n",
+                "python/_helpers.py": "REGION = 'emea'\n",
+                "python/orders/__init__.py": "",
+                "python/orders/utils.py": "def order_label(value):\n    return str(value)\n",
+                "adapter.py": "ADAPTER = None\n",
             },
             expected_project_name="demo",
         ),
     ),
     ids=lambda case: case.description,
 )
-def test_given_documented_integration_python_when_discovering_inputs_then_paths_are_accepted(
+def test_given_supported_project_python_when_discovering_inputs_then_paths_are_accepted(
     test_case: ProjectPythonPathAcceptanceTestCase,
     tmp_path: Path,
     write_repo_files: Callable[[Path, dict[str, str]], None],
@@ -532,6 +534,73 @@ def test_given_documented_integration_python_when_discovering_inputs_then_paths_
     result: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
 
     assert result.project_config.name == test_case.expected_project_name
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when Python lives in removed tasks root",
+            repo_files=base_repo_files() | {"tasks/orders.py": "VALUE = 1\n"},
+            expected_error_fragment="tasks/orders.py",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when Python lives in removed assets root",
+            repo_files=base_repo_files() | {"assets/orders.py": "VALUE = 1\n"},
+            expected_error_fragment="assets/orders.py",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when Python lives in removed checks root",
+            repo_files=base_repo_files() | {"checks/orders.py": "VALUE = 1\n"},
+            expected_error_fragment="checks/orders.py",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when Python lives in removed loaders root",
+            repo_files=base_repo_files() | {"loaders/orders.py": "VALUE = 1\n"},
+            expected_error_fragment="loaders/orders.py",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when Python lives in removed factories root",
+            repo_files=base_repo_files() | {"factories/orders.py": "VALUE = 1\n"},
+            expected_error_fragment="factories/orders.py",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when Python lives in removed libs root",
+            repo_files=base_repo_files() | {"libs/cleaning.py": "VALUE = 1\n"},
+            expected_error_fragment="libs/cleaning.py",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when Python lives in removed dagster root",
+            repo_files=base_repo_files() | {"dagster/definitions.py": "VALUE = 1\n"},
+            expected_error_fragment="dagster/definitions.py",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when Python lives in removed rivers_pipeline root",
+            repo_files=base_repo_files() | {"rivers_pipeline/definitions.py": "VALUE = 1\n"},
+            expected_error_fragment="rivers_pipeline/definitions.py",
+        ),
+        DiscoverProjectInputsErrorTestCase(
+            description="raises when Python lives in removed root definitions root",
+            repo_files=base_repo_files() | {"definitions.py": "VALUE = 1\n"},
+            expected_error_fragment="definitions.py",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_python_in_removed_root_when_discovering_inputs_then_d016_is_raised(
+    test_case: DiscoverProjectInputsErrorTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(tmp_path, test_case.repo_files)
+
+    with pytest.raises(ProjectPythonPathError) as error_info:
+        discover_project_inputs(project_dir=tmp_path)
+
+    assert error_info.value.code == "D016"
+    assert f"Unsupported project Python path(s): {test_case.expected_error_fragment}" in str(
+        error_info.value
+    )
 
 
 @pytest.mark.parametrize(
@@ -563,7 +632,7 @@ def test_given_non_project_with_python_when_discovering_then_missing_config_erro
             description="generated duplicate names fail validation",
             repo_files=base_repo_files()
             | {
-                "tasks/generated.py": """
+                "python/tasks/generated.py": """
 from sqlbuild.factories import factory
 from sqlbuild.tasks import task
 
@@ -586,7 +655,7 @@ def generated_tasks():
             description="generated name colliding with top-level node fails validation",
             repo_files=base_repo_files()
             | {
-                "tasks/top_level.py": """
+                "python/tasks/top_level.py": """
 from sqlbuild.tasks import task
 
 
@@ -594,7 +663,7 @@ from sqlbuild.tasks import task
 def top_level_profile(ctx):
     return None
 """,
-                "assets/generated.py": """
+                "python/assets/generated.py": """
 from sqlbuild.assets import asset
 from sqlbuild.factories import factory
 
@@ -613,7 +682,7 @@ def generated_assets():
             description="generated dependency cycle fails validation",
             repo_files=base_repo_files()
             | {
-                "tasks/generated.py": """
+                "python/tasks/generated.py": """
 from sqlbuild.factories import factory
 from sqlbuild.tasks import task
 
@@ -636,7 +705,7 @@ def generated_tasks():
             description="generated loader SQL dependency fails validation",
             repo_files=base_repo_files()
             | {
-                "loaders/generated.py": """
+                "python/loaders/generated.py": """
 from sqlbuild.factories import factory
 from sqlbuild.loaders import loader
 from sqlbuild.refs import model
@@ -656,7 +725,7 @@ def generated_loaders():
             description="generated check SQL dependency fails validation",
             repo_files=base_repo_files()
             | {
-                "checks/generated.py": """
+                "python/checks/generated.py": """
 from sqlbuild.checks import check
 from sqlbuild.factories import factory
 from sqlbuild.refs import model
@@ -677,7 +746,7 @@ def generated_checks():
             repo_files=base_repo_files()
             | {
                 "sources/raw.yml": "sources:\n  - name: raw_orders\n    managed: true\n",
-                "loaders/generated.py": """
+                "python/loaders/generated.py": """
 from sqlbuild.factories import factory
 from sqlbuild.loaders import loader
 
@@ -691,29 +760,6 @@ def generated_loaders():
 """,
             },
             expected_error_fragment="Managed source 'raw_orders' in sources/raw.yml requires loader",
-        ),
-        DiscoverFactoryValidationTestCase(
-            description="kind-folder factory returning foreign kind fails validation",
-            repo_files=base_repo_files()
-            | {
-                "assets/generated.py": """
-from sqlbuild.factories import factory
-from sqlbuild.loaders import loader
-
-
-@factory
-def gen():
-    @loader(name="raw_orders")
-    def load(ctx):
-        return []
-
-    return load
-""",
-            },
-            expected_error_fragment=(
-                "Factory gen in assets/ returned a loader 'raw_orders'; "
-                "mixed-kind factories must live in factories/."
-            ),
         ),
     ),
     ids=lambda case: case.description,
@@ -866,14 +912,14 @@ sources:
             description="raises when loader names are duplicated",
             repo_files=base_repo_files()
             | {
-                "loaders/a.py": """
+                "python/loaders/a.py": """
 from sqlbuild.loaders import loader
 
 @loader
 def raw_orders(ctx):
     return []
 """,
-                "loaders/b.py": """
+                "python/loaders/b.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -887,14 +933,14 @@ def raw_orders(ctx):
             description="raises when explicit loader names are duplicated",
             repo_files=base_repo_files()
             | {
-                "loaders/a.py": """
+                "python/loaders/a.py": """
 from sqlbuild.loaders import loader
 
 @loader(name="raw_orders")
 def load_a(ctx):
     return []
 """,
-                "loaders/b.py": """
+                "python/loaders/b.py": """
 from sqlbuild.loaders import loader
 
 @loader(name="raw_orders")
@@ -914,7 +960,7 @@ sources:
     table: fetch_orders
 """.strip()
                 + "\n",
-                "loaders/raw_orders.py": """
+                "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -934,7 +980,7 @@ sources:
     table: raw_orders
 """.strip()
                 + "\n",
-                "loaders/raw_orders.py": """
+                "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -948,7 +994,7 @@ def raw_orders(ctx):
             description="raises when loader dependency is not decorated",
             repo_files=base_repo_files()
             | {
-                "loaders/events.py": """
+                "python/loaders/events.py": """
 from sqlbuild.loaders import loader
 
 def fetch_events(ctx):
@@ -965,7 +1011,7 @@ def enriched_events(ctx):
             description="raises when loader dependencies contain a cycle",
             repo_files=base_repo_files()
             | {
-                "loaders/events.py": """
+                "python/loaders/events.py": """
 from sqlbuild.loaders import loader
 
 def fetch_events(ctx):
@@ -991,7 +1037,7 @@ sources:
     write_strategy: table
 """.strip()
                 + "\n",
-                "loaders/raw_orders.py": """
+                "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader(write_strategy="table", columns=[{"name": "id", "type": "INTEGER"}])
@@ -1005,14 +1051,14 @@ def raw_orders(ctx):
             description="raises when task and asset names are duplicated",
             repo_files=base_repo_files()
             | {
-                "tasks/export_customers.py": """
+                "python/tasks/export_customers.py": """
 from sqlbuild.tasks import task
 
 @task
 def export_customers(ctx):
     return None
 """,
-                "assets/export_customers.py": """
+                "python/assets/export_customers.py": """
 from sqlbuild.assets import asset
 
 @asset
@@ -1026,16 +1072,16 @@ def export_customers(ctx):
             description="raises when check name collides with task name",
             repo_files=base_repo_files()
             | {
-                "tasks/export_customers.py": """
+                "python/tasks/export_customers.py": """
 from sqlbuild.tasks import task
 
 @task
 def export_customers(ctx):
     return None
 """,
-                "checks/export_customers.py": """
+                "python/checks/export_customers.py": """
 from sqlbuild.checks import check
-from tasks.export_customers import export_customers
+from python.tasks.export_customers import export_customers
 
 @check(depends_on=export_customers, name="export_customers")
 def export_customers_check(ctx):
@@ -1049,7 +1095,7 @@ def export_customers_check(ctx):
             repo_files=base_repo_files()
             | {
                 "models/marts/export_customers.sql": "MODEL ();\n\nselect 1\n",
-                "tasks/export_customers.py": """
+                "python/tasks/export_customers.py": """
 from sqlbuild.tasks import task
 
 @task
@@ -1074,7 +1120,7 @@ seeds:
 """.strip()
                 + "\n",
                 "seeds/export_customers.csv": "customer_id\n1\n",
-                "assets/export_customers.py": """
+                "python/assets/export_customers.py": """
 from sqlbuild.assets import asset
 
 @asset
@@ -1096,16 +1142,16 @@ sources:
     table: export_customers_exists
 """.strip()
                 + "\n",
-                "tasks/export_customers.py": """
+                "python/tasks/export_customers.py": """
 from sqlbuild.tasks import task
 
 @task
 def export_customers(ctx):
     return None
 """,
-                "checks/export_customers.py": """
+                "python/checks/export_customers.py": """
 from sqlbuild.checks import check
-from tasks.export_customers import export_customers
+from python.tasks.export_customers import export_customers
 
 @check(depends_on=export_customers)
 def export_customers_exists(ctx):
@@ -1155,7 +1201,7 @@ FUNCTION (
 amount > 100
 """.strip()
                 + "\n",
-                "loaders/fetch_orders.py": """
+                "python/loaders/fetch_orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -1223,7 +1269,7 @@ def notify(ctx):
             description="raises when task dependency is not decorated",
             repo_files=base_repo_files()
             | {
-                "tasks/windows.py": """
+                "python/tasks/windows.py": """
 from sqlbuild.tasks import task
 
 def fetch_window(ctx):
@@ -1240,7 +1286,7 @@ def export_window(ctx):
             description="raises when task and asset dependencies contain a cycle",
             repo_files=base_repo_files()
             | {
-                "tasks/windows.py": """
+                "python/tasks/windows.py": """
 from sqlbuild.tasks import task
 
 def fetch_window(ctx):
@@ -1259,7 +1305,7 @@ fetch_window = task(depends_on=enrich_window)(fetch_window)
             description="raises when check dependency is not decorated",
             repo_files=base_repo_files()
             | {
-                "checks/exports.py": """
+                "python/checks/exports.py": """
 from sqlbuild.checks import check
 
 def export_customers(ctx):
@@ -1276,7 +1322,7 @@ def export_customers_exists(ctx):
             description="raises when loader declares SQL model dependency",
             repo_files=base_repo_files()
             | {
-                "loaders/orders.py": """
+                "python/loaders/orders.py": """
 from sqlbuild.loaders import loader
 from sqlbuild.refs import model
 
@@ -1291,7 +1337,7 @@ def load_orders(ctx):
             description="raises when check declares SQL model dependency",
             repo_files=base_repo_files()
             | {
-                "checks/orders.py": """
+                "python/checks/orders.py": """
 from sqlbuild.checks import check
 from sqlbuild.refs import model
 
@@ -1306,16 +1352,16 @@ def check_orders(ctx):
             description="raises when check depends on check",
             repo_files=base_repo_files()
             | {
-                "assets/exports.py": """
+                "python/assets/exports.py": """
 from sqlbuild.assets import asset
 
 @asset
 def export_customers(ctx):
     return None
 """,
-                "checks/exports.py": """
+                "python/checks/exports.py": """
 from sqlbuild.checks import check
-from assets.exports import export_customers
+from python.assets.exports import export_customers
 
 @check(depends_on=export_customers)
 def export_customers_exists(ctx):

@@ -797,6 +797,13 @@ class DiscoverCheckFunctionsTestCase:
 
 
 @dataclass(frozen=True)
+class DiscoverPythonRootNodesTestCase:
+    description: str
+    files: dict[str, str]
+    expected_nodes: tuple[tuple[str, str, str], ...]
+
+
+@dataclass(frozen=True)
 class ExpectedBooleanTestCase:
     description: str
     expected_result: bool

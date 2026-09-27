@@ -35,7 +35,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                 Path("audits/generic/expression_is_true.sql"),
                 Path("functions/sql/udf__is_completed_order.sql"),
                 Path("functions/sql/table_fn__customer_orders.sql"),
-                Path("loaders/waffle_sources.py"),
+                Path("python/loaders/waffle_sources.py"),
                 Path("macros/currency.py"),
                 Path("models/marts/_sqlbuild/_macros/currency.py"),
                 Path("models/marts/_sqlbuild/_macros/datetime.py"),
@@ -65,24 +65,35 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
             template="dagster",
             expected_files=(
                 Path("README.md"),
-                Path("sqlbuild_project.toml"),
-                Path("models/marts/fact_orders.sql"),
-                Path("sources/raw.yml"),
-                Path("loaders/waffle_sources.py"),
-                Path("dagster/definitions.py"),
-                Path("dagster/README.md"),
+                Path("definitions.py"),
+                Path("waffle_shop/README.md"),
+                Path("waffle_shop/sqlbuild_project.toml"),
+                Path("waffle_shop/models/marts/fact_orders.sql"),
+                Path("waffle_shop/sources/raw.yml"),
+                Path("waffle_shop/python/loaders/waffle_sources.py"),
             ),
-            unexpected_paths=(Path("target"),),
+            unexpected_paths=(
+                Path("target"),
+                Path("sqlbuild_project.toml"),
+                Path("dagster"),
+                Path("waffle_shop/dagster"),
+                Path("waffle_shop/definitions.py"),
+            ),
             expected_file_fragments=(
-                (Path("sqlbuild_project.toml"), ('default_target = "dev"',)),
+                (Path("waffle_shop/sqlbuild_project.toml"), ('default_target = "dev"',)),
                 (
-                    Path("sources/raw.yml"),
+                    Path("waffle_shop/sources/raw.yml"),
                     ("managed: true",),
                 ),
                 (
-                    Path("loaders/waffle_sources.py"),
+                    Path("waffle_shop/python/loaders/waffle_sources.py"),
                     ("def raw__customers(ctx", "def raw__orders(ctx"),
                 ),
+                (
+                    Path("definitions.py"),
+                    ('PROJECT_DIR = Path(__file__).resolve().parent / "waffle_shop"',),
+                ),
+                (Path("README.md"), ("dagster dev -f definitions.py",)),
             ),
         ),
         CreatePlaygroundProjectTestCase(
@@ -91,19 +102,24 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
             template="rivers",
             expected_files=(
                 Path("README.md"),
-                Path("sqlbuild_project.toml"),
-                Path("models/marts/fact_orders.sql"),
-                Path("sources/raw.yml"),
-                Path("loaders/waffle_sources.py"),
-                Path("rivers_pipeline/__init__.py"),
-                Path("rivers_pipeline/definitions.py"),
-                Path("rivers_pipeline/README.md"),
+                Path("definitions.py"),
+                Path("waffle_shop/sqlbuild_project.toml"),
+                Path("waffle_shop/models/marts/fact_orders.sql"),
+                Path("waffle_shop/sources/raw.yml"),
+                Path("waffle_shop/python/loaders/waffle_sources.py"),
             ),
-            unexpected_paths=(Path("target"),),
+            unexpected_paths=(
+                Path("target"),
+                Path("sqlbuild_project.toml"),
+                Path("rivers_pipeline"),
+                Path("waffle_shop/rivers_pipeline"),
+                Path("waffle_shop/definitions.py"),
+            ),
             expected_file_fragments=(
                 (
-                    Path("rivers_pipeline/definitions.py"),
+                    Path("definitions.py"),
                     (
+                        'PROJECT_DIR = Path(__file__).resolve().parent / "waffle_shop"',
                         "import rivers as rs",
                         "from sqlbuild.integrations.rivers import",
                         "@sqlbuild_assets(project=SQLBUILD_PROJECT)",
@@ -112,8 +128,8 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                     ),
                 ),
                 (
-                    Path("rivers_pipeline/README.md"),
-                    ("rivers dev rivers_pipeline.definitions", "`waffle_shop` job"),
+                    Path("README.md"),
+                    ("rivers dev definitions", "`waffle_shop` job"),
                 ),
             ),
         ),
@@ -127,7 +143,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                 Path("models/fact_waffle_orders.sql"),
                 Path("models/customer_revenue.sql"),
                 Path("sources/raw.yml"),
-                Path("loaders/waffle_loaders.py"),
+                Path("python/loaders/waffle_loaders.py"),
             ),
             unexpected_paths=(Path("target"), Path("sqlbuild_local.toml")),
             expected_file_fragments=(
@@ -137,14 +153,14 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                 ),
                 (Path("sources/raw.yml"), ("managed: true",)),
                 (
-                    Path("loaders/waffle_loaders.py"),
+                    Path("python/loaders/waffle_loaders.py"),
                     ("def raw_orders(ctx):", "def raw_customers(ctx):"),
                 ),
             ),
             unexpected_file_fragments=(
                 (Path("sources/raw.yml"), ("loader:",)),
                 (
-                    Path("loaders/waffle_loaders.py"),
+                    Path("python/loaders/waffle_loaders.py"),
                     ("def load_raw_orders(ctx):", "def load_raw_customers(ctx):"),
                 ),
             ),
@@ -161,7 +177,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                 Path("seeds/lookups.yml"),
                 Path("seeds/waffle_price_tiers.csv"),
                 Path("sources/raw.yml"),
-                Path("loaders/waffle_loaders.py"),
+                Path("python/loaders/waffle_loaders.py"),
                 Path("tests/unit/test_fact_waffle_orders.sql"),
                 Path("tests/scenarios/customer_revenue_minimal.sql"),
             ),
@@ -215,10 +231,10 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                 Path("sqlbuild_project.toml"),
                 Path("sources/raw.yml"),
                 Path("models/fact_orders.sql"),
-                Path("tasks/orders.py"),
-                Path("loaders/orders.py"),
-                Path("assets/orders_export.py"),
-                Path("checks/orders_export.py"),
+                Path("python/tasks/orders.py"),
+                Path("python/loaders/orders.py"),
+                Path("python/assets/orders_export.py"),
+                Path("python/checks/orders_export.py"),
             ),
             unexpected_paths=(Path("target"), Path("sqlbuild_local.toml")),
             expected_file_fragments=(
@@ -227,7 +243,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                     ("[connections.developer]", 'connection = "developer"'),
                 ),
                 (
-                    Path("tasks/orders.py"),
+                    Path("python/tasks/orders.py"),
                     (
                         "from sqlbuild.tasks import SkipMode, task",
                         "def prepare_raw_orders",
@@ -236,11 +252,11 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                     ),
                 ),
                 (
-                    Path("loaders/orders.py"),
+                    Path("python/loaders/orders.py"),
                     ("@loader(depends_on=(prepare_raw_orders,))", "def raw_orders"),
                 ),
                 (
-                    Path("assets/orders_export.py"),
+                    Path("python/assets/orders_export.py"),
                     (
                         'ctx.relation(model("fact_orders"))',
                         "materialized=False",
@@ -248,14 +264,14 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                     ),
                 ),
                 (
-                    Path("checks/orders_export.py"),
+                    Path("python/checks/orders_export.py"),
                     (
                         "@check(depends_on=orders_export",
                         "ctx.result_of(node_function=orders_export)",
                     ),
                 ),
             ),
-            unexpected_file_fragments=((Path("tasks/orders.py"), ("sqlbuild.compiler",)),),
+            unexpected_file_fragments=((Path("python/tasks/orders.py"), ("sqlbuild.compiler",)),),
         ),
     ],
     ids=lambda case: case.description,
@@ -338,8 +354,11 @@ def test_given_existing_target_when_creating_playground_then_it_raises_user_erro
                 "SQLBuild playground created",
                 "Project: demo_dagster_shop",
                 "Example: waffle shop + Dagster",
-                "dagster dev -f dagster/definitions.py",
+                "cd demo_dagster_shop/waffle_shop",
+                "cd ..",
+                "dagster dev -f definitions.py",
             ),
+            project_subdir="waffle_shop",
         ),
         RunPlaygroundTestCase(
             description="prints Rivers next steps after creating Rivers playground",
@@ -349,8 +368,11 @@ def test_given_existing_target_when_creating_playground_then_it_raises_user_erro
                 "SQLBuild playground created",
                 "Project: demo_rivers_shop",
                 "Example: waffle shop + Rivers",
-                "rivers dev rivers_pipeline.definitions",
+                "cd demo_rivers_shop/waffle_shop",
+                "cd ..",
+                "rivers dev definitions",
             ),
+            project_subdir="waffle_shop",
         ),
         RunPlaygroundTestCase(
             description="prints loader-focused waffle shop next steps",
@@ -414,7 +436,8 @@ def test_given_playground_command_when_running_then_it_prints_next_steps(
     expected_fragment: str
     for expected_fragment in test_case.expected_stdout_fragments:
         assert expected_fragment in captured.out
-    assert (tmp_path / test_case.target_path / "sqlbuild_project.toml").is_file()
+    project_dir: Path = tmp_path / test_case.target_path / test_case.project_subdir
+    assert (project_dir / "sqlbuild_project.toml").is_file()
     assert (tmp_path / test_case.target_path / ".agents/skills/sqlbuild/SKILL.md").is_file()
 
 

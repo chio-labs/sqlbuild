@@ -35,7 +35,7 @@ def test_given_generated_and_direct_attachments_when_compiled_then_audit_inputs_
 AUDIT ();
 SELECT * FROM __ref("@model") WHERE NOT (@expression)
 """,
-            "factories/quality.py": """
+            "python/factories/quality.py": """
 from sqlbuild.audits import AuditCase, AuditSeverity, audit_factory
 
 @audit_factory

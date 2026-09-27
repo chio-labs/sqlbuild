@@ -41,8 +41,8 @@ def run_init(project_dir: Path | None) -> int:
     doc.blank()
     doc.section("Next steps")
     doc.line("  1. Add sources to sources/")
-    doc.line("  2. Add seeds to seeds/ or loaders to loaders/")
-    doc.line("  3. Add tasks to tasks/, assets to assets/, or checks to checks/")
+    doc.line("  2. Add seeds to seeds/")
+    doc.line("  3. Add Python loaders, tasks, assets, checks, and factories to python/")
     doc.line(
         "  4. Add SQL hooks to hooks/sql/, Python hooks to hooks/python/, "
         "functions to functions/, or macros to macros/"

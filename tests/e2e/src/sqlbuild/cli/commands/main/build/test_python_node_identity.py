@@ -18,8 +18,8 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 
-_LOADERS_PATH: str = "loaders/orders.py"
-_ASSETS_PATH: str = "assets/exports.py"
+_LOADERS_PATH: str = "python/loaders/orders.py"
+_ASSETS_PATH: str = "python/assets/exports.py"
 _ORIGINAL_COLUMNS: str = 'LoaderColumnSpec(name="order_id", type="INTEGER")'
 _ORIGINAL_RETRY: str = "RetryPolicy(max_attempts=2, retry_on=RuntimeError)"
 

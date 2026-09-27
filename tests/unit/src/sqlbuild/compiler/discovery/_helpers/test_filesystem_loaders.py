@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.discovery._helpers.filesystem.core import discover_python_node_functions
-from sqlbuild.compiler.discovery.exceptions import LoaderDiscoveryError
+from sqlbuild.compiler.discovery.exceptions import PythonNodeDiscoveryError
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DiscoverLoaderFunctionsTestCase,
@@ -18,16 +18,16 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     "test_case",
     [
         DiscoverLoaderFunctionsTestCase(
-            description="discovers decorated source loaders from loaders directory",
+            description="discovers decorated source loaders from the python directory",
             files={
-                "loaders/github.py": """
+                "python/loaders/github.py": """
 from sqlbuild.loaders import loader
 
 @loader
 def github_events(ctx):
     return []
 """,
-                "loaders/stripe.py": """
+                "python/loaders/stripe.py": """
 from sqlbuild.loaders import loader
 
 @loader(destination="raw.customers")
@@ -47,7 +47,7 @@ def stripe_customers(ctx):
         DiscoverLoaderFunctionsTestCase(
             description="discovers intermediate loader write and schema metadata",
             files={
-                "loaders/events.py": """
+                "python/loaders/events.py": """
 from sqlbuild.loaders import loader
 
 @loader(
@@ -77,7 +77,7 @@ def events(ctx):
         DiscoverLoaderFunctionsTestCase(
             description="discovers loader dependencies from decorator metadata",
             files={
-                "loaders/events.py": """
+                "python/loaders/events.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -101,7 +101,7 @@ def enriched_events(ctx):
         DiscoverLoaderFunctionsTestCase(
             description="discovers explicit loader names and dependencies",
             files={
-                "loaders/events.py": """
+                "python/loaders/events.py": """
 from sqlbuild.loaders import loader
 
 @loader(name="fetch_events")
@@ -123,7 +123,7 @@ def make_enriched(ctx):
             expected_contracts=(None, None),
         ),
         DiscoverLoaderFunctionsTestCase(
-            description="returns empty tuple when loaders directory does not exist",
+            description="returns empty tuple when python directory does not exist",
             files={},
             expected_names=(),
             expected_targets=(),
@@ -137,9 +137,9 @@ def make_enriched(ctx):
         DiscoverLoaderFunctionsTestCase(
             description="ignores undecorated functions and init files",
             files={
-                "loaders/__init__.py": "",
-                "loaders/helpers.py": "def helper(): return None\n",
-                "loaders/orders.py": """
+                "python/loaders/__init__.py": "",
+                "python/loaders/helpers.py": "def helper(): return None\n",
+                "python/loaders/orders.py": """
 from sqlbuild.loaders import loader
 
 @loader
@@ -200,7 +200,7 @@ def test_given_project_dir_when_discovering_loaders_then_returns_expected(
     [
         DiscoverLoaderFunctionsTestCase(
             description="raises clear error when loader file import fails",
-            files={"loaders/broken.py": "import missing_loader_dependency\n"},
+            files={"python/loaders/broken.py": "import missing_loader_dependency\n"},
             expected_names=(),
             expected_targets=(),
             expected_dependency_counts=(),
@@ -209,7 +209,7 @@ def test_given_project_dir_when_discovering_loaders_then_returns_expected(
             expected_unique_keys=(),
             expected_column_names=(),
             expected_contracts=(),
-            expected_error_fragment="Failed to import source loader file",
+            expected_error_fragment="Failed to import Python node file python/loaders/broken.py",
         )
     ],
     ids=lambda case: case.description,
@@ -225,5 +225,5 @@ def test_given_loader_import_error_when_discovering_loaders_then_raises_clear_er
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(contents, encoding="utf-8")
 
-    with pytest.raises(LoaderDiscoveryError, match=test_case.expected_error_fragment):
+    with pytest.raises(PythonNodeDiscoveryError, match=test_case.expected_error_fragment):
         discover_python_node_functions(project_dir=tmp_path)

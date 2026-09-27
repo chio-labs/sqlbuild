@@ -47,6 +47,7 @@ SUPPORTED_TYPED_SELECTOR_KINDS: frozenset[str] = frozenset(
         SelectorKind.PATH,
     }
 )
+PLAYGROUND_ORCHESTRATED_PROJECT_DIR: str = "waffle_shop"
 PLAYGROUND_TEMPLATE_VALUES: tuple[str, ...] = tuple(
     template.value for template in PlaygroundTemplate
 )

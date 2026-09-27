@@ -24,6 +24,14 @@ class PythonNodesPlaygroundLifecycleTestCase:
 
 
 @dataclass(frozen=True)
+class PlaygroundCompileBuildTestCase:
+    description: str
+    template: str
+    project_subdir: str
+    expected_build_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class UnicodeEmptyFixtureTestCase:
     description: str
     status: str
