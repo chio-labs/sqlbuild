@@ -13,10 +13,10 @@
   <a href="https://sqlbuild.com/docs/roadmap/">Roadmap</a>
 </p>
 
-Change your warehouse as often as your code. SQLBuild brings compile-time checks, tests and diffs to
-your SQL, so change is safe. It is a free, open-source framework for SQL and Python data pipelines,
-and it keeps its state in append-only tables in your own warehouse: no external state database, no
-manifest files and no paid tier.
+Change your warehouse as often as your code. SQLBuild brings compile-time checks, tests and safe
+renames to your SQL, so change stops being risky. It is a free, open-source framework for SQL and
+Python data pipelines, and it keeps its state in append-only tables in your own warehouse: no
+external state database, no manifest files and no paid tier.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/chio-labs/sqlbuild/main/.github/demos/rename.gif" alt="Moving and renaming an incremental model: sqb plan migrates the existing table instead of rebuilding it" width="100%">
