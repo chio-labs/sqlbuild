@@ -82,6 +82,13 @@ order_id,customer_id,status
 2,200,completed
 ```
 
+## Errors
+
+When the warehouse rejects the SQL, `sqb query` prints the warehouse message as
+`error[C108]: ...` on stderr and exits with code `2`. Nothing is written to stdout, so
+redirected `json` or `csv` output is never partial. Invalid command input, such as a missing
+query file, exits with code `1`.
+
 ## Examples
 
 ```bash

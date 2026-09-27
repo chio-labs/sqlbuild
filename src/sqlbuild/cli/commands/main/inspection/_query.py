@@ -6,13 +6,14 @@ import sys
 from pathlib import Path
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.models import QueryResult
 from sqlbuild.cli.commands._helpers.query.output import render_query_result
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands._helpers.runtime.connection import (
     resolve_project_connection_config,
 )
-from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.exceptions import CliUserError, QueryExecutionError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
@@ -58,6 +59,10 @@ def run_query(
     connection: object = adapter.connect(connection_config)
     try:
         result: QueryResult = adapter.query(connection=connection, sql=query_sql, limit=limit)
+    except AdapterUserError:
+        raise
+    except Exception as error:
+        raise QueryExecutionError(str(getattr(error, "message", error))) from error
     finally:
         adapter.close(connection)
 

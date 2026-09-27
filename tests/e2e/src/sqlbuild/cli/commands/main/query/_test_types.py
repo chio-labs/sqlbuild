@@ -24,3 +24,11 @@ class QueryFileErrorCliTestCase:
     expected_stderr_fragment: str
     repo_files: dict[str, str] = field(default_factory=dict)
     binary_files: dict[str, bytes] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class QueryExecutionErrorCliTestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_stderr_fragment: str
+    expected_returncode: int = 2
