@@ -1386,7 +1386,7 @@ pub(super) fn bounded_names_are_unique() -> bool {
         "WITH {long} AS (SELECT 1 AS order_id), __sqb_cte_0 AS (SELECT * FROM {long}), \
          final AS (SELECT * FROM __sqb_cte_0) SELECT final.* FROM final"
     );
-    let reserved = "__sqb_cte_1 __ref__orders __source__orders __expected__orders __actual__orders";
+    let reserved = "__sqb_cte_1 __SQB_CTE_2 __ref__orders __source__orders __expected__orders __actual__orders";
     let mut first = CteNamespace::default();
     first.reserve(&sql);
     first.reserve(reserved);
@@ -1417,6 +1417,7 @@ pub(super) fn bounded_names_are_unique() -> bool {
             .all(|name| name.len() <= 30 && name.starts_with("__sqb_cte_"))
         && !names.contains(&"__sqb_cte_0")
         && !names.contains(&"__sqb_cte_1")
+        && !names.contains(&"__sqb_cte_2")
         && rewritten != second_step
         && rewritten
             == replay

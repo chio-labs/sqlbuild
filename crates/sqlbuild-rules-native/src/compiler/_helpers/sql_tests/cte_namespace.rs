@@ -3,9 +3,11 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
-use polyglot_sql::expressions::Identifier;
+use polyglot_sql::expressions::{Identifier, Null};
 use polyglot_sql::traversal::transform_map;
 use polyglot_sql::{DialectType, Expression};
+
+const CTE_NAME_PREFIX: &str = "__sqb_cte_";
 
 /// Allocate bounded, collision-free ordinal names within one rendered query.
 #[derive(Default)]
@@ -16,16 +18,23 @@ pub(crate) struct CteNamespace {
 
 impl CteNamespace {
     /// Reserve names from all steps, including fixtures and queries not yet rendered.
+    /// Only tokens with the generated-name prefix can collide, so only those are kept.
     pub(crate) fn reserve(&mut self, sql: &str) {
         self.occupied.extend(
             sql.split(|c: char| !c.is_alphanumeric() && c != '_')
+                .filter(|token| {
+                    token
+                        .as_bytes()
+                        .get(..CTE_NAME_PREFIX.len())
+                        .is_some_and(|head| head.eq_ignore_ascii_case(CTE_NAME_PREFIX.as_bytes()))
+                })
                 .map(str::to_ascii_lowercase),
         );
     }
 
     fn allocate(&mut self) -> String {
         loop {
-            let name = format!("__sqb_cte_{:x}", self.next);
+            let name = format!("{CTE_NAME_PREFIX}{:x}", self.next);
             self.next += 1;
             if self.occupied.insert(name.clone()) {
                 return name;
@@ -53,7 +62,8 @@ impl CteNamespace {
                 if with.recursive {
                     names.insert(original.clone(), replacement.clone());
                 }
-                cte.this = rewrite_relations(cte.this.clone(), &names, dialect)?;
+                let body = std::mem::replace(&mut cte.this, Expression::Null(Null));
+                cte.this = rewrite_relations(body, &names, dialect)?;
                 names.insert(original, replacement.clone());
                 cte.alias = Identifier::new(replacement);
             }
