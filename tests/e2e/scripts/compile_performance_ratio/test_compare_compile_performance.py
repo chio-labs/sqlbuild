@@ -41,9 +41,8 @@ _REPO_ROOT: Path = Path(__file__).resolve().parents[4]
 def test_given_two_builds_when_comparing_compile_performance_then_enforces_ratio_limit(
     test_case: CompilePerformanceRatioTestCase,
 ) -> None:
-    environment: dict[str, str] = {
-        key: value for key, value in os.environ.items() if key != "GITHUB_STEP_SUMMARY"
-    }
+    environment: dict[str, str] = dict(os.environ)
+    _ = environment.pop("GITHUB_STEP_SUMMARY", None)
     result: subprocess.CompletedProcess[str] = subprocess.run(
         [
             sys.executable,

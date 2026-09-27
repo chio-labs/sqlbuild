@@ -43,7 +43,7 @@ def compare_compile_performance(argv: list[str] | None = None) -> int:
         comparison=comparison, runs=args.runs, max_ratio=args.max_ratio
     )
     print(markdown)
-    append_summary(path=Path(summary_value) if summary_value else None, markdown=markdown)
+    _ = append_summary(path=Path(summary_value) if summary_value else None, markdown=markdown)
     exceeded: list[str] = [
         f"{name} ratio {ratio:.3f} exceeds {args.max_ratio:.2f}"
         for name, ratio in (("wall", comparison.wall_ratio), ("CPU", comparison.cpu_ratio))

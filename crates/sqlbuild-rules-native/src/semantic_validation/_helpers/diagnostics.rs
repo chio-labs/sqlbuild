@@ -189,8 +189,7 @@ fn sqlbuild_code(code: &str) -> Option<String> {
     None
 }
 
-/// Implicit conversions are enforced like the incompatibility they risk:
-/// each has a mechanical remedy (an explicit conversion or comparison).
+/// Maps implicit-conversion findings to blocking codes; each has an explicit-CAST remedy.
 fn implicit_conversion_code(number: usize) -> Option<&'static str> {
     match number {
         210 => Some("B217"),

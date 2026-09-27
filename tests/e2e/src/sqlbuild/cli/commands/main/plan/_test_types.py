@@ -24,3 +24,12 @@ class RemovedHookTestCase:
     description: str
     expected_error: str
     expected_exit_code: int = 1
+
+
+@dataclass(frozen=True)
+class TerminalPlanProgressE2ETestCase:
+    description: str
+    runs: int
+    columns: int
+    expected_screen_fragments: tuple[str, ...]
+    expected_raw_fragments: tuple[str, ...]

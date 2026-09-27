@@ -16,6 +16,8 @@ from scripts.compile_performance_ratio.constants import (
     BASE_LABEL,
     COMPILE_ENTRY,
     DENSE_KIND,
+    EXCLUDED_ENVIRONMENT_KEYS,
+    EXCLUDED_ENVIRONMENT_PREFIX,
     FRESH_AUDIT_SHARE,
     FRESH_FUNCTION_SHARE,
     FRESH_MACRO_SHARE,
@@ -25,6 +27,7 @@ from scripts.compile_performance_ratio.constants import (
     HEAD_LABEL,
     REPORTED_PHASES,
 )
+from scripts.compile_performance_ratio.exceptions import CompileComparisonError
 from scripts.compile_performance_ratio.models import CompileComparison, CompileRun
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     write_semantic_compile_project,
@@ -58,11 +61,7 @@ def compare_builds(
     head_python: Path,
     runs: int,
 ) -> CompileComparison:
-    """Alternate base and head cold compiles of one project on the same machine.
-
-    One untimed compile per build first warms imports and the file cache, so neither
-    build pays the process's first-run cost inside the measurement.
-    """
+    """Alternate base and head cold compiles after one untimed warm-up compile per build."""
 
     builds: tuple[tuple[str, Path], ...] = ((BASE_LABEL, base_python), (HEAD_LABEL, head_python))
     for label, python in builds:
@@ -92,7 +91,7 @@ def _compile_once(*, label: str, python: Path, project_dir: Path) -> CompileRun:
     environment: dict[str, str] = {
         key: value
         for key, value in os.environ.items()
-        if key != "VIRTUAL_ENV" and not key.startswith("DBT_")
+        if key not in EXCLUDED_ENVIRONMENT_KEYS and not key.startswith(EXCLUDED_ENVIRONMENT_PREFIX)
     }
     before: resource.struct_rusage = resource.getrusage(resource.RUSAGE_CHILDREN)
     started: float = time.perf_counter()
@@ -116,7 +115,7 @@ def _compile_once(*, label: str, python: Path, project_dir: Path) -> CompileRun:
     wall_seconds: float = time.perf_counter() - started
     after: resource.struct_rusage = resource.getrusage(resource.RUSAGE_CHILDREN)
     if completed.returncode != 0:
-        raise RuntimeError(
+        raise CompileComparisonError(
             f"{label} compile failed with exit {completed.returncode}: {completed.stderr[-2000:]}"
         )
     payload: dict[str, object] = json.loads(completed.stdout)
@@ -134,7 +133,8 @@ def _compile_once(*, label: str, python: Path, project_dir: Path) -> CompileRun:
 
 
 def _median_phases(*, runs: list[CompileRun]) -> dict[str, float]:
-    return {
-        phase: statistics.median(run.timings_ms.get(phase, 0) for run in runs)
-        for phase in REPORTED_PHASES
-    }
+    medians: dict[str, float] = {}
+    for phase in REPORTED_PHASES:
+        values: list[int] = [run.timings_ms.get(phase, 0) for run in runs]
+        medians[phase] = statistics.median(values)
+    return medians
