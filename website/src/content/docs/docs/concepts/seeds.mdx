@@ -35,6 +35,14 @@ seeds:
         type: INTEGER
 ```
 
+Seed YAML accepts only these keys; any other key is a compile error:
+
+| Level | Keys |
+|-------|------|
+| File | `seeds` |
+| Seed | `name`, `description`, `database`, `schema`, `meta`, `tags`, `csv_settings`, `columns`, `audits` |
+| Column | `name`, `type`, `nullable`, `description`, `meta`, `audits` |
+
 Every seed must have a YAML declaration with at least one typed column. CSV filenames must be unique across the entire `seeds/` directory (including subdirectories). The seed name in the YAML must match the CSV filename (without the `.csv` extension).
 
 ## Referencing seeds
@@ -61,6 +69,28 @@ sqb seed
 ```
 
 Seeds are fully replaced on every run. If the CSV changes, the table is recreated with the new data.
+
+## Seed audits
+
+Attach audits to a seed or its columns with the same syntax as source audits:
+
+```yaml
+seeds:
+  - name: waffle_types
+    columns:
+      - name: waffle_type_id
+        type: INTEGER
+        audits:
+          - not_null
+          - unique
+    audits:
+      - expression_is_true:
+          expression: "price_cents >= 0"
+          severity: error
+```
+
+During `sqb build`, seed audits run right after the seed loads. An `error` failure blocks every
+model that depends on the seed. See [Audits](/docs/concepts/audits#seed-audits).
 
 ## Target overrides
 

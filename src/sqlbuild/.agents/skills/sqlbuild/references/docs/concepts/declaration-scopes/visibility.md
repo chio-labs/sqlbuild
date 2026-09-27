@@ -57,13 +57,15 @@ Grouped declaration directories can be placed below these SQL resource roots:
 
 | Root | Contents |
 |------|----------|
-| `models/` | Models and inline model hooks |
+| `models/` | Models, inline model hooks, and scoped audits, schemas, and hooks |
 | `tests/unit/` | Unit tests |
 | `tests/scenarios/` | Scenarios |
-| `hooks/sql/` | Named SQL hooks |
 | `functions/sql/` | SQL functions |
-| `audits/` | Audits |
 | `sources/` | Inline source expressions |
+
+Project-wide `audits/`, `schemas/`, and `hooks/` are declaration roles, not resource trees: they
+cannot contain `_sqlbuild/` or other declaration directories. Scope an audit, schema, or hook by
+moving it under the `_sqlbuild/` folder of the models that use it.
 
 Each root is a separate tree. For example, `models/constants/` does not make declarations available
 under `tests/`. Put a declaration in the top-level `constants/`, `enums/`, or `macros/` directory
@@ -73,10 +75,11 @@ them to be private to.
 
 Existing scoped declaration roles directly below an owner remain supported. `_sqlbuild/` is the
 preferred layout because it keeps all declarations together without changing their visibility.
-Only the six public/private declaration-role directories are valid directly under `_sqlbuild/`;
-other entries are rejected. `_sqlbuild/` must sit below a concrete owner directory. A project-root
+Only the declaration-role directories listed on the
+[overview](../declaration-scopes.md) are valid directly under `_sqlbuild/`; other entries
+are rejected. `_sqlbuild/` must sit below a concrete owner directory. A project-root
 `_sqlbuild/` or authored-root path such as `models/_sqlbuild/` is invalid; use the project-wide
-`macros/`, `enums/`, or `constants/` roots at that boundary.
+roots at that boundary.
 
 ## Which file controls visibility?
 
@@ -86,13 +89,20 @@ other entries are rejected. `_sqlbuild/` must sit below a concrete owner directo
 | Inline SQL hook in a model | The model file |
 | Unit test SQL | The test file, plus inferred tested-resource relationships |
 | Scenario SQL | The scenario file, plus expected-model enum and constant relationships |
-| Named SQL hook | The hook file under `hooks/sql/` |
+| Named SQL hook | The owner folder of the hook's role, or the project root for `hooks/sql/` |
 | SQL function | The function file under `functions/sql/` |
-| Audit | The audit file |
+| Audit | The owner folder of the audit's role, or the project root for `audits/` |
+| Reusable schema | The owner folder of the schema's role, for `extends` and enum column types |
 | Inline source expression | The source definition |
 
-This means a reusable named hook does not change meaning depending on which model calls it. The
-hook uses declarations available where the hook itself is stored.
+This means a reusable named hook or audit does not change meaning depending on which model uses
+it. It uses declarations available from the folder that owns it: a hook in
+`models/marts/_sqlbuild/hooks/sql/` sees the same macros, enums, and constants as a model directly
+in `models/marts/`.
+
+A model can name an audit, schema, or hook only when that declaration is visible from the model's
+folder, using the same rules as macros. Naming one from a sibling or parent folder fails with
+`S006` and names the declaration's location.
 
 ## Tests and expected output
 

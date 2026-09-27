@@ -21,7 +21,9 @@ For shared lifecycle ordering, failure timing, naming, and identity rules, see t
 
 ## Reusable SQL hooks
 
-SQLBuild discovers `.sql` files recursively under `hooks/sql/`. Each file defines exactly one hook and must start with a `HOOK(...)` header as its first non-whitespace content.
+SQLBuild discovers `.sql` files recursively under `hooks/sql/` and under scoped
+`<folder>/_sqlbuild/hooks/sql/` and `<folder>/_sqlbuild/_hooks/sql/` roles; see
+[Hooks](../hooks.md#project-layout) for who can call each. Each file defines exactly one hook and must start with a `HOOK(...)` header as its first non-whitespace content.
 
 **`hooks/sql/permissions/grant_access.sql`**
 
@@ -130,7 +132,8 @@ Both named and inline SQL hooks receive the invoking model's runtime context. Th
 For named hooks, SQLBuild first substitutes `@name` and `@'name'` arguments into the hook body. A supplied argument such as `relation: "@@CTX:destination.qualified"` therefore resolves to the invoking model's final target-overridden destination.
 
 An inline hook uses macros, constants, and enums available to its model file. A named hook uses those
-available to its own file under `hooks/sql/`. See
+available from the folder that owns its role: project-wide declarations for `hooks/sql/`, or the
+owner folder's declarations for `<folder>/_sqlbuild/hooks/sql/`. See
 [How Visibility Works](../../declaration-scopes/visibility.md#which-file-controls-visibility).
 
 `${...}` config-template syntax is not valid in SQL hooks.

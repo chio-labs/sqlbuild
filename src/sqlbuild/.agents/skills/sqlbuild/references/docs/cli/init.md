@@ -47,9 +47,13 @@ my-project/
 ```
 
 Empty directories contain `.gitkeep` files so the scaffold can be committed. Reusable attached
-audit definitions belong in `audits/generic/`; standalone audits belong in `audits/singular/`.
-Add reusable SQL lifecycle hooks to `hooks/sql/` and decorated Python lifecycle hooks to
-`hooks/python/`; see [Hooks](../concepts/models/hooks.md).
+audit definitions belong in `audits/generic/`; cross-resource singular audits belong in
+`audits/singular/`. Add reusable SQL lifecycle hooks to `hooks/sql/` and decorated Python lifecycle
+hooks to `hooks/python/`; see [Hooks](../concepts/models/hooks.md).
+
+These top-level roles are project-wide. Once an audit, schema, hook, or macro is used only under
+one folder, such as `models/marts/`, SQLBuild requires it to move into that folder's `_sqlbuild/`
+directory; see [Where to Put Declarations](../concepts/declaration-scopes/placement.md).
 
 The generated project uses DuckDB, creates a named `local` connection shared by `dev` and
 `prod`, and defaults models to table materialization. Its configuration follows this shape:

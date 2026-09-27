@@ -12,7 +12,9 @@ For shared lifecycle ordering, failure timing, naming, and identity rules, see t
 
 ## Define a Python hook
 
-SQLBuild discovers decorated functions recursively from `.py` files under `hooks/python/`:
+SQLBuild discovers decorated functions recursively from `.py` files under `hooks/python/` and
+under scoped `<folder>/_sqlbuild/hooks/python/` and `<folder>/_sqlbuild/_hooks/python/` roles; see
+[Hooks](../hooks.md#project-layout) for who can call each:
 
 **`hooks/python/notifications.py`**
 
