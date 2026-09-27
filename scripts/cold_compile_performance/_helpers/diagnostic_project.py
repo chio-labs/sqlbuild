@@ -6,7 +6,7 @@ from pathlib import Path
 def write_diagnostic_project(
     *, project_dir: Path, model_count: int = 3, width: int = 32, depth: int = 100
 ) -> None:
-    """Generate large macro-backed CTE models with independent errors and warnings."""
+    """Generate large macro-backed CTE models with independent reference and conversion errors."""
     project_dir.mkdir(parents=True, exist_ok=True)
     models: Path = project_dir / "models"
     models.mkdir(exist_ok=True)
@@ -28,11 +28,11 @@ def write_diagnostic_project(
             ctes.append(f"{name} AS (\nSELECT\n{projection}\nFROM {previous}\n)")
             previous = name
         errors: list[str] = [f"missing_{index:03} AS broken_{index:03}" for index in range(50)]
-        warnings: list[str] = [
-            f"CAST(TIMESTAMP '2026-04-01' AS INTEGER) AS risky_{index:03}" for index in range(50)
+        conversions: list[str] = [
+            f"{columns[index % width]} = 'shipped' AS risky_{index:03}" for index in range(50)
         ]
         sql: str = "MODEL (materialized view);\nWITH\n" + ",\n".join(ctes)
-        sql += "\nSELECT\n" + ",\n".join((*errors, *warnings)) + f"\nFROM {previous}\n"
+        sql += "\nSELECT\n" + ",\n".join((*errors, *conversions)) + f"\nFROM {previous}\n"
         name = f"large_orders_{model_index}"
         (models / f"{name}.sql").write_text(sql)
         (models / f"downstream_orders_{model_index}.sql").write_text(

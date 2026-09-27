@@ -43,8 +43,7 @@ def test_given_large_invalid_models_when_compiling_then_bounds_diagnostic_work(
         (item.get("resource_name", ""), item["severity"]) for item in payload["diagnostics"]
     )
     for index in range(3):
-        assert counts[(f"large_orders_{index}", "error")] >= 50
-        assert counts[(f"large_orders_{index}", "warning")] >= 50
+        assert counts[(f"large_orders_{index}", "error")] >= 100
         assert f"downstream_orders_{index}" in payload["semantic_checks_partial"]
     _LOGGER.info("large diagnostic project wall=%.3fs counts=%s", elapsed, counts)
     assert elapsed < test_case.expected_max_wall_seconds
