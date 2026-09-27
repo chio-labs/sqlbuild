@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.121.0](https://github.com/chio-labs/sqlbuild/compare/v0.120.0...v0.121.0) (2026-09-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* Projects run only in direct mode. Virtual commands, flags, configuration keys, state backends, and prepare_version hooks are removed. Concurrent microbatch event IDs changed; drop existing _sqlbuild_microbatches tables before the next concurrent run. Sequential runs never use this table.
+
+### Features
+
+* remove virtual data environments and validate models at compile time ([#852](https://github.com/chio-labs/sqlbuild/issues/852)) ([0964666](https://github.com/chio-labs/sqlbuild/commit/0964666bbcb66d2b4c55a958bf74633dd08fce59))
+
 ## [0.120.0](https://github.com/chio-labs/sqlbuild/compare/v0.119.5...v0.120.0) (2026-09-27)
 
 
