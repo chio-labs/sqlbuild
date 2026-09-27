@@ -1928,6 +1928,7 @@ def _build_test_model_query_overrides(
         sql_analysis_enabled=inputs.effective_settings.sql_analysis,
         target_name=inputs.effective_target_name,
         vars=inputs.effective_vars,
+        _enforce_explicit_references=inputs.project_config.references.enforce_explicit,
     )
     overrides: dict[str, str] = {}
     model_input: CompileModelInput

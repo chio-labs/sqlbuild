@@ -689,6 +689,9 @@ auto_load_sources = false
 [scopes]
 enforce_placement = false
 
+[references]
+enforce_explicit = false
+
 [defaults]
 materialized = "table"
 seed_database = "seed_db"
@@ -774,6 +777,7 @@ enabled = true
             expected_max_concurrency=8,
             expected_auto_load_sources=False,
             expected_enforce_placement=False,
+            expected_enforce_explicit_references=False,
             expected_materialized="table",
             expected_row_diff_exclude_columns=("loaded_at",),
             expected_row_diff_tolerances={
@@ -853,6 +857,7 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.settings.concurrency == test_case.expected_max_concurrency
     assert config.settings.auto_load_sources is test_case.expected_auto_load_sources
     assert config.scopes.enforce_placement is test_case.expected_enforce_placement
+    assert config.references.enforce_explicit is test_case.expected_enforce_explicit_references
     assert config.defaults.materialized == test_case.expected_materialized
     assert config.defaults.row_diff_exclude_columns == test_case.expected_row_diff_exclude_columns
     assert config.defaults.row_diff_tolerances == test_case.expected_row_diff_tolerances
@@ -1225,6 +1230,28 @@ adapter = "duckdb"
 enforce_placement = "no"
 """.strip(),
             expected_error_fragment="Expected 'enforce_placement' to be a boolean when provided",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when explicit reference enforcement is not a boolean",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[references]
+enforce_explicit = "no"
+""".strip(),
+            expected_error_fragment="Expected 'enforce_explicit' to be a boolean when provided",
+        ),
+        LoadProjectConfigErrorTestCase(
+            description="raises when the references section has an unknown key",
+            project_file_contents="""
+name = "demo"
+adapter = "duckdb"
+
+[references]
+enforce = false
+""".strip(),
+            expected_error_fragment="references",
         ),
         LoadProjectConfigErrorTestCase(
             description="raises when settings sql_analysis is not a boolean",

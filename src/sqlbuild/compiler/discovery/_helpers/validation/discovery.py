@@ -40,6 +40,7 @@ from sqlbuild.python_nodes.models import (
     SqlResourceRef,
     TaskDefinition,
 )
+from sqlbuild.python_nodes.types import SqlResourceRefKind
 from sqlbuild.spec.contracts.models import SchemaModelEntry, SchemaSeedEntry, SourceEntry
 
 
@@ -354,6 +355,11 @@ def _validate_python_node_dependencies(
                         f"Loader '{node.name}' depends on SQL resource "
                         f"'{dependency.name}'; loaders "
                         "may depend on Python loader/task/asset functions only"
+                    )
+                if dependency.kind is SqlResourceRefKind.SEED:
+                    raise DiscoveryConflictError(
+                        f"Python node '{node.name}' depends on seed '{dependency.name}'; "
+                        "Python nodes may depend on models and sources"
                     )
                 continue
             if _python_node_dependency_key(dependency) not in node_by_dependency_key:

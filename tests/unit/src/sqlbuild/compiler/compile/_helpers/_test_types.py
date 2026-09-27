@@ -937,3 +937,51 @@ class AttachedAuditGateCycleTestCase:
     description: str
     files: dict[str, str]
     expected_error_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TypedMacroReferenceTestCase:
+    """A macro call passing typed references, and the SQL it expands to."""
+
+    description: str
+    macro_file_contents: str
+    sql: str
+    expected_sql: str
+
+
+@dataclass(frozen=True)
+class MacroGeneratedReferenceErrorTestCase:
+    """A macro call whose expanded output contains a reference it was not given."""
+
+    description: str
+    macro_file_contents: str
+    sql: str
+    expected_error_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MacroGeneratedReferenceSwitchTestCase:
+    """A macro emitting a reference while explicit-reference enforcement is disabled."""
+
+    description: str
+    macro_file_contents: str
+    sql: str
+    expected_sql: str
+
+
+@dataclass(frozen=True)
+class MalformedTypedMacroReferenceTestCase:
+    """A macro argument that looks like a reference call but is not a valid typed reference."""
+
+    description: str
+    sql: str
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class TypedReferenceAdapterRenderingTestCase:
+    """An adapter resolving a typed macro reference with its own relation quoting."""
+
+    description: str
+    adapter_name: str
+    expected_resolved_sql: str

@@ -10,11 +10,18 @@ import re
 import sys
 import threading
 from collections.abc import Callable, Iterator, Mapping
+from contextvars import Token
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType, ModuleType
 from typing import cast
 
+from sqlbuild.compiler.compile._helpers.render.macro_references import (
+    evaluate_typed_reference,
+    reject_macro_generated_references,
+    relation_placeholder_text,
+    render_relation_placeholders,
+)
 from sqlbuild.compiler.compile.constants import (
     DECLARATION_REFERENCE_NAMES,
     MACRO_CONTEXT_PARAMETER_NAME,
@@ -61,6 +68,7 @@ from sqlbuild.compiler.sql_analysis.main._is_identifier_start import (
 from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
 from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
+from sqlbuild.python_nodes.models import RELATION_RENDERER, SqlResourceRef
 from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 
@@ -97,6 +105,7 @@ class _MacroAnalysisInputs:
 class _ExpansionFacts:
     dependencies: list[DeclarationIdentity] = field(default_factory=list)
     usages: list[UsageRecord] = field(default_factory=list)
+    relations: dict[SqlResourceRef, int] = field(default_factory=dict)
 
     def add_dependency(self, identity: DeclarationIdentity) -> _ExpansionFacts:
         """Record a resolved dependency in encounter order."""
@@ -109,6 +118,18 @@ class _ExpansionFacts:
 
         self.usages.append(usage)
         return self
+
+    def relation_placeholder(self, ref: object) -> str:
+        """Return the stable in-expansion placeholder for one typed reference argument."""
+
+        if not isinstance(ref, SqlResourceRef):
+            raise CompileInputError("Only typed resource references render as relations")
+        return relation_placeholder_text(self.relations.setdefault(ref, len(self.relations)))
+
+    def render_relation_placeholders(self, sql: str) -> str:
+        """Replace typed reference placeholders with the reference call written at the call site."""
+
+        return render_relation_placeholders(sql=sql, relations=self.relations)
 
 
 @dataclass(frozen=True)
@@ -1269,6 +1290,7 @@ def _expand_sql_macros(
                 f"Macro '@{_parse_macro_name(sql=sql, call_start_index=macro_start_index)}' in "
                 f"'{consumer_path}' must return a SQL string when used directly in SQL"
             )
+        macro_result = state.facts.render_relation_placeholders(macro_result)
         rendered_sql_parts.append(macro_result)
         spans.append(
             ExpansionSpan(
@@ -1431,12 +1453,18 @@ def _evaluate_macro_call(
             file_path=file_path,
             state=state,
         )
-        macro_result: object = _call_loaded_macro(
-            loaded_macro=loaded_macro,
-            macro_context=invocation_context,
-            args=args,
-            kwargs=kwargs,
+        renderer_token: Token[Callable[[object], str] | None] = RELATION_RENDERER.set(
+            state.facts.relation_placeholder
         )
+        try:
+            macro_result: object = _call_loaded_macro(
+                loaded_macro=loaded_macro,
+                macro_context=invocation_context,
+                args=args,
+                kwargs=kwargs,
+            )
+        finally:
+            RELATION_RENDERER.reset(renderer_token)
     except CompileInputError:
         raise
     except TypeError as error:
@@ -1456,6 +1484,13 @@ def _evaluate_macro_call(
         _validate_final_macro_sql(
             macro_name=macro_name, file_path=file_path, macro_result=macro_result
         )
+        if state.macro_context._enforce_explicit_references:
+            reject_macro_generated_references(
+                loaded_macro=loaded_macro,
+                macro_result=macro_result,
+                file_path=file_path,
+                consumer=state.consumer,
+            )
     return macro_result, closing_paren_index + 1
 
 
@@ -1752,6 +1787,8 @@ def _evaluate_literal_ast_node(
 ) -> object:
     if isinstance(node, ast.Constant):
         return node.value
+    if isinstance(node, ast.Call):
+        return evaluate_typed_reference(node=node, file_path=file_path)
     if isinstance(node, ast.Name):
         if node.id in placeholder_values:
             return placeholder_values[node.id]
@@ -1798,7 +1835,8 @@ def _evaluate_literal_ast_node(
             raise CompileInputError(f"Macro arguments in '{file_path}' use unsupported unary value")
         return -operand if isinstance(node.op, ast.USub) else operand
     raise CompileInputError(
-        f"Macro arguments in '{file_path}' must use only Python literals and nested macro calls"
+        f"Macro arguments in '{file_path}' must use only Python literals, nested macro calls, "
+        "and __ref(), __source(), or __seed() references"
     )
 
 

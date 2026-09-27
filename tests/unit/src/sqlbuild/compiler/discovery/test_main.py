@@ -837,6 +837,28 @@ def generated_checks():
             expected_error_fragment="Check 'check_orders' depends on SQL resource 'orders'",
         ),
         DiscoverFactoryValidationTestCase(
+            description="generated task seed dependency fails validation",
+            repo_files=base_repo_files()
+            | {
+                "python/tasks/generated.py": """
+from sqlbuild.factories import factory
+from sqlbuild.refs import seed
+from sqlbuild.tasks import task
+
+
+@factory
+def generated_tasks():
+    @task(name="export_countries", depends_on=seed("country_codes"))
+    def export_countries(ctx):
+        return None
+    return export_countries
+""",
+            },
+            expected_error_fragment=(
+                "Python node 'export_countries' depends on seed 'country_codes'"
+            ),
+        ),
+        DiscoverFactoryValidationTestCase(
             description="generated managed source loader mismatch fails validation",
             repo_files=base_repo_files()
             | {

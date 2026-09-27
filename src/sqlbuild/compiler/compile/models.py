@@ -330,6 +330,7 @@ class MacroContext:
     _constant_declarations: Mapping[str, ConstantDeclaration] = field(
         default_factory=dict, repr=False, compare=False
     )
+    _enforce_explicit_references: bool = field(default=True, repr=False, compare=False)
 
     def render_constant(self, name: str) -> str:
         """Render one visible constant as an adapter-safe SQL value."""
