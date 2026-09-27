@@ -187,6 +187,27 @@ fn given_join_modifiers_and_whole_row_uses_when_linting_duckdb_then_aliases_are_
             expected_replacement: None,
         },
         test_types::AdditionalLintRuleTestCase {
+            description: "implicit alias repeating the relation name is unused",
+            sql: "SELECT id FROM orders orders",
+            rule: "SQBRSQL023",
+            expected_anchor: Some("orders"),
+            expected_replacement: Some(""),
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "explicit alias repeating the relation name is unused",
+            sql: "SELECT id FROM orders AS orders",
+            rule: "SQBRSQL023",
+            expected_anchor: Some("AS orders"),
+            expected_replacement: Some(""),
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "alias repeating the relation name is used when referenced",
+            sql: "SELECT orders.id FROM orders orders",
+            rule: "SQBRSQL023",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
             description: "unaliased relation before window clause has no alias",
             sql: "SELECT SUM(amount) OVER w FROM orders WINDOW w AS (ORDER BY id)",
             rule: "SQBRSQL023",

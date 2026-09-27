@@ -1250,8 +1250,10 @@ fn unused_alias_spans(query: &QuerySlice<'_>) -> Vec<Span> {
             continue;
         }
         let alias = &tokens[alias_index].text;
+        let relation_name = significant_before(tokens, span_start);
         let used = (query_start..query_end).any(|index| {
             index != alias_index
+                && Some(index) != relation_name
                 && depths[index] >= depth
                 && is_identifier(&tokens[index])
                 && tokens[index].text.eq_ignore_ascii_case(alias)
