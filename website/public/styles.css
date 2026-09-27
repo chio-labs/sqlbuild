@@ -122,7 +122,7 @@ pre {
 }
 
 .wrap {
-	width: min(1140px, 100% - 48px);
+	width: min(1240px, 100% - 48px);
 	margin: 0 auto;
 }
 
@@ -277,6 +277,10 @@ pre {
 	margin: 20px 0 0;
 	color: var(--muted-foreground);
 	font-size: 18px;
+}
+
+.hero .lede {
+	max-width: 68ch;
 }
 
 .actions {
