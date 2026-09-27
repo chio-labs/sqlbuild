@@ -111,6 +111,23 @@ def execute_audit_impl(  # noqa: PLR0913
         return result
 
 
+def failed_audit_result(
+    *, audit: AuditPlanEntry, error: Exception, run_scope_phase: AuditRunScope
+) -> AuditExecutionResult:
+    """Return an error result for an audit whose execution raised."""
+
+    return replace(
+        _base_result(
+            audit=audit,
+            outcome=AuditOutcome.ERROR,
+            row_count=0,
+            executed_sql=audit.resolved_sql,
+            run_scope_phase=run_scope_phase,
+        ),
+        execution_error=str(error),
+    )
+
+
 def _measurement_result(  # noqa: PLR0913
     *,
     audit: AuditPlanEntry,

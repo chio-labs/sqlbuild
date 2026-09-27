@@ -19,6 +19,9 @@ from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.executor.auditing.main._execute import execute_audit
+from sqlbuild.executor.auditing.main._execute_reporting_errors import (
+    execute_audit_reporting_errors,
+)
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 
 
@@ -137,4 +140,19 @@ def execute_entry(*, entry: AuditPlanEntry, adapter: Adapter) -> AuditExecutionR
         source_map={},
         relation_overrides=None,
         run_scope_phase=AuditRunScope.FINAL,
+    )
+
+
+def execute_entry_reporting_errors(
+    *, entry: AuditPlanEntry, adapter: Adapter
+) -> AuditExecutionResult:
+    return execute_audit_reporting_errors(
+        audit=entry,
+        adapter=cast(Any, adapter),
+        connection=object(),
+        model_locations={},
+        seed_locations={},
+        source_map={},
+        run_scope_phase=AuditRunScope.FINAL,
+        quality_scope="source",
     )

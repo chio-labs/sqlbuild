@@ -1134,6 +1134,39 @@ def _format_failure_details(*, result: BuildExecutionResult, style: CliStyle) ->
             )
         lines.append("")
 
+    lines.extend(_format_audit_error_details(result=result, style=style, has_failures=has_failures))
+    return lines
+
+
+def _format_audit_error_details(
+    *, result: BuildExecutionResult, style: CliStyle, has_failures: bool
+) -> list[str]:
+    lines: list[str] = []
+    audit_result: AuditExecutionResult
+    for audit_result in (*result.source_audit_results, *result.end_audit_results):
+        if audit_result.execution_error is None:
+            continue
+        if not has_failures:
+            lines.append("")
+            lines.append(style.error_strong("Failures:"))
+            lines.append("")
+            has_failures = True
+        target: str = (
+            f" on {audit_result.attached_target_name}"
+            if audit_result.attached_target_name is not None
+            else ""
+        )
+        lines.append(f"  {audit_result.audit_name}{target}  (audit)")
+        lines.extend(
+            _format_failure_error_block(
+                error_code=None,
+                error_message=audit_result.execution_error,
+                error_help=None,
+                style=style,
+            )
+        )
+        lines.append("")
+
     return lines
 
 

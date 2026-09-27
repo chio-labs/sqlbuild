@@ -9,7 +9,9 @@ from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import AuditPlanEntry, PlanOutput
-from sqlbuild.executor.auditing.main._execute import execute_audit
+from sqlbuild.executor.auditing.main._execute_reporting_errors import (
+    execute_audit_reporting_errors,
+)
 from sqlbuild.executor.auditing.main.publish_completed_audit_results import (
     publish_completed_audit_results,
 )
@@ -68,14 +70,13 @@ def run_pending_source_audits(
                 resource_name=audit.name,
                 run_id=run_id,
             ) as lifecycle:
-                result: AuditExecutionResult = execute_audit(
+                result: AuditExecutionResult = execute_audit_reporting_errors(
                     audit=audit,
                     adapter=adapter,
                     connection=connection,
                     model_locations=plan.model_locations,
                     seed_locations=plan.seed_locations,
                     source_map=plan.source_map,
-                    relation_overrides=None,
                     run_scope_phase=AuditRunScope.FINAL,
                     quality_scope="source",
                 )

@@ -985,3 +985,20 @@ class NestedSourceGateE2ETestCase:
     expected_exit_code: int
     expected_checks: dict[tuple[str, str], tuple[str, str]]
     expected_orders_built: bool
+
+
+@dataclass(frozen=True)
+class AuditExecutionErrorE2ETestCase:
+    description: str
+    audit_kind: str
+    severity: str
+    concurrency: int
+    expected_attachment_kind: str
+    expected_asset_statuses: dict[str, str]
+
+
+@dataclass(frozen=True)
+class AuditExecutionErrorTerminalE2ETestCase:
+    description: str
+    audit_kind: str
+    expected_fragments: tuple[str, ...]

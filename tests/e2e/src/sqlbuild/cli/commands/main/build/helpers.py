@@ -581,3 +581,79 @@ def build_asset_names(stdout: str) -> tuple[str, ...]:
     """Return the asset names reported by build JSON output."""
 
     return tuple(asset["name"] for asset in json.loads(stdout)["assets"])
+
+
+AUDIT_ERROR_DATABASE: str = "error_shop.duckdb"
+_BROKEN_AUDIT: str = (
+    "AUDIT ();\n\nSELECT r.* FROM @relation r JOIN main.missing_lookup m ON r.code = m.code\n"
+)
+_AUDIT_ERROR_TARGET_FILES: dict[str, dict[str, str]] = {
+    "source": {
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+            "    audits:\n      - broken_check:\n          severity: {severity}\n"
+        ),
+        "audits/generic/broken_check.sql": _BROKEN_AUDIT,
+        "models/staged_orders.sql": (
+            'MODEL (materialized table);\n\nSELECT code FROM __source("raw_orders")\n'
+        ),
+    },
+    "seed": {
+        "seeds/order_codes.yml": (
+            "seeds:\n  - name: order_codes\n    columns:\n      - name: code\n"
+            "        type: VARCHAR\n    audits:\n      - broken_check:\n"
+            "          severity: {severity}\n"
+        ),
+        "seeds/order_codes.csv": "code\nA\n",
+        "audits/generic/broken_check.sql": _BROKEN_AUDIT,
+        "models/coded_orders.sql": (
+            'MODEL (materialized table);\n\nSELECT code FROM __seed("order_codes")\n'
+        ),
+    },
+    "end": {
+        "models/orders.sql": "MODEL (materialized table);\n\nSELECT 'A' AS code\n",
+        "models/customers.sql": "MODEL (materialized table);\n\nSELECT 'A' AS code\n",
+        "audits/singular/broken_check.sql": (
+            "AUDIT (severity {severity});\n\n"
+            'SELECT o.code FROM __ref("orders") o JOIN __ref("customers") c USING (code)\n'
+            "JOIN main.missing_lookup m USING (code)\n"
+        ),
+    },
+}
+
+
+def prepare_audit_error_project(*, tmp_path: Path, audit_kind: str, severity: str) -> Path:
+    """Write a project whose broken_check audit reads a relation that does not exist."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            'name = "error_shop"\nadapter = "duckdb"\n\n'
+            f'[connection]\ndatabase = "{AUDIT_ERROR_DATABASE}"\n'
+        ),
+    }
+    files.update(
+        {
+            path: contents.replace("{severity}", severity)
+            for path, contents in _AUDIT_ERROR_TARGET_FILES[audit_kind].items()
+        }
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path, project_name="error_shop", repo_files=files
+    )
+    execute_duckdb(
+        db_path=project_dir / AUDIT_ERROR_DATABASE,
+        sql="CREATE TABLE main.raw_orders AS SELECT 'A' AS code",
+    )
+    return project_dir
+
+
+def audit_check_by_name(*, stdout: str, name: str) -> dict[str, object]:
+    """Return the build JSON check with the given name."""
+
+    return {check["name"]: check for check in json.loads(stdout)["checks"]}[name]
+
+
+def build_asset_statuses(stdout: str) -> dict[str, str]:
+    """Map asset names to their status in build JSON output."""
+
+    return {asset["name"]: asset["status"] for asset in json.loads(stdout)["assets"]}
