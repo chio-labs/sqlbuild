@@ -56,14 +56,18 @@ jobs:
           rules_performance=false
           broad=false
           changed=false
-          # The website builds and deploys in its own workflow, so a change that only touches it
-          # skips the Python checks and test suites.
-          website_only=true
+          # A change that only touches the website, root-level Markdown, the README demo GIFs or the
+          # skill pages generated from the website docs skips the Python checks and test suites.
+          # The website builds in its own workflow.
+          docs_only=true
           while IFS= read -r -d '' path; do
             changed=true
             case "${path}" in
-              website/*|.github/workflows/website.yml) ;;
-              *) website_only=false ;;
+              website/*|.github/workflows/website.yml|.github/demos/*) ;;
+              src/sqlbuild/.agents/skills/sqlbuild/references/docs/*.md) ;;
+              */*) docs_only=false ;;
+              *.md) ;;
+              *) docs_only=false ;;
             esac
             case "${path}" in
               crates/*|Cargo.toml|Cargo.lock|pyproject.toml|uv.lock)
@@ -119,7 +123,7 @@ jobs:
           fi
 
           checks=true
-          if [[ "${website_only}" == "true" ]]; then
+          if [[ "${docs_only}" == "true" ]]; then
             checks=false
           fi
 
