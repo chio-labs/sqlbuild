@@ -1,4 +1,7 @@
-# Semantic compilation
+---
+title: "Semantic Compilation"
+description: "Offline reference, semantic and type checks that sqb compile runs before any warehouse work."
+---
 
 `sqb compile` stays offline. It validates SQL references against each input separately, including
 models with no relation inputs. A join to an open source does not disable checks on a closed input.
@@ -16,7 +19,7 @@ An unqualified name that could belong to an open input cannot be rejected offlin
 
 Adopt a physical source schema with:
 
-```sh
+```bash
 sqb contract generate --from <target> --select source:raw_orders --write
 ```
 
@@ -40,15 +43,15 @@ Known output shapes also validate `unique_key`, `cursor`, `cursor_type`, `cursor
 
 Expression type checks are enabled for **DuckDB (including MotherDuck), PostgreSQL, Snowflake,
 and BigQuery**. Other adapters retain reference and semantic checks without expression type checks.
-`TYPE_CHECKED_DIALECTS` in `compiler/sql_analysis/constants.py` owns this gate.
 
 Proven bind-time rejections and implicit conversions are both errors. For example, DuckDB rejects
 `ordered_at > 5` for a TIMESTAMP column. Snowflake accepts `order_id = customer_code` for an
 INTEGER and a VARCHAR column, but the conversion fails on non-numeric values, so SQLBuild reports
 it as a blocking B217 error; write the conversion explicitly. Typed string literals such as
 `ordered_at > '2026-01-01'` remain valid. Columns from `SELECT *` are type-checked through their
-upstream shapes in every query. Unknown input types never cause type errors. Dialect coercions differ: numeric predicates are accepted by DuckDB
-but rejected by PostgreSQL, Snowflake, and BigQuery.
+upstream shapes in every query. Unknown input types never cause type errors. Dialect coercions
+differ: numeric predicates are accepted by DuckDB but rejected by PostgreSQL, Snowflake, and
+BigQuery.
 Snowflake's function catalogue is partial and deliberately does not reject unknown function names.
 Function signatures and overload coverage remain partial; compilation is not a replacement for
 executing SQL unit tests.
@@ -60,7 +63,8 @@ input columns are errors.
 Project function registration prevents unknown-function errors but does not declare return types to
 the validator: some expressions consuming a project function result remain unchecked. Raw external
 relations and scope-ordering cases also remain
-partially checked. An unknown cast type is a warning because extensions may install that type.
+partially checked. A cast to a type SQLBuild does not know is a B218 error. Types named in project
+contracts and function signatures are registered, so declare an extension-defined type there.
 
 One notice summarizes partial semantic checks. `sqb compile --json` includes per-model reasons in
 `semantic_checks_partial`; progress and notices go to stderr. The notice does not increment the
@@ -96,8 +100,7 @@ Type errors report uppercase types and available operand evidence, for example
 `o.ordered_at is TIMESTAMP, 5 is INTEGER`. Comparison help recommends a literal appropriate to the
 type family and dialect. Native spans are mapped back through normalization and macro expansion;
 simple binary expressions are underlined in full. Diagnostics without usable spans keep the
-authored query-start fallback. Per-operand labels and per-code documentation links are separate
-follow-ups.
+authored query-start fallback.
 
 Error recovery treats poisoned output names and their downstream lineage as provisional. A
 downstream error traceable only to that root is suppressed and counted in a root-error note;

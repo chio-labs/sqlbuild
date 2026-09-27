@@ -6,6 +6,7 @@
 			"docs/quickstart",
 			"docs/feature-comparison",
 			"docs/roadmap",
+			"docs/upgrading",
 			"docs/benchmarks"
 		]
 	},
@@ -22,6 +23,7 @@
 		"items": [
 			"docs/concepts/project-configuration",
 			"docs/concepts/resource-identities",
+			"docs/concepts/semantic-compilation",
 			{
 				"label": "Adapters",
 				"collapsed": true,

@@ -370,11 +370,6 @@ disables an inherited sample for a path or model. CLI `--sample-rows`, `--sample
 
 ## Settings
 
-SQLBuild projects run in direct mode. `virtual_environments` (including `false`),
-`changes_only`, `[targets.<name>.state]`, and `janitor.max_checkpoints` have been removed.
-Remove these keys from project and local configuration files. The `prepare_version`
-custom materialization hook has also been removed; materializations defining it fail to load.
-
 Global feature toggles:
 
 ```toml
