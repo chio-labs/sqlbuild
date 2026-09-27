@@ -45,10 +45,10 @@ The `dagster` and `rivers` templates keep orchestrator code outside the SQLBuild
 sqlbuild-playground/
   definitions.py     # Dagster or Rivers definitions pointing at waffle_shop/
   README.md          # setup instructions
-  waffle_shop/       # the waffle shop SQLBuild project
+  waffle_shop/       # the waffle shop SQLBuild project, including agent skill files
 ```
 
-The Dagster `definitions.py` uses `sqlbuild_assets`, `sqlbuild_scenario_checks`, and `SqlBuildCliResource`; the Rivers `definitions.py` defines a `waffle_shop` job. Run `sqb` commands from `waffle_shop/` and the orchestrator from the top-level directory.
+The Dagster `definitions.py` uses `sqlbuild_assets`, `sqlbuild_scenario_checks`, and `SqlBuildCliResource`; the Rivers `definitions.py` defines a `waffle_shop` job. Run `sqb` commands from `waffle_shop/` and the orchestrator from the top-level directory. Agent skill files are installed in `waffle_shop/`, where `sqb skills` and stale-skill checks maintain them.
 
 The `python_nodes` template instead creates a focused Python-nodes project:
 

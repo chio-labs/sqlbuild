@@ -22,3 +22,11 @@ class RunPlaygroundTestCase:
     template: str = "waffle_shop"
     expected_color_fragments: tuple[str, ...] = ()
     project_subdir: str = ""
+
+
+@dataclass(frozen=True)
+class WrapperPlaygroundSkillsTestCase:
+    description: str
+    template: str
+    project_subdir: str
+    skill_file: str

@@ -9,12 +9,15 @@ from sqlbuild.cli.commands._helpers.playground import (
     completion_output as playground_completion_output,
 )
 from sqlbuild.cli.commands._helpers.playground.copy import create_playground_project
+from sqlbuild.cli.commands._helpers.skills.update import maintain_sqlbuild_skills
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.main.workspace._playground import run_playground
 from sqlbuild.cli.commands.models import PlaygroundCommandRequest
+from sqlbuild.cli.output.models import SkillMaintenanceResult
 from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
     CreatePlaygroundProjectTestCase,
     RunPlaygroundTestCase,
+    WrapperPlaygroundSkillsTestCase,
 )
 
 
@@ -438,7 +441,7 @@ def test_given_playground_command_when_running_then_it_prints_next_steps(
         assert expected_fragment in captured.out
     project_dir: Path = tmp_path / test_case.target_path / test_case.project_subdir
     assert (project_dir / "sqlbuild_project.toml").is_file()
-    assert (tmp_path / test_case.target_path / ".agents/skills/sqlbuild/SKILL.md").is_file()
+    assert (project_dir / ".agents/skills/sqlbuild/SKILL.md").is_file()
 
 
 @pytest.mark.parametrize(
@@ -479,3 +482,44 @@ def test_given_color_terminal_when_running_playground_command_then_it_styles_key
     expected_fragment: str
     for expected_fragment in test_case.expected_color_fragments:
         assert expected_fragment in captured.out
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        WrapperPlaygroundSkillsTestCase(
+            description="dagster playground installs skills maintained from the nested project",
+            template="dagster",
+            project_subdir="waffle_shop",
+            skill_file=".agents/skills/sqlbuild/SKILL.md",
+        ),
+        WrapperPlaygroundSkillsTestCase(
+            description="rivers playground installs skills maintained from the nested project",
+            template="rivers",
+            project_subdir="waffle_shop",
+            skill_file=".claude/skills/sqlbuild/SKILL.md",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_wrapper_playground_when_maintaining_skills_then_nested_project_sees_installed_skills(
+    test_case: WrapperPlaygroundSkillsTestCase,
+    tmp_path: Path,
+) -> None:
+    exit_code: int = run_playground(
+        PlaygroundCommandRequest(
+            project_dir=tmp_path, target_path="orchestrator", template=test_case.template
+        )
+    )
+    wrapper_dir: Path = tmp_path / "orchestrator"
+    project_dir: Path = wrapper_dir / test_case.project_subdir
+
+    fresh: SkillMaintenanceResult = maintain_sqlbuild_skills(project_dir=project_dir)
+    installed_skill: Path = project_dir / test_case.skill_file
+    installed_skill.write_text("edited\n", encoding="utf-8")
+    stale: SkillMaintenanceResult = maintain_sqlbuild_skills(project_dir=project_dir)
+
+    assert exit_code == 0
+    assert not (wrapper_dir / test_case.skill_file).exists()
+    assert fresh.message == ""
+    assert "SQLBuild skill files are out of date" in stale.message

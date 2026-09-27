@@ -48,6 +48,9 @@ SUPPORTED_TYPED_SELECTOR_KINDS: frozenset[str] = frozenset(
     }
 )
 PLAYGROUND_ORCHESTRATED_PROJECT_DIR: str = "waffle_shop"
+PLAYGROUND_ORCHESTRATED_TEMPLATES: frozenset[PlaygroundTemplate] = frozenset(
+    {PlaygroundTemplate.DAGSTER, PlaygroundTemplate.RIVERS}
+)
 PLAYGROUND_TEMPLATE_VALUES: tuple[str, ...] = tuple(
     template.value for template in PlaygroundTemplate
 )

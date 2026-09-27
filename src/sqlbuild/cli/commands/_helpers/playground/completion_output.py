@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands.constants import PLAYGROUND_ORCHESTRATED_PROJECT_DIR
+from sqlbuild.cli.commands.constants import (
+    PLAYGROUND_ORCHESTRATED_PROJECT_DIR,
+    PLAYGROUND_ORCHESTRATED_TEMPLATES,
+)
 from sqlbuild.cli.commands.models import (
     PlaygroundCommandRequest,
     PlaygroundTarget,
@@ -38,7 +41,7 @@ def render_playground_completion_text(
 
 
 def _suggested_commands(*, template: PlaygroundTemplate, display_path: str) -> tuple[str, ...]:
-    orchestrated: bool = template in (PlaygroundTemplate.DAGSTER, PlaygroundTemplate.RIVERS)
+    orchestrated: bool = template in PLAYGROUND_ORCHESTRATED_TEMPLATES
     project_path: str = (
         f"{display_path}/{PLAYGROUND_ORCHESTRATED_PROJECT_DIR}" if orchestrated else display_path
     )
