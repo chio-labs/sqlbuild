@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.122.0](https://github.com/chio-labs/sqlbuild/compare/v0.121.0...v0.122.0) (2026-09-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* audit files outside audits/generic/ and audits/singular/ no longer compile; single-model, source-only, seed-only, and resource-free singular audits fail with P004; top-level audits, schemas, and hooks used only under one folder must move to that folder's _sqlbuild/ roles; unknown seed YAML keys are rejected.
+
+### Features
+
+* scope audits, schemas and hooks, add seed audits and gate targets on attached audits ([#855](https://github.com/chio-labs/sqlbuild/issues/855)) ([8966898](https://github.com/chio-labs/sqlbuild/commit/8966898386ba56e650b734b4df88418f0c2be545))
+
 ## [0.121.0](https://github.com/chio-labs/sqlbuild/compare/v0.120.0...v0.121.0) (2026-09-27)
 
 
