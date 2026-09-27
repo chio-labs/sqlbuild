@@ -37,6 +37,37 @@
   Any per-diagnostic, per-reference, or per-token work must be bounded by a test with a strict time
   limit. A path that is only slow when something is wrong is still a regression.
 
+## Performance Work
+
+- Never compare timings across different machines, runners, or sessions. Every performance claim
+  must come from a same-machine comparison: base and candidate built from the same toolchain, run
+  alternately at least three times each, reporting medians of both wall time and CPU time
+  (user+sys) plus the per-phase `compile_timings`.
+- On shared local machines, confirm no concurrent builds or benchmarks are running and record the
+  load average. If load exceeds the core count, treat wall times as unreliable and report CPU time.
+- Hosted CI runners vary by up to ~60%. Do not diagnose regressions from absolute CI budgets or
+  from runs on different runners; use the same-runner ratio guard or a same-job paired comparison.
+- Before attributing a regression to a cause, prove it with an on/off experiment (a temporary
+  kill switch or a revert) on the same machine. Profiles identify suspects; experiments convict.
+  Remove experiment switches before committing.
+- Measure the modes users run: cold without cache, cold writing the cache, and warm. A change that
+  affects analysis, validation, or caching must report all three.
+- Performance fixes must not reduce coverage. Show that diagnostics are unchanged or a strict,
+  validated superset on the dense benchmark and a real-project run.
+- Do not raise performance budgets or tolerances to make a regression pass.
+
+## Native SQL (Polyglot) Changes
+
+- Treat every Polyglot change as a compiler change: before adopting a new Polyglot version, run the
+  same-machine dense and fresh 3,000-model comparisons against the current version and report the
+  ratio and per-phase timings.
+- Polyglot diagnostics adopted by SQLBuild are enforceable errors or dropped. Never surface a new
+  native finding as a non-blocking warning; map it to a SQLBuild error code with a mechanical remedy.
+- Coverage conditions must not depend on incidental query shape (for example, only checking
+  statements with a set operation). Checks apply uniformly or the gap is documented and ticketed.
+- Run the Polyglot feature-gate checks (`make test-rust-feature-gates`) before pushing Polyglot
+  changes; cross-module helpers must respect feature gates.
+
 ## Public Repository Hygiene
 
 - Treat every tracked file, generated artifact, fixture, benchmark, filename, commit, branch, pull
@@ -87,6 +118,9 @@
   requests local verification or CI is unavailable.
 - State the expected verification scope in subagent prompts and explicitly prohibit unnecessary full-suite runs.
 - Do not delay committing and pushing a focused fix solely to repeat checks already completed successfully by another agent or CI.
+- Subagents reporting performance results must include wall time, CPU time, run count, machine
+  load, and whether base and candidate ran on the same machine. Results lacking these are
+  hypotheses, not evidence.
 
 ## State and Source of Truth
 
