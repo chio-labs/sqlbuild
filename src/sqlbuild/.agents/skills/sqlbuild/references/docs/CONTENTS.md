@@ -10,7 +10,6 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [Quickstart](quickstart.md) (`quickstart`) - Get a SQLBuild project running locally with DuckDB in under a minute.
 - [Feature Comparison](feature-comparison.md) (`feature-comparison`) - Feature comparison between SQLBuild, dbt, and SQLMesh.
 - [Roadmap](roadmap.md) (`roadmap`) - What's coming next in SQLBuild.
-- [Upgrading](upgrading.md) (`upgrading`) - Changes that need action when you upgrade a project.
 - [Benchmarks](benchmarks.md) (`benchmarks`) - Complete compiler performance on projects with thousands of models, SQL tests, and audit attachments.
 
 ## dbt Compatibility
