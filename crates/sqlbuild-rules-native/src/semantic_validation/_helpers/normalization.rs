@@ -197,6 +197,7 @@ fn skip_non_code(sql: &str, index: usize) -> Result<Option<usize>, String> {
             backtick_identifiers: true,
             single_quote_backslash_escapes: true,
             double_quote_backslash_escapes: false,
+            dollar_quotes: true,
         },
     )
     .map_err(|error| format!("invalid SQL analysis input: {error:?}"))
