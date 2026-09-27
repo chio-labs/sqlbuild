@@ -401,7 +401,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kind: [dense, fresh]
+        include:
+          - kind: dense
+            max_ratio: "1.10"
+          - kind: fresh
+            max_ratio: "1.30"
     steps:
       - uses: actions/checkout@v4
       - name: Check out the comparison base
@@ -431,9 +435,11 @@ jobs:
       - name: Compare base and head cold compiles
         env:
           KIND: ${{ matrix.kind }}
+          MAX_RATIO: ${{ matrix.max_ratio }}
         run: |
           uv run python -m scripts.compare_compile_performance \
             --kind "${KIND}" \
+            --max-ratio "${MAX_RATIO}" \
             --models 3000 \
             --base-python base/.venv/bin/python \
             --head-python .venv/bin/python

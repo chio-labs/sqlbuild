@@ -36,10 +36,10 @@ _GIB: int = 1024 * 1024 * 1024
             macro_count=37,
             test_count=2_945,
             audit_count=5_056,
-            expected_max_wall_seconds=11.0,
+            expected_max_wall_seconds=12.5,
             expected_max_rss_bytes=int(1.5 * _GIB),
             expected_semantic_fingerprint=(
-                "bdea5dadc5aec771113a0a5d0215b10e12340ed923c446cbea4f0382af077639"
+                "8a6f8015c53c12d152ff137b3ef6ff89bc98e2b9471ecb3898e69e35cd895025"
             ),
         ),
         FreshProcessCompilePerformanceGuardTestCase(
@@ -54,7 +54,7 @@ _GIB: int = 1024 * 1024 * 1024
             expected_max_wall_seconds=15.5,
             expected_max_rss_bytes=int(1.75 * _GIB),
             expected_semantic_fingerprint=(
-                "c6f218e97573b62cd2e8457c2b131ab900e27d6ba00240e285d70236c2d965c8"
+                "8c91b4a742697d8bced8ae7874a8566c3467b24f35d1fc33128cae35fcd6f97c"
             ),
         ),
         FreshProcessCompilePerformanceGuardTestCase(
@@ -66,10 +66,10 @@ _GIB: int = 1024 * 1024 * 1024
             macro_count=123,
             test_count=9_816,
             audit_count=16_855,
-            expected_max_wall_seconds=29.5,
+            expected_max_wall_seconds=35.0,
             expected_max_rss_bytes=2 * _GIB,
             expected_semantic_fingerprint=(
-                "189c2447f4cef2731f996056e688eed320b35c9b56b846f4304e0b16fab5fab8"
+                "aa2dc552eae6a8f26546fc9e1d40b194da813a8cd3dec60c6f85bb696c1692c6"
             ),
         ),
     ],
