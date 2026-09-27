@@ -64,6 +64,7 @@ from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTi
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.main.render_result import format_result
+from sqlbuild.rule_engine.main.render_skipped_rules import format_skipped_type_proof_rules
 from sqlbuild.rule_engine.main.run_rules import run_rules
 from sqlbuild.rule_engine.models import RulesCacheConfig, RulesConfig, RulesResult, RulesRunResult
 from sqlbuild.runtime.contracts.main.open_connection import open_connection_with_hooks
@@ -114,11 +115,16 @@ def run_compile_pipeline(
             discovered_inputs=discovered_inputs,
             project=project,
         ),
+        no_sql_analysis=resolved_options.no_sql_validation,
     )
     if on_progress is not None:
+        skipped_rules_note: str | None = format_skipped_type_proof_rules(
+            codes=rules_result.skipped_type_proof_rules
+        )
         on_progress(
             f"Evaluated rules. (built-in {rules_result.built_in_ms / 1000:.2f}s, "
             f"custom {rules_result.custom_ms / 1000:.2f}s)"
+            + ("" if skipped_rules_note is None else f"; {skipped_rules_note}")
         )
     if rules_result.findings:
         rendered: str = format_result(

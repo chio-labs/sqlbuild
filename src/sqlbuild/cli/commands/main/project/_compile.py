@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -31,6 +32,7 @@ from sqlbuild.compiler.profiling.main.collect import collect_compile_timings
 from sqlbuild.compiler.profiling.models import CompileTimingCollector
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.presentation.main.supports_color import supports_color
+from sqlbuild.rule_engine.main.render_skipped_rules import format_skipped_type_proof_rules
 
 
 def run_compile(request: CompileCommandRequest) -> int:
@@ -143,6 +145,11 @@ def _run_compile_with_status(
 
     if status is not None:
         status.close()
+    skipped_rules_note: str | None = format_skipped_type_proof_rules(
+        codes=analysis.skipped_type_proof_rules
+    )
+    if skipped_rules_note is not None:
+        print(f"note: {skipped_rules_note}", file=sys.stderr)
 
     if json_output:
         print(

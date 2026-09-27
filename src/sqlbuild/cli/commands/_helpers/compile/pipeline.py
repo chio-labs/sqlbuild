@@ -210,6 +210,7 @@ def _analyze_compile_project(
             selected_keys=selected_keys if select or exclude else None,
             prepared_sql=early_lint.preparation,
             expansion_reuse=early_lint.expansion_reuse,
+            no_sql_analysis=no_sql_validation,
         )
         _ = complete_compile_phase(
             status=status,
@@ -246,6 +247,7 @@ def _analyze_compile_project(
         custom_rules_ms=rules_result.custom_ms,
         rule_cache_hits=rules_result.cache_hits,
         rule_cache_misses=rules_result.cache_misses,
+        skipped_type_proof_rules=rules_result.skipped_type_proof_rules,
     )
 
 

@@ -62,6 +62,7 @@ class CompileAnalysis:
     custom_rules_ms: int = 0
     rule_cache_hits: int = 0
     rule_cache_misses: int = 0
+    skipped_type_proof_rules: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

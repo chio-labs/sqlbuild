@@ -38,6 +38,7 @@ from sqlbuild.rule_engine._helpers.engine.native import (
     finalize_native_findings,
     native_catalogue,
 )
+from sqlbuild.rule_engine.constants import TYPE_PROOF_RULE_CODES
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.models import (
@@ -73,6 +74,7 @@ def evaluate_rules(
     selected_keys: frozenset[CompiledObjectKey] | None = None,
     prepared_sql: PreparedSqlLint | None = None,
     expansion_reuse: SqlExpansionReuse | None = None,
+    no_sql_analysis: bool = False,
 ) -> RulesRunResult:
     """Evaluate independent rule phases concurrently, then finalize their combined findings."""
     effective_config: RulesConfig = resolve_rule_ignore_selectors(
@@ -89,6 +91,12 @@ def evaluate_rules(
     selected: tuple[Rule, ...] = select_rules(
         catalogue=catalogue, config=effective_config, project_dir=resolved_project_dir
     )
+    skipped_type_proof_rules: tuple[str, ...] = ()
+    if no_sql_analysis or not graph.project.settings.sql_analysis:
+        skipped_type_proof_rules = tuple(
+            rule.code for rule in selected if rule.code in TYPE_PROOF_RULE_CODES
+        )
+        selected = tuple(rule for rule in selected if rule.code not in TYPE_PROOF_RULE_CODES)
     native_rules: tuple[Rule, ...] = tuple(rule for rule in selected if not rule.custom)
     custom_rules: tuple[Rule, ...] = tuple(rule for rule in selected if rule.custom)
     if custom_rules:
@@ -149,6 +157,7 @@ def evaluate_rules(
         custom_ms=result.custom_ms,
         cache_hits=result.cache_hits + sql_result.cache_hits,
         cache_misses=result.cache_misses + sql_result.cache_misses,
+        skipped_type_proof_rules=skipped_type_proof_rules,
     )
 
 

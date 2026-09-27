@@ -227,3 +227,13 @@ class EmptyInputTestRuleCacheTestCase:
     replacement_mock: str
     expected_first_codes: tuple[str, ...]
     expected_second_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TypeProofRuleCompileTestCase:
+    description: str
+    project_toml: str
+    extra_args: tuple[str, ...]
+    expected_returncode: int
+    expected_rule_findings: int
+    expected_note_count: int
