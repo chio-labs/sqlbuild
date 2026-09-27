@@ -121,13 +121,14 @@ def test_given_complete_contract_when_clause_references_missing_column_then_comp
 
     output: str = capsys.readouterr().out
     assert exit_code == test_case.expected_exit_code
+    assert f"error[{test_case.expected_error_code}]" in output
+    assert f"'{test_case.missing_column}'" in output
+    assert "(context:" not in output
+    assert "model: downstream" in output
     assert (
-        f"error[{test_case.expected_error_code}]: Unknown column '{test_case.missing_column}'"
+        f"--> models/downstream.sql:2:{test_case.query_sql.index(test_case.missing_column) + 1}"
         in output
     )
-    assert "(context:" in output
-    assert "model: downstream" in output
-    assert "--> models/downstream.sql:2:" in output
 
 
 @pytest.mark.parametrize(
@@ -170,13 +171,13 @@ def test_given_two_complete_contracts_when_unqualified_column_is_ambiguous_then_
     "test_case",
     [
         SemanticBindingIntegrationTestCase(
-            description="given partial upstream when column absence is unproven then compile succeeds",
-            expected_exit_code=0,
+            description="explicit projection closes output names over an open input",
+            expected_exit_code=1,
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_partial_upstream_when_column_absence_is_unproven_then_compile_succeeds(
+def test_given_explicit_projection_when_output_column_is_missing_then_compile_fails(
     test_case: SemanticBindingIntegrationTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -193,7 +194,7 @@ def test_given_partial_upstream_when_column_absence_is_unproven_then_compile_suc
 
     output: str = capsys.readouterr().out
     assert exit_code == test_case.expected_exit_code
-    assert "error[B" not in output
+    assert "error[B002]" in output
 
 
 @pytest.mark.parametrize(
@@ -203,7 +204,7 @@ def test_given_partial_upstream_when_column_absence_is_unproven_then_compile_suc
             description="given default enforced source contract when column is missing then compile fails",
             source_contract_yaml="",
             expected_exit_code=1,
-            expected_output_fragment="error[B002]: Unknown column 'missing' in table 'raw_orders'",
+            expected_output_fragment="error[B002]: Unknown column 'missing' in raw_orders",
             expected_absent_output_fragment="0 errors, 0 warnings",
         ),
         SourceContractDefaultIntegrationTestCase(

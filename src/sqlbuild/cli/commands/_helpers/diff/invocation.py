@@ -34,13 +34,11 @@ def resolve_diff_invocation(*, request: DiffCommandRequest) -> DiffInvocation:
         if is_query_diff_request(request=request)
         else discover_project_inputs(project_dir=effective_project_dir)
     )
-    is_virtual_mode: bool = discovered_inputs.project_config.settings.virtual_environments
-    if not request.select and not is_virtual_mode and not is_query_diff_request(request=request):
+    if not request.select and not is_query_diff_request(request=request):
         raise CliUserError("diff requires --select in v1", code="C204")
     return DiffInvocation(
         effective_project_dir=effective_project_dir,
         discovered_inputs=discovered_inputs,
-        is_virtual_mode=is_virtual_mode,
     )
 
 
@@ -119,8 +117,6 @@ def _validate_query_diff_request(*, request: DiffCommandRequest) -> None:
             "raw-query diff does not support --bounded; filter both raw queries explicitly",
             code="C214",
         )
-    if request.allow_partial_diff:
-        raise CliUserError("raw-query diff does not use --allow-partial-diff", code="C215")
     if request.max_models is not None:
         raise CliUserError("raw-query diff does not accept --max-models", code="C243")
     if request.left_label is not None and not request.left_label.strip():

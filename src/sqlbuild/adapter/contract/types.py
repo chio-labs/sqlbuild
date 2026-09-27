@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from enum import StrEnum
-from typing import Protocol
+from typing import Literal, Protocol
 
 from sqlbuild.compiler.lineage.types import InferredNullability
 
 type FunctionNullabilityRule = Callable[[tuple[InferredNullability, ...]], InferredNullability]
+type StatementSizeLimit = tuple[int, Literal["bytes", "characters"]]
 
 
 class AdapterExecute[ConnectionT, ResultT](Protocol):

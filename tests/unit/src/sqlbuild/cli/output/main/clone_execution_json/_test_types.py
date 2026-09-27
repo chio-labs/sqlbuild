@@ -11,11 +11,3 @@ class CloneExecutionJsonTestCase:
     expected_asset_statuses: tuple[str, ...]
     expected_asset_actions: tuple[str, ...]
     expected_summary: dict[str, int]
-
-
-@dataclass(frozen=True)
-class VirtualCloneExecutionJsonTestCase:
-    description: str
-    expected_status: str
-    expected_asset_statuses: tuple[str, ...]
-    expected_summary: dict[str, int]

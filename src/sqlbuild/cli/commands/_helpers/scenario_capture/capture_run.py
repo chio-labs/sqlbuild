@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands._helpers.scenario_output.namespace import (
+    scenario_activity_message,
+    write_namespace_completion,
+)
 from sqlbuild.cli.commands._helpers.scenario_output.result_output import render_result_error
 from sqlbuild.cli.commands.constants import SUCCESS_STATUS
 from sqlbuild.cli.commands.models import ScenarioRunOutputContext
@@ -67,8 +71,11 @@ def run_scenario_capture_run(
         use_color=use_color,
     )
     status_is_tty: bool = hasattr(progress_stream, "isatty") and progress_stream.isatty()
+    activity: str = scenario_activity_message(
+        activity="Capturing scenarios...", context=output_context
+    )
     if not status_is_tty:
-        progress_stream.write("Capturing scenarios...\n\n")
+        progress_stream.write(f"{activity}\n\n")
         progress_stream.flush()
     results: tuple[ScenarioSnapshotCaptureRunResult, ...] = run_scenario_capture_pipeline(
         project_dir=project_dir,
@@ -92,7 +99,7 @@ def run_scenario_capture_run(
             ),
         ),
         on_scenario_start=lambda _scenario: (
-            scenario_status.start("Capturing scenarios...") if status_is_tty else None
+            scenario_status.start(activity) if status_is_tty else None
         ),
         on_scenario_complete=lambda _scenario, scenario_plan, result: _complete_capture_run(
             scenario_status=scenario_status,
@@ -122,6 +129,7 @@ def run_scenario_capture_run(
         + "\n"
     )
     progress_stream.flush()
+    write_namespace_completion(context=output_context, succeeded=fail_count == 0)
     return (0 if fail_count == 0 else 1), capture_results_out
 
 

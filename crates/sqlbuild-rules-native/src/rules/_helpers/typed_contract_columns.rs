@@ -14,6 +14,7 @@ pub(crate) fn evaluate(model: &Model, rule: &RuleMetadata, faults: &FaultCollect
     for column in &model.columns {
         if column.data_type.trim().is_empty() {
             faults.push(Fault {
+                unevaluated: false,
                 code: rule.code.clone(),
                 path: model.relative_path.clone(),
                 line: 1,
@@ -26,6 +27,7 @@ pub(crate) fn evaluate(model: &Model, rule: &RuleMetadata, faults: &FaultCollect
     for family in &model.dynamic_columns {
         if family.data_type.trim().is_empty() {
             faults.push(Fault {
+                unevaluated: false,
                 code: rule.code.clone(),
                 path: model.relative_path.clone(),
                 line: 1,

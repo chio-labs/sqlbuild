@@ -27,8 +27,6 @@ def deterministic_microbatch_event_id(
         scope.target_schema,
         scope.target_name,
         scope.physical_generation_id,
-        scope.virtual_environment_name,
-        scope.virtual_model_version_hash,
         record_type.value,
         partition_start,
         partition_end,

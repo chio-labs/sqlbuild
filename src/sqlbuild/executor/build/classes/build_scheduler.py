@@ -1059,12 +1059,7 @@ class BuildScheduler:
                         microbatch_event_store=microbatch_event_store,
                         microbatch_event_store_resolver=microbatch_event_store_resolver,
                         microbatch_scope=microbatch_scope,
-                        microbatch_model_version_hash=(
-                            microbatch_scope.virtual_model_version_hash
-                            if microbatch_scope is not None
-                            and microbatch_scope.virtual_model_version_hash is not None
-                            else model_entry.fingerprint_version_hash
-                        ),
+                        microbatch_model_version_hash=model_entry.fingerprint_version_hash,
                         microbatch_unaccounted_partition_policy=(
                             model_entry.unaccounted_partition_policy
                             or self._runtime.microbatch_unaccounted_partition_policy

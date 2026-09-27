@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import orjson
 
+from sqlbuild.cli.commands._helpers.compile.semantic_notice import (
+    selected_semantic_coverage,
+    semantic_coverage_notice,
+)
 from sqlbuild.cli.commands.constants import TARGET_DIRECTORY_NAME
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.output.models import (
@@ -56,6 +61,7 @@ def format_compile_text(
     lineage_mode: CompileLineageMode = CompileLineageMode.FAST,
     use_color: bool,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
+    sql_validation_enabled: bool = True,
 ) -> str:
     """Format human-readable compile output."""
 
@@ -94,11 +100,29 @@ def format_compile_text(
         )
         lines.append("  " + style.muted("Use --json for the full compile report."))
     lines.append("")
+    notice: str | None = semantic_coverage_notice(
+        project=graph.project,
+        selected_keys=selected_keys,
+        sql_validation_enabled=sql_validation_enabled,
+    )
+    if notice:
+        lines.append(notice)
+        lines.append("")
     if diagnostics:
         lines.append(
             _format_diagnostics_text(
                 diagnostics=diagnostics,
-                source_texts=_model_source_texts(graph.project.models),
+                source_texts={
+                    **_model_source_texts(graph.project.models),
+                    **{
+                        source.source_file.relative_path: source.source_file.contents
+                        for source in graph.project.sources
+                    },
+                    **{
+                        test.test_file.relative_path: test.test_file.contents
+                        for test in graph.project.sql_tests
+                    },
+                },
                 style=style,
             )
         )
@@ -159,6 +183,7 @@ def format_compile_json(
     diagnostics: tuple[CompilerDiagnostic, ...],
     lineage_mode: CompileLineageMode = CompileLineageMode.FAST,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
+    sql_validation_enabled: bool = True,
 ) -> str:
     """Serialize the offline compile report as JSON."""
 
@@ -173,6 +198,11 @@ def format_compile_json(
             selected_keys=selected_keys,
         ),
         "diagnostics": [_diagnostic_to_json(diagnostic) for diagnostic in diagnostics],
+        "semantic_checks_partial": selected_semantic_coverage(
+            project=graph.project,
+            selected_keys=selected_keys,
+            sql_validation_enabled=sql_validation_enabled,
+        ),
         "compile_timings": timings_ms,
         "lineage_mode": lineage_mode.value,
         "resources": _resources(graph=graph, lineage=lineage),
@@ -503,6 +533,10 @@ def _diagnostic_to_json(diagnostic: CompilerDiagnostic) -> dict[str, object]:
         ]
     if diagnostic.help is not None:
         payload["help"] = diagnostic.help
+    if diagnostic.notes:
+        payload["notes"] = list(diagnostic.notes)
+    if diagnostic.affected_rules:
+        payload["affected_rules"] = list(diagnostic.affected_rules)
     return payload
 
 
@@ -523,7 +557,17 @@ def _format_diagnostics_text(
     *, diagnostics: tuple[CompilerDiagnostic, ...], source_texts: dict[Path, str], style: CliStyle
 ) -> str:
     lines: list[str] = []
+    warning_counts: Counter[CompilerDiagnostic] = Counter(
+        diagnostic
+        for diagnostic in diagnostics
+        if diagnostic.severity == DiagnosticSeverity.WARNING
+    )
+    shown_warnings: set[CompilerDiagnostic] = set()
     for diagnostic in diagnostics:
+        if diagnostic in shown_warnings:
+            continue
+        if diagnostic.severity == DiagnosticSeverity.WARNING:
+            shown_warnings.add(diagnostic)
         lines.extend(
             _format_diagnostic_text(
                 diagnostic=diagnostic,
@@ -531,6 +575,9 @@ def _format_diagnostics_text(
                 style=style,
             )
         )
+        count: int = warning_counts[diagnostic]
+        if count > 1:
+            lines.append(f"  = {count} occurrences; all retained in JSON and the warning count")
         lines.append("")
     if lines:
         lines.pop()
@@ -549,8 +596,7 @@ def _format_diagnostic_text(
             diagnostic.resource_type is not None
             and str(diagnostic.resource_type) != CompiledResourceType.MODEL
         ):
-            label = "resource"
-            resource = f"{diagnostic.resource_type}: {resource}"
+            label = str(diagnostic.resource_type).replace("_", " ")
         lines.append(f"  {label}: {style.object_name(resource)}")
     if diagnostic.location is not None:
         lines.extend(
@@ -571,6 +617,9 @@ def _format_diagnostic_text(
                 source_texts=source_texts,
             )
         )
+    lines.extend(f"  {style.muted('= note:')} {note}" for note in diagnostic.notes)
+    if diagnostic.affected_rules:
+        lines.append(f"  {style.muted('= affected Rules:')} {', '.join(diagnostic.affected_rules)}")
     if diagnostic.help is not None:
         lines.append(f"  {style.muted('= help:')} {diagnostic.help}")
     return lines

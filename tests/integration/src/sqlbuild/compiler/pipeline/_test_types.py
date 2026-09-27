@@ -7,6 +7,110 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 
 
 @dataclass(frozen=True)
+class ExpressionMemoCase:
+    description: str
+    expression: str
+    expected_analysis_calls: int = 1
+
+
+@dataclass(frozen=True)
+class ExpressionBatchCase:
+    description: str
+    orders_expression: str
+    customers_expression: str
+    expected_batches: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class ShapeCacheCase:
+    description: str
+    sql: str
+    expected_columns: int = 2
+    expected_star: bool = True
+
+
+@dataclass(frozen=True)
+class IdentifierBindingCase:
+    description: str
+    dialect: str
+    projection: str
+    reference: str
+    expected_codes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ValidationCacheCase:
+    description: str
+    enabled: bool
+    expected_hits: int
+    expected_bypasses: int
+
+
+@dataclass(frozen=True)
+class NativeCatalogCase:
+    description: str
+    sql: str
+    expected_codes: tuple[str, ...] = ()
+    spelling: str = "MiSsPeLlEd"
+    expected_sql: str = "SELECT * FROM __sqlbuild_table_function_table_fn__orders"
+
+
+@dataclass(frozen=True)
+class SemanticCompileCase:
+    description: str
+    upstream: str
+    downstream: str
+    expected_code: str | None
+    header: str = "MODEL (materialized view);\n"
+    expected_diagnostic_count: int = 1
+    expected_column: int | None = None
+
+
+@dataclass(frozen=True)
+class DiagnosticUxCase:
+    description: str
+    edits: tuple[tuple[str, str, str], ...]
+    extra_files: tuple[tuple[str, str], ...] = ()
+    expected_errors: int = 1
+    expected_fragments: tuple[str, ...] = ()
+    expected_partial: bool = True
+
+
+@dataclass(frozen=True)
+class ColumnSuggestionCase:
+    description: str
+    name: str
+    columns: tuple[str, ...]
+    expected_match: str | None
+
+
+@dataclass(frozen=True)
+class SemanticTriageCase:
+    description: str
+    column_type: str = "DATE"
+    cursor_type: str = "timestamp"
+    setting: str = ""
+    expected_codes: tuple[str, ...] = ()
+    independent_sql: str = ""
+    root_contract: str = ""
+
+
+@dataclass(frozen=True)
+class SnowflakeSemanticReleaseCase:
+    description: str
+    sql: str
+    expected_codes: tuple[str, ...] = ()
+    expected_exit_code: int = 0
+
+
+@dataclass(frozen=True)
+class SnowflakeOutputInferenceCase:
+    description: str
+    sql: str
+    expected_type: str | None = None
+
+
+@dataclass(frozen=True)
 class RulesPipelineIntegrationTestCase:
     """One configured Rules failure in the shared planning compiler."""
 
@@ -249,3 +353,15 @@ class ReshapedStarLineageIntegrationTestCase:
     description: str
     query_sql: str
     expected_sources: tuple[frozenset[tuple[str, str]], ...]
+
+
+@dataclass(frozen=True)
+class SharedBindingQueryCase:
+    description: str
+    orders_summary_sql: str
+    customers_summary_sql: str
+    expected_shared_queries: int
+    expected_codes: tuple[str, ...] = ()
+    later_models: tuple[tuple[str, str], ...] = ()
+    expected_lineage: tuple[tuple[str, str], ...] = ()
+    expected_findings: tuple[tuple[str, str], ...] = ()

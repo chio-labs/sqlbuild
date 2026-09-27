@@ -34,6 +34,58 @@ struct AnalysisRequest {
     schema: Option<ValidationSchema>,
     #[serde(default)]
     binding_schema: Option<ValidationSchema>,
+    #[serde(default)]
+    binding_options: Option<BindingOptions>,
+    #[serde(default)]
+    binding_references: Option<Vec<(String, bool)>>,
+    #[serde(default)]
+    binding_override: Option<usize>,
+    /// Relation stubs in `sql` that rename the catalog relations of the binding schema.
+    #[serde(default)]
+    binding_aliases: Option<HashMap<String, String>>,
+    #[serde(default)]
+    analysis_references: Option<Vec<(String, String)>>,
+    #[serde(default)]
+    sqlbuild_diagnostics: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct BindingOptions {
+    #[serde(default)]
+    check_types: bool,
+    #[serde(default)]
+    semantic: bool,
+    #[serde(default)]
+    known_functions: Vec<String>,
+    #[serde(default)]
+    known_types: Vec<String>,
+}
+
+impl AnalysisRequest {
+    fn validation_options(&self) -> SchemaValidationOptions {
+        SchemaValidationOptions {
+            check_types: self
+                .binding_options
+                .as_ref()
+                .is_some_and(|options| options.check_types),
+            semantic: self
+                .binding_options
+                .as_ref()
+                .is_some_and(|options| options.semantic),
+            known_functions: self
+                .binding_options
+                .as_ref()
+                .map_or_else(Vec::new, |options| options.known_functions.clone()),
+            known_types: self
+                .binding_options
+                .as_ref()
+                .map_or_else(Vec::new, |options| options.known_types.clone()),
+            check_references: true,
+            strict: Some(true),
+            strict_syntax: false,
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -262,8 +314,39 @@ pub(crate) fn analyze_project_json(request_json: &str) -> Result<String, String>
 }
 
 pub(crate) fn analyze_project_compact_json(request_json: &str) -> Result<String, String> {
-    let request: CompactProjectAnalysisBatchRequest =
+    analyze_project_compact_with_catalog(request_json, None)
+}
+
+pub(crate) fn analyze_project_compact_with_catalog(
+    request_json: &str,
+    catalog: Option<&crate::semantic_validation::models::ProjectCatalog>,
+) -> Result<String, String> {
+    let mut request: CompactProjectAnalysisBatchRequest =
         serde_json::from_str(request_json).map_err(|error| error.to_string())?;
+    for query in &mut request.queries {
+        query.sqlbuild_diagnostics = catalog.is_some();
+        if let Some(references) = &query.analysis_references {
+            query.schema = catalog
+                .ok_or("analysis references require a native project catalog")?
+                .analysis_schema(references);
+        }
+        if let Some(references) = &query.binding_references {
+            let catalog = catalog.ok_or("binding references require a native project catalog")?;
+            let mut schema = catalog.reference_schema(references, query.binding_override)?;
+            if let Some(aliases) = &query.binding_aliases {
+                catalog.alias_reference_schema(&mut schema, references, aliases);
+            }
+            query.binding_schema = Some(schema);
+            if !catalog.quoted_ignore_case || !query.sql.contains('"') {
+                query.binding_options = Some(BindingOptions {
+                    check_types: catalog.options.check_types,
+                    semantic: catalog.options.semantic,
+                    known_functions: catalog.options.known_functions.clone(),
+                    known_types: catalog.options.known_types.clone(),
+                });
+            }
+        }
+    }
     let workers = request.workers.clamp(1, MAX_WORKERS);
     if request
         .templates
@@ -350,7 +433,7 @@ pub(crate) fn analyze_project_compact_json(request_json: &str) -> Result<String,
         let analysis_groups: Vec<CompiledQueryWorkResult> = pool.install(|| {
             batch
                 .into_par_iter()
-                .map(analyze_compact_query_work)
+                .map(|work| analyze_compact_query_work(work, catalog))
                 .collect()
         });
         for group in analysis_groups {
@@ -371,12 +454,50 @@ pub(crate) fn analyze_project_compact_json(request_json: &str) -> Result<String,
     serde_json::to_string(&response).map_err(|error| error.to_string())
 }
 
-fn analyze_compact_query_work(work: CompactQueryWork) -> CompiledQueryWorkResult {
-    let work = match try_borrowed_query(work) {
+fn analyze_compact_query_work(
+    work: CompactQueryWork,
+    catalog: Option<&crate::semantic_validation::models::ProjectCatalog>,
+) -> CompiledQueryWorkResult {
+    let diagnostic_sql = work
+        .query
+        .sqlbuild_diagnostics
+        .then(|| work.query.sql.clone());
+    let dialect = work.query.dialect.parse::<DialectType>();
+    let mut result = analyze_compact_query_work_inner(work, catalog);
+    if let (Some(sql), Ok(dialect)) = (diagnostic_sql, dialect)
+        && let Some(validation) = result.validation.take()
+    {
+        result.validation = Some(validation.and_then(|value| {
+            crate::semantic_validation::main::map_diagnostics::map_diagnostics(&sql, dialect, value)
+        }));
+    }
+    result
+}
+
+fn analyze_compact_query_work_inner(
+    work: CompactQueryWork,
+    catalog: Option<&crate::semantic_validation::models::ProjectCatalog>,
+) -> CompiledQueryWorkResult {
+    let exact_catalog = catalog.filter(|catalog| {
+        work.query
+            .binding_schema
+            .as_ref()
+            .is_some_and(|schema| catalog.needs_identifier_encoding(&work.query.sql, schema))
+    });
+    let work = match try_borrowed_query(work, exact_catalog) {
         Ok(result) => return result,
         Err(work) => *work,
     };
-    let (query_result, validation, _) = compile_query(work.query, work.project_projections);
+    let exact_schema = exact_catalog.and_then(|_| work.query.binding_schema.clone());
+    let sql = exact_catalog.map(|_| work.query.sql.clone());
+    let (query_result, mut validation, expression) =
+        compile_query(work.query, work.project_projections);
+    if let (Some(catalog), Some(schema), Some(sql)) = (exact_catalog, exact_schema, sql) {
+        validation = Some(match expression {
+            Some(expression) => catalog.expression_validation(&sql, &schema, expression),
+            None => catalog.validate(&sql, &schema),
+        });
+    }
     CompiledQueryWorkResult {
         projections: project_query_templates(&query_result, work.projections),
         validation,
@@ -385,7 +506,8 @@ fn analyze_compact_query_work(work: CompactQueryWork) -> CompiledQueryWorkResult
 
 /// Fold fully bound lexical query graphs; unsupported shapes retain the existing resolver.
 fn try_borrowed_query(
-    work: CompactQueryWork,
+    mut work: CompactQueryWork,
+    exact_catalog: Option<&crate::semantic_validation::models::ProjectCatalog>,
 ) -> Result<CompiledQueryWorkResult, Box<CompactQueryWork>> {
     if work.query.schema.is_none()
         || (work.query.binding_schema.is_none()
@@ -429,8 +551,14 @@ fn try_borrowed_query(
         return Err(Box::new(work));
     }
     if matches!(&expression, polyglot_sql::Expression::Select(select)
-        if select.with.is_none() && select.expressions.iter().any(|projection| super::borrowed_facts::projection_star(projection).is_some()))
+        if select.with.is_none()
+            && select.expressions.iter().any(|projection| super::borrowed_facts::projection_star(projection).is_some()))
     {
+        if matches!(&expression, polyglot_sql::Expression::Select(select)
+            if select.from.as_ref().is_some_and(|from| matches!(from.expressions.as_slice(), [polyglot_sql::Expression::Subquery(_)])))
+        {
+            work.project_projections = false;
+        }
         return Err(Box::new(work));
     }
     if !matches!(
@@ -452,14 +580,10 @@ fn try_borrowed_query(
         || matches!(node, polyglot_sql::Expression::Select(select) if select.with.as_ref().is_some_and(|with| with.recursive))
         || matches!(node, polyglot_sql::Expression::Union(union) if union.with.as_ref().is_some_and(|with| with.recursive))
         || matches!(node, polyglot_sql::Expression::Select(select) if !borrowed_sources_supported(select, dialect))
-    }) {
-        return Err(Box::new(work));
-    }
-    if expression.dfs().any(|node| {
-        matches!(node, polyglot_sql::Expression::Select(select)
-        if select.expressions.iter().any(|projection| projection.dfs().any(|child| matches!(child,
-            polyglot_sql::Expression::Select(_) | polyglot_sql::Expression::Union(_)
-            | polyglot_sql::Expression::Intersect(_) | polyglot_sql::Expression::Except(_)))))
+        || matches!(node, polyglot_sql::Expression::Select(select)
+            if select.expressions.iter().any(|projection| projection.dfs().any(|child| matches!(child,
+                polyglot_sql::Expression::Select(_) | polyglot_sql::Expression::Union(_)
+                | polyglot_sql::Expression::Intersect(_) | polyglot_sql::Expression::Except(_)))))
     }) {
         return Err(Box::new(work));
     }
@@ -474,41 +598,9 @@ fn try_borrowed_query(
                 })
         })
         .and_then(|schema| super::borrowed_facts::infer_bound(&expression, Some(schema), dialect));
-    let validation = work
-        .query
-        .binding_schema
-        .as_ref()
-        .or(work.query.schema.as_ref())
-        .map(|schema| {
-            if bound_facts.is_some() {
-                return Ok(ValidationResult::with_errors(Vec::new()));
-            }
-            let result = polyglot_sql::validation::validate_parsed_with_schema(
-                vec![expression.clone()],
-                dialect,
-                schema,
-                &SchemaValidationOptions {
-                    check_types: false,
-                    check_references: true,
-                    strict: Some(true),
-                    semantic: false,
-                    strict_syntax: false,
-                    ..Default::default()
-                },
-            );
-            crate::semantic_validation::main::complete_parsed_validation(
-                crate::semantic_validation::main::ParsedValidationRequest {
-                    sql: &work.query.sql,
-                    dialect,
-                    schema,
-                    result,
-                    expression: Some(&expression),
-                },
-            )
-        });
-    if !matches!(validation, Some(Ok(ref result)) if result.valid) {
-        return Err(Box::new(work));
-    }
+    let catalog_expression = exact_catalog.map(|_| expression.clone());
+    let needs_validation = bound_facts.is_none() || work.query.binding_options.is_some();
+    let mut validation_expression = None;
     let unannotated_outputs: Option<Vec<_>> = work
         .projections
         .iter()
@@ -522,6 +614,9 @@ fn try_borrowed_query(
         })
         .collect();
     if unannotated_outputs.is_none() {
+        if needs_validation {
+            validation_expression = Some(expression.clone());
+        }
         let schema = work.query.schema.as_ref().map(|schema| {
             polyglot_sql::validation::mapping_schema_from_validation_schema_with_dialect(
                 schema, dialect,
@@ -619,11 +714,59 @@ fn try_borrowed_query(
             Ok(ProjectAnalysis {
                 columns,
                 lineage_columns,
-                has_star: false,
+                has_star: matches!(&expression, polyglot_sql::Expression::Select(select)
+                    if select.expressions.iter().any(|projection| super::borrowed_facts::projection_star(projection).is_some())),
                 requires_legacy_fallback,
                 preserve_fallback_lineage: true,
             }),
         ));
+    }
+    let mut validation = work
+        .query
+        .binding_schema
+        .as_ref()
+        .or(work.query.schema.as_ref())
+        .map(|schema| {
+            if !needs_validation {
+                return Ok(ValidationResult::with_errors(Vec::new()));
+            }
+            let retain_expression =
+                crate::semantic_validation::main::may_have_extra_clause_checks(&work.query.sql);
+            let validation_expression = validation_expression.take().unwrap_or_else(|| {
+                if retain_expression {
+                    expression.clone()
+                } else {
+                    std::mem::replace(
+                        &mut expression,
+                        polyglot_sql::Expression::Null(polyglot_sql::expressions::Null),
+                    )
+                }
+            });
+            let result = polyglot_sql::validation::validate_parsed_with_schema(
+                vec![validation_expression],
+                dialect,
+                schema,
+                &work.query.validation_options(),
+            );
+            crate::semantic_validation::main::complete_parsed_validation(
+                crate::semantic_validation::main::ParsedValidationRequest {
+                    sql: &work.query.sql,
+                    dialect,
+                    schema,
+                    result,
+                    expression: retain_expression.then_some(&expression),
+                },
+            )
+        });
+    if !matches!(validation, Some(Ok(ref result)) if result.valid) {
+        return Err(Box::new(work));
+    }
+    if let (Some(catalog), Some(expression), Some(schema)) = (
+        exact_catalog,
+        catalog_expression,
+        work.query.binding_schema.as_ref(),
+    ) {
+        validation = Some(catalog.expression_validation(&work.query.sql, schema, expression));
     }
     Ok(CompiledQueryWorkResult {
         projections,
@@ -799,6 +942,7 @@ type CompiledQueryResult = (
 );
 
 fn compile_query(mut request: AnalysisRequest, project_projections: bool) -> CompiledQueryResult {
+    let validation_options = request.validation_options();
     let Some(schema) = request.binding_schema.take() else {
         return (query_analysis(request, project_projections), None, None);
     };
@@ -814,14 +958,7 @@ fn compile_query(mut request: AnalysisRequest, project_projections: bool) -> Com
             schema: request.schema,
         },
         &schema,
-        &SchemaValidationOptions {
-            check_types: false,
-            check_references: true,
-            strict: Some(true),
-            semantic: false,
-            strict_syntax: false,
-            ..Default::default()
-        },
+        &validation_options,
         project_projections,
     );
     let validation = crate::semantic_validation::main::complete_parsed_validation(
@@ -933,7 +1070,7 @@ struct CompactProjectBatch {
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
 enum CompactProjectResponse {
-    Success((Vec<usize>, bool)),
+    Success((Vec<usize>, bool, bool)),
     LegacyTypeRecovery((Vec<usize>, bool, &'static str)),
     Failure(String),
 }
@@ -1033,7 +1170,11 @@ impl CompactProjectAccumulator {
                     "native project type recovery requires legacy fallback",
                 ))
             } else {
-                CompactProjectResponse::Success((columns, analysis.has_star))
+                CompactProjectResponse::Success((
+                    columns,
+                    analysis.has_star,
+                    analysis.preserve_fallback_lineage,
+                ))
             },
         )
     }

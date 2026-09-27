@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import re
-from collections import defaultdict, deque
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from functools import partial
+from graphlib import CycleError, TopologicalSorter
 from pathlib import Path
+from typing import Any, cast
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.contract.types import BuiltinAdapter
@@ -39,6 +41,31 @@ from sqlbuild.compiler.compile._helpers.analysis.validation import (
     validate_hook_sql_syntax,
     validate_sql_syntax,
 )
+from sqlbuild.compiler.compile._helpers.assembly.binding_positions import (
+    get_authored_binding_location,
+    query_line_offset,
+)
+from sqlbuild.compiler.compile._helpers.assembly.binding_waves import analyze_binding_waves
+from sqlbuild.compiler.compile._helpers.assembly.binding_waves import (
+    downstream_model_names as _downstream_model_names,
+)
+from sqlbuild.compiler.compile._helpers.assembly.binding_waves import (
+    referenced_model_names as _referenced_model_names,
+)
+from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
+    known_declared_types,
+    known_function_names,
+)
+from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
+    binding_required_names,
+    binding_schema_for_model,
+    build_complete_binding_schemas,
+    get_expression_source_shapes,
+    published_model_shape,
+)
+from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
+    build_declared_column_types as _build_column_types_by_table,
+)
 from sqlbuild.compiler.compile._helpers.assembly.targets import (
     build_model_relation_target,
     build_seed_relation_target,
@@ -52,6 +79,7 @@ from sqlbuild.compiler.compile._helpers.deps.dependencies import (
     model_build_deps,
     sql_test_scope_deps,
 )
+from sqlbuild.compiler.compile._helpers.diagnostics.recovery import complete_semantic_diagnostics
 from sqlbuild.compiler.compile._helpers.render.context_templates import (
     resolve_early_model_templates,
 )
@@ -67,6 +95,7 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
     find_macro_call_names,
 )
 from sqlbuild.compiler.compile._helpers.render.templating import expand_template_data
+from sqlbuild.compiler.compile._helpers.sharing.binding import shareable_binding_prekeys
 from sqlbuild.compiler.compile._helpers.sql_tests.core import extract_assertion_target_model_names
 from sqlbuild.compiler.compile._helpers.sql_tests.identity import (
     build_sql_test_case_fingerprint,
@@ -76,7 +105,6 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
     scope_index_with_compile_usages,
 )
-from sqlbuild.compiler.compile.main.function_node_type import function_node_type
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
     CompactAnalysisCacheCandidate,
@@ -114,6 +142,12 @@ from sqlbuild.compiler.compile.models import (
     MacroContext,
     PolyglotAnalysisResult,
 )
+from sqlbuild.compiler.compile.models import (
+    ModelSqlAnalysis as _ModelSqlAnalysis,
+)
+from sqlbuild.compiler.compile.models import (
+    ModelSqlAnalysisRequest as _ModelSqlAnalysisRequest,
+)
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompactBatchResponseCallback,
@@ -126,11 +160,17 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullabili
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.resource_names.main.function_node_type import function_node_type
 from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
 from sqlbuild.compiler.scopes.main._validate_scope_index import validate_scope_index
 from sqlbuild.compiler.scopes.models import ScopeIndex
-from sqlbuild.compiler.sql_analysis.constants import BINDING_UNKNOWN_TABLE_INTERNAL_CODE
+from sqlbuild.compiler.sql_analysis.constants import (
+    BINDING_UNKNOWN_TABLE_INTERNAL_CODE,
+    NATIVE_DIALECT_ALIASES,
+)
 from sqlbuild.compiler.sql_analysis.exceptions import SqlAnalysisBoundaryError
+from sqlbuild.compiler.sql_analysis.main._binding_catalog import create_binding_catalog
+from sqlbuild.compiler.sql_analysis.main._identifier_case import ignores_quoted_case
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.models import (
     SqlBindingDiagnostic,
@@ -150,23 +190,9 @@ from sqlbuild.spec.contracts.models import (
     SchemaDynamicColumnFamily,
     SourceColumnEntry,
     SourceEntry,
+    SourceLocation,
     TargetConfig,
 )
-
-
-@dataclass(frozen=True)
-class _ModelSqlAnalysis:
-    polyglot_analysis: PolyglotAnalysisResult
-    placeholders: dict[str, str] | None
-
-
-@dataclass(frozen=True)
-class _ModelSqlAnalysisRequest:
-    model_input: CompileModelInput
-    query_sql: str
-    placeholders: dict[str, str] | None
-    cache_key: str | None
-    binding_schema: dict[str, dict[str, str]] | None
 
 
 @dataclass(frozen=True)
@@ -203,14 +229,75 @@ def assemble_compiled_project(
     dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]] = (
         _build_dynamic_families_by_table(inputs)
     )
-    complete_binding_schemas: dict[str, dict[str, str]] = _build_complete_binding_schemas(inputs)
+    profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
+    profile = replace(
+        profile,
+        semantic_known_functions=known_function_names(inputs.sql_function_inputs),
+        semantic_known_types=known_declared_types(
+            functions=inputs.sql_function_inputs, column_types=column_types_by_table
+        ),
+        quoted_identifiers_ignore_case=ignores_quoted_case(
+            connection=inputs.effective_connection, dialect=profile.sql_analysis_dialect
+        ),
+        sql_analysis_dialect=NATIVE_DIALECT_ALIASES.get(
+            profile.sql_analysis_dialect or "", profile.sql_analysis_dialect
+        ),
+        function_return_types={
+            **profile.function_return_types,
+            **{
+                f"__sqlbuild_udf_{function.name}".upper(): function.returns
+                for function in inputs.sql_function_inputs
+                if not function.return_columns
+            },
+        },
+    )
+    complete_binding_schemas: dict[str, dict[str, str]] = build_complete_binding_schemas(inputs)
+    binding_catalog: Any = create_binding_catalog(
+        dialect=profile.sql_analysis_dialect or "generic",
+        quoted_ignore_case=profile.quoted_identifiers_ignore_case,
+        known_functions=profile.semantic_known_functions,
+        known_types=profile.semantic_known_types,
+        relations={},
+    )
+    profile = replace(profile, binding_catalog=binding_catalog)
+    if sql_analysis_enabled:
+        expression_sources: tuple[CompileSourceInput, ...] = tuple(
+            source_input
+            for source_input in inputs.source_inputs
+            if source_input.source_entry.expression
+        )
+        expression_shapes: tuple[dict[str, str] | None, ...] = get_expression_source_shapes(
+            expressions=tuple(
+                cast(str, source_input.source_entry.expression)
+                for source_input in expression_sources
+            ),
+            profile=profile,
+        )
+        for source_input, shape in zip(expression_sources, expression_shapes, strict=True):
+            if shape is not None:
+                declared_types: dict[str, str] = column_types_by_table.get(
+                    source_input.source_entry.name, {}
+                )
+                declared_shape: dict[str, str] = {
+                    name: declared_types.get(name, column_type)
+                    for name, column_type in shape.items()
+                }
+                complete_binding_schemas[source_input.source_entry.name] = declared_shape
+                column_types_by_table[source_input.source_entry.name] = declared_shape
+                column_nullability_by_table[source_input.source_entry.name] = {
+                    name: column_nullability_by_table.get(source_input.source_entry.name, {}).get(
+                        name, InferredNullability.UNKNOWN
+                    )
+                    for name in declared_shape
+                }
+    binding_catalog.native.update_relations(complete_binding_schemas)
+    binding_catalog.schemas.update(complete_binding_schemas)
     dynamic_contract_analysis_inputs: _DynamicContractAnalysisInputs = (
         _DynamicContractAnalysisInputs(
             families_by_table=dynamic_families_by_table,
             authoritative_column_types_by_table=complete_binding_schemas,
         )
     )
-    profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
     allow_compact_analysis: bool = column_lineage_mode in {
         ColumnLineageMode.FAST,
         ColumnLineageMode.RICH,
@@ -223,6 +310,10 @@ def assemble_compiled_project(
             allow_compact_analysis=allow_compact_analysis,
             rich_type_inference=rich_type_inference,
             signature_namespace={
+                "known_functions": known_function_names(inputs.sql_function_inputs),
+                "known_types": known_declared_types(
+                    functions=inputs.sql_function_inputs, column_types=column_types_by_table
+                ),
                 "target": inputs.effective_target_name,
                 "vars": inputs.effective_vars,
             },
@@ -234,6 +325,10 @@ def assemble_compiled_project(
     if sql_analysis_enabled:
         with record_compile_timing("model_analysis_ms"):
             model_sql_analysis_by_name = _analyze_model_sql_in_parallel(
+                known_functions=known_function_names(inputs.sql_function_inputs),
+                known_types=known_declared_types(
+                    functions=inputs.sql_function_inputs, column_types=column_types_by_table
+                ),
                 model_inputs=tuple(
                     model_input
                     for model_input in inputs.model_inputs
@@ -271,7 +366,8 @@ def assemble_compiled_project(
         effective_target_name=inputs.effective_target_name,
         run_id=inputs.run_id,
     )
-    return CompiledProject(
+    project: CompiledProject = CompiledProject(
+        binding_catalog=profile.binding_catalog,
         sql_expansions={
             model_input.model_file.file_path: model_input.sql_expansion
             for model_input in inputs.model_inputs
@@ -283,6 +379,7 @@ def assemble_compiled_project(
         effective_vars=inputs.effective_vars,
         effective_target_database=_str_or_none(effective_target_values.get("database")),
         effective_target_schema=_str_or_none(effective_target_values.get("schema")),
+        sql_analysis_dialect=profile.sql_analysis_dialect,
         compile_cache_dir=inputs.compile_cache_dir,
         settings=inputs.effective_settings,
         scenario=resolve_effective_scenario_config(
@@ -357,10 +454,19 @@ def assemble_compiled_project(
             *_project_binding_diagnostics(
                 model_inputs=inputs.model_inputs,
                 analyses_by_name=model_sql_analysis_by_name,
+                dialect=profile.sql_analysis_dialect,
             ),
         ),
         external_sql_reference_resolver=inputs.external_sql_reference_resolver,
         scope_index=scope_index,
+    )
+    return complete_semantic_diagnostics(
+        project=project,
+        profile=profile,
+        binding_results={
+            name: analysis.polyglot_analysis.binding_diagnostics
+            for name, analysis in model_sql_analysis_by_name.items()
+        },
     )
 
 
@@ -400,6 +506,7 @@ def _assemble_compiled_model(
     inferred_columns: tuple[InferredColumn, ...] | None = None
     fast_lineage_columns: Sequence[CompiledLineageColumnFact] | None = None
     fast_lineage_has_star: bool = False
+    fast_lineage_star_resolved: bool = False
     placeholders: dict[str, str] | None = (
         sql_analysis.placeholders if sql_analysis is not None else _model_placeholders(model_input)
     )
@@ -431,6 +538,7 @@ def _assemble_compiled_model(
             inferred_columns = polyglot_analysis.columns
             fast_lineage_columns = polyglot_analysis.lineage_columns
             fast_lineage_has_star = polyglot_analysis.has_star
+            fast_lineage_star_resolved = polyglot_analysis.star_resolved
         else:
             if model_input.sql_validation_enabled:
                 validate_sql_syntax(
@@ -496,6 +604,7 @@ def _assemble_compiled_model(
         inferred_columns=inferred_columns,
         fast_lineage_columns=fast_lineage_columns,
         fast_lineage_has_star=fast_lineage_has_star,
+        fast_lineage_star_resolved=fast_lineage_star_resolved,
         authored_sql=model_input.model_file.contents,
         authored_query_sql=model_input.model_file.query_sql,
         output_column_locations=model_input.model_file.output_column_locations,
@@ -506,6 +615,8 @@ def _assemble_compiled_model(
         enum_columns=model_input.enum_columns,
         binding_diagnostics=_binding_compiler_diagnostics(
             model_input=model_input,
+            cleaned_sql=sql_analysis.cleaned_sql if sql_analysis is not None else None,
+            dialect=profile.sql_analysis_dialect,
             diagnostics=(polyglot_analysis.binding_diagnostics if sql_analysis_enabled else ()),
         ),
         binding_validated=(polyglot_analysis.binding_validated if sql_analysis_enabled else False),
@@ -515,6 +626,8 @@ def _assemble_compiled_model(
 
 def _analyze_model_sql_in_parallel(
     *,
+    known_functions: tuple[str, ...],
+    known_types: tuple[str, ...],
     model_inputs: tuple[CompileModelInput, ...],
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     column_types_by_table: dict[str, dict[str, str]],
@@ -542,6 +655,10 @@ def _analyze_model_sql_in_parallel(
     request_cache_keys: tuple[str, ...] = tuple(
         request.cache_key for request in requests if request.cache_key is not None
     )
+    dependency_ordered: bool = allow_compact_analysis and any(
+        request.binding_schema is not None and not all(request.binding_schema.values())
+        for request in requests
+    )
     compact_batch_plan: CompactAnalysisCachePlan | None = None
     if analysis_cache is not None:
         compact_batch_plan = build_compact_analysis_cache_plan(
@@ -567,12 +684,12 @@ def _analyze_model_sql_in_parallel(
             expected_count=len(requests),
             min_model_count=_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT,
         )
-        if compact_batch_plan is not None
+        if compact_batch_plan is not None and not dependency_ordered
         else None
     )
     if compact_candidate is not None:
         completed_analyses: dict[str, PolyglotAnalysisResult] = {}
-        if analysis_cache is not None and len(compact_candidate.matching_indexes) == len(requests):
+        if analysis_cache is not None:
             completed_analyses, _, _ = read_model_analyses(
                 context=analysis_cache,
                 cache_keys=request_cache_keys,
@@ -627,6 +744,8 @@ def _analyze_model_sql_in_parallel(
                     bypasses=0,
                 )
                 compact_analyses = _complete_inferred_bindings(
+                    known_functions=known_functions,
+                    known_types=known_types,
                     requests=requests,
                     analyses=compact_analyses,
                     complete_binding_schemas=complete_binding_schemas,
@@ -680,41 +799,70 @@ def _analyze_model_sql_in_parallel(
             for cache_key, analysis in compact_cached_analyses.items()
         }
     )
+    analyses: tuple[_ModelSqlAnalysis, ...]
+    if dependency_ordered:
+        analyses, cached_analyses = analyze_binding_waves(
+            requests=requests,
+            names=tuple(_model_name(request.model_input) for request in requests),
+            cached=cached_analyses,
+            previous_signatures=previous_signatures,
+            shapes=complete_binding_schemas,
+            types=column_types_by_table,
+            nullability=column_nullability_by_table,
+            profile=inference_profile,
+            analyze=partial(
+                _analyze_model_sql_requests,
+                inference_profile=inference_profile,
+                allow_compact_analysis=allow_compact_analysis,
+                rich_type_inference=rich_type_inference,
+                shareable_prekeys=shareable_binding_prekeys(requests=requests),
+            ),
+            complete=partial(
+                _complete_inferred_bindings,
+                known_functions=known_functions,
+                known_types=known_types,
+                inference_profile=inference_profile,
+            ),
+        )
+        if compact_batch_plan is not None:
+            compact_batch_hit_count = sum(analysis.cached for analysis in analyses)
+            entry_cache_hit_count -= compact_batch_hit_count
+    else:
+        analyses = _analyze_model_sql_requests(
+            requests=requests,
+            cached_analyses=cached_analyses,
+            column_nullability_by_table=column_nullability_by_table,
+            column_types_by_table=column_types_by_table,
+            inference_profile=inference_profile,
+            allow_compact_analysis=allow_compact_analysis,
+            rich_type_inference=rich_type_inference,
+            on_compact_response=(
+                compact_analysis_batch_response_writer(
+                    plan=compact_batch_plan,
+                    count=len(requests),
+                )
+                if compact_batch_plan is not None and not cached_analyses
+                else None
+            ),
+            shareable_prekeys=shareable_binding_prekeys(requests=requests),
+        )
+        analyses = _complete_inferred_bindings(
+            known_functions=known_functions,
+            known_types=known_types,
+            requests=requests,
+            analyses=analyses,
+            complete_binding_schemas=complete_binding_schemas,
+            inference_profile=inference_profile,
+        )
     record_analysis_cache_metrics(
         batch_hits=compact_batch_hit_count,
         entry_hits=entry_cache_hit_count,
         misses=(
-            sum(
-                request.cache_key is None or request.cache_key not in cached_analyses
-                for request in requests
-            )
+            len(requests) - compact_batch_hit_count - entry_cache_hit_count
             if analysis_cache is not None
             else 0
         ),
         bypasses=(len(requests) if analysis_cache is None else 0),
-    )
-    analyses: tuple[_ModelSqlAnalysis, ...] = _analyze_model_sql_requests(
-        requests=requests,
-        cached_analyses=cached_analyses,
-        column_nullability_by_table=column_nullability_by_table,
-        column_types_by_table=column_types_by_table,
-        inference_profile=inference_profile,
-        allow_compact_analysis=allow_compact_analysis,
-        rich_type_inference=rich_type_inference,
-        on_compact_response=(
-            compact_analysis_batch_response_writer(
-                plan=compact_batch_plan,
-                count=len(requests),
-            )
-            if compact_batch_plan is not None and not cached_analyses
-            else None
-        ),
-    )
-    analyses = _complete_inferred_bindings(
-        requests=requests,
-        analyses=analyses,
-        complete_binding_schemas=complete_binding_schemas,
-        inference_profile=inference_profile,
     )
     if analysis_cache is None:
         return {
@@ -757,7 +905,7 @@ def _analyze_model_sql_in_parallel(
         model_inputs=model_inputs,
         changed_names=changed_signature_names,
     )
-    if invalidated_names:
+    if invalidated_names and not dependency_ordered:
         invalidated_requests: tuple[_ModelSqlAnalysisRequest, ...] = tuple(
             request
             for request in requests
@@ -788,6 +936,8 @@ def _analyze_model_sql_in_parallel(
             for request, analysis in zip(requests, analyses, strict=True)
         )
         analyses = _complete_inferred_bindings(
+            known_functions=known_functions,
+            known_types=known_types,
             requests=requests,
             analyses=analyses,
             complete_binding_schemas=complete_binding_schemas,
@@ -854,6 +1004,7 @@ def _analyze_model_sql_requests(
     rich_type_inference: bool,
     cached_compact_batch: tuple[CompactBatchPreparation, object] | None = None,
     on_compact_response: CompactBatchResponseCallback | None = None,
+    shareable_prekeys: frozenset[str] | None = None,
 ) -> tuple[_ModelSqlAnalysis, ...]:
     if allow_compact_analysis:
         uncached: tuple[tuple[int, _ModelSqlAnalysisRequest], ...] = tuple(
@@ -890,6 +1041,7 @@ def _analyze_model_sql_requests(
                         binding_schemas=tuple(
                             request.binding_schema for _, request in batch_requests
                         ),
+                        shareable_prekeys=shareable_prekeys,
                     ),
                 )
             )
@@ -909,6 +1061,10 @@ def _analyze_model_sql_requests(
                             sql=prepared_by_index[index].cleaned_sql,
                             dialect=inference_profile.sql_analysis_dialect,
                             schema=requests[index].binding_schema or {},
+                            known_functions=inference_profile.semantic_known_functions,
+                            known_types=inference_profile.semantic_known_types,
+                            quoted_identifiers_ignore_case=inference_profile.quoted_identifiers_ignore_case,
+                            catalog=inference_profile.binding_catalog,
                         )
                         for index in validation_indices
                     )
@@ -960,73 +1116,134 @@ def _analyze_model_sql_requests(
 
 def _complete_inferred_bindings(
     *,
+    known_functions: tuple[str, ...],
+    known_types: tuple[str, ...],
     requests: tuple[_ModelSqlAnalysisRequest, ...],
     analyses: tuple[_ModelSqlAnalysis, ...],
     complete_binding_schemas: dict[str, dict[str, str]],
     inference_profile: ExpressionInferenceProfile,
+    supplied_relations: frozenset[str] = frozenset(),
 ) -> tuple[_ModelSqlAnalysis, ...]:
-    """Propagate complete derived model shapes without treating partial inputs as closed."""
+    """Bind each scope independently, preserving open inputs as empty tables."""
 
     complete_schemas: dict[str, dict[str, str]] = dict(complete_binding_schemas)
     results: list[_ModelSqlAnalysis] = list(analyses)
-    required_names_by_index: dict[int, frozenset[str]] = {}
-    dependents_by_name: dict[str, list[int]] = defaultdict(list)
-    for index, request in enumerate(requests):
-        required_names: frozenset[str] | None = _binding_required_names(
-            model_input=request.model_input
+    indexes: dict[str, int] = {
+        _model_name(request.model_input): index for index, request in enumerate(requests)
+    }
+    available_names: frozenset[str] = frozenset(indexes)
+    graph: dict[str, tuple[str, ...]] = {
+        name: _referenced_model_names(
+            model_input=requests[index].model_input, available_names=available_names
         )
+        for name, index in indexes.items()
+    }
+    try:
+        ordered_names: tuple[str, ...] = tuple(TopologicalSorter(graph).static_order())
+    except CycleError:
+        return analyses
+    for name in ordered_names:
+        index: int = indexes[name]
+        request: _ModelSqlAnalysisRequest = requests[index]
+        required_names: frozenset[str] | None = binding_required_names(request.model_input)
         if required_names is None:
             continue
-        required_names_by_index[index] = required_names
-        for required_name in required_names:
-            dependents_by_name[required_name].append(index)
-    ready: deque[int] = deque(
-        index
-        for index, required_names in required_names_by_index.items()
-        if required_names <= complete_schemas.keys()
-    )
-    processed: set[int] = set()
+        analysis: PolyglotAnalysisResult = results[index].polyglot_analysis
+        inputs_known: bool = bool(required_names) and required_names <= complete_schemas.keys()
+        star_pending: bool = analysis.has_star and not analysis.star_resolved and inputs_known
+        stars_expanded_natively: bool = required_names <= supplied_relations
+        if star_pending and analysis.columns and stars_expanded_natively:
+            analysis = replace(analysis, star_resolved=True)
+            results[index] = replace(results[index], polyglot_analysis=analysis)
+            star_pending = False
+        if (
+            not results[index].cached
+            and required_names
+            and (any(column.type is None for column in analysis.columns or ()) or star_pending)
+            and not re.search(r"\b(?:UNION|INTERSECT|EXCEPT)\b", request.query_sql, re.IGNORECASE)
+        ):
+            input_schemas: dict[str, dict[str, str]] = {
+                table: complete_schemas[table]
+                for table in required_names
+                if table in complete_schemas
+            }
+            nullability: dict[str, dict[str, InferredNullability]] = {
+                table: dict.fromkeys(columns, InferredNullability.UNKNOWN)
+                for table, columns in input_schemas.items()
+            }
+            enriched: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+                query_sql=request.query_sql,
+                references=request.model_input.references,
+                placeholders=request.placeholders,
+                column_types_by_table=input_schemas,
+                column_nullability_by_table=nullability,
+                inference_profile=inference_profile,
+                allow_compact_analysis=True,
+                recover_cte_facts=_should_recover_cte_facts(request.model_input),
+            )
+            recovered_types: dict[str, str | None] = {
+                column.name: column.type
+                for column in (*(enriched.columns or ()), *(analysis.columns or ()))
+                if column.type is not None
+            }
+            star_expanded: bool = star_pending and enriched.analysis_succeeded
+            if (not analysis.columns or star_expanded) and enriched.analysis_succeeded:
+                analysis = replace(
+                    enriched,
+                    binding_diagnostics=analysis.binding_diagnostics,
+                    binding_validated=analysis.binding_validated,
+                )
+            analysis = replace(
+                analysis,
+                columns=tuple(
+                    replace(column, type=column.type or recovered_types.get(column.name))
+                    for column in analysis.columns or ()
+                ),
+                star_resolved=analysis.star_resolved or star_expanded,
+            )
+            results[index] = replace(results[index], polyglot_analysis=analysis)
+        star_known: bool = not analysis.has_star or (analysis.star_resolved and inputs_known)
+        if analysis.columns and star_known:
+            complete_schemas.setdefault(
+                name,
+                published_model_shape(
+                    sql=results[index].cleaned_sql or request.query_sql,
+                    profile=inference_profile,
+                    columns={column.name: column.type or "UNKNOWN" for column in analysis.columns},
+                    inputs={table: complete_schemas.get(table, {}) for table in required_names},
+                    config_values=request.model_input.config.values,
+                ),
+            )
     deferred_validation_indices: list[int] = []
     deferred_validation_requests: list[SqlSchemaValidationRequest] = []
-    while ready:
-        index: int = ready.popleft()
-        if index in processed:
+    for index, request in enumerate(requests):
+        if results[index].cached:
             continue
-        processed.add(index)
-        request: _ModelSqlAnalysisRequest = requests[index]
-        current: _ModelSqlAnalysis = results[index]
-        analysis: PolyglotAnalysisResult = current.polyglot_analysis
-        if not analysis.binding_validated:
-            binding_schema: dict[str, dict[str, str]] = {
-                name: complete_schemas[name] for name in required_names_by_index[index]
-            }
-            if binding_schema:
-                deferred_validation_indices.append(index)
-                deferred_validation_requests.append(
-                    get_complete_schema_binding_request(
-                        query_sql=request.query_sql,
-                        placeholders=request.placeholders,
-                        dialect=inference_profile.sql_analysis_dialect,
-                        binding_schema=binding_schema,
-                    )
-                )
-            else:
-                analysis = replace(analysis, binding_validated=True)
-                results[index] = replace(current, polyglot_analysis=analysis)
-        if not (
-            required_names_by_index[index]
-            and analysis.analysis_succeeded
-            and analysis.columns is not None
-            and not analysis.has_star
-        ):
+        required_names = binding_required_names(request.model_input)
+        if required_names is None:
             continue
-        model_name: str = _model_name(request.model_input)
-        complete_schemas[model_name] = {
-            column.name: column.type or "UNKNOWN" for column in analysis.columns
-        }
-        for dependent_index in dependents_by_name.get(model_name, ()):
-            if required_names_by_index[dependent_index] <= complete_schemas.keys():
-                ready.append(dependent_index)
+        if results[index].fused_binding_validated and (
+            results[index].validated_schema or request.binding_schema
+        ) == {name: complete_schemas.get(name, {}) for name in required_names}:
+            continue
+        deferred_validation_indices.append(index)
+        deferred_validation_requests.append(
+            replace(
+                get_complete_schema_binding_request(
+                    query_sql=request.query_sql,
+                    cleaned_sql=results[index].cleaned_sql,
+                    known_functions=known_functions,
+                    known_types=known_types,
+                    placeholders=request.placeholders,
+                    dialect=inference_profile.sql_analysis_dialect,
+                    binding_schema={
+                        name: complete_schemas.get(name, {}) for name in required_names
+                    },
+                ),
+                quoted_identifiers_ignore_case=inference_profile.quoted_identifiers_ignore_case,
+                catalog=inference_profile.binding_catalog,
+            )
+        )
     with record_compile_timing("binding_validation_ms"):
         validation_results: tuple[SqlBindingResult, ...] = get_schema_validations(
             requests=tuple(deferred_validation_requests)
@@ -1034,7 +1251,7 @@ def _complete_inferred_bindings(
     for index, validation_result in zip(
         deferred_validation_indices, validation_results, strict=True
     ):
-        current = results[index]
+        current: _ModelSqlAnalysis = results[index]
         results[index] = replace(
             current,
             polyglot_analysis=replace(
@@ -1044,63 +1261,6 @@ def _complete_inferred_bindings(
             ),
         )
     return tuple(results)
-
-
-def _binding_required_names(model_input: CompileModelInput) -> frozenset[str] | None:
-    if not model_input.sql_validation_enabled:
-        return None
-    names: set[str] = set()
-    for reference in model_input.references:
-        if reference.ref_kind == SqlReferenceKind.UDF:
-            continue
-        if reference.ref_kind == SqlReferenceKind.DBT_REF:
-            return None
-        names.add(
-            table_function_analysis_name(reference.ref_name)
-            if reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION
-            else reference.ref_name
-        )
-    if not names and re.search(r"\b(?:FROM|JOIN)\b", model_input.query_sql, re.IGNORECASE):
-        return None
-    return frozenset(names)
-
-
-def _downstream_model_names(
-    *,
-    model_inputs: tuple[CompileModelInput, ...],
-    changed_names: set[str],
-) -> set[str]:
-    downstream_by_name: dict[str, set[str]] = {}
-    for model_input in model_inputs:
-        model_name: str = _model_name(model_input)
-        for reference in model_input.references:
-            if reference.ref_kind == SqlReferenceKind.REF:
-                downstream_by_name.setdefault(reference.ref_name, set()).add(model_name)
-    downstream_names: set[str] = set()
-    pending: list[str] = list(changed_names)
-    while pending:
-        for downstream_name in downstream_by_name.get(pending.pop(), set()):
-            if downstream_name not in downstream_names and downstream_name not in changed_names:
-                downstream_names.add(downstream_name)
-                pending.append(downstream_name)
-    return downstream_names
-
-
-def _referenced_model_names(
-    *,
-    model_input: CompileModelInput,
-    available_names: frozenset[str] | None = None,
-) -> tuple[str, ...]:
-    return tuple(
-        sorted(
-            {
-                reference.ref_name
-                for reference in model_input.references
-                if reference.ref_kind == SqlReferenceKind.REF
-                and (available_names is None or reference.ref_name in available_names)
-            }
-        )
-    )
 
 
 def _dependency_signatures_by_key(
@@ -1144,6 +1304,7 @@ def _analyze_model_sql(
         return _ModelSqlAnalysis(
             polyglot_analysis=cached_analysis,
             placeholders=request.placeholders,
+            cached=True,
         )
     polyglot_analysis: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
         query_sql=request.query_sql,
@@ -1159,7 +1320,11 @@ def _analyze_model_sql(
     )
     return _ModelSqlAnalysis(
         polyglot_analysis=polyglot_analysis,
+        cleaned_sql=precomputed.cleaned_sql if precomputed is not None else None,
         placeholders=request.placeholders,
+        validated_schema=request.binding_schema,
+        fused_binding_validated=precomputed is not None
+        and precomputed.binding_diagnostics is not None,
     )
 
 
@@ -1176,7 +1341,7 @@ def _model_sql_analysis_request(
         sql=model_input.query_sql,
         cursor_type=model_input.config.values.get("cursor_type"),
     )
-    binding_schema: dict[str, dict[str, str]] | None = _binding_schema_for_model(
+    binding_schema: dict[str, dict[str, str]] | None = binding_schema_for_model(
         model_input=model_input,
         complete_binding_schemas=complete_binding_schemas,
     )
@@ -1249,30 +1414,6 @@ def _build_column_nullability_by_table(
     return facts
 
 
-def _build_column_types_by_table(inputs: CompileProjectInputs) -> dict[str, dict[str, str]]:
-    facts: dict[str, dict[str, str]] = {}
-    for model_input in inputs.model_inputs:
-        if model_input.schema_entry is not None:
-            facts[model_input.schema_entry.name] = {
-                column.name: column.type or "UNKNOWN" for column in model_input.schema_entry.columns
-            }
-    for seed_input in inputs.seed_inputs:
-        facts[seed_input.schema_entry.name] = {
-            column.name: column.type or "UNKNOWN" for column in seed_input.schema_entry.columns
-        }
-    for source_input in inputs.source_inputs:
-        facts[source_input.source_entry.name] = {
-            column.name: column.type or "UNKNOWN" for column in source_input.source_entry.columns
-        }
-    for function_input in inputs.sql_function_inputs:
-        if not function_input.return_columns:
-            continue
-        facts[table_function_analysis_name(function_input.name)] = {
-            column.name: column.type for column in function_input.return_columns
-        }
-    return facts
-
-
 def _build_dynamic_families_by_table(
     inputs: CompileProjectInputs,
 ) -> dict[str, tuple[SchemaDynamicColumnFamily, ...]]:
@@ -1285,68 +1426,11 @@ def _build_dynamic_families_by_table(
     }
 
 
-def _build_complete_binding_schemas(
-    inputs: CompileProjectInputs,
-) -> dict[str, dict[str, str]]:
-    """Return only relation shapes whose missing columns are authoritative."""
-
-    schemas: dict[str, dict[str, str]] = {}
-    for model_input in inputs.model_inputs:
-        if (
-            model_input.config.values.get("contract") == ContractPolicy.ENFORCED
-            and model_input.schema_entry is not None
-            and model_input.schema_entry.columns
-            and not model_input.schema_entry.dynamic_columns
-        ):
-            schemas[_model_name(model_input)] = _typed_schema_columns(
-                model_input.schema_entry.columns
-            )
-    for source_input in inputs.source_inputs:
-        if (
-            source_input.source_entry.contract == ContractPolicy.ENFORCED
-            and source_input.source_entry.columns
-        ):
-            schemas[source_input.source_entry.name] = _typed_schema_columns(
-                source_input.source_entry.columns
-            )
-    for seed_input in inputs.seed_inputs:
-        if seed_input.schema_entry.columns:
-            schemas[seed_input.schema_entry.name] = _typed_schema_columns(
-                seed_input.schema_entry.columns
-            )
-    for function_input in inputs.sql_function_inputs:
-        if function_input.return_columns:
-            schemas[table_function_analysis_name(function_input.name)] = {
-                column.name: column.type for column in function_input.return_columns
-            }
-    return schemas
-
-
-def _typed_schema_columns(columns: tuple[SchemaColumn | SourceColumnEntry, ...]) -> dict[str, str]:
-    return {column.name: column.type or "UNKNOWN" for column in columns}
-
-
-def _binding_schema_for_model(
-    *,
-    model_input: CompileModelInput,
-    complete_binding_schemas: dict[str, dict[str, str]],
-) -> dict[str, dict[str, str]] | None:
-    required_names: frozenset[str] | None = _binding_required_names(model_input)
-    if not required_names:
-        return None
-    schema: dict[str, dict[str, str]] = {}
-    for table_name in required_names:
-        columns: dict[str, str] | None = complete_binding_schemas.get(table_name)
-        if columns is None:
-            return None
-        schema[table_name] = columns
-    return schema
-
-
 def _project_binding_diagnostics(
     *,
     model_inputs: tuple[CompileModelInput, ...],
     analyses_by_name: dict[str, _ModelSqlAnalysis],
+    dialect: str | None,
 ) -> tuple[CompilerDiagnostic, ...]:
     diagnostics: list[CompilerDiagnostic] = []
     for model_input in model_inputs:
@@ -1356,6 +1440,8 @@ def _project_binding_diagnostics(
         diagnostics.extend(
             _binding_compiler_diagnostics(
                 model_input=model_input,
+                cleaned_sql=analysis.cleaned_sql,
+                dialect=dialect,
                 diagnostics=analysis.polyglot_analysis.binding_diagnostics,
             )
         )
@@ -1366,23 +1452,40 @@ def _binding_compiler_diagnostics(
     *,
     model_input: CompileModelInput,
     diagnostics: tuple[SqlBindingDiagnostic, ...],
+    dialect: str | None,
+    cleaned_sql: str | None = None,
 ) -> tuple[CompilerDiagnostic, ...]:
-    query_line_offset: int | None = _query_line_offset(model_input)
+    line_offset: int | None = query_line_offset(model_input)
     seen: set[tuple[str, str, int | None, int | None]] = set()
     result: list[CompilerDiagnostic] = []
     for diagnostic in diagnostics:
         if diagnostic.code == BINDING_UNKNOWN_TABLE_INTERNAL_CODE:
             continue
+        if cleaned_sql is None:
+            cleaned_sql = get_complete_schema_binding_request(
+                query_sql=cursor_intrinsics_analysis_sql(
+                    sql=model_input.query_sql,
+                    cursor_type=model_input.config.values.get("cursor_type"),
+                ),
+                placeholders=_model_placeholders(model_input),
+                dialect=dialect,
+                binding_schema={},
+            ).sql
         line: int | None
         column: int | None
-        line, column = _authored_binding_position(
-            model_input=model_input,
+        location: SourceLocation | None = get_authored_binding_location(
+            path=model_input.model_file.relative_path,
+            authored_sql=model_input.model_file.contents,
+            authored_query_sql=model_input.model_file.query_sql,
+            cleaned_sql=cleaned_sql,
+            expansion=model_input.sql_expansion,
             diagnostic=diagnostic,
         )
+        line, column = (location.line, location.column) if location is not None else (None, None)
         if line is None:
             line = (
-                diagnostic.line + query_line_offset
-                if diagnostic.line is not None and query_line_offset is not None
+                diagnostic.line + line_offset
+                if diagnostic.line is not None and line_offset is not None
                 else diagnostic.line
             )
             column = diagnostic.column
@@ -1392,13 +1495,13 @@ def _binding_compiler_diagnostics(
             line,
             column,
         )
-        if key in seen:
+        if key in seen and diagnostic.severity == DiagnosticSeverity.ERROR:
             continue
         seen.add(key)
         result.append(
             CompilerDiagnostic(
                 phase=DiagnosticPhase.COMPILE,
-                severity=DiagnosticSeverity.ERROR,
+                severity=DiagnosticSeverity(diagnostic.severity),
                 code=diagnostic.code,
                 message=diagnostic.message,
                 resource_type=CompiledResourceType.MODEL,
@@ -1406,37 +1509,10 @@ def _binding_compiler_diagnostics(
                 path=model_input.model_file.relative_path,
                 line=line,
                 column=column,
-                help="correct the column reference or the authoritative upstream contract",
+                location=location,
             )
         )
     return tuple(result)
-
-
-def _query_line_offset(model_input: CompileModelInput) -> int | None:
-    query_sql: str = model_input.model_file.query_sql
-    query_start: int = model_input.model_file.contents.find(query_sql)
-    if query_start < 0:
-        return None
-    return model_input.model_file.contents[:query_start].count("\n")
-
-
-def _authored_binding_position(
-    *, model_input: CompileModelInput, diagnostic: SqlBindingDiagnostic
-) -> tuple[int | None, int | None]:
-    match: re.Match[str] | None = re.search(
-        r"(?:Unknown column|Ambiguous column reference) '([^']+)'", diagnostic.message
-    )
-    if match is None:
-        return None, None
-    identifier: str = match.group(1).rsplit(".", maxsplit=1)[-1]
-    contents: str = model_input.model_file.contents
-    occurrences: list[re.Match[str]] = list(
-        re.finditer(rf"(?<![A-Za-z0-9_]){re.escape(identifier)}(?![A-Za-z0-9_])", contents)
-    )
-    if len(occurrences) != 1:
-        return None, None
-    start: int = occurrences[0].start()
-    return contents.count("\n", 0, start) + 1, start - contents.rfind("\n", 0, start)
 
 
 def _schema_column_nullability(

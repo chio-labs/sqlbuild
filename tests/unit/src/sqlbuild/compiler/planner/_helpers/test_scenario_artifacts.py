@@ -42,6 +42,13 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     "test_case",
     [
         ScenarioHashPrefixTestCase(
+            description="namespace is inserted between project and scenario",
+            project_name="waffle_shop",
+            scenario_name="revenue__customer_refund",
+            run_namespace="job-1",
+            expected_hash_prefix="60b4ca1f43a9",
+        ),
+        ScenarioHashPrefixTestCase(
             description="uses stable project and scenario identity hash",
             project_name="waffle_shop",
             scenario_name="revenue__customer_refund",
@@ -62,6 +69,7 @@ def test_given_project_and_scenario_when_hashing_then_returns_expected_prefix(
     result: str = compute_scenario_hash_prefix(
         project_name=test_case.project_name,
         scenario_name=test_case.scenario_name,
+        run_namespace=test_case.run_namespace,
     )
 
     assert result == test_case.expected_hash_prefix
@@ -75,7 +83,14 @@ def test_given_project_and_scenario_when_hashing_then_returns_expected_prefix(
             scenario_names=("scenario_2", "scenario_5"),
             prefix_length=1,
             expected_error_fragment="both map to hash prefix '9'",
-        )
+        ),
+        ScenarioHashCollisionTestCase(
+            description="collision detection applies within a namespace",
+            scenario_names=tuple(f"scenario_{index}" for index in range(17)),
+            prefix_length=1,
+            run_namespace="job-1",
+            expected_error_fragment="Scenario artifact hash collision",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -89,6 +104,7 @@ def test_given_colliding_scenario_hashes_when_building_index_then_raises_clear_e
                 build_compiled_scenario_with_name(name) for name in test_case.scenario_names
             ),
             prefix_length=test_case.prefix_length,
+            run_namespace=test_case.run_namespace,
         )
     assert exc_info.value.code == SCENARIO_PLAN_HASH_COLLISION
 

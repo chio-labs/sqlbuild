@@ -117,22 +117,6 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
             module_name="sqlbuild.cli.commands.main.state._janitor",
             function_name="run_janitor",
         ),
-        "promote": _lazy_handler(
-            module_name="sqlbuild.cli.commands.main.state._promote",
-            function_name="run_promote",
-        ),
-        "reconcile": _lazy_handler(
-            module_name="sqlbuild.cli.commands.main.state._reconcile",
-            function_name="run_reconcile",
-        ),
-        "rollback": _lazy_handler(
-            module_name="sqlbuild.cli.commands.main.state._rollback",
-            function_name="run_rollback",
-        ),
-        "state": _lazy_handler(
-            module_name="sqlbuild.cli.commands.main.state._state",
-            function_name="run_state",
-        ),
         "init": _lazy_handler(
             module_name="sqlbuild.cli.commands.main.workspace._init",
             function_name="run_init",
@@ -190,21 +174,6 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
         run_load=lazy["load"],
         run_clone=lazy["clone"],
         run_diff=lazy["diff"],
-        run_reconcile=lambda project_dir, no_color, virtual_environment, reconcile_command, model_name, seed_name, physical_relation_name, auto_approve, cli_vars: (  # noqa: E501
-            lazy["reconcile"](
-                project_dir=project_dir,
-                no_color=no_color,
-                virtual_environment=virtual_environment,
-                reconcile_command=reconcile_command,
-                model_name=model_name,
-                seed_name=seed_name,
-                physical_relation_name=physical_relation_name,
-                auto_approve=auto_approve,
-                cli_vars=cli_vars,
-            )
-        ),
-        run_promote=lazy["promote"],
-        run_rollback=lazy["rollback"],
         run_query=lambda project_dir, sql, query_file, selected_target, output_format, limit: lazy[
             "query"
         ](
@@ -226,19 +195,6 @@ def build_lazy_cli_handlers() -> CliEntrypointHandlers:
         ),
         run_lineage=lazy["lineage"],
         run_janitor=lazy["janitor"],
-        run_state=lambda project_dir, state_command, backup_id, auto_approve, no_color, checkpoint_command, checkpoint_id, virtual_environment, allow_copy: (  # noqa: E501
-            lazy["state"](
-                project_dir=project_dir,
-                state_command=state_command,
-                backup_id=backup_id,
-                auto_approve=auto_approve,
-                no_color=no_color,
-                checkpoint_command=checkpoint_command,
-                checkpoint_id=checkpoint_id,
-                virtual_environment=virtual_environment,
-                allow_copy=allow_copy,
-            )
-        ),
         run_init=lazy["init"],
         run_playground=lazy["playground"],
         run_skills_update=lambda project_dir, global_install, targets, force: lazy["skills"](

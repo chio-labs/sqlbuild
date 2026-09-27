@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import signal
 import statistics
 import subprocess
@@ -16,16 +17,18 @@ from contextlib import contextmanager, redirect_stdout
 from io import StringIO
 from pathlib import Path
 from types import FrameType
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, cast
 
 import pytest
 
+from scripts.cold_compile_performance.main.read_compile_measurement import read_compile_measurement
 from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
     semantic_compile_fingerprint,
 )
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FreshProcessCompileCachePerformanceGuardTestCase,
+    SemanticCorpusCase,
 )
 
 _DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
@@ -41,6 +44,43 @@ _DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
 )
 _DBT_SHAPED_WARM_SAMPLE_COUNT: int = 3
 _PERFORMANCE_SAFETY_TIMEOUT_MULTIPLIER: float = 2.0
+
+
+def semantic_corpus_cases(*, group: str) -> list[dict[str, Any]]:
+    path: Path = Path(__file__).parent / "fixtures" / "semantic" / "corpus.json"
+    raw: dict[str, list[dict[str, Any]]] = json.loads(path.read_text(encoding="utf-8"))
+    outcomes: dict[str, list[str]] = json.loads(
+        path.with_name("native_outcomes.json").read_text(encoding="utf-8")
+    )
+    resolved: dict[str, list[dict[str, Any]]] = {name: [] for name in raw}
+    overrides: dict[str, tuple[str, str]] = {}
+    for outcome, identifiers in outcomes.items():
+        destination, code = outcome.split(":")
+        overrides.update(dict.fromkeys(identifiers, (destination, code)))
+    for original_group, cases in raw.items():
+        for case in cases:
+            identifier: str = case["description"].split(":", maxsplit=1)[0]
+            destination, code = overrides.get(identifier, (original_group, ""))
+            resolved[destination].append(
+                {
+                    **case,
+                    "expected_exit_code": int(destination in {"invalid", "pending"}),
+                    "expected_codes": [code] * bool(code) or case["expected_codes"],
+                    "pending_native": destination == "pending",
+                }
+            )
+    return resolved[group]
+
+
+def prepare_semantic_corpus_project(
+    *, base: Path, tmp_path: Path, test_case: SemanticCorpusCase
+) -> Path:
+    project: Path = tmp_path / "orders_project"
+    shutil.copytree(base, project)
+    for relative_path, contents in test_case.repo_files.items():
+        path: Path = project / relative_path
+        path.write_text(contents, encoding="utf-8")
+    return project
 
 
 class CompileBenchmarkMeasurement(NamedTuple):
@@ -76,6 +116,19 @@ class FreshProcessCompileBenchmarkResult(NamedTuple):
     peak_rss_bytes: int
     semantic_fingerprint: str
     payload: dict[str, object]
+    cpu_seconds: float
+    major_page_faults: int
+    minor_page_faults: int
+
+    def __repr__(self) -> str:
+        return (
+            f"FreshProcessCompileBenchmarkResult(elapsed_seconds={self.elapsed_seconds}, "
+            f"cpu_seconds={self.cpu_seconds}, peak_rss_bytes={self.peak_rss_bytes}, "
+            f"major_page_faults={self.major_page_faults}, "
+            f"minor_page_faults={self.minor_page_faults}, "
+            f"semantic_fingerprint={self.semantic_fingerprint!r}, "
+            f"compile_timings={self.payload.get('compile_timings')!r})"
+        )
 
 
 class FreshProcessCompileCacheBenchmarkResult(NamedTuple):
@@ -558,7 +611,7 @@ def _run_fresh_process_compile_benchmark(
         "--output",
         str(measurement_path),
         "--format",
-        "%e %M",
+        "%e %M %U %S %F %R",
         str(Path(sys.executable).with_name("sqb")),
         "--project-dir",
         str(project_dir),
@@ -567,28 +620,36 @@ def _run_fresh_process_compile_benchmark(
         "--json",
         *compile_args,
     ]
-    with (
-        output_path.open("wb") as output_file,
-        stderr_path.open("wb") as stderr_file,
-    ):
-        with subprocess.Popen(
-            command,
-            stdout=output_file,
-            stderr=stderr_file,
-            start_new_session=True,
-        ) as process:
-            try:
-                returncode: int = process.wait(timeout=expected_max_wall_seconds + 10.0)
-            except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGKILL)
-                process.wait()
-                raise
+    started: float = time.monotonic()
+    try:
+        with (
+            output_path.open("wb") as output_file,
+            stderr_path.open("wb") as stderr_file,
+        ):
+            with subprocess.Popen(
+                command,
+                stdout=output_file,
+                stderr=stderr_file,
+                start_new_session=True,
+            ) as process:
+                try:
+                    returncode: int = process.wait(timeout=expected_max_wall_seconds + 10.0)
+                except subprocess.TimeoutExpired:
+                    os.killpg(process.pid, signal.SIGKILL)
+                    process.wait()
+                    raise
+    finally:
+        payload_object, measurement = read_compile_measurement(
+            label=label,
+            measurement_path=measurement_path,
+            output_path=output_path,
+            elapsed_seconds=time.monotonic() - started,
+        )
     assert returncode == 0, stderr_path.read_text(encoding="utf-8")
-    elapsed_text, peak_rss_kib_text = measurement_path.read_text(encoding="utf-8").split()
+    elapsed_text, peak_rss_kib_text, user_text, system_text, major_text, minor_text = measurement
     elapsed_seconds: float = float(elapsed_text)
-    payload_object: object = json.loads(output_path.read_bytes())
     assert isinstance(payload_object, dict)
-    payload: dict[str, object] = payload_object
+    payload: dict[str, object] = cast(dict[str, object], payload_object)
     peak_rss_bytes: int = int(peak_rss_kib_text) * 1024
     compiled_dir: Path = project_dir / "target" / "compiled"
     semantic_fingerprint: str = semantic_compile_fingerprint(
@@ -599,6 +660,9 @@ def _run_fresh_process_compile_benchmark(
         peak_rss_bytes=peak_rss_bytes,
         semantic_fingerprint=semantic_fingerprint,
         payload=payload,
+        cpu_seconds=float(user_text) + float(system_text),
+        major_page_faults=int(major_text),
+        minor_page_faults=int(minor_text),
     )
 
 
@@ -1575,7 +1639,7 @@ def _semantic_regular_model_sql(
         False: f'__ref("model_{index - 1:05d}")',
     }[_layered_is_base_model(index=index)]
     metric_expressions: str = "".join(
-        f",\n  CAST(COALESCE(CASE WHEN id % {column_index % 11 + 2} = 0 "
+        f",\n  CAST(COALESCE(CASE WHEN input.id % {column_index % 11 + 2} = 0 "
         f"THEN amount + {column_index} WHEN status = 'priority' "
         f"THEN amount * {column_index % 7 + 1} ELSE amount - {column_index} END, 0) AS DOUBLE) "
         f"AS metric_{column_index:04d}"
@@ -1593,13 +1657,16 @@ def _semantic_regular_model_sql(
     }[index % _FUNCTION_INTERVAL == 0]
     macro_index: int = (index // macro_call_interval) % macro_count
     id_expression: str = {
-        True: f'@macro_{macro_index:05d}("id")',
-        False: "id",
+        True: f'@macro_{macro_index:05d}("input.id")',
+        False: "input.id",
     }[index % macro_call_interval == 0]
+    status_expression: str = (
+        "CAST(CASE WHEN input.id % 2 = 0 THEN 'even' ELSE 'odd' END AS VARCHAR)"
+    )
     direct_sql: str = f"""SELECT
   CAST({id_expression} AS INTEGER) AS id,
   CAST({amount_expression} AS DOUBLE) AS amount,
-  CAST(CASE WHEN id % 2 = 0 THEN 'even' ELSE 'odd' END AS VARCHAR) AS status{metric_expressions}
+  {status_expression} AS status{metric_expressions}
 FROM {relation_sql} AS input{seed_join_sql}
 """
     with_sql: str = f"WITH transformed AS (\n{direct_sql.rstrip()}\n)\nSELECT * FROM transformed\n"

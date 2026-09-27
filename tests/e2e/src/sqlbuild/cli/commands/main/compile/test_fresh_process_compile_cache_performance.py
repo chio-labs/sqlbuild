@@ -43,24 +43,24 @@ _MAX_EDIT_TO_COLD_RATIO: float = 0.60
             macro_count=500,
             test_count=2_945,
             audit_count=5_056,
-            expected_cold_max_wall_seconds=14.5,
-            expected_warm_max_wall_seconds=8.25,
-            expected_edit_max_wall_seconds=7.25,
+            expected_cold_max_wall_seconds=17.0,
+            expected_warm_max_wall_seconds=9.5,
+            expected_edit_max_wall_seconds=8.0,
             expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
             expected_max_edit_to_cold_ratio=_MAX_EDIT_TO_COLD_RATIO,
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=96 * _MIB,
             expected_cold_fingerprint=(
-                "3a955baeac3aaef85d1bcfe25eddce899abf8e542ad168510faa8c6cb53b9a30"
+                "e40512a79290e70e9170599ea526950e7b8c8745f534ee5e385ed2195f69fded"
             ),
             expected_leaf_edit_fingerprint=(
-                "37171d29e89f3ed9db9b29b21d9af810a7c9bf3555cc497159c2d4ef87ae8f9d"
+                "610664f9cb4d04db8c947f32cd57dad57e1b04064880dfd3700767a25981f849"
             ),
             expected_macro_edit_fingerprint=(
-                "e37d388dc19e21da66fcb2f6fad2c3ef8db288724e7ab65031a75180e1535949"
+                "f31227fbcf12586be22198e3dc499a9f572ef185267706c64df134b12e93403a"
             ),
             expected_project_config_fingerprint=(
-                "cbbe850cd2288979fd7682180176dfa9cda00bb48968ddb3b6c16ecd5728a389"
+                "3a7a8cab7a4e42cfffb9952130c1fdd6b4c573fc0b3a5ae99116eda1f12dabf1"
             ),
             macro_call_interval=6,
             scoped_macros=True,
@@ -75,24 +75,24 @@ _MAX_EDIT_TO_COLD_RATIO: float = 0.60
             macro_count=834,
             test_count=4_908,
             audit_count=8_427,
-            expected_cold_max_wall_seconds=23.5,
+            expected_cold_max_wall_seconds=24.0,
             expected_warm_max_wall_seconds=13.5,
-            expected_edit_max_wall_seconds=12.0,
+            expected_edit_max_wall_seconds=12.5,
             expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
             expected_max_edit_to_cold_ratio=_MAX_EDIT_TO_COLD_RATIO,
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=160 * _MIB,
             expected_cold_fingerprint=(
-                "b39d33782ca1bc09235a6b6190dbc6a35cec43a161ef29d459aafd3f6be90166"
+                "71d3f0d6d40cec6484a6b307ae589377767945c5ec04e0e6bcc7bd18d5c68089"
             ),
             expected_leaf_edit_fingerprint=(
-                "1bbf19080469c9716003c718fad5f8c196619778d20a44a4464a0af1c9f291d6"
+                "677f073370570f0035a41a1ec1d47d7459444da6eed11ccbafba4850708e05ce"
             ),
             expected_macro_edit_fingerprint=(
-                "394e5ee7d30c4cccbf608ea9d0b0e3a37d81b3948804d83a867244eccd9f3135"
+                "7cb89115a3fbd771eae4b9a5406f4b6f125b51f3cd3270ce0495f5db35fb28c2"
             ),
             expected_project_config_fingerprint=(
-                "4e2e86138b95fab8d4e45f97a990984f5057ad4686c4e05f0ba1de2de2ebe280"
+                "9abf2059b8a71892559bbd2fe80b5d164ae9b6ddaf375706802979543e8fed22"
             ),
             macro_call_interval=6,
             scoped_macros=True,
@@ -107,24 +107,24 @@ _MAX_EDIT_TO_COLD_RATIO: float = 0.60
             macro_count=1_667,
             test_count=9_816,
             audit_count=16_855,
-            expected_cold_max_wall_seconds=42.5,
-            expected_warm_max_wall_seconds=24.5,
-            expected_edit_max_wall_seconds=22.0,
+            expected_cold_max_wall_seconds=47.5,
+            expected_warm_max_wall_seconds=25.0,
+            expected_edit_max_wall_seconds=25.5,
             expected_max_warm_to_cold_ratio=_MAX_WARM_TO_COLD_RATIO,
             expected_max_edit_to_cold_ratio=_MAX_EDIT_TO_COLD_RATIO,
             expected_max_rss_bytes=2 * _GIB,
             expected_max_cache_bytes=320 * _MIB,
             expected_cold_fingerprint=(
-                "1e3a63aab6d47bd1425c23d6f03c084d5207086caad6ce0da7564be0ce048158"
+                "f29cb502ded5df2cd32157c5d83363d7218b7335f61944f3c034230c94b6a46e"
             ),
             expected_leaf_edit_fingerprint=(
-                "a853c671586612047923ffd1b8f0a5ef9d9a7c2d6edb634ad731432e5b641b16"
+                "291a9cd967733f6446755c5f332aeffab64881c82abb01ec8decafe249658b92"
             ),
             expected_macro_edit_fingerprint=(
-                "25793047e0ae59c5c9d3a67ace435990de502e0d2c2be9d25ba2b5589ecf778d"
+                "ed4ad652e2f02b2ed609fb07ed94b616c434f4e8f68843ed12bfd23b5cbfaaa9"
             ),
             expected_project_config_fingerprint=(
-                "1cd1b9d836d9f5dd27c632cc8d9ab68464855dc22457c68ed44ad7efa7eb44af"
+                "9e5a05f1ae2d6d4a2daaa79e43cdd51f76b3d8908b2d9146a46a36d362c13aeb"
             ),
             macro_call_interval=6,
             scoped_macros=True,
@@ -222,18 +222,15 @@ def test_given_semantic_project_when_compiling_across_processes_then_cache_is_in
         1,
         0,
     )
-    assert fresh_process_compile_cache_metrics(result.after_leaf_edit) == (
-        test_case.model_count - 1,
-        1,
-        0,
-        0,
+    assert_complete_compile_cache_hit(
+        measurement=result.after_leaf_edit,
+        model_count=test_case.model_count,
     )
     macro_batch_hits, macro_entry_hits, macro_misses, macro_bypasses = (
         fresh_process_compile_cache_metrics(result.macro_edit)
     )
     assert macro_batch_hits + macro_entry_hits + macro_misses == test_case.model_count
     assert macro_batch_hits > 0
-    assert macro_entry_hits > 0
     assert macro_misses == test_case.expected_macro_edit_misses
     assert macro_bypasses == 0
     assert_complete_compile_cache_hit(

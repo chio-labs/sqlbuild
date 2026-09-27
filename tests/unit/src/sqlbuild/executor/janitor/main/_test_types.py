@@ -6,7 +6,6 @@ from datetime import datetime
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.executor.janitor.models import (
     JanitorRelationKey,
-    JanitorVirtualStatePruneCandidate,
 )
 
 
@@ -25,14 +24,10 @@ class JanitorPlanTestCase:
     protected_relation_keys: frozenset[JanitorRelationKey] = frozenset()
     expected_candidate_names: tuple[str, ...] = field(default_factory=tuple)
     expected_direct_state_table_names: tuple[str, ...] = field(default_factory=tuple)
-    expected_virtual_state_table_names: tuple[str, ...] = field(default_factory=tuple)
     expected_skipped_relation_reasons: tuple[str, ...] = field(default_factory=tuple)
     expected_skipped_schema_sources: tuple[str, ...] = field(default_factory=tuple)
     expected_blocked_schema_sources: tuple[str, ...] = field(default_factory=tuple)
     expected_suppressed_candidate_names: tuple[str, ...] = field(default_factory=tuple)
-    virtual_state_prune_candidates: tuple[JanitorVirtualStatePruneCandidate, ...] = field(
-        default_factory=tuple
-    )
 
 
 @dataclass(frozen=True)
@@ -42,10 +37,6 @@ class JanitorExecuteTestCase:
     expected_dropped_targets: tuple[str, ...]
     direct_mode: bool = False
     expected_pruned_table_names: tuple[str, ...] = field(default_factory=tuple)
-    expected_pruned_virtual_table_names: tuple[str, ...] = field(default_factory=tuple)
-    virtual_state_prune_candidates: tuple[JanitorVirtualStatePruneCandidate, ...] = field(
-        default_factory=tuple
-    )
 
 
 @dataclass(frozen=True)
@@ -130,7 +121,6 @@ class JanitorRetentionResolutionTestCase:
     description: str
     override: int | None
     configured: int | None
-    virtual_environments: bool
     expected_retention_days: int
 
 

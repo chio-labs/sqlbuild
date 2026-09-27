@@ -7,6 +7,7 @@ import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
+from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.constants import (
     MISSING_TEMPLATE_CONTEXT_MESSAGE_PART,
     MISSING_TEMPLATE_CONTEXT_VALUE_MESSAGE_PART,
@@ -25,7 +26,6 @@ from sqlbuild.compiler.compile.constants import (
     TEMPLATE_TRUE_LITERAL,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.types import TemplateNamespace
 
 

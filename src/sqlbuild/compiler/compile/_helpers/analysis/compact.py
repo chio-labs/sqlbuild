@@ -17,7 +17,6 @@ from sqlbuild.compiler.compile._helpers.analysis.columns import (
     _infer_columns_with_polyglot,
     _infer_polyglot_nullability,
     _infer_polyglot_shallow_nullability,
-    _lineage_resource_type,
     _polyglot_alias_nullability_from_select,
     _polyglot_expression_type,
     _qualified_reference_names,
@@ -28,18 +27,30 @@ from sqlbuild.compiler.compile._helpers.analysis.cte_facts import (
     _polyglot_cte_passthrough_facts,
     _polyglot_filtered_non_null_outputs,
 )
+from sqlbuild.compiler.compile._helpers.sharing.binding import (
+    binding_query_fields,
+    lineage_reference_map,
+    prepare_binding_queries,
+    remembered_shared_results,
+    reused_shared_results,
+    shared_result_is_exact,
+    shared_result_keys,
+)
 from sqlbuild.compiler.compile.constants import (
     COMPACT_ANALYSIS_FACT_LENGTH,
     COMPACT_ANALYSIS_LEGACY_RESPONSE_LENGTH,
     COMPACT_ANALYSIS_RESPONSE_LENGTH,
     COMPACT_ANALYSIS_SOURCE_LENGTH,
+    COMPACT_RELATION_STUB_PREFIX,
     RESOLVED_SOURCE_CONFIDENCE,
     SQL_WILDCARD_TOKEN,
     UNKNOWN_SQL_TYPE_NAME,
 )
 from sqlbuild.compiler.compile.exceptions import CompactAnalysisInputError
 from sqlbuild.compiler.compile.models import (
+    CompactBatchContext,
     CompactBatchExecutionOptions,
+    CompactBatchInputs,
     CompactBatchPreparation,
     CompactLineageFacts,
     CompactProjectedFacts,
@@ -51,9 +62,11 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
     NativeCompactAnalysis,
     PolyglotAnalysisResult,
+    PreparedBindingQuery,
     ProjectedAnalysisRequest,
+    SharedBindingQuery,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompactBatchResponseCallback, CompiledResourceType
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
     ColumnTransformKind,
@@ -151,8 +164,10 @@ from sqlbuild.compiler.sql_analysis.constants import (
     POLYGLOT_PAYLOAD_COLUMN as _POLYGLOT_PAYLOAD_COLUMN,
 )
 from sqlbuild.compiler.sql_analysis.exceptions import SqlAnalysisBoundaryError
+from sqlbuild.compiler.sql_analysis.main._binding_catalog import create_binding_catalog
 from sqlbuild.compiler.sql_analysis.main._decode_schema_validation import decode_schema_validation
-from sqlbuild.compiler.sql_analysis.main._prepare_schema_validation import prepare_schema_validation
+from sqlbuild.compiler.sql_analysis.main._normalize_analysis import normalize_analysis_sql
+from sqlbuild.compiler.sql_analysis.main._normalize_analysis_batch import normalize_analysis_sqls
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.compiler.sql_analysis.models import (
@@ -245,6 +260,7 @@ def analyze_columns_and_lineage_with_polyglot(
                 ),
                 template_index=precomputed.compact_template_index,
                 resource_name_indexes=precomputed.resource_name_indexes,
+                resource_names=precomputed.resource_names,
                 binding_diagnostics=(
                     precomputed.binding_diagnostics
                     if precomputed.binding_diagnostics is not None
@@ -331,6 +347,7 @@ def analyze_columns_and_lineage_with_polyglot(
                 ),
                 template_index=precomputed.compact_template_index,
                 resource_name_indexes=precomputed.resource_name_indexes,
+                resource_names=precomputed.resource_names,
                 binding_diagnostics=(),
                 binding_validated=False,
             )
@@ -378,61 +395,290 @@ def analyze_queries_with_compact_polyglot_batch(
     if binding_schemas is not None and len(binding_schemas) != len(query_sqls):
         raise CompactAnalysisInputError("binding schemas must match the query batch length")
     if cached_batch is not None:
-        preparation: CompactBatchPreparation = cached_batch[0]
-    else:
-        with record_compile_timing("analysis_preparation_ms"):
-            preparation = _prepare_compact_analysis_batch(
-                query_sqls=query_sqls,
-                references=references,
-                placeholders=placeholders,
-                column_nullability_by_table=column_nullability_by_table,
-                column_types_by_table=column_types_by_table,
-                inference_profile=inference_profile,
-                recover_cte_facts=recover_cte_facts,
-                rich_type_inference=rich_type_inference,
-                binding_schemas=binding_schemas,
+        if len(cached_batch[0].cleaned_sql) != len(query_sqls):
+            raise CompactAnalysisInputError(
+                "cached compact query-analysis preparation has an invalid length"
             )
-    if len(preparation.cleaned_sql) != len(query_sqls):
-        raise CompactAnalysisInputError(
-            "cached compact query-analysis preparation has an invalid length"
+        with record_compile_timing("analysis_projection_ms"):
+            return _project_compact_analysis_batch(
+                preparation=cached_batch[0], response_payload=cached_batch[1]
+            )
+    inputs: CompactBatchInputs = CompactBatchInputs(
+        query_sqls=query_sqls,
+        references=references,
+        placeholders=placeholders,
+        column_nullability_by_table=column_nullability_by_table,
+        column_types_by_table=column_types_by_table,
+        inference_profile=inference_profile,
+        recover_cte_facts=recover_cte_facts,
+        rich_type_inference=rich_type_inference,
+        binding_schemas=binding_schemas,
+    )
+    reuse_results: bool = options.on_response is None and binding_schemas is not None
+    with record_compile_timing("analysis_preparation_ms"):
+        context: CompactBatchContext = _compact_batch_context(
+            inputs=inputs,
+            share=True,
+            shareable_prekeys=options.shareable_prekeys if reuse_results else None,
         )
-    if cached_batch is not None:
-        response_payload: object = cached_batch[1]
-    else:
-        with record_compile_timing("analysis_native_ms"):
-            response_payload = _run_compact_analysis_batch(preparation=preparation)
+        memo: dict[object, object] | None = (
+            cast(dict[object, object], context.binding_catalog.shared_analyses)
+            if reuse_results and context.binding_catalog is not None
+            else None
+        )
+        memo_keys: tuple[tuple[object, ...] | None, ...] = shared_result_keys(
+            inputs=inputs, context=context
+        )
+        reused: dict[int, NativeCompactAnalysis] = (
+            reused_shared_results(inputs=inputs, context=context, keys=memo_keys, memo=memo)
+            if memo is not None
+            else {}
+        )
+        analyzed: tuple[int, ...] = tuple(
+            index for index in range(len(query_sqls)) if index not in reused
+        )
+    analyzed_results: tuple[NativeCompactAnalysis, ...] = ()
+    if analyzed:
+        analyzed_inputs: CompactBatchInputs = _batch_input_subset(inputs=inputs, indexes=analyzed)
+        recomputed: tuple[int, ...]
+        analyzed_results, recomputed = _analyze_compact_inputs(
+            inputs=analyzed_inputs,
+            context=_batch_context_subset(context=context, indexes=analyzed),
+            on_response=options.on_response if not reused else None,
+        )
+        if memo is not None:
+            for key, result in remembered_shared_results(
+                keys=tuple(
+                    None if position in recomputed else memo_keys[index]
+                    for position, index in enumerate(analyzed)
+                ),
+                results=analyzed_results,
+            ).items():
+                memo.setdefault(key, result)
+    results: list[NativeCompactAnalysis | None] = [None] * len(query_sqls)
+    for index, result in zip(analyzed, analyzed_results, strict=True):
+        results[index] = result
+    for index, result in reused.items():
+        results[index] = result
+    return tuple(cast(NativeCompactAnalysis, result) for result in results)
+
+
+def _analyze_compact_inputs(
+    *,
+    inputs: CompactBatchInputs,
+    context: CompactBatchContext,
+    on_response: CompactBatchResponseCallback | None,
+) -> tuple[tuple[NativeCompactAnalysis, ...], tuple[int, ...]]:
+    """Run one native batch, re-analysing inexact shared members with their own names."""
+
+    with record_compile_timing("analysis_preparation_ms"):
+        preparation: CompactBatchPreparation = _prepare_compact_analysis_batch(
+            inputs=inputs, context=context
+        )
+    with record_compile_timing("analysis_native_ms"):
+        response_payload: object = _run_compact_analysis_batch(preparation=preparation)
     with record_compile_timing("analysis_projection_ms"):
-        projected: tuple[NativeCompactAnalysis, ...] = _project_compact_analysis_batch(
+        projected: tuple[NativeCompactAnalysis, ...] = _attach_compiled_bindings(
             preparation=preparation,
-            response_payload=response_payload,
-        )
-        if cached_batch is None:
-            projected = _attach_compiled_bindings(
+            response=response_payload,
+            analyses=_project_compact_analysis_batch(
                 preparation=preparation,
-                response=response_payload,
-                analyses=projected,
+                response_payload=response_payload,
+            ),
+        )
+    member_indexes: tuple[int, ...] = _inexact_shared_members(
+        preparation=preparation, response=response_payload
+    )
+    if member_indexes:
+        projected = _reanalyze_shared_members(
+            member_indexes=member_indexes, projected=projected, request=inputs
+        )
+    elif on_response is not None:
+        on_response(preparation=preparation, response=response_payload)
+    return projected, member_indexes
+
+
+def _batch_input_subset(
+    *, inputs: CompactBatchInputs, indexes: tuple[int, ...]
+) -> CompactBatchInputs:
+    if len(indexes) == len(inputs.query_sqls):
+        return inputs
+    return replace(
+        inputs,
+        query_sqls=tuple(inputs.query_sqls[index] for index in indexes),
+        references=tuple(inputs.references[index] for index in indexes),
+        placeholders=tuple(inputs.placeholders[index] for index in indexes),
+        recover_cte_facts=tuple(inputs.recover_cte_facts[index] for index in indexes),
+        binding_schemas=(
+            tuple(inputs.binding_schemas[index] for index in indexes)
+            if inputs.binding_schemas is not None
+            else None
+        ),
+    )
+
+
+def _batch_context_subset(
+    *, context: CompactBatchContext, indexes: tuple[int, ...]
+) -> CompactBatchContext:
+    if len(indexes) == len(context.normalized_sqls):
+        return context
+    return replace(
+        context,
+        normalized_sqls=[context.normalized_sqls[index] for index in indexes],
+        binding_queries=tuple(context.binding_queries[index] for index in indexes),
+    )
+
+
+def _inexact_shared_members(
+    *, preparation: CompactBatchPreparation, response: object
+) -> tuple[int, ...]:
+    if not preparation.shared_query_indexes or not isinstance(response, dict):
+        return ()
+    payload: dict[str, object] = cast(dict[str, object], response)
+    validations: object = payload.get("validations")
+    analyses: object = payload.get("analyses")
+    templates: object = payload.get("templates")
+    if not isinstance(analyses, list) or not isinstance(templates, list):
+        return ()
+    members: list[int] = []
+    for index, (projection, analysis) in enumerate(
+        zip(preparation.projections, analyses, strict=True)
+    ):
+        template_index: int = cast(int, projection["templateIndex"])
+        query_index: int = cast(int, preparation.templates[template_index]["queryIndex"])
+        if query_index not in preparation.shared_query_indexes:
+            continue
+        template: object = (
+            templates[analysis[0]]
+            if isinstance(analysis, list)
+            and analysis
+            and isinstance(analysis[0], int)
+            and 0 <= analysis[0] < len(templates)
+            else str(analysis)
+        )
+        validation: object = (
+            cast(list[object], validations)[query_index] if isinstance(validations, list) else None
+        )
+        if not shared_result_is_exact(validation=validation, template=template):
+            members.append(index)
+    return tuple(members)
+
+
+def _reanalyze_shared_members(
+    *,
+    member_indexes: tuple[int, ...],
+    projected: tuple[NativeCompactAnalysis, ...],
+    request: CompactBatchInputs,
+) -> tuple[NativeCompactAnalysis, ...]:
+    """Recompute members of inexact shared queries with their own relation names."""
+
+    with record_compile_timing("analysis_preparation_ms"):
+        preparation: CompactBatchPreparation = _prepare_compact_analysis_batch(
+            inputs=_batch_input_subset(inputs=request, indexes=member_indexes),
+            share_binding_queries=False,
+        )
+    with record_compile_timing("analysis_native_ms"):
+        response: object = _run_compact_analysis_batch(preparation=preparation)
+    with record_compile_timing("analysis_projection_ms"):
+        replacements: tuple[NativeCompactAnalysis, ...] = _attach_compiled_bindings(
+            preparation=preparation,
+            response=response,
+            analyses=_project_compact_analysis_batch(
+                preparation=preparation, response_payload=response
+            ),
+        )
+    results: list[NativeCompactAnalysis] = list(projected)
+    for index, replacement in zip(member_indexes, replacements, strict=True):
+        results[index] = replacement
+    return tuple(results)
+
+
+def _compact_batch_context(
+    *,
+    inputs: CompactBatchInputs,
+    share: bool,
+    shareable_prekeys: frozenset[str] | None,
+) -> CompactBatchContext:
+    """Prepare the catalog, cleaned SQL, and binding references for one batch."""
+
+    profile: ExpressionInferenceProfile = inputs.inference_profile
+    dialect: str | None = profile.sql_analysis_dialect
+    binding_catalog: Any | None = profile.binding_catalog
+    if binding_catalog is None and inputs.binding_schemas is not None:
+        binding_catalog = create_binding_catalog(
+            dialect=dialect or "generic",
+            quoted_ignore_case=profile.quoted_identifiers_ignore_case,
+            known_functions=profile.semantic_known_functions,
+            known_types=profile.semantic_known_types,
+            relations=inputs.column_types_by_table,
+        )
+    if binding_catalog is not None:
+        required_tables: set[str] = set()
+        for query_references in inputs.references:
+            required_tables.update(
+                _analysis_reference_name(reference) for reference in query_references
             )
-    if cached_batch is None and options.on_response is not None:
-        options.on_response(preparation=preparation, response=response_payload)
-    return projected
+        binding_catalog.prepare_analysis(
+            types={
+                name: inputs.column_types_by_table[name]
+                for name in required_tables
+                if name in inputs.column_types_by_table
+            },
+            nullability={
+                name: inputs.column_nullability_by_table[name]
+                for name in required_tables
+                if name in inputs.column_nullability_by_table
+            },
+        )
+    normalized_sqls: list[str] = normalize_analysis_sqls(
+        sqls=inputs.query_sqls,
+        dialect=dialect,
+        placeholders=inputs.placeholders,
+    )
+    binding_queries: tuple[PreparedBindingQuery | None, ...] = (
+        prepare_binding_queries(
+            binding_catalog=binding_catalog,
+            inputs=inputs,
+            cleaned_sqls=normalized_sqls,
+            share=share,
+            shareable_prekeys=shareable_prekeys,
+        )
+        if inputs.binding_schemas is not None and binding_catalog is not None
+        else (None,) * len(inputs.query_sqls)
+    )
+    return CompactBatchContext(
+        binding_catalog=binding_catalog,
+        normalized_sqls=normalized_sqls,
+        binding_queries=binding_queries,
+    )
 
 
 def _prepare_compact_analysis_batch(
     *,
-    query_sqls: tuple[str, ...],
-    references: tuple[tuple[CompileSqlReference, ...], ...],
-    placeholders: tuple[dict[str, str] | None, ...],
-    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
-    column_types_by_table: dict[str, dict[str, str]],
-    inference_profile: ExpressionInferenceProfile,
-    recover_cte_facts: tuple[bool, ...],
-    rich_type_inference: bool,
-    binding_schemas: tuple[dict[str, dict[str, str]] | None, ...] | None = None,
+    inputs: CompactBatchInputs,
+    share_binding_queries: bool = True,
+    context: CompactBatchContext | None = None,
 ) -> CompactBatchPreparation:
+    query_sqls: tuple[str, ...] = inputs.query_sqls
+    references: tuple[tuple[CompileSqlReference, ...], ...] = inputs.references
+    placeholders: tuple[dict[str, str] | None, ...] = inputs.placeholders
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]] = (
+        inputs.column_nullability_by_table
+    )
+    column_types_by_table: dict[str, dict[str, str]] = inputs.column_types_by_table
+    inference_profile: ExpressionInferenceProfile = inputs.inference_profile
+    recover_cte_facts: tuple[bool, ...] = inputs.recover_cte_facts
+    rich_type_inference: bool = inputs.rich_type_inference
+    binding_schemas: tuple[dict[str, dict[str, str]] | None, ...] | None = inputs.binding_schemas
     dialect: str | None = inference_profile.sql_analysis_dialect
+    if context is None:
+        context = _compact_batch_context(
+            inputs=inputs, share=share_binding_queries, shareable_prekeys=None
+        )
+    binding_catalog: Any | None = context.binding_catalog
     prepared: list[str] = []
     queries: list[dict[str, object]] = []
-    query_indexes: dict[tuple[str, str, bytes | None, bytes | None], int] = {}
+    query_indexes: dict[tuple[object, ...], int] = {}
     templates: list[dict[str, object]] = []
     template_indexes: dict[
         tuple[
@@ -447,27 +693,35 @@ def _prepare_compact_analysis_batch(
     ] = {}
     projections: list[dict[str, object]] = []
     function_return_types: dict[str, str] = dict(inference_profile.function_return_types)
+    normalized_sqls: list[str] = context.normalized_sqls
+    member_binding_schemas: tuple[dict[str, dict[str, str]] | None, ...] = (
+        binding_schemas if binding_schemas is not None else (None,) * len(query_sqls)
+    )
+    binding_queries: tuple[PreparedBindingQuery | None, ...] = context.binding_queries
+    shared_query_indexes: set[int] = set()
     for (
         query_sql,
+        cleaned_sql,
         query_references,
         query_placeholders,
         query_recover_cte_facts,
         binding_schema,
+        binding_query,
     ) in zip(
         query_sqls,
+        normalized_sqls,
         references,
         placeholders,
         recover_cte_facts,
-        binding_schemas if binding_schemas is not None else (None,) * len(query_sqls),
+        member_binding_schemas,
+        binding_queries,
         strict=True,
     ):
-        cleaned_sql: str = _cleaned_analysis_sql(
-            query_sql=query_sql,
-            placeholders=query_placeholders,
-            dialect=dialect,
-        )
-        lineage_references: dict[str, tuple[CompiledResourceType, str]] = _lineage_reference_map(
+        lineage_references: dict[str, tuple[CompiledResourceType, str]] = lineage_reference_map(
             query_references
+        )
+        shared: SharedBindingQuery | None = (
+            binding_query.shared if binding_query is not None else None
         )
         qualified_reference_names: frozenset[str] = (
             _qualified_reference_names(
@@ -477,16 +731,22 @@ def _prepare_compact_analysis_batch(
             if binding_schema is None
             else frozenset()
         )
-        canonical_stubs: dict[str, str] = {
-            name: (
-                name
-                if binding_schema is not None or name in qualified_reference_names
-                else f"__sqlbuild_project_input_{index}"
-            )
-            for index, name in enumerate(lineage_references)
-        }
+        canonical_stubs: dict[str, str] = (
+            shared.stubs
+            if shared is not None
+            else {
+                name: (
+                    name
+                    if binding_schema is not None or name in qualified_reference_names
+                    else f"{COMPACT_RELATION_STUB_PREFIX}{index}"
+                )
+                for index, name in enumerate(lineage_references)
+            }
+        )
         analysis_sql: str = (
-            cleaned_sql
+            shared.sql
+            if shared is not None
+            else cleaned_sql
             if binding_schema is not None
             else _cleaned_analysis_sql(
                 query_sql=query_sql,
@@ -499,41 +759,63 @@ def _prepare_compact_analysis_batch(
             "sql": analysis_sql,
             "dialect": dialect or "generic",
         }
-        schema: dict[str, object] | None = _compact_analysis_schema(
-            column_nullability_by_table=column_nullability_by_table,
-            column_types_by_table=column_types_by_table,
-            table_names=frozenset(
-                _analysis_reference_name(reference) for reference in query_references
-            ),
-            table_name_aliases=canonical_stubs,
-        )
+        schema: dict[str, object] | None = None
+        if binding_catalog is not None:
+            query["analysis_references"] = [
+                (name, canonical_stubs.get(name, name))
+                for name in sorted(
+                    lineage_references, key=lambda name: canonical_stubs.get(name, name)
+                )
+            ]
+        else:
+            schema = _compact_analysis_schema(
+                column_nullability_by_table=column_nullability_by_table,
+                column_types_by_table=column_types_by_table,
+                table_names=frozenset(
+                    _analysis_reference_name(reference) for reference in query_references
+                ),
+                table_name_aliases=canonical_stubs,
+            )
         if schema is not None:
             query["schema"] = schema
         binding_payload: dict[str, object] | None = None
-        if binding_schema is not None:
-            binding_payload = prepare_schema_validation(
-                request=SqlSchemaValidationRequest(
-                    sql=cleaned_sql,
-                    dialect=dialect,
-                    schema=binding_schema,
-                )
-            )
-            query["binding_schema"] = binding_payload["schema"]
-        query_key: tuple[str, str, bytes | None, bytes | None] = (
-            analysis_sql,
-            dialect or "generic",
-            (orjson.dumps(schema, option=orjson.OPT_SORT_KEYS) if schema is not None else None),
-            (
-                orjson.dumps(binding_payload["schema"], option=orjson.OPT_SORT_KEYS)
-                if binding_payload is not None
-                else None
-            ),
+        shared_key: tuple[object, ...] | None = (
+            (shared.key, query_recover_cte_facts) if shared is not None else None
         )
-        query_index: int | None = query_indexes.get(query_key)
+        query_index: int | None = query_indexes.get(shared_key) if shared_key is not None else None
+        if query_index is None and binding_schema is not None:
+            if binding_query is None or binding_catalog is None:
+                raise SqlAnalysisBoundaryError("binding schemas require a native project catalog")
+            binding_fields: dict[str, object]
+            binding_fields, binding_payload = binding_query_fields(
+                binding_query=binding_query, binding_catalog=binding_catalog
+            )
+            query.update(binding_fields)
+        query_key: tuple[object, ...]
+        if shared_key is not None:
+            query_key = shared_key
+        else:
+            query_key = (
+                analysis_sql,
+                dialect or "generic",
+                (
+                    orjson.dumps(
+                        schema or query.get("analysis_references"), option=orjson.OPT_SORT_KEYS
+                    )
+                ),
+                (
+                    orjson.dumps(binding_payload, option=orjson.OPT_SORT_KEYS)
+                    if binding_payload is not None
+                    else None
+                ),
+            )
+            query_index = query_indexes.get(query_key)
         if query_index is None:
             query_index = len(queries)
             query_indexes[query_key] = query_index
             queries.append(query)
+        if shared is not None:
+            shared_query_indexes.add(query_index)
         declared_column_order: tuple[str, ...] = (
             tuple(
                 column_nullability_by_table.get(_analysis_reference_name(query_references[0]), {})
@@ -595,6 +877,8 @@ def _prepare_compact_analysis_batch(
         queries=tuple(queries),
         templates=tuple(templates),
         projections=tuple(projections),
+        binding_catalog=binding_catalog,
+        shared_query_indexes=frozenset(shared_query_indexes),
     )
 
 
@@ -607,6 +891,19 @@ def _run_compact_analysis_batch(*, preparation: CompactBatchPreparation) -> obje
         >= _LARGE_COMPACT_SQL_BYTES
     )
     workers: int = 1 if large_project else 4
+    if preparation.binding_catalog is not None:
+        return orjson.loads(
+            preparation.binding_catalog.native.analyze_compact(
+                orjson.dumps(
+                    {
+                        "queries": preparation.queries,
+                        "templates": preparation.templates,
+                        "projections": preparation.projections,
+                        "workers": workers,
+                    }
+                )
+            )
+        )
     return orjson.loads(
         cast(NativeQueryAnalysisModule, _native).analyze_project_queries_compact_json(
             orjson.dumps(
@@ -723,7 +1020,14 @@ def _project_compact_analysis_batch(
             )
             if not (
                 isinstance(template, list)
-                and (len(template) == COMPACT_ANALYSIS_RESPONSE_LENGTH or legacy_type_recovery)
+                and (
+                    len(template) == COMPACT_ANALYSIS_RESPONSE_LENGTH
+                    or legacy_type_recovery
+                    or (
+                        len(template) == COMPACT_ANALYSIS_LEGACY_RESPONSE_LENGTH
+                        and isinstance(template[2], bool)
+                    )
+                )
                 and isinstance(template[0], list)
                 and isinstance(template[1], bool)
             ):
@@ -755,7 +1059,13 @@ def _project_compact_analysis_batch(
             results.append(
                 NativeCompactAnalysis(
                     cleaned_sql=cleaned_sql,
-                    analysis=None if legacy_type_recovery else {"hasStar": template[1]},
+                    analysis=None
+                    if legacy_type_recovery
+                    else {
+                        "hasStar": template[1],
+                        "starResolved": len(template) == COMPACT_ANALYSIS_LEGACY_RESPONSE_LENGTH
+                        and template[2] is True,
+                    },
                     projected=not legacy_type_recovery,
                     compact_rows=cast(list[object], template[0]),
                     compact_fact_rows=cast(list[object], raw_facts),
@@ -840,6 +1150,7 @@ def _projected_analysis_result(*, request: ProjectedAnalysisRequest) -> Polyglot
         columns=tuple(columns),
         lineage_columns=tuple(lineage_columns),
         has_star=bool(analysis.get("hasStar")),
+        star_resolved=bool(analysis.get("starResolved")),
         binding_diagnostics=request.binding_diagnostics,
         binding_validated=request.binding_validated,
     )
@@ -862,6 +1173,7 @@ def _compact_projected_analysis_result(
                 resource_name_indexes=request.resource_name_indexes,
             ),
             has_star=bool(request.analysis and request.analysis.get("hasStar")),
+            star_resolved=bool(request.analysis and request.analysis.get("starResolved")),
             binding_diagnostics=request.binding_diagnostics,
             binding_validated=request.binding_validated,
         )
@@ -969,8 +1281,10 @@ def _compact_projected_analysis_result(
                 raise SqlAnalysisBoundaryError(
                     "native compact analysis returned invalid upstream lineage"
                 )
-            if not all(
-                isinstance(value, int) and not isinstance(value, bool) for value in raw_source
+            if (
+                type(raw_source[0]) is not int
+                or type(raw_source[1]) is not int
+                or type(raw_source[2]) is not int
             ):
                 raise SqlAnalysisBoundaryError(
                     "native compact analysis returned invalid upstream indexes"
@@ -1000,8 +1314,10 @@ def _compact_projected_analysis_result(
             string_pool=string_pool,
             rows=compact_facts.lineage_rows,
             resource_name_indexes=request.resource_name_indexes,
+            resource_names=request.resource_names,
         ),
         has_star=bool(request.analysis and request.analysis.get("hasStar")),
+        star_resolved=bool(request.analysis and request.analysis.get("starResolved")),
         binding_diagnostics=request.binding_diagnostics,
         binding_validated=request.binding_validated,
     )
@@ -1014,17 +1330,9 @@ def _cleaned_analysis_sql(
     dialect: str | None,
     relation_stubs: dict[str, str] | None = None,
 ) -> str:
-    cleaned_sql: str = _replace_refs_with_stubs(
-        query_sql=query_sql,
-        dialect=dialect,
-        relation_stubs=relation_stubs,
+    return normalize_analysis_sql(
+        sql=query_sql, dialect=dialect, stubs=relation_stubs, placeholders=placeholders
     )
-    if placeholders:
-        cleaned_sql = substitute_placeholder_defaults(
-            query_sql=cleaned_sql,
-            placeholders=placeholders,
-        )
-    return cleaned_sql
 
 
 def get_complete_schema_binding_request(
@@ -1033,19 +1341,22 @@ def get_complete_schema_binding_request(
     placeholders: dict[str, str] | None,
     dialect: str | None,
     binding_schema: dict[str, dict[str, str]],
+    known_functions: tuple[str, ...] = (),
+    known_types: tuple[str, ...] = (),
+    cleaned_sql: str | None = None,
 ) -> SqlSchemaValidationRequest:
     """Build one stable native schema-validation request."""
 
-    cleaned_sql: str = _replace_refs_with_stubs(query_sql=query_sql, dialect=dialect)
-    if placeholders:
-        cleaned_sql = substitute_placeholder_defaults(
-            query_sql=cleaned_sql,
-            placeholders=placeholders,
+    if cleaned_sql is None:
+        cleaned_sql = normalize_analysis_sql(
+            sql=query_sql, dialect=dialect, placeholders=placeholders
         )
     return SqlSchemaValidationRequest(
         sql=cleaned_sql,
         dialect=dialect,
         schema=binding_schema,
+        known_functions=known_functions,
+        known_types=known_types,
     )
 
 
@@ -1108,7 +1419,7 @@ def _analyze_columns_and_lineage_with_compact_polyglot(
         return None
     if not _compact_analysis_is_eligible(analysis=analysis, projections=projections):
         return None
-    reference_map: dict[str, tuple[CompiledResourceType, str]] = _lineage_reference_map(references)
+    reference_map: dict[str, tuple[CompiledResourceType, str]] = lineage_reference_map(references)
     relation_alias_by_name: dict[str, str | None] = _compact_relation_alias_by_name(analysis)
     cte_passthrough_types, cte_passthrough_nullability, direct_cte_outputs, parsed = (
         _polyglot_cte_passthrough_facts(
@@ -1288,22 +1599,6 @@ def _compact_analysis_schema_column(
     return column
 
 
-def _lineage_reference_map(
-    references: tuple[CompileSqlReference, ...],
-) -> dict[str, tuple[CompiledResourceType, str]]:
-    reference_map: dict[str, tuple[CompiledResourceType, str]] = {}
-    reference: CompileSqlReference
-    for reference in references:
-        resource_type: CompiledResourceType | None = _lineage_resource_type(reference)
-        if resource_type is None:
-            continue
-        reference_map[_analysis_reference_name(reference)] = (
-            resource_type,
-            reference.ref_name,
-        )
-    return reference_map
-
-
 def _compact_relation_alias_by_name(analysis: dict[str, Any]) -> dict[str, str | None]:
     alias_by_name: dict[str, str | None] = {}
     relation_key: str
@@ -1334,14 +1629,16 @@ def _compact_projection_type(
     cast_type: object = projection.get(_POLYGLOT_ANALYSIS_CAST_TYPE)
     if isinstance(cast_type, str) and cast_type and cast_type != UNKNOWN_SQL_TYPE_NAME:
         return cast_type
-    type_hint: object = projection.get(_POLYGLOT_ANALYSIS_TYPE_HINT)
-    if isinstance(type_hint, str) and type_hint and type_hint != UNKNOWN_SQL_TYPE_NAME:
-        return type_hint
     transform_function: object = projection.get(_POLYGLOT_ANALYSIS_TRANSFORM_FUNCTION)
     if isinstance(transform_function, dict):
         function_name: object = transform_function.get(_POLYGLOT_ANALYSIS_FUNCTION_NAME)
         if isinstance(function_name, str):
-            return inference_profile.function_return_type(function_name)
+            declared_type: str | None = inference_profile.function_return_type(function_name)
+            if declared_type is not None:
+                return declared_type
+    type_hint: object = projection.get(_POLYGLOT_ANALYSIS_TYPE_HINT)
+    if isinstance(type_hint, str) and type_hint and type_hint != UNKNOWN_SQL_TYPE_NAME:
+        return type_hint
     return None
 
 

@@ -20,6 +20,12 @@ Repeated `sqb build` runs cause source-loader data to grow or change:
 
 ## What This Shows
 
+The complete source contracts also support offline `sqb compile` column and type checks.
+DuckDB rejects proven bind-time type errors; accepted conversions with data-dependent risks are
+non-blocking W21x warnings. PostgreSQL, Snowflake, and BigQuery use their own coercion rules;
+MotherDuck uses DuckDB's rules. Unknown types remain unchecked. The escape hatches are
+`MODEL (sql_analysis false)`, the corresponding path default, and `--no-sql-analysis`.
+
 - chained intermediate source loaders
 - different intermediate write strategies
 - terminal managed source loaders

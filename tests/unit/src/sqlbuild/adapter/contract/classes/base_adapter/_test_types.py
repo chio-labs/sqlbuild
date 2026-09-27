@@ -2,6 +2,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.types import StatementSizeLimit
+
+
+@dataclass(frozen=True)
+class StatementSizeLimitTestCase:
+    description: str
+    adapter_factory: Callable[[], BaseAdapter]
+    expected_limit: StatementSizeLimit | None
 
 
 @dataclass(frozen=True)

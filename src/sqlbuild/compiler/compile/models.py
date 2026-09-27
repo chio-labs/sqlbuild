@@ -107,6 +107,8 @@ class CompilerDiagnostic:
     location: SourceLocation | None = None
     related_locations: tuple[RelatedLocation, ...] = field(default_factory=tuple)
     help: str | None = None
+    notes: tuple[str, ...] = ()
+    affected_rules: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "phase", DiagnosticPhase(self.phase))
@@ -522,6 +524,7 @@ class CompactLineageFacts(Sequence[CompiledLineageColumnFact]):
         ...,
     ]
     resource_name_indexes: dict[int, int] = field(default_factory=dict)
+    resource_names: dict[int, str] = field(default_factory=dict)
     _cache: dict[int, CompiledLineageColumnFact] = field(
         default_factory=dict,
         init=False,
@@ -577,6 +580,9 @@ class CompactLineageFacts(Sequence[CompiledLineageColumnFact]):
     def resource_name(self, index: int) -> str:
         """Resolve a canonical native relation index to this model's resource name."""
 
+        name: str | None = self.resource_names.get(index)
+        if name is not None:
+            return name
         return self.string_pool[self.resource_name_indexes.get(index, index)]
 
     @staticmethod
@@ -607,6 +613,7 @@ class PolyglotAnalysisResult:
     columns: tuple[InferredColumn, ...] | None = None
     lineage_columns: Sequence[CompiledLineageColumnFact] = field(default_factory=tuple)
     has_star: bool = False
+    star_resolved: bool = False
     binding_diagnostics: tuple[SqlBindingDiagnostic, ...] = field(default_factory=tuple)
     binding_validated: bool = False
 
@@ -730,6 +737,29 @@ class CompileModelInput:
     macro_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
     declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
     sql_expansion: CompiledSqlExpansion | None = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
+class ModelSqlAnalysis:
+    """Completed model analysis and its in-memory binding proof."""
+
+    polyglot_analysis: PolyglotAnalysisResult
+    placeholders: dict[str, str] | None
+    cached: bool = False
+    fused_binding_validated: bool = False
+    cleaned_sql: str | None = None
+    validated_schema: dict[str, dict[str, str]] | None = None
+
+
+@dataclass(frozen=True)
+class ModelSqlAnalysisRequest:
+    """Inputs to one model's SQL analysis."""
+
+    model_input: CompileModelInput
+    query_sql: str
+    placeholders: dict[str, str] | None
+    cache_key: str | None
+    binding_schema: dict[str, dict[str, str]] | None
 
 
 @dataclass(frozen=True)
@@ -863,6 +893,7 @@ class CompiledModel:
     inferred_columns: tuple[InferredColumn, ...] | None = None
     fast_lineage_columns: Sequence[CompiledLineageColumnFact] | None = None
     fast_lineage_has_star: bool = False
+    fast_lineage_star_resolved: bool = False
     authored_sql: str = ""
     authored_query_sql: str = ""
     output_column_locations: dict[str, SourceLocation] = field(default_factory=dict)
@@ -874,6 +905,7 @@ class CompiledModel:
     binding_diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
     binding_validated: bool = False
     dynamic_column_contract: DynamicColumnContractProof | None = None
+    unchecked_output_columns: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -998,8 +1030,10 @@ class CompiledProject:
     effective_target_name: str | None
     effective_connection: dict[str, object]
     effective_vars: dict[str, object]
+    binding_catalog: Any | None = field(default=None, repr=False, compare=False)
     effective_target_database: str | None = None
     effective_target_schema: str | None = None
+    sql_analysis_dialect: str | None = None
     compile_cache_dir: Path | None = None
     settings: SettingsConfig = field(default_factory=SettingsConfig)
     scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
@@ -1258,6 +1292,7 @@ class CompactBatchExecutionOptions:
 
     binding_schemas: tuple[dict[str, dict[str, str]] | None, ...] | None = None
     on_response: CompactBatchResponseCallback | None = None
+    shareable_prekeys: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -1268,6 +1303,50 @@ class CompactBatchPreparation:
     queries: tuple[dict[str, object], ...]
     templates: tuple[dict[str, object], ...]
     projections: tuple[dict[str, object], ...]
+    binding_catalog: Any | None = field(default=None, repr=False, compare=False)
+    shared_query_indexes: frozenset[int] = frozenset()
+
+
+@dataclass(frozen=True)
+class CompactBatchInputs:
+    """Ordered per-model inputs of one compact native analysis batch."""
+
+    query_sqls: tuple[str, ...]
+    references: tuple[tuple[CompileSqlReference, ...], ...]
+    placeholders: tuple[dict[str, str] | None, ...]
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]]
+    column_types_by_table: dict[str, dict[str, str]]
+    inference_profile: Any
+    recover_cte_facts: tuple[bool, ...]
+    rich_type_inference: bool
+    binding_schemas: tuple[dict[str, dict[str, str]] | None, ...] | None
+
+
+@dataclass(frozen=True)
+class CompactBatchContext:
+    """Binding catalog, cleaned SQL, and binding references prepared for one batch."""
+
+    binding_catalog: Any | None
+    normalized_sqls: list[str]
+    binding_queries: tuple[PreparedBindingQuery | None, ...]
+
+
+@dataclass(frozen=True)
+class SharedBindingQuery:
+    """Relation-stubbed binding query shared by models with identical input shapes."""
+
+    sql: str
+    stubs: dict[str, str]
+    key: tuple[object, ...]
+
+
+@dataclass(frozen=True)
+class PreparedBindingQuery:
+    """Native binding references for one model and its optional shared form."""
+
+    references: list[tuple[str, bool]]
+    overrides: dict[str, Mapping[str, str]]
+    shared: SharedBindingQuery | None = None
 
 
 @dataclass(frozen=True)
@@ -1356,6 +1435,7 @@ class ProjectedAnalysisRequest:
     caches: CompactProjectionCaches = field(default_factory=CompactProjectionCaches)
     template_index: int | None = None
     resource_name_indexes: dict[int, int] = field(default_factory=dict)
+    resource_names: dict[int, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -1380,6 +1460,7 @@ class NativeCompactAnalysis:
         | None
     ) = None
     resource_name_indexes: dict[int, int] = field(default_factory=dict)
+    resource_names: dict[int, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

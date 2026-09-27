@@ -1,6 +1,7 @@
 """Constants for fresh-process compile performance guards."""
 
 UNLIMITED_CGROUP_MEMORY_VALUE: str = "max"
+COMPILE_MEASUREMENT_FIELD_COUNT: int = 6
 
 DENSE_JOIN_THRESHOLDS: tuple[int, ...] = (55, 75, 90, 99)
 DENSE_JOIN_COUNTS: tuple[int, ...] = (0, 1, 4, 8, 20)

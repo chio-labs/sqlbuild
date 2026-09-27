@@ -22,6 +22,7 @@
 		"items": [
 			"docs/concepts/project-configuration",
 			"docs/concepts/resource-identities",
+			"docs/concepts/semantic-compilation",
 			{
 				"label": "Adapters",
 				"collapsed": true,

@@ -361,7 +361,7 @@ def build_partial_ref_fixture_project_files() -> dict[str, str]:
 
 
 def build_open_schema_ref_fixture_project_files() -> dict[str, str]:
-    """Build a fixture with a required column beyond a partial star-model contract."""
+    """Build a fixture with a required column beyond a partial star-model schema."""
 
     return {
         "sqlbuild_project.toml": (
@@ -372,7 +372,6 @@ def build_open_schema_ref_fixture_project_files() -> dict[str, str]:
         ),
         "models/stg_orders.sql": (
             "MODEL (\n"
-            "  contract enforced,\n"
             "  columns (\n"
             "    order_id (type INTEGER),\n"
             "  ),\n"
@@ -1457,7 +1456,7 @@ def build_cursor_window_project_files(*, tests: dict[str, str]) -> dict[str, str
             "  cursor_inputs (raw_orders (column order_date, roles [filter, watermark]),),\n"
             "  batch_size 1h,\n"
             ");\n\n"
-            "SELECT COUNT(*) AS order_count\n"
+            "SELECT MAX(DATE_TRUNC('hour', order_date)) AS order_hour, COUNT(*) AS order_count\n"
             'FROM __source("raw_orders")\n'
             "WHERE order_date >= __cursor_start() AND order_date < __cursor_end()\n"
         ),
@@ -1479,3 +1478,24 @@ def build_declared_window_test(*, window: str, model_name: str) -> dict[str, str
             "SELECT 1\n"
         )
     }
+
+
+def build_cte_scope_project_files(*, queries: tuple[str, ...], expected: str) -> dict[str, str]:
+    """Build a chain with deliberately overlapping model-local CTE names."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            'name = "cte_scope"\nadapter = "duckdb"\n[connection]\ndatabase = "orders.duckdb"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+        ),
+        "tests/unit/chain.sql": (
+            'TEST (name "order_chain");\nWITH '
+            "__source__raw_orders AS (SELECT 1 AS order_id), "
+            f"__expected__orders_{len(queries) - 1} AS ({expected}) SELECT 1"
+        ),
+    }
+    for index, query in enumerate(queries):
+        files[f"models/orders_{index}.sql"] = f"MODEL ();\n{query}"
+    return files

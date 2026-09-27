@@ -5,10 +5,14 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile._helpers.analysis import compact
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
+    CompactBatchPreparation,
     CompileAdapterContext,
     CompileAuditInput,
     CompiledLineageColumnFact,
@@ -23,6 +27,7 @@ from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.sql_values.types import CollectionRendering
+from tests.integration.src.sqlbuild.compiler.pipeline._test_types import SharedBindingQueryCase
 
 _SCHEMA_FIXTURE_PATH: Path = (
     Path(__file__).resolve().parents[5] / "fixtures" / "dbt_manifest_v12_schema.json"
@@ -168,3 +173,32 @@ def lineage_source_pairs(column: CompiledLineageColumnFact) -> frozenset[tuple[s
     return frozenset(
         (source.resource_name, source.column_name) for source in column.upstream_columns
     )
+
+
+_SHARED_BINDING_UPSTREAM_SQL: str = "MODEL (materialized view); SELECT 1 AS id, 2.5 AS amount"
+
+
+def write_shared_binding_project(*, project_dir: Path, test_case: SharedBindingQueryCase) -> None:
+    (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = []\n'
+    )
+    models: Path = project_dir / "models"
+    models.mkdir()
+    (models / "orders.sql").write_text(_SHARED_BINDING_UPSTREAM_SQL)
+    (models / "customers.sql").write_text(_SHARED_BINDING_UPSTREAM_SQL)
+    (models / "orders_summary.sql").write_text(test_case.orders_summary_sql)
+    (models / "customers_summary.sql").write_text(test_case.customers_summary_sql)
+    for name, sql in test_case.later_models:
+        (models / f"{name}.sql").write_text(sql)
+
+
+def trace_native_compact_batches(monkeypatch: pytest.MonkeyPatch) -> list[CompactBatchPreparation]:
+    original: Callable[..., object] = compact._run_compact_analysis_batch
+    preparations: list[CompactBatchPreparation] = []
+
+    def traced(*, preparation: CompactBatchPreparation) -> object:
+        preparations.append(preparation)
+        return original(preparation=preparation)
+
+    monkeypatch.setattr(compact, "_run_compact_analysis_batch", traced)
+    return preparations

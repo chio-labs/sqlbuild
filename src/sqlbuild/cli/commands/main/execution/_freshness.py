@@ -18,7 +18,6 @@ from sqlbuild.cli.commands._helpers.freshness.output import (
 from sqlbuild.cli.commands._helpers.freshness.selection import resolve_freshness_source_names
 from sqlbuild.cli.commands._helpers.freshness.state import (
     read_direct_freshness_state_for_command,
-    read_virtual_freshness_state_for_command,
 )
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands._helpers.runtime.connection import (
@@ -49,7 +48,6 @@ def run_freshness(request: FreshnessCommandRequest) -> int:
     select: tuple[str, ...] = request.select
     cli_vars: dict[str, object] | None = request.cli_vars
     compare_state: bool = request.compare_state
-    virtual_environment_name: str | None = request.virtual_environment_name
     if request.fail_on_stale and not compare_state:
         raise CliUserError("freshness --fail-on-stale requires --state", code="C238")
     effective_project_dir: Path = (
@@ -93,13 +91,7 @@ def run_freshness(request: FreshnessCommandRequest) -> int:
         try:
             previous_records_by_source_name: dict[str, SourceFreshnessRecord] | None = None
             previous_records: dict[SourceFreshnessIdentity, SourceFreshnessRecord] | None = None
-            if compare_state and virtual_environment_name is not None:
-                previous_records_by_source_name = read_virtual_freshness_state_for_command(
-                    discovered_inputs=discovered_inputs,
-                    project_dir=effective_project_dir,
-                    virtual_environment_name=virtual_environment_name,
-                )
-            elif compare_state:
+            if compare_state:
                 previous_records = read_direct_freshness_state_for_command(
                     adapter=adapter,
                     connection=connection,

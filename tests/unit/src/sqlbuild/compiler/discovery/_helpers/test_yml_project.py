@@ -660,7 +660,6 @@ schema = "dev"
                     "loader_schema": None,
                     "defer_sources_to": None,
                     "defer_clone_from": None,
-                    "changes_only": None,
                     "compile_cache": None,
                     "allow_as_clone_origin": False,
                     "allow_as_clone_destination": False,
@@ -668,7 +667,6 @@ schema = "dev"
             },
             expected_janitor_enabled=False,
             expected_retention_days=None,
-            expected_janitor_max_checkpoints=20,
             expected_janitor_delete_tracked_only=True,
             expected_janitor_exclude_patterns=(),
         ),
@@ -683,12 +681,10 @@ default_target = "dev"
 path = "data.db"
 
 [settings]
-virtual_environments = true
 sql_analysis = false
 query_change_tracking = true
 concurrency = 8
 auto_load_sources = false
-changes_only = true
 
 [scopes]
 enforce_placement = false
@@ -720,7 +716,6 @@ schema = "dev_${user}"
 loader_schema = "raw_${user}"
 defer_sources_to = "prod"
 defer_clone_from = "prod"
-changes_only = true
 compile_cache = false
 
 [targets.dev.connection]
@@ -737,7 +732,6 @@ allow_as_clone_destination = true
 enabled = true
 retention_days = 21
 archive_retention_days = 3
-max_checkpoints = 3
 delete_tracked_only = false
 exclude_patterns = ["partition_*"]
 direct_state_history_versions = 5
@@ -774,13 +768,11 @@ enabled = true
 """.strip(),
             expected_name="demo",
             expected_adapter="duckdb",
-            expected_virtual_environments=True,
             expected_default_target="dev",
             expected_connection={"path": "data.db"},
             expected_sql_analysis=False,
             expected_max_concurrency=8,
             expected_auto_load_sources=False,
-            expected_changes_only=True,
             expected_enforce_placement=False,
             expected_materialized="table",
             expected_row_diff_exclude_columns=("loaded_at",),
@@ -808,7 +800,6 @@ enabled = true
                     "loader_schema": "raw_${user}",
                     "defer_sources_to": "prod",
                     "defer_clone_from": "prod",
-                    "changes_only": True,
                     "compile_cache": False,
                     "allow_as_clone_origin": True,
                     "allow_as_clone_destination": True,
@@ -817,7 +808,6 @@ enabled = true
             expected_janitor_enabled=True,
             expected_retention_days=21,
             expected_janitor_archive_retention_days=3,
-            expected_janitor_max_checkpoints=3,
             expected_janitor_delete_tracked_only=False,
             expected_janitor_exclude_patterns=("partition_*",),
             expected_janitor_direct_state_history_versions=5,
@@ -857,13 +847,11 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
 
     assert config.name == test_case.expected_name
     assert config.adapter == test_case.expected_adapter
-    assert config.settings.virtual_environments is test_case.expected_virtual_environments
     assert config.default_target == test_case.expected_default_target
     assert config.connection == test_case.expected_connection
     assert config.settings.sql_analysis is test_case.expected_sql_analysis
     assert config.settings.concurrency == test_case.expected_max_concurrency
     assert config.settings.auto_load_sources is test_case.expected_auto_load_sources
-    assert config.settings.changes_only is test_case.expected_changes_only
     assert config.scopes.enforce_placement is test_case.expected_enforce_placement
     assert config.defaults.materialized == test_case.expected_materialized
     assert config.defaults.row_diff_exclude_columns == test_case.expected_row_diff_exclude_columns
@@ -875,28 +863,11 @@ def test_given_project_config_file_when_loading_project_config_then_it_returns_e
     assert config.defaults.function_schema == test_case.expected_function_schema
     assert config.path_defaults == test_case.expected_path_defaults
     assert config.vars == test_case.expected_vars
-    assert {
-        target_name: {
-            "connection": target_config.connection,
-            "vars": target_config.vars,
-            "database": target_config.database,
-            "schema": target_config.schema,
-            "loader_schema": target_config.loader_schema,
-            "defer_sources_to": target_config.defer_sources_to,
-            "defer_clone_from": target_config.defer_clone_from,
-            "changes_only": target_config.changes_only,
-            "compile_cache": target_config.compile_cache,
-            "allow_as_clone_origin": target_config.clone.allow_as_clone_origin,
-            "allow_as_clone_destination": target_config.clone.allow_as_clone_destination,
-        }
-        for target_name, target_config in config.targets.items()
-    } == test_case.expected_targets
     assert config.janitor.enabled is test_case.expected_janitor_enabled
     assert config.janitor.retention_days == test_case.expected_retention_days
     assert (
         config.janitor.archive_retention_days == test_case.expected_janitor_archive_retention_days
     )
-    assert config.janitor.max_checkpoints == test_case.expected_janitor_max_checkpoints
     assert config.janitor.delete_tracked_only is test_case.expected_janitor_delete_tracked_only
     assert config.janitor.exclude_patterns == test_case.expected_janitor_exclude_patterns
     assert (
@@ -956,7 +927,6 @@ sql_analysis = false
 sql_validation = false
 concurrency = 4
 auto_load_sources = false
-changes_only = true
 
 [vars]
 user = "kevin"
@@ -991,13 +961,11 @@ max_total_bytes = 78
                     "sql_analysis",
                     "concurrency",
                     "auto_load_sources",
-                    "changes_only",
                 }
             ),
             expected_vars={"user": "kevin"},
             expected_dbt_target="pat",
             expected_dbt_vars={"shared": "local", "threads": 2},
-            expected_changes_only=True,
             expected_scenario_local_type_overrides={
                 "snowflake": {
                     "NUMBER(*,0)": "BIGINT",
@@ -1070,7 +1038,6 @@ schema = "local_schema"
 loader_schema = "local_raw"
 defer_sources_to = "prod"
 defer_clone_from = "prod"
-changes_only = false
 compile_cache = false
 
 [targets.dev.connection]
@@ -1101,7 +1068,6 @@ allow_as_clone_destination = false
                     "loader_schema": "local_raw",
                     "defer_sources_to": "prod",
                     "defer_clone_from": "prod",
-                    "changes_only": False,
                     "compile_cache": False,
                     "allow_as_clone_origin": True,
                     "allow_as_clone_destination": False,
@@ -1131,7 +1097,6 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
     assert config.settings.sql_validation is test_case.expected_sql_validation
     assert config.settings.concurrency == test_case.expected_max_concurrency
     assert config.settings.auto_load_sources is test_case.expected_auto_load_sources
-    assert config.settings.changes_only is test_case.expected_changes_only
     assert config.setting_overrides == test_case.expected_setting_overrides
     assert config.vars == test_case.expected_vars
     assert config.dbt.target == test_case.expected_dbt_target
@@ -1143,22 +1108,6 @@ def test_given_local_config_state_when_loading_local_config_then_it_returns_expe
         "max_bytes_per_relation": config.scenario.snapshot_limits.max_bytes_per_relation,
         "max_total_bytes": config.scenario.snapshot_limits.max_total_bytes,
     } == test_case.expected_snapshot_limits
-    assert {
-        target_name: {
-            "connection": target_config.connection,
-            "vars": target_config.vars,
-            "database": target_config.database,
-            "schema": target_config.schema,
-            "loader_schema": target_config.loader_schema,
-            "defer_sources_to": target_config.defer_sources_to,
-            "defer_clone_from": target_config.defer_clone_from,
-            "changes_only": target_config.changes_only,
-            "compile_cache": target_config.compile_cache,
-            "allow_as_clone_origin": target_config.clone.allow_as_clone_origin,
-            "allow_as_clone_destination": target_config.clone.allow_as_clone_destination,
-        }
-        for target_name, target_config in config.targets.items()
-    } == test_case.expected_targets
     attribute_name: str
     for attribute_name in test_case.expected_missing_attributes:
         assert not hasattr(config, attribute_name)
@@ -1276,17 +1225,6 @@ adapter = "duckdb"
 enforce_placement = "no"
 """.strip(),
             expected_error_fragment="Expected 'enforce_placement' to be a boolean when provided",
-        ),
-        LoadProjectConfigErrorTestCase(
-            description="raises when virtual environments setting is not a boolean",
-            project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[settings]
-virtual_environments = "yes"
-""".strip(),
-            expected_error_fragment="Expected 'virtual_environments' to be a boolean when provided",
         ),
         LoadProjectConfigErrorTestCase(
             description="raises when settings sql_analysis is not a boolean",
@@ -1546,11 +1484,6 @@ connection = "   "
             expected_error_fragment=r"targets.dev.clone contains unknown key\(s\): connections",
         ),
         LoadProjectConfigErrorTestCase(
-            description="raises when state contains unknown key",
-            project_file_contents='name = "demo"\nadapter = "duckdb"\n[targets.dev.state]\nconnections = {}',
-            expected_error_fragment=r"targets.dev.state contains unknown key\(s\): connections",
-        ),
-        LoadProjectConfigErrorTestCase(
             description="raises when environment clone allow_as_clone_origin is not a boolean",
             project_file_contents="""
 name = "demo"
@@ -1651,17 +1584,6 @@ query_change_tracking = false
 enabled = true
 """.strip(),
             expected_error_fragment="janitor.delete_tracked_only requires",
-        ),
-        LoadProjectConfigErrorTestCase(
-            description="raises when janitor max checkpoints is less than one",
-            project_file_contents="""
-name = "demo"
-adapter = "duckdb"
-
-[janitor]
-max_checkpoints = 0
-""".strip(),
-            expected_error_fragment="janitor.max_checkpoints must be >= 1",
         ),
         LoadProjectConfigErrorTestCase(
             description="raises when janitor direct state history versions is negative",

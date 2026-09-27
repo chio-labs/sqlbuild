@@ -128,12 +128,17 @@ def run_native_sql_lint(
         if not isinstance(raw_diagnostics, list):
             raise NativeLintError("native lint response is missing a diagnostics list")
         for raw_diagnostic in raw_diagnostics:
-            violation: LintViolation | None = _authored_violation(
-                raw_diagnostic=raw_diagnostic,
-                body=body,
-                contents=contents_by_path[body.file_path],
-                dialect=config.dialect,
-            )
+            try:
+                violation: LintViolation | None = _authored_violation(
+                    raw_diagnostic=raw_diagnostic,
+                    body=body,
+                    contents=contents_by_path[body.file_path],
+                    dialect=config.dialect,
+                )
+            except NativeLintError as error:
+                violation = _parse_failure_violation(
+                    error=error, body=body, contents=contents_by_path[body.file_path]
+                )
             if violation is not None:
                 violations_by_file.setdefault(body.file_path, []).append(violation)
     return {path: tuple(entries) for path, entries in violations_by_file.items()}
@@ -167,10 +172,12 @@ def _native_responses(
                 orjson.dumps(payloads, option=orjson.OPT_SORT_KEYS).decode()
             )
         )
-    except (TypeError, ValueError) as error:
-        raise NativeLintError(str(error)) from error
+    except (TypeError, ValueError, RuntimeError) as error:
+        return dict.fromkeys(keys, NativeLintError(str(error)))
     if not isinstance(decoded, list) or len(decoded) != len(keys):
-        raise NativeLintError("native lint engine returned an invalid batch response")
+        return dict.fromkeys(
+            keys, NativeLintError("native lint engine returned an invalid batch response")
+        )
     results: tuple[_NativeResult, ...] = tuple(_native_result(response=value) for value in decoded)
     return dict(zip(keys, results, strict=True))
 
@@ -187,19 +194,19 @@ def _native_result(*, response: object) -> _NativeResult:
     result: dict[str, Any] = cast(dict[str, Any], decoded)
     if result.get("version") != _NATIVE_LINT_API_VERSION:
         return NativeLintError("native lint engine returned an unsupported response version")
+    if not isinstance(result.get("diagnostics"), list):
+        return NativeLintError("native lint response is missing a diagnostics list")
     return result
 
 
 def _parse_failure_violation(
     *, error: NativeLintError, body: LintBody, contents: str
-) -> LintViolation | None:
+) -> LintViolation:
     """Convert a per-body native parse rejection into an authored project fault."""
 
     match: re.Match[str] | None = _PARSE_ERROR_POSITION_PATTERN.match(error.message)
-    if match is None:
-        return None
-    expanded_line: int = int(match.group("line"))
-    expanded_column: int = int(match.group("column"))
+    expanded_line: int = int(match.group("line")) if match else 1
+    expanded_column: int = int(match.group("column")) if match else 1
     expanded_lines: list[str] = body.lint_text.splitlines(keepends=True)
     expanded_offset: int = 0
     if 1 <= expanded_line <= len(expanded_lines):

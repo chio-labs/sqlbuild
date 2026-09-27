@@ -43,10 +43,11 @@ from sqlbuild.compiler.lineage.types import (
 from sqlbuild.compiler.profiling.main._metric import record_compile_metric
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.sql_analysis.constants import BINDING_SEVERITIES, TYPE_CHECKED_DIALECTS
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 
-_ANALYSIS_CACHE_VERSION: int = 10
-_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v13-bound-lineage-type-recovery"
+_ANALYSIS_CACHE_VERSION: int = 12
+_ANALYSIS_ALGORITHM_FINGERPRINT: str = "model-sql-analysis-v21-completed-star-shapes"
 _LINEAGE_COLUMN_VALUE_COUNT: int = 4
 _LINEAGE_SOURCE_VALUE_COUNT: int = 3
 _COMPACT_TRANSFORM_CODES: dict[str, int] = {
@@ -126,6 +127,7 @@ def build_analysis_cache_context(
         "python_version": platform.python_version_tuple()[:2],
         "allow_compact_analysis": allow_compact_analysis,
         "rich_type_inference": rich_type_inference,
+        "type_checked_dialects": sorted(TYPE_CHECKED_DIALECTS),
         "inference_profile": profile_payload,
     }
     try:
@@ -675,6 +677,7 @@ def model_analysis_output_signature(analysis: PolyglotAnalysisResult) -> str:
                 ]
             ),
             "has_star": analysis.has_star,
+            "star_resolved": analysis.star_resolved,
         }
     )
 
@@ -738,6 +741,9 @@ def _inference_profile_payload(
         )
     return {
         "sql_analysis_dialect": profile.sql_analysis_dialect,
+        "quoted_identifiers_ignore_case": profile.quoted_identifiers_ignore_case,
+        "semantic_known_functions": profile.semantic_known_functions,
+        "semantic_known_types": profile.semantic_known_types,
         "function_nullability_rules": rules,
         "function_return_types": dict(sorted(profile.function_return_types.items())),
     }
@@ -802,6 +808,7 @@ def _analysis_payload(*, cache_key: str, analysis: PolyglotAnalysisResult) -> di
         ),
         "l": [_lineage_column_payload(column) for column in analysis.lineage_columns],
         "h": analysis.has_star,
+        "sr": analysis.star_resolved,
         "b": [
             [
                 diagnostic.code,
@@ -810,6 +817,7 @@ def _analysis_payload(*, cache_key: str, analysis: PolyglotAnalysisResult) -> di
                 diagnostic.column,
                 diagnostic.start,
                 diagnostic.end,
+                diagnostic.severity,
             ]
             for diagnostic in analysis.binding_diagnostics
         ],
@@ -888,6 +896,7 @@ def _analysis_from_payload(
             columns=columns,
             lineage_columns=lineage_columns,
             has_star=has_star,
+            star_resolved=values.get("sr") is True,
             binding_diagnostics=binding_diagnostics,
             binding_validated=binding_validated,
         ),
@@ -896,10 +905,12 @@ def _analysis_from_payload(
 
 
 def _binding_diagnostic_from_payload(payload: list[object]) -> SqlBindingDiagnostic:
-    diagnostic_value_count: int = 6
+    diagnostic_value_count: int = 7
     if len(payload) != diagnostic_value_count:
-        raise AnalysisCacheEntryError("analysis cache binding diagnostic must contain six values")
-    code, message, line, column, start, end = payload
+        raise AnalysisCacheEntryError("analysis cache binding diagnostic must contain seven values")
+    code, message, line, column, start, end, severity = payload
+    if severity not in BINDING_SEVERITIES:
+        raise AnalysisCacheEntryError("analysis cache binding diagnostic severity is invalid")
     if not isinstance(code, str) or not isinstance(message, str):
         raise AnalysisCacheEntryError(
             "analysis cache binding diagnostic code/message must be strings"
@@ -914,6 +925,7 @@ def _binding_diagnostic_from_payload(payload: list[object]) -> SqlBindingDiagnos
         column=cast(int | None, column),
         start=cast(int | None, start),
         end=cast(int | None, end),
+        severity=cast(str, severity),
     )
 
 

@@ -263,7 +263,6 @@ class LoadProjectConfigTestCase:
     expected_targets: dict[str, dict[str, object]]
     expected_janitor_enabled: bool
     expected_retention_days: int | None
-    expected_janitor_max_checkpoints: int
     expected_janitor_delete_tracked_only: bool
     expected_janitor_exclude_patterns: tuple[str, ...]
     expected_seed_database: str | None = None
@@ -291,8 +290,6 @@ class LoadProjectConfigTestCase:
     expected_dbt_target_path: str | None = None
     expected_dbt_vars: dict[str, object] = field(default_factory=dict)
     expected_auto_load_sources: bool = True
-    expected_virtual_environments: bool = False
-    expected_changes_only: bool = False
     expected_enforce_placement: bool = True
 
 
@@ -311,7 +308,6 @@ class LoadLocalConfigTestCase:
     expected_dbt_target: str | None = None
     expected_dbt_vars: dict[str, object] = field(default_factory=dict)
     expected_auto_load_sources: bool = True
-    expected_changes_only: bool = False
     expected_targets: dict[str, dict[str, object]] = field(default_factory=dict)
     expected_missing_attributes: tuple[str, ...] = ()
     expected_scenario_local_type_overrides: dict[str, dict[str, str]] = field(default_factory=dict)

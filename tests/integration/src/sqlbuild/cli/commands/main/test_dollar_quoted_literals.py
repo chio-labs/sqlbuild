@@ -30,7 +30,16 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import run_build
                     1,
                 ),
             ),
-        )
+        ),
+        DollarQuotedLiteralBuildTestCase(
+            description="tagged dollar-quoted literal with an apostrophe stays opaque",
+            projection=(
+                "$note$ customer's note $note$ AS order_label,\n"
+                "  $$plain$$ AS order_note,\n"
+                "  o.order_id"
+            ),
+            expected_rows=((" customer's note ", "plain", 1),),
+        ),
     ],
     ids=lambda case: case.description,
 )

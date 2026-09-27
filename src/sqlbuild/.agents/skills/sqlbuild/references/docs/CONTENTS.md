@@ -22,6 +22,7 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 
 - [Project Configuration](concepts/project-configuration.md) (`concepts/project-configuration`) - Configure your SQLBuild project with sqlbuild_project.toml and sqlbuild_local.toml.
 - [Resource Identities](concepts/resource-identities.md) (`concepts/resource-identities`) - Canonical names for SQLBuild resources, selectors, state, and integrations.
+- [Semantic Compilation](concepts/semantic-compilation.md) (`concepts/semantic-compilation`) - Offline reference, semantic and type checks that sqb compile runs before any warehouse work.
 - [Overview](concepts/adapters.md) (`concepts/adapters`) - Supported database engines and their connection configuration.
 - [Snowflake](concepts/adapters/snowflake.md) (`concepts/adapters/snowflake`) - Snowflake adapter configuration for SQLBuild.
 - [DuckDB](concepts/adapters/duckdb.md) (`concepts/adapters/duckdb`) - DuckDB adapter configuration for SQLBuild.

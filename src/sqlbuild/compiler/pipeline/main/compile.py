@@ -55,7 +55,6 @@ from sqlbuild.compiler.planner.models import (
     PlannerSelection,
     PlanOutput,
 )
-from sqlbuild.compiler.planner.types import WorkSelectionPolicy
 from sqlbuild.compiler.python_nodes.main._run_selection import (
     resolve_python_sql_run_selection_from_inputs,
 )
@@ -131,6 +130,7 @@ def run_compile_pipeline(
             result=RulesResult(
                 findings=rules_result.findings,
                 evaluated_models=rules_result.evaluated_models,
+                unevaluated_resources=rules_result.unevaluated_resources,
                 cache_hits=rules_result.cache_hits,
                 cache_misses=rules_result.cache_misses,
             ),
@@ -252,7 +252,6 @@ def _build_result(
         plan_output=plan_output,
         run_selection=run_selection,
         selected_python_node_names=selected_python_node_names,
-        work_selection_policy=WorkSelectionPolicy.ALL_SELECTED,
     )
 
     return CompilePipelineResult(

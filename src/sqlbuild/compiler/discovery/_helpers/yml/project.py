@@ -37,9 +37,12 @@ from sqlbuild.cost.constants import USD_PER_CREDIT_CONFIG_KEY
 from sqlbuild.cursor_algebra.constants import DURATION_DAY_UNIT
 from sqlbuild.cursor_algebra.models import Duration
 from sqlbuild.spec.contracts.constants import (
+    SCENARIO_RUN_NAMESPACE_CONFIG_KEY,
     TIME_TRAVEL_RETENTION_MATERIALIZATIONS,
     ZERO_DAY_CURSOR_DURATION,
 )
+from sqlbuild.spec.contracts.exceptions import SpecConfigError
+from sqlbuild.spec.contracts.main.parse_scenario_run_namespace import parse_scenario_run_namespace
 from sqlbuild.spec.contracts.models import (
     AuthoredTimeTravelRetention,
     ClonePolicy,
@@ -57,7 +60,6 @@ from sqlbuild.spec.contracts.models import (
     LocalClonePolicy,
     LocalConfig,
     LocalDbtConfig,
-    LocalStateConfig,
     LocalTargetConfig,
     MaterializationDefaultsConfig,
     MaterializationRetentionDefaults,
@@ -71,7 +73,6 @@ from sqlbuild.spec.contracts.models import (
     SinksConfig,
     SnapshotsConfig,
     StartCursorsConfig,
-    StateConfig,
     TargetConfig,
 )
 from sqlbuild.spec.contracts.types import (
@@ -469,6 +470,12 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
     mapping: dict[str, object] = _coerce_mapping(
         payload=payload, label="settings", file_path=file_path
     )
+    _reject_removed_virtual_keys(
+        mapping=mapping,
+        removed_keys=frozenset({"virtual_environments", "changes_only"}),
+        label="settings",
+        file_path=file_path,
+    )
     canonical_setting_names: frozenset[str] = frozenset(
         field.name for field in fields(SettingsConfig)
     )
@@ -512,12 +519,6 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
             "settings.column_contract_mode must be one of: implicit, explicit"
         ) from error
     auto_load_sources: bool = _optional_bool(mapping=mapping, key="auto_load_sources", default=True)
-    virtual_environments: bool = _optional_bool(
-        mapping=mapping,
-        key="virtual_environments",
-        default=False,
-    )
-    changes_only: bool = _optional_bool(mapping=mapping, key="changes_only", default=False)
     microbatch_concurrency: bool = _optional_bool(
         mapping=mapping, key="microbatch_concurrency", default=False
     )
@@ -563,8 +564,6 @@ def _load_settings(*, payload: object, file_path: Path) -> SettingsConfig:
         column_contract_mode=column_contract_mode,
         concurrency=concurrency,
         auto_load_sources=auto_load_sources,
-        changes_only=changes_only,
-        virtual_environments=virtual_environments,
         microbatch_concurrency=microbatch_concurrency,
         microbatch_unaccounted_partition_policy=microbatch_unaccounted_partition_policy,
         table_promotion_mode=table_promotion_mode,
@@ -817,6 +816,12 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
     mapping: dict[str, object] = _coerce_mapping(
         payload=payload, label="defaults", file_path=file_path
     )
+    _reject_removed_virtual_keys(
+        mapping=mapping,
+        removed_keys=frozenset({"run_despite_unchanged"}),
+        label="defaults",
+        file_path=file_path,
+    )
     row_diff_exclude_columns: tuple[str, ...] = tuple(
         _load_string_sequence(
             payload=mapping.get("row_diff_exclude_columns"),
@@ -883,7 +888,6 @@ def _load_defaults(*, payload: object, file_path: Path) -> DefaultsConfig:
             payload=mapping, key="unaccounted_partition_policy"
         ),
         replay_on_change=_optional_str(payload=mapping, key="replay_on_change"),
-        run_despite_unchanged=_optional_str(payload=mapping, key="run_despite_unchanged"),
         row_diff_exclude_columns=row_diff_exclude_columns,
         row_diff_tolerances=row_diff_tolerances,
         row_diff_sample_rows=_optional_non_negative_int(
@@ -905,6 +909,12 @@ def _load_path_defaults(*, payload: object, file_path: Path) -> dict[str, dict[s
         if not isinstance(path_value, dict):
             raise ProjectConfigError(f"{file_path} path_defaults['{path_key}'] must be a mapping")
         path_dict: dict[str, object] = cast(dict[str, object], path_value)
+        _reject_removed_virtual_keys(
+            mapping=path_dict,
+            removed_keys=frozenset({"run_despite_unchanged"}),
+            label="path_defaults",
+            file_path=file_path,
+        )
         _validate_path_default_tags(path_dict=path_dict, path_key=path_key, file_path=file_path)
         normalized_path_key: str = _normalize_path_default_key(
             path_key=path_key, file_path=file_path
@@ -1107,14 +1117,6 @@ def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig
         _validate_clone_keys(
             clone_mapping=clone_mapping, target_name=target_name, file_path=file_path
         )
-        state_mapping: dict[str, object] = _coerce_mapping(
-            payload=target_mapping.get("state"),
-            label=f"targets.{target_name}.state",
-            file_path=file_path,
-        )
-        _validate_state_keys(
-            state_mapping=state_mapping, target_name=target_name, file_path=file_path
-        )
         execution_limits: ExecutionLimitsConfig = _load_execution_limits(
             payload=target_mapping.get("execution_limits"),
             label=f"targets.{target_name}.execution_limits",
@@ -1132,7 +1134,6 @@ def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig
             loader_schema=_optional_str(payload=target_mapping, key="loader_schema"),
             defer_sources_to=_optional_str(payload=target_mapping, key="defer_sources_to"),
             defer_clone_from=_optional_str(payload=target_mapping, key="defer_clone_from"),
-            changes_only=_optional_nullable_bool(mapping=target_mapping, key="changes_only"),
             compile_cache=_optional_nullable_bool(mapping=target_mapping, key="compile_cache"),
             time_travel_retention=_optional_target_retention_default(
                 mapping=target_mapping, target_name=target_name, file_path=file_path
@@ -1179,20 +1180,6 @@ def _load_targets(*, payload: object, file_path: Path) -> dict[str, TargetConfig
                     default=False,
                 ),
             ),
-            state=StateConfig(
-                backend=_optional_str(payload=state_mapping, key="backend"),
-                schema=_optional_str(payload=state_mapping, key="schema"),
-                connection=_optional_mapping(payload=state_mapping, key="connection"),
-                allow_reset=_optional_bool(
-                    mapping=state_mapping,
-                    key="allow_reset",
-                    default=False,
-                ),
-                unsuffixed_virtual_env=_optional_str(
-                    payload=state_mapping,
-                    key="unsuffixed_virtual_env",
-                ),
-            ),
         )
     return targets
 
@@ -1221,14 +1208,6 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
         _validate_clone_keys(
             clone_mapping=clone_mapping, target_name=target_name, file_path=file_path
         )
-        state_mapping: dict[str, object] = _coerce_mapping(
-            payload=target_mapping.get("state"),
-            label=f"targets.{target_name}.state",
-            file_path=file_path,
-        )
-        _validate_state_keys(
-            state_mapping=state_mapping, target_name=target_name, file_path=file_path
-        )
         execution_limits: ExecutionLimitsConfig = _load_execution_limits(
             payload=target_mapping.get("execution_limits"),
             label=f"targets.{target_name}.execution_limits",
@@ -1246,7 +1225,6 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
             loader_schema=_optional_str(payload=target_mapping, key="loader_schema"),
             defer_sources_to=_optional_str(payload=target_mapping, key="defer_sources_to"),
             defer_clone_from=_optional_str(payload=target_mapping, key="defer_clone_from"),
-            changes_only=_optional_nullable_bool(mapping=target_mapping, key="changes_only"),
             compile_cache=_optional_nullable_bool(mapping=target_mapping, key="compile_cache"),
             time_travel_retention=_optional_target_retention_default(
                 mapping=target_mapping, target_name=target_name, file_path=file_path
@@ -1288,19 +1266,6 @@ def _load_local_targets(*, payload: object, file_path: Path) -> dict[str, LocalT
                     key="allow_as_clone_destination",
                 ),
             ),
-            state=LocalStateConfig(
-                backend=_optional_str(payload=state_mapping, key="backend"),
-                schema=_optional_str(payload=state_mapping, key="schema"),
-                connection=_optional_mapping(payload=state_mapping, key="connection"),
-                allow_reset=_optional_nullable_bool(
-                    mapping=state_mapping,
-                    key="allow_reset",
-                ),
-                unsuffixed_virtual_env=_optional_str(
-                    payload=state_mapping,
-                    key="unsuffixed_virtual_env",
-                ),
-            ),
         )
     return targets
 
@@ -1337,6 +1302,12 @@ def _load_target_connection(
 def _validate_target_keys(
     *, target_mapping: dict[str, object], target_name: str, file_path: Path
 ) -> None:
+    _reject_removed_virtual_keys(
+        mapping=target_mapping,
+        removed_keys=frozenset({"state", "changes_only"}),
+        label=f"targets.{target_name}",
+        file_path=file_path,
+    )
     _validate_allowed_keys(
         mapping=target_mapping,
         allowed_keys=frozenset(
@@ -1348,7 +1319,6 @@ def _validate_target_keys(
                 "loader_schema",
                 "defer_sources_to",
                 "defer_clone_from",
-                "changes_only",
                 "compile_cache",
                 "time_travel_retention",
                 "owns_time_travel_retention_namespace",
@@ -1356,7 +1326,6 @@ def _validate_target_keys(
                 "table_type_downgrade",
                 "time_travel_retention_decrease",
                 "clone",
-                "state",
                 "execution_limits",
             }
         ),
@@ -1409,29 +1378,21 @@ def _validate_clone_keys(
     )
 
 
-def _validate_state_keys(
-    *, state_mapping: dict[str, object], target_name: str, file_path: Path
-) -> None:
-    _validate_allowed_keys(
-        mapping=state_mapping,
-        allowed_keys=frozenset(
-            {"backend", "schema", "connection", "allow_reset", "unsuffixed_virtual_env"}
-        ),
-        label=f"targets.{target_name}.state",
-        file_path=file_path,
-    )
-
-
 def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:
     mapping: dict[str, object] = _coerce_mapping(
         payload=payload, label="janitor", file_path=file_path
+    )
+    _reject_removed_virtual_keys(
+        mapping=mapping,
+        removed_keys=frozenset({"max_checkpoints"}),
+        label="janitor",
+        file_path=file_path,
     )
     enabled: bool = _optional_bool(mapping=mapping, key="enabled", default=False)
     retention_days: int | None = _optional_nullable_int(mapping=mapping, key="retention_days")
     archive_retention_days: int = _optional_int(
         mapping=mapping, key="archive_retention_days", default=14
     )
-    max_checkpoints: int = _optional_int(mapping=mapping, key="max_checkpoints", default=20)
     direct_state_history_versions: int = _optional_int(
         mapping=mapping,
         key="direct_state_history_versions",
@@ -1453,19 +1414,31 @@ def _load_janitor(*, payload: object, file_path: Path) -> JanitorConfig:
         raise ProjectConfigError(f"{file_path} janitor.retention_days must be >= 0")
     if archive_retention_days < 0:
         raise ProjectConfigError(f"{file_path} janitor.archive_retention_days must be >= 0")
-    if max_checkpoints < 1:
-        raise ProjectConfigError(f"{file_path} janitor.max_checkpoints must be >= 1")
     if direct_state_history_versions < 0:
         raise ProjectConfigError(f"{file_path} janitor.direct_state_history_versions must be >= 0")
     return JanitorConfig(
         enabled=enabled,
         retention_days=retention_days,
         archive_retention_days=archive_retention_days,
-        max_checkpoints=max_checkpoints,
         direct_state_history_versions=direct_state_history_versions,
         delete_tracked_only=delete_tracked_only,
         exclude_patterns=exclude_patterns,
     )
+
+
+def _reject_removed_virtual_keys(
+    *,
+    mapping: dict[str, object],
+    removed_keys: frozenset[str],
+    label: str,
+    file_path: Path,
+) -> None:
+    removed: list[str] = sorted(removed_keys.intersection(mapping))
+    if removed:
+        raise ProjectConfigError(
+            f"{file_path} [{label}] option(s) {', '.join(removed)} were removed "
+            "with virtual environments; projects run in direct mode"
+        )
 
 
 def _load_snapshots(*, payload: object, file_path: Path) -> SnapshotsConfig:
@@ -1515,7 +1488,9 @@ def _load_scenario(*, payload: object, file_path: Path) -> ScenarioConfig:
     )
     _validate_allowed_keys(
         mapping=mapping,
-        allowed_keys=frozenset({"local_type_overrides", "snapshot_limits"}),
+        allowed_keys=frozenset(
+            {"local_type_overrides", "snapshot_limits", SCENARIO_RUN_NAMESPACE_CONFIG_KEY}
+        ),
         label="scenario",
         file_path=file_path,
     )
@@ -1536,7 +1511,14 @@ def _load_scenario(*, payload: object, file_path: Path) -> ScenarioConfig:
             payload=rules_payload,
             file_path=file_path,
         )
+    run_namespace: str | None = None
+    if SCENARIO_RUN_NAMESPACE_CONFIG_KEY in mapping:
+        try:
+            run_namespace = parse_scenario_run_namespace(mapping[SCENARIO_RUN_NAMESPACE_CONFIG_KEY])
+        except SpecConfigError as exc:
+            raise ProjectConfigError(f"{file_path} {exc}") from exc
     return ScenarioConfig(
+        run_namespace=run_namespace,
         local_type_overrides=local_type_overrides,
         snapshot_limits=_load_scenario_snapshot_limits(
             payload=mapping.get("snapshot_limits"),

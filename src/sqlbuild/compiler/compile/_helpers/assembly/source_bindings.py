@@ -1,0 +1,209 @@
+"""Rebind models to source columns already inspected by the planner."""
+
+from __future__ import annotations
+
+from dataclasses import replace
+from graphlib import TopologicalSorter
+from typing import Any
+
+from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProfile
+from sqlbuild.compiler.compile._helpers.analysis.compact import (
+    analyze_columns_and_lineage_with_polyglot,
+    get_complete_schema_binding_request,
+)
+from sqlbuild.compiler.compile._helpers.assembly.binding_positions import (
+    get_authored_binding_position,
+)
+from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
+    known_declared_types,
+    known_function_names,
+)
+from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
+    binding_relation_names,
+    published_model_shape,
+    semantic_shapes,
+)
+from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
+    cursor_intrinsics_analysis_sql,
+)
+from sqlbuild.compiler.compile.models import (
+    CompiledModel,
+    CompiledObjectKey,
+    CompiledProject,
+    CompiledSqlExpansion,
+    CompilerDiagnostic,
+    PolyglotAnalysisResult,
+)
+from sqlbuild.compiler.compile.types import (
+    CompiledResourceType,
+    DiagnosticPhase,
+    DiagnosticSeverity,
+)
+from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.compiler.sql_analysis.constants import (
+    BINDING_UNKNOWN_TABLE_INTERNAL_CODE,
+    CASE_SENSITIVE_BINDING_DIALECTS,
+    NATIVE_DIALECT_ALIASES,
+)
+from sqlbuild.compiler.sql_analysis.main._identifier_case import ignores_quoted_case
+from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
+from sqlbuild.compiler.sql_analysis.models import SqlBindingResult, SqlSchemaValidationRequest
+
+
+def _model_shapes(
+    *, model: CompiledModel, shapes: dict[str, dict[str, str]]
+) -> dict[str, dict[str, str]]:
+    return {name: shapes.get(name, {}) for name in binding_relation_names(model.references)}
+
+
+def get_source_binding_diagnostics(
+    *,
+    project: CompiledProject,
+    columns: dict[str, tuple[ColumnInfo, ...]],
+    profile: ExpressionInferenceProfile,
+    selected_keys: frozenset[CompiledObjectKey],
+) -> tuple[CompilerDiagnostic, ...]:
+    """Validate selected source readers without executing or inspecting warehouse SQL."""
+
+    if not project.settings.sql_analysis or not columns:
+        return ()
+    profile = replace(
+        profile,
+        sql_analysis_dialect=NATIVE_DIALECT_ALIASES.get(
+            profile.sql_analysis_dialect or "generic", profile.sql_analysis_dialect
+        ),
+        quoted_identifiers_ignore_case=ignores_quoted_case(
+            connection=project.effective_connection, dialect=profile.sql_analysis_dialect
+        ),
+    )
+    shapes: dict[str, dict[str, str]] = semantic_shapes(project=project, profile=profile)
+    changed_sources: set[str] = set()
+    for name, value in columns.items():
+        if value:
+            raw_shape: dict[str, str] = {column.name: column.type for column in value}
+            if raw_shape != shapes.get(name) or (
+                profile.sql_analysis_dialect in CASE_SENSITIVE_BINDING_DIALECTS
+                and not profile.quoted_identifiers_ignore_case
+            ):
+                changed_sources.add(name)
+            shapes[name] = {
+                '"' + column.name.replace('"', '""') + '"': column.type for column in value
+            }
+    physical_catalog: Any | None = (
+        project.binding_catalog.with_relations(shapes)
+        if project.binding_catalog is not None
+        else None
+    )
+    profile = replace(profile, binding_catalog=physical_catalog)
+    by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    graph: dict[str, tuple[str, ...]] = {}
+    for model in project.models:
+        graph[model.name] = tuple(
+            reference.ref_name
+            for reference in model.references
+            if reference.ref_kind == SqlReferenceKind.REF and reference.ref_name in by_name
+        )
+    affected: set[str] = set()
+    models: list[CompiledModel] = []
+    for name in TopologicalSorter(graph).static_order():
+        model: CompiledModel = by_name[name]
+        if model.key not in selected_keys or model.config.values.get("sql_analysis") is False:
+            continue
+        if any(
+            (
+                reference.ref_kind == SqlReferenceKind.SOURCE
+                and reference.ref_name in changed_sources
+            )
+            or (reference.ref_kind == SqlReferenceKind.REF and reference.ref_name in affected)
+            for reference in model.references
+        ):
+            models.append(model)
+            affected.add(model.name)
+            inputs: dict[str, dict[str, str]] = _model_shapes(model=model, shapes=shapes)
+            nullability: dict[str, dict[str, InferredNullability]] = {
+                table: dict.fromkeys(shape, InferredNullability.UNKNOWN)
+                for table, shape in inputs.items()
+            }
+            analysis: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
+                query_sql=model.query_sql,
+                references=model.references,
+                placeholders=_placeholders(model),
+                column_types_by_table=inputs,
+                column_nullability_by_table=nullability,
+                inference_profile=profile,
+                allow_compact_analysis=True,
+                recover_cte_facts=True,
+            )
+            if analysis.columns and (not analysis.has_star or all(inputs.values())):
+                shapes[model.name] = published_model_shape(
+                    sql=model.query_sql,
+                    profile=profile,
+                    inputs=inputs,
+                    columns={column.name: column.type or "UNKNOWN" for column in analysis.columns},
+                    config_values=model.config.values,
+                )
+            else:
+                shapes.pop(model.name, None)
+    if physical_catalog is not None:
+        physical_catalog = physical_catalog.with_relations(shapes)
+    functions: tuple[str, ...] = known_function_names(project.functions)
+    types: tuple[str, ...] = known_declared_types(functions=project.functions, column_types=shapes)
+    requests: tuple[SqlSchemaValidationRequest, ...] = tuple(
+        replace(
+            get_complete_schema_binding_request(
+                known_functions=functions,
+                known_types=types,
+                query_sql=cursor_intrinsics_analysis_sql(
+                    sql=model.query_sql, cursor_type=model.config.values.get("cursor_type")
+                ),
+                placeholders=_placeholders(model),
+                dialect=profile.sql_analysis_dialect,
+                binding_schema=_model_shapes(model=model, shapes=shapes),
+            ),
+            catalog=physical_catalog,
+            quoted_identifiers_ignore_case=ignores_quoted_case(
+                connection=project.effective_connection, dialect=profile.sql_analysis_dialect
+            ),
+        )
+        for model in models
+    )
+    results: tuple[SqlBindingResult, ...] = get_schema_validations(requests=requests)
+    expansions: dict[str, CompiledSqlExpansion] = {
+        path.stem: expansion for path, expansion in project.sql_expansions.items()
+    }
+    diagnostics: list[CompilerDiagnostic] = []
+    for model, request, result in zip(models, requests, results, strict=True):
+        for diagnostic in result.diagnostics:
+            if diagnostic.code == BINDING_UNKNOWN_TABLE_INTERNAL_CODE:
+                continue
+            line: int | None
+            column: int | None
+            line, column = get_authored_binding_position(
+                authored_sql=model.authored_sql,
+                authored_query_sql=model.authored_query_sql,
+                cleaned_sql=request.sql,
+                diagnostic=diagnostic,
+                expansion=expansions.get(model.name),
+            )
+            diagnostics.append(
+                CompilerDiagnostic(
+                    phase=DiagnosticPhase.COMPILE,
+                    severity=DiagnosticSeverity(diagnostic.severity),
+                    code=diagnostic.code,
+                    message=diagnostic.message,
+                    resource_type=CompiledResourceType.MODEL,
+                    resource_name=model.name,
+                    path=model.relative_path,
+                    line=line,
+                    column=column,
+                )
+            )
+    return tuple(diagnostics)
+
+
+def _placeholders(model: CompiledModel) -> dict[str, str] | None:
+    values: object = model.config.values.get("placeholders")
+    if isinstance(values, dict):
+        return {str(key): str(value) for key, value in values.items()}
+    return None

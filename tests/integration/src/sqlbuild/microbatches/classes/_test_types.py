@@ -26,3 +26,9 @@ class RetiredDirectStoreRecordTestCase:
     description: str
     retired_record_type: str
     expected_event_count: int
+
+
+@dataclass(frozen=True)
+class RetiredColumnsTestCase:
+    description: str
+    expected_existing_count: int

@@ -51,7 +51,6 @@ CHECK_COMMAND: str = "check"
 STANDALONE_CHECK_COMMANDS: frozenset[str] = frozenset({"audit", CHECK_COMMAND, "test"})
 EVENT_OUTPUT_FLAG: str = "--event-output"
 LIVE_EVENT_COMMANDS: frozenset[str] = ASSET_SELECTION_COMMANDS
-VIRTUAL_ENV_FLAG: str = "--virtual-env"
 EXPLICIT_SELECTION_FLAGS: frozenset[str] = frozenset({"--select", "-s", "--select-file"})
 JSON_OUTPUT_FLAGS: frozenset[str] = frozenset({"--json", "--json-output"})
 JSON_OUTPUT_FLAG: str = "--json-output"

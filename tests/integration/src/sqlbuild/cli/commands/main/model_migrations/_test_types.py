@@ -74,13 +74,6 @@ class PlanAsTargetTestCase:
 
 
 @dataclass(frozen=True)
-class VirtualModeMigrationTestCase:
-    description: str
-    expected_exit_code: int
-    expected_fragment: str
-
-
-@dataclass(frozen=True)
 class StagedReplaceTestCase:
     description: str
     install_failure: Callable[[pytest.MonkeyPatch], None]

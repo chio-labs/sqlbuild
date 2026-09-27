@@ -76,7 +76,7 @@ jobs:
                 performance=true
                 rules_performance=true
                 ;;
-              src/sqlbuild/cli/commands/_helpers/compile/*|src/sqlbuild/executor/testing/*|scripts/cold_compile_performance/*|tests/e2e/src/sqlbuild/cli/commands/main/compile/*)
+              src/sqlbuild/cli/commands/_helpers/compile/*|src/sqlbuild/executor/testing/*|scripts/cold_compile_performance/*|scripts/compile_performance_ratio/*|scripts/compare_compile_performance.py|tests/e2e/src/sqlbuild/cli/commands/main/compile/*)
                 broad=true
                 performance=true
                 ;;
@@ -90,7 +90,7 @@ jobs:
                 duckdb=true
                 format_performance=true
                 ;;
-              tests/e2e/src/sqlbuild/cli/commands/main/postgres/*|tests/integration/src/sqlbuild/adapters/postgres/*|tests/integration/src/sqlbuild/virtual/state/classes/postgres/*|tests/integration/src/sqlbuild/runtime/execution_history/*)
+              tests/e2e/src/sqlbuild/cli/commands/main/postgres/*|tests/integration/src/sqlbuild/adapters/postgres/*|tests/integration/src/sqlbuild/runtime/execution_history/*)
                 postgres=true
                 ;;
               tests/e2e/*)
@@ -195,14 +195,12 @@ jobs:
             target: test-e2e-duckdb-build-core
           - name: build incremental
             target: test-e2e-duckdb-build-incremental
-          - name: build virtual
-            target: test-e2e-duckdb-build-virtual
           - name: CLI data
             target: test-e2e-duckdb-cli-data
           - name: CLI commands
             target: test-e2e-duckdb-cli
-          - name: virtual environments
-            target: test-e2e-duckdb-virtual
+          - name: CLI inspection
+            target: test-e2e-duckdb-inspection
           - name: integrations
             target: test-e2e-duckdb-integrations
     env:
@@ -390,6 +388,62 @@ jobs:
             make test-e2e-dense-compile-performance \
               SQLBUILD_BENCHMARK_MODELS="${BENCHMARK_MODELS}"
 
+      - name: Run diagnostic-heavy compile guards
+        if: matrix.models == 1000
+        run: make test-e2e-diagnostic-compile-performance
+
+  compile_performance_ratio:
+    name: Same-runner compile ratio (${{ matrix.kind }} 3000 models)
+    needs: [changes, lockfile]
+    if: needs.changes.outputs.performance == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - kind: dense
+            max_ratio: "1.10"
+          - kind: fresh
+            max_ratio: "1.30"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out the comparison base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'main' }}
+          path: base
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            Cargo.lock
+            base/uv.lock
+            base/Cargo.lock
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Install Python
+        run: uv python install 3.12
+      - name: Install head dependencies
+        run: uv sync --locked --all-groups --all-extras
+      - name: Install base dependencies
+        working-directory: base
+        run: uv sync --locked --all-extras
+      - name: Compare base and head cold compiles
+        env:
+          KIND: ${{ matrix.kind }}
+          MAX_RATIO: ${{ matrix.max_ratio }}
+        run: |
+          uv run python -m scripts.compare_compile_performance \
+            --kind "${KIND}" \
+            --max-ratio "${MAX_RATIO}" \
+            --models 3000 \
+            --base-python base/.venv/bin/python \
+            --head-python .venv/bin/python
+
   cache_compile_performance:
     name: Fresh-process compile cache (${{ matrix.models }} models)
     needs: [changes, lockfile]
@@ -551,6 +605,7 @@ jobs:
         performance,
         cold_compile_performance,
         dense_compile_performance,
+        compile_performance_ratio,
         cache_compile_performance,
         rules_performance,
         postgres,
@@ -568,6 +623,7 @@ jobs:
           PERFORMANCE_RESULT: ${{ needs.performance.result }}
           COLD_COMPILE_PERFORMANCE_RESULT: ${{ needs.cold_compile_performance.result }}
           DENSE_COMPILE_PERFORMANCE_RESULT: ${{ needs.dense_compile_performance.result }}
+          COMPILE_PERFORMANCE_RATIO_RESULT: ${{ needs.compile_performance_ratio.result }}
           CACHE_COMPILE_PERFORMANCE_RESULT: ${{ needs.cache_compile_performance.result }}
           RULES_PERFORMANCE_RESULT: ${{ needs.rules_performance.result }}
           POSTGRES_RESULT: ${{ needs.postgres.result }}
@@ -587,6 +643,7 @@ jobs:
             "${PERFORMANCE_RESULT}" \
             "${COLD_COMPILE_PERFORMANCE_RESULT}" \
             "${DENSE_COMPILE_PERFORMANCE_RESULT}" \
+            "${COMPILE_PERFORMANCE_RATIO_RESULT}" \
             "${CACHE_COMPILE_PERFORMANCE_RESULT}" \
             "${RULES_PERFORMANCE_RESULT}" \
             "${POSTGRES_RESULT}"; do

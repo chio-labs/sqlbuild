@@ -22,6 +22,7 @@ sqb scenario test [flags]
 | `--select`, `-s` | Select scenarios to run |
 | `--exclude` | Exclude scenarios from the selection |
 | `--retain` | Keep scenario-owned warehouse artifacts for inspection |
+| `--scenario-namespace NAMESPACE` | Isolate warehouse artifacts for this run; overrides environment and config |
 | `--local` | Run locally against DuckDB using captured JSONL snapshots |
 | `--strict` | Treat missing/stale local snapshots as errors instead of skips |
 | `--sync-snapshots` | Capture missing/stale snapshots before local run (requires `--local`) |
@@ -115,6 +116,7 @@ sqb scenario capture [flags]
 | `--select`, `-s` | Select scenarios to capture |
 | `--exclude` | Exclude scenarios from the selection |
 | `--retain` | Keep warehouse fixture artifacts after capture |
+| `--scenario-namespace NAMESPACE` | Isolate warehouse artifacts for this capture; overrides environment and config |
 | `--force` | Bypass snapshot capture safety limits |
 | `--max-snapshot-rows` | Override per-relation row limit |
 | `--max-snapshot-total-rows` | Override total row limit |
@@ -138,6 +140,11 @@ sqb scenario capture --select daily_revenue_minimal --retain
 Snapshots are written to `tests/_scenario_snapshots/<scenario_name>/` with a `scenario.json` manifest and JSONL files for each fixture relation. These files can be committed to version control.
 
 ## Runtime artifacts
+
+Both subcommands report the effective namespace and its source. `scenario test --json` includes
+`execution.scenario_namespace` (null when unset) and `execution.scenario_namespace_source`
+(`cli`, `env`, `local config`, `project config`, or `unset`). Progress goes to stderr in JSON mode.
+See [parallel CI runs](/docs/concepts/scenarios#parallel-ci-runs) for namespace configuration and cleanup.
 
 Both remote and local scenario runs write runtime artifacts to `target/run/scenarios/<scenario_name>/`:
 

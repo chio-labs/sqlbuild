@@ -6,7 +6,7 @@ import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationLookup
@@ -28,11 +28,7 @@ from sqlbuild.cli.commands.models import (
     DirectDiffPreparation,
     QueryDiffPreparation,
     QueryDiffRunOutcome,
-    VirtualDiffPreparation,
-    VirtualDiffRunOutcome,
 )
-from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
-from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.compile.main.effective_runtime import build_effective_runtime_config
 from sqlbuild.compiler.compile.main.effective_target_namespace import (
     build_effective_target_namespace,
@@ -54,13 +50,9 @@ from sqlbuild.executor.diff.models import (
     QueryDiffArtifactCleanupResult,
     RowDiffSamplingOverride,
 )
-from sqlbuild.presentation.main.supports_color import supports_color
-from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
-from sqlbuild.virtual.diff.main.diff import run_virtual_diff
-from sqlbuild.virtual.diff.models import VirtualDiffOptions
 
 
 def prepare_direct_diff(
@@ -668,121 +660,6 @@ def _preflight_query_columns(
             f"{display_label} has {len(columns)} columns, exceeding --max-columns {max_columns}",
             code="C239",
         )
-
-
-def prepare_virtual_diff(
-    *, request: DiffCommandRequest, invocation: DiffInvocation
-) -> VirtualDiffPreparation:
-    """Resolve virtual diff adapter, connection, and sample limits."""
-
-    if request.from_name is None or request.to_name is None:
-        raise CliUserError("virtual diff requires FROM:TO", code="C236")
-    effective_adapter_name: str = resolve_effective_adapter_name(
-        project_config=invocation.discovered_inputs.project_config,
-        local_config=invocation.discovered_inputs.local_config,
-    )
-    return VirtualDiffPreparation(
-        from_virtual_environment=request.from_name,
-        to_virtual_environment=request.to_name,
-        adapter=resolve_adapter(
-            adapter_name=effective_adapter_name,
-            project_dir=invocation.effective_project_dir,
-        ),
-        connection_config=resolve_project_connection_config(
-            discovered_inputs=invocation.discovered_inputs,
-            project_dir=invocation.effective_project_dir,
-            cli_vars=request.cli_vars,
-        ),
-        effective_max_column_examples=_effective_max_examples(
-            explicit_value=request.max_column_examples, verbose=request.verbose
-        ),
-        effective_max_row_only_examples=_effective_max_examples(
-            explicit_value=request.max_row_only_examples, verbose=request.verbose
-        ),
-        use_color=not request.no_color and supports_color(),
-    )
-
-
-def execute_virtual_diff(
-    *, request: DiffCommandRequest, invocation: DiffInvocation, preparation: VirtualDiffPreparation
-) -> VirtualDiffRunOutcome:
-    """Execute a virtual environment diff."""
-
-    progress_stream: TextIO = sys.stderr if request.json_output else sys.stdout
-    planning_progress: PlanningProgressReporter = PlanningProgressReporter(
-        stream=progress_stream,
-        use_color=preparation.use_color,
-    )
-    connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
-        adapter_name=resolve_effective_adapter_name(
-            project_config=invocation.discovered_inputs.project_config,
-            local_config=invocation.discovered_inputs.local_config,
-        ),
-        stream=progress_stream,
-        use_color=preparation.use_color,
-    )
-    (
-        result,
-        selected_names,
-        skipped_names,
-        from_stale,
-        to_stale,
-        from_working,
-        to_working,
-    ) = run_virtual_diff(
-        project_dir=invocation.effective_project_dir,
-        discovered_inputs=invocation.discovered_inputs,
-        adapter=preparation.adapter,
-        connection_config=preparation.connection_config,
-        from_virtual_environment_name=preparation.from_virtual_environment,
-        to_virtual_environment_name=preparation.to_virtual_environment,
-        options=VirtualDiffOptions(
-            no_sql_validation=request.no_sql_validation,
-            select=request.select,
-            exclude=request.exclude,
-            schema_only=request.schema_only,
-            bounded=request.bounded,
-            collect_samples=not request.schema_only,
-            max_column_examples=preparation.effective_max_column_examples,
-            max_row_only_examples=preparation.effective_max_row_only_examples,
-            max_models=request.max_models,
-            max_columns=request.max_columns,
-            sampling_override=_sampling_override(request=request),
-            unique_key_override=request.unique_key_override,
-            unkeyed=request.unkeyed,
-            excluded_columns_override=request.excluded_columns_override,
-            tolerance_overrides=parse_cli_tolerance_overrides(values=request.tolerance_overrides),
-            allow_partial_diff=request.allow_partial_diff,
-            cli_vars=request.cli_vars,
-            external_sql_reference_resolver=resolve_external_sql_reference_resolver(
-                project_dir=invocation.effective_project_dir,
-                discovered_inputs=invocation.discovered_inputs,
-            ),
-        ),
-        hooks=ConnectionHooks(
-            on_progress=planning_progress.on_progress,
-            on_connection_start=connection_progress.on_connection_start,
-            on_connection_complete=lambda connection_count, elapsed_seconds: (
-                connection_progress.on_connection_complete(
-                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
-                )
-            ),
-            on_connection_error=lambda connection_count, elapsed_seconds: (
-                connection_progress.on_connection_error(
-                    connection_count=connection_count, elapsed_seconds=elapsed_seconds
-                )
-            ),
-        ),
-    )
-    return VirtualDiffRunOutcome(
-        result=result,
-        selected_names=selected_names,
-        skipped_names=skipped_names,
-        from_stale=from_stale,
-        to_stale=to_stale,
-        from_working=from_working,
-        to_working=to_working,
-    )
 
 
 def _effective_max_examples(*, explicit_value: int | None, verbose: bool) -> int:

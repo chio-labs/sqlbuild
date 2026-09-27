@@ -62,6 +62,7 @@ from sqlbuild.adapter.contract.types import (
     PromotionStrategy,
     SnapshotLatestVersionStyle,
     SnapshotUpdateStyle,
+    StatementSizeLimit,
     TablePromotionMode,
 )
 from sqlbuild.adapter.relations.main.get_columns_for_relations import (
@@ -247,10 +248,10 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
             return None
         return relations[0].created_at.isoformat()
 
-    def recommended_max_sql_length(self) -> int | None:
-        """Return the recommended maximum SQL length for lightweight unit-test queries."""
+    def max_statement_size(self) -> StatementSizeLimit | None:
+        """Return a hard SQL text limit and unit (bytes mean UTF-8), or None for no static limit."""
 
-        return 256_000
+        return None
 
     def maximum_identifier_length(self) -> int:
         """Return the maximum unqualified identifier length supported by the adapter."""

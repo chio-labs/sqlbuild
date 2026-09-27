@@ -42,7 +42,6 @@ from sqlbuild.integrations.dagster.constants import (
     SOURCE_NODE_KIND,
     STANDALONE_CHECK_COMMANDS,
     SUCCESS_EXECUTION_STATUS,
-    VIRTUAL_ENV_FLAG,
     WARNING_CHECK_SEVERITY,
 )
 
@@ -267,7 +266,6 @@ def _with_event_output_args(
         or context is None
         or not args
         or args[0] not in LIVE_EVENT_COMMANDS
-        or VIRTUAL_ENV_FLAG in args
         or EVENT_OUTPUT_FLAG in args
     ):
         return args, None

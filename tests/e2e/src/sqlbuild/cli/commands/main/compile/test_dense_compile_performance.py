@@ -1,6 +1,5 @@
 """Fresh-process guards for dense query graphs and the complete built-in ruleset."""
 
-import logging
 from itertools import filterfalse
 from operator import attrgetter
 from pathlib import Path
@@ -26,7 +25,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     measure_model_sql_bytes,
 )
 
-_LOGGER: logging.Logger = logging.getLogger(__name__)
 _GIB: int = 1024 * 1024 * 1024
 
 
@@ -40,28 +38,28 @@ _GIB: int = 1024 * 1024 * 1024
             1000,
             14.0,
             3 * _GIB // 2,
-            "99f2f5c698cca3c7f0d5a2defbd31935d98813843c899286a23a8e7d4441a736",
+            "093fb28b99d2da6aa98158628b758338cbfd8742fdbf43cbe1beb4a161681370",
         ),
         DenseCompileGuardTestCase(
             "dense_models_3000_all_rules",
             3000,
             34.0,
             11 * _GIB // 4,
-            "1243f3de95857de4e7d1d8563ae6766aa9d2a192cf7525cec8ef5562b12704dc",
+            "3d387c37e25d7241c4c79b495df6f2737d57bf839fc9bf97cebc23c1c0ed1e70",
         ),
         DenseCompileGuardTestCase(
             "dense_models_5000_all_rules",
             5000,
             55.0,
             13 * _GIB // 4,
-            "956135597584ec369d37c23ab91b01bc6bf2df9ba78dce602311e152d451fa90",
+            "dfe3610ddca5cfd995b860ac28995d75958a70626304c9879de50a380e9abe65",
         ),
         DenseCompileGuardTestCase(
             "dense_models_10000_all_rules",
             10000,
             145.0,
             4 * _GIB,
-            "92bf43fc45084c67de0eab3d4f32160e8303f99e1b951f6a7a1da5660f0eb66b",
+            "dbf8679c49a22a2869511bb08123f13ab0a079bb1722cc471ec52c115f4d4794",
         ),
     ),
     ids=lambda case: case.description,
@@ -93,14 +91,10 @@ def test_given_dense_project_when_compiling_cold_then_preserves_rules_semantics_
         expected_max_wall_seconds=test_case.expected_max_wall_seconds,
         compile_args=("--no-cache",),
     )
-    _LOGGER.info(
-        "dense compile models=%d builtin_rules=%d wall=%.3fs peak_rss_bytes=%d fingerprint=%s timings=%s",
-        test_case.model_count,
-        len(builtin_codes),
-        result.elapsed_seconds,
-        result.peak_rss_bytes,
-        result.semantic_fingerprint,
-        result.payload["compile_timings"],
+    print(
+        f"dense compile models={test_case.model_count} builtin_rules={len(builtin_codes)} "
+        f"fingerprint={result.semantic_fingerprint}",
+        flush=True,
     )
     assert result.payload["diagnostics"] == []
     assert result.payload["has_errors"] is False

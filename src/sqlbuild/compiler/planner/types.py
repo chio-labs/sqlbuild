@@ -44,11 +44,6 @@ class SelectorKind(StrEnum):
     PATH = "path"
 
 
-class WorkSelectionPolicy(StrEnum):
-    ALL_SELECTED = "all_selected"
-    STALE_ONLY = "stale_only"
-
-
 class GraphResourceKind(StrEnum):
     MODEL = "model"
     SEED = "seed"
@@ -62,7 +57,6 @@ class ChangeKind(StrEnum):
     QUERY_CHANGED = "query_changed"
     CONFIG_CHANGED = "config_changed"
     SCHEMA_CHANGED = "schema_changed"
-    RUN_DESPITE_UNCHANGED = "run_despite_unchanged"
     NO_CHANGE = "no_change"
 
 
@@ -130,18 +124,12 @@ class PlanReason(StrEnum):
     FUNCTION_CHANGED = "function_changed"
     CONFIG_CHANGED = "config_changed"
     SCHEMA_CHANGED = "schema_changed"
-    RUN_DESPITE_UNCHANGED = "run_despite_unchanged"
     UPSTREAM_CHANGED = "upstream_changed"
     NORMAL_INCREMENTAL = "normal_incremental"
     NO_CHANGE = "no_change"
     DISABLED = "disabled"
     SOURCE_FRESHNESS_ERROR = "source_freshness_error"
     EXTERNAL_UPSTREAM_FAILED = "external_upstream_failed"
-
-
-class RunDespiteUnchangedMode(StrEnum):
-    ALWAYS = "always"
-    DURATION = "duration"
 
 
 class IncrementalStrategy(StrEnum):

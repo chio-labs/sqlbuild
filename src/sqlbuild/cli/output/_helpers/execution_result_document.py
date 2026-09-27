@@ -59,12 +59,6 @@ from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
-from sqlbuild.virtual.executor.constants import (
-    VIRTUAL_CLONE_FOUND_ACTIONS,
-    VIRTUAL_CLONE_MISSING_ACTION,
-    VIRTUAL_CLONE_SKIPPED_LOCKED_ACTION,
-)
-from sqlbuild.virtual.executor.models import VirtualCloneResult
 
 _JSON_VERSION: int = 1
 _SCENARIO_RESOURCE_NAMESPACE: ContextVar[str | None] = ContextVar(
@@ -417,47 +411,6 @@ def _format_clone_asset(*, item: CloneItemResult, resource_type: str) -> dict[st
     )
 
 
-def format_virtual_clone_execution_json(*, result: VirtualCloneResult) -> str:
-    """Format virtual clone command execution results as JSON."""
-
-    return _format_execution_json(
-        command="clone",
-        status=(
-            BuildStatus.SUCCESS.value if result.missing_count == 0 else BuildStatus.FAILED.value
-        ),
-        assets=tuple(
-            _drop_none(
-                {
-                    "kind": item.artifact_type.value,
-                    "name": item.artifact_name,
-                    "status": _virtual_clone_item_status(action=item.action),
-                    "action": item.action,
-                    "version_hash": item.version_hash,
-                    "message": item.message,
-                }
-            )
-            for item in result.item_results
-        ),
-        checks=(),
-        summary={
-            "success_count": result.found_count,
-            "failure_count": result.missing_count,
-            "skipped_count": result.skipped_locked_count,
-            "total_count": result.selected_count,
-        },
-    )
-
-
-def _virtual_clone_item_status(*, action: str) -> str:
-    if action in VIRTUAL_CLONE_FOUND_ACTIONS:
-        return "success"
-    if action == VIRTUAL_CLONE_SKIPPED_LOCKED_ACTION:
-        return "skipped"
-    if action == VIRTUAL_CLONE_MISSING_ACTION:
-        return "warning"
-    return "failed"
-
-
 def format_test_execution_json(*, results: tuple[SqlTestExecutionResult, ...]) -> str:
     """Format test command execution results as JSON."""
 
@@ -507,7 +460,11 @@ def format_audit_execution_json(
 
 
 def format_scenario_execution_json(
-    *, results: tuple[ScenarioRunResult, ...], local: bool = False
+    *,
+    results: tuple[ScenarioRunResult, ...],
+    local: bool = False,
+    run_namespace: str | None = None,
+    namespace_source: str = "unset",
 ) -> str:
     """Format scenario test command execution results as JSON."""
 
@@ -523,6 +480,10 @@ def format_scenario_execution_json(
         checks.extend(_format_scenario_checks(result))
     return _format_execution_json(
         command="scenario test",
+        execution={
+            "scenario_namespace": run_namespace,
+            "scenario_namespace_source": namespace_source,
+        },
         status=BuildStatus.SUCCESS.value if fail_count == 0 else BuildStatus.FAILED.value,
         assets=tuple(assets),
         checks=tuple(checks),
@@ -536,13 +497,21 @@ def format_scenario_execution_json(
 
 
 def format_scenario_snapshot_execution_json(
-    *, results: tuple[ScenarioSnapshotCaptureRunResult, ...], refresh: bool = False
+    *,
+    results: tuple[ScenarioSnapshotCaptureRunResult, ...],
+    refresh: bool = False,
+    run_namespace: str | None = None,
+    namespace_source: str = "unset",
 ) -> str:
     """Format scenario snapshot sync/refresh execution results as JSON."""
 
     fail_count: int = sum(1 for result in results if result.status == ExecutionStatus.FAILED)
     return _format_execution_json(
         command="scenario snapshot refresh" if refresh else "scenario snapshot sync",
+        execution={
+            "scenario_namespace": run_namespace,
+            "scenario_namespace_source": namespace_source,
+        },
         status=BuildStatus.SUCCESS.value if fail_count == 0 else BuildStatus.FAILED.value,
         assets=(),
         checks=(),

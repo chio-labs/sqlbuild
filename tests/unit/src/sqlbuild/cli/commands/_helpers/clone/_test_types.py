@@ -1,17 +1,6 @@
 from dataclasses import dataclass
 
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
-from sqlbuild.virtual.executor.models import VirtualCloneResult
-
-
-@dataclass(frozen=True)
-class RenderVirtualCloneOutputTestCase:
-    description: str
-    result: VirtualCloneResult
-    verbose: bool
-    expected_fragments: tuple[str, ...]
-    expected_color_fragments: tuple[str, ...] = ()
-    unexpected_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -66,13 +55,3 @@ class CloneFingerprintProgressReporterTestCase:
     total: int
     pending_identities: tuple[str, ...]
     expected_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class VirtualCloneLifecycleCase:
-    description: str
-    missing_count: int
-    skipped_count: int
-    expected_exit_code: int
-    expected_progress_fragment: str
-    unexpected_progress_fragment: str

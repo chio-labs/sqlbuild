@@ -23,7 +23,14 @@ def format_result_text(*, result: RulesResult) -> str:
             f"[{finding.code}] {finding.message}\n"
             f"  Remediation: {finding.remediation}"
         )
+        if finding.affected_rules:
+            blocks.append(f"  Affected Rules: {', '.join(finding.affected_rules)}")
     blocks.append(f"Found {len(result.findings)} Rules findings")
+    if result.unevaluated_resources:
+        blocks.append(
+            f"{result.evaluated_models} models evaluated, "
+            f"{result.unevaluated_resources} resources could not be evaluated"
+        )
     return "\n".join(blocks)
 
 
@@ -38,10 +45,16 @@ def format_result_json(*, result: RulesResult) -> str:
                 "column": finding.column,
                 "message": finding.message,
                 "remediation": finding.remediation,
+                **(
+                    {"affected_rules": list(finding.affected_rules)}
+                    if finding.affected_rules
+                    else {}
+                ),
             }
         )
     payload: dict[str, object] = {
         "evaluated_models": result.evaluated_models,
+        "unevaluated_resources": result.unevaluated_resources,
         "cache_hits": result.cache_hits,
         "cache_misses": result.cache_misses,
         "finding_count": len(result.findings),

@@ -58,14 +58,6 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.identity.helpers import (
             expected_version_hash="resolved-hash",
         ),
         MergeRecomputedModelChangesTestCase(
-            description="run_despite_unchanged keeps resolved change when no recomputed change exists",
-            resolved_change_kind=ChangeKind.RUN_DESPITE_UNCHANGED,
-            recomputed_change_kind=None,
-            expected_change_kind=ChangeKind.RUN_DESPITE_UNCHANGED,
-            expected_backfill_action=BackfillAction.BOUNDED,
-            expected_version_hash="resolved-hash",
-        ),
-        MergeRecomputedModelChangesTestCase(
             description="no_change keeps resolved change when no recomputed change exists",
             resolved_change_kind=ChangeKind.NO_CHANGE,
             recomputed_change_kind=None,
@@ -158,22 +150,6 @@ def test_given_no_recomputed_change_when_merging_then_keeps_resolved_change(
         MergeRecomputedModelChangesTestCase(
             description="schema_changed adopts recomputed query_changed",
             resolved_change_kind=ChangeKind.SCHEMA_CHANGED,
-            recomputed_change_kind=ChangeKind.QUERY_CHANGED,
-            expected_change_kind=ChangeKind.QUERY_CHANGED,
-            expected_backfill_action=BackfillAction.FORWARD_ONLY,
-            expected_version_hash="recomputed-hash",
-        ),
-        MergeRecomputedModelChangesTestCase(
-            description="run_despite_unchanged survives recomputed no_change with resolved backfill",
-            resolved_change_kind=ChangeKind.RUN_DESPITE_UNCHANGED,
-            recomputed_change_kind=ChangeKind.NO_CHANGE,
-            expected_change_kind=ChangeKind.RUN_DESPITE_UNCHANGED,
-            expected_backfill_action=BackfillAction.BOUNDED,
-            expected_version_hash="recomputed-hash",
-        ),
-        MergeRecomputedModelChangesTestCase(
-            description="run_despite_unchanged adopts recomputed query_changed",
-            resolved_change_kind=ChangeKind.RUN_DESPITE_UNCHANGED,
             recomputed_change_kind=ChangeKind.QUERY_CHANGED,
             expected_change_kind=ChangeKind.QUERY_CHANGED,
             expected_backfill_action=BackfillAction.FORWARD_ONLY,

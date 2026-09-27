@@ -375,6 +375,14 @@ pub(crate) fn lint(request: LintRequest) -> Result<LintResponse, String> {
         },
     );
     let statements = parser.parse().map_err(|error| error.to_string())?;
+    for statement in &statements {
+        if statement
+            .dfs()
+            .any(|node| matches!(node, Expression::Command(_) | Expression::Raw(_)))
+        {
+            return Err("unsupported syntax: native parser retained an opaque SQL node".to_owned());
+        }
+    }
     let external_identifiers: HashSet<String> = request
         .external_identifiers
         .iter()

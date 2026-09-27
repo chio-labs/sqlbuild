@@ -6,6 +6,23 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class SourceSemanticBindingCase:
+    description: str
+    command: str
+    expected_code: str = "B002"
+
+
+@dataclass(frozen=True)
+class SemanticCorpusCase:
+    description: str
+    category: str
+    repo_files: dict[str, str]
+    expected_exit_code: int
+    expected_codes: tuple[str, ...]
+    pending_native: bool
+
+
+@dataclass(frozen=True)
 class VariedCompileCacheTestCase:
     description: str
     model_count: int
@@ -252,3 +269,13 @@ class UnrelatedPythonPackageBuildTestCase:
     unrelated_files: dict[str, str]
     repo_files: dict[str, str]
     expected_build_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DiagnosticPerformanceCase:
+    description: str
+    depth: int = 100
+    width: int = 32
+    expected_max_wall_seconds: float = 20.0
+    expected_timeout_seconds: float = 65.0
+    diagnostic_count: int = 100

@@ -70,6 +70,7 @@ pub(crate) fn evaluate_proven_dynamic(model: &Model, rule: &RuleMetadata, faults
         .filter(|column| !column.data_type.is_empty() && !column.type_proven)
     {
         faults.push(Fault {
+            unevaluated: false,
             code: rule.code.clone(),
             path: model.relative_path.clone(),
             line: 1,
@@ -90,6 +91,7 @@ pub(crate) fn evaluate_proven_dynamic(model: &Model, rule: &RuleMetadata, faults
         .filter(|family| !family.type_proven)
     {
         faults.push(Fault {
+            unevaluated: false,
             code: rule.code.clone(),
             path: model.relative_path.clone(),
             line: 1,
@@ -219,6 +221,7 @@ impl OutputRule<'_> {
     fn push(&self, position: Option<(u64, u64)>, message: String, remediation: String) {
         let (line, column) = position.unwrap_or((1, 1));
         self.faults.push(Fault {
+            unevaluated: false,
             code: self.rule.code.clone(),
             path: self.model.relative_path.clone(),
             line,

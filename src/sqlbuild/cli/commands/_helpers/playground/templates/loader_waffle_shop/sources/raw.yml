@@ -1,5 +1,6 @@
 sources:
   - name: raw_orders
+    contract: enforced
     managed: true
     write_strategy: table
     columns:
@@ -16,6 +17,7 @@ sources:
       - name: load_seq
         type: INTEGER
   - name: raw_customers
+    contract: enforced
     managed: true
     write_strategy: table
     columns:

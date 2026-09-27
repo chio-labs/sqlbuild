@@ -77,6 +77,7 @@ from sqlbuild.adapter.contract.types import (
     PromotionStrategy,
     SnapshotLatestVersionStyle,
     SnapshotUpdateStyle,
+    StatementSizeLimit,
     TablePromotionMode,
 )
 from sqlbuild.adapter.relations.main.get_columns_for_relations import (
@@ -1575,10 +1576,10 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def python_functions_inherit_default_namespace(self) -> bool:
         return True
 
-    def recommended_max_sql_length(self) -> int | None:
-        """Return the recommended maximum SQL length for lightweight unit-test queries."""
+    def max_statement_size(self) -> StatementSizeLimit | None:
+        """Defer 65,536 * negotiated packet bytes to SQL Server: https://learn.microsoft.com/en-us/sql/sql-server/maximum-capacity-specifications-for-sql-server."""
 
-        return 256_000
+        return None
 
     def relation_exists(
         self,

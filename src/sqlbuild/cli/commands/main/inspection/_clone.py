@@ -15,7 +15,6 @@ from sqlbuild.cli.commands._helpers.clone.outputs import (
     write_clone_execution_json_output,
 )
 from sqlbuild.cli.commands._helpers.clone.planning import prepare_clone_execution
-from sqlbuild.cli.commands._helpers.clone.virtual import execute_virtual_clone
 from sqlbuild.cli.commands.models import (
     CloneCommandRequest,
     CloneConnectionContext,
@@ -29,8 +28,6 @@ def run_clone(request: CloneCommandRequest) -> int:
     """Execute the clone command."""
 
     invocation: CloneInvocation = resolve_clone_invocation(request=request)
-    if invocation.discovered_inputs.project_config.settings.virtual_environments:
-        return execute_virtual_clone(request=request, invocation=invocation)
     connection_context: CloneConnectionContext = connect_clone_targets(
         request=request,
         invocation=invocation,

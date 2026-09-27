@@ -6,8 +6,10 @@ import time
 from collections.abc import Callable
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline._helpers.analysis_selection import (
     resolve_compile_analysis_selection,
@@ -58,6 +60,26 @@ def compile_project_phase(
         timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
         if timing_tracker is not None:
             timing_tracker.compile_seconds = compile_seconds
+    errors: tuple[CompilerDiagnostic, ...] = tuple(
+        diagnostic
+        for diagnostic in project.diagnostics
+        if diagnostic.is_error
+        and (
+            resolved_options.plan_sql_tests
+            or diagnostic.resource_type != CompiledResourceType.SQL_TEST
+        )
+    )
+    if errors:
+        if on_progress is not None:
+            on_progress("Project compilation failed.")
+        raise CompileInputError(
+            "\n".join(
+                f"[{diagnostic.code}] {diagnostic.path}:"
+                f"{diagnostic.line or 1}:{diagnostic.column or 1}: {diagnostic.message}"
+                for diagnostic in errors
+            ),
+            code=errors[0].code,
+        )
     if on_progress is not None:
         on_progress(f"Compiled project. ({compile_seconds:.2f}s)")
     return CompiledProjectPhaseResult(

@@ -25,7 +25,7 @@ from sqlbuild.compiler.planner.models import (
     ResolvedModelAction,
     WarehouseSnapshot,
 )
-from sqlbuild.compiler.planner.types import ChangeKind, GraphResourceKind
+from sqlbuild.compiler.planner.types import GraphResourceKind
 
 
 def with_honest_model_write_hashes(
@@ -115,19 +115,10 @@ def _merged_recomputed_change(
     resolved_change: ChangeDetectionResult,
     recomputed_change: ChangeDetectionResult | None,
 ) -> ChangeDetectionResult:
-    """Prefer the recomputed change but never downgrade RUN_DESPITE_UNCHANGED to NO_CHANGE."""
+    """Prefer a recomputed change when available."""
 
     if recomputed_change is None:
         return resolved_change
-    if (
-        resolved_change.change_kind == ChangeKind.RUN_DESPITE_UNCHANGED
-        and recomputed_change.change_kind == ChangeKind.NO_CHANGE
-    ):
-        return replace(
-            recomputed_change,
-            change_kind=ChangeKind.RUN_DESPITE_UNCHANGED,
-            backfill=resolved_change.backfill,
-        )
     return recomputed_change
 
 

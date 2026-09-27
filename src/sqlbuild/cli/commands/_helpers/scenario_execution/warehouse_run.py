@@ -6,6 +6,10 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands._helpers.scenario_output.namespace import (
+    scenario_activity_message,
+    write_namespace_completion,
+)
 from sqlbuild.cli.commands._helpers.scenario_output.result_output import complete_scenario_run
 from sqlbuild.cli.commands.constants import SUCCESS_STATUS
 from sqlbuild.cli.commands.models import ScenarioRunOutputContext
@@ -50,8 +54,11 @@ def run_warehouse_scenarios(
         use_color=use_color,
     )
     status_is_tty: bool = hasattr(progress_stream, "isatty") and progress_stream.isatty()
+    activity: str = scenario_activity_message(
+        activity="Running scenarios...", context=output_context
+    )
     if not status_is_tty:
-        progress_stream.write("Running scenarios...\n\n")
+        progress_stream.write(f"{activity}\n\n")
         progress_stream.flush()
     execution_connection_progress: ConnectionProgressReporter = ConnectionProgressReporter(
         adapter_name=adapter_name,
@@ -80,7 +87,7 @@ def run_warehouse_scenarios(
             ),
         ),
         on_scenario_start=lambda _scenario: (
-            scenario_status.start("Running scenarios...") if status_is_tty else None
+            scenario_status.start(activity) if status_is_tty else None
         ),
         on_scenario_complete=lambda _scenario, scenario_plan, result: complete_scenario_run(
             scenario_status=scenario_status,
@@ -97,8 +104,14 @@ def run_warehouse_scenarios(
     exit_code: int = _write_remote_summary(
         results=results, stream=progress_stream, use_color=use_color
     )
+    write_namespace_completion(context=output_context, succeeded=exit_code == 0)
     write_execution_json_output(
-        payload=format_scenario_execution_json(results=results, local=False),
+        payload=format_scenario_execution_json(
+            results=results,
+            local=False,
+            run_namespace=output_context.namespace.value,
+            namespace_source=output_context.namespace.source,
+        ),
         json_output=json_output,
         json_output_path=json_output_path,
     )

@@ -8,8 +8,8 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.constants import PRESERVE_TARGET_VALUE
-from sqlbuild.compiler.compile.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,

@@ -84,14 +84,6 @@ def test_given_raw_query_diff_arguments_when_parsing_then_inputs_remain_distinct
             expected_argv=("clone", "--from", "prod", "--to", "dev"),
         ),
         VerboseCommandTestCase(description="diff", expected_argv=("diff", "prod:dev")),
-        VerboseCommandTestCase(
-            description="promote",
-            expected_argv=("promote", "--from", "preview", "--to", "dev"),
-        ),
-        VerboseCommandTestCase(
-            description="rollback",
-            expected_argv=("rollback", "--virtual-env", "dev"),
-        ),
     ],
     ids=lambda case: case.description,
 )

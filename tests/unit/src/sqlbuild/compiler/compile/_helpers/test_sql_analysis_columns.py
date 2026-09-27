@@ -131,7 +131,7 @@ def test_given_queries_when_batch_analyzing_then_uses_one_ordered_native_request
     }
 
     assert "orders" in results[0].cleaned_sql
-    assert results[0].analysis == {"hasStar": False}
+    assert results[0].analysis == {"hasStar": False, "starResolved": False}
     assert results[0].compact_rows == [0]
     assert results[1].analysis is None
     assert results[1].projected is True

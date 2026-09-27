@@ -99,17 +99,6 @@ class CappedMicrobatchScenarioE2ETestCase:
 
 
 @dataclass(frozen=True)
-class VirtualCappedProducerGapE2ETestCase:
-    """Expected physical and state results for a legal virtual capped producer graph."""
-
-    description: str
-    expected_exit_code: int
-    expected_ids: tuple[int, ...]
-    expected_gap_rows: tuple[tuple[object, ...], ...]
-    expected_microbatch_event_count: int
-
-
-@dataclass(frozen=True)
 class CappedWatermarkRejectionE2ETestCase:
     """Expected static rejection for a capped watermark producer."""
 
@@ -331,17 +320,6 @@ class PythonHooksLifecycleMatrixBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
-class VirtualPythonHooksBuildE2ETestCase:
-    """Test case for virtual builds with Python lifecycle hooks."""
-
-    description: str
-    expected_exit_code: int
-    expected_model_rows: tuple[tuple[object, ...], ...]
-    expected_hook_log_rows: tuple[tuple[object, ...], ...]
-    expected_identity_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
 class DirectChangesOnlyBuildE2ETestCase:
     """Test case for direct build changes-only behavior."""
 
@@ -351,191 +329,6 @@ class DirectChangesOnlyBuildE2ETestCase:
     unexpected_output_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_query_results: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
     expected_failed_sql_fragment: str | None = None
-
-
-@dataclass(frozen=True)
-class VirtualBuildE2ETestCase:
-    """Test case for virtual build e2e behavior."""
-
-    description: str
-    expected_build_fragments: tuple[str, ...]
-    expected_plan_fragments: tuple[str, ...]
-    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
-    expected_ref_rows: tuple[tuple[object, ...], ...]
-    expected_physical_version_count: int | None = None
-    expected_default_plan_fragments: tuple[str, ...] = field(default_factory=tuple)
-    expected_final_plan_fragments: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class VirtualConcurrentBuildE2ETestCase:
-    """Test case for concurrent virtual build e2e behavior."""
-
-    description: str
-    concurrency: int
-    expected_model_count: int
-    expected_build_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class VirtualSeedBuildE2ETestCase:
-    """Test case for virtual seed build state behavior."""
-
-    description: str
-    expected_initial_rows: tuple[tuple[object, ...], ...]
-    expected_changed_rows: tuple[tuple[object, ...], ...]
-    expected_changed_fragments: tuple[str, ...]
-    expected_branch_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
-    expected_physical_seed_count: int = 0
-
-
-@dataclass(frozen=True)
-class VirtualSeedGapE2ETestCase:
-    """Test case for targeted virtual seed gap coverage."""
-
-    description: str
-    expected_fragments: tuple[str, ...] = field(default_factory=tuple)
-    unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class VirtualCustomMaterializationE2ETestCase:
-    """Test case for virtual custom materialization behavior."""
-
-    description: str
-    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
-    expected_ancestry_rows: tuple[tuple[object, ...], ...]
-
-
-@dataclass(frozen=True)
-class VirtualPythonBuildE2ETestCase:
-    """Test case for virtual Python-node build behavior."""
-
-    description: str
-    project_name: str
-    plan_command: tuple[str, ...]
-    build_command: tuple[str, ...]
-    expected_build_exit_code: int
-    expected_plan_fragments: tuple[str, ...] = field(default_factory=tuple)
-    expected_absent_plan_fragments: tuple[str, ...] = field(default_factory=tuple)
-    expected_build_fragments: tuple[str, ...] = field(default_factory=tuple)
-    expected_prepared_text: str | None = None
-    expected_profile_text: str | None = None
-    expected_source_profile_text: str | None = None
-    expected_profile_exists: bool | None = None
-
-
-@dataclass(frozen=True)
-class VirtualPythonIdentityBuildE2ETestCase:
-    """Test case for virtual Python identity persistence behavior."""
-
-    description: str
-    expected_state_identity_rows: tuple[tuple[object, ...], ...]
-    expected_warehouse_fingerprint_table_count: int
-    expected_changed_plan_fragments: tuple[str, ...]
-    unexpected_changed_plan_fragments: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class VirtualNodeResultStateE2ETestCase:
-    """Test case for virtual node result state persistence behavior."""
-
-    description: str
-    expected_state_rows: tuple[tuple[object, ...], ...]
-    expected_asset_payload: dict[str, object]
-    expected_loader_text: str
-    expected_history_text: str
-    expected_warehouse_result_table_count: int
-    expected_build_fragments: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class VirtualNodeResultFailureStateE2ETestCase:
-    """Test case for virtual failed node result state persistence behavior."""
-
-    description: str
-    project_name: str
-    repo_files: dict[str, str]
-    command: tuple[str, ...]
-    expected_exit_code: int
-    expected_state_rows: tuple[tuple[object, ...], ...]
-
-
-@dataclass(frozen=True)
-class VirtualWaffleShopE2ETestCase:
-    """Test case for full waffle shop virtual build behavior."""
-
-    description: str
-    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
-    expected_view_names: tuple[str, ...]
-    expected_function_names: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class VirtualBuildSelectionGuardE2ETestCase:
-    """Test case for virtual build selection guard behavior."""
-
-    description: str
-    blocked_command: tuple[str, ...]
-    expanded_command: tuple[str, ...]
-    expected_blocked_fragments: tuple[str, ...]
-    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
-
-
-@dataclass(frozen=True)
-class VirtualSourceFreshnessBuildE2ETestCase:
-    """Test case for virtual source freshness build behavior."""
-
-    description: str
-    expected_initial_rows: tuple[tuple[object, ...], ...]
-    expected_updated_rows: tuple[tuple[object, ...], ...]
-    expected_error_fragment: str | None = None
-
-
-@dataclass(frozen=True)
-class VirtualPromoteE2ETestCase:
-    """Test case for virtual promotion behavior."""
-
-    description: str
-    promote_command: tuple[str, ...]
-    expected_promote_fragments: tuple[str, ...]
-    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
-    blocked_command: tuple[str, ...] = field(default_factory=tuple)
-    expected_blocked_fragments: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class VirtualRollbackE2ETestCase:
-    """Test case for virtual rollback behavior."""
-
-    description: str
-    rollback_command: tuple[str, ...]
-    expected_rollback_fragments: tuple[str, ...]
-    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
-    expected_checkpoint_count: int
-    expected_exit_code: int = 0
-    expected_stderr_fragments: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class VirtualExplicitCheckpointRollbackE2ETestCase:
-    """Test case for explicit checkpoint rollback behavior."""
-
-    description: str
-    rollback_command_prefix: tuple[str, ...]
-    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
-
-
-@dataclass(frozen=True)
-class VirtualPartialRollbackE2ETestCase:
-    """Test case for partial rollback guard behavior."""
-
-    description: str
-    blocked_command: tuple[str, ...]
-    allowed_command: tuple[str, ...]
-    expected_blocked_stderr_fragments: tuple[str, ...]
-    expected_allowed_stdout_fragments: tuple[str, ...]
-    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
 
 
 @dataclass(frozen=True)
@@ -950,15 +743,6 @@ class StatelessSerialMicrobatchE2ETestCase:
 
 
 @dataclass(frozen=True)
-class VirtualConcurrentMicrobatchE2ETestCase:
-    """Expected virtual concurrent storage and lock behavior."""
-
-    description: str
-    expected_exit_code: int
-    expected_minimum_event_count: int
-
-
-@dataclass(frozen=True)
 class MicrobatchReconciliationPolicyE2ETestCase:
     """Expected state facts after rebuilding with missing completion history."""
 
@@ -1020,15 +804,6 @@ class PlanCommandBuildE2ETestCase:
     expected_exit_code: int
     expected_stdout_fragments: tuple[str, ...]
     expected_stderr_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class VirtualModeGuardBuildE2ETestCase:
-    description: str
-    project_toml: str
-    command: tuple[str, ...]
-    expected_exit_code: int
-    expected_error_fragment: str
 
 
 @dataclass(frozen=True)

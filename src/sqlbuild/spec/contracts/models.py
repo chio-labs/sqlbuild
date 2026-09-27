@@ -92,17 +92,6 @@ class ResolvedTableType:
 
 
 @dataclass(frozen=True)
-class StateConfig:
-    """Virtual mode state store configuration."""
-
-    backend: str | None = None
-    schema: str | None = None
-    connection: dict[str, object] = field(default_factory=dict)
-    allow_reset: bool = False
-    unsuffixed_virtual_env: str | None = None
-
-
-@dataclass(frozen=True)
 class ExecutionLimitsConfig:
     """Optional target-scoped build execution limits."""
 
@@ -110,17 +99,6 @@ class ExecutionLimitsConfig:
     max_duration: str | None = None
     max_duration_seconds: int | None = None
     remediation: str | None = None
-
-
-@dataclass(frozen=True)
-class LocalStateConfig:
-    """Local virtual environment mode state store overrides."""
-
-    backend: str | None = None
-    schema: str | None = None
-    connection: dict[str, object] = field(default_factory=dict)
-    allow_reset: bool | None = None
-    unsuffixed_virtual_env: str | None = None
 
 
 @dataclass(frozen=True)
@@ -135,9 +113,7 @@ class TargetConfig:
     loader_schema: str | None = None
     defer_sources_to: str | None = None
     defer_clone_from: str | None = None
-    changes_only: bool | None = None
     clone: ClonePolicy = field(default_factory=ClonePolicy)
-    state: StateConfig = field(default_factory=StateConfig)
     compile_cache: bool | None = None
     time_travel_retention: AuthoredTimeTravelRetention | None = None
     time_travel_retention_by_materialization: dict[str, AuthoredTimeTravelRetention] = field(
@@ -162,9 +138,7 @@ class LocalTargetConfig:
     loader_schema: str | None = None
     defer_sources_to: str | None = None
     defer_clone_from: str | None = None
-    changes_only: bool | None = None
     clone: LocalClonePolicy = field(default_factory=LocalClonePolicy)
-    state: LocalStateConfig = field(default_factory=LocalStateConfig)
     compile_cache: bool | None = None
     time_travel_retention: AuthoredTimeTravelRetention | None = None
     time_travel_retention_by_materialization: dict[str, AuthoredTimeTravelRetention] | None = None
@@ -184,8 +158,6 @@ class SettingsConfig:
     column_contract_mode: ColumnContractMode = ColumnContractMode.IMPLICIT
     concurrency: int = 1
     auto_load_sources: bool = True
-    changes_only: bool = False
-    virtual_environments: bool = False
     microbatch_concurrency: bool = False
     microbatch_unaccounted_partition_policy: str = "synthesize"
     table_promotion_mode: str | None = None
@@ -290,7 +262,6 @@ class DefaultsConfig:
     max_microbatches: int | None = None
     unaccounted_partition_policy: str | None = None
     replay_on_change: str | None = None
-    run_despite_unchanged: str | None = None
     row_diff_exclude_columns: tuple[str, ...] = field(default_factory=tuple)
     row_diff_tolerances: dict[str, object] = field(default_factory=dict)
     row_diff_sample_rows: int | None = None
@@ -315,7 +286,6 @@ class JanitorConfig:
     enabled: bool = False
     retention_days: int | None = None
     archive_retention_days: int = 14
-    max_checkpoints: int = 20
     direct_state_history_versions: int = 20
     delete_tracked_only: bool = True
     exclude_patterns: tuple[str, ...] = field(default_factory=tuple)
@@ -345,6 +315,7 @@ class ScenarioSnapshotLimitsConfig:
 class ScenarioConfig:
     """Scenario command configuration."""
 
+    run_namespace: str | None = None
     local_type_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
     snapshot_limits: ScenarioSnapshotLimitsConfig = field(
         default_factory=ScenarioSnapshotLimitsConfig
@@ -556,7 +527,7 @@ class SourceFreshnessAgePolicy:
 
 @dataclass(frozen=True)
 class SourceFreshnessConfig:
-    """Configured source freshness observation for virtual planning."""
+    """Configured source freshness observation for planning."""
 
     strategy: SourceFreshnessStrategy
     value_kind: SourceFreshnessValueKind | None = None

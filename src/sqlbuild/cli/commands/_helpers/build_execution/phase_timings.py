@@ -16,15 +16,12 @@ from sqlbuild.cli.commands.models import (
     BuildCommandRequest,
     BuildInvocation,
     BuildPhaseTimings,
-    VirtualBuildCliRequest,
-    VirtualBuildExecution,
 )
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
 from sqlbuild.diagnostics.models import PartialBuildPhaseTimings
 from sqlbuild.presentation.classes.cli_document import CliDocument
 from sqlbuild.presentation.classes.cli_style import CliStyle
-from sqlbuild.virtual.executor.models import VirtualBuildPipelineResult
 
 
 def write_build_phase_timings(
@@ -128,62 +125,6 @@ def finalize_exceptional_with_timings(
         )
     finally:
         _ = finish_cost_collection_timing(started_at=cost_started_at)
-
-
-def write_virtual_build_phase_timings(
-    *,
-    stream: TextIO,
-    request: VirtualBuildCliRequest,
-    execution: VirtualBuildExecution,
-    result: VirtualBuildPipelineResult,
-    cost_collection_seconds: float,
-) -> None:
-    """Write completed virtual-build timings from typed pipeline results."""
-
-    if not request.verbose and not request.debug:
-        return
-    total_seconds: float = (
-        time.monotonic() - request.command_started_at
-        if request.command_started_at is not None
-        else execution.elapsed
-    )
-    write_build_phase_timings(
-        stream=stream,
-        timings=BuildPhaseTimings(
-            compile_seconds=result.compile_seconds,
-            planning_seconds=result.planning_seconds,
-            connection_preparation_seconds=(
-                result.execution_result.timings.connection_preparation_seconds
-            ),
-            schema_preparation_seconds=result.execution_result.timings.schema_preparation_seconds,
-            execution_seconds=result.execution_result.timings.execution_seconds,
-            cost_collection_seconds=cost_collection_seconds,
-            total_seconds=total_seconds,
-        ),
-        use_color=request.use_color,
-    )
-
-
-def record_and_write_virtual_build_phase_timings(
-    *,
-    stream: TextIO,
-    request: VirtualBuildCliRequest,
-    execution: VirtualBuildExecution,
-    result: VirtualBuildPipelineResult,
-    cost_collection_seconds: float,
-) -> None:
-    """Record and write completed virtual-build timing diagnostics."""
-
-    timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
-    if timing_tracker is not None:
-        timing_tracker.cost_collection_seconds = cost_collection_seconds
-    write_virtual_build_phase_timings(
-        stream=stream,
-        request=request,
-        execution=execution,
-        result=result,
-        cost_collection_seconds=cost_collection_seconds,
-    )
 
 
 def _timing_rows(timings: BuildPhaseTimings) -> tuple[tuple[str, str], ...]:
