@@ -237,10 +237,19 @@ WHERE s.status IS NULL
 ```
 
 An attached audit always gates its target. SQLBuild waits for everything the audit reads, then
-runs it before the target is published: a model audit runs against the staged relation before
-promotion, and a source or seed audit runs before any dependant is built. An `error` failure keeps
-the model unpublished and blocks everything downstream; a `warn` failure is reported and the build
-continues. The audit is reported under its target.
+runs the audit exactly where any other audit on that target runs:
+
+- On a model, it follows the model's table promotion mode and the audit's run scope. With `staged`
+  promotion, a `final` audit checks the staged table before promotion; with `immediate` promotion,
+  or for final-phase audits on incremental and snapshot models, it runs after the write, like any
+  other audit there. See [Run scope](#run-scope) and
+  [Table promotion mode](project-configuration.md#table-promotion-mode).
+- On a source or seed, it runs before any model that depends on it is built.
+
+An `error` failure blocks everything downstream of the target, and where the target's other audits
+would keep it unpublished, this one does too. A `warn` failure is reported and the build continues.
+The audit is reported under its target. If a resource the audit reads fails to build, or a source
+it reads fails its own `error` audit, the target is blocked as well.
 
 In a partial build such as `sqb build -s orders`, resources the audit reads but that are not
 selected are not built; the audit reads their existing tables.
