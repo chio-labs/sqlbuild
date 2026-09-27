@@ -15,6 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     SeedAuditBuildE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    execute_duckdb,
     prepare_inline_project,
     query_duckdb,
     run_sqb,
@@ -51,9 +52,7 @@ _SCOPED_PROJECT_FILES: dict[str, str] = {
         "WHERE w.order_id IS NULL\n"
     ),
     "models/marts/_sqlbuild/hooks/sql/record_start.sql": (
-        "HOOK ();\n\n"
-        "CREATE TABLE IF NOT EXISTS main.hook_log (kind VARCHAR);\n"
-        "INSERT INTO main.hook_log VALUES ('sql')\n"
+        "HOOK ();\n\nINSERT INTO main.hook_log VALUES ('sql')\n"
     ),
     "models/marts/_sqlbuild/hooks/python/lifecycle.py": (
         "from sqlbuild.hooks import hook\n\n\n"
@@ -98,6 +97,10 @@ def test_given_scoped_declarations_when_building_then_schema_hooks_and_audits_ap
 ) -> None:
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path, project_name="scoped_shop", repo_files=_SCOPED_PROJECT_FILES
+    )
+    execute_duckdb(
+        db_path=project_dir / "scoped_shop.duckdb",
+        sql="CREATE TABLE main.hook_log (kind VARCHAR)",
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
