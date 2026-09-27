@@ -72,6 +72,15 @@ class RulesIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class ImplicitAliasRuleIntegrationTestCase:
+    """One model query and its expected unused-alias finding locations."""
+
+    description: str
+    query_sql: str
+    expected_locations: tuple[tuple[int, int], ...]
+
+
+@dataclass(frozen=True)
 class RulePassIntegrationTestCase:
     """One compiler-integrated Rules command expected to pass."""
 

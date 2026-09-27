@@ -19,6 +19,7 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     DynamicPivotRulesIntegrationTestCase,
     ExplicitContractOutputRuleIntegrationTestCase,
+    ImplicitAliasRuleIntegrationTestCase,
     RulePassIntegrationTestCase,
     RulesIntegrationTestCase,
     TypedContractRuleIntegrationTestCase,
@@ -954,6 +955,73 @@ CROSS JOIN __table_fn("expand_order")(source_orders.order_id) AS expanded
     assert exit_code == test_case.expected_exit_code
     payload: dict[str, object] = json.loads(capsys.readouterr().out)
     assert payload["findings"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ImplicitAliasRuleIntegrationTestCase(
+            description="unused implicit join alias is reported",
+            query_sql=(
+                "SELECT o.order_id\n"
+                'FROM __ref("orders") o\n'
+                'INNER JOIN __ref("customers") c ON o.customer_id = o.order_id\n'
+            ),
+            expected_locations=((4, 31),),
+        ),
+        ImplicitAliasRuleIntegrationTestCase(
+            description="unused implicit subquery alias is reported",
+            query_sql='SELECT order_id\nFROM (SELECT order_id FROM __ref("orders")) recent\n',
+            expected_locations=((3, 45),),
+        ),
+        ImplicitAliasRuleIntegrationTestCase(
+            description="implicit and explicit unused aliases are reported alike",
+            query_sql='SELECT order_id\nFROM __ref("orders") AS o, __ref("customers") c\n',
+            expected_locations=((3, 22), (3, 47)),
+        ),
+        ImplicitAliasRuleIntegrationTestCase(
+            description="used implicit aliases are clean",
+            query_sql=(
+                "SELECT o.order_id, c.customer_id\n"
+                'FROM __ref("orders") o\n'
+                'INNER JOIN __ref("customers") c ON o.customer_id = c.customer_id\n'
+            ),
+            expected_locations=(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_implicit_table_alias_when_running_alias_rule_then_usage_decides_finding(
+    test_case: ImplicitAliasRuleIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Implicit aliases are held to the same unused-alias contract as AS aliases."""
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    models: Path = tmp_path / "models"
+    models.mkdir()
+    (models / "orders.sql").write_text(
+        'MODEL (description "Orders");\nSELECT 1 AS order_id, 2 AS customer_id\n',
+        encoding="utf-8",
+    )
+    (models / "customers.sql").write_text(
+        'MODEL (description "Customers");\nSELECT 2 AS customer_id\n', encoding="utf-8"
+    )
+    (models / "order_customers.sql").write_text(
+        'MODEL (description "Order customers");\n' + test_case.query_sql, encoding="utf-8"
+    )
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "rules", "--json", "run", "SQBRSQL023"])
+
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    findings: list[dict[str, object]] = cast(list[dict[str, object]], payload["findings"])
+    assert exit_code == int(bool(test_case.expected_locations))
+    assert tuple((finding["line"], finding["column"]) for finding in findings) == (
+        test_case.expected_locations
+    )
+    assert {finding["path"] for finding in findings} <= {"models/order_customers.sql"}
 
 
 @pytest.mark.parametrize(
