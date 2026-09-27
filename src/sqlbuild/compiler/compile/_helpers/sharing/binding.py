@@ -201,6 +201,8 @@ def _shared_reference_names(
         return None
     if any(name.startswith(COMPACT_RELATION_STUB_PREFIX) for name in names):
         return None
+    if COMPACT_RELATION_STUB_PREFIX.casefold() in cleaned_sql.casefold():
+        return None
     if SQL_QUOTED_IDENTIFIER_DELIMITER in cleaned_sql:
         return None
     for relation, columns in binding_schema.items():

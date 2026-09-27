@@ -34,6 +34,42 @@ from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
             ),
             expected_shared_queries=0,
         ),
+        SharedBindingQueryCase(
+            description="an authored lowercase stub-named CTE is not shared",
+            orders_summary_sql=(
+                "MODEL (materialized view); WITH __sqlbuild_project_input_0 AS "
+                '(SELECT CAST(2 AS VARCHAR) AS id) SELECT id FROM __ref("orders")'
+            ),
+            customers_summary_sql=(
+                "MODEL (materialized view); WITH __sqlbuild_project_input_0 AS "
+                '(SELECT CAST(2 AS VARCHAR) AS id) SELECT id FROM __ref("customers")'
+            ),
+            expected_shared_queries=0,
+            later_models=(
+                (
+                    "next_orders",
+                    'MODEL (materialized view); SELECT id + 1 AS next_id FROM __ref("orders_summary")',
+                ),
+            ),
+        ),
+        SharedBindingQueryCase(
+            description="an authored uppercase stub-named CTE is not shared",
+            orders_summary_sql=(
+                "MODEL (materialized view); WITH __SQLBUILD_PROJECT_INPUT_0 AS "
+                '(SELECT CAST(2 AS VARCHAR) AS id) SELECT id FROM __ref("orders")'
+            ),
+            customers_summary_sql=(
+                "MODEL (materialized view); WITH __SQLBUILD_PROJECT_INPUT_0 AS "
+                '(SELECT CAST(2 AS VARCHAR) AS id) SELECT id FROM __ref("customers")'
+            ),
+            expected_shared_queries=0,
+            later_models=(
+                (
+                    "next_orders",
+                    'MODEL (materialized view); SELECT id + 1 AS next_id FROM __ref("orders_summary")',
+                ),
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
