@@ -20,6 +20,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     DynamicPivotRulesIntegrationTestCase,
     ExplicitContractOutputRuleIntegrationTestCase,
     ImplicitAliasRuleIntegrationTestCase,
+    NumericRangeDecisionIntegrationTestCase,
     RulePassIntegrationTestCase,
     RulesIntegrationTestCase,
     TypedContractRuleIntegrationTestCase,
@@ -156,6 +157,83 @@ def test_given_exact_internal_edge_exception_when_compiling_then_live_edge_passe
     assert any(
         diagnostic["code"] == test_case.expected_code and "stale" in str(diagnostic["message"])
         for diagnostic in cast(list[dict[str, object]], stale_result["diagnostics"])
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NumericRangeDecisionIntegrationTestCase(
+            description="literal between bounds and value list are reported",
+            predicate=(
+                "TRY_CAST(code AS INTEGER) BETWEEN 30 AND 61\n"
+                "  OR TRY_CAST(code AS INTEGER) NOT IN (30, 31, 45)"
+            ),
+            expected_findings=(
+                (
+                    "non-canonical numeric comparison: TRY_CAST(code AS INTEGER) BETWEEN 30 AND 61",
+                    "Declare the threshold as a CONSTANT and compare through "
+                    '@const("<name>"); only -1, 0, and 1 are self-explanatory.',
+                ),
+                (
+                    "non-canonical numeric comparison: "
+                    "TRY_CAST(code AS INTEGER) NOT IN (30, 31, 45)",
+                    "Declare the values as a list or set CONSTANT and compare through "
+                    '[NOT] IN @const("<name>"); only -1, 0, and 1 are self-explanatory.',
+                ),
+            ),
+            expected_exit_code=1,
+        ),
+        NumericRangeDecisionIntegrationTestCase(
+            description="constant-backed between bounds and value list pass",
+            predicate=(
+                'TRY_CAST(code AS INTEGER) BETWEEN @const("_low_code") AND @const("_high_code")\n'
+                '  OR TRY_CAST(code AS INTEGER) NOT IN @const("_held_codes")'
+            ),
+            expected_findings=(),
+            expected_exit_code=0,
+            constants="  constants (_low_code 30, _high_code 61, _held_codes [30, 31, 45]),\n",
+        ),
+        NumericRangeDecisionIntegrationTestCase(
+            description="canonical between bounds and value list pass",
+            predicate=(
+                "TRY_CAST(code AS INTEGER) BETWEEN 0 AND 1\n"
+                "  OR TRY_CAST(code AS INTEGER) IN (-1, 0, 1)"
+            ),
+            expected_findings=(),
+            expected_exit_code=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_numeric_range_or_value_list_when_compiling_then_literal_decisions_are_reported(
+    test_case: NumericRangeDecisionIntegrationTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """BETWEEN bounds and IN members follow the same named-decision rule as comparisons."""
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRDECLARATION102"]\n',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        "MODEL (\n"
+        '  description "Orders",\n' + test_case.constants + ");\n\n"
+        "SELECT code\n"
+        "FROM (SELECT '31' AS code) AS items\n"
+        f"WHERE {test_case.predicate}\n",
+        encoding="utf-8",
+    )
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
+    result: dict[str, object] = json.loads(capsys.readouterr().out)
+    diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], result["diagnostics"])
+
+    assert exit_code == test_case.expected_exit_code
+    assert tuple((diagnostic["message"], diagnostic["help"]) for diagnostic in diagnostics) == (
+        test_case.expected_findings
     )
 
 

@@ -30,6 +30,7 @@ use std::ops::ControlFlow;
 
 const MIXED_STAR_REMEDIATION: &str = "SELECT *, a, b mixes a passthrough star with derived columns. The * exemption permits a lone SELECT * only. Move a and b into an earlier CTE so they are computed upstream, leaving the final select a pure SELECT *. If you need those columns in the output, drop the * exemption and enumerate every column explicitly.";
 const RULES_PARSER_RECURSION_LIMIT: usize = 128;
+const NUMERIC_VALUE_LIST_REMEDIATION: &str = "Declare the values as a list or set CONSTANT and compare through [NOT] IN @const(\"<name>\"); only -1, 0, and 1 are self-explanatory.";
 
 #[derive(Clone)]
 struct Position {
@@ -42,6 +43,8 @@ struct ComparisonFact {
     position: Option<Position>,
     sql: String,
     equality: bool,
+    value_list: bool,
+    binary: bool,
     output_name: Option<String>,
     columns: BTreeSet<String>,
     string_literals: Vec<String>,
@@ -1226,7 +1229,9 @@ fn evaluate_literal_rules(
 ) {
     let facts = select_facts(&parsed.query);
     for comparison in facts.into_iter().flat_map(|select| select.comparisons) {
-        if let Some(rule) = selected.get("SQBRDECLARATION101") {
+        if comparison.binary
+            && let Some(rule) = selected.get("SQBRDECLARATION101")
+        {
             let enum_column = comparison
                 .columns
                 .iter()
@@ -1265,7 +1270,9 @@ fn evaluate_literal_rules(
                     rule,
                     comparison.position.as_ref(),
                     format!("non-canonical numeric comparison: {}", comparison.sql),
-                    None,
+                    comparison
+                        .value_list
+                        .then(|| NUMERIC_VALUE_LIST_REMEDIATION.to_owned()),
                 ));
             }
         }
@@ -1669,8 +1676,8 @@ fn comparison_facts(root: &Expr, source_context: &SourceContext, output: &mut Ve
     impl Visitor for Comparisons<'_> {
         type Break = ();
         fn pre_visit_expr(&mut self, expression: &Expr) -> ControlFlow<Self::Break> {
-            if let Expr::BinaryOp { op, .. } = expression
-                && matches!(
+            let is_comparison = match expression {
+                Expr::BinaryOp { op, .. } => matches!(
                     op,
                     BinaryOperator::Eq
                         | BinaryOperator::NotEq
@@ -1678,8 +1685,11 @@ fn comparison_facts(root: &Expr, source_context: &SourceContext, output: &mut Ve
                         | BinaryOperator::GtEq
                         | BinaryOperator::Lt
                         | BinaryOperator::LtEq
-                )
-            {
+                ),
+                Expr::Between { .. } | Expr::InList { .. } => true,
+                _ => false,
+            };
+            if is_comparison {
                 self.output
                     .push(comparison_fact(expression, self.source_context));
             }
@@ -1776,27 +1786,38 @@ fn comparison_fact(root: &Expr, source_context: &SourceContext) -> ComparisonFac
                 Expr::BinaryOp {
                     op: BinaryOperator::Eq,
                     ..
-                }
+                } | Expr::InList { negated: false, .. }
             ),
+            value_list: matches!(root, Expr::InList { .. }),
+            binary: matches!(root, Expr::BinaryOp { .. }),
             source_context: source_context.clone(),
             ..ComparisonFact::default()
         },
     };
     let _ = root.visit(&mut visitor);
-    if let Expr::BinaryOp { left, right, .. } = root {
-        for operand in [left.as_ref(), right.as_ref()] {
-            if let Some(number) = numeric_value(operand) {
-                visitor.fact.numeric_literals.push(number);
-            }
-            if direct_column(operand).is_none() {
-                visitor.fact.modified_columns.extend(column_facts(operand));
-            }
-            if direct_string_literal(operand).is_none() && contains_string_literal(operand) {
-                visitor.fact.modified_string_literal = true;
-            }
+    for operand in comparison_operands(root) {
+        if let Some(number) = numeric_value(operand) {
+            visitor.fact.numeric_literals.push(number);
+        }
+        if direct_column(operand).is_none() {
+            visitor.fact.modified_columns.extend(column_facts(operand));
+        }
+        if direct_string_literal(operand).is_none() && contains_string_literal(operand) {
+            visitor.fact.modified_string_literal = true;
         }
     }
     visitor.fact
+}
+
+fn comparison_operands(root: &Expr) -> Vec<&Expr> {
+    match root {
+        Expr::BinaryOp { left, right, .. } => vec![left.as_ref(), right.as_ref()],
+        Expr::Between {
+            expr, low, high, ..
+        } => vec![expr.as_ref(), low.as_ref(), high.as_ref()],
+        Expr::InList { expr, list, .. } => std::iter::once(expr.as_ref()).chain(list).collect(),
+        _ => Vec::new(),
+    }
 }
 
 fn direct_column(expression: &Expr) -> Option<ColumnFact> {

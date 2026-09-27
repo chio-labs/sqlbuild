@@ -81,6 +81,17 @@ class ImplicitAliasRuleIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class NumericRangeDecisionIntegrationTestCase:
+    """One numeric range or value-list predicate and its expected rule findings."""
+
+    description: str
+    predicate: str
+    expected_findings: tuple[tuple[str, str], ...]
+    expected_exit_code: int
+    constants: str = ""
+
+
+@dataclass(frozen=True)
 class RulePassIntegrationTestCase:
     """One compiler-integrated Rules command expected to pass."""
 
