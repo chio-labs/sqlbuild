@@ -10,6 +10,7 @@ use crate::sql_lint::_helpers::engine::{
     direct_indices, is_comment, is_layout, is_query_from, query_end, significant_after,
     significant_before, token_depths,
 };
+use crate::sql_lint::constants::RELATION_MODIFIER_KEYWORDS;
 use crate::sql_lint::models::{AdditionalFactOptions, AdditionalQueryFacts};
 
 const COUNT_ONE_LITERAL: &str = "1";
@@ -1250,10 +1251,15 @@ fn unused_alias_spans(query: &QuerySlice<'_>) -> Vec<Span> {
         }
         let alias = &tokens[alias_index].text;
         let used = (query_start..query_end).any(|index| {
-            depths[index] >= depth
+            index != alias_index
+                && depths[index] >= depth
+                && is_identifier(&tokens[index])
                 && tokens[index].text.eq_ignore_ascii_case(alias)
+                && significant_before(tokens, index).is_none_or(|previous| {
+                    !matches!(tokens[previous].token_type, TokenType::Dot | TokenType::As)
+                })
                 && significant_after(tokens, index)
-                    .is_some_and(|next| tokens[next].token_type == TokenType::Dot)
+                    .is_none_or(|next| tokens[next].token_type != TokenType::LParen)
         });
         if !used {
             spans.push(Span {
@@ -1301,7 +1307,14 @@ fn relation_alias_positions(tokens: &[Token], relation_clause: &[usize]) -> Vec<
 }
 
 fn is_implicit_relation_alias(tokens: &[Token], segment: &[usize], position: usize) -> bool {
-    if position == 0 || !is_identifier(&tokens[segment[position]]) {
+    let candidate = &tokens[segment[position]];
+    if position == 0
+        || !is_identifier(candidate)
+        || candidate.token_type != TokenType::QuotedIdentifier
+            && RELATION_MODIFIER_KEYWORDS
+                .iter()
+                .any(|keyword| candidate.text.eq_ignore_ascii_case(keyword))
+    {
         return false;
     }
     let previous = &tokens[segment[position - 1]];

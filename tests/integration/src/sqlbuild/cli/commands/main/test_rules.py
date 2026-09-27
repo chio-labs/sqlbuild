@@ -1058,6 +1058,20 @@ CROSS JOIN __table_fn("expand_order")(source_orders.order_id) AS expanded
             expected_locations=((3, 22), (3, 47)),
         ),
         ImplicitAliasRuleIntegrationTestCase(
+            description="whole-row alias uses are clean",
+            query_sql=(
+                "SELECT to_json(o) AS payload, c\n"
+                'FROM __ref("orders") o\n'
+                'INNER JOIN __ref("customers") AS c ON o.customer_id = c.customer_id\n'
+            ),
+            expected_locations=(),
+        ),
+        ImplicitAliasRuleIntegrationTestCase(
+            description="join modifiers after unaliased relations are clean",
+            query_sql='SELECT *\nFROM __ref("orders") POSITIONAL JOIN __ref("customers")\n',
+            expected_locations=(),
+        ),
+        ImplicitAliasRuleIntegrationTestCase(
             description="used implicit aliases are clean",
             query_sql=(
                 "SELECT o.order_id, c.customer_id\n"

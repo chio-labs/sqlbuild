@@ -139,3 +139,151 @@ fn given_implicit_and_explicit_table_aliases_when_linting_then_unused_aliases_ma
     }
     Ok(())
 }
+
+#[test]
+fn given_join_modifiers_and_whole_row_uses_when_linting_duckdb_then_aliases_are_kept()
+-> Result<(), String> {
+    let test_cases = [
+        test_types::AdditionalLintRuleTestCase {
+            description: "unaliased relation before positional join has no alias",
+            sql: "SELECT * FROM orders POSITIONAL JOIN customers",
+            rule: "SQBRSQL023",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "unaliased relation before asof join has no alias",
+            sql: "SELECT * FROM orders ASOF JOIN prices ON orders.item_id = prices.item_id AND orders.ordered_at >= prices.valid_from",
+            rule: "SQBRSQL023",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "unaliased relation before natural join has no alias",
+            sql: "SELECT * FROM orders NATURAL JOIN customers",
+            rule: "SQBRSQL023",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "unaliased relation before anti join has no alias",
+            sql: "SELECT * FROM orders ANTI JOIN refunds USING (order_id)",
+            rule: "SQBRSQL023",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "unaliased relation before semi join has no alias",
+            sql: "SELECT * FROM orders SEMI JOIN refunds USING (order_id)",
+            rule: "SQBRSQL023",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "unaliased relation before cross join has no alias",
+            sql: "SELECT * FROM orders CROSS JOIN customers",
+            rule: "SQBRSQL023",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "unaliased relation before tablesample has no alias",
+            sql: "SELECT * FROM orders TABLESAMPLE BERNOULLI (10)",
+            rule: "SQBRSQL023",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "unaliased relation before unpivot has no alias",
+            sql: "SELECT * FROM orders UNPIVOT (amount FOR month IN (jan, feb))",
+            rule: "SQBRSQL023",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "implicit alias used as whole-row function argument",
+            sql: "SELECT row_to_json(o) AS payload FROM orders o",
+            rule: "SQBRSQL023",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "explicit alias used as whole-row function argument",
+            sql: "SELECT row_to_json(o) AS payload FROM orders AS o",
+            rule: "SQBRSQL023",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "implicit alias used as bare projection",
+            sql: "SELECT o FROM orders o",
+            rule: "SQBRSQL023",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "explicit alias used as bare projection",
+            sql: "SELECT o FROM orders AS o",
+            rule: "SQBRSQL023",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "implicit alias used in whole-row comparison",
+            sql: "SELECT 1 AS present FROM orders o WHERE o IS NOT NULL",
+            rule: "SQBRSQL023",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "explicit alias used in whole-row comparison",
+            sql: "SELECT 1 AS present FROM orders AS o WHERE o IS NOT NULL",
+            rule: "SQBRSQL023",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "unused implicit alias beside an unrelated qualified column is reported",
+            sql: "SELECT c.o FROM customers c CROSS JOIN orders o",
+            rule: "SQBRSQL023",
+            expected_anchor: Some("o"),
+            expected_replacement: Some(""),
+        },
+        test_types::AdditionalLintRuleTestCase {
+            description: "unused explicit alias shadowed by an output alias is reported",
+            sql: "SELECT order_id AS o FROM orders AS o",
+            rule: "SQBRSQL023",
+            expected_anchor: Some("AS o"),
+            expected_replacement: Some(""),
+        },
+    ];
+
+    for test_case in test_cases {
+        let diagnostics =
+            helpers::diagnostics_for_dialect(test_case.sql, "duckdb", &[test_case.rule])?;
+        assert_eq!(
+            diagnostics.len(),
+            usize::from(test_case.expected_anchor.is_some()),
+            "{}",
+            test_case.description
+        );
+        let _ = test_case.expected_anchor.map(|expected_anchor| {
+            let diagnostic = &diagnostics[0];
+            let start = diagnostic["start"].as_u64().unwrap_or_default() as usize;
+            let end = diagnostic["end"].as_u64().unwrap_or_default() as usize;
+            assert_eq!(
+                &test_case.sql[start..end],
+                expected_anchor,
+                "{}",
+                test_case.description
+            );
+            assert_eq!(
+                diagnostic["fix"]["replacement"].as_str(),
+                test_case.expected_replacement,
+                "{}",
+                test_case.description
+            );
+        });
+    }
+    Ok(())
+}
