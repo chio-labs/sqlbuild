@@ -66,6 +66,8 @@ Macro calls accept Python literal values:
 - Dictionaries: `{"key": "value"}`
 - `None`
 - The result of another macro call
+- `__ref("model")`, `__source("source")`, and `__seed("seed")` references, alone or inside lists
+  and dictionaries
 
 Positional and keyword arguments are supported:
 
@@ -75,6 +77,49 @@ Positional and keyword arguments are supported:
 
 Use quoted strings when passing SQL expressions such as column names. The macro decides how to
 place that text into its returned SQL.
+
+## Typed reference arguments
+
+Pass the models, sources, and seeds a macro reads as reference arguments:
+
+```sql
+SELECT * FROM @union_all([__ref("orders_eu"), __ref("orders_us")])
+```
+
+The macro receives each reference as a typed `SqlResourceRef` from `sqlbuild.refs`, the same type
+Python nodes use. It has `kind` and `name` attributes, and formatting it into SQL renders the
+relation with the adapter's quoting:
+
+```python
+# models/marts/_sqlbuild/_macros/unions.py
+from sqlbuild.refs import SqlResourceRef
+
+
+def union_all(relations: list[SqlResourceRef]) -> str:
+    return " UNION ALL ".join(f"SELECT order_id FROM {relation}" for relation in relations)
+```
+
+The dependency belongs to the model that makes the call. The graph, column lineage, and
+declaration scopes treat `@union_all([__ref("orders_eu"), __ref("orders_us")])` exactly like a
+model that wrote `__ref("orders_eu")` and `__ref("orders_us")` itself.
+
+### References in macro output
+
+A macro must not produce references on its own. Any `__ref()`, `__source()`, or `__seed()` in a
+macro's expanded output fails to compile with `P006`, whether the macro's Python code wrote it or
+it arrived as a quoted string argument such as `@wrap('__ref("stg_orders")')`:
+
+```
+error[P006]: model:order_summary depends on model:stg_orders through macro orders_base()
+  --> models/marts/_sqlbuild/_macros/orders.py
+  = help: write the reference in the model, or pass it in: @orders_base(__ref("stg_orders"))
+  = help: while migrating a project, allow macro-generated references with [references] enforce_explicit = false in sqlbuild_project.toml
+```
+
+A dependency hidden inside a macro is invisible to reviewers of the model file and bypasses
+declaration scopes. For projects migrating from other tools,
+[`[references] enforce_explicit = false`](/docs/concepts/project-configuration#references) allows
+macro-generated references project-wide.
 
 ## Keep implementation details private
 

@@ -28,9 +28,16 @@ FROM __ref("stg_orders")
 - Arguments are Python literals: strings, numbers, `True`/`False`, lists, dicts, `None`, or another
   macro call. Pass SQL expressions and column names as quoted strings. Keyword arguments work:
   `@mock_orders(count=5, status="completed")`.
+- Pass the models, sources and seeds a macro reads as typed arguments:
+  `@union_all([__ref("orders_eu"), __ref("orders_us")])`. The macro receives `SqlResourceRef`
+  values (`sqlbuild.refs`); formatting one into SQL renders the relation, and the dependency
+  belongs to the calling model.
 - A macro used in SQL must return a string, and its output is final SQL. Never return text
   containing another `@macro()` call; compose by calling the Python functions directly, including
   functions imported from other visible macro files (`from macros.currency import add_tax`).
+- Never return `__ref()`, `__source()` or `__seed()` from a macro, including through a quoted
+  string argument: it fails compile with `P006`. Only `[references] enforce_explicit = false` in
+  `sqlbuild_project.toml` allows it, as a project-wide migration switch.
 - Macros work in model SQL, SQL hooks, unit tests, scenarios, audits, SQL functions and inline
   source expressions. They are not allowed in ordinary `MODEL()` configuration fields.
 - Imported functions keep their original identity; they are not re-exported by the importing
