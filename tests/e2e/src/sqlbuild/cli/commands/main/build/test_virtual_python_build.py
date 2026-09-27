@@ -160,7 +160,7 @@ def test_given_virtual_python_nodes_when_building_then_runs_loader_and_read_side
                 "from sqlbuild.tasks import task\n\n"
                 "@task\n"
                 "def prepare_orders(ctx):\n"
-                "    Path(__file__).parents[1].joinpath('prepared.txt').write_text('7')\n"
+                "    Path(__file__).parents[2].joinpath('prepared.txt').write_text('7')\n"
                 "    return ctx.result(payload={'order_id': 7})\n"
             ),
             "python/loaders/raw.py": (
@@ -169,7 +169,7 @@ def test_given_virtual_python_nodes_when_building_then_runs_loader_and_read_side
                 "from python.tasks.prepare import prepare_orders\n\n"
                 "@loader(depends_on=(prepare_orders,))\n"
                 "def raw_orders(ctx):\n"
-                "    marker = Path(__file__).parents[1].joinpath('prepared.txt')\n"
+                "    marker = Path(__file__).parents[2].joinpath('prepared.txt')\n"
                 "    return [{'order_id': int(marker.read_text())}]\n"
             ),
             "sources/raw.yml": (
@@ -192,14 +192,14 @@ def test_given_virtual_python_nodes_when_building_then_runs_loader_and_read_side
                 "def profile_fact_orders(ctx):\n"
                 "    relation = ctx.relation(model('fact_orders'))\n"
                 "    rows = ctx.query(f'SELECT COUNT(*) FROM {relation}').fetchall()[0][0]\n"
-                "    Path(__file__).parents[1].joinpath('profile.txt').write_text(str(rows))\n"
+                "    Path(__file__).parents[2].joinpath('profile.txt').write_text(str(rows))\n"
                 "    return ctx.result(payload={'rows': rows})\n"
                 "\n"
                 "@task(depends_on=source('raw_orders'))\n"
                 "def profile_raw_orders(ctx):\n"
                 "    relation = ctx.relation(source('raw_orders'))\n"
                 "    rows = ctx.query(f'SELECT COUNT(*) FROM {relation}').fetchall()[0][0]\n"
-                "    output = Path(__file__).parents[1].joinpath('source_profile.txt')\n"
+                "    output = Path(__file__).parents[2].joinpath('source_profile.txt')\n"
                 "    output.write_text(str(rows))\n"
                 "    return ctx.result(payload={'rows': rows})\n"
             ),
@@ -311,12 +311,12 @@ def test_given_virtual_python_result_when_building_then_persists_node_results_in
                 "def summarize_loader(ctx):\n"
                 "    result = ctx.result_of(node_function=raw_orders)\n"
                 "    history = ctx.results_of(node_function=raw_orders, limit=1)\n"
-                "    output = Path(__file__).parents[1].joinpath('loader_result.txt')\n"
+                "    output = Path(__file__).parents[2].joinpath('loader_result.txt')\n"
                 "    output.write_text(\n"
                 "        f\"{result.metadata['loader_name']}:{result.metadata['source_name']}:\"\n"
                 "        f\"{result.metadata['rows_loaded']}\"\n"
                 "    )\n"
-                "    history_output = Path(__file__).parents[1].joinpath('history_result.txt')\n"
+                "    history_output = Path(__file__).parents[2].joinpath('history_result.txt')\n"
                 "    history_output.write_text(\n"
                 "        f\"{ctx.result_of(node_function=produce_result).payload['value']}:{len(history)}\"\n"
                 "    )\n"
@@ -779,7 +779,7 @@ def test_given_virtual_python_identities_when_replanning_then_reads_virtual_stat
                 "from sqlbuild.tasks import task\n\n"
                 "@task\n"
                 "def prepare_orders(ctx):\n"
-                "    Path(__file__).parents[1].joinpath('prepared.txt').write_text('7')\n"
+                "    Path(__file__).parents[2].joinpath('prepared.txt').write_text('7')\n"
                 "    return ctx.result(payload={'order_id': 7})\n"
             ),
             "python/loaders/raw.py": (
@@ -788,7 +788,7 @@ def test_given_virtual_python_identities_when_replanning_then_reads_virtual_stat
                 "from python.tasks.prepare import prepare_orders\n\n"
                 "@loader(depends_on=(prepare_orders,))\n"
                 "def raw_orders(ctx):\n"
-                "    marker = Path(__file__).parents[1].joinpath('prepared.txt')\n"
+                "    marker = Path(__file__).parents[2].joinpath('prepared.txt')\n"
                 "    return [{'order_id': int(marker.read_text())}]\n"
             ),
             "sources/raw.yml": (
@@ -811,7 +811,7 @@ def test_given_virtual_python_identities_when_replanning_then_reads_virtual_stat
                 "def profile_fact_orders(ctx):\n"
                 "    relation = ctx.relation(model('fact_orders'))\n"
                 "    rows = ctx.query(f'SELECT COUNT(*) FROM {relation}').fetchall()[0][0]\n"
-                "    Path(__file__).parents[1].joinpath('profile.txt').write_text(str(rows))\n"
+                "    Path(__file__).parents[2].joinpath('profile.txt').write_text(str(rows))\n"
                 "    return ctx.result(payload={'rows': rows})\n"
             ),
         },
@@ -848,7 +848,7 @@ def test_given_virtual_python_identities_when_replanning_then_reads_virtual_stat
         "from sqlbuild.tasks import task\n\n"
         "@task\n"
         "def prepare_orders(ctx):\n"
-        "    Path(__file__).parents[1].joinpath('prepared.txt').write_text('8')\n"
+        "    Path(__file__).parents[2].joinpath('prepared.txt').write_text('8')\n"
         "    return ctx.result(payload={'order_id': 8})\n",
         encoding="utf-8",
     )
@@ -1046,7 +1046,7 @@ def test_given_virtual_python_nodes_when_no_python_then_only_loader_side_python_
                 "from sqlbuild.tasks import task\n\n"
                 "@task\n"
                 "def prepare_orders(ctx):\n"
-                "    Path(__file__).parents[1].joinpath('prepared.txt').write_text('7')\n"
+                "    Path(__file__).parents[2].joinpath('prepared.txt').write_text('7')\n"
                 "    return ctx.result(payload={'order_id': 7})\n"
             ),
             "python/loaders/raw.py": (
@@ -1055,7 +1055,7 @@ def test_given_virtual_python_nodes_when_no_python_then_only_loader_side_python_
                 "from python.tasks.prepare import prepare_orders\n\n"
                 "@loader(depends_on=(prepare_orders,))\n"
                 "def raw_orders(ctx):\n"
-                "    marker = Path(__file__).parents[1].joinpath('prepared.txt')\n"
+                "    marker = Path(__file__).parents[2].joinpath('prepared.txt')\n"
                 "    return [{'order_id': int(marker.read_text())}]\n"
             ),
             "sources/raw.yml": (
@@ -1076,7 +1076,7 @@ def test_given_virtual_python_nodes_when_no_python_then_only_loader_side_python_
                 "from sqlbuild.tasks import task\n\n"
                 "@task(depends_on=model('fact_orders'))\n"
                 "def profile_fact_orders(ctx):\n"
-                "    Path(__file__).parents[1].joinpath('profile.txt').write_text('ran')\n"
+                "    Path(__file__).parents[2].joinpath('profile.txt').write_text('ran')\n"
                 "    return ctx.result()\n"
             ),
         },

@@ -640,7 +640,7 @@ def test_given_alias_imported_provider_annotation_when_running_command_then_cli_
 
                 from sqlbuild.tasks import task
 
-                provider_path = Path(__file__).parents[1] / "providers" / "marker.py"
+                provider_path = Path(__file__).parents[2] / "providers" / "marker.py"
                 spec = importlib.util.spec_from_file_location("alias_marker", provider_path)
                 alias_marker = importlib.util.module_from_spec(spec)
                 sys.modules["alias_marker"] = alias_marker

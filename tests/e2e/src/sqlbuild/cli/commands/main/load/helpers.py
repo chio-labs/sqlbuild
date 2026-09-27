@@ -55,7 +55,7 @@ def assert_source_only_ingress_dependency_case(
                 "from sqlbuild.tasks import task\n\n"
                 "@task\n"
                 "def prepare_events(ctx):\n"
-                "    Path(__file__).parents[1].joinpath('prepared.txt').write_text('prepared')\n"
+                "    Path(__file__).parents[2].joinpath('prepared.txt').write_text('prepared')\n"
                 "    return ctx.result()\n"
             ),
         },
