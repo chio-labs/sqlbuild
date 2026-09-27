@@ -381,7 +381,7 @@ def test_given_report_when_serializing_then_bytes_are_deterministic_safe_and_can
     assert first == second
     assert first.endswith("\n")
     assert first.isascii()
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     sections: list[dict[str, object]] = cast(list[dict[str, object]], payload["sections"])
     assert isinstance(sections[0]["collapsed"], bool)
     assert isinstance(sections[0]["collapsed_count"], int)

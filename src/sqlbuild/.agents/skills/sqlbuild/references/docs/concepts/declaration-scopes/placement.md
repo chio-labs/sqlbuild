@@ -14,6 +14,7 @@ Online: https://sqlbuild.com/docs/concepts/declaration-scopes/placement/
 - Different resource trees
 - Audits, schemas, and hooks
 - What SQLBuild checks
+- Adopting placement in an existing project
 
 Start with the ordinary project-wide directories unless you have a reason to limit access:
 
@@ -131,5 +132,20 @@ folder of the files that use it. If the declaration is in a broader location, th
 - The destination directory
 
 These checks use the complete project rather than only the models selected by the current command.
+
+## Adopting placement in an existing project
+
+Placement findings are errors by default. While moving an existing project into its required
+layout, you can report them as warnings for the whole project:
+
+```toml
+# sqlbuild_project.toml
+[scopes]
+enforce_placement = false
+```
+
+This applies to every declaration kind and covers only placement findings: declarations in a
+broader location than their users need, and unused declarations. A declaration that is not visible
+from a file that uses it is still an error. Remove the setting once the warnings are fixed.
 
   Use Scope Explorer to see what a file can access or preview moving the file.

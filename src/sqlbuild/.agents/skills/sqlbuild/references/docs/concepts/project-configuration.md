@@ -15,6 +15,7 @@ Online: https://sqlbuild.com/docs/concepts/project-configuration/
 - Path defaults
 - Settings
 - Rules
+- Scopes
 - Project variables
 - Janitor
 - Scenario
@@ -415,6 +416,19 @@ select = ["SQBRSQL", "SQBRGRAPH", "XSQBRARCH"]
 Rules are opt-in. Exact codes activate individual checks and prefixes activate a family. Built-in
 codes begin with `SQBR`; repository-defined codes begin with `XSQBR`. See
 [Compiler-integrated Rules](rules.md) for configuration, authoring, and suppressions.
+
+## Scopes
+
+Declaration placement findings are errors by default. Set `enforce_placement = false` to report
+them as warnings for the whole project while you move declarations into place:
+
+```toml
+[scopes]
+enforce_placement = false
+```
+
+Visibility errors are unaffected. See
+[Where to Put Declarations](declaration-scopes/placement.md).
 
 ## Project variables
 

@@ -381,12 +381,12 @@ def build_move_preview(
 
 
 def serialize_result(*, result: ScopeReport | ScopeBrowseResult | ScopeListResult) -> str:
-    """Serialize a schema-version-one scope result as deterministic ASCII JSON."""
+    """Serialize a schema-version-two scope result as deterministic ASCII JSON."""
 
     payload: object = _value(result)
     if not isinstance(payload, dict):
         raise ScopeError("Scope report serialization did not produce an object")
-    payload = {"schema_version": 1, **payload}
+    payload = {"schema_version": 2, **payload}
     return json.dumps(payload, sort_keys=True, ensure_ascii=True, separators=(",", ":")) + "\n"
 
 

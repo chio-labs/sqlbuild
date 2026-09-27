@@ -375,7 +375,7 @@ sqb scope model:stg_orders \
 in text output. `none` omits declaration definition locations and replaces structural and header
 paths with `(hidden)`. Paths in stable machine output never expose an absolute workspace root.
 
-`--json` emits the canonical schema rather than serializing the visual tree. The top-level `schema_version` is currently `1`. Reports include the target, scope chain, declaration sections, applied filters, section totals, collapsed and truncated flags, cursors, diagnostics, and aggregate and section-level completeness. Move previews and explanations appear when requested.
+`--json` emits the canonical schema rather than serializing the visual tree. The top-level `schema_version` is currently `2`. Reports include the target, scope chain, declaration sections, applied filters, section totals, collapsed and truncated flags, cursors, diagnostics, and aggregate and section-level completeness. Move previews and explanations appear when requested.
 
 JSON is deterministically ordered, ASCII, newline-terminated, and byte-stable for identical inputs. It contains no ANSI formatting. Consumers should check `schema_version` before relying on fields.
 

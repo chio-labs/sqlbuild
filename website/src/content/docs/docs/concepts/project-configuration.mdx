@@ -396,6 +396,19 @@ Rules are opt-in. Exact codes activate individual checks and prefixes activate a
 codes begin with `SQBR`; repository-defined codes begin with `XSQBR`. See
 [Compiler-integrated Rules](/docs/concepts/rules) for configuration, authoring, and suppressions.
 
+## Scopes
+
+Declaration placement findings are errors by default. Set `enforce_placement = false` to report
+them as warnings for the whole project while you move declarations into place:
+
+```toml
+[scopes]
+enforce_placement = false
+```
+
+Visibility errors are unaffected. See
+[Where to Put Declarations](/docs/concepts/declaration-scopes/placement).
+
 ## Project variables
 
 Variables are simple string substitutions available in model SQL via the `@@name` syntax:

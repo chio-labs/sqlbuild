@@ -6,7 +6,7 @@ from pathlib import Path
 
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
 
-SCOPE_METADATA_SCHEMA_VERSION: int = 2
+SCOPE_METADATA_SCHEMA_VERSION: int = 3
 SCOPE_CACHE_SCHEMA_VERSION: int = 3
 SCOPE_FINGERPRINT_ALGORITHM_VERSION: int = 2
 SCOPE_CACHE_DIRECTORY: Path = Path("target/cache/compiler/declaration-scopes-v2")

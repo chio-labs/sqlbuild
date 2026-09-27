@@ -61,7 +61,7 @@ def test_given_scope_index_when_rendering_json_twice_then_bytes_are_deterministi
     assert outputs[0] == outputs[1]
     assert outputs[0].endswith("\n") and not outputs[0].endswith("\n\n")
     assert "\x1b[" not in outputs[0]
-    assert json.loads(outputs[0])["schema_version"] == 1
+    assert json.loads(outputs[0])["schema_version"] == 2
     assert "secret-source-digest" not in outputs[0]
     assert "/home/" not in outputs[0]
 
