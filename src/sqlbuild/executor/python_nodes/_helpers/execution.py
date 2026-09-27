@@ -20,12 +20,12 @@ from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.node_results.main._direct_store import build_direct_node_result_store
 from sqlbuild.executor.node_results.models import NodeResultRecord
 from sqlbuild.executor.node_results.types import NodeResultStatus
+from sqlbuild.executor.python_nodes._helpers.relation_guard import build_python_node_relation_guard
 from sqlbuild.executor.python_nodes._helpers.results import (
     build_python_node_failure_result,
     evaluate_python_node_fan_in,
     normalize_python_node_return,
 )
-from sqlbuild.executor.python_nodes.classes.runtime_relation_guard import RuntimeRelationGuard
 from sqlbuild.executor.python_nodes.models import (
     AssetContext,
     PythonNodeExecutionResult,
@@ -384,34 +384,14 @@ def _build_context(
         default_schema=runtime.default_schema,
         relation_targets=runtime.resolved_relation_targets,
         allowed_sql_refs=allowed_sql_refs,
-        relation_guard=_node_relation_guard(
-            node=node, node_kind=node_kind, runtime=runtime, warnings=warnings
+        relation_guard=build_python_node_relation_guard(
+            owner_label=f"{node_kind.value} '{node.name}'", runtime=runtime, warnings=warnings
         ),
         providers=providers,
         start_cursor_ts=runtime.start_cursor_ts,
         end_cursor_ts=runtime.end_cursor_ts,
         start_cursor_int=runtime.start_cursor_int,
         end_cursor_int=runtime.end_cursor_int,
-    )
-
-
-def _node_relation_guard(
-    *,
-    node: ExecutablePythonNode,
-    node_kind: PythonNodeKind,
-    runtime: PythonNodeRuntime,
-    warnings: list[str],
-) -> RuntimeRelationGuard | None:
-    if runtime.project_relations is None:
-        return None
-    return RuntimeRelationGuard(
-        owner_label=f"{node_kind.value} '{node.name}'",
-        declare_help="declare it with depends_on={typed}",
-        project_relations=runtime.project_relations,
-        dialect=runtime.adapter.sql_analysis_dialect(),
-        default_database=runtime.default_database,
-        default_schema=runtime.default_schema,
-        warnings=warnings,
     )
 
 

@@ -3,27 +3,15 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey, CompiledProject
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import PythonHookEntry
 from sqlbuild.compiler.graph._helpers.algorithms import transitive_closure_many_impl
 from sqlbuild.compiler.graph._helpers.audit_gates import attached_audit_gate_edges_impl
 from sqlbuild.compiler.graph._helpers.lineage import build_lineage_upstream_deps_impl
+from sqlbuild.compiler.graph._helpers.sql_refs import sql_ref_key_impl
 from sqlbuild.compiler.graph.models import HookReadEdge
 from sqlbuild.python_nodes.models import SqlResourceRef
-from sqlbuild.python_nodes.types import SqlResourceRefKind
 
 _MODEL_HOOK_KEYS: tuple[str, ...] = ("pre_hooks", "post_hooks")
-_RESOURCE_TYPE_BY_REF_KIND: dict[SqlResourceRefKind, CompiledResourceType] = {
-    SqlResourceRefKind.MODEL: CompiledResourceType.MODEL,
-    SqlResourceRefKind.SOURCE: CompiledResourceType.SOURCE,
-    SqlResourceRefKind.SEED: CompiledResourceType.SEED,
-}
-
-
-def hook_read_key(ref: SqlResourceRef) -> CompiledObjectKey:
-    """Return the compiled graph key a declared hook read names."""
-
-    return CompiledObjectKey(resource_type=_RESOURCE_TYPE_BY_REF_KIND[ref.kind], name=ref.name)
 
 
 def model_python_hook_names_impl(model: CompiledModel) -> tuple[str, ...]:
@@ -51,7 +39,7 @@ def hook_read_edges_impl(*, project: CompiledProject) -> tuple[HookReadEdge, ...
     for model in project.models:
         for hook_name in model_python_hook_names_impl(model):
             for ref in reads_by_hook.get(hook_name, ()):
-                read: CompiledObjectKey = hook_read_key(ref)
+                read: CompiledObjectKey = sql_ref_key_impl(ref)
                 if read != model.key:
                     edges[HookReadEdge(hook_name=hook_name, gated=model.key, read=read)] = None
     return tuple(edges)

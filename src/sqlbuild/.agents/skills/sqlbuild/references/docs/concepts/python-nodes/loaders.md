@@ -268,6 +268,8 @@ def raw_account_metrics(ctx: LoaderContext) -> list[dict[str, object]]:
     ]
 ```
 
+Read upstream relations through `ctx.loader(...)` and `ctx.source(...)`, not by writing their table names in SQL. SQLBuild rejects literal SQL that names a project source, model, or seed with `P008`, and warns at run time when dynamic SQL does; loaders run before models and seeds and cannot read them. See [Hard-coded relation names](sql-references.md#hard-coded-relation-names).
+
 Dependencies form a DAG. SQLBuild schedules loaders in topological order and executes independent loaders concurrently when `--concurrency` is set.
 
 Intermediate loaders (those referenced only via `depends_on`, with no managed source of the same name) are given synthetic source entries and write to `__loader__<name>` tables by default. Only the terminal loader - the one whose name matches a managed source - populates that source; intermediate loaders feed it. Use the `destination` parameter on the decorator to override the intermediate relation:

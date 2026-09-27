@@ -1,4 +1,4 @@
-"""Literal SQL in tasks, assets, and hooks must not hard-code project relation names."""
+"""Literal SQL in Python nodes and hooks must not hard-code project relation names."""
 
 from __future__ import annotations
 
@@ -15,7 +15,9 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     compile_and_assemble,
     gate_model,
+    python_check_source,
     python_hook_source,
+    python_loader_source,
     python_task_source,
 )
 
@@ -43,6 +45,19 @@ _COUNTRY_SEED: dict[str, str] = {
 }
 
 
+_CHECK_PATH: str = "python/checks/orders.py"
+_LOADER_PATH: str = "python/loaders/raw.py"
+_RAW_SOURCES: dict[str, str] = {
+    "sources/raw.yml": (
+        "sources:\n"
+        "  - name: raw_regions\n    managed: true\n    write_strategy: table\n"
+        "    columns:\n      - name: id\n        type: INTEGER\n"
+        "  - name: raw_customers\n    managed: true\n    write_strategy: table\n"
+        "    columns:\n      - name: id\n        type: INTEGER\n"
+    ),
+}
+
+
 @pytest.mark.parametrize(
     "test_case",
     (
@@ -61,7 +76,86 @@ _COUNTRY_SEED: dict[str, str] = {
                 "ctx.query()",
                 "python/tasks/export.py:7",
                 'depends_on=model("customers")',
+                "if 'customers' is an external table that shares the name, qualify it with its "
+                "schema",
                 "[references] enforce_explicit = false",
+            ),
+        ),
+        PythonSqlReferenceErrorTestCase(
+            description="task literal SQL naming a seed",
+            files={
+                **_MODELS,
+                **_COUNTRY_SEED,
+                _HOOK_PATH: python_hook_source(),
+                _TASK_PATH: python_task_source(
+                    body='    ctx.query("SELECT * FROM country_codes")\n'
+                ),
+            },
+            expected_error_fragments=(
+                "task:export_orders names seed:country_codes",
+                'declare it with depends_on=seed("country_codes") and use '
+                'ctx.relation(seed("country_codes"))',
+            ),
+        ),
+        PythonSqlReferenceErrorTestCase(
+            description="check literal SQL naming an undeclared model",
+            files={
+                **_MODELS,
+                _HOOK_PATH: python_hook_source(),
+                _CHECK_PATH: python_check_source(
+                    depends_on='model("orders")',
+                    body='    ctx.query("SELECT count(*) FROM customers")\n',
+                ),
+            },
+            expected_error_fragments=(
+                "[P008]",
+                "check:orders_present names model:customers as 'customers' in SQL passed to "
+                "ctx.query()",
+                "python/checks/orders.py:7",
+                'declare it with depends_on=model("customers")',
+            ),
+        ),
+        PythonSqlReferenceErrorTestCase(
+            description="loader literal SQL naming a source it does not depend on",
+            files={
+                **_MODELS,
+                **_RAW_SOURCES,
+                _HOOK_PATH: python_hook_source(),
+                _LOADER_PATH: python_loader_source(
+                    depends_on="", body='    ctx.query("SELECT * FROM raw_regions")\n'
+                ),
+            },
+            expected_error_fragments=(
+                "loader:raw_customers names source:raw_regions as 'raw_regions'",
+                'use ctx.source("raw_regions") instead of the relation name',
+            ),
+        ),
+        PythonSqlReferenceErrorTestCase(
+            description="loader literal SQL naming an upstream loader's source",
+            files={
+                **_MODELS,
+                **_RAW_SOURCES,
+                _HOOK_PATH: python_hook_source(),
+                _LOADER_PATH: python_loader_source(
+                    depends_on="raw_regions", body='    ctx.query("SELECT * FROM raw_regions")\n'
+                ),
+            },
+            expected_error_fragments=("use ctx.loader(raw_regions) instead of the relation name",),
+        ),
+        PythonSqlReferenceErrorTestCase(
+            description="loader literal SQL naming a model",
+            files={
+                **_MODELS,
+                **_RAW_SOURCES,
+                _HOOK_PATH: python_hook_source(),
+                _LOADER_PATH: python_loader_source(
+                    depends_on="", body='    ctx.query("SELECT * FROM customers")\n'
+                ),
+            },
+            expected_error_fragments=(
+                "loader:raw_customers names model:customers as 'customers'",
+                "loaders run before models and seeds and cannot read them; read model:customers "
+                "from a task or asset instead",
             ),
         ),
         PythonSqlReferenceErrorTestCase(
@@ -92,6 +186,17 @@ _COUNTRY_SEED: dict[str, str] = {
             },
             expected_error_fragments=("names model:customers as 'main.customers'",),
         ),
+        PythonSqlReferenceErrorTestCase(
+            description="qualified name omits the external table help",
+            files={
+                **_MODELS,
+                _HOOK_PATH: python_hook_source(
+                    body='    ctx.query("SELECT * FROM main.customers")\n'
+                ),
+            },
+            expected_error_fragments=("names model:customers",),
+            unexpected_error_fragments=("external table",),
+        ),
     ),
     ids=lambda case: case.description,
 )
@@ -109,6 +214,7 @@ def test_given_hard_coded_project_relation_when_compiling_then_it_fails(
         f"[{getattr(error.value, 'code', '')}] {error.value} {getattr(error.value, 'help', '')}"
     )
     assert all(fragment in rendered for fragment in test_case.expected_error_fragments)
+    assert not any(fragment in rendered for fragment in test_case.unexpected_error_fragments)
 
 
 @pytest.mark.parametrize(
@@ -148,6 +254,38 @@ def test_given_hard_coded_project_relation_when_compiling_then_it_fails(
             files={
                 **_MODELS,
                 _HOOK_PATH: python_hook_source(body='    ctx.query("SELECT * FROM orders")\n'),
+            },
+            expected_model_names=("customers", "orders"),
+        ),
+        PythonSqlReferenceAllowedTestCase(
+            description="check reading its declared model through ctx.relation",
+            files={
+                **_MODELS,
+                _HOOK_PATH: python_hook_source(),
+                _CHECK_PATH: python_check_source(
+                    depends_on='model("orders")',
+                    body=(
+                        '    orders = ctx.relation(model("orders"))\n'
+                        '    ctx.query(f"SELECT count(*) FROM {orders}")\n'
+                    ),
+                ),
+            },
+            expected_model_names=("customers", "orders"),
+        ),
+        PythonSqlReferenceAllowedTestCase(
+            description="loader naming its own source and reading upstream through ctx.loader",
+            files={
+                **_MODELS,
+                **_RAW_SOURCES,
+                _HOOK_PATH: python_hook_source(),
+                _LOADER_PATH: python_loader_source(
+                    depends_on="raw_regions",
+                    body=(
+                        "    regions = ctx.loader(raw_regions)\n"
+                        '    ctx.query(f"SELECT * FROM {regions.destination}")\n'
+                        '    ctx.query("SELECT count(*) FROM raw_customers")\n'
+                    ),
+                ),
             },
             expected_model_names=("customers", "orders"),
         ),

@@ -371,3 +371,31 @@ def python_task_source(*, body: str) -> str:
         "def export_orders(ctx):\n"
         f"{body}"
     )
+
+
+def python_check_source(*, depends_on: str, body: str) -> str:
+    """Return a Python check module defining ``orders_present`` with the given dependencies."""
+
+    return (
+        "from sqlbuild.checks import check\n"
+        "from sqlbuild.refs import model\n\n\n"
+        f"@check(depends_on={depends_on})\n"
+        "def orders_present(ctx):\n"
+        f"{body}"
+        "    return ctx.pass_()\n"
+    )
+
+
+def python_loader_source(*, depends_on: str, body: str) -> str:
+    """Return loaders ``raw_regions`` and ``raw_customers``; the latter runs ``body``."""
+
+    return (
+        "from sqlbuild.loaders import loader\n\n\n"
+        "@loader\n"
+        "def raw_regions(ctx):\n"
+        "    return [{'id': 1}]\n\n\n"
+        f"@loader(depends_on=[{depends_on}])\n"
+        "def raw_customers(ctx):\n"
+        f"{body}"
+        "    return [{'id': 1}]\n"
+    )

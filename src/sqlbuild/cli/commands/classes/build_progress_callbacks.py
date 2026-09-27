@@ -854,7 +854,9 @@ def _count_build_footer_results(
 
     load_result: LoadExecutionResult
     for load_result in result.load_results:
-        if load_result.status == ExecutionStatus.SUCCESS:
+        if load_result.status == ExecutionStatus.SUCCESS and load_result.warning_messages:
+            warn_count += 1
+        elif load_result.status == ExecutionStatus.SUCCESS:
             pass_count += 1
         elif load_result.status == ExecutionStatus.FAILED:
             fail_count += 1
@@ -1215,32 +1217,33 @@ def _format_warning_details(
                 lines.append(line)
             lines.append("")
 
-    function_result: FunctionExecutionResult
-    for function_result in result.function_results:
-        if not function_result.warning_messages:
-            continue
+    labelled_warnings: tuple[tuple[str, tuple[str, ...]], ...] = (
+        *(
+            (f"{function_result.function_name}  ({function_result.function_kind})", messages)
+            for function_result in result.function_results
+            if (messages := function_result.warning_messages)
+        ),
+        *(
+            (f"{load_result.source_name}  (loader {load_result.loader_name})", messages)
+            for load_result in result.load_results
+            if (messages := load_result.warning_messages)
+        ),
+        *(
+            (f"{python_result.node_name}  ({python_result.kind.value})", messages)
+            for python_result in python_node_results
+            if (messages := python_result.warning_messages)
+        ),
+    )
+    label: str
+    messages: tuple[str, ...]
+    for label, messages in labelled_warnings:
         if not has_warnings:
             lines.append("")
             lines.append(style.warning_strong("Warnings:"))
             lines.append("")
             has_warnings = True
-        lines.append(f"  {function_result.function_name}  ({function_result.function_kind})")
-        warning_msg: str
-        for warning_msg in function_result.warning_messages:
-            lines.append(f"    {warning_msg}")
-        lines.append("")
-
-    python_result: PythonNodeExecutionResult
-    for python_result in python_node_results:
-        if not python_result.warning_messages:
-            continue
-        if not has_warnings:
-            lines.append("")
-            lines.append(style.warning_strong("Warnings:"))
-            lines.append("")
-            has_warnings = True
-        lines.append(f"  {python_result.node_name}  ({python_result.kind.value})")
-        for warning_msg in python_result.warning_messages:
+        lines.append(f"  {label}")
+        for warning_msg in messages:
             lines.append(f"    {warning_msg}")
         lines.append("")
 

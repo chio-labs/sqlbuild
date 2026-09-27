@@ -181,6 +181,7 @@ def test_given_checks_complete_when_adapter_close_fails_then_close_renders_all_t
             relation_targets={},
             default_database=None,
             default_schema=None,
+            project_relations=None,
         ),
     )
     pipeline_result: CompilePipelineResult = cast(

@@ -736,3 +736,18 @@ def explicit_reference_project_files(
         EXPLICIT_REFERENCE_MACRO_PATH: EXPLICIT_REFERENCE_MACROS,
         EXPLICIT_REFERENCE_HOOK_PATH: EXPLICIT_REFERENCE_HOOKS,
     } | overrides
+
+
+def explicit_reference_literal_loader(*, table: str) -> str:
+    """Return loaders ``raw_regions`` and ``raw_customers``; the latter queries ``table``."""
+
+    return (
+        "from sqlbuild.loaders import loader\n\n\n"
+        "@loader\n"
+        "def raw_regions(ctx):\n"
+        "    return [{'id': 1}]\n\n\n"
+        "@loader\n"
+        "def raw_customers(ctx):\n"
+        f'    ctx.query("SELECT count(*) FROM {table}")\n'
+        "    return [{'id': 1}]\n"
+    )

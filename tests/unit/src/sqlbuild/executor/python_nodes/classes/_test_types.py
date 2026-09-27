@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 
+from sqlbuild.compiler.references.types import HardCodedRelationOwnerKind
 from sqlbuild.python_nodes.models import SqlResourceRef
 
 
@@ -12,5 +13,9 @@ class RuntimeRelationGuardTestCase:
     description: str
     statements: tuple[str, ...]
     expected_warning_fragments: tuple[str, ...]
+    expected_warning_count: int
     resolved_refs: tuple[SqlResourceRef, ...] = field(default_factory=tuple)
     own_refs: frozenset[SqlResourceRef] = frozenset()
+    owner_label: str = "task 'export_orders'"
+    owner_kind: HardCodedRelationOwnerKind = HardCodedRelationOwnerKind.NODE
+    upstream_loader_by_source: dict[str, str] = field(default_factory=dict)

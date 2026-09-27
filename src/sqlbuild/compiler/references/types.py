@@ -66,3 +66,11 @@ class ExternalSqlReferenceResolver(Protocol):
         ref_package: str | None,
     ) -> str | None:
         """Return the physical relation for an external reference, if resolvable."""
+
+
+class HardCodedRelationOwnerKind(StrEnum):
+    """The kind of Python code that names a project relation in SQL."""
+
+    NODE = "node"
+    HOOK = "hook"
+    LOADER = "loader"

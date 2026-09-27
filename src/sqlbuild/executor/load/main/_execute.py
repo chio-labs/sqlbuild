@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -28,6 +29,7 @@ from sqlbuild.executor.load._helpers.execution import load_resource_kind
 from sqlbuild.executor.load._helpers.external import execute_external_source_load
 from sqlbuild.executor.load._helpers.loader_invocation import (
     build_loader_context,
+    build_loader_relation_guard,
     interpret_loader_return,
     validate_source_write_strategy,
 )
@@ -62,6 +64,47 @@ def execute_source_load(
     on_progress: Callable[[str], None] | None = None,
 ) -> LoadExecutionResult:
     """Run one source loader and write returned rows using the table strategy."""
+
+    warnings: list[str] = []
+    result: LoadExecutionResult = _execute_source_load(
+        source_entry=source_entry,
+        loader_function=loader_function,
+        adapter=adapter,
+        connection_config=connection_config,
+        connection=connection,
+        runtime=runtime,
+        statement_recorder=statement_recorder,
+        ref_bindings=LoaderRefBindings(
+            loader_ref_entries=loader_ref_entries,
+            source_ref_entries=source_ref_entries,
+            relation_guard=build_loader_relation_guard(
+                source_entry=source_entry,
+                loader_function=loader_function,
+                adapter=adapter,
+                runtime=runtime,
+                loader_ref_entries=loader_ref_entries,
+                warnings=warnings,
+            ),
+        ),
+        on_progress=on_progress,
+    )
+    if not warnings:
+        return result
+    return replace(result, warning_messages=tuple(warnings))
+
+
+def _execute_source_load(
+    *,
+    source_entry: SourceEntry,
+    loader_function: DiscoveredLoaderFunction,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    connection: Any,
+    runtime: LoadRuntimeParams,
+    statement_recorder: StatementRecorder,
+    ref_bindings: LoaderRefBindings,
+    on_progress: Callable[[str], None] | None = None,
+) -> LoadExecutionResult:
 
     destination_name: str = (
         source_entry.table if source_entry.table is not None else source_entry.name
@@ -119,10 +162,7 @@ def execute_source_load(
                 destination=destination,
                 runtime=runtime,
                 statement_recorder=statement_recorder,
-                ref_bindings=LoaderRefBindings(
-                    loader_ref_entries=loader_ref_entries,
-                    source_ref_entries=source_ref_entries,
-                ),
+                ref_bindings=ref_bindings,
                 on_progress=on_progress,
             )
             with OperationLifecycle(operation_kind="loader", operation_name="managed_source_load"):

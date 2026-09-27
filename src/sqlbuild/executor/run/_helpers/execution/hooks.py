@@ -21,6 +21,7 @@ from sqlbuild.compiler.python_nodes.main.identity import build_python_node_ident
 from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
+from sqlbuild.compiler.references.types import HardCodedRelationOwnerKind
 from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
@@ -507,7 +508,7 @@ def _hook_relation_guard(
     )
     return RuntimeRelationGuard(
         owner_label=f"hook '{hook_name}' on model '{model_name}'",
-        declare_help="declare it with @hook(reads={typed})",
+        owner_kind=HardCodedRelationOwnerKind.HOOK,
         project_relations=_resolve_hook_relations(adapter=adapter, refs=all_refs, lookup=lookup),
         dialect=adapter.sql_analysis_dialect(),
         default_database=adapter.default_database(),

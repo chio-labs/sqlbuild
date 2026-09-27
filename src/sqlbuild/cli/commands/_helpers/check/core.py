@@ -30,8 +30,13 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.python_nodes.main.selectors import resolve_python_nodes_from_selectors
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
+from sqlbuild.compiler.python_nodes.models import (
+    DiscoveredPythonNode,
+    PythonNodeGraph,
+    PythonSqlRunLifecyclePlan,
+)
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
+from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.build.types import ExecutionStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.main.read_side import create_read_side_python_execution_tracker
@@ -187,6 +192,7 @@ def run_check_read_side_dependencies(
     lifecycle_plan: PythonSqlRunLifecyclePlan,
     relation_targets: dict[SqlResourceRef, str],
     validation_refs: frozenset[SqlResourceRef] | None = None,
+    project_relations: dict[SqlResourceRef, str] | None = None,
     providers: ProviderContainer | None = None,
 ) -> tuple[PythonNodeExecutionResult, ...]:
     """Run read-side Python dependencies for checks against existing SQL relations."""
@@ -239,6 +245,7 @@ def run_check_read_side_dependencies(
             default_database=adapter.default_database(),
             default_schema=adapter.default_schema(),
             relation_targets=relation_targets,
+            project_relations=project_relations,
             providers=providers,
         ),
     )
@@ -246,6 +253,10 @@ def run_check_read_side_dependencies(
         if sql_ref.kind == SqlResourceRefKind.MODEL:
             tracker.record_sql_result(
                 ModelExecutionResult(model_name=sql_ref.name, status=ExecutionStatus.SUCCESS)
+            )
+        elif sql_ref.kind == SqlResourceRefKind.SEED:
+            tracker.record_sql_result(
+                SeedExecutionResult(seed_name=sql_ref.name, status=ExecutionStatus.SUCCESS)
             )
         elif sql_ref.kind == SqlResourceRefKind.SOURCE:
             tracker.record_sql_result(
@@ -362,6 +373,7 @@ def format_check_json(*, results: tuple[PythonCheckExecutionResult, ...]) -> str
                 "message": result.message,
                 "error_message": result.error_message,
                 "metadata": result.metadata,
+                "warnings": list(result.warning_messages) or None,
             }
             for result in results
         ],
@@ -381,8 +393,9 @@ def relevant_check_functions(
     python_graph: PythonNodeGraph,
     exclude: tuple[str, ...],
     selected_dependency_names: frozenset[str],
+    completed_sql_names: frozenset[str] = frozenset(),
 ) -> tuple[DiscoveredCheckFunction, ...]:
-    """Return checks whose Python dependencies all ran and were not excluded."""
+    """Return non-excluded checks whose Python and SQL dependencies all ran in this build."""
 
     excluded_names: frozenset[str] = _resolve_python_check_excludes(
         exclude=exclude, python_graph=python_graph
@@ -394,7 +407,12 @@ def relevant_check_functions(
         if node.name in excluded_names:
             continue
         upstream_names: tuple[str, ...] = python_graph.upstream_deps.get(node.name, ())
-        if upstream_names and all(name in selected_dependency_names for name in upstream_names):
+        sql_names: tuple[str, ...] = tuple(sql_ref.name for sql_ref in node.sql_deps)
+        if (
+            (upstream_names or sql_names)
+            and all(name in selected_dependency_names for name in upstream_names)
+            and all(name in completed_sql_names for name in sql_names)
+        ):
             check_names.add(node.name)
     return tuple(check for check in discovered_inputs.check_functions if check.name in check_names)
 
@@ -470,6 +488,19 @@ def _validate_check_sql_ref_exists(
             database=target.database, schema=target.schema, name=target.name
         )
         relation: str = resolve_relation_location_qualified_name(adapter=adapter, location=target)
+    elif ref.kind == SqlResourceRefKind.SEED:
+        seed_target: CompiledRelationLocation | None = (
+            pipeline_result.plan_output.seed_locations.get(ref.name)
+        )
+        if seed_target is None:
+            raise CliUserError(
+                f"Python check dependency requires unknown seed '{ref.name}'",
+                code="C682",
+            )
+        exists = relation_lookup.exists(
+            database=seed_target.database, schema=seed_target.schema, name=seed_target.name
+        )
+        relation = resolve_relation_location_qualified_name(adapter=adapter, location=seed_target)
     elif ref.kind == SqlResourceRefKind.SOURCE:
         source: SourceEntry | None = (
             pipeline_result.plan_output.source_read_map or pipeline_result.plan_output.source_map
@@ -501,6 +532,13 @@ def _check_sql_ref_location(
         if target is None:
             return None
         return (target.database, target.schema, target.name)
+    if ref.kind == SqlResourceRefKind.SEED:
+        seed_target: CompiledRelationLocation | None = (
+            pipeline_result.plan_output.seed_locations.get(ref.name)
+        )
+        if seed_target is None:
+            return None
+        return (seed_target.database, seed_target.schema, seed_target.name)
     if ref.kind == SqlResourceRefKind.SOURCE:
         source: SourceEntry | None = (
             pipeline_result.plan_output.source_read_map or pipeline_result.plan_output.source_map
@@ -543,7 +581,11 @@ def _check_group_label(
     python_graph: PythonNodeGraph | None,
 ) -> str:
     if python_graph is not None:
-        upstream_names: tuple[str, ...] = python_graph.upstream_deps.get(result_name, ())
+        node: DiscoveredPythonNode | None = python_graph.nodes_by_name.get(result_name)
+        upstream_names: tuple[str, ...] = (
+            *python_graph.upstream_deps.get(result_name, ()),
+            *(() if node is None else (sql_ref.name for sql_ref in node.sql_deps)),
+        )
         if len(upstream_names) == 1:
             return upstream_names[0]
         if len(upstream_names) > 1:
@@ -570,3 +612,6 @@ def _write_check_result_row(
     if detail:
         stream.write(f"  {detail}")
     stream.write("\n")
+    warning_message: str
+    for warning_message in result.warning_messages:
+        stream.write(f"    {style.warning(warning_message)}\n")

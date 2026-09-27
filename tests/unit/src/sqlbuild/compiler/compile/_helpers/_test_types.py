@@ -1007,11 +1007,12 @@ class HookReadErrorTestCase:
 
 @dataclass(frozen=True)
 class PythonSqlReferenceErrorTestCase:
-    """A task, asset, or hook whose literal SQL hard-codes a project relation name."""
+    """A Python node or hook whose literal SQL hard-codes a project relation name."""
 
     description: str
     files: dict[str, str]
     expected_error_fragments: tuple[str, ...]
+    unexpected_error_fragments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

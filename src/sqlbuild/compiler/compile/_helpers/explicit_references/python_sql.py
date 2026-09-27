@@ -5,8 +5,8 @@ from __future__ import annotations
 import ast
 import inspect
 import textwrap
-from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.compiler.compile.constants import HARD_CODED_PROJECT_RELATION_CODE
@@ -18,13 +18,18 @@ from sqlbuild.compiler.references.main._compiled_project_relations import (
     compiled_project_relations,
 )
 from sqlbuild.compiler.references.main.extract_relation_names import extract_relation_names
+from sqlbuild.compiler.references.main.hard_coded_relation_remedy import (
+    hard_coded_relation_remedy,
+)
 from sqlbuild.compiler.references.main.match_project_relation import match_project_relation
 from sqlbuild.compiler.references.models import (
     ProjectRelation,
     ProjectRelationIndex,
     RelationName,
 )
-from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.compiler.references.types import HardCodedRelationOwnerKind
+from sqlbuild.python_nodes.main.read_loader_definition import read_loader_definition
+from sqlbuild.python_nodes.models import LoaderDefinition, SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
 
 _SQL_METHOD_NAMES: frozenset[str] = frozenset({"query", "execute_sql"})
@@ -35,11 +40,11 @@ _VALUE_PLACEHOLDER: str = "__sqlbuild_python_value_"
 @dataclass(frozen=True)
 class _PythonSqlOwner:
     label: str
+    kind: HardCodedRelationOwnerKind
     function: Callable[..., object]
     relative_path: Path
-    declare_help: str
-    own_refs: frozenset[SqlResourceRef]
-    relation_kinds: frozenset[SqlResourceRefKind]
+    own_refs: frozenset[SqlResourceRef] = frozenset()
+    upstream_loader_by_source: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -52,7 +57,7 @@ class _LiteralSql:
 def validate_python_sql_references(
     *, project: CompiledProject, discovered_inputs: DiscoveredProjectInputs
 ) -> None:
-    """Reject literal SQL in tasks, assets, and hooks that names a project relation."""
+    """Reject literal SQL in Python nodes and hooks that names a project relation."""
 
     owners: tuple[_PythonSqlOwner, ...] = _owners(
         project=project, discovered_inputs=discovered_inputs
@@ -77,25 +82,22 @@ def validate_python_sql_references(
 def _owners(
     *, project: CompiledProject, discovered_inputs: DiscoveredProjectInputs
 ) -> tuple[_PythonSqlOwner, ...]:
-    node_kinds: frozenset[SqlResourceRefKind] = frozenset(
-        {SqlResourceRefKind.MODEL, SqlResourceRefKind.SOURCE}
-    )
     owners: list[_PythonSqlOwner] = []
     for label, nodes in (
         ("task", discovered_inputs.task_functions),
         ("asset", discovered_inputs.asset_functions),
+        ("check", discovered_inputs.check_functions),
     ):
         owners.extend(
             _PythonSqlOwner(
                 label=f"{label}:{node.name}",
+                kind=HardCodedRelationOwnerKind.NODE,
                 function=node.function,
                 relative_path=node.relative_path,
-                declare_help="declare it with depends_on={typed}",
-                own_refs=frozenset(),
-                relation_kinds=node_kinds,
             )
             for node in nodes
         )
+    owners.extend(_loader_owners(project=project, discovered_inputs=discovered_inputs))
     attached_models: dict[str, set[SqlResourceRef]] = {}
     for model in project.models:
         for hook_name in model_python_hook_names(model=model):
@@ -105,14 +107,49 @@ def _owners(
     owners.extend(
         _PythonSqlOwner(
             label=f"hook:{hook.name}",
+            kind=HardCodedRelationOwnerKind.HOOK,
             function=hook.function,
             relative_path=hook.relative_path,
-            declare_help="declare it with @hook(reads={typed})",
             own_refs=frozenset(attached_models.get(hook.name, ())),
-            relation_kinds=frozenset(SqlResourceRefKind),
         )
         for hook in project.hook_functions
     )
+    return tuple(owners)
+
+
+def _loader_owners(
+    *, project: CompiledProject, discovered_inputs: DiscoveredProjectInputs
+) -> tuple[_PythonSqlOwner, ...]:
+    sources_by_loader: dict[str, set[str]] = {}
+    for source in project.sources:
+        if source.source_entry.loader is not None:
+            sources_by_loader.setdefault(source.source_entry.loader, set()).add(source.name)
+    owners: list[_PythonSqlOwner] = []
+    for loader in discovered_inputs.loader_functions:
+        upstream_loader_by_source: dict[str, str] = {}
+        for dependency in loader.depends_on:
+            definition: LoaderDefinition | None = (
+                read_loader_definition(dependency) if callable(dependency) else None
+            )
+            if definition is None:
+                continue
+            for source_name in sources_by_loader.get(definition.name, ()):
+                upstream_loader_by_source[source_name] = getattr(
+                    dependency, "__name__", definition.name
+                )
+        owners.append(
+            _PythonSqlOwner(
+                label=f"loader:{loader.name}",
+                kind=HardCodedRelationOwnerKind.LOADER,
+                function=loader.function,
+                relative_path=loader.relative_path,
+                own_refs=frozenset(
+                    SqlResourceRef(kind=SqlResourceRefKind.SOURCE, name=source_name)
+                    for source_name in sources_by_loader.get(loader.name, ())
+                ),
+                upstream_loader_by_source=upstream_loader_by_source,
+            )
+        )
     return tuple(owners)
 
 
@@ -193,15 +230,21 @@ def _reject_hard_coded_relation(
         if relation.schema is None and relation.name.casefold() in temporary:
             continue
         match: ProjectRelation | None = match_project_relation(index=index, relation=relation)
-        if (
-            match is None
-            or match.ref in owner.own_refs
-            or match.ref.kind not in owner.relation_kinds
-        ):
+        if match is None or match.ref in owner.own_refs:
             continue
-        typed: str = f'{match.ref.kind.value}("{match.ref.name}")'
         written: str = ".".join(
             part for part in (relation.database, relation.schema, relation.name) if part
+        )
+        remedy: str = hard_coded_relation_remedy(
+            owner_kind=owner.kind,
+            ref=match.ref,
+            upstream_loader_by_source=owner.upstream_loader_by_source,
+        )
+        qualify_help: str = (
+            f"\n  = help: if '{written}' is an external table that shares the name, qualify it "
+            "with its schema"
+            if relation.schema is None
+            else ""
         )
         raise CompileInputError(
             f"{owner.label} names {match.ref.kind.value}:{match.ref.name} as '{written}' in SQL "
@@ -209,8 +252,7 @@ def _reject_hard_coded_relation(
             f"{literal.line}",
             code=HARD_CODED_PROJECT_RELATION_CODE,
             help=(
-                f"{owner.declare_help.format(typed=typed)} and use ctx.relation({typed}) instead "
-                "of the relation name\n"
+                f"{remedy}{qualify_help}\n"
                 "  = help: while migrating a project, allow hard-coded relation names with "
                 "[references] enforce_explicit = false in sqlbuild_project.toml"
             ),

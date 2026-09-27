@@ -1024,6 +1024,19 @@ class ExplicitReferenceBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class ExplicitReferencePythonDependencyE2ETestCase:
+    """Python nodes declaring seed and model dependencies, built and checked end to end."""
+
+    description: str
+    select: tuple[str, ...]
+    expected_dag_edges: tuple[tuple[str, str], ...]
+    expected_checked_asset_ids: tuple[str, ...]
+    expected_order_before: tuple[str, str]
+    expected_country_counts: tuple[tuple[object, ...], ...]
+    expected_check_row_pattern: str
+
+
+@dataclass(frozen=True)
 class ExplicitReferenceFailureE2ETestCase:
     """A project whose references are not explicit, and the failure it reports."""
 

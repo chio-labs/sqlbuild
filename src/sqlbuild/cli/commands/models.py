@@ -320,6 +320,7 @@ class CheckExecutionPreparation:
     relation_refs: frozenset[SqlResourceRef]
     default_database: str | None
     default_schema: str | None
+    project_relations: dict[SqlResourceRef, str] | None = None
 
 
 @dataclass(frozen=True)

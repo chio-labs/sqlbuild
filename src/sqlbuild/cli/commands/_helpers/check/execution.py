@@ -23,6 +23,7 @@ from sqlbuild.cli.progress.classes.native_progress_projector import (
     current_native_progress_projector,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
+from sqlbuild.compiler.pipeline.main.project_relation_targets import build_project_relation_targets
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
 from sqlbuild.compiler.python_nodes.main.run_lifecycle import build_python_sql_run_lifecycle
@@ -88,6 +89,9 @@ def prepare_check_execution(
         relation_refs=relation_refs,
         default_database=_default_database(invocation=invocation, pipeline_result=pipeline_result),
         default_schema=_default_schema(invocation=invocation, pipeline_result=pipeline_result),
+        project_relations=build_project_relation_targets(
+            adapter=invocation.adapter, plan_output=pipeline_result.plan_output
+        ),
     )
 
 
@@ -151,6 +155,7 @@ def execute_check_plan(
                 default_database=preparation.default_database,
                 default_schema=preparation.default_schema,
                 relation_targets=preparation.relation_targets,
+                project_relations=preparation.project_relations,
                 providers=providers,
             ),
             run_state=ingress_result.run_state,
@@ -233,6 +238,7 @@ def _execute_check_read_side(
         lifecycle_plan=preparation.lifecycle_plan,
         relation_targets=preparation.relation_targets,
         validation_refs=preparation.relation_refs,
+        project_relations=preparation.project_relations,
         providers=providers,
     )
     record_python_run_state_results(

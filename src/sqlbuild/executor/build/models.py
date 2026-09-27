@@ -31,6 +31,7 @@ from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.microbatches.models import MicrobatchScope
 from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.provider.main.runtime import ProviderContainer
+from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback, NodeStartCallback
 from sqlbuild.spec.contracts.models import SnapshotsConfig
 
@@ -91,6 +92,7 @@ class BuildRuntimeParams:
         | None
     ) = None
     microbatch_lease_check: Callable[[], None] | None = None
+    project_relations: Mapping[SqlResourceRef, str] | None = None
 
 
 @dataclass(frozen=True)

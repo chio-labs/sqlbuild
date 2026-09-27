@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.cli.commands._helpers.check.core import (
+    build_check_relation_targets,
     load_results_by_loader_name,
     record_python_run_state_results,
     relevant_check_functions,
@@ -17,6 +18,7 @@ from sqlbuild.cli.commands.models import (
     BuildRunOutcome,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
+from sqlbuild.compiler.pipeline.main.project_relation_targets import build_project_relation_targets
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
@@ -57,6 +59,13 @@ def run_post_build_python_checks(
                 load_results=outcome.result.load_results,
             )
         ),
+        completed_sql_names=frozenset(
+            (
+                *(result.model_name for result in outcome.result.model_results),
+                *(result.seed_name for result in outcome.result.seed_results),
+                *(result.source_name for result in outcome.result.load_results),
+            )
+        ),
     )
     if not check_functions:
         return ()
@@ -90,6 +99,16 @@ def run_post_build_python_checks(
                 is_reload=request.reload_sources,
                 default_database=invocation.adapter.default_database(),
                 default_schema=invocation.adapter.default_schema(),
+                relation_targets=build_check_relation_targets(
+                    adapter=invocation.adapter,
+                    pipeline_result=pipeline_result,
+                    python_graph=python_graph,
+                    selected_python_names=frozenset(check.name for check in check_functions),
+                ),
+                project_relations=build_project_relation_targets(
+                    adapter=invocation.adapter,
+                    plan_output=pipeline_result.plan_output,
+                ),
                 providers=providers,
             ),
             run_state=check_run_state,

@@ -21,6 +21,9 @@ from sqlbuild.cli.commands.models import DirectLifecycleCallbacks
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.pipeline.main.project_relation_targets import (
+    build_project_relation_targets,
+)
 from sqlbuild.compiler.pipeline.main.relation_targets import build_python_relation_targets
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.main.selection.loader_dag import build_intermediate_source_map
@@ -100,12 +103,8 @@ def prepare_direct_python_lifecycle(
             ),
         ),
     )
-    project_relations: dict[SqlResourceRef, str] | None = (
-        build_python_relation_targets(
-            adapter=adapter, project=pipeline_result.project, plan_output=plan_output
-        )
-        if pipeline_result.project.enforce_explicit_references
-        else None
+    project_relations: dict[SqlResourceRef, str] | None = build_project_relation_targets(
+        adapter=adapter, plan_output=plan_output
     )
     default_database: str | None = pipeline_result.project.effective_target_database
     if default_database is None:

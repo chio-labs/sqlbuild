@@ -9,7 +9,11 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonNodeIdentity
+from sqlbuild.compiler.python_nodes.models import (
+    DiscoveredPythonNode,
+    PythonNodeGraph,
+    PythonNodeIdentity,
+)
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus
 from sqlbuild.cost.classes.cost_context import CostContext
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
@@ -20,6 +24,7 @@ from sqlbuild.executor.node_results.types import NodeResultStatus
 from sqlbuild.executor.python_nodes._helpers.fingerprinting import (
     try_write_python_node_identity_fingerprint,
 )
+from sqlbuild.executor.python_nodes._helpers.relation_guard import build_python_node_relation_guard
 from sqlbuild.executor.python_nodes._helpers.results import normalize_python_check_return
 from sqlbuild.executor.python_nodes.models import (
     CheckContext,
@@ -143,6 +148,8 @@ def _execute_one_python_check(
         ) as lifecycle,
     ):
         if blocked is None:
+            node: DiscoveredPythonNode = python_graph.nodes_by_name[check_function.name]
+            warnings: list[str] = []
             context: CheckContext = CheckContext(
                 adapter=adapter,
                 connection_config=runtime.connection_config,
@@ -159,7 +166,12 @@ def _execute_one_python_check(
                 default_database=runtime.default_database,
                 default_schema=runtime.default_schema,
                 relation_targets=runtime.resolved_relation_targets,
-                allowed_sql_refs=frozenset(),
+                allowed_sql_refs=frozenset(node.sql_deps),
+                relation_guard=build_python_node_relation_guard(
+                    owner_label=f"check '{check_function.name}'",
+                    runtime=runtime,
+                    warnings=warnings,
+                ),
                 providers=providers if providers is not None else _empty_provider_container(),
                 start_cursor_ts=runtime.start_cursor_ts,
                 end_cursor_ts=runtime.end_cursor_ts,
@@ -188,6 +200,7 @@ def _execute_one_python_check(
                     severity=severity,
                     message=check_result.message,
                     metadata=check_result.metadata,
+                    warning_messages=tuple(warnings),
                 )
             except Exception as error:
                 result = PythonCheckExecutionResult(
@@ -195,6 +208,7 @@ def _execute_one_python_check(
                     passed=False,
                     severity=PythonCheckSeverity.ERROR,
                     error_message=str(error),
+                    warning_messages=tuple(warnings),
                 )
         else:
             result = blocked

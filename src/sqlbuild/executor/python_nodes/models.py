@@ -72,6 +72,7 @@ class PythonCheckExecutionResult:
     message: str | None = None
     metadata: dict[str, object] = field(default_factory=dict)
     error_message: str | None = None
+    warning_messages: tuple[str, ...] = field(default_factory=tuple)
 
     @property
     def warned(self) -> bool:

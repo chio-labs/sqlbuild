@@ -156,7 +156,10 @@ def format_build_execution_json(
     )
     python_check_fail_count: int = sum(1 for result in python_check_results if result.failed)
     python_check_warn_count: int = sum(1 for result in python_check_results if result.warned)
-    python_warning_count: int = sum(len(result.warning_messages) for result in python_node_results)
+    python_warning_count: int = sum(
+        len(result.warning_messages)
+        for result in (*python_node_results, *python_check_results, *load_results)
+    )
     python_check_pass_count: int = sum(1 for result in python_check_results if result.passed)
     status: BuildStatus = (
         BuildStatus.FAILED
@@ -742,6 +745,7 @@ def _format_load_assets(
                 "skip_mode": result.skip_mode.value if result.skip_mode else None,
                 "skip_reason": result.skip_reason,
                 "error_message": result.error_message,
+                "warnings": result.warning_messages or None,
             }
         )
         for result in results
@@ -898,6 +902,7 @@ def _format_python_check_results(
                 "message": result.message,
                 "error_message": result.error_message,
                 "metadata": result.metadata,
+                "warnings": result.warning_messages or None,
             }
         )
         for result in results

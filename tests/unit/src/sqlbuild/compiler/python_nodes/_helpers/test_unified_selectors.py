@@ -10,6 +10,7 @@ from sqlbuild.compiler.python_nodes._helpers.unified_selectors import (
     validate_python_sql_boundaries,
 )
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlSelection
+from sqlbuild.refs import seed
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers._test_types import (
     PythonSqlSelectorErrorTestCase,
     PythonSqlSelectorTestCase,
@@ -214,6 +215,47 @@ def test_given_managed_source_loader_glob_when_resolving_then_requires_source_se
 @pytest.mark.parametrize(
     "test_case",
     [
+        PythonSqlSelectorTestCase(
+            description="upstream expansion of a Python node includes its SQL dependencies",
+            select=("+profile_orders",),
+            exclude=(),
+            expected_sql_names=frozenset({"orders", "raw_orders"}),
+            expected_python_node_names=frozenset({"profile_orders"}),
+        ),
+        PythonSqlSelectorTestCase(
+            description="downstream expansion of a SQL resource includes dependent Python nodes",
+            select=("raw_orders+",),
+            exclude=(),
+            expected_sql_names=frozenset({"orders", "raw_orders"}),
+            expected_python_node_names=frozenset({"profile_orders"}),
+        ),
+        PythonSqlSelectorTestCase(
+            description="unexpanded Python node selects no SQL dependency",
+            select=("profile_orders",),
+            exclude=(),
+            expected_sql_names=frozenset(),
+            expected_python_node_names=frozenset({"profile_orders"}),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_python_sql_dependency_when_expanding_selectors_then_crosses_the_boundary(
+    test_case: PythonSqlSelectorTestCase,
+) -> None:
+    result: PythonSqlSelection = resolve_python_sql_selectors(
+        select=test_case.select,
+        exclude=test_case.exclude,
+        project_graph=build_orders_project_graph(),
+        python_graph=build_sql_ref_python_node_graph(dependency=model_ref("orders")),
+    )
+
+    assert frozenset(key.name for key in result.sql_keys) == test_case.expected_sql_names
+    assert result.python_node_names == test_case.expected_python_node_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         PythonSqlSelectorErrorTestCase(
             description="raises when model ref is unknown",
             select=("profile_orders",),
@@ -237,6 +279,14 @@ def test_given_managed_source_loader_glob_when_resolving_then_requires_source_se
             expected_error_type=ValueError,
             expected_error_fragment="declares model.*raw_orders.*but.*raw_orders.*is a source",
             sql_ref_dependency=model_ref("raw_orders"),
+        ),
+        PythonSqlSelectorErrorTestCase(
+            description="raises when seed ref names a model",
+            select=("profile_orders",),
+            exclude=(),
+            expected_error_type=ValueError,
+            expected_error_fragment="declares seed.*orders.*but.*orders.*is a model",
+            sql_ref_dependency=seed("orders"),
         ),
     ],
     ids=lambda case: case.description,

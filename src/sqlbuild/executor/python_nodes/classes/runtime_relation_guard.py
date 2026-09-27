@@ -6,6 +6,9 @@ import logging
 from collections.abc import Mapping
 
 from sqlbuild.compiler.references.main.extract_relation_names import extract_relation_names
+from sqlbuild.compiler.references.main.hard_coded_relation_remedy import (
+    hard_coded_relation_remedy,
+)
 from sqlbuild.compiler.references.main.match_project_relation import match_project_relation
 from sqlbuild.compiler.references.main.runtime_project_relations import (
     runtime_project_relations,
@@ -15,6 +18,7 @@ from sqlbuild.compiler.references.models import (
     ProjectRelationIndex,
     RelationName,
 )
+from sqlbuild.compiler.references.types import HardCodedRelationOwnerKind
 from sqlbuild.python_nodes.models import SqlResourceRef
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -27,16 +31,18 @@ class RuntimeRelationGuard:
         self,
         *,
         owner_label: str,
-        declare_help: str,
+        owner_kind: HardCodedRelationOwnerKind,
         project_relations: Mapping[SqlResourceRef, str],
         dialect: str | None,
         default_database: str | None,
         default_schema: str | None,
         warnings: list[str],
         own_refs: frozenset[SqlResourceRef] = frozenset(),
+        upstream_loader_by_source: Mapping[str, str] | None = None,
     ) -> None:
         self._owner_label: str = owner_label
-        self._declare_help: str = declare_help
+        self._owner_kind: HardCodedRelationOwnerKind = owner_kind
+        self._upstream_loader_by_source: Mapping[str, str] | None = upstream_loader_by_source
         self._project_relations: Mapping[SqlResourceRef, str] = project_relations
         self._dialect: str | None = dialect
         self._default_database: str | None = default_database
@@ -48,7 +54,7 @@ class RuntimeRelationGuard:
         self._index: ProjectRelationIndex | None = None
 
     def record_resolved(self, ref: SqlResourceRef) -> None:
-        """Record a relation the node obtained through ctx.relation()."""
+        """Record a relation the node resolved through its context instead of by name."""
 
         self._resolved_refs.add(ref)
 
@@ -92,13 +98,15 @@ class RuntimeRelationGuard:
         return self._index
 
     def _warning(self, *, match: ProjectRelation, relation: RelationName) -> str:
-        typed: str = f'{match.ref.kind.value}("{match.ref.name}")'
         written: str = ".".join(
             part for part in (relation.database, relation.schema, relation.name) if part
         )
+        remedy: str = hard_coded_relation_remedy(
+            owner_kind=self._owner_kind,
+            ref=match.ref,
+            upstream_loader_by_source=self._upstream_loader_by_source,
+        )
         return (
             f"[P008] {self._owner_label} named {match.ref.kind.value}:{match.ref.name} as "
-            f"'{written}' in SQL without ctx.relation(); "
-            f"{self._declare_help.format(typed=typed)} and use ctx.relation({typed}), or set "
-            "[references] enforce_explicit = false"
+            f"'{written}' in SQL; {remedy}, or set [references] enforce_explicit = false"
         )

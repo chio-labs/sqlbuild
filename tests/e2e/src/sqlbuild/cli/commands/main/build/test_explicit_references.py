@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from itertools import chain
 from pathlib import Path
@@ -12,6 +13,7 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     ExplicitReferenceBuildE2ETestCase,
     ExplicitReferenceFailureE2ETestCase,
+    ExplicitReferencePythonDependencyE2ETestCase,
     ExplicitReferenceRuntimeWarningE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
@@ -20,6 +22,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     EXPLICIT_REFERENCE_MACRO_PATH,
     EXPLICIT_REFERENCE_MACROS,
     EXPLICIT_REFERENCE_MODELS,
+    explicit_reference_literal_loader,
     explicit_reference_project_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
@@ -51,6 +54,117 @@ _RUNTIME_TASK: str = (
     '    customers = "stg_" + "customers"\n'
     '    ctx.query(f"SELECT count(*) FROM {customers}")\n'
 )
+
+
+_COUNTRY_SEED_FILES: dict[str, str] = {
+    "seeds/countries.yml": (
+        "seeds:\n  - name: countries\n    columns:\n      - name: code\n        type: VARCHAR\n"
+    ),
+    "seeds/countries.csv": "code\nGB\nFR\n",
+}
+_SEED_TASK: str = (
+    "from sqlbuild.refs import seed\n"
+    "from sqlbuild.tasks import task\n\n\n"
+    '@task(depends_on=seed("countries"))\n'
+    "def count_countries(ctx):\n"
+    '    countries = ctx.relation(seed("countries"))\n'
+    "    ctx.execute_sql(\n"
+    '        f"CREATE OR REPLACE TABLE country_counts AS SELECT count(*) AS n FROM {countries}"\n'
+    "    )\n"
+)
+_MODEL_CHECK: str = (
+    "from sqlbuild.checks import check\n"
+    "from sqlbuild.refs import model\n\n\n"
+    '@check(depends_on=model("all_orders"))\n'
+    "def orders_present(ctx):\n"
+    '    orders = ctx.relation(model("all_orders"))\n'
+    '    count = ctx.query(f"SELECT count(*) FROM {orders}").fetchone()[0]\n'
+    '    return ctx.pass_() if count else ctx.fail(message="no orders")\n'
+)
+_LITERAL_CHECK: str = _MODEL_CHECK.replace(
+    'ctx.query(f"SELECT count(*) FROM {orders}")', 'ctx.query("SELECT count(*) FROM stg_customers")'
+)
+_RUNTIME_CHECK: str = _MODEL_CHECK.replace(
+    '    return ctx.pass_() if count else ctx.fail(message="no orders")\n',
+    '    customers = "stg_" + "customers"\n'
+    '    ctx.query(f"SELECT count(*) FROM {customers}")\n'
+    '    return ctx.pass_() if count else ctx.fail(message="no orders")\n',
+)
+_RAW_SOURCES: str = (
+    "sources:\n"
+    "  - name: raw_regions\n    managed: true\n    write_strategy: table\n"
+    "    columns:\n      - name: id\n        type: INTEGER\n"
+    "  - name: raw_customers\n    managed: true\n    write_strategy: table\n"
+    "    columns:\n      - name: id\n        type: INTEGER\n"
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExplicitReferencePythonDependencyE2ETestCase(
+            description="task on a seed and check on a model build, order, select and check",
+            select=("+task:count_countries",),
+            expected_dag_edges=(
+                ("seed:countries", "task:count_countries"),
+                ("model:all_orders", "check:orders_present"),
+            ),
+            expected_checked_asset_ids=("model:all_orders",),
+            expected_order_before=("countries", "count_countries"),
+            expected_country_counts=((2,),),
+            expected_check_row_pattern=r"check\s+orders_present\s+PASS",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_python_seed_and_model_dependencies_when_building_then_graph_selection_and_checks_hold(
+    test_case: ExplicitReferencePythonDependencyE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="explicit_refs",
+        repo_files=explicit_reference_project_files(
+            overrides={
+                **_COUNTRY_SEED_FILES,
+                "python/tasks/countries.py": _SEED_TASK,
+                "python/checks/orders.py": _MODEL_CHECK,
+            }
+        ),
+    )
+
+    dag: subprocess.CompletedProcess[str] = run_sqb(
+        command=("dag", "--json"), project_dir=project_dir
+    )
+    selected: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", *test_case.select), project_dir=project_dir
+    )
+    full: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    checked: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "check"), project_dir=project_dir
+    )
+
+    assert dag.returncode == 0, dag.stdout + dag.stderr
+    payload: dict[str, object] = json.loads(dag.stdout)
+    edges: set[tuple[str, str]] = {(edge["from_id"], edge["to_id"]) for edge in payload["edges"]}
+    assert set(test_case.expected_dag_edges) <= edges
+    check_assets: dict[str, tuple[str, ...]] = {
+        check["id"]: tuple(check["checked_asset_ids"]) for check in payload["checks"]
+    }
+    assert check_assets["check:orders_present"] == test_case.expected_checked_asset_ids
+    assert selected.returncode == 0, selected.stdout + selected.stderr
+    first, second = test_case.expected_order_before
+    assert selected.stdout.index(f" {first} ") < selected.stdout.index(f" {second} ")
+    assert " all_orders " not in selected.stdout
+    assert query_duckdb(
+        db_path=project_dir / "warehouse.duckdb", sql="SELECT n FROM country_counts"
+    ) == list(test_case.expected_country_counts)
+    assert full.returncode == 0, full.stdout + full.stderr
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+    assert re.search(test_case.expected_check_row_pattern, full.stdout), full.stdout
+    assert re.search(test_case.expected_check_row_pattern, checked.stdout), checked.stdout
 
 
 @pytest.mark.parametrize(
@@ -139,6 +253,43 @@ def test_given_typed_macro_references_and_hook_reads_when_building_then_graph_an
                 "[references] enforce_explicit = false",
             ),
         ),
+        ExplicitReferenceFailureE2ETestCase(
+            description="check literal SQL naming an undeclared model fails compile",
+            overrides={"python/checks/orders.py": _LITERAL_CHECK},
+            command=("--no-color", "compile"),
+            expected_exit_code=1,
+            expected_output_fragments=(
+                "error[P008]: check:orders_present names model:stg_customers as 'stg_customers'",
+                "--> python/checks/orders.py:8",
+                'declare it with depends_on=model("stg_customers")',
+            ),
+        ),
+        ExplicitReferenceFailureE2ETestCase(
+            description="loader literal SQL naming a source fails compile with ctx.source help",
+            overrides={
+                "sources/raw.yml": _RAW_SOURCES,
+                "python/loaders/raw.py": explicit_reference_literal_loader(table="raw_regions"),
+            },
+            command=("--no-color", "compile"),
+            expected_exit_code=1,
+            expected_output_fragments=(
+                "error[P008]: loader:raw_customers names source:raw_regions as 'raw_regions'",
+                'use ctx.source("raw_regions") instead of the relation name',
+            ),
+        ),
+        ExplicitReferenceFailureE2ETestCase(
+            description="loader literal SQL naming a model fails compile",
+            overrides={
+                "sources/raw.yml": _RAW_SOURCES,
+                "python/loaders/raw.py": explicit_reference_literal_loader(table="stg_customers"),
+            },
+            command=("--no-color", "compile"),
+            expected_exit_code=1,
+            expected_output_fragments=(
+                "error[P008]: loader:raw_customers names model:stg_customers as 'stg_customers'",
+                "loaders run before models and seeds and cannot read them",
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -218,6 +369,52 @@ def test_given_runtime_hard_coded_relation_when_building_then_it_warns_without_f
     stored: list[str] = list(
         chain.from_iterable(
             asset.get("warnings") or () for asset in json.loads(machine.stdout)["assets"]
+        )
+    )
+    assert len(stored) == len(test_case.expected_warning_fragments)
+    assert all(
+        fragment in warning
+        for warning, fragment in zip(stored, test_case.expected_warning_fragments, strict=True)
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExplicitReferenceRuntimeWarningE2ETestCase(
+            description="check naming an undeclared model at run time warns and passes",
+            overrides={"python/checks/orders.py": _RUNTIME_CHECK},
+            enforce_explicit=True,
+            expected_exit_code=0,
+            expected_warning_fragments=(
+                "[P008] check 'orders_present' named model:stg_customers as 'stg_customers'",
+            ),
+            expected_final_line_prefix="",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_check_runtime_hard_coded_relation_when_building_then_it_warns_without_failing(
+    test_case: ExplicitReferenceRuntimeWarningE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="explicit_refs",
+        repo_files=explicit_reference_project_files(
+            overrides=test_case.overrides, enforce_explicit=test_case.enforce_explicit
+        ),
+    )
+
+    machine: subprocess.CompletedProcess[str] = run_sqb(
+        command=("build", "--json"), project_dir=project_dir
+    )
+
+    assert machine.returncode == test_case.expected_exit_code, machine.stdout + machine.stderr
+    assert all(fragment in machine.stderr for fragment in test_case.expected_warning_fragments)
+    stored: list[str] = list(
+        chain.from_iterable(
+            check.get("warnings") or () for check in json.loads(machine.stdout)["checks"]
         )
     )
     assert len(stored) == len(test_case.expected_warning_fragments)
