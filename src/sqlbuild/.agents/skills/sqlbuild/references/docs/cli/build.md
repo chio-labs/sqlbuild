@@ -74,6 +74,10 @@ This replaces the former `sqb run` command. The full lifecycle (tests + audits) 
 5. Models are materialized in DAG topological order
 6. Error-severity audits run against the staging table before promotion to the target (unless `--no-audits`)
 
+A resource with an attached audit also waits for every other model, seed, or table function that
+audit reads, so the audit can gate the resource before it is published. See
+[Audits that read other resources](../concepts/audits.md#audits-that-read-other-resources).
+
 ## Output
 
 ```

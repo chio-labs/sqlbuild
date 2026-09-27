@@ -204,6 +204,41 @@ MODEL (
 );
 ```
 
+### Audits that read other resources
+
+An attached audit can read other models, sources, seeds, and table functions besides its target,
+for example to check that every value appears in a lookup table:
+
+```sql
+-- audits/generic/known_status.sql
+AUDIT ();
+
+SELECT o.*
+FROM @relation o
+LEFT JOIN __seed("order_statuses") s USING (status)
+WHERE s.status IS NULL
+```
+
+An attached audit always gates its target. SQLBuild waits for everything the audit reads, then
+runs it before the target is published: a model audit runs against the staged relation before
+promotion, and a source or seed audit runs before any dependant is built. An `error` failure keeps
+the model unpublished and blocks everything downstream; a `warn` failure is reported and the build
+continues. The audit is reported under its target.
+
+In a partial build such as `sqb build -s orders`, resources the audit reads but that are not
+selected are not built; the audit reads their existing tables.
+
+An attached audit cannot read a resource built from its own target, because the target would have
+to wait for its own dependants. That fails to compile with `P005`:
+
+```
+error[P005]: Audit 'known_status' on model 'orders' reads model 'order_summary', which depends on
+'orders'; an attached audit gates its target, so it cannot wait for a resource built from that
+target
+  = help: write a singular audit under audits/singular/ that references both 'orders' and
+  'order_summary'; it runs once both are built
+```
+
 ## Singular audits
 
 Singular audits are standalone SQL files that check a relationship between resources. They must be
@@ -243,9 +278,10 @@ There is no `_audits/singular/` role, because singular audits are never attached
 singular audit must live under the nearest folder containing everything it references. Audit files
 directly under `audits/` or in any other `audits/` child are compile errors.
 
-SQLBuild infers where a singular audit runs from its references. When it references exactly one
-model, or one referenced model is downstream of every other referenced model, the audit attaches
-to that model. Otherwise it runs at the end of the build.
+SQLBuild infers where a singular audit runs from its references. When one referenced model is
+downstream of every other referenced model, the audit attaches to that model. Otherwise it runs at
+the end of the build, after the resources it references are published. Only singular audits run at
+the end of the build; attached audits always gate their target.
 
 ## Source audits
 
@@ -267,6 +303,10 @@ sources:
 
 If a source audit with `error` severity fails, all downstream models that depend on that source are blocked. This lets you catch data quality issues at the source before any transformations run.
 
+A source audit that reads other resources waits for them before any model that depends on the
+source is built. It may read a model that is not built from the source; reading one that is fails
+with `P005`. See [Audits that read other resources](#audits-that-read-other-resources).
+
 ## Seed audits
 
 Seeds use the same YAML audit syntax as sources, at table and column level:
@@ -286,8 +326,9 @@ seeds:
           severity: error
 ```
 
-Seed audits run in `sqb build` after the seed loads. An `error` failure blocks every model that
-depends on the seed; a `warn` failure is reported and the build continues.
+Seed audits run in `sqb build` after the seed loads and after everything the audit reads is built.
+An `error` failure blocks every model that depends on the seed; a `warn` failure is reported and
+the build continues. A seed audit cannot read a model built from that seed (`P005`).
 
 ## Severity
 
