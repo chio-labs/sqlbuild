@@ -252,7 +252,10 @@ The audit is reported under its target. If a resource the audit reads fails to b
 it reads fails its own `error` audit, the target is blocked as well.
 
 In a partial build such as `sqb build -s orders`, resources the audit reads but that are not
-selected are not built; the audit reads their existing tables.
+selected are not built; the audit reads their existing tables. Selectors such as `+orders` follow
+data lineage only, so they do not add the audit's reads to the selection. If an unselected read
+does not exist in the warehouse yet, planning fails with `S301` and names the audit and the read;
+see [Missing upstream dependencies](../cli/plan.md#missing-upstream-dependencies).
 
 An attached audit cannot read a resource built from its own target, because the target would have
 to wait for its own dependants. That fails to compile with `P005`:
@@ -362,6 +365,10 @@ the build continues. A seed audit cannot read a model built from that seed (`P00
 |----------|----------|
 | `error` | Blocks the build. Staging table is not promoted, DML is not applied. |
 | `warn` | Reports a warning but allows the build to continue. |
+
+An audit whose query raises a warehouse error, for example because a relation it reads is missing,
+fails whatever its severity: the build reports the error message and fails, and everything
+downstream of the audit's target is blocked, the same as when a model audit raises.
 
 Set the default severity in `sqlbuild_project.toml`:
 

@@ -85,3 +85,15 @@ error[S301]: cannot build selected scope: 3 missing upstream dependencies (stg_o
 ```
 
 Build the upstream chain first, or select it along with the model: `sqb build --select +fact_orders`.
+
+The check also covers resources that an attached audit on a selected resource reads, even when the
+model SQL does not read them. Selecting `+fact_orders` follows data lineage only, so it does not
+pull those resources in. When a missing resource is needed only by an audit, the error names the
+audit, its target, and the resource:
+
+```
+error[S301]: cannot build selected scope: audit 'relationships' on 'stg_orders' reads 'waffle_types', which is not selected and does not exist in the warehouse; select it or build it first
+```
+
+Load or build the resource first (for a seed, `sqb seed`), or add it to the selection. When both
+kinds are missing, the error lists the missing upstream dependencies and then the audit reads.
