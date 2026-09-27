@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.119.5](https://github.com/chio-labs/sqlbuild/compare/v0.119.4...v0.119.5) (2026-09-27)
+
+
+### Bug Fixes
+
+* close correctness gaps in Rules, SQL scanners and sqb query ([#848](https://github.com/chio-labs/sqlbuild/issues/848)) ([0fe3fa5](https://github.com/chio-labs/sqlbuild/commit/0fe3fa5cbf209292fafb952f4830ba5fecde4b6a))
+
 ## [0.119.4](https://github.com/chio-labs/sqlbuild/compare/v0.119.3...v0.119.4) (2026-09-26)
 
 
