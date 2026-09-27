@@ -574,14 +574,10 @@ fn try_borrowed_query(
         || matches!(node, polyglot_sql::Expression::Select(select) if select.with.as_ref().is_some_and(|with| with.recursive))
         || matches!(node, polyglot_sql::Expression::Union(union) if union.with.as_ref().is_some_and(|with| with.recursive))
         || matches!(node, polyglot_sql::Expression::Select(select) if !borrowed_sources_supported(select, dialect))
-    }) {
-        return Err(Box::new(work));
-    }
-    if expression.dfs().any(|node| {
-        matches!(node, polyglot_sql::Expression::Select(select)
-        if select.expressions.iter().any(|projection| projection.dfs().any(|child| matches!(child,
-            polyglot_sql::Expression::Select(_) | polyglot_sql::Expression::Union(_)
-            | polyglot_sql::Expression::Intersect(_) | polyglot_sql::Expression::Except(_)))))
+        || matches!(node, polyglot_sql::Expression::Select(select)
+            if select.expressions.iter().any(|projection| projection.dfs().any(|child| matches!(child,
+                polyglot_sql::Expression::Select(_) | polyglot_sql::Expression::Union(_)
+                | polyglot_sql::Expression::Intersect(_) | polyglot_sql::Expression::Except(_)))))
     }) {
         return Err(Box::new(work));
     }
@@ -597,8 +593,8 @@ fn try_borrowed_query(
         })
         .and_then(|schema| super::borrowed_facts::infer_bound(&expression, Some(schema), dialect));
     let catalog_expression = exact_catalog.map(|_| expression.clone());
-    let validation_expression =
-        (bound_facts.is_none() || work.query.binding_options.is_some()).then(|| expression.clone());
+    let needs_validation = bound_facts.is_none() || work.query.binding_options.is_some();
+    let mut validation_expression = None;
     let unannotated_outputs: Option<Vec<_>> = work
         .projections
         .iter()
@@ -612,6 +608,10 @@ fn try_borrowed_query(
         })
         .collect();
     if unannotated_outputs.is_none() {
+        // Validation annotates its own bound copy of the authored statement.
+        if needs_validation {
+            validation_expression = Some(expression.clone());
+        }
         let schema = work.query.schema.as_ref().map(|schema| {
             polyglot_sql::validation::mapping_schema_from_validation_schema_with_dialect(
                 schema, dialect,
@@ -722,9 +722,23 @@ fn try_borrowed_query(
         .as_ref()
         .or(work.query.schema.as_ref())
         .map(|schema| {
-            let Some(validation_expression) = validation_expression else {
+            if !needs_validation {
                 return Ok(ValidationResult::with_errors(Vec::new()));
-            };
+            }
+            // Only the extra clause checks read the statement after validation;
+            // otherwise the unannotated statement moves into validation.
+            let retain_expression =
+                crate::semantic_validation::main::may_have_extra_clause_checks(&work.query.sql);
+            let validation_expression = validation_expression.take().unwrap_or_else(|| {
+                if retain_expression {
+                    expression.clone()
+                } else {
+                    std::mem::replace(
+                        &mut expression,
+                        polyglot_sql::Expression::Null(polyglot_sql::expressions::Null),
+                    )
+                }
+            });
             let result = polyglot_sql::validation::validate_parsed_with_schema(
                 vec![validation_expression],
                 dialect,
@@ -737,7 +751,7 @@ fn try_borrowed_query(
                     dialect,
                     schema,
                     result,
-                    expression: Some(&expression),
+                    expression: retain_expression.then_some(&expression),
                 },
             )
         });

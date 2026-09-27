@@ -119,7 +119,7 @@ pub(super) fn validation_result(request: ValidationRequest) -> Result<Validation
     Ok(result)
 }
 
-pub(super) fn may_have_extra_clause_checks(sql: &str) -> bool {
+pub(crate) fn may_have_extra_clause_checks(sql: &str) -> bool {
     sql.as_bytes()
         .windows(5)
         .any(|word| word.eq_ignore_ascii_case(b"using"))
