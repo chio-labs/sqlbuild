@@ -6,7 +6,7 @@ pub(crate) const VALUES_RELATION_PREFIX_TOKEN_COUNT: usize = 2;
 pub(crate) const POSITION_ARGUMENT_SEPARATOR: &str = ",";
 pub(crate) const CTE_MACRO_PLACEHOLDER_LITERAL: &str = "1";
 pub(crate) const POSTFIX_CAST_PREFIX_TOKEN_COUNT: usize = 2;
-pub(crate) const RELATION_MODIFIER_KEYWORDS: [&str; 42] = [
+pub(crate) const RELATION_MODIFIER_KEYWORDS: [&str; 43] = [
     "ANTI",
     "APPLY",
     "ASOF",
@@ -49,4 +49,5 @@ pub(crate) const RELATION_MODIFIER_KEYWORDS: [&str; 42] = [
     "UNPIVOT",
     "USING",
     "WHERE",
+    "WINDOW",
 ];

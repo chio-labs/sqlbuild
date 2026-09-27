@@ -187,6 +187,13 @@ fn given_join_modifiers_and_whole_row_uses_when_linting_duckdb_then_aliases_are_
             expected_replacement: None,
         },
         test_types::AdditionalLintRuleTestCase {
+            description: "unaliased relation before window clause has no alias",
+            sql: "SELECT SUM(amount) OVER w FROM orders WINDOW w AS (ORDER BY id)",
+            rule: "SQBRSQL023",
+            expected_anchor: None,
+            expected_replacement: None,
+        },
+        test_types::AdditionalLintRuleTestCase {
             description: "unaliased relation before tablesample has no alias",
             sql: "SELECT * FROM orders TABLESAMPLE BERNOULLI (10)",
             rule: "SQBRSQL023",
