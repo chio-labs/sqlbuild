@@ -14,6 +14,7 @@ from sqlbuild.compiler.scopes.constants import SCOPE_CACHE_DIRECTORY, SCOPE_CACH
 from sqlbuild.compiler.scopes.main.load_or_build_scope_index import load_or_build_scope_index
 from sqlbuild.compiler.scopes.models import DeclarationIdentity, ScopeIndex
 from sqlbuild.compiler.scopes.types import (
+    DeclarationKind,
     DiagnosticSeverity,
     GrantKind,
     ResourceKind,
@@ -637,17 +638,17 @@ def test_given_one_broken_model_when_loading_then_valid_and_broken_paths_remain_
                 "hooks/sql/valid.sql": "HOOK ();\nSELECT 1",
                 "hooks/sql/broken.sql": "HOOK (\nSELECT 1",
             },
-            expected_kind=ResourceKind.HOOK,
-            expected_paths=("hooks/sql/broken.sql", "hooks/sql/valid.sql"),
+            expected_kind=DeclarationKind.SQL_HOOK,
+            expected_paths=("hooks/sql/valid.sql",),
         ),
         TolerantCategoryCase(
             description="audits retain valid siblings",
             files={
-                "audits/valid.sql": "AUDIT ();\nSELECT 1",
-                "audits/broken.sql": "AUDIT (\nSELECT 1",
+                "audits/singular/valid.sql": "AUDIT ();\nSELECT 1",
+                "audits/singular/broken.sql": "AUDIT (\nSELECT 1",
             },
-            expected_kind=ResourceKind.AUDIT,
-            expected_paths=("audits/broken.sql", "audits/valid.sql"),
+            expected_kind=DeclarationKind.SINGULAR_AUDIT,
+            expected_paths=("audits/singular/valid.sql",),
         ),
         TolerantCategoryCase(
             description="sources retain valid siblings",
@@ -677,7 +678,7 @@ def test_given_broken_authored_file_when_loading_then_valid_category_siblings_ar
             record.path
             for record in filter(
                 lambda item: item.identity.kind is test_case.expected_kind,
-                index.resources,
+                (*index.resources, *index.declarations),
             )
         )
     )

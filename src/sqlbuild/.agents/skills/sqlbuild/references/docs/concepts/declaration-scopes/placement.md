@@ -6,12 +6,27 @@
 
 Online: https://sqlbuild.com/docs/concepts/declaration-scopes/placement/
 
+## Contents
+
+- Choose a location
+- One directory
+- One directory tree
+- Different resource trees
+- Audits, schemas, and hooks
+- What SQLBuild checks
+- Adopting placement in an existing project
+
 Start with the ordinary project-wide directories unless you have a reason to limit access:
 
 ```text
 macros/
 enums/
 constants/
+audits/generic/
+audits/singular/
+schemas/
+hooks/sql/
+hooks/python/
 ```
 
 Move a declaration closer to its users when it should be available only in one folder or one folder
@@ -22,9 +37,14 @@ tree.
 | Where it is needed | Location |
 |--------------------|----------|
 | One model only | Inside that model's `MODEL()` header, for enums and constants |
-| SQL files directly in one directory | `_sqlbuild/_macros/`, `_sqlbuild/_enums/`, or `_sqlbuild/_constants/` |
-| A directory and its descendants | `_sqlbuild/macros/`, `_sqlbuild/enums/`, or `_sqlbuild/constants/` |
-| Different trees, such as models and tests | Top-level `macros/`, `enums/`, or `constants/` |
+| SQL files directly in one directory | The underscored role under that directory's `_sqlbuild/`, such as `_sqlbuild/_macros/`, `_sqlbuild/_audits/generic/`, `_sqlbuild/_schemas/`, or `_sqlbuild/_hooks/sql/` |
+| A directory and its descendants | The unprefixed role under the nearest shared directory's `_sqlbuild/`, such as `_sqlbuild/constants/`, `_sqlbuild/audits/generic/`, `_sqlbuild/schemas/`, or `_sqlbuild/hooks/python/` |
+| Sibling folders of one resource tree, such as `models/marts/` and `models/staging/` | The top-level role, such as `macros/`, `audits/generic/`, or `schemas/` |
+| Different trees, such as models and tests, or models and sources | The top-level role |
+
+Singular audits have no folder-only role. A singular audit that references resources under one
+directory tree lives in that directory's `_sqlbuild/audits/singular/`; one that references a source,
+a seed, or models in sibling top-level folders lives in `audits/singular/`.
 
 ## One directory
 
@@ -78,6 +98,26 @@ Top-level placement is valid when consumers genuinely cross resource trees or ot
 shared owner folder. SQLBuild applies the same nearest-shared-folder analysis to project-wide
 declarations, so a declaration used only under one narrower folder must move closer to those users.
 
+## Audits, schemas, and hooks
+
+A generic audit, reusable schema, or named hook is used by the resources that name it: a model's
+`audits`, `model_schema`, `pre_hooks`, or `post_hooks`, a source or seed YAML `audits:` list, or
+the audit cases returned by an audit factory. A child schema's `extends` counts as a use from the
+child schema's owner folder.
+
+```text
+models/
+└── marts/
+    ├── _sqlbuild/
+    │   ├── _audits/generic/
+    │   │   └── non_negative_revenue.sql   used only by marts/*.sql
+    │   └── audits/singular/
+    │       └── orders_have_customers.sql  references marts models only
+    ├── daily_revenue.sql
+    ├── fact_orders.sql
+    └── dim_customers.sql
+```
+
 ## What SQLBuild checks
 
 Every declaration must be used by real compiled SQL. A name appearing only in a comment, quoted
@@ -92,5 +132,20 @@ folder of the files that use it. If the declaration is in a broader location, th
 - The destination directory
 
 These checks use the complete project rather than only the models selected by the current command.
+
+## Adopting placement in an existing project
+
+Placement findings are errors by default. While moving an existing project into its required
+layout, you can report them as warnings for the whole project:
+
+```toml
+# sqlbuild_project.toml
+[scopes]
+enforce_placement = false
+```
+
+This applies to every declaration kind and covers only placement findings: declarations in a
+broader location than their users need, and unused declarations. A declaration that is not visible
+from a file that uses it is still an error. Remove the setting once the warnings are fixed.
 
   Use Scope Explorer to see what a file can access or preview moving the file.

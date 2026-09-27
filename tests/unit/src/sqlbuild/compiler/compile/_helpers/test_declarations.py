@@ -142,10 +142,11 @@ __expected__orders AS (
 )
 SELECT 1
 """,
-            "audits/orders.sql": """
+            "audits/singular/orders.sql": """
 AUDIT ();
 
 SELECT * FROM __ref("orders") WHERE threshold < @const("min_items")
+  AND threshold NOT IN (SELECT value FROM __source("inline_values"))
 """,
         },
     )
@@ -185,7 +186,8 @@ SELECT * FROM __ref("orders") WHERE threshold < @const("min_items")
         (),
     )
     assert tuple(audit.sql_body for audit in compile_inputs.audit_inputs) == (
-        'SELECT * FROM __ref("orders") WHERE threshold < 7',
+        'SELECT * FROM __ref("orders") WHERE threshold < 7\n'
+        '  AND threshold NOT IN (SELECT value FROM __source("inline_values"))',
         'SELECT fulfillment_method\nFROM __ref("orders")\nWHERE fulfillment_method IS NOT NULL\n'
         "  AND fulfillment_method NOT IN ('DELIVERY', 'PICKUP')",
         'SELECT priority\nFROM __ref("orders")\nWHERE priority IS NOT NULL\n'
@@ -285,7 +287,10 @@ SELECT * FROM __ref("orders") WHERE threshold < @const("min_items")
             expected_source_sql="SELECT * FROM entries WHERE country IN ('GB', 'FR')\n",
             expected_test_fragment="SELECT 'GB' IN ('GB', 'FR') AS supported",
             expected_scenario_fragment="SELECT ['GB', 'FR'] AS countries",
-            expected_audit_sql=("SELECT * FROM entries WHERE country NOT IN ('FR', 'GB')"),
+            expected_audit_sql=(
+                'SELECT * FROM __ref("orders") JOIN __source("supported_entries") USING (country)\n'
+                "WHERE country NOT IN ('FR', 'GB')"
+            ),
             expected_attached_audit_sql=(
                 "SELECT * FROM __ref(\"orders\") WHERE country NOT IN ('GB', 'FR')"
             ),
@@ -358,9 +363,10 @@ WITH __ref__orders AS (SELECT @const("country_array") AS countries),
 __expected__orders AS (SELECT @const("country_array") AS countries)
 SELECT 1
 """,
-            "audits/orders.sql": """
+            "audits/singular/orders.sql": """
 AUDIT ();
-SELECT * FROM entries WHERE country NOT IN @const("unique_countries")
+SELECT * FROM __ref("orders") JOIN __source("supported_entries") USING (country)
+WHERE country NOT IN @const("unique_countries")
 """,
             "audits/generic/typed_audit.sql": """
 AUDIT ();

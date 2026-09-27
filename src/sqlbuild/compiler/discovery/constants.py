@@ -53,9 +53,7 @@ CANONICAL_AUTHORED_ROOTS: tuple[tuple[str, ...], ...] = (
     ("models",),
     ("tests", "unit"),
     ("tests", "scenarios"),
-    ("hooks", "sql"),
     ("functions", "sql"),
-    ("audits",),
     ("sources",),
 )
 

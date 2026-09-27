@@ -84,7 +84,7 @@ seeds:
 """.strip()
                 + "\n",
                 "seeds/country_codes.csv": "code\nUS\n",
-                "audits/generic/not_null.sql": "AUDIT ();\n\n"
+                "models/staging/_sqlbuild/_audits/generic/not_null.sql": "AUDIT ();\n\n"
                 "SELECT @column FROM __ref('@model') WHERE @column IS NULL\n",
                 "tests/unit/orders_test.sql": """
 TEST ();
@@ -133,10 +133,20 @@ SELECT 1
             | {
                 "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
                 "models/orders.sql": "MODEL ();\n\nSELECT 1 AS order_id\n",
-                "audits/orders.sql": """
+                "seeds/schema.yml": """
+seeds:
+  - name: order_codes
+    columns:
+      - name: order_id
+        type: INTEGER
+""".strip()
+                + "\n",
+                "seeds/order_codes.csv": "order_id\n1\n",
+                "audits/singular/orders.sql": """
 AUDIT (always_run true);
 
-SELECT order_id FROM __ref("orders") WHERE order_id IS NULL
+SELECT order_id FROM __ref("orders")
+WHERE order_id NOT IN (SELECT order_id FROM __seed("order_codes"))
 """.strip()
                 + "\n",
             },
@@ -145,10 +155,18 @@ SELECT order_id FROM __ref("orders") WHERE order_id IS NULL
             expected_model_target_names=("orders",),
             expected_model_target_schemas=(None,),
             expected_source_names=(),
-            expected_seed_names=(),
+            expected_seed_names=("order_codes",),
+            expected_seed_target_schemas=(None,),
+            expected_seed_target_databases=(None,),
+            expected_seed_target_qualified_names=(None,),
+            expected_seed_logical_schemas=(None,),
+            expected_seed_logical_databases=(None,),
             expected_audit_names=("orders",),
             expected_audit_scope_deps=(
-                (CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),),
+                (
+                    CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
+                    CompiledObjectKey(resource_type=CompiledResourceType.SEED, name="order_codes"),
+                ),
             ),
             expected_audit_attached_target_kinds=(None,),
             expected_audit_always_runs=(True,),

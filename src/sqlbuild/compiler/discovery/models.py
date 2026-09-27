@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from sqlbuild.compiler.auditing.models import MeasurementContract
@@ -14,8 +14,8 @@ from sqlbuild.compiler.discovery.constants import (
     SQL_SCENARIOS_OWNERSHIP_ROOT,
     SQL_TESTS_OWNERSHIP_ROOT,
 )
-from sqlbuild.compiler.discovery.types import LoaderConnectionMode
-from sqlbuild.compiler.scopes.types import ScopeKind
+from sqlbuild.compiler.discovery.types import LoaderConnectionMode, ScopedDeclarationFile
+from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
 from sqlbuild.provider.classes.provider import Provider
 from sqlbuild.python_nodes.models import AuditCase, ColumnLineageRef, RetryPolicy, SqlResourceRef
 from sqlbuild.python_nodes.types import PythonCheckSeverity
@@ -120,6 +120,10 @@ class DiscoveredSqlHookFile:
     sql_body: str
     name: str
     description: str | None = None
+    scope_kind: ScopeKind = ScopeKind.GLOBAL
+    ownership_root: Path | None = None
+    owning_path: Path | None = None
+    declaration_root: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -212,6 +216,29 @@ class ModelSchemaDeclaration:
 
 
 @dataclass(frozen=True)
+class NamedDeclarationRoot:
+    """One directory whose files define audits, reusable schemas, or named hooks of one kind."""
+
+    directory: Path
+    relative_directory: Path
+    kind: DeclarationKind
+    scope_kind: ScopeKind
+    ownership_root: Path | None
+    owning_path: Path | None
+
+    def place[Placed: ScopedDeclarationFile](self, item: Placed) -> Placed:
+        """Return a discovered file annotated with this role's scope facts."""
+
+        return replace(
+            item,
+            scope_kind=self.scope_kind,
+            ownership_root=self.ownership_root,
+            owning_path=self.owning_path,
+            declaration_root=self.relative_directory,
+        )
+
+
+@dataclass(frozen=True)
 class DiscoveredModelSchemaFile:
     """A public SQL file containing reusable model schemas."""
 
@@ -219,6 +246,10 @@ class DiscoveredModelSchemaFile:
     relative_path: Path
     contents: str
     declarations: tuple[ModelSchemaDeclaration, ...]
+    scope_kind: ScopeKind = ScopeKind.GLOBAL
+    ownership_root: Path | None = None
+    owning_path: Path | None = None
+    declaration_root: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -327,6 +358,11 @@ class DiscoveredAuditFile:
     relative_path: Path
     contents: str
     blocks: tuple[DiscoveredAuditBlock, ...]
+    declaration_kind: DeclarationKind = DeclarationKind.AUDIT
+    scope_kind: ScopeKind = ScopeKind.GLOBAL
+    ownership_root: Path | None = None
+    owning_path: Path | None = None
+    declaration_root: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -466,6 +502,10 @@ class DiscoveredHookFunction:
     function: Callable[..., object]
     description: str | None = None
     provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
+    scope_kind: ScopeKind = ScopeKind.GLOBAL
+    ownership_root: Path | None = None
+    owning_path: Path | None = None
+    declaration_root: Path | None = None
 
 
 @dataclass(frozen=True)

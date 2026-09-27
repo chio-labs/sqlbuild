@@ -259,10 +259,9 @@ pub(crate) enum ResourceKind {
     Model,
     Test,
     Scenario,
-    Hook,
     Function,
-    Audit,
     Source,
+    Seed,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -271,6 +270,11 @@ pub(crate) enum DeclarationKind {
     Macro,
     Enum,
     Constant,
+    Audit,
+    SingularAudit,
+    Schema,
+    SqlHook,
+    PythonHook,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

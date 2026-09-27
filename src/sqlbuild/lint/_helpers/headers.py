@@ -6,7 +6,10 @@ import re
 from functools import cache
 from pathlib import Path
 
-from sqlbuild.compiler.compile.constants import AUDIT_DIRECTORY_NAME
+from sqlbuild.compiler.discovery.main.named_declaration_role_kind import (
+    named_declaration_role_kind,
+)
+from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.lint.constants import DSL_HEADER_KINDS
 from sqlbuild.lint.models import HeaderSpan
 
@@ -50,7 +53,9 @@ def lint_body_ranges(
 ) -> tuple[tuple[int, int], ...]:
     """Return lintable authored bodies using resource-specific DSL boundaries."""
 
-    if file_path.is_relative_to(project_dir / AUDIT_DIRECTORY_NAME):
+    if file_path.is_relative_to(project_dir) and named_declaration_role_kind(
+        relative_path=file_path.relative_to(project_dir)
+    ) in {DeclarationKind.AUDIT, DeclarationKind.SINGULAR_AUDIT}:
         measurement_ranges: tuple[tuple[int, int], ...] = measurement_body_ranges(contents=contents)
         if measurement_ranges:
             return measurement_ranges

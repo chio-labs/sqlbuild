@@ -234,14 +234,19 @@ def test_given_standalone_measurement_with_header_policy_when_compiling_then_it_
         tmp_path,
         {
             "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
-            "audits/rate.sql": """
+            "models/orders.sql": "MODEL ();\nSELECT 1 AS order_id",
+            "models/customers.sql": "MODEL ();\nSELECT 1 AS order_id",
+            "audits/singular/rate.sql": """
                 AUDIT (
                   evaluation measurement,
                   value rate,
                   minimum_samples 5,
                   thresholds (warn (outside 95 100))
                 );
-                MEASURE (SELECT 99 AS rate);
+                MEASURE (
+                  SELECT 99 AS rate
+                  FROM __ref("orders") JOIN __ref("customers") USING (order_id)
+                );
             """,
         },
     )

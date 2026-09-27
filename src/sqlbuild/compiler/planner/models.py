@@ -1134,6 +1134,7 @@ class AuditPlanEntry:
     attached_column_name: str | None = None
     always_run: bool = False
     description: str | None = None
+    reads_outside_target_lineage: bool = False
 
 
 @dataclass(frozen=True)

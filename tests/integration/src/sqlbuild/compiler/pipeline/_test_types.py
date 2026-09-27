@@ -365,3 +365,11 @@ class SharedBindingQueryCase:
     later_models: tuple[tuple[str, str], ...] = ()
     expected_lineage: tuple[tuple[str, str], ...] = ()
     expected_findings: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class SingularAuditAttachmentIntegrationTestCase:
+    description: str
+    orders_header: str
+    generic_audit_files: dict[str, str]
+    expected_attachment: tuple[str, str | None]

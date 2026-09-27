@@ -16,6 +16,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.compiler.planner._helpers.output.audit_scheduling import (
+    reads_outside_target_lineage,
     resolve_attachment_kind,
     resolve_effective_run_scope,
 )
@@ -33,8 +34,8 @@ def plan_audit(
     seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     adapter: BaseAdapter,
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    lineage_upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    lineage_downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     model_materializations: dict[str, str],
 ) -> AuditPlanEntry:
     """Build an audit plan entry with refs and sources resolved."""
@@ -68,8 +69,7 @@ def plan_audit(
     attached_target_name: str | None
     attachment_kind, attached_target_name = resolve_attachment_kind(
         audit=audit,
-        upstream_deps=upstream_deps,
-        downstream_deps=downstream_deps,
+        downstream_deps=lineage_downstream_deps,
     )
 
     attached_materialization: str | None = None
@@ -126,4 +126,7 @@ def plan_audit(
         attached_column_name=audit.attached_column_name,
         always_run=audit.always_run,
         description=audit.description,
+        reads_outside_target_lineage=reads_outside_target_lineage(
+            audit=audit, upstream_deps=lineage_upstream_deps
+        ),
     )

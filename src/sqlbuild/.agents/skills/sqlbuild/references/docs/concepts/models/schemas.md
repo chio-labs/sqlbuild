@@ -41,7 +41,19 @@ See [Audits](../audits.md) for built-in audits, custom audits, arguments, severi
 
 ## Reusable schemas
 
-When multiple models implement the same relation shape, declare it once under `schemas/`. SQLBuild discovers schema files recursively and makes public names available throughout the project.
+When multiple models implement the same relation shape, declare it once in a schema role. SQLBuild discovers schema files recursively in each role.
+
+| Location | Who can bind it |
+|----------|-----------------|
+| `schemas/` | Models anywhere in the project |
+| `<folder>/_sqlbuild/schemas/` | Models in `<folder>` and below |
+| `<folder>/_sqlbuild/_schemas/` | Models directly in `<folder>` only |
+
+A reusable schema must live under the nearest folder containing every model that binds it or
+schema that extends it. A top-level schema bound only by models under `models/marts/` fails to
+compile with `S024` and names the destination, such as `models/marts/_sqlbuild/_schemas/`. Binding
+a schema that is not visible from the model's folder fails with `S006`. See
+[Where to Put Declarations](../declaration-scopes/placement.md).
 
 ```sql
 -- schemas/orders/order.sql
@@ -115,6 +127,9 @@ SCHEMA (
   ),
 );
 ```
+
+The parent must be visible from the child schema's owner folder, using the same rules as a model
+binding a schema. Enum column types must likewise be visible from the schema's owner folder.
 
 Inheritance may be transitive. Parent columns resolve before child columns. An inherited column cannot be redeclared or overridden in a child schema. SQLBuild rejects unknown parents, cycles, case-insensitive duplicates, and multiple parents.
 

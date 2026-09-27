@@ -4,6 +4,9 @@ seeds:
     columns:
       - name: waffle_type_id
         type: INTEGER
+        audits:
+          - not_null
+          - unique
       - name: waffle_name
         type: VARCHAR
       - name: category

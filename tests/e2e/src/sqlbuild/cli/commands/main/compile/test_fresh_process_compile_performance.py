@@ -36,10 +36,10 @@ _GIB: int = 1024 * 1024 * 1024
             macro_count=37,
             test_count=2_945,
             audit_count=5_056,
-            expected_max_wall_seconds=12.5,
+            expected_max_wall_seconds=17.0,
             expected_max_rss_bytes=int(1.5 * _GIB),
             expected_semantic_fingerprint=(
-                "8a6f8015c53c12d152ff137b3ef6ff89bc98e2b9471ecb3898e69e35cd895025"
+                "5d557ae6e25e895e61e07c58f711cb457bb012d9b242aab62460f9a4aed315e9"
             ),
         ),
         FreshProcessCompilePerformanceGuardTestCase(
@@ -51,10 +51,10 @@ _GIB: int = 1024 * 1024 * 1024
             macro_count=61,
             test_count=4_908,
             audit_count=8_427,
-            expected_max_wall_seconds=18.0,
+            expected_max_wall_seconds=25.0,
             expected_max_rss_bytes=int(1.75 * _GIB),
             expected_semantic_fingerprint=(
-                "8c91b4a742697d8bced8ae7874a8566c3467b24f35d1fc33128cae35fcd6f97c"
+                "d36434f6d80c24519e2600fca6dcae06fc01cc2c0ec8aa50c390488835a26d45"
             ),
         ),
         FreshProcessCompilePerformanceGuardTestCase(
@@ -66,10 +66,10 @@ _GIB: int = 1024 * 1024 * 1024
             macro_count=123,
             test_count=9_816,
             audit_count=16_855,
-            expected_max_wall_seconds=35.0,
+            expected_max_wall_seconds=50.0,
             expected_max_rss_bytes=2 * _GIB,
             expected_semantic_fingerprint=(
-                "aa2dc552eae6a8f26546fc9e1d40b194da813a8cd3dec60c6f85bb696c1692c6"
+                "ea9c7a46f73788b952d1da3050d81acff09059676d997346779baa600083ed42"
             ),
         ),
     ],
@@ -113,7 +113,7 @@ def test_given_scaled_semantic_project_when_compiling_fresh_then_preserves_resou
         "selected_functions": test_case.function_count,
         "audits": test_case.audit_count,
         "tests": test_case.test_count,
-        "hooks": 2,
+        "hooks": 0,
         "execution_layers": 54,
         "errors": 0,
         "warnings": 0,

@@ -26,6 +26,7 @@ from sqlbuild.cli.commands.constants import (
 from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode
 from sqlbuild.compiler.contract_adoption.types import ContractAction
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
+from sqlbuild.compiler.scopes.types import DeclarationKind
 
 
 def _installed_version() -> str:
@@ -441,7 +442,7 @@ def _add_inspection_parsers(
         "--kind",
         dest="scope_kind",
         action="append",
-        choices=("macro", "enum", "constant"),
+        choices=tuple(kind.value for kind in DeclarationKind),
         default=[],
     )
     scope_parser.add_argument("--match", dest="scope_match", default=None, metavar="GLOB")

@@ -8,7 +8,11 @@ from pathlib import PurePosixPath
 
 from sqlbuild.compiler.discovery.constants import CANONICAL_AUTHORED_ROOTS
 from sqlbuild.compiler.scopes._helpers.identities import format_identity
-from sqlbuild.compiler.scopes.constants import DECLARATION_GROUP_DIRECTORY
+from sqlbuild.compiler.scopes.constants import (
+    DECLARATION_GROUP_DIRECTORY,
+    DECLARATION_ROLE_PARTS,
+    NAMED_DECLARATION_KINDS,
+)
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
@@ -19,7 +23,13 @@ from sqlbuild.compiler.scopes.models import (
     ScopeIndex,
     UsageRecord,
 )
-from sqlbuild.compiler.scopes.types import DiagnosticSeverity, ScopeDiagnosticCode, ScopeKind
+from sqlbuild.compiler.scopes.types import (
+    DeclarationKind,
+    DiagnosticSeverity,
+    OwnershipRootKind,
+    ScopeDiagnosticCode,
+    ScopeKind,
+)
 
 type _Anchor = tuple[OwnershipRoot, str]
 type _UsagesByDeclaration = dict[DeclarationIdentity, tuple[UsageRecord, ...]]
@@ -34,6 +44,7 @@ _PLACEMENT_CODES: frozenset[ScopeDiagnosticCode] = frozenset(
         ScopeDiagnosticCode.OVER_BROAD_GLOBAL,
     }
 )
+_PROJECT_ROOT_PATH: str = "."
 _AUTHORED_ROOT_PATHS: frozenset[str] = frozenset(
     PurePosixPath(*parts).as_posix() for parts in CANONICAL_AUTHORED_ROOTS
 )
@@ -71,6 +82,8 @@ def build_placement_validated_index(
                 if usage.consumer == declaration.identity.owner and usage.through is None
             )
         if not declaration_usages:
+            if declaration.identity.kind is DeclarationKind.SINGULAR_AUDIT:
+                continue
             diagnostics.append(
                 _diagnostic(
                     declaration=declaration,
@@ -194,13 +207,18 @@ def _required_placement_for_record(
         sorted({_consumer_label(usage) for usage in declaration_usages})
     )
     roots: set[OwnershipRoot] = {root for root, _path in anchors}
-    if len(roots) != 1:
+    if len(roots) != 1 or any(root.kind is OwnershipRootKind.GLOBAL for root in roots):
         return ScopeKind.GLOBAL, None, consumers
     ownership_root: OwnershipRoot = next(iter(roots))
     paths: tuple[str, ...] = tuple(path for _root, path in anchors)
     distinct: set[str] = set(paths)
+    named: bool = declaration.kind in NAMED_DECLARATION_KINDS
     if len(distinct) == 1:
         required_path: str = next(iter(distinct))
+        if named and required_path == ownership_root.path:
+            return ScopeKind.GLOBAL, None, consumers
+        if declaration.kind is DeclarationKind.SINGULAR_AUDIT:
+            return ScopeKind.INHERITED, required_path, consumers
         return ScopeKind.LOCAL, required_path, consumers
     required_path = _lca(paths)
     return (
@@ -234,6 +252,15 @@ def _anchor_sets(*, index: ScopeIndex, usages_by_declaration: _UsagesByDeclarati
                         )
                     )
                 continue
+            if (
+                usage.through is None
+                and isinstance(usage.consumer, DeclarationIdentity)
+                and usage.consumer.kind in NAMED_DECLARATION_KINDS
+            ):
+                consumer_declaration: DeclarationRecord | None = declarations.get(usage.consumer)
+                if consumer_declaration is not None:
+                    direct.add(_declaration_location_anchor(record=consumer_declaration))
+                continue
             resource_identity: ResourceIdentity | None = usage.through
             if resource_identity is None and isinstance(usage.consumer, ResourceIdentity):
                 resource_identity = usage.consumer
@@ -257,6 +284,14 @@ def _anchor_sets(*, index: ScopeIndex, usages_by_declaration: _UsagesByDeclarati
             target_anchors |= source_anchors
             pending.append(target)
     return {identity: frozenset(items) for identity, items in anchors.items()}
+
+
+def _declaration_location_anchor(*, record: DeclarationRecord) -> _Anchor:
+    """Anchor a use by an audit, schema, or hook at the folder where that declaration lives."""
+
+    if record.owning_path is None:
+        return OwnershipRoot(_PROJECT_ROOT_PATH, OwnershipRootKind.GLOBAL), _PROJECT_ROOT_PATH
+    return record.ownership_root, record.owning_path
 
 
 def _lca(paths: tuple[str, ...]) -> str:
@@ -284,21 +319,25 @@ def _message(
     consumers: str,
 ) -> str:
     current_path: str = declaration.owning_path or declaration.ownership_root.path
+    role_parts: tuple[str, ...] = DECLARATION_ROLE_PARTS[declaration.identity.kind]
     if required_scope is ScopeKind.GLOBAL:
-        target: str = f"top-level {declaration.identity.kind.value}s/"
+        target: str = f"top-level {'/'.join(role_parts)}/"
     else:
         prefix: str = "_" if required_scope is ScopeKind.LOCAL else ""
-        role: str = f"{prefix}{declaration.identity.kind.value}s/"
+        role: str = "/".join((f"{prefix}{role_parts[0]}", *role_parts[1:])) + "/"
         target = (
             f"{required_path}/{role}"
             if required_path in _AUTHORED_ROOT_PATHS
             else f"{required_path}/{DECLARATION_GROUP_DIRECTORY}/{role}"
         )
+    consumer_label: str = (
+        "References" if declaration.identity.kind is DeclarationKind.SINGULAR_AUDIT else "Consumers"
+    )
     return (
         f"Declaration '{format_identity(identity=declaration.identity)}' is currently "
         f"{_scope_label(declaration.scope)} at '{current_path}' ({declaration.path}); required "
-        f"{_scope_label(required_scope)} at '{required_path or 'top-level root'}'. Consumers: "
-        f"{consumers}. Move it to '{target}'"
+        f"{_scope_label(required_scope)} at '{required_path or 'top-level root'}'. "
+        f"{consumer_label}: {consumers}. Move it to '{target}'"
     )
 
 

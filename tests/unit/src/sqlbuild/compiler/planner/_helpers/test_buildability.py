@@ -3,10 +3,14 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapter.contract.models import RelationInfo
-from sqlbuild.compiler.planner._helpers.graph.buildability import check_buildability
+from sqlbuild.compiler.planner._helpers.graph.buildability import (
+    check_buildability,
+    missing_upstream_message,
+)
 from sqlbuild.compiler.planner.models import MissingUpstream, WarehouseSnapshot
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CheckBuildabilityTestCase,
+    MissingUpstreamMessageTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     build_snapshot_from_relation_names,
@@ -15,6 +19,9 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     seed_key,
     source_key,
 )
+
+_RELATIONSHIPS_ORIGIN: str = "audit 'relationships' on 'stg_orders' reads 'waffle_types'"
+_STATUS_ORIGIN: str = "audit 'known_status' on 'orders' reads 'order_statuses'"
 
 
 @pytest.mark.parametrize(
@@ -159,3 +166,100 @@ def test_given_scope_and_snapshot_when_checking_buildability_then_returns_expect
     )
 
     assert result == test_case.expected_missing
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MissingUpstreamMessageTestCase(
+            description="data-lineage misses keep the existing wording",
+            missing=(
+                MissingUpstream(key=model_key("a"), required_by=(model_key("b"),)),
+                MissingUpstream(key=model_key("c"), required_by=(model_key("b"),)),
+            ),
+            edge_origins={},
+            expected_message=(
+                "cannot build selected scope: 2 missing upstream dependencies (a, c)"
+            ),
+        ),
+        MissingUpstreamMessageTestCase(
+            description="a miss required only by an audit read names the audit",
+            missing=(
+                MissingUpstream(
+                    key=seed_key("waffle_types"), required_by=(model_key("stg_orders"),)
+                ),
+            ),
+            edge_origins={
+                (model_key("stg_orders"), seed_key("waffle_types")): _RELATIONSHIPS_ORIGIN
+            },
+            expected_message=(
+                "cannot build selected scope: audit 'relationships' on 'stg_orders' reads "
+                "'waffle_types', which is not selected and does not exist in the warehouse; "
+                "select it or build it first"
+            ),
+        ),
+        MissingUpstreamMessageTestCase(
+            description="a miss also required by data lineage is a lineage miss",
+            missing=(
+                MissingUpstream(
+                    key=seed_key("waffle_types"),
+                    required_by=(model_key("stg_orders"), model_key("waffle_menu")),
+                ),
+            ),
+            edge_origins={
+                (model_key("stg_orders"), seed_key("waffle_types")): _RELATIONSHIPS_ORIGIN
+            },
+            expected_message=(
+                "cannot build selected scope: 1 missing upstream dependencies (waffle_types)"
+            ),
+        ),
+        MissingUpstreamMessageTestCase(
+            description="mixed misses list lineage dependencies and audit reads",
+            missing=(
+                MissingUpstream(key=model_key("a"), required_by=(model_key("b"),)),
+                MissingUpstream(
+                    key=seed_key("waffle_types"), required_by=(model_key("stg_orders"),)
+                ),
+                MissingUpstream(key=seed_key("order_statuses"), required_by=(model_key("orders"),)),
+            ),
+            edge_origins={
+                (model_key("stg_orders"), seed_key("waffle_types")): _RELATIONSHIPS_ORIGIN,
+                (model_key("orders"), seed_key("order_statuses")): _STATUS_ORIGIN,
+            },
+            expected_message=(
+                "cannot build selected scope: 1 missing upstream dependencies (a); 2 audit reads "
+                f"are not selected and do not exist in the warehouse ({_RELATIONSHIPS_ORIGIN}; "
+                f"{_STATUS_ORIGIN}); select them or build them first"
+            ),
+        ),
+        MissingUpstreamMessageTestCase(
+            description="more than five audit reads are truncated",
+            missing=tuple(
+                MissingUpstream(key=seed_key(f"codes_{index}"), required_by=(model_key("orders"),))
+                for index in range(6)
+            ),
+            edge_origins={
+                (model_key("orders"), seed_key(f"codes_{index}")): (
+                    f"audit 'check_{index}' on 'orders' reads 'codes_{index}'"
+                )
+                for index in range(6)
+            },
+            expected_message=(
+                "cannot build selected scope: 6 audit reads are not selected and do not exist in "
+                "the warehouse ("
+                + "; ".join(
+                    f"audit 'check_{index}' on 'orders' reads 'codes_{index}'" for index in range(5)
+                )
+                + "; ...); select them or build them first"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_missing_upstreams_when_describing_then_message_names_their_cause(
+    test_case: MissingUpstreamMessageTestCase,
+) -> None:
+    assert (
+        missing_upstream_message(missing=test_case.missing, edge_origins=test_case.edge_origins)
+        == test_case.expected_message
+    )

@@ -74,7 +74,7 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [Execution Observability](concepts/observability.md) (`concepts/observability`) - Choose authoritative lifecycle facts, readable logs, or command-output records.
 - [Typed Sinks](concepts/observability/sinks.md) (`concepts/observability/sinks`) - Export lifecycle facts and command output through project-owned providers.
 - [Execution history](concepts/observability/execution-history.md) (`concepts/observability/execution-history`) - Store and query lifecycle events and run history from Python, with SQLite locally or PostgreSQL when deployed.
-- [Overview](concepts/declaration-scopes.md) (`concepts/declaration-scopes`) - Limit enums, constants, and macros to the parts of a project that use them.
+- [Overview](concepts/declaration-scopes.md) (`concepts/declaration-scopes`) - Limit enums, constants, macros, audits, schemas, and named hooks to the parts of a project that use them.
 - [How Visibility Works](concepts/declaration-scopes/visibility.md) (`concepts/declaration-scopes/visibility`) - See which enums, constants, and macros are available to each SQL file.
 - [Where to Put Declarations](concepts/declaration-scopes/placement.md) (`concepts/declaration-scopes/placement`) - Choose the narrowest folder that contains every real use.
 - [Scope Explorer](concepts/declaration-scopes/explorer.md) (`concepts/declaration-scopes/explorer`) - Inspect visibility, explain resolution, browse declarations, and preview moves offline.

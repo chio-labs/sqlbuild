@@ -1403,10 +1403,10 @@ __expected__orders AS (
 SELECT 1
 """.strip()
                 + "\n",
-                "audits/orders.sql": """
+                "audits/singular/orders.sql": """
 AUDIT ();
 
-SELECT @project_columns() FROM __source("raw_orders")
+SELECT @project_columns() FROM __source("raw_orders") JOIN __ref("orders") USING (order_id)
 """.strip()
                 + "\n",
                 "sources/raw.yml": """
@@ -1459,7 +1459,7 @@ SELECT 1
             expected_test_expected_model_names=(("orders",),),
             expected_audit_sql_bodies=(
                 "SELECT order_id, customer_id, 'cli_macro' AS label, 'analyst' AS role, "
-                "'' AS suffix FROM __source(\"raw_orders\")",
+                '\'\' AS suffix FROM __source("raw_orders") JOIN __ref("orders") USING (order_id)',
             ),
             expected_effective_target_name="dev",
             expected_effective_connection={},
@@ -1473,7 +1473,7 @@ SELECT 1
                 "'' AS suffix from __source(\"raw_orders\")",
             ),
             expected_model_references=((("source", "raw_orders"),),),
-            expected_audit_references=((("source", "raw_orders"),),),
+            expected_audit_references=((("source", "raw_orders"), ("ref", "orders")),),
         ),
         BuildCompileInputsTestCase(
             description="accepts dbt source and seed SQL test fixtures from manifest",
@@ -1616,10 +1616,11 @@ __expected__orders AS (
 SELECT 1
 """.strip()
                 + "\n",
-                "audits/orders.sql": """
+                "audits/singular/orders.sql": """
 AUDIT ();
 
-SELECT * FROM @@raw_schema.orders WHERE loaded_by = '@@ENV:USER_NAME'
+SELECT * FROM __ref("orders") JOIN __source("raw_orders") USING (id)
+WHERE loaded_by = '@@ENV:USER_NAME'
 """.strip()
                 + "\n",
                 "audits/generic/source_filter.sql": """
@@ -1688,7 +1689,8 @@ sources:
             expected_test_mock_seed_names=((),),
             expected_test_expected_model_names=(("orders",),),
             expected_audit_sql_bodies=(
-                "SELECT * FROM analytics_raw.orders WHERE loaded_by = 'runner'",
+                'SELECT * FROM __ref("orders") JOIN __source("raw_orders") USING (id)\n'
+                "WHERE loaded_by = 'runner'",
                 "SELECT order_id\n"
                 'FROM __ref("orders")\n'
                 "WHERE order_id IS NOT NULL\n"
@@ -1718,7 +1720,10 @@ sources:
             expected_effective_sql_analysis=False,
             expected_effective_sql_validation=False,
             expected_model_references=((),),
-            expected_audit_references=((), (("ref", "orders"),)),
+            expected_audit_references=(
+                (("ref", "orders"), ("source", "raw_orders")),
+                (("ref", "orders"),),
+            ),
             environment_variables={
                 "USER_NAME": "runner",
                 "SOURCE_SYSTEM": "crm",
@@ -2213,14 +2218,22 @@ __expected__orders AS (
 SELECT 1
 """.strip()
                 + "\n",
-                "audits/orders.sql": """
+                "audits/singular/orders.sql": """
 AUDIT (name "first");
 
-SELECT @project_columns() FROM raw_orders;
+SELECT @project_columns() FROM __ref("orders") JOIN __source("raw_orders") USING (order_id);
 
 AUDIT (name "second");
 
-SELECT @project_columns() FROM raw_customers
+SELECT @project_columns() FROM __ref("orders") JOIN __source("raw_customers") USING (order_id)
+""".strip()
+                + "\n",
+                "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    table: orders
+  - name: raw_customers
+    table: customers
 """.strip()
                 + "\n",
             },
@@ -2232,7 +2245,7 @@ SELECT @project_columns() FROM raw_customers
             expected_model_query_sqls=("select 1",),
             expected_model_path_defaults=(None,),
             expected_seed_names=(),
-            expected_source_names=(),
+            expected_source_names=("raw_orders", "raw_customers"),
             expected_effective_target_name=None,
             expected_effective_connection={},
             expected_effective_vars={},
@@ -2267,11 +2280,15 @@ SELECT 1
             expected_test_mock_seed_names=((), ()),
             expected_test_expected_model_names=(("orders",), ("orders",)),
             expected_audit_sql_bodies=(
-                "SELECT order_id FROM raw_orders;",
-                "SELECT order_id FROM raw_customers",
+                'SELECT order_id FROM __ref("orders") JOIN __source("raw_orders") USING (order_id);',
+                'SELECT order_id FROM __ref("orders") JOIN __source("raw_customers") '
+                "USING (order_id)",
             ),
             expected_model_references=((),),
-            expected_audit_references=((), ()),
+            expected_audit_references=(
+                (("ref", "orders"), ("source", "raw_orders")),
+                (("ref", "orders"), ("source", "raw_customers")),
+            ),
         ),
         BuildCompileInputsTestCase(
             description="discovers python sqlbuild udf metadata",
@@ -3464,7 +3481,7 @@ SELECT 1 AS customer_id, CURRENT_TIMESTAMP AS updated_at
             description="raises when an audit references an unknown source",
             repo_files=base_repo_files()
             | {
-                "audits/orders.sql": """
+                "audits/singular/orders.sql": """
 AUDIT ();
 
 SELECT * FROM __source("missing_source")
@@ -3517,7 +3534,7 @@ SELECT * FROM __dbt_ref("stg_orders")
             description="raises when an audit uses dbt refs",
             repo_files=base_repo_files()
             | {
-                "audits/orders.sql": """
+                "audits/singular/orders.sql": """
 AUDIT ();
 
 SELECT * FROM __dbt_ref("stg_orders")
@@ -3527,7 +3544,7 @@ SELECT * FROM __dbt_ref("stg_orders")
             selected_target=None,
             run_id=None,
             expected_error_fragment=(
-                r"Audit file audits/orders\.sql may not use __dbt_ref\('stg_orders'\); "
+                r"Audit file audits/singular/orders\.sql may not use __dbt_ref\('stg_orders'\); "
                 "audit dbt model checks belong in dbt"
             ),
         ),
@@ -3884,7 +3901,7 @@ SELECT 1
             description="raises when a compiled audit body references an unknown macro",
             repo_files=base_repo_files()
             | {
-                "audits/orders.sql": """
+                "audits/singular/orders.sql": """
 AUDIT ();
 
 SELECT @missing_macro()

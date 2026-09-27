@@ -15,6 +15,10 @@ from typing import get_type_hints
 
 from pydantic import ValidationError
 
+from sqlbuild.compiler.discovery._helpers.filesystem.named_declarations import (
+    named_declaration_files,
+    named_declaration_roots,
+)
 from sqlbuild.compiler.discovery._helpers.filesystem.sql_test_files import discover_sql_test_files
 from sqlbuild.compiler.discovery._helpers.python.functions import parse_python_function
 from sqlbuild.compiler.discovery._helpers.sql.audits import parse_sql_audit_file
@@ -38,7 +42,6 @@ from sqlbuild.compiler.discovery._helpers.yml.schema import parse_schema_yml
 from sqlbuild.compiler.discovery._helpers.yml.sources import parse_sources_yml
 from sqlbuild.compiler.discovery.constants import (
     CANONICAL_AUTHORED_ROOTS,
-    MODEL_SCHEMAS_DIRECTORY_NAME,
     PYTHON_INIT_MODULE_STEM,
     PYTHON_NODE_ROOT,
     SCHEMA_FILE_NAME,
@@ -84,7 +87,9 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
     DiscoveredTaskFunction,
     DiscoveryFileFault,
+    NamedDeclarationRoot,
 )
+from sqlbuild.compiler.discovery.types import ScopedDeclarationFile
 from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
     validate_resource_identity,
 )
@@ -92,6 +97,7 @@ from sqlbuild.compiler.scopes.constants import (
     DECLARATION_DIRECTORY_FACTS,
     DECLARATION_GROUP_DIRECTORY,
     GLOBAL_DECLARATION_DIRECTORIES,
+    GROUPED_NAMED_DECLARATION_DIRECTORIES,
     INHERITED_DECLARATION_DIRECTORIES,
     LOCAL_DECLARATION_DIRECTORIES,
 )
@@ -256,13 +262,15 @@ def _validate_declaration_groups(*, project_dir: Path) -> None:
                 raise DeclarationParseError(
                     f"Grouped declaration root {group.relative_to(project_dir).as_posix()}/ must "
                     "be below a concrete owner directory; use the project-wide macros/, enums/, "
-                    "or constants/ root instead"
+                    "constants/, audits/, schemas/, or hooks/ root instead"
                 )
             unsupported: tuple[Path, ...] = tuple(
                 sorted(
                     child
                     for child in group.iterdir()
-                    if not child.is_dir() or child.name not in _SCOPED_DECLARATION_DIRECTORIES
+                    if not child.is_dir()
+                    or child.name
+                    not in _SCOPED_DECLARATION_DIRECTORIES | GROUPED_NAMED_DECLARATION_DIRECTORIES
                 )
             )
             if unsupported:
@@ -569,30 +577,56 @@ def _unscoped_files(*, root: Path, pattern: str, project_dir: Path) -> Iterator[
             yield file_path
 
 
-def discover_model_schema_files(*, project_dir: Path) -> tuple[DiscoveredModelSchemaFile, ...]:
-    """Discover public reusable model schemas under schemas/."""
+def discover_model_schema_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredModelSchemaFile, ...]:
+    """Discover project-wide and scoped reusable model schemas."""
 
-    schema_root: Path = project_dir / MODEL_SCHEMAS_DIRECTORY_NAME
-    if not schema_root.is_dir():
-        return ()
-    discovered_files: list[DiscoveredModelSchemaFile] = []
-    file_path: Path
-    for file_path in sorted(schema_root.rglob("*.sql")):
+    def parse(item: tuple[NamedDeclarationRoot, Path]) -> DiscoveredModelSchemaFile:
+        file_path: Path = item[1]
         contents: str = file_path.read_text(encoding="utf-8")
         relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
-        discovered_files.append(
-            DiscoveredModelSchemaFile(
-                file_path=file_path,
-                relative_path=relative_path,
-                contents=contents,
-                declarations=parse_model_schema_declaration_file(
-                    contents=contents,
-                    file_path=file_path,
-                    relative_path=relative_path,
-                ),
-            )
+        return DiscoveredModelSchemaFile(
+            file_path=file_path,
+            relative_path=relative_path,
+            contents=contents,
+            declarations=parse_model_schema_declaration_file(
+                contents=contents, file_path=file_path, relative_path=relative_path
+            ),
         )
-    return tuple(discovered_files)
+
+    return _parse_named_declaration_files(
+        project_dir=project_dir,
+        kinds=frozenset({DeclarationKind.SCHEMA}),
+        parse=parse,
+        on_fault=on_fault,
+    )
+
+
+def _parse_named_declaration_files[DiscoveredT: ScopedDeclarationFile](
+    *,
+    project_dir: Path,
+    kinds: frozenset[DeclarationKind],
+    parse: Callable[[tuple[NamedDeclarationRoot, Path]], DiscoveredT],
+    on_fault: Callable[[DiscoveryFileFault], None] | None,
+    skip_underscored: bool = False,
+) -> tuple[DiscoveredT, ...]:
+    """Parse each SQL file in the requested named declaration roles with its role's scope facts."""
+
+    return _parse_discovered_files(
+        project_dir=project_dir,
+        items=(
+            item
+            for item in named_declaration_files(
+                roots=named_declaration_roots(project_dir=project_dir, kinds=kinds),
+                pattern="*.sql",
+            )
+            if not (skip_underscored and item[1].name.startswith("_"))
+        ),
+        item_path=lambda item: item[1],
+        parse=lambda item: item[0].place(parse(item)),
+        on_fault=on_fault,
+    )
 
 
 def discover_sql_function_files(
@@ -795,24 +829,22 @@ def discover_scenario_files(
 def discover_audit_files(
     *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
 ) -> tuple[DiscoveredAuditFile, ...]:
-    """Discover audit SQL files under audits/."""
+    """Discover generic and singular audit SQL files in their project-wide and scoped roles."""
 
-    audits_root: Path = project_dir / "audits"
-    if not audits_root.is_dir():
-        return ()
-
-    def parse(file_path: Path) -> DiscoveredAuditFile:
+    def parse(item: tuple[NamedDeclarationRoot, Path]) -> DiscoveredAuditFile:
+        root, file_path = item
         contents: str = file_path.read_text(encoding="utf-8")
         return DiscoveredAuditFile(
             file_path=file_path,
             relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
             contents=contents,
             blocks=parse_sql_audit_file(contents=contents, file_path=file_path),
+            declaration_kind=root.kind,
         )
 
-    return _parse_discovered_paths(
+    return _parse_named_declaration_files(
         project_dir=project_dir,
-        file_paths=_unscoped_files(root=audits_root, pattern="*.sql", project_dir=project_dir),
+        kinds=frozenset({DeclarationKind.AUDIT, DeclarationKind.SINGULAR_AUDIT}),
         parse=parse,
         on_fault=on_fault,
     )
@@ -907,15 +939,17 @@ def discover_hook_functions(
 ) -> tuple[DiscoveredHookFunction, ...]:
     """Discover decorated model lifecycle hook functions under hooks/python/."""
 
-    hooks_root: Path = project_dir / "hooks" / "python"
-    if not hooks_root.is_dir():
-        return ()
-
     discovered_hooks: list[DiscoveredHookFunction] = []
     seen_names: dict[str, Path] = {}
     provider_by_name: dict[str, DiscoveredProvider] = _provider_by_name(providers)
+    root: NamedDeclarationRoot
     file_path: Path
-    for file_path in sorted(hooks_root.rglob("*.py")):
+    for root, file_path in named_declaration_files(
+        roots=named_declaration_roots(
+            project_dir=project_dir, kinds=frozenset({DeclarationKind.PYTHON_HOOK})
+        ),
+        pattern="*.py",
+    ):
         if file_path.stem == PYTHON_INIT_MODULE_STEM or file_path.name.startswith("_"):
             continue
         module: ModuleType = _load_python_node_module(
@@ -937,16 +971,20 @@ def discover_hook_functions(
                 )
             seen_names[hook_definition.name] = file_path
             discovered_hooks.append(
-                DiscoveredHookFunction(
-                    file_path=file_path,
-                    relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
-                    name=hook_definition.name,
-                    function=value,
-                    description=hook_definition.description,
-                    provider_usages=_provider_usages(
+                root.place(
+                    DiscoveredHookFunction(
+                        file_path=file_path,
+                        relative_path=_project_relative_path(
+                            path=file_path, project_dir=project_dir
+                        ),
+                        name=hook_definition.name,
                         function=value,
-                        provider_by_name=provider_by_name,
-                    ),
+                        description=hook_definition.description,
+                        provider_usages=_provider_usages(
+                            function=value,
+                            provider_by_name=provider_by_name,
+                        ),
+                    )
                 )
             )
     return tuple(discovered_hooks)
@@ -955,31 +993,22 @@ def discover_hook_functions(
 def discover_sql_hook_files(
     *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
 ) -> tuple[DiscoveredSqlHookFile, ...]:
-    """Discover named SQL lifecycle hook resources under hooks/sql/."""
+    """Discover named SQL lifecycle hooks in their project-wide and scoped roles."""
 
-    hooks_root: Path = project_dir / "hooks" / "sql"
-    if not hooks_root.is_dir():
-        return ()
-
-    def parse(file_path: Path) -> DiscoveredSqlHookFile:
-        relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
+    def parse(item: tuple[NamedDeclarationRoot, Path]) -> DiscoveredSqlHookFile:
+        file_path: Path = item[1]
         return parse_sql_hook_file(
             contents=file_path.read_text(encoding="utf-8"),
             file_path=file_path,
-            relative_path=relative_path,
+            relative_path=_project_relative_path(path=file_path, project_dir=project_dir),
         )
 
-    return _parse_discovered_paths(
+    return _parse_named_declaration_files(
         project_dir=project_dir,
-        file_paths=(
-            file_path
-            for file_path in _unscoped_files(
-                root=hooks_root, pattern="*.sql", project_dir=project_dir
-            )
-            if not file_path.name.startswith("_")
-        ),
+        kinds=frozenset({DeclarationKind.SQL_HOOK}),
         parse=parse,
         on_fault=on_fault,
+        skip_underscored=True,
     )
 
 

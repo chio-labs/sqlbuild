@@ -670,6 +670,7 @@ class PlanAttachedAuditTestCase:
     referenced_model_names: tuple[str, ...]
     upstream_edges: dict[str, tuple[str, ...]]
     expected_attachment_kind: AuditAttachmentKind
+    expected_reads_outside_target_lineage: bool
 
 
 @dataclass(frozen=True)
@@ -885,6 +886,7 @@ class ResolveAttachmentTestCase:
     upstream_edges: dict[str, tuple[str, ...]]
     expected_attachment_kind: AuditAttachmentKind
     expected_attached_name: str | None
+    expected_reads_outside_target_lineage: bool = False
 
 
 @dataclass(frozen=True)
@@ -911,3 +913,11 @@ class PlannerStaleWarningScopeTestCase:
     selected_model_name: str
     expected_inspected_names: frozenset[str]
     expected_execution_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MissingUpstreamMessageTestCase:
+    description: str
+    missing: tuple[MissingUpstream, ...]
+    edge_origins: dict[tuple[CompiledObjectKey, CompiledObjectKey], str]
+    expected_message: str

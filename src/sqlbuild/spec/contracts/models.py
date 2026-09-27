@@ -507,6 +507,7 @@ class SchemaSeedEntry:
     csv_settings: SeedCsvSettings = field(default_factory=SeedCsvSettings)
     columns: tuple[SchemaColumn, ...] = field(default_factory=tuple)
     tags: tuple[str, ...] = field(default_factory=tuple)
+    audits: tuple[SchemaAuditInstance, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

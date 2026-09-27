@@ -57,23 +57,12 @@ def audit_scope_deps(
 
     deps: list[CompiledObjectKey] = list(model_build_deps(references=references))
     if attached_target_kind is not None and attached_target_name is not None:
-        normalized_target_kind: AttachedAuditTargetKind = AttachedAuditTargetKind(
-            attached_target_kind
+        deps.append(
+            CompiledObjectKey(
+                resource_type=AttachedAuditTargetKind(attached_target_kind).resource_type,
+                name=attached_target_name,
+            )
         )
-        if normalized_target_kind == AttachedAuditTargetKind.MODEL:
-            deps.append(
-                CompiledObjectKey(
-                    resource_type=CompiledResourceType.MODEL,
-                    name=attached_target_name,
-                )
-            )
-        if normalized_target_kind == AttachedAuditTargetKind.SOURCE:
-            deps.append(
-                CompiledObjectKey(
-                    resource_type=CompiledResourceType.SOURCE,
-                    name=attached_target_name,
-                )
-            )
     return _dedupe_object_keys(deps)
 
 

@@ -371,11 +371,9 @@ def _sql_test_meta(test: CompiledSqlTest) -> dict[str, object]:
 def _build_audit_check(audit: CompiledAudit) -> DagCheck:
     checked_asset_ids: tuple[str, ...] = tuple(_node_id(key) for key in audit.scope_deps)
     if audit.attached_target_kind is not None and audit.attached_target_name is not None:
-        resource_type: CompiledResourceType = (
-            CompiledResourceType.SOURCE
-            if audit.attached_target_kind == AttachedAuditTargetKind.SOURCE
-            else CompiledResourceType.MODEL
-        )
+        resource_type: CompiledResourceType = AttachedAuditTargetKind(
+            audit.attached_target_kind
+        ).resource_type
         checked_asset_ids = (
             _node_id(CompiledObjectKey(resource_type, audit.attached_target_name)),
         )

@@ -20,6 +20,7 @@ from sqlbuild.compiler.scopes._helpers.lookup import build_lookup
 from sqlbuild.compiler.scopes._helpers.paths import normalize_path
 from sqlbuild.compiler.scopes.constants import (
     GLOBAL_DECLARATION_DIRECTORIES,
+    GLOBAL_NAMED_DECLARATION_DIRECTORIES,
     SCOPE_CACHE_DIRECTORY,
     SCOPE_CACHE_FILENAME,
     SCOPE_CACHE_MAX_BYTES,
@@ -535,7 +536,9 @@ def scope_index_fingerprint(*, project_dir: Path) -> str:
             {
                 *(Path(*parts).as_posix() for parts in CANONICAL_AUTHORED_ROOTS),
                 *GLOBAL_DECLARATION_DIRECTORIES,
-                "schemas",
+                *GLOBAL_NAMED_DECLARATION_DIRECTORIES,
+                "python",
+                "seeds",
             }
         )
     )
@@ -635,7 +638,9 @@ def _fingerprint_record(*, path: str, role: str, content: bytes) -> dict[str, ob
 
 def _source_role(*, path: Path) -> str:
     parts: tuple[str, ...] = path.parts
-    if any(part in GLOBAL_DECLARATION_DIRECTORIES for part in parts):
+    if any(part in GLOBAL_DECLARATION_DIRECTORIES for part in parts) or (
+        parts[:1] and parts[0] in GLOBAL_NAMED_DECLARATION_DIRECTORIES
+    ):
         return "declaration"
     if path.suffix == SCOPE_MACRO_SUFFIX:
         return "macro"

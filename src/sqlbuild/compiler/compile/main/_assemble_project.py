@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.compile._helpers.assembly.audit_gates import validate_attached_audit_gates
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.models import (
     CompiledProject,
@@ -24,7 +25,7 @@ def assemble_project(
 ) -> CompiledProject:
     """Convert compile inputs into the planner-ready project view."""
 
-    return assemble_compiled_project(
+    project: CompiledProject = assemble_compiled_project(
         inputs=inputs,
         inference_profile=inference_profile,
         skip_column_inference=skip_column_inference,
@@ -32,3 +33,5 @@ def assemble_project(
         analysis_cache_dir=analysis_cache_dir,
         analysis_model_names=analysis_model_names,
     )
+    validate_attached_audit_gates(project=project)
+    return project

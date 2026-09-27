@@ -199,7 +199,7 @@ OPERATION_TARGET_KINDS: frozenset[str] = frozenset(
     }
 )
 OPERATION_SCOPES: frozenset[str] = frozenset(
-    {"delta", "end", "final", "model", "source", "standalone"}
+    {"delta", "end", "final", "model", "seed", "source", "standalone"}
 )
 OPERATION_ADAPTERS: frozenset[str] = frozenset(
     {

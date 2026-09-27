@@ -17,6 +17,7 @@ from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
 )
 from sqlbuild.compiler.planner._helpers.output.audit_scheduling import (
+    reads_outside_target_lineage,
     resolve_attachment_kind,
     resolve_effective_run_scope,
 )
@@ -48,7 +49,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
             expected_attached_name="raw_orders",
         ),
         ResolveAttachmentTestCase(
-            description="source-attached audit with seed dependency moves to END",
+            description="source-attached audit with seed dependency still gates the source",
             references=(
                 CompileSqlReference(
                     ref_kind=SqlReferenceKind.SOURCE,
@@ -62,8 +63,35 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
             attached_target_kind=AttachedAuditTargetKind.SOURCE,
             attached_target_name="raw_orders",
             upstream_edges={},
-            expected_attachment_kind=AuditAttachmentKind.END,
+            expected_attachment_kind=AuditAttachmentKind.SOURCE,
             expected_attached_name="raw_orders",
+            expected_reads_outside_target_lineage=True,
+        ),
+        ResolveAttachmentTestCase(
+            description="source-attached audit reading an unrelated model gates the source",
+            references=(
+                CompileSqlReference(ref_kind=SqlReferenceKind.SOURCE, ref_name="raw_orders"),
+                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="order_statuses"),
+            ),
+            attached_target_kind=AttachedAuditTargetKind.SOURCE,
+            attached_target_name="raw_orders",
+            upstream_edges={"order_statuses": ()},
+            expected_attachment_kind=AuditAttachmentKind.SOURCE,
+            expected_attached_name="raw_orders",
+            expected_reads_outside_target_lineage=True,
+        ),
+        ResolveAttachmentTestCase(
+            description="seed-attached audit reading another seed gates the seed",
+            references=(
+                CompileSqlReference(ref_kind=SqlReferenceKind.SEED, ref_name="order_codes"),
+                CompileSqlReference(ref_kind=SqlReferenceKind.SEED, ref_name="allowed_codes"),
+            ),
+            attached_target_kind=AttachedAuditTargetKind.SEED,
+            attached_target_name="order_codes",
+            upstream_edges={},
+            expected_attachment_kind=AuditAttachmentKind.SEED,
+            expected_attached_name="order_codes",
+            expected_reads_outside_target_lineage=True,
         ),
         ResolveAttachmentTestCase(
             description="model-attached audit with upstream refs returns MODEL",
@@ -78,7 +106,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
             expected_attached_name="orders",
         ),
         ResolveAttachmentTestCase(
-            description="model-attached audit with downstream ref moves to END",
+            description="model-attached audit with downstream ref still resolves to MODEL",
             references=(
                 CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="stg_orders"),
                 CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
@@ -86,11 +114,12 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
             attached_target_kind=AttachedAuditTargetKind.MODEL,
             attached_target_name="stg_orders",
             upstream_edges={"orders": ("stg_orders",), "stg_orders": ()},
-            expected_attachment_kind=AuditAttachmentKind.END,
+            expected_attachment_kind=AuditAttachmentKind.MODEL,
             expected_attached_name="stg_orders",
+            expected_reads_outside_target_lineage=True,
         ),
         ResolveAttachmentTestCase(
-            description="model-attached audit with unrelated ref moves to END",
+            description="model-attached audit with unrelated ref gates the model",
             references=(
                 CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
                 CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="customers"),
@@ -98,8 +127,9 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
             attached_target_kind=AttachedAuditTargetKind.MODEL,
             attached_target_name="orders",
             upstream_edges={"orders": (), "customers": ()},
-            expected_attachment_kind=AuditAttachmentKind.END,
+            expected_attachment_kind=AuditAttachmentKind.MODEL,
             expected_attached_name="orders",
+            expected_reads_outside_target_lineage=True,
         ),
         ResolveAttachmentTestCase(
             description="singular audit with only source refs returns SOURCE",
@@ -184,29 +214,26 @@ def test_given_audit_refs_when_resolving_attachment_then_returns_expected(
 
     kind: AuditAttachmentKind
     name: str | None
-    kind, name = resolve_attachment_kind(
-        audit=audit,
-        upstream_deps=upstream,
-        downstream_deps=downstream,
-    )
+    kind, name = resolve_attachment_kind(audit=audit, downstream_deps=downstream)
 
     assert kind == test_case.expected_attachment_kind
     assert name == test_case.expected_attached_name
+    assert (
+        reads_outside_target_lineage(audit=audit, upstream_deps=upstream)
+        is test_case.expected_reads_outside_target_lineage
+    )
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
         ResolveAttachmentErrorTestCase(
-            description="source-attached audit referencing model raises",
-            references=(
-                CompileSqlReference(ref_kind=SqlReferenceKind.SOURCE, ref_name="raw_orders"),
-                CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),
-            ),
-            attached_target_kind=AttachedAuditTargetKind.SOURCE,
-            attached_target_name="raw_orders",
+            description="attached audit without a target name raises",
+            references=(CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders"),),
+            attached_target_kind=AttachedAuditTargetKind.MODEL,
+            attached_target_name=None,
             upstream_edges={"orders": ()},
-            expected_error_fragment="must not reference models",
+            expected_error_fragment="missing an attached target name",
         ),
     ],
     ids=lambda case: case.description,
@@ -219,16 +246,11 @@ def test_given_invalid_attachment_when_resolving_then_raises(
         attached_target_kind=test_case.attached_target_kind,
         attached_target_name=test_case.attached_target_name,
     )
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
-    upstream, downstream = build_scheduling_graph(test_case.upstream_edges)
+    _, downstream = build_scheduling_graph(test_case.upstream_edges)
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
-        resolve_attachment_kind(
-            audit=audit,
-            upstream_deps=upstream,
-            downstream_deps=downstream,
-        )
+        resolve_attachment_kind(audit=audit, downstream_deps=downstream)
 
 
 @pytest.mark.parametrize(

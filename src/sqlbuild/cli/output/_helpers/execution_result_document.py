@@ -987,6 +987,7 @@ def _format_audit_checks(
                     if result.evaluation_mode == AuditEvaluationMode.MEASUREMENT
                     else None
                 ),
+                "execution_error": result.execution_error,
             }
         )
         for result in results

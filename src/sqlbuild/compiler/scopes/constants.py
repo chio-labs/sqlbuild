@@ -6,8 +6,8 @@ from pathlib import Path
 
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
 
-SCOPE_METADATA_SCHEMA_VERSION: int = 2
-SCOPE_CACHE_SCHEMA_VERSION: int = 2
+SCOPE_METADATA_SCHEMA_VERSION: int = 3
+SCOPE_CACHE_SCHEMA_VERSION: int = 3
 SCOPE_FINGERPRINT_ALGORITHM_VERSION: int = 2
 SCOPE_CACHE_DIRECTORY: Path = Path("target/cache/compiler/declaration-scopes-v2")
 SCOPE_CACHE_FILENAME: str = "scope-index.json"
@@ -69,4 +69,38 @@ DECLARATION_DIRECTORY_FACTS: dict[str, tuple[DeclarationKind, ScopeKind]] = {
     "_macros": (DeclarationKind.MACRO, ScopeKind.LOCAL),
     "_enums": (DeclarationKind.ENUM, ScopeKind.LOCAL),
     "_constants": (DeclarationKind.CONSTANT, ScopeKind.LOCAL),
+}
+
+GLOBAL_NAMED_DECLARATION_ROOTS: dict[tuple[str, ...], DeclarationKind] = {
+    ("audits", "generic"): DeclarationKind.AUDIT,
+    ("audits", "singular"): DeclarationKind.SINGULAR_AUDIT,
+    ("schemas",): DeclarationKind.SCHEMA,
+    ("hooks", "sql"): DeclarationKind.SQL_HOOK,
+    ("hooks", "python"): DeclarationKind.PYTHON_HOOK,
+}
+GROUPED_NAMED_DECLARATION_ROLES: dict[tuple[str, ...], tuple[DeclarationKind, ScopeKind]] = {
+    ("audits", "generic"): (DeclarationKind.AUDIT, ScopeKind.INHERITED),
+    ("_audits", "generic"): (DeclarationKind.AUDIT, ScopeKind.LOCAL),
+    ("audits", "singular"): (DeclarationKind.SINGULAR_AUDIT, ScopeKind.INHERITED),
+    ("schemas",): (DeclarationKind.SCHEMA, ScopeKind.INHERITED),
+    ("_schemas",): (DeclarationKind.SCHEMA, ScopeKind.LOCAL),
+    ("hooks", "sql"): (DeclarationKind.SQL_HOOK, ScopeKind.INHERITED),
+    ("_hooks", "sql"): (DeclarationKind.SQL_HOOK, ScopeKind.LOCAL),
+    ("hooks", "python"): (DeclarationKind.PYTHON_HOOK, ScopeKind.INHERITED),
+    ("_hooks", "python"): (DeclarationKind.PYTHON_HOOK, ScopeKind.LOCAL),
+}
+GROUPED_NAMED_DECLARATION_DIRECTORIES: frozenset[str] = frozenset(
+    role[0] for role in GROUPED_NAMED_DECLARATION_ROLES
+)
+GLOBAL_NAMED_DECLARATION_DIRECTORIES: frozenset[str] = frozenset(
+    role[0] for role in GLOBAL_NAMED_DECLARATION_ROOTS
+)
+NAMED_DECLARATION_KINDS: frozenset[DeclarationKind] = frozenset(
+    GLOBAL_NAMED_DECLARATION_ROOTS.values()
+)
+DECLARATION_ROLE_PARTS: dict[DeclarationKind, tuple[str, ...]] = {
+    DeclarationKind.MACRO: ("macros",),
+    DeclarationKind.ENUM: ("enums",),
+    DeclarationKind.CONSTANT: ("constants",),
+    **{kind: role for role, kind in GLOBAL_NAMED_DECLARATION_ROOTS.items()},
 }

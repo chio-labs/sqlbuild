@@ -116,7 +116,7 @@ pub(crate) fn threshold_request(
 
 pub(crate) fn scope_index() -> Value {
     json!({
-        "schema_version": 2,
+        "schema_version": 3,
         "ownership_roots": [{"path": "models", "resource_kind": "model"}],
         "resources": [{
             "identity": "model:orders",

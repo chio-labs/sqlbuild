@@ -892,3 +892,48 @@ class SetOperationExpectedTestCase:
     sql: str
     expected_payload_type: str = ""
     expected_error_template: str = ""
+
+
+@dataclass(frozen=True)
+class NamedDeclarationAcceptedTestCase:
+    """A valid audit, schema, or hook layout."""
+
+    description: str
+    files: dict[str, str]
+    expected_diagnostic_codes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class NamedDeclarationErrorTestCase:
+    """An invalid audit, schema, or hook layout and the diagnostic fragments it must produce."""
+
+    description: str
+    files: dict[str, str]
+    expected_error_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NamedDeclarationWarningTestCase:
+    """A misplaced declaration compiled with advisory placement."""
+
+    description: str
+    files: dict[str, str]
+    expected_code: str
+
+
+@dataclass(frozen=True)
+class AttachedAuditGateTestCase:
+    """A project whose attached audit reads another resource, and the ordering edges it adds."""
+
+    description: str
+    files: dict[str, str]
+    expected_edges: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class AttachedAuditGateCycleTestCase:
+    """A project whose attached audit reads a resource built from its own target."""
+
+    description: str
+    files: dict[str, str]
+    expected_error_fragments: tuple[str, ...]

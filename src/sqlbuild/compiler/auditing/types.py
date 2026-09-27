@@ -17,6 +17,7 @@ class AuditRunScope(StrEnum):
 
 class AuditAttachmentKind(StrEnum):
     SOURCE = "source"
+    SEED = "seed"
     MODEL = "model"
     END = "end"
 

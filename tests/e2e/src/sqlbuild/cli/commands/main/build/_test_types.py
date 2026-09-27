@@ -274,6 +274,7 @@ class PythonHookFailureBuildE2ETestCase:
     expected_present_tables: tuple[str, ...]
     expected_absent_tables: tuple[str, ...]
     model_sql: str | None = None
+    hook_files: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -907,3 +908,104 @@ class PythonHelperPackageIdentityE2ETestCase:
     edited_text: str
     expected_identity_status: str
     expected_version_count: int
+
+
+@dataclass(frozen=True)
+class ScopedDeclarationBuildE2ETestCase:
+    description: str
+    expected_exit_code: int
+    expected_checks: dict[tuple[str, str | None], str]
+    expected_hook_rows: tuple[tuple[str, int], ...]
+
+
+@dataclass(frozen=True)
+class ScopedDeclarationScopeE2ETestCase:
+    description: str
+    target: str
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SeedAuditBuildE2ETestCase:
+    description: str
+    seed_csv: str
+    expected_exit_code: int
+    expected_status: str
+    expected_dependent_table: bool
+
+
+@dataclass(frozen=True)
+class AttachedAuditGateBuildE2ETestCase:
+    description: str
+    target_kind: str
+    target_name: str
+    audit_name: str
+    dependant_name: str
+    order_code: str
+    expected_exit_code: int
+    expected_status: str
+    expected_dependant_built: bool
+    target_query: str
+    expected_target_rows: tuple[tuple[str, ...], ...]
+    concurrency: int = 1
+
+
+@dataclass(frozen=True)
+class AttachedAuditGateCycleE2ETestCase:
+    description: str
+    target_kind: str
+    read: str
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AttachedAuditGatePartialBuildE2ETestCase:
+    description: str
+    target_kind: str
+    select: str
+    replaced_read_sql: str
+    expected_exit_code: int
+    expected_check: tuple[str, str]
+    unselected_asset: str
+
+
+@dataclass(frozen=True)
+class AttachedAuditGateNoAuditsE2ETestCase:
+    description: str
+    target_kind: str
+    order_code: str
+    target_query: str
+    expected_target_rows: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class NestedSourceGateE2ETestCase:
+    description: str
+    raw_code: str
+    expected_exit_code: int
+    expected_checks: dict[tuple[str, str], tuple[str, str]]
+    expected_orders_built: bool
+
+
+@dataclass(frozen=True)
+class AuditExecutionErrorE2ETestCase:
+    description: str
+    audit_kind: str
+    severity: str
+    concurrency: int
+    expected_attachment_kind: str
+    expected_asset_statuses: dict[str, str]
+
+
+@dataclass(frozen=True)
+class AuditExecutionErrorTerminalE2ETestCase:
+    description: str
+    audit_kind: str
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AuditReadPlanE2ETestCase:
+    description: str
+    select: str
+    expected_error_fragment: str

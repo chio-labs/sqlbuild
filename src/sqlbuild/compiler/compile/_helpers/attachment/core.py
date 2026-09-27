@@ -48,6 +48,12 @@ from sqlbuild.compiler.compile._helpers.config.namespace_validation import (
     validate_preserved_logical_namespace,
 )
 from sqlbuild.compiler.compile._helpers.config.table_type import resolve_storage_policies
+from sqlbuild.compiler.compile._helpers.named_declarations.core import (
+    named_declaration_usages,
+)
+from sqlbuild.compiler.compile._helpers.named_declarations.model_schemas import (
+    model_schema_enum_declarations,
+)
 from sqlbuild.compiler.compile._helpers.refs.cache import cached_sql_reference_extractor
 from sqlbuild.compiler.compile._helpers.render.arguments import render_parameterized_sql
 from sqlbuild.compiler.compile._helpers.render.context_templates import (
@@ -241,7 +247,7 @@ class _HookExpansionContext:
     macro_context: MacroContext
     declaration_expansion: DeclarationExpansionContext
     sql_hook_definitions: dict[str, DiscoveredSqlHookFile]
-    consumer: ResourceIdentity
+    consumer: ResourceIdentity | DeclarationIdentity
     facts: _HookExpansionFacts
 
 
@@ -499,6 +505,25 @@ def _build_model_inputs(
             hook_functions=discovered_inputs.hook_functions,
             provider_names=frozenset(provider.name for provider in discovered_inputs.providers),
         )
+        named_usages: tuple[UsageRecord, ...] = (
+            *(
+                named_declaration_usages(
+                    resolver=context.declaration_resolver,
+                    kind=DeclarationKind.SCHEMA,
+                    name=model_schema.name,
+                    consumer=model_identity,
+                    consumer_path=model_file.relative_path,
+                )
+                if model_schema is not None
+                else ()
+            ),
+            *_python_hook_usages(
+                values=effective_config.values,
+                resolver=context.declaration_resolver,
+                consumer=model_identity,
+                consumer_path=model_file.relative_path,
+            ),
+        )
         var_substituted_sql: str = (
             prepared_var_substituted_sql
             if prepared_var_substituted_sql is not None
@@ -622,7 +647,16 @@ def _build_model_inputs(
         header_schema_entry, enum_columns = resolve_enum_contract_columns(
             schema_entry=header_schema_entry,
             config_values=model_config.values,
-            enums=declarations.enums,
+            enums=(
+                declarations.enums
+                if model_schema is None
+                else {
+                    **declarations.enums,
+                    **model_schema_enum_declarations(
+                        schema=model_schema, resolver=context.declaration_resolver
+                    ),
+                }
+            ),
         )
         generated_usages: tuple[UsageRecord, ...] = _generated_enum_usages(
             enum_columns=enum_columns,
@@ -631,7 +665,12 @@ def _build_model_inputs(
         )
         model_declaration_usages: tuple[UsageRecord, ...] = tuple(
             dict.fromkeys(
-                (*declaration_expansion.usages, *generated_usages, *hook_expansion.usages)
+                (
+                    *declaration_expansion.usages,
+                    *generated_usages,
+                    *hook_expansion.usages,
+                    *named_usages,
+                )
             )
         )
         _reject_legacy_schema_match(model_file=model_file, schema_files=legacy_schema_files)
@@ -1223,6 +1262,34 @@ def validate_python_hook_config(
             )
 
 
+def _python_hook_usages(
+    *,
+    values: dict[str, object],
+    resolver: DeclarationScopeResolver | None,
+    consumer: ResourceIdentity,
+    consumer_path: Path,
+) -> tuple[UsageRecord, ...]:
+    usages: list[UsageRecord] = []
+    hook_key: str
+    for hook_key in sorted(_MODEL_HOOK_KEYS):
+        raw_value: object | None = values.get(hook_key)
+        if not isinstance(raw_value, list | tuple):
+            continue
+        hook_entry: object
+        for hook_entry in raw_value:
+            if isinstance(hook_entry, PythonHookEntry):
+                usages.extend(
+                    named_declaration_usages(
+                        resolver=resolver,
+                        kind=DeclarationKind.PYTHON_HOOK,
+                        name=hook_entry.name,
+                        consumer=consumer,
+                        consumer_path=consumer_path,
+                    )
+                )
+    return tuple(usages)
+
+
 def validate_python_hook_signature(
     *,
     hook_entry: PythonHookEntry,
@@ -1399,6 +1466,16 @@ def expand_sql_macros_in_value(
                 f"Discovered SQL hooks: {known_hook_names}. If this is an inline SQL "
                 'statement, use inline_sql("...").'
             )
+        hook_facts: _HookExpansionFacts = context.facts
+        hook_facts.add(
+            named_declaration_usages(
+                resolver=context.declaration_expansion.resolver,
+                kind=DeclarationKind.SQL_HOOK,
+                name=value.name,
+                consumer=context.consumer,
+                consumer_path=context.file_path,
+            )
+        )
         rendered_statement: str = render_parameterized_sql(
             sql=hook_definition.sql_body,
             arguments=value.kwargs,
@@ -1418,7 +1495,7 @@ def expand_sql_macros_in_value(
             context=replace(
                 context,
                 file_path=hook_definition.file_path,
-                consumer=ResourceIdentity(ResourceKind.HOOK, value.name),
+                consumer=DeclarationIdentity(DeclarationKind.SQL_HOOK, value.name),
             ),
             hook_key=hook_key,
             hook_index=hook_index,

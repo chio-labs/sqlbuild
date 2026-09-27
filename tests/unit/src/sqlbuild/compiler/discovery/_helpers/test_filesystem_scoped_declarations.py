@@ -54,9 +54,7 @@ class _DiscoveredFile(Protocol):
         DiscoverScopedDeclarationTestCase("models", "models", "models"),
         DiscoverScopedDeclarationTestCase("unit_tests", "tests/unit", "tests/unit"),
         DiscoverScopedDeclarationTestCase("scenarios", "tests/scenarios", "tests/scenarios"),
-        DiscoverScopedDeclarationTestCase("sql_hooks", "hooks/sql", "hooks/sql"),
         DiscoverScopedDeclarationTestCase("sql_functions", "functions/sql", "functions/sql"),
-        DiscoverScopedDeclarationTestCase("audits", "audits", "audits"),
         DiscoverScopedDeclarationTestCase("sources", "sources", "sources"),
     ),
     ids=lambda case: case.description,
@@ -320,7 +318,7 @@ def test_given_invalid_scoped_root_when_discovering_project_inputs_then_strict_d
         ),
         OrdinaryDiscoveryExclusionTestCase(
             "hook",
-            "hooks/sql/domain/_constants/value.sql",
+            "models/domain/_sqlbuild/_constants/value.sql",
             "CONSTANT (name scoped_value, value 1);\n",
             "hook",
             (),
@@ -334,7 +332,7 @@ def test_given_invalid_scoped_root_when_discovering_project_inputs_then_strict_d
         ),
         OrdinaryDiscoveryExclusionTestCase(
             "audit",
-            "audits/domain/_constants/value.sql",
+            "models/domain/_sqlbuild/_constants/value.sql",
             "CONSTANT (name scoped_value, value 1);\n",
             "audit",
             (),
@@ -355,7 +353,7 @@ def test_given_invalid_scoped_root_when_discovering_project_inputs_then_strict_d
         ),
         OrdinaryDiscoveryExclusionTestCase(
             "python_hook",
-            "hooks/sql/domain/_macros/value.py",
+            "models/domain/_sqlbuild/_macros/value.py",
             "raise RuntimeError('must not import')\n",
             "python_hook",
             (),

@@ -12,6 +12,7 @@ from sqlbuild.compiler.discovery.constants import (
 )
 from sqlbuild.compiler.discovery.exceptions import ProjectPythonPathError
 from sqlbuild.compiler.scopes.constants import (
+    DECLARATION_GROUP_DIRECTORY,
     GLOBAL_DECLARATION_DIRECTORIES,
     INHERITED_DECLARATION_DIRECTORIES,
     LOCAL_DECLARATION_DIRECTORIES,
@@ -35,6 +36,12 @@ _LEGACY_DIAGNOSTIC_ROOTS: frozenset[str] = frozenset({"event_exporters"})
 _SUPPORTED_ROOT_FILES: frozenset[Path] = frozenset({Path("adapter.py")})
 _SCOPED_DECLARATION_DIRECTORIES: frozenset[str] = (
     INHERITED_DECLARATION_DIRECTORIES | LOCAL_DECLARATION_DIRECTORIES
+)
+_GROUPED_PYTHON_HOOK_ROLES: frozenset[tuple[str, str, str]] = frozenset(
+    {
+        (DECLARATION_GROUP_DIRECTORY, "hooks", "python"),
+        (DECLARATION_GROUP_DIRECTORY, "_hooks", "python"),
+    }
 )
 
 
@@ -101,5 +108,9 @@ def _is_scoped_declaration_path(parts: tuple[str, ...]) -> bool:
     for root_parts in CANONICAL_AUTHORED_ROOTS:
         if parts[: len(root_parts)] != root_parts:
             continue
-        return any(part in _SCOPED_DECLARATION_DIRECTORIES for part in parts[len(root_parts) : -1])
+        scoped_parts: tuple[str, ...] = parts[len(root_parts) : -1]
+        return any(part in _SCOPED_DECLARATION_DIRECTORIES for part in scoped_parts) or any(
+            scoped_parts[index : index + 3] in _GROUPED_PYTHON_HOOK_ROLES
+            for index in range(len(scoped_parts))
+        )
     return False

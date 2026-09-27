@@ -10,6 +10,7 @@ from sqlbuild.compiler.compile.models import CompiledSqlExpansion, SqlExpansionC
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.scopes.constants import (
+    DECLARATION_GROUP_DIRECTORY,
     INHERITED_DECLARATION_DIRECTORIES,
     LOCAL_DECLARATION_DIRECTORIES,
 )
@@ -53,7 +54,9 @@ def run_lint(
     for file_path, contents in sorted(files.items()):
         relative_parts: tuple[str, ...] = file_path.relative_to(project_dir).parts
         declaration_directories: frozenset[str] = (
-            INHERITED_DECLARATION_DIRECTORIES | LOCAL_DECLARATION_DIRECTORIES
+            INHERITED_DECLARATION_DIRECTORIES
+            | LOCAL_DECLARATION_DIRECTORIES
+            | {DECLARATION_GROUP_DIRECTORY}
         )
         headers: tuple[HeaderSpan, ...] = scan_headers(
             contents=contents,

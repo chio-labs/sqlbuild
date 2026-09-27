@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from sqlbuild.compiler.compile._helpers.named_declarations.model_schemas import (
+    model_schema_scope_usages,
+)
 from sqlbuild.compiler.compile.models import CompileProjectInputs
 from sqlbuild.compiler.scopes.main._get_placement_validated_scope_index import (
     get_placement_validated_scope_index,
@@ -19,7 +22,14 @@ from sqlbuild.compiler.scopes.models import (
 def scope_index_with_compile_usages(*, inputs: CompileProjectInputs) -> ScopeIndex:
     """Return compile inputs' canonical index with all usage and placement facts."""
 
-    collected_usages: list[UsageRecord] = []
+    collected_usages: list[UsageRecord] = list(
+        model_schema_scope_usages(
+            schema_files=inputs.discovered_inputs.model_schema_files,
+            resolver=(
+                inputs.declaration_scope.resolver if inputs.declaration_scope is not None else None
+            ),
+        )
+    )
     for model_input in inputs.model_inputs:
         collected_usages.extend(model_input.macro_usages)
         collected_usages.extend(model_input.declaration_usages)

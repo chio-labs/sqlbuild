@@ -419,10 +419,23 @@ schema = "${source_prefix}_raw"
 
 _SOURCE_DEFERRAL_AUDIT_PROJECT_FILES: dict[str, str] = {
     **_SOURCE_DEFERRAL_PROJECT_FILES,
-    "audits/singular/source_status.sql": """
+    "sources/raw.yml": """
+sources:
+  - name: raw_orders
+    managed: true
+    write_strategy: table
+    audits: [source_status]
+    columns:
+      - name: order_id
+        type: INTEGER
+      - name: status
+        type: VARCHAR
+""".strip()
+    + "\n",
+    "audits/generic/source_status.sql": """
 AUDIT ();
 
-SELECT order_id FROM __source("raw_orders") WHERE status != 'prod-audit'
+SELECT order_id FROM @relation WHERE status != 'prod-audit'
 """.strip()
     + "\n",
 }

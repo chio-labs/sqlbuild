@@ -9,8 +9,8 @@ from sqlbuild.compiler.references.types import SqlReferenceKind
 
 PRESERVE_TARGET_VALUE: str = "preserve"
 
-AUDIT_DIRECTORY_NAME: str = "audits"
-GENERIC_AUDIT_DIRECTORY_NAME: str = "generic"
+SINGULAR_AUDIT_NOT_CROSS_RESOURCE_CODE: str = "P004"
+ATTACHED_AUDIT_READS_OWN_DEPENDANT_CODE: str = "P005"
 HOOK_DIRECTORY_NAME: str = "hooks"
 MODEL_DIRECTORY_NAME: str = "models"
 NOT_NULL_AUDIT_NAME: str = "not_null"

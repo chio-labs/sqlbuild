@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from sqlbuild.compiler.auditing.types import AuditOutcome
+from sqlbuild.compiler.auditing.types import AuditOutcome, AuditSeverity
 
 
 @dataclass(frozen=True)
@@ -39,3 +39,18 @@ class NullMeasurementOutcomeCase:
 class AuditExecutionCase:
     description: str
     expected_outcome: AuditOutcome
+
+
+@dataclass(frozen=True)
+class AuditRaisedErrorCase:
+    description: str
+    severity: AuditSeverity
+    error: Exception
+    expected_execution_error: str
+
+
+@dataclass(frozen=True)
+class AuditInterruptCase:
+    description: str
+    error: BaseException
+    expected_error_type: type[BaseException]

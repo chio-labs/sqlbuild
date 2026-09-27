@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
-from sqlbuild.compiler.planner._helpers.graph.buildability import check_buildability
+from sqlbuild.compiler.planner._helpers.graph.buildability import (
+    check_buildability,
+    missing_upstream_message,
+)
+from sqlbuild.compiler.planner._helpers.graph.core import build_execution_edge_origins
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     DeferralInputs,
@@ -33,8 +37,9 @@ def check_selected_scope_buildability(
         satisfied_keys=external_seed_keys,
     )
     if missing:
-        names: str = ", ".join(m.key.name for m in missing[:5])
         raise PlannerInputError(
-            f"cannot build selected scope: {len(missing)} missing upstream dependencies ({names})",
+            missing_upstream_message(
+                missing=missing, edge_origins=build_execution_edge_origins(project)
+            ),
             code="S301",
         )

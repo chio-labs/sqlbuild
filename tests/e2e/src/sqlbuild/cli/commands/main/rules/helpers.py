@@ -19,6 +19,7 @@ def write_unevaluated_rules_project(
     selected_rules: tuple[str, ...] = ("SQBRSQL035",),
     resource_path: str = "models/staging/orders.sql",
     resource_template: str = "MODEL ({options});\nSELECT {expression} AS order_id",
+    extra_files: tuple[tuple[str, str], ...] = (),
 ) -> None:
     (project_dir / "sqlbuild_project.toml").write_text(
         f'name = "orders"\nadapter = "{adapter}"\n[rules]\nselect = {json.dumps(selected_rules)}\n'
@@ -27,6 +28,12 @@ def write_unevaluated_rules_project(
     models: Path = project_dir / "models/staging"
     models.mkdir(parents=True)
     (models / "orders.sql").write_text("MODEL ();\nSELECT 1 AS order_id\n")
+    relative_path: str
+    contents: str
+    for relative_path, contents in extra_files:
+        extra: Path = project_dir / relative_path
+        extra.parent.mkdir(parents=True, exist_ok=True)
+        extra.write_text(contents)
     resource: Path = project_dir / resource_path
     resource.parent.mkdir(parents=True, exist_ok=True)
     resource.write_text(

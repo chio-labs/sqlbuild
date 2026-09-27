@@ -57,8 +57,14 @@ _MODULE_DISCOVERIES: dict[str, Callable[..., object]] = {
         DiscoverFileFaultsTestCase(
             description="audits fault every nested SQL file",
             discovery_name="audits",
-            unreadable_files=("audits/orders.sql", "audits/nested/_customers.sql"),
-            expected_fault_paths=(Path("audits/nested/_customers.sql"), Path("audits/orders.sql")),
+            unreadable_files=(
+                "audits/singular/orders.sql",
+                "audits/generic/nested/_customers.sql",
+            ),
+            expected_fault_paths=(
+                Path("audits/generic/nested/_customers.sql"),
+                Path("audits/singular/orders.sql"),
+            ),
         ),
         DiscoverFileFaultsTestCase(
             description="constants fault declaration files",

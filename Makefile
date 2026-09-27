@@ -59,6 +59,8 @@ E2E_DUCKDB_PYTEST_ARGS := -m "$(E2E_DUCKDB_MARKERS)" -vv --color=yes -n auto --d
 
 E2E_DUCKDB_BUILD_CORE_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/no_tests_no_audits \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_attached_audit_gates.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_audit_execution_errors.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_audit_factory_failures.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_audit_failures.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_build.py \
@@ -81,6 +83,7 @@ E2E_DUCKDB_BUILD_CORE_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_reusable_model_schemas.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_runtime_artifact_preservation.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_schema_backfill_behavior.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_scoped_declarations.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_selector_surface.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_table_function_dependency.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_template_expressions.py \

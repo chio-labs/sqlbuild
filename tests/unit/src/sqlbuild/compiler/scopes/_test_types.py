@@ -5,8 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from sqlbuild.compiler.scopes.constants import SCOPE_CACHE_SCHEMA_VERSION
 from sqlbuild.compiler.scopes.models import DeclarationIdentity, ResourceIdentity
 from sqlbuild.compiler.scopes.types import (
+    DeclarationKind,
     DiagnosticSeverity,
     InaccessibleReason,
     ResourceKind,
@@ -188,7 +190,7 @@ class CacheFaultCase:
 
     description: str
     mutate: Callable[..., None]
-    expected_schema_version: int = 2
+    expected_schema_version: int = SCOPE_CACHE_SCHEMA_VERSION
 
 
 @dataclass(frozen=True)
@@ -217,5 +219,5 @@ class TolerantCategoryCase:
 
     description: str
     files: dict[str, str]
-    expected_kind: ResourceKind
+    expected_kind: ResourceKind | DeclarationKind
     expected_paths: tuple[str, ...]

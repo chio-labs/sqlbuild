@@ -17,6 +17,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledLineageSourceFact,
     CompiledModel,
     CompiledModelSqlTestPayload,
+    CompiledObjectKey,
     CompiledProject,
     CompiledSqlTest,
     CompileProjectInputs,
@@ -31,6 +32,7 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.types import ColumnLineageConfidence, ColumnTransformKind
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
+from sqlbuild.compiler.planner._helpers.graph.core import build_execution_upstream_deps
 from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
@@ -245,3 +247,46 @@ def _compiled_model_empty_names(payload: object) -> tuple[str, ...]:
 
 def _compiled_direct_tested_names(payload: object) -> tuple[str, ...]:
     return cast(CompiledDirectLogicSqlTestPayload, payload).tested_resource_names
+
+
+def singular_audit_files(*, base: dict[str, str], sql: str) -> dict[str, str]:
+    """Return project files with one top-level singular audit over the given SQL."""
+
+    return base | {"audits/singular/check.sql": f"AUDIT ();\n{sql}"}
+
+
+def model_header(*, key: str, value: str) -> str:
+    """Return a one-column model whose header sets one key."""
+
+    return f"MODEL ({key} {value});\nSELECT 1 AS order_id"
+
+
+def compile_and_assemble(*, project_dir: Path) -> CompiledProject:
+    """Attach and assemble a DuckDB fixture so scope placement is validated."""
+
+    return assemble_project(
+        inputs=compile_project_inputs(project_dir=project_dir), skip_column_inference=True
+    )
+
+
+def gate_audit(*, read: str) -> str:
+    """Return a generic audit that joins its target to another resource."""
+
+    return f"AUDIT ();\nSELECT s.* FROM @relation s LEFT JOIN {read} a USING (code)"
+
+
+def gate_model(*, sql: str, header: str = "MODEL ();") -> str:
+    """Return a model with the given header."""
+
+    return f"{header}\n{sql}"
+
+
+def execution_edge_names(*, project: CompiledProject) -> frozenset[tuple[str, str]]:
+    """Return (node, upstream) name pairs of the project's execution graph."""
+
+    edges: set[tuple[str, str]] = set()
+    key: CompiledObjectKey
+    deps: tuple[CompiledObjectKey, ...]
+    for key, deps in build_execution_upstream_deps(project).items():
+        edges.update((key.name, dep.name) for dep in deps)
+    return frozenset(edges)

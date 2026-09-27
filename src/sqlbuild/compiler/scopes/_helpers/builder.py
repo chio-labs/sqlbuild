@@ -6,7 +6,7 @@ import hashlib
 import inspect
 from collections import defaultdict
 from collections.abc import Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import CodeType
 
@@ -23,10 +23,14 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.discovery.main._scope_snapshot import discover_scope_snapshot
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
+    DiscoveredAuditFile,
     DiscoveredConstantFile,
     DiscoveredEnumFile,
+    DiscoveredHookFunction,
     DiscoveredMacroFile,
+    DiscoveredModelSchemaFile,
     DiscoveredProjectInputs,
+    DiscoveredSqlHookFile,
     DiscoveryFileFault,
     EnumDeclaration,
     TolerantScopeDiscovery,
@@ -63,11 +67,48 @@ _ROOTS: dict[ResourceKind, str] = {
     ResourceKind.MODEL: "models",
     ResourceKind.TEST: "tests/unit",
     ResourceKind.SCENARIO: "tests/scenarios",
-    ResourceKind.HOOK: "hooks/sql",
     ResourceKind.FUNCTION: "functions/sql",
-    ResourceKind.AUDIT: "audits",
     ResourceKind.SOURCE: "sources",
 }
+_SEED_ROOT: OwnershipRoot = OwnershipRoot("seeds", OwnershipRootKind.GLOBAL, ResourceKind.SEED)
+_PYTHON_FUNCTION_ROOT: OwnershipRoot = OwnershipRoot(
+    "functions/python", OwnershipRootKind.GLOBAL, ResourceKind.FUNCTION
+)
+
+
+@dataclass(frozen=True)
+class _NamedPlacement:
+    scope: ScopeKind
+    ownership_root: OwnershipRoot
+    owning_path: str | None
+
+    @classmethod
+    def of(
+        cls,
+        item: DiscoveredAuditFile
+        | DiscoveredModelSchemaFile
+        | DiscoveredSqlHookFile
+        | DiscoveredHookFunction,
+    ) -> _NamedPlacement:
+        fallback: str = normalize_path(path=item.declaration_root or item.relative_path.parent)
+        return cls(
+            scope=item.scope_kind,
+            ownership_root=_root(path=item.ownership_root, fallback=fallback),
+            owning_path=(
+                normalize_path(path=item.owning_path) if item.owning_path is not None else None
+            ),
+        )
+
+    def record(self, *, kind: DeclarationKind, name: str, path: Path) -> DeclarationRecord:
+        return DeclarationRecord(
+            identity=DeclarationIdentity(kind, name),
+            path=normalize_path(path=path),
+            line=1,
+            column=1,
+            scope=self.scope,
+            ownership_root=self.ownership_root,
+            owning_path=self.owning_path,
+        )
 
 
 def build_index(
@@ -114,12 +155,6 @@ def build_index(
                 path=scenario_file.relative_path,
             )
         )
-    for hook_file in discovered_inputs.sql_hook_files:
-        resources.append(
-            _resource_record(
-                kind=ResourceKind.HOOK, name=hook_file.name, path=hook_file.relative_path
-            )
-        )
     for function_file in discovered_inputs.sql_function_files:
         resources.append(
             _resource_record(
@@ -131,15 +166,24 @@ def build_index(
                 path=function_file.relative_path,
             )
         )
-    for audit_file in discovered_inputs.audit_files:
-        for block in audit_file.blocks:
-            resources.append(
-                _resource_record(
-                    kind=ResourceKind.AUDIT,
-                    name=block.name or audit_file.relative_path.stem,
-                    path=audit_file.relative_path,
-                )
+    for python_function_file in discovered_inputs.python_function_files:
+        resources.append(
+            ResourceRecord(
+                identity=ResourceIdentity(
+                    ResourceKind.FUNCTION, python_function_file.file_path.stem
+                ),
+                path=normalize_path(path=python_function_file.relative_path),
+                ownership_root=_PYTHON_FUNCTION_ROOT,
             )
+        )
+    for seed_file in discovered_inputs.seed_files:
+        resources.append(
+            ResourceRecord(
+                identity=ResourceIdentity(ResourceKind.SEED, seed_file.file_path.stem),
+                path=normalize_path(path=seed_file.relative_path),
+                ownership_root=_SEED_ROOT,
+            )
+        )
     for source_file in discovered_inputs.source_files:
         for source in source_file.source_entries:
             resources.append(
@@ -154,6 +198,7 @@ def build_index(
         declarations.extend(_enum_file_records(enum_file))
     for constant_file in discovered_inputs.constant_files:
         declarations.extend(_constant_file_records(constant_file))
+    declarations.extend(_named_declaration_records(discovered_inputs=discovered_inputs))
     if loaded_macros is not None:
         macro_files: dict[str, DiscoveredMacroFile] = {
             normalize_path(path=item.relative_path): item for item in discovered_inputs.macro_files
@@ -381,6 +426,54 @@ def _constant_file_records(file: DiscoveredConstantFile) -> list[DeclarationReco
         )
         for item in file.declarations
     ]
+
+
+def _named_declaration_records(
+    *, discovered_inputs: DiscoveredProjectInputs
+) -> list[DeclarationRecord]:
+    records: list[DeclarationRecord] = []
+    for audit_file in discovered_inputs.audit_files:
+        placement: _NamedPlacement = _NamedPlacement.of(audit_file)
+        if audit_file.declaration_kind is DeclarationKind.AUDIT:
+            records.append(
+                placement.record(
+                    kind=DeclarationKind.AUDIT,
+                    name=audit_file.relative_path.stem,
+                    path=audit_file.relative_path,
+                )
+            )
+            continue
+        records.extend(
+            placement.record(
+                kind=DeclarationKind.SINGULAR_AUDIT,
+                name=block.name or audit_file.relative_path.stem,
+                path=audit_file.relative_path,
+            )
+            for block in audit_file.blocks
+        )
+    for schema_file in discovered_inputs.model_schema_files:
+        placement = _NamedPlacement.of(schema_file)
+        records.extend(
+            placement.record(
+                kind=DeclarationKind.SCHEMA, name=declaration.name, path=schema_file.relative_path
+            )
+            for declaration in schema_file.declarations
+        )
+    for hook_file in discovered_inputs.sql_hook_files:
+        records.append(
+            _NamedPlacement.of(hook_file).record(
+                kind=DeclarationKind.SQL_HOOK, name=hook_file.name, path=hook_file.relative_path
+            )
+        )
+    for hook_function in discovered_inputs.hook_functions:
+        records.append(
+            _NamedPlacement.of(hook_function).record(
+                kind=DeclarationKind.PYTHON_HOOK,
+                name=hook_function.name,
+                path=hook_function.relative_path,
+            )
+        )
+    return records
 
 
 def _private_declarations(

@@ -35,7 +35,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
                 Path("seeds/waffle_types.csv"),
                 Path("sources/raw.yml"),
                 Path("tests/unit/test_daily_revenue_chain.sql"),
-                Path("audits/generic/expression_is_true.sql"),
+                Path("models/marts/_sqlbuild/_audits/generic/expression_is_true.sql"),
                 Path("functions/sql/udf__is_completed_order.sql"),
                 Path("functions/sql/table_fn__customer_orders.sql"),
                 Path("python/loaders/waffle_sources.py"),

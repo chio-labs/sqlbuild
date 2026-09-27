@@ -9,7 +9,6 @@ from sqlbuild.compiler.auditing.types import (
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledObjectKey,
-    CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
@@ -20,34 +19,48 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.compiler.references.types import SqlReferenceKind
 
+_ATTACHMENT_KINDS: dict[AttachedAuditTargetKind, AuditAttachmentKind] = {
+    AttachedAuditTargetKind.MODEL: AuditAttachmentKind.MODEL,
+    AttachedAuditTargetKind.SOURCE: AuditAttachmentKind.SOURCE,
+    AttachedAuditTargetKind.SEED: AuditAttachmentKind.SEED,
+}
+
 
 def resolve_attachment_kind(
     *,
     audit: CompiledAudit,
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> tuple[AuditAttachmentKind, str | None]:
-    """Resolve audit attachment kind and attached target name."""
+    """Resolve audit attachment kind and attached target name; attached audits gate their target."""
 
-    if audit.attached_target_kind == AttachedAuditTargetKind.SOURCE:
-        _validate_source_attached_audit(audit=audit)
-        if _source_lifecycle_attachment_is_safe(audit=audit):
-            return AuditAttachmentKind.SOURCE, audit.attached_target_name
-        return AuditAttachmentKind.END, audit.attached_target_name
+    if audit.attached_target_kind is not None:
+        if audit.attached_target_name is None:
+            raise PlannerInputError(
+                f"audit '{audit.name}': attached audit is missing an attached target name"
+            )
+        return _ATTACHMENT_KINDS[AttachedAuditTargetKind(audit.attached_target_kind)], (
+            audit.attached_target_name
+        )
+    return _infer_singular_attachment(audit=audit, downstream_deps=downstream_deps)
 
-    if audit.attached_target_kind == AttachedAuditTargetKind.MODEL:
-        if _model_lifecycle_attachment_is_safe(
-            audit=audit,
-            upstream_deps=upstream_deps,
-        ):
-            return AuditAttachmentKind.MODEL, audit.attached_target_name
-        return AuditAttachmentKind.END, audit.attached_target_name
 
-    return _infer_singular_attachment(
-        audit=audit,
-        upstream_deps=upstream_deps,
-        downstream_deps=downstream_deps,
+def reads_outside_target_lineage(
+    *,
+    audit: CompiledAudit,
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+) -> bool:
+    """Return whether an attached model audit reads anything besides its target and upstream."""
+
+    if audit.attached_target_kind is None or audit.attached_target_name is None:
+        return False
+    target: CompiledObjectKey = CompiledObjectKey(
+        resource_type=AttachedAuditTargetKind(audit.attached_target_kind).resource_type,
+        name=audit.attached_target_name,
     )
+    lineage: frozenset[CompiledObjectKey] = frozenset(
+        {target, *expand_upstream(key=target, upstream=upstream_deps)}
+    )
+    return any(dep_key not in lineage for dep_key in audit.scope_deps)
 
 
 def resolve_effective_run_scope(
@@ -69,62 +82,9 @@ def resolve_effective_run_scope(
     return AuditRunScope.DELTA_AND_FINAL
 
 
-def _validate_source_attached_audit(*, audit: CompiledAudit) -> None:
-    """Validate that a source-attached audit does not reference models."""
-
-    ref: CompileSqlReference
-    for ref in audit.references:
-        if ref.ref_kind == SqlReferenceKind.REF:
-            raise PlannerInputError(
-                f"audit '{audit.name}': source-attached audit must not reference models "
-                f"via {SqlReferenceKind.REF.placeholder_call()}; found "
-                f"{SqlReferenceKind.REF.example_call(ref.ref_name)}"
-            )
-
-
-def _source_lifecycle_attachment_is_safe(*, audit: CompiledAudit) -> bool:
-    """Return whether an attached audit only depends on its target source."""
-
-    if audit.attached_target_name is None:
-        raise PlannerInputError(
-            f"audit '{audit.name}': source-attached audit is missing an attached source name"
-        )
-    attached_key: CompiledObjectKey = CompiledObjectKey(
-        resource_type=CompiledResourceType.SOURCE,
-        name=audit.attached_target_name,
-    )
-    return all(dep_key == attached_key for dep_key in audit.scope_deps)
-
-
-def _model_lifecycle_attachment_is_safe(
-    *,
-    audit: CompiledAudit,
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-) -> bool:
-    """Return whether an attached audit can run inside the target model lifecycle."""
-
-    if audit.attached_target_name is None:
-        raise PlannerInputError(
-            f"audit '{audit.name}': model-attached audit is missing an attached model name"
-        )
-    attached_key: CompiledObjectKey = CompiledObjectKey(
-        resource_type=CompiledResourceType.MODEL, name=audit.attached_target_name
-    )
-    attached_upstream: frozenset[CompiledObjectKey] = expand_upstream(
-        key=attached_key, upstream=upstream_deps
-    )
-
-    dep_key: CompiledObjectKey
-    for dep_key in audit.scope_deps:
-        if dep_key != attached_key and dep_key not in attached_upstream:
-            return False
-    return True
-
-
 def _infer_singular_attachment(
     *,
     audit: CompiledAudit,
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> tuple[AuditAttachmentKind, str | None]:
     """Infer attachment for a singular audit from its refs and graph structure."""
