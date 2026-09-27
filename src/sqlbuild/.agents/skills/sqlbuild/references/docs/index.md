@@ -7,7 +7,7 @@
 Online: https://sqlbuild.com/docs/
 
 SQLBuild is a free, open-source framework for SQL and Python data pipelines. It brings compile-time
-checks, tests and safe renames to your warehouse, so you can change it as often as you change your code.
+checks, tests and diffs to your warehouse, so you can change it as often as you change your code.
 
 Valid SQL isn't the same as correct SQL. A query can compile, run and return rows, and still produce
 a wrong number that people already trust. SQLBuild is built to catch that before it reaches
