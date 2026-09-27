@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -19,11 +20,15 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.run.models import HookContext
-from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
+from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks
+from sqlbuild.executor.run.models import HookContext, HookRelationLookup, HookRunContext
+from sqlbuild.executor.run.types import HookPhase
+from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily, SourceEntry
 
 
 def insert_snapshot_hook_log(ctx: HookContext, phase: str) -> None:
@@ -298,3 +303,56 @@ def build_recording_adapter(
         "postgres": RecordingPostgresAdapter,
         "duckdb": RecordingDuckDbAdapter,
     }[adapter_name]()
+
+
+def run_python_hook_with_relations(
+    *,
+    function: Callable[..., object],
+    reads: tuple[SqlResourceRef, ...],
+    enforce_explicit_references: bool = True,
+    warnings: list[str] | None = None,
+) -> None:
+    """Run one post-hook on ``orders`` with ``customers`` and ``raw_orders`` planned."""
+
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": ":memory:"})
+    connection.execute("CREATE TABLE customers AS SELECT 1 AS customer_id")
+    connection.execute("CREATE SCHEMA raw")
+    connection.execute("CREATE TABLE raw.orders AS SELECT 1 AS order_id")
+    execute_hooks(
+        connection=connection,
+        adapter=adapter,
+        hooks=[PythonHookEntry(name="refresh_lookup", kwargs={})],
+        phase=HookPhase.POST_HOOKS,
+        hook_functions=(
+            DiscoveredHookFunction(
+                file_path=Path(__file__),
+                relative_path=Path("hooks/python/lookups.py"),
+                name="refresh_lookup",
+                function=function,
+                reads=reads,
+            ),
+        ),
+        hook_run=HookRunContext(
+            model_name="orders",
+            destination=CompiledRelationLocation(
+                database=None, schema="main", name="orders", qualified_name=None
+            ),
+            run_id="run-1",
+            relation_lookup=HookRelationLookup(
+                model_locations={
+                    "customers": CompiledRelationLocation(
+                        database=None, schema="main", name="customers", qualified_name=None
+                    ),
+                    "orders": CompiledRelationLocation(
+                        database=None, schema="main", name="orders", qualified_name=None
+                    ),
+                },
+                source_map={
+                    "raw_orders": SourceEntry(name="raw_orders", schema="raw", table="orders")
+                },
+            ),
+            warnings=warnings,
+            enforce_explicit_references=enforce_explicit_references,
+        ),
+    )

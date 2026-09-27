@@ -15,3 +15,12 @@ class AttachedAuditGateEdge:
     target: CompiledObjectKey
     gated: CompiledObjectKey
     read: CompiledObjectKey
+
+
+@dataclass(frozen=True)
+class HookReadEdge:
+    """One ordering edge: a model waits for a resource its Python hook declares it reads."""
+
+    hook_name: str
+    gated: CompiledObjectKey
+    read: CompiledObjectKey

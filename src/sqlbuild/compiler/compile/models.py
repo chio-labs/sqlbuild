@@ -1047,6 +1047,7 @@ class CompiledProject:
     sql_scenarios: tuple[CompiledSqlScenario, ...] = field(default_factory=tuple)
     loader_functions: tuple[DiscoveredLoaderFunction, ...] = field(default_factory=tuple)
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
+    enforce_explicit_references: bool = True
     sql_hook_files: tuple[DiscoveredSqlHookFile, ...] = field(default_factory=tuple)
     materialization_files: tuple[DiscoveredMaterializationFile, ...] = field(default_factory=tuple)
     public_enums: dict[str, EnumDeclaration] = field(default_factory=dict)

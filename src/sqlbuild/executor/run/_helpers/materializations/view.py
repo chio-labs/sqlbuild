@@ -17,7 +17,7 @@ from sqlbuild.compiler.planner.models import AuditPlanEntry, ModelPlanEntry
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.main._execute import execute_audit
 from sqlbuild.executor.auditing.models import AuditExecutionResult
-from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
+from sqlbuild.executor.run._helpers.execution.hook_phases import build_model_hook_run
 from sqlbuild.executor.run._helpers.execution.hooks import execute_hooks, render_hooks
 from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
@@ -26,13 +26,11 @@ from sqlbuild.executor.run._helpers.execution.results import (
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run.models import (
     HookExecutionResult,
-    HookRunContext,
     ModelExecutionResult,
     ModelMaterializationContext,
 )
 from sqlbuild.executor.run.types import ExecutionPhase, HookPhase
 from sqlbuild.executor.scheduling.types import ExecutionStatus
-from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -52,10 +50,7 @@ def execute_view_entry(
     run_id: str = context.run_id
     query_change_tracking: bool = context.query_change_tracking
     hook_functions: tuple[DiscoveredHookFunction, ...] = context.hook_functions
-    effective_target_name: str | None = context.effective_target_name
     effective_vars: Mapping[str, object] | None = context.effective_vars
-    providers: ProviderContainer | None = context.providers
-    python_identity_recorder: PythonIdentityRecorder | None = context.python_identity_recorder
     target_database: str | None = entry.destination.database
     target_schema: str | None = entry.destination.schema
     target_qualified: str = resolve_relation_location_qualified_name(
@@ -78,15 +73,11 @@ def execute_view_entry(
                 phase=HookPhase.PRE_HOOKS,
                 hook_functions=hook_functions,
                 hook_results=hook_results,
-                hook_run=HookRunContext(
-                    model_name=entry.name,
-                    destination=entry.destination,
-                    run_id=run_id,
-                    target=effective_target_name,
-                    effective_vars=effective_vars,
+                hook_run=build_model_hook_run(
+                    context=context,
                     statement_recorder=statement_recorder,
-                    providers=providers,
-                    python_identity_recorder=python_identity_recorder,
+                    warnings=warnings,
+                    effective_vars=effective_vars,
                 ),
             )
         if pre_hook_skipped:
@@ -179,15 +170,11 @@ def execute_view_entry(
                 phase=HookPhase.POST_HOOKS,
                 hook_functions=hook_functions,
                 hook_results=hook_results,
-                hook_run=HookRunContext(
-                    model_name=entry.name,
-                    destination=entry.destination,
-                    run_id=run_id,
-                    target=effective_target_name,
-                    effective_vars=effective_vars,
+                hook_run=build_model_hook_run(
+                    context=context,
                     statement_recorder=statement_recorder,
-                    providers=providers,
-                    python_identity_recorder=python_identity_recorder,
+                    warnings=warnings,
+                    effective_vars=effective_vars,
                 ),
             )
         if post_hook_skipped:

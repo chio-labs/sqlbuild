@@ -22,6 +22,7 @@ from sqlbuild.compiler.python_nodes.types import (
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.node_results.models import NodeResultEnvelope
+from sqlbuild.executor.python_nodes.classes.runtime_relation_guard import RuntimeRelationGuard
 from sqlbuild.executor.python_nodes.constants import (
     MISSING_DEFAULT,
     PYTHON_NODE_RELATION_QUALIFIER_SEPARATOR,
@@ -98,6 +99,7 @@ class PythonNodeExecutionResult:
     skip_mode: SkipMode | None = None
     skip_reason: str | None = None
     error_message: str | None = None
+    warning_messages: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -145,6 +147,7 @@ class PythonNodeRuntime:
     default_database: str | None = None
     default_schema: str | None = None
     relation_targets: dict[SqlResourceRef, str] | None = None
+    project_relations: dict[SqlResourceRef, str] | None = None
     start_cursor_ts: datetime | None = None
     end_cursor_ts: datetime | None = None
     start_cursor_int: int | None = None
@@ -189,6 +192,7 @@ class BasePythonNodeContext:
     default_schema: str | None = None
     relation_targets: dict[SqlResourceRef, str] = field(default_factory=dict)
     allowed_sql_refs: frozenset[SqlResourceRef] = frozenset()
+    relation_guard: RuntimeRelationGuard | None = field(default=None, repr=False)
     providers: ProviderContainer = field(default_factory=_empty_provider_container)
     use_color: bool = False
     start_cursor_ts: datetime | None = None
@@ -197,10 +201,14 @@ class BasePythonNodeContext:
     end_cursor_int: int | None = None
 
     def execute_sql(self, sql: str) -> Any:
+        if self.relation_guard is not None:
+            self.relation_guard.check(sql)
         self.statement_recorder.record(sql)
         return self.adapter.execute(connection=self.connection, sql=sql)
 
     def query(self, sql: str) -> Any:
+        if self.relation_guard is not None:
+            self.relation_guard.check(sql)
         self.statement_recorder.record(sql)
         return self.adapter.execute(connection=self.connection, sql=sql)
 
@@ -236,6 +244,8 @@ class BasePythonNodeContext:
         relation: str | None = self.relation_targets.get(ref)
         if relation is None:
             raise ExecutorInputError(f"No runtime relation found for SQL ref '{ref.name}'")
+        if self.relation_guard is not None:
+            self.relation_guard.record_resolved(ref)
         return relation
 
     def skip(

@@ -7,7 +7,7 @@ from collections.abc import Callable
 from sqlbuild.executor.run.models import HookContext, HookSkipResult
 from sqlbuild.python_nodes.main.apply_hook import apply_hook
 from sqlbuild.python_nodes.main.read_hook_definition import read_hook_definition
-from sqlbuild.python_nodes.models import HookDefinition
+from sqlbuild.python_nodes.models import HookDefinition, SqlResourceRef
 
 __all__ = ("HookContext", "HookDefinition", "HookSkipResult", "get_hook_definition", "hook")
 
@@ -17,10 +17,11 @@ def hook(
     *,
     name: str | None = None,
     description: str | None = None,
+    reads: SqlResourceRef | tuple[SqlResourceRef, ...] | list[SqlResourceRef] = (),
 ) -> Callable[..., object] | Callable[[Callable[..., object]], Callable[..., object]]:
     """Mark a Python function as a SQLBuild model lifecycle hook."""
 
-    return apply_hook(function=function, name=name, description=description)
+    return apply_hook(function=function, name=name, description=description, reads=reads)
 
 
 def get_hook_definition(function: Callable[..., object]) -> HookDefinition | None:

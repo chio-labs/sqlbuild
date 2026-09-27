@@ -501,6 +501,7 @@ class DiscoveredHookFunction:
     name: str
     function: Callable[..., object]
     description: str | None = None
+    reads: tuple[SqlResourceRef, ...] = field(default_factory=tuple)
     provider_usages: tuple[DiscoveredProviderUsage, ...] = field(default_factory=tuple)
     scope_kind: ScopeKind = ScopeKind.GLOBAL
     ownership_root: Path | None = None

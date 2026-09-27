@@ -1009,3 +1009,38 @@ class AuditReadPlanE2ETestCase:
     description: str
     select: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class ExplicitReferenceBuildE2ETestCase:
+    """A build of a project using typed macro references and Python hook reads."""
+
+    description: str
+    overrides: dict[str, str]
+    expected_exit_code: int
+    expected_dag_edges: tuple[tuple[str, str], ...]
+    expected_customer_counts: tuple[tuple[object, ...], ...]
+    expected_order_before: tuple[str, str]
+
+
+@dataclass(frozen=True)
+class ExplicitReferenceFailureE2ETestCase:
+    """A project whose references are not explicit, and the failure it reports."""
+
+    description: str
+    overrides: dict[str, str]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExplicitReferenceRuntimeWarningE2ETestCase:
+    """A build whose Python SQL hard-codes a project relation only at run time."""
+
+    description: str
+    overrides: dict[str, str]
+    enforce_explicit: bool
+    expected_exit_code: int
+    expected_warning_fragments: tuple[str, ...]
+    expected_final_line_prefix: str

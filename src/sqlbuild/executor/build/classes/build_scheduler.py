@@ -1053,6 +1053,7 @@ class BuildScheduler:
                         query_change_tracking=self._query_change_tracking,
                         schema_prepared=self._schema_prepared,
                         hook_functions=self._plan.hook_functions,
+                        enforce_explicit_references=self._plan.enforce_explicit_references,
                         effective_target_name=self._target,
                         effective_vars=self._effective_vars,
                         providers=self._providers,

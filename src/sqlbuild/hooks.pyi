@@ -4,6 +4,7 @@ from typing import overload
 from sqlbuild.executor.run.models import HookContext as HookContext
 from sqlbuild.executor.run.models import HookSkipResult as HookSkipResult
 from sqlbuild.python_nodes.models import HookDefinition as HookDefinition
+from sqlbuild.python_nodes.models import SqlResourceRef
 
 __all__ = ("HookContext", "HookDefinition", "HookSkipResult", "get_hook_definition", "hook")
 
@@ -11,6 +12,9 @@ __all__ = ("HookContext", "HookDefinition", "HookSkipResult", "get_hook_definiti
 def hook(function: Callable[..., object]) -> Callable[..., object]: ...
 @overload
 def hook(
-    *, name: str | None = None, description: str | None = None
+    *,
+    name: str | None = None,
+    description: str | None = None,
+    reads: SqlResourceRef | tuple[SqlResourceRef, ...] | list[SqlResourceRef] = (),
 ) -> Callable[[Callable[..., object]], Callable[..., object]]: ...
 def get_hook_definition(function: Callable[..., object]) -> HookDefinition | None: ...

@@ -1356,6 +1356,7 @@ class PlanOutput:
     source_map: dict[str, SourceEntry] = field(default_factory=dict)
     source_read_map: dict[str, SourceEntry] = field(default_factory=dict)
     hook_functions: tuple[DiscoveredHookFunction, ...] = field(default_factory=tuple)
+    enforce_explicit_references: bool = True
     provider_usages: tuple[PlanProviderUsage, ...] = field(default_factory=tuple)
     source_freshness: DirectSourceFreshnessPlanningResult | None = None
     python_identity_fingerprints: dict[tuple[str, str], Fingerprint] = field(default_factory=dict)

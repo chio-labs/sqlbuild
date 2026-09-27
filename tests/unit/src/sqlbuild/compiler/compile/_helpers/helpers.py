@@ -347,3 +347,27 @@ def resolve_model_references_for_adapter(*, sql: str, adapter_name: str) -> str:
         cursor_type=None,
         lower_bound_inclusive=True,
     )
+
+
+def python_hook_source(*, reads: str = "()", body: str = "    return None\n") -> str:
+    """Return a Python hook module defining ``refresh_lookup`` with declared reads."""
+
+    return (
+        "from sqlbuild.hooks import hook\n"
+        "from sqlbuild.refs import model, seed, source\n\n\n"
+        f"@hook(reads={reads})\n"
+        "def refresh_lookup(ctx):\n"
+        f"{body}"
+    )
+
+
+def python_task_source(*, body: str) -> str:
+    """Return a Python task module defining ``export_orders`` that depends on ``orders``."""
+
+    return (
+        "from sqlbuild.refs import model\n"
+        "from sqlbuild.tasks import task\n\n\n"
+        '@task(depends_on=model("orders"))\n'
+        "def export_orders(ctx):\n"
+        f"{body}"
+    )

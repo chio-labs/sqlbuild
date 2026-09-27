@@ -100,6 +100,13 @@ def prepare_direct_python_lifecycle(
             ),
         ),
     )
+    project_relations: dict[SqlResourceRef, str] | None = (
+        build_python_relation_targets(
+            adapter=adapter, project=pipeline_result.project, plan_output=plan_output
+        )
+        if pipeline_result.project.enforce_explicit_references
+        else None
+    )
     default_database: str | None = pipeline_result.project.effective_target_database
     if default_database is None:
         default_database = adapter.default_database()
@@ -141,6 +148,7 @@ def prepare_direct_python_lifecycle(
                     start_cursor_int=start_cursor_int,
                     end_cursor_int=end_cursor_int,
                     relation_targets=relation_targets,
+                    project_relations=project_relations,
                     providers=providers,
                 ),
                 callbacks=IngressCallbacks(
@@ -181,6 +189,7 @@ def prepare_direct_python_lifecycle(
                 default_database=default_database,
                 default_schema=default_schema,
                 relation_targets=relation_targets,
+                project_relations=project_relations,
                 start_cursor_ts=start_cursor_ts,
                 end_cursor_ts=end_cursor_ts,
                 start_cursor_int=start_cursor_int,

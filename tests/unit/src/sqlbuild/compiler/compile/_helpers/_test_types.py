@@ -985,3 +985,39 @@ class TypedReferenceAdapterRenderingTestCase:
     description: str
     adapter_name: str
     expected_resolved_sql: str
+
+
+@dataclass(frozen=True)
+class HookReadEdgeTestCase:
+    """A Python hook declaring reads, and the ordering edges its model gains."""
+
+    description: str
+    files: dict[str, str]
+    expected_edges: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class HookReadErrorTestCase:
+    """A Python hook declaring reads that cannot be satisfied."""
+
+    description: str
+    files: dict[str, str]
+    expected_error_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PythonSqlReferenceErrorTestCase:
+    """A task, asset, or hook whose literal SQL hard-codes a project relation name."""
+
+    description: str
+    files: dict[str, str]
+    expected_error_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PythonSqlReferenceAllowedTestCase:
+    """Python SQL that compiles because it names no undeclared project relation literally."""
+
+    description: str
+    files: dict[str, str]
+    expected_model_names: tuple[str, ...]

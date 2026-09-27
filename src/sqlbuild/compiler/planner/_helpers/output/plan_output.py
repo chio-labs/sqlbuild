@@ -166,6 +166,7 @@ def build_plan_output(
         source_map=relations.source_map,
         source_read_map=relations.source_read_map,
         hook_functions=project.hook_functions,
+        enforce_explicit_references=project.enforce_explicit_references,
         provider_usages=_build_provider_usages(
             project=project,
             model_entries=model_entry_results.entries,

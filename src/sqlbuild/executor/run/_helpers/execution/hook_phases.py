@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
@@ -13,6 +15,7 @@ from sqlbuild.executor.run._helpers.execution.results import (
 )
 from sqlbuild.executor.run.models import (
     HookExecutionResult,
+    HookRelationLookup,
     HookRunContext,
     ModelExecutionResult,
     ModelMaterializationContext,
@@ -45,7 +48,7 @@ def run_pre_hook_phase(
                 hook_functions=context.hook_functions,
                 hook_results=hook_results,
                 hook_run=build_model_hook_run(
-                    context=context, statement_recorder=statement_recorder
+                    context=context, statement_recorder=statement_recorder, warnings=warnings
                 ),
             )
         if pre_hook_skipped:
@@ -95,7 +98,7 @@ def run_post_hook_phase(
                 hook_functions=context.hook_functions,
                 hook_results=hook_results,
                 hook_run=build_model_hook_run(
-                    context=context, statement_recorder=statement_recorder
+                    context=context, statement_recorder=statement_recorder, warnings=warnings
                 ),
             )
     except Exception as exc:
@@ -119,6 +122,8 @@ def build_model_hook_run(
     *,
     context: ModelMaterializationContext,
     statement_recorder: StatementRecorder,
+    warnings: list[str],
+    effective_vars: Mapping[str, object] | None = None,
 ) -> HookRunContext:
     """Build the hook run context for one model's lifecycle hooks."""
 
@@ -127,8 +132,15 @@ def build_model_hook_run(
         destination=context.entry.destination,
         run_id=context.run_id,
         target=context.effective_target_name,
-        effective_vars=context.effective_vars,
+        effective_vars=context.effective_vars if effective_vars is None else effective_vars,
         statement_recorder=statement_recorder,
         providers=context.providers,
         python_identity_recorder=context.python_identity_recorder,
+        relation_lookup=HookRelationLookup(
+            model_locations=context.model_locations,
+            seed_locations=context.seed_locations,
+            source_map=context.source_map,
+        ),
+        warnings=warnings,
+        enforce_explicit_references=context.enforce_explicit_references,
     )

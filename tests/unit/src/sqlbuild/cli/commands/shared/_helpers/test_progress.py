@@ -623,6 +623,29 @@ def test_given_audit_results_when_aggregating_then_produces_expected_entries(
             unexpected_fragments=("\033[",),
         ),
         BuildFooterTestCase(
+            description="model warning counts the model as warned and precedes the completion line",
+            result=BuildExecutionResult(
+                status=BuildStatus.SUCCESS,
+                model_results=(
+                    ModelExecutionResult(
+                        model_name="orders",
+                        status=ExecutionStatus.SUCCESS,
+                        warning_messages=("[P008] hook 'refresh_lookup' named model:customers",),
+                    ),
+                ),
+                success_count=1,
+                warning_count=1,
+            ),
+            expected_fragments=(
+                "Warnings:",
+                "[P008] hook 'refresh_lookup' named model:customers\n\n\u2713 Completed with warnings",
+                "PASS=0",
+                "WARN=1",
+                "TOTAL=1",
+            ),
+            unexpected_fragments=("\033[",),
+        ),
+        BuildFooterTestCase(
             description="warning footer uses semantic colors",
             result=BuildExecutionResult(
                 status=BuildStatus.SUCCESS,

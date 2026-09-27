@@ -7,6 +7,10 @@ from pathlib import Path
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.assembly.audit_gates import validate_attached_audit_gates
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
+from sqlbuild.compiler.compile._helpers.explicit_references.hook_reads import validate_hook_reads
+from sqlbuild.compiler.compile._helpers.explicit_references.python_sql import (
+    validate_python_sql_references,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompileProjectInputs,
@@ -34,4 +38,7 @@ def assemble_project(
         analysis_model_names=analysis_model_names,
     )
     validate_attached_audit_gates(project=project)
+    validate_hook_reads(project=project)
+    if inputs.project_config.references.enforce_explicit:
+        validate_python_sql_references(project=project, discovered_inputs=inputs.discovered_inputs)
     return project

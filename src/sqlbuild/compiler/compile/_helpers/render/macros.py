@@ -16,7 +16,7 @@ from pathlib import Path
 from types import MappingProxyType, ModuleType
 from typing import cast
 
-from sqlbuild.compiler.compile._helpers.render.macro_references import (
+from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
     evaluate_typed_reference,
     reject_macro_generated_references,
     relation_placeholder_text,

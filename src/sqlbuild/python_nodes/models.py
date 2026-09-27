@@ -128,6 +128,7 @@ class HookDefinition:
 
     name: str
     description: str | None = None
+    reads: tuple[SqlResourceRef, ...] = ()
 
 
 @dataclass(frozen=True)
