@@ -16,10 +16,15 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredPythonNodeFunctions,
     DiscoveredTaskFunction,
 )
+from sqlbuild.compiler.python_nodes.main.identity import build_python_node_identity
+from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DiscoverCheckFunctionsTestCase,
+    DiscoverPythonRootImportTestCase,
     DiscoverPythonRootNodesTestCase,
     DiscoverTaskAssetFunctionsTestCase,
+    PythonRootHelperIdentityTestCase,
+    PythonRootProjectIsolationTestCase,
 )
 
 
@@ -350,3 +355,198 @@ def test_given_python_root_when_discovering_python_nodes_then_decorators_define_
         *(("check", node.name, node.relative_path.as_posix()) for node in result.checks),
     )
     assert discovered == test_case.expected_nodes
+
+
+_HELPER_PACKAGE_FILES: dict[str, str] = {
+    "python/helpers/__init__.py": "",
+    "python/helpers/values.py": """
+from pathlib import Path
+
+Path(__file__).resolve().parents[2].joinpath("init_count.txt").open("a").write("values\\n")
+STATUS = "shipped"
+""",
+    "python/helpers/clean.py": """
+from .values import STATUS
+
+
+def normalize_status(value):
+    return f"{value.strip().lower()}:{STATUS}"
+""",
+    "python/orders.py": """
+import python.helpers.clean
+from sqlbuild.tasks import task
+
+
+@task
+def orders(ctx):
+    return python.helpers.clean.normalize_status(" Shipped ")
+""",
+}
+
+
+def _write_files(*, root: Path, files: dict[str, str]) -> None:
+    relative_path: str
+    contents: str
+    for relative_path, contents in files.items():
+        file_path: Path = root / relative_path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(contents, encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DiscoverPythonRootImportTestCase(
+            description="imports helper packages with relative imports once per discovery pass",
+            files=_HELPER_PACKAGE_FILES,
+            expected_task_names=("orders",),
+            expected_init_count=1,
+        ),
+        DiscoverPythonRootImportTestCase(
+            description="shares one helper module between nodes that import it absolutely",
+            files={
+                "python/_counter.py": """
+from pathlib import Path
+
+Path(__file__).resolve().parents[1].joinpath("init_count.txt").open("a").write("counter\\n")
+""",
+                "python/tasks/first.py": """
+import python._counter
+from sqlbuild.tasks import task
+
+
+@task
+def first_task(ctx):
+    return None
+""",
+                "python/tasks/second.py": """
+from python import _counter
+from sqlbuild.tasks import task
+
+
+@task
+def second_task(ctx):
+    return None
+""",
+            },
+            expected_task_names=("first_task", "second_task"),
+            expected_init_count=1,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_python_root_helpers_when_discovering_then_modules_import_under_package_names(
+    test_case: DiscoverPythonRootImportTestCase,
+    tmp_path: Path,
+) -> None:
+    _write_files(root=tmp_path, files=test_case.files)
+
+    result: DiscoveredPythonNodeFunctions = discover_python_node_functions(project_dir=tmp_path)
+
+    assert tuple(node.name for node in result.tasks) == test_case.expected_task_names
+    assert all(node.function.__module__.startswith("python.") for node in result.tasks)
+    init_lines: list[str] = (tmp_path / "init_count.txt").read_text().splitlines()
+    assert len(init_lines) == test_case.expected_init_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonRootProjectIsolationTestCase(
+            description="second project imports its own python helpers",
+            first_files={
+                "python/_values.py": "STATUS = 'first'\n",
+                "python/orders.py": """
+from python._values import STATUS
+from sqlbuild.tasks import task
+
+
+@task
+def orders(ctx):
+    return STATUS
+""",
+            },
+            second_files={
+                "python/_values.py": "STATUS = 'second'\n",
+                "python/orders.py": """
+from python._values import STATUS
+from sqlbuild.tasks import task
+
+
+@task
+def orders(ctx):
+    return STATUS
+""",
+            },
+            expected_first_result="first",
+            expected_second_result="second",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_two_projects_when_discovering_sequentially_then_python_modules_are_isolated(
+    test_case: PythonRootProjectIsolationTestCase,
+    tmp_path: Path,
+) -> None:
+    first_dir: Path = tmp_path / "first"
+    second_dir: Path = tmp_path / "second"
+    _write_files(root=first_dir, files=test_case.first_files)
+    _write_files(root=second_dir, files=test_case.second_files)
+
+    first: DiscoveredPythonNodeFunctions = discover_python_node_functions(project_dir=first_dir)
+    second: DiscoveredPythonNodeFunctions = discover_python_node_functions(project_dir=second_dir)
+
+    assert first.tasks[0].function(None) == test_case.expected_first_result
+    assert second.tasks[0].function(None) == test_case.expected_second_result
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonRootHelperIdentityTestCase(
+            description="editing a relative-import helper changes the dependent node identity",
+            files=_HELPER_PACKAGE_FILES,
+            edited_path="python/helpers/clean.py",
+            original_text="value.strip().lower()",
+            edited_text="value.strip().upper()",
+            expected_dependency_path="python/helpers/clean.py",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_python_root_helper_edit_when_rediscovering_then_node_identity_changes(
+    test_case: PythonRootHelperIdentityTestCase,
+    tmp_path: Path,
+) -> None:
+    _write_files(root=tmp_path, files=test_case.files)
+    before_task: DiscoveredTaskFunction = discover_python_node_functions(
+        project_dir=tmp_path
+    ).tasks[0]
+    before: PythonNodeIdentity = build_python_node_identity(
+        node_type="task",
+        node_name=before_task.name,
+        function=before_task.function,
+        project_dir=tmp_path,
+    )
+    edited: Path = tmp_path / test_case.edited_path
+    edited.write_text(
+        edited.read_text(encoding="utf-8").replace(test_case.original_text, test_case.edited_text),
+        encoding="utf-8",
+    )
+
+    after_task: DiscoveredTaskFunction = discover_python_node_functions(project_dir=tmp_path).tasks[
+        0
+    ]
+    after: PythonNodeIdentity = build_python_node_identity(
+        node_type="task",
+        node_name=after_task.name,
+        function=after_task.function,
+        project_dir=tmp_path,
+    )
+
+    assert before.source_hash == after.source_hash
+    assert before.version_hash != after.version_hash
+    assert test_case.expected_dependency_path in {
+        dependency.source_path for dependency in after.dependencies
+    }
+    assert test_case.edited_text in after.metadata_json

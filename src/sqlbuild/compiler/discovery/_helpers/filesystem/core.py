@@ -1357,11 +1357,15 @@ def _discover_python_node_functions(
     node_root: Path = project_dir / PYTHON_NODE_ROOT
     if not node_root.is_dir():
         return bucket
+    _evict_python_root_modules()
+    importlib.invalidate_caches()
     file_path: Path
     for file_path in sorted(node_root.rglob("*.py")):
         if file_path.stem == PYTHON_INIT_MODULE_STEM:
             continue
-        module: ModuleType = _load_python_node_module(file_path=file_path, project_dir=project_dir)
+        module: ModuleType = _import_python_root_module(
+            file_path=file_path, project_dir=project_dir
+        )
         _append_module_python_nodes(
             bucket=bucket,
             module=module,
@@ -1370,6 +1374,32 @@ def _discover_python_node_functions(
             provider_by_name=provider_by_name,
         )
     return bucket
+
+
+def _evict_python_root_modules() -> None:
+    """Drop python.* modules so each discovery pass imports the current project afresh."""
+
+    module_name: str
+    for module_name in tuple(sys.modules):
+        if module_name == PYTHON_NODE_ROOT or module_name.startswith(f"{PYTHON_NODE_ROOT}."):
+            sys.modules.pop(module_name, None)
+
+
+def _import_python_root_module(*, file_path: Path, project_dir: Path) -> ModuleType:
+    """Import a python/ module under its package name, reusing it within a discovery pass."""
+
+    relative_path: Path = _project_relative_path(path=file_path, project_dir=project_dir)
+    module_name: str = ".".join(relative_path.with_suffix("").parts)
+    old_path: list[str] = list(sys.path)
+    sys.path.insert(0, str(project_dir))
+    try:
+        return importlib.import_module(module_name)
+    except Exception as error:
+        raise PythonNodeDiscoveryError(
+            f"Failed to import Python node file {relative_path}: {error}"
+        ) from error
+    finally:
+        sys.path = old_path
 
 
 def _append_module_python_nodes(

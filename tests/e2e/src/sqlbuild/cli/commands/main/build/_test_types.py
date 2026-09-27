@@ -1120,3 +1120,15 @@ class DroppedIncrementalRelationE2ETestCase:
     description: str
     incremental_strategy: str
     expected_rows: tuple[tuple[int, str], ...]
+
+
+@dataclass(frozen=True)
+class PythonHelperPackageIdentityE2ETestCase:
+    """Test case for node identity after editing a relative-import helper package."""
+
+    description: str
+    edited_path: str
+    original_text: str
+    edited_text: str
+    expected_identity_status: str
+    expected_version_count: int

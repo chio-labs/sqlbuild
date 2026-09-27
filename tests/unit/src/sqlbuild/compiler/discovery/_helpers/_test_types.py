@@ -804,6 +804,33 @@ class DiscoverPythonRootNodesTestCase:
 
 
 @dataclass(frozen=True)
+class DiscoverPythonRootImportTestCase:
+    description: str
+    files: dict[str, str]
+    expected_task_names: tuple[str, ...]
+    expected_init_count: int = 0
+
+
+@dataclass(frozen=True)
+class PythonRootProjectIsolationTestCase:
+    description: str
+    first_files: dict[str, str]
+    second_files: dict[str, str]
+    expected_first_result: object
+    expected_second_result: object
+
+
+@dataclass(frozen=True)
+class PythonRootHelperIdentityTestCase:
+    description: str
+    files: dict[str, str]
+    edited_path: str
+    original_text: str
+    edited_text: str
+    expected_dependency_path: str
+
+
+@dataclass(frozen=True)
 class ExpectedBooleanTestCase:
     description: str
     expected_result: bool
