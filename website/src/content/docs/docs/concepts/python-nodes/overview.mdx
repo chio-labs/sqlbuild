@@ -5,14 +5,14 @@ description: "Tasks, assets, loaders, and checks as first-class nodes in the SQL
 
 Python nodes let your project grow beyond warehouse-only SQL while keeping the SQL graph clean. They are ordinary Python functions, decorated to become nodes in the same DAG as your SQL models, and they run as part of `sqb build`.
 
-There are four kinds, authored in dedicated top-level folders:
+There are four kinds. The decorator says what each function is, so all of them live under one `python/` folder:
 
-| Kind | Decorator | Folder | Purpose |
-|------|-----------|--------|---------|
-| Loader | `@loader` | `loaders/` | Load external data into a managed source |
-| Task | `@task` | `tasks/` | Run Python computation or side effects |
-| Asset | `@asset` | `assets/` | Produce or observe an external artifact |
-| Check | `@check` | `checks/` | Validate tasks, assets, and loaders |
+| Kind | Decorator | Purpose |
+|------|-----------|---------|
+| Loader | `@loader` | Load external data into a managed source |
+| Task | `@task` | Run Python computation or side effects |
+| Asset | `@asset` | Produce or observe an external artifact |
+| Check | `@check` | Validate tasks, assets, and loaders |
 
 All four share the same decorator conventions, dependency model, selection syntax, and runtime context helpers. The pages for each kind cover their specifics:
 
@@ -24,6 +24,26 @@ All four share the same decorator conventions, dependency model, selection synta
 - [SQL references](/docs/concepts/python-nodes/sql-references) - read SQL models and sources from Python
 
 Nodes can also be generated programmatically with [`@factory`](/docs/concepts/python-nodes/factories) instead of authored one at a time.
+
+## The `python/` folder
+
+Anything that runs as part of the pipeline graph goes in `python/`: loaders, tasks, assets, checks, [factories](/docs/concepts/python-nodes/factories), and the helper modules they import. SQLBuild imports every `.py` file under `python/` recursively (except `__init__.py`) and registers each decorated function by its decorator. Undecorated functions and helper-only modules are allowed and never become nodes.
+
+How you organize files inside `python/` is up to you. The playgrounds group nodes by kind:
+
+```
+python/
+  _helpers.py          # shared helpers, not nodes
+  loaders/orders.py
+  tasks/orders.py
+  assets/orders_export.py
+  checks/orders_export.py
+  factories/regional.py
+```
+
+Grouping by domain (`python/orders/`, `python/customers/`) works just as well, and a single file may mix kinds. Import other project modules through the `python` package, for example `from python.tasks.orders import export_orders` or `from python._helpers import normalize_status`.
+
+Code that extends SQLBuild itself keeps its own folder, such as `rules/`, `materializations/`, `adapters/`, `providers/`, `sinks/`, `hooks/python/`, `functions/python/`, and `macros/`. Python outside the supported locations fails compilation with `D016`; see [Project Python](/docs/concepts/project-configuration#project-python) for the full list.
 
 ## The SQL boundary
 

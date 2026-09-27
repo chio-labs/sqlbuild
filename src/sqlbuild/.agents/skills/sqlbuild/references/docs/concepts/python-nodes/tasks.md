@@ -20,10 +20,10 @@ Tasks are Python functions that run as part of the DAG. Use them for computation
 
 ## Defining a task
 
-Place Python files under `tasks/` and decorate functions with `@task`:
+Place Python files under `python/` (the playgrounds use `python/tasks/`) and decorate functions with `@task`:
 
 ```python
-# tasks/orders.py
+# python/tasks/orders.py
 from sqlbuild.tasks import task, TaskContext
 
 @task

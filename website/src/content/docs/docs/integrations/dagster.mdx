@@ -20,10 +20,10 @@ This installs `dagster` and `dagster-webserver` alongside SQLBuild.
 ```bash
 sqb playground --template dagster
 cd sqlbuild-playground
-dagster dev -f dagster/definitions.py
+dagster dev -f definitions.py
 ```
 
-This creates the waffle shop project with a `dagster/definitions.py` that includes asset definitions, scenario checks, and a configured resource. Open the Dagster UI, materialize the assets, then run the scenario checks.
+This creates a Dagster code location with a `definitions.py` that includes asset definitions, scenario checks, and a configured resource, next to the waffle shop SQLBuild project in `waffle_shop/`. Dagster code stays outside the SQLBuild project directory. Open the Dagster UI, materialize the assets, then run the scenario checks.
 
 ## How it works
 
@@ -45,7 +45,7 @@ from sqlbuild.integrations.dagster import (
 )
 import dagster as dg
 
-project = SqlBuildProject(project_dir=".")
+project = SqlBuildProject(project_dir="my_sqlbuild_project")
 project.prepare_if_dev()  # auto-generates DAG artifact in dagster dev
 
 @sqlbuild_assets(project=project)
@@ -61,6 +61,8 @@ defs = dg.Definitions(
 ```bash
 dagster dev -f definitions.py
 ```
+
+`definitions.py` belongs to your Dagster code location and sits next to the SQLBuild project directory (`my_sqlbuild_project/` here), not inside it. SQLBuild projects contain no orchestrator code.
 
 Dagster discovers every SQLBuild model, loader, task, and asset as a Dagster asset. Selecting a subset in the Dagster UI automatically scopes the `sqb build` invocation to those nodes via `--select`.
 
@@ -128,7 +130,7 @@ def my_scenario_checks(context, sqb):
 `SqlBuildProject.prepare()` regenerates the DAG artifact by running `sqb compile --dag`. Use `prepare_if_dev()` to only regenerate during local development:
 
 ```python
-project = SqlBuildProject(project_dir=".")
+project = SqlBuildProject(project_dir="my_sqlbuild_project")
 project.prepare_if_dev()  # only runs when DAGSTER_IS_DEV_CLI is set
 ```
 

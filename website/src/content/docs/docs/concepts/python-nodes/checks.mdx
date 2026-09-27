@@ -9,12 +9,12 @@ Checks are separate graph nodes, not callbacks embedded in a task or asset. A ch
 
 ## Defining a check
 
-Place Python files under `checks/` and decorate functions with `@check`. `depends_on` is required:
+Place Python files under `python/` (the playgrounds use `python/checks/`) and decorate functions with `@check`. `depends_on` is required:
 
 ```python
-# checks/orders.py
+# python/checks/orders.py
 from sqlbuild.checks import check, CheckContext
-from tasks.orders import export_orders
+from python.tasks.orders import export_orders
 
 
 @check(depends_on=export_orders)
@@ -109,7 +109,7 @@ sqb check --select tag:exports
 | | Checks | Audits |
 |---|--------|--------|
 | Validates | Python tasks, assets, loaders | SQL relations |
-| Authored in | `checks/` (Python) | `MODEL()` headers / `audits/` (SQL) |
+| Authored in | `python/` (Python) | `MODEL()` headers / `audits/` (SQL) |
 | Run by | `sqb build`, `sqb check` | `sqb build`, `sqb audit` |
 | Severity | `error`, `warn` | `error`, `warn` |
 

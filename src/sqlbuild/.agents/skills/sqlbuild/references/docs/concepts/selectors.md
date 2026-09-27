@@ -70,7 +70,7 @@ sqb build --select models/marts
 sqb build --select path:models/intermediate
 ```
 
-Any name containing `/` is treated as a path selector, so `path:models/marts` and a bare `models/marts` work the same way. Path selectors require an explicit root directory: `models/`, `tasks/`, `assets/`, `checks/`, or `loaders/`. Nested paths work too: `models/staging/orders`.
+Any name containing `/` is treated as a path selector, so `path:models/marts` and a bare `models/marts` work the same way. Path selectors require an explicit root directory: `models/` for SQL models or `python/` for Python nodes. Nested paths work too: `models/staging/orders` or `python/tasks`.
 
 ### Seed and source
 
@@ -167,5 +167,5 @@ path selector 'fact_orders~' requires names on both sides of '~'
 If a path selector omits the root directory, SQLBuild asks for the explicit form:
 
 ```
-path selectors require an explicit root: use 'models/', 'tasks/', 'assets/', 'checks/', or 'loaders/'
+path selectors require an explicit root: use 'models/' or 'python/'
 ```
