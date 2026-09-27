@@ -82,6 +82,28 @@ _SINGULAR_BASE_FILES: dict[str, str] = {
             ),
         ),
         NamedDeclarationAcceptedTestCase(
+            "top-level singular audit over a sub-folder model and a table function",
+            {
+                "models/marts/orders.sql": _ORDERS,
+                "functions/sql/order_rows.sql": _TABLE_FUNCTION,
+                "audits/singular/check.sql": (
+                    'AUDIT ();\nSELECT * FROM __ref("orders") '
+                    'JOIN __table_fn("order_rows")() USING (order_id)'
+                ),
+            },
+        ),
+        NamedDeclarationAcceptedTestCase(
+            "top-level singular audit over a sub-folder model and a source",
+            {
+                "models/marts/orders.sql": _ORDERS,
+                "sources/raw.yml": _SOURCES,
+                "audits/singular/check.sql": (
+                    'AUDIT ();\nSELECT * FROM __ref("orders") '
+                    'JOIN __source("raw_orders") USING (order_id)'
+                ),
+            },
+        ),
+        NamedDeclarationAcceptedTestCase(
             "top-level generic audit used across one resource tree",
             {
                 "audits/generic/order_check.sql": _GENERIC_AUDIT,
