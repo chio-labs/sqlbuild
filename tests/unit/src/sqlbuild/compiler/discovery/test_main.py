@@ -467,6 +467,55 @@ def generated_tasks():
             expected_task_names=("prepare_orders",),
         ),
         DiscoverFactoryValidationTestCase(
+            description="factory returning its own module-level node registers it once",
+            repo_files=base_repo_files()
+            | {
+                "python/factories/orders.py": """
+from sqlbuild.factories import factory
+from sqlbuild.tasks import task
+
+
+@task
+def orders(ctx):
+    return None
+
+
+@factory
+def order_nodes():
+    return orders
+""",
+            },
+            expected_task_names=("orders",),
+        ),
+        DiscoverFactoryValidationTestCase(
+            description="factory returning an imported python module node registers it once",
+            repo_files=base_repo_files()
+            | {
+                "python/a_factories/orders.py": """
+from python.tasks.orders import prepare_orders
+from sqlbuild.factories import factory
+from sqlbuild.tasks import task
+
+
+@factory
+def order_nodes():
+    @task(name="publish_orders", depends_on=prepare_orders)
+    def publish(ctx):
+        return None
+    return [prepare_orders, publish]
+""",
+                "python/tasks/orders.py": """
+from sqlbuild.tasks import task
+
+
+@task
+def prepare_orders(ctx):
+    return None
+""",
+            },
+            expected_task_names=("publish_orders", "prepare_orders"),
+        ),
+        DiscoverFactoryValidationTestCase(
             description="factory can import ordinary private helper module",
             repo_files=base_repo_files()
             | {
@@ -677,6 +726,30 @@ def generated_assets():
 """,
             },
             expected_error_fragment="Duplicate Python node found for 'profile'",
+        ),
+        DiscoverFactoryValidationTestCase(
+            description="factory returning a distinct node named like a module node fails validation",
+            repo_files=base_repo_files()
+            | {
+                "python/factories/orders.py": """
+from sqlbuild.factories import factory
+from sqlbuild.tasks import task
+
+
+@task
+def orders(ctx):
+    return None
+
+
+@factory
+def order_nodes():
+    @task(name="orders")
+    def generated_orders(ctx):
+        return None
+    return generated_orders
+""",
+            },
+            expected_error_fragment="Duplicate Python node found for 'orders'",
         ),
         DiscoverFactoryValidationTestCase(
             description="generated dependency cycle fails validation",

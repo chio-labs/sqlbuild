@@ -1371,6 +1371,7 @@ def _discover_python_node_functions(
             module=module,
             file_path=file_path,
             project_dir=project_dir,
+            node_root=node_root,
             provider_by_name=provider_by_name,
         )
     return bucket
@@ -1402,12 +1403,27 @@ def _import_python_root_module(*, file_path: Path, project_dir: Path) -> ModuleT
         sys.path = old_path
 
 
+def _is_python_root_module_function(*, function: Callable[..., object], node_root: Path) -> bool:
+    """Return whether direct discovery registers this callable from its own python/ module."""
+
+    if not any(kind != "factory" for kind in _python_node_definition_names(function)):
+        return False
+    module: ModuleType | None = sys.modules.get(getattr(function, "__module__", ""))
+    if module is None or vars(module).get(getattr(function, "__name__", "")) is not function:
+        return False
+    module_file: object = getattr(module, "__file__", None)
+    if not isinstance(module_file, str) or Path(module_file).stem == PYTHON_INIT_MODULE_STEM:
+        return False
+    return _is_relative_to(path=Path(module_file).resolve(), parent=node_root.resolve())
+
+
 def _append_module_python_nodes(
     *,
     bucket: _PythonNodeDiscoveryBucket,
     module: ModuleType,
     file_path: Path,
     project_dir: Path,
+    node_root: Path,
     provider_by_name: dict[str, DiscoveredProvider],
 ) -> None:
     _append_module_audit_factories(
@@ -1441,6 +1457,8 @@ def _append_module_python_nodes(
         index: int
         generated_function: Callable[..., object]
         for index, generated_function in enumerate(generated_functions):
+            if _is_python_root_module_function(function=generated_function, node_root=node_root):
+                continue
             if not _append_python_node_function(
                 bucket=bucket,
                 function=generated_function,

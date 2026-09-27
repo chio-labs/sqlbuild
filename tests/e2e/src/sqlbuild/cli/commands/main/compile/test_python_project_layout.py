@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -305,6 +306,73 @@ def test_given_python_root_project_when_compiling_and_building_then_nodes_run_wi
     )
     assert "_helpers" not in build_output
     assert "order_rows" not in build_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        PythonProjectLayoutCompileTestCase(
+            description="factory returning its module-level task registers one node",
+            repo_files={
+                "sqlbuild_project.toml": 'name = "factory_layout"\nadapter = "duckdb"\n',
+                "python/factories/orders.py": (
+                    "from sqlbuild.factories import factory\n"
+                    "from sqlbuild.tasks import task\n\n\n"
+                    "@task\n"
+                    "def orders(ctx):\n"
+                    "    return None\n\n\n"
+                    "@factory\n"
+                    "def order_nodes():\n"
+                    "    return orders\n"
+                ),
+            },
+            expected_exit_code=0,
+            expected_stderr_fragments=(),
+        ),
+        PythonProjectLayoutCompileTestCase(
+            description="factory returning a distinct same-name task still conflicts",
+            repo_files={
+                "sqlbuild_project.toml": 'name = "factory_layout"\nadapter = "duckdb"\n',
+                "python/factories/orders.py": (
+                    "from sqlbuild.factories import factory\n"
+                    "from sqlbuild.tasks import task\n\n\n"
+                    "@task\n"
+                    "def orders(ctx):\n"
+                    "    return None\n\n\n"
+                    "@factory\n"
+                    "def order_nodes():\n"
+                    "    @task(name='orders')\n"
+                    "    def generated_orders(ctx):\n"
+                    "        return None\n"
+                    "    return generated_orders\n"
+                ),
+            },
+            expected_exit_code=1,
+            expected_stderr_fragments=("Duplicate Python node found for 'orders'",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_factory_returning_module_node_when_planning_then_node_registers_once(
+    test_case: PythonProjectLayoutCompileTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="factory_layout",
+        repo_files=test_case.repo_files,
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("plan", "--json"),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    assert all(fragment in result.stderr for fragment in test_case.expected_stderr_fragments)
+    if result.returncode == 0:
+        payload: dict[str, list[dict[str, object]]] = json.loads(result.stdout)
+        assert [entry["name"] for entry in payload["python_nodes"]] == ["orders"]
 
 
 if __name__ == "__main__":
