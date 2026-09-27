@@ -433,3 +433,10 @@ class FullRefreshPromotionTestCase:
     adapter_name: str
     target_exists: bool
     expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ReusedFinalAuditResultsTestCase:
+    description: str
+    reads_outside_target_lineage: bool
+    expected_reused: bool

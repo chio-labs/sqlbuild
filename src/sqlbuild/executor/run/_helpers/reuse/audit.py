@@ -21,18 +21,21 @@ def audit_plan_binding_key(audit: AuditPlanEntry) -> str:
 def reused_final_audit_results_by_binding_key(
     *, metadata_json: str | None, model_audits: tuple[AuditPlanEntry, ...]
 ) -> dict[str, AuditExecutionResult]:
-    """Build reused final PASS audit results from accepted reuse_from origin proof."""
+    """Build reused final PASS results from origin proof; audits reading outside lineage re-run."""
 
+    reusable_audits: tuple[AuditPlanEntry, ...] = tuple(
+        audit for audit in model_audits if not audit.reads_outside_target_lineage
+    )
     decision: AuditGateReuseDecision = reuse_from_audit_gate_reuse_decision(
         metadata_json=metadata_json,
-        model_audits=model_audits,
+        model_audits=reusable_audits,
     )
     if not decision.reusable:
         return {}
     reusable_binding_keys: frozenset[str] = frozenset(decision.reusable_binding_keys)
     results: dict[str, AuditExecutionResult] = {}
     audit: AuditPlanEntry
-    for audit in model_audits:
+    for audit in reusable_audits:
         if audit.severity != AuditSeverity.ERROR:
             continue
         binding_key: str = audit_plan_binding_key(audit)

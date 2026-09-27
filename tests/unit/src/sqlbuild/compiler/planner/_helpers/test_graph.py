@@ -37,12 +37,12 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     "test_case",
     [
         BuildUpstreamDepsTestCase(
-            description="keeps attached audit refs out of model deps",
+            description="orders an attached model audit's extra reads before its target",
             model_deps={"stg_payments": ("raw_payments",)},
             source_names=("raw_payments", "raw_orders"),
             seed_names=(),
             expected_upstream_keys={
-                "stg_payments": ("raw_payments",),
+                "stg_payments": ("raw_payments", "raw_orders"),
                 "raw_payments": (),
                 "raw_orders": (),
             },
@@ -238,11 +238,13 @@ def test_given_injected_edge_cycle_when_ordering_topologically_then_error_names_
     "test_case",
     [
         ExecutionEdgeOriginsTestCase(
-            description="does not record audit scope deps as execution edges",
+            description="names the audit behind each attached-audit ordering edge",
             model_deps={"stg_payments": ("raw_payments",)},
             source_names=("raw_payments", "raw_orders"),
             audit_model_source_deps={"stg_payments": ("raw_orders",)},
-            expected_origin_fragments=(),
+            expected_origin_fragments=(
+                "audit 'stg_payments_audit' on 'stg_payments' reads 'raw_orders'",
+            ),
         ),
     ],
     ids=lambda case: case.description,

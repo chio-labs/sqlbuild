@@ -170,7 +170,7 @@ def test_given_failing_audit_when_running_audit_then_exit_code_is_nonzero(
     "test_case",
     [
         AuditE2ETestCase(
-            description="attached audit reading downstream model runs after its dependencies",
+            description="attached audit reading a sibling model gates its target",
             expected_exit_code=0,
             expected_stdout_fragment="PASS=29",
             expected_stdout_fragments=("stg_orders", "cross_model_consistency"),
@@ -178,7 +178,7 @@ def test_given_failing_audit_when_running_audit_then_exit_code_is_nonzero(
     ],
     ids=lambda case: case.description,
 )
-def test_given_attached_audit_reads_downstream_model_when_building_and_auditing_then_it_runs_once_at_end(
+def test_given_attached_audit_reads_sibling_model_when_building_and_auditing_then_it_gates_its_target(
     test_case: AuditE2ETestCase,
     tmp_path: Path,
 ) -> None:
@@ -207,8 +207,8 @@ def test_given_attached_audit_reads_downstream_model_when_building_and_auditing_
         'AUDIT (name "cross_model_consistency");\n\n'
         "SELECT stg.order_id\n"
         "FROM @relation stg\n"
-        'LEFT JOIN __ref("fact_orders") fact USING (order_id)\n'
-        "WHERE fact.order_id IS NULL\n",
+        'LEFT JOIN __ref("stg_customers") customers USING (customer_id)\n'
+        "WHERE customers.customer_id IS NULL\n",
         encoding="utf-8",
     )
 
@@ -242,7 +242,7 @@ def test_given_attached_audit_reads_downstream_model_when_building_and_auditing_
         "status": "pass",
         "severity": "error",
         "row_count": 0,
-        "attachment_kind": "end",
+        "attachment_kind": "model",
         "attached_target_kind": "model",
         "asset_name": "stg_orders",
         "run_scope_phase": "final",

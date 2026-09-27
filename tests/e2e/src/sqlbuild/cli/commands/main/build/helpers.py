@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from textwrap import dedent
@@ -8,6 +9,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     DeferCloneBuildE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    execute_duckdb,
     prepare_inline_project,
     query_duckdb,
     run_sqb,
@@ -449,3 +451,95 @@ def dropped_incremental_project_files(*, incremental_strategy: str) -> dict[str,
             'SELECT id, ordered_at FROM __source("raw_orders")\n'
         ),
     }
+
+
+ATTACHED_AUDIT_GATE_DATABASE: str = "gate_shop.duckdb"
+_GATE_AUDIT_TEMPLATE: str = (
+    "AUDIT ();\n\n"
+    "SELECT s.code FROM @relation s\n"
+    "LEFT JOIN {read} a USING (code)\n"
+    "WHERE a.code IS NULL\n"
+)
+_GATE_TARGET_FILES: dict[str, dict[str, str]] = {
+    "model": {
+        "models/orders.sql": (
+            "MODEL (materialized table, audits [code_check (severity error)]);\n\n"
+            "SELECT '{code}' AS code\n"
+        ),
+        "models/order_summary.sql": (
+            'MODEL (materialized table);\n\nSELECT code FROM __ref("orders")\n'
+        ),
+    },
+    "source": {
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
+            "    audits:\n      - code_check:\n          severity: error\n"
+        ),
+        "models/staged_orders.sql": (
+            'MODEL (materialized table);\n\nSELECT code FROM __source("raw_orders")\n'
+        ),
+    },
+    "seed": {
+        "seeds/order_codes.yml": (
+            "seeds:\n  - name: order_codes\n    columns:\n      - name: code\n"
+            "        type: VARCHAR\n    audits:\n      - code_check:\n          severity: error\n"
+        ),
+        "seeds/order_codes.csv": "code\n{code}\n",
+        "models/coded_orders.sql": (
+            'MODEL (materialized table);\n\nSELECT code FROM __seed("order_codes")\n'
+        ),
+    },
+}
+_GATE_PRE_EXISTING_TABLES: dict[str, tuple[str, ...]] = {
+    "model": ("CREATE TABLE main.orders AS SELECT 'previous' AS code",),
+    "source": ("CREATE TABLE main.raw_orders AS SELECT '{code}' AS code",),
+    "seed": (),
+}
+
+
+def prepare_attached_audit_gate_project(
+    *, tmp_path: Path, target_kind: str, order_code: str, read: str = '__ref("valid_codes")'
+) -> Path:
+    """Write a project whose code_check audit on one target reads the valid_codes model."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            'name = "gate_shop"\nadapter = "duckdb"\n\n'
+            f'[connection]\ndatabase = "{ATTACHED_AUDIT_GATE_DATABASE}"\n'
+        ),
+        "audits/generic/code_check.sql": _GATE_AUDIT_TEMPLATE.format(read=read),
+        "models/valid_codes.sql": (
+            "MODEL (materialized table);\n\nSELECT code FROM (VALUES ('A'), ('B')) AS valid(code)\n"
+        ),
+    }
+    files.update(
+        {
+            path: contents.replace("{code}", order_code)
+            for path, contents in _GATE_TARGET_FILES[target_kind].items()
+        }
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path, project_name="gate_shop", repo_files=files
+    )
+    statement: str
+    for statement in _GATE_PRE_EXISTING_TABLES[target_kind]:
+        execute_duckdb(
+            db_path=project_dir / ATTACHED_AUDIT_GATE_DATABASE,
+            sql=statement.replace("{code}", order_code),
+        )
+    return project_dir
+
+
+def build_check_outcomes(stdout: str) -> dict[tuple[object, object], tuple[object, object]]:
+    """Map (check name, asset) to (attachment kind, status) from build JSON output."""
+
+    return {
+        (check["name"], check.get("asset_name")): (check["attachment_kind"], check["status"])
+        for check in json.loads(stdout)["checks"]
+    }
+
+
+def build_asset_names(stdout: str) -> tuple[str, ...]:
+    """Return the asset names reported by build JSON output."""
+
+    return tuple(asset["name"] for asset in json.loads(stdout)["assets"])

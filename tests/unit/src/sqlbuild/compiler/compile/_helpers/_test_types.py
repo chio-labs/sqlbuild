@@ -919,3 +919,21 @@ class NamedDeclarationWarningTestCase:
     description: str
     files: dict[str, str]
     expected_code: str
+
+
+@dataclass(frozen=True)
+class AttachedAuditGateTestCase:
+    """A project whose attached audit reads another resource, and the ordering edges it adds."""
+
+    description: str
+    files: dict[str, str]
+    expected_edges: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class AttachedAuditGateCycleTestCase:
+    """A project whose attached audit reads a resource built from its own target."""
+
+    description: str
+    files: dict[str, str]
+    expected_error_fragments: tuple[str, ...]

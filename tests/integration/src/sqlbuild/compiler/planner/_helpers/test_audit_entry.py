@@ -120,7 +120,7 @@ def test_given_audit_when_executing_resolved_sql_then_returns_expected_rows(
         seed_locations={},
         source_map=test_case.source_map,
         adapter=adapter,
-        upstream_deps={},
+        lineage_upstream_deps={},
         downstream_deps={},
         model_materializations={},
     )

@@ -37,13 +37,15 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
             referenced_model_names=("orders", "stg_orders"),
             upstream_edges={"orders": ("stg_orders",), "stg_orders": ()},
             expected_attachment_kind=AuditAttachmentKind.MODEL,
+            expected_reads_outside_target_lineage=False,
         ),
         PlanAttachedAuditTestCase(
-            description="downstream-reading attached audit moves to end scheduling",
+            description="attached audit reading outside its lineage still gates its model",
             attached_target_name="stg_orders",
             referenced_model_names=("stg_orders", "orders"),
             upstream_edges={"orders": ("stg_orders",), "stg_orders": ()},
-            expected_attachment_kind=AuditAttachmentKind.END,
+            expected_attachment_kind=AuditAttachmentKind.MODEL,
+            expected_reads_outside_target_lineage=True,
         ),
     ],
     ids=lambda case: case.description,
@@ -72,7 +74,7 @@ def test_given_logically_attached_audit_when_planning_then_scheduling_and_identi
         seed_locations={},
         source_map={},
         adapter=PlannerTestAdapter(),
-        upstream_deps=upstream,
+        lineage_upstream_deps=upstream,
         downstream_deps=downstream,
         model_materializations={test_case.attached_target_name: "incremental"},
     )
@@ -81,6 +83,7 @@ def test_given_logically_attached_audit_when_planning_then_scheduling_and_identi
     assert result.attached_target_kind == AttachedAuditTargetKind.MODEL
     assert result.attached_target_name == test_case.attached_target_name
     assert result.effective_run_scope == AuditRunScope.FINAL
+    assert result.reads_outside_target_lineage is test_case.expected_reads_outside_target_lineage
 
 
 @pytest.mark.parametrize(
@@ -151,7 +154,7 @@ def test_given_audit_when_planning_then_resolves_sql(
         seed_locations={},
         source_map=source_map,
         adapter=PlannerTestAdapter(),
-        upstream_deps={},
+        lineage_upstream_deps={},
         downstream_deps={},
         model_materializations={},
     )
@@ -190,7 +193,7 @@ def test_given_audit_with_unresolved_marker_when_planning_then_it_raises_clear_e
             seed_locations={},
             source_map=source_map,
             adapter=PlannerTestAdapter(),
-            upstream_deps={},
+            lineage_upstream_deps={},
             downstream_deps={},
             model_materializations={},
         )

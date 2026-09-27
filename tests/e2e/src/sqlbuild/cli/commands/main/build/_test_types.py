@@ -932,3 +932,47 @@ class SeedAuditBuildE2ETestCase:
     expected_exit_code: int
     expected_status: str
     expected_dependent_table: bool
+
+
+@dataclass(frozen=True)
+class AttachedAuditGateBuildE2ETestCase:
+    description: str
+    target_kind: str
+    target_name: str
+    audit_name: str
+    dependant_name: str
+    order_code: str
+    expected_exit_code: int
+    expected_status: str
+    expected_dependant_built: bool
+    target_query: str
+    expected_target_rows: tuple[tuple[str, ...], ...]
+    concurrency: int = 1
+
+
+@dataclass(frozen=True)
+class AttachedAuditGateCycleE2ETestCase:
+    description: str
+    target_kind: str
+    read: str
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AttachedAuditGatePartialBuildE2ETestCase:
+    description: str
+    target_kind: str
+    select: str
+    replaced_read_sql: str
+    expected_exit_code: int
+    expected_check: tuple[str, str]
+    unselected_asset: str
+
+
+@dataclass(frozen=True)
+class AttachedAuditGateNoAuditsE2ETestCase:
+    description: str
+    target_kind: str
+    order_code: str
+    target_query: str
+    expected_target_rows: tuple[tuple[str, ...], ...]

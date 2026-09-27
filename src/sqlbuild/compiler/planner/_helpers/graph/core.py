@@ -11,9 +11,11 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     SqlTestMode,
 )
+from sqlbuild.compiler.graph.main._attached_audit_gate_edges import attached_audit_gate_edges
 from sqlbuild.compiler.graph.main.invert_edges import invert_edges
 from sqlbuild.compiler.graph.main.path_nodes import path_nodes
 from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
+from sqlbuild.compiler.graph.models import AttachedAuditGateEdge
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 
 
@@ -42,6 +44,12 @@ def build_execution_upstream_deps(
             if target_key in upstream:
                 upstream[target_key].append(test.key)
 
+    edge: AttachedAuditGateEdge
+    for edge in attached_audit_gate_edges(project=project):
+        gated_upstream: list[CompiledObjectKey] = upstream.setdefault(edge.gated, [])
+        if edge.read not in gated_upstream:
+            gated_upstream.append(edge.read)
+
     return {k: tuple(v) for k, v in upstream.items()}
 
 
@@ -57,6 +65,12 @@ def build_execution_edge_origins(
             origins[(target_key, test.key)] = (
                 f"SQL test '{test.name}' runs before '{target_key.name}'"
             )
+    edge: AttachedAuditGateEdge
+    for edge in attached_audit_gate_edges(project=project):
+        origins.setdefault(
+            (edge.gated, edge.read),
+            f"audit '{edge.audit_name}' on '{edge.target.name}' reads '{edge.read.name}'",
+        )
     return origins
 
 
