@@ -42,6 +42,21 @@ from tests.unit.src.sqlbuild.compiler.sql_analysis._helpers._test_types import (
             quoted_sql="'a''''b'",
             expected_end=len("'a''''b'"),
         ),
+        SkipQuotedTextSuccessTestCase(
+            description="dollar quote hides apostrophes, comments and single dollars",
+            quoted_sql="$$customer's order -- $5 $$",
+            expected_end=len("$$customer's order -- $5 $$"),
+        ),
+        SkipQuotedTextSuccessTestCase(
+            description="tagged dollar quote ends only at its own tag",
+            quoted_sql="$order$ $$ it's $order$",
+            expected_end=len("$order$ $$ it's $order$"),
+        ),
+        SkipQuotedTextSuccessTestCase(
+            description="positional parameter dollar is one code character",
+            quoted_sql="$1",
+            expected_end=1,
+        ),
     ),
     ids=lambda case: case.description,
 )
@@ -61,6 +76,12 @@ def test_given_quoted_text_when_skipping_then_returns_end_position(
         SkipQuotedTextErrorTestCase(
             description="unclosed single quote",
             sql="'customer",
+            context="SQL reference",
+            expected_error="SQL reference contains an unclosed quoted string",
+        ),
+        SkipQuotedTextErrorTestCase(
+            description="unclosed dollar quote",
+            sql="$order$ customer's $$",
             context="SQL reference",
             expected_error="SQL reference contains an unclosed quoted string",
         ),
@@ -86,6 +107,16 @@ def test_given_unclosed_quote_when_skipping_then_raises_contextual_error(
             description="quotes and comments are skipped",
             sql="a'(b'`c`--d\n/*e*/f",
             expected_positions=((0, 0), (17, 0)),
+        ),
+        IterCodePositionsTestCase(
+            description="dollar-quoted text is skipped",
+            sql="a $$'(--$$b",
+            expected_positions=((0, 0), (1, 0), (10, 0)),
+        ),
+        IterCodePositionsTestCase(
+            description="dollars inside identifiers and parameters remain code",
+            sql="a$$b $1",
+            expected_positions=tuple((index, 0) for index in range(7)),
         ),
         IterCodePositionsTestCase(
             description="unbalanced close parenthesis goes below zero depth",

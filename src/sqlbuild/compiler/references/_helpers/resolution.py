@@ -25,7 +25,7 @@ _UNRESOLVED_UDF_PATTERN: re.Pattern[str] = re.compile(
 _UNRESOLVED_TABLE_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
     reference_call_prefix_pattern_text(SqlReferenceKind.TABLE_FUNCTION)
 )
-_SQL_QUOTE_TOKENS: frozenset[str] = frozenset({"'", '"', "`"})
+_SQL_QUOTE_TOKENS: frozenset[str] = frozenset({"'", '"', "`", "$"})
 
 
 def assert_no_unresolved_sql_markers(*, sql: str, context: str) -> None:

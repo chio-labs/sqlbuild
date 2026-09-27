@@ -26,7 +26,9 @@ _INTRINSIC_NAMES: tuple[str, ...] = (_CURSOR_START_INTRINSIC, _CURSOR_END_INTRIN
 _IDENTIFIER_JOIN_CHARACTER: str = "_"
 _LINE_COMMENT_TOKEN: str = "--"
 _BLOCK_COMMENT_TOKEN: str = "/*"
-_INTRINSIC_SCAN_PATTERN: re.Pattern[str] = re.compile(r"__cursor_start|__cursor_end|--|/\*|'|\"|`")
+_INTRINSIC_SCAN_PATTERN: re.Pattern[str] = re.compile(
+    r"__cursor_start|__cursor_end|--|/\*|'|\"|`|\$"
+)
 
 
 def get_validated_model_cursor_intrinsics(

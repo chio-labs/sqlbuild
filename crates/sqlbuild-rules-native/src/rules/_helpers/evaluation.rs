@@ -315,6 +315,7 @@ pub(crate) fn rules_quote_policy(dialect_name: &str) -> QuotePolicy {
         single_quote_backslash_escapes: backslash_escapes,
         double_quote_backslash_escapes: backslash_escapes
             && !dialect.is_delimited_identifier_start('"'),
+        dollar_quotes: false,
     }
 }
 

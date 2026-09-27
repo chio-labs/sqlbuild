@@ -72,6 +72,15 @@ class RulesIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class DollarQuotedLiteralBuildTestCase:
+    """One model projection with dollar-quoted literals and its built rows."""
+
+    description: str
+    projection: str
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class ImplicitAliasRuleIntegrationTestCase:
     """One model query and its expected unused-alias finding locations."""
 

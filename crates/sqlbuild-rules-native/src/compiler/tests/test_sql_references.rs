@@ -1,6 +1,6 @@
 use crate::compiler::tests::helpers::{
     comments_and_quoted_text_hide_references, complex_or_malformed_sql_requests_fallback,
-    simple_references_preserve_authored_order,
+    dollar_quoted_text_hides_references, simple_references_preserve_authored_order,
 };
 use crate::compiler::tests::test_types::StaticSqlOperationTestCase;
 
@@ -15,6 +15,11 @@ fn given_sql_reference_cases_when_extracting_then_expected_behavior_holds() {
         StaticSqlOperationTestCase {
             description: "comments and quoted text hide embedded references",
             run: comments_and_quoted_text_hide_references,
+            expected_success: true,
+        },
+        StaticSqlOperationTestCase {
+            description: "dollar-quoted text hides embedded references",
+            run: dollar_quoted_text_hides_references,
             expected_success: true,
         },
         StaticSqlOperationTestCase {

@@ -8,12 +8,14 @@ const QUOTES_ONLY: QuotePolicy = QuotePolicy {
     backtick_identifiers: false,
     single_quote_backslash_escapes: false,
     double_quote_backslash_escapes: false,
+    dollar_quotes: false,
 };
 
 const BACKSLASH_ONLY: QuotePolicy = QuotePolicy {
     backtick_identifiers: false,
     single_quote_backslash_escapes: true,
     double_quote_backslash_escapes: false,
+    dollar_quotes: false,
 };
 
 #[test]
@@ -62,9 +64,15 @@ fn given_quote_policies_when_matching_parentheses_then_policy_decides_quote_boun
             expected_close: Ok(12),
         },
         MatchingParenPolicyTestCase {
-            description: "dollar quotes are scanned as code",
+            description: "compiler policy skips dollar-quoted text",
             sql: "($$ ) $$ x) y",
             policy: QuotePolicy::COMPILER,
+            expected_close: Ok(10),
+        },
+        MatchingParenPolicyTestCase {
+            description: "dollar quotes are code when the policy disables them",
+            sql: "($$ ) $$ x) y",
+            policy: QuotePolicy::SQL_LINT,
             expected_close: Ok(4),
         },
         MatchingParenPolicyTestCase {
@@ -135,6 +143,36 @@ fn given_comment_or_quote_starts_when_finding_non_code_end_then_returns_end_offs
             sql: r"'a\",
             policy: QuotePolicy::SQL_LINT,
             expected_end: Err(Unclosed::Quote),
+        },
+        NonCodeEndTestCase {
+            description: "dollar quote hides apostrophes, comments and single dollars",
+            sql: "$$it's -- $5 $$ b",
+            policy: QuotePolicy::COMPILER,
+            expected_end: Ok(Some(15)),
+        },
+        NonCodeEndTestCase {
+            description: "tagged dollar quote ends only at its own tag",
+            sql: "$tag$ $$ ) $tag$ b",
+            policy: QuotePolicy::COMPILER,
+            expected_end: Ok(Some(16)),
+        },
+        NonCodeEndTestCase {
+            description: "unterminated dollar quote reports the quote",
+            sql: "$$it's",
+            policy: QuotePolicy::COMPILER,
+            expected_end: Err(Unclosed::Quote),
+        },
+        NonCodeEndTestCase {
+            description: "positional parameter is code",
+            sql: "$1 $",
+            policy: QuotePolicy::COMPILER,
+            expected_end: Ok(None),
+        },
+        NonCodeEndTestCase {
+            description: "digit-led tag is not a dollar quote",
+            sql: "$1$ x $1$",
+            policy: QuotePolicy::COMPILER,
+            expected_end: Ok(None),
         },
         NonCodeEndTestCase {
             description: "plain code has no non-code end",

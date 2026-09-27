@@ -17,14 +17,17 @@ pub(crate) struct QuotePolicy {
     pub(crate) single_quote_backslash_escapes: bool,
     /// A backslash escapes the next byte inside double-quoted text.
     pub(crate) double_quote_backslash_escapes: bool,
+    /// `$$` and `$tag$` delimit opaque string literals.
+    pub(crate) dollar_quotes: bool,
 }
 
 impl QuotePolicy {
-    /// Compiler policy, mirroring Python `sql_analysis`: backticks quote, backslashes are literal.
+    /// Compiler policy, mirroring Python `sql_analysis`: backticks and dollar quotes are text.
     pub(crate) const COMPILER: Self = Self {
         backtick_identifiers: true,
         single_quote_backslash_escapes: false,
         double_quote_backslash_escapes: false,
+        dollar_quotes: true,
     };
 
     /// SQL lint base policy: backslashes escape; lint enables backticks per dialect.
@@ -32,6 +35,7 @@ impl QuotePolicy {
         backtick_identifiers: false,
         single_quote_backslash_escapes: true,
         double_quote_backslash_escapes: true,
+        dollar_quotes: false,
     };
 
     /// Return this policy with backtick-delimited identifiers enabled or disabled.

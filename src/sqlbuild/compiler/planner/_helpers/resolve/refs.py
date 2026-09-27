@@ -47,7 +47,7 @@ _UDF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.U
 _TABLE_FUNCTION_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(
     SqlReferenceKind.TABLE_FUNCTION
 )
-_SQL_QUOTE_TOKENS: frozenset[str] = frozenset({"'", '"', "`"})
+_SQL_QUOTE_TOKENS: frozenset[str] = frozenset({"'", '"', "`", "$"})
 _CLAUSE_KEYWORDS: frozenset[str] = frozenset(
     {
         "WHERE",
