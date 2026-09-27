@@ -35,6 +35,7 @@ _SEED_WITH_AUDIT: str = (
     "    audits:\n      - code_check\n"
 )
 _AUDITED_HEADER: str = "MODEL (audits [code_check]);"
+_ORDER_CHECK_HEADER: str = "MODEL (audits [order_check]);"
 _ALLOWED_SEED: str = (
     "seeds:\n  - name: allowed_codes\n    columns:\n      - name: code\n        type: VARCHAR\n"
 )
@@ -73,6 +74,19 @@ _ALLOWED_SEED: str = (
                 "seeds/allowed_codes.csv": "code\nA\n",
             },
             (("order_codes", "allowed_codes"),),
+        ),
+        AttachedAuditGateTestCase(
+            "source audit triggered by another audit's read gates that triggering model",
+            {
+                "audits/generic/code_check.sql": gate_audit(read='__ref("valid_codes")'),
+                "audits/generic/order_check.sql": gate_audit(read='__source("raw_orders")'),
+                "sources/raw.yml": _SOURCES_WITH_AUDIT,
+                "models/valid_codes.sql": gate_model(sql="SELECT 'A' AS code"),
+                "models/orders.sql": gate_model(
+                    sql="SELECT 'A' AS code", header=_ORDER_CHECK_HEADER
+                ),
+            },
+            (("orders", "raw_orders"), ("orders", "valid_codes")),
         ),
     ),
     ids=lambda case: case.description,
@@ -138,9 +152,28 @@ def test_given_attached_audit_reading_another_resource_when_compiling_then_it_ad
                 "audits/generic/code_check.sql": gate_audit(read='__ref("customers")'),
                 "audits/generic/order_check.sql": gate_audit(read='__ref("orders")'),
                 "models/orders.sql": gate_model(sql="SELECT 'A' AS code", header=_AUDITED_HEADER),
-                "models/customers.sql": "MODEL (audits [order_check]);\nSELECT 'A' AS code",
+                "models/customers.sql": gate_model(
+                    sql="SELECT 'A' AS code", header=_ORDER_CHECK_HEADER
+                ),
             },
             ("[P005]", "which depends on"),
+        ),
+        AttachedAuditGateCycleTestCase(
+            "source audit triggered by an audit read that reads its triggering model's dependant",
+            {
+                "audits/generic/code_check.sql": gate_audit(read='__ref("order_summary")'),
+                "audits/generic/order_check.sql": gate_audit(read='__source("raw_orders")'),
+                "sources/raw.yml": _SOURCES_WITH_AUDIT,
+                "models/orders.sql": gate_model(
+                    sql="SELECT 'A' AS code", header=_ORDER_CHECK_HEADER
+                ),
+                "models/order_summary.sql": gate_model(sql='SELECT * FROM __ref("orders")'),
+            },
+            (
+                "[P005]",
+                "on source 'raw_orders' reads model 'order_summary', which depends on 'raw_orders'",
+                "singular audit",
+            ),
         ),
     ),
     ids=lambda case: case.description,

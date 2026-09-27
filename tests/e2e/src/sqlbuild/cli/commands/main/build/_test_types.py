@@ -976,3 +976,12 @@ class AttachedAuditGateNoAuditsE2ETestCase:
     order_code: str
     target_query: str
     expected_target_rows: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class NestedSourceGateE2ETestCase:
+    description: str
+    raw_code: str
+    expected_exit_code: int
+    expected_checks: dict[tuple[str, str], tuple[str, str]]
+    expected_orders_built: bool

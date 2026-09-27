@@ -12,12 +12,14 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     AttachedAuditGateCycleE2ETestCase,
     AttachedAuditGateNoAuditsE2ETestCase,
     AttachedAuditGatePartialBuildE2ETestCase,
+    NestedSourceGateE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
     ATTACHED_AUDIT_GATE_DATABASE,
     build_asset_names,
     build_check_outcomes,
     prepare_attached_audit_gate_project,
+    prepare_nested_source_gate_project,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     execute_duckdb,
@@ -265,3 +267,51 @@ def test_given_failing_gate_audit_when_building_without_audits_then_target_publi
     assert query_duckdb(
         db_path=project_dir / ATTACHED_AUDIT_GATE_DATABASE, sql=test_case.target_query
     ) == list(test_case.expected_target_rows)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NestedSourceGateE2ETestCase(
+            description="source audit reached through another audit's read waits for its reads",
+            raw_code="B",
+            expected_exit_code=0,
+            expected_checks={
+                ("source_check", "raw_codes"): ("source", "pass"),
+                ("order_check", "orders"): ("model", "pass"),
+            },
+            expected_orders_built=True,
+        ),
+        NestedSourceGateE2ETestCase(
+            description="failing source audit reached through another audit's read blocks it",
+            raw_code="Z",
+            expected_exit_code=1,
+            expected_checks={("source_check", "raw_codes"): ("source", "error")},
+            expected_orders_built=False,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_source_audit_triggered_by_audit_read_when_building_concurrently_then_reads_wait(
+    test_case: NestedSourceGateE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_nested_source_gate_project(
+        tmp_path=tmp_path, raw_code=test_case.raw_code
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--json", "--concurrency", "4"), project_dir=project_dir
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    outcomes: dict[tuple[object, object], tuple[object, object]] = build_check_outcomes(
+        result.stdout
+    )
+    assert {key: outcomes.get(key) for key in test_case.expected_checks} == (
+        test_case.expected_checks
+    )
+    assert (
+        table_exists(db_path=project_dir / ATTACHED_AUDIT_GATE_DATABASE, table_name="orders")
+        is test_case.expected_orders_built
+    )

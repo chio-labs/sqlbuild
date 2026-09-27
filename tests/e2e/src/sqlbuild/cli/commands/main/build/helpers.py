@@ -530,6 +530,44 @@ def prepare_attached_audit_gate_project(
     return project_dir
 
 
+def prepare_nested_source_gate_project(*, tmp_path: Path, raw_code: str) -> Path:
+    """Write a project whose model audit reads a source that has an audit reading a model."""
+
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="gate_shop",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "gate_shop"\nadapter = "duckdb"\n\n'
+                f'[connection]\ndatabase = "{ATTACHED_AUDIT_GATE_DATABASE}"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n  - name: raw_codes\n    schema: main\n    table: raw_codes\n"
+                "    audits:\n      - source_check:\n          severity: error\n"
+            ),
+            "audits/generic/source_check.sql": _GATE_AUDIT_TEMPLATE.format(
+                read='__ref("valid_codes")'
+            ),
+            "audits/generic/order_check.sql": _GATE_AUDIT_TEMPLATE.format(
+                read='__source("raw_codes")'
+            ),
+            "models/orders.sql": (
+                "MODEL (materialized table, audits [order_check (severity error)]);\n\n"
+                "SELECT 'A' AS code\n"
+            ),
+            "models/valid_codes.sql": (
+                "MODEL (materialized table);\n\n"
+                "SELECT code FROM (VALUES ('A'), ('B')) AS valid(code)\n"
+            ),
+        },
+    )
+    execute_duckdb(
+        db_path=project_dir / ATTACHED_AUDIT_GATE_DATABASE,
+        sql=f"CREATE TABLE main.raw_codes AS SELECT * FROM (VALUES ('A'), ('{raw_code}')) t(code)",
+    )
+    return project_dir
+
+
 def build_check_outcomes(stdout: str) -> dict[tuple[object, object], tuple[object, object]]:
     """Map (check name, asset) to (attachment kind, status) from build JSON output."""
 
