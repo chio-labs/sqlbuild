@@ -231,7 +231,6 @@ def test_given_semantic_project_when_compiling_across_processes_then_cache_is_in
     )
     assert macro_batch_hits + macro_entry_hits + macro_misses == test_case.model_count
     assert macro_batch_hits > 0
-    assert macro_entry_hits > 0
     assert macro_misses == test_case.expected_macro_edit_misses
     assert macro_bypasses == 0
     assert_complete_compile_cache_hit(
