@@ -56,6 +56,10 @@ their existing relations. A hook cannot read a resource built from the model tha
 that model would have to wait for its own dependants; that fails to compile with `P007`. Reading
 an unknown model, source, or seed fails to compile. Use `ctx.destination` for the hook's own model.
 
+The Dagster integration does not add declared reads to its asset graph, the same as reads of
+attached audits. Within one `sqb build` the ordering holds; when Dagster runs the hooked model in a
+separate build from the resources it reads, the hook reads their existing relations.
+
 Declaring reads does not change who may call the hook: the model must still see the hook under the
 usual [scope rules](/docs/concepts/models/hooks#project-layout).
 

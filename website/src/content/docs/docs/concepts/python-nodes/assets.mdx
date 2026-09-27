@@ -115,7 +115,7 @@ See [Tasks](/docs/concepts/python-nodes/tasks#retries) for the full retry policy
 | Parameter | Description |
 |-----------|-------------|
 | `name` | Override the node name (defaults to the function name) |
-| `depends_on` | Upstream nodes (function, tuple, or list); `model()`/`source()` for read-only SQL refs |
+| `depends_on` | Upstream nodes (function, tuple, or list); `model()`/`source()`/`seed()` for read-only SQL refs |
 | `columns` | Column declarations for the produced artifact |
 | `column_lineage` | Map of asset column to upstream `{node, column}` references |
 | `tags` | Labels for selection and grouping |

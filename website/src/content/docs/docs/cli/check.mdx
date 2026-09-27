@@ -50,4 +50,4 @@ Results are written to `target/run/checks/python_checks.json`.
 
 ## Relationship to build
 
-`sqb build` runs relevant Python checks by default after the tasks, assets, and loaders they depend on have run. `sqb build --no-audits` skips checks alongside audits. `sqb check` runs only checks, on demand.
+`sqb build` runs relevant Python checks by default after the tasks, assets, loaders, models, sources, and seeds they depend on have run. `sqb build --no-audits` skips checks alongside audits. `sqb check` runs only checks, on demand.
