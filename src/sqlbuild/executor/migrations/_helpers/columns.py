@@ -26,7 +26,7 @@ def apply_model_column_renames(
     entries: tuple[ColumnMigrationPlanEntry, ...],
     run_id: str,
 ) -> None:
-    """Rename and record every pending column of one model, re-checking live columns first."""
+    """Rename and record every pending column of one model, re-checking live columns per rename."""
 
     first: ColumnMigrationPlanEntry = entries[0]
     adapter.ensure_schema(
@@ -38,10 +38,6 @@ def apply_model_column_renames(
     create_table_sql: str = adapter.render_create_column_migration_state_table_sql(
         database=first.destination.database, schema=first.destination.schema or ""
     )
-    live: frozenset[str] = frozenset(
-        column.name.lower()
-        for column in _live_columns(adapter=adapter, connection=connection, entry=first)
-    )
     if not adapter.supports_transactional_ddl():
         entry: ColumnMigrationPlanEntry
         for entry in entries:
@@ -49,7 +45,6 @@ def apply_model_column_renames(
                 adapter=adapter,
                 connection=connection,
                 entry=entry,
-                live=live,
                 run_id=run_id,
                 create_table_sql=create_table_sql,
             )
@@ -61,7 +56,6 @@ def apply_model_column_renames(
                 adapter=adapter,
                 connection=connection,
                 entry=entry,
-                live=live,
                 run_id=run_id,
                 create_table_sql=None,
                 attempts=1,
@@ -73,11 +67,14 @@ def _rename_and_record(
     adapter: BaseAdapter,
     connection: Any,
     entry: ColumnMigrationPlanEntry,
-    live: frozenset[str],
     run_id: str,
     create_table_sql: str | None,
     attempts: int = MIGRATION_WRITE_ATTEMPTS,
 ) -> None:
+    live: frozenset[str] = frozenset(
+        column.name.lower()
+        for column in _live_columns(adapter=adapter, connection=connection, entry=entry)
+    )
     already_renamed: bool = (
         entry.origin_column.lower() not in live and entry.destination_column.lower() in live
     )

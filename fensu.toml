@@ -94,6 +94,12 @@ path = "src/sqlbuild/adapters/sqlserver/classes/sqlserver_adapter.py"
 reason = "The SQL Server adapter intentionally keeps overrideable backend behavior on one class."
 
 [[targets.python.rule_exceptions]]
+rule = "XSB051"
+path = "src/sqlbuild/executor/migrations/_helpers/columns.py"
+symbols = ["apply_model_column_renames"]
+reason = "Each in-place column rename must re-read live columns immediately before its ALTER so overlapping builds reconcile instead of failing."
+
+[[targets.python.rule_exceptions]]
 rule = "FFS120"
 path = "src/sqlbuild/integrations/dbt/_helpers/profile/render.py"
 symbols = ["_render_string.env_var", "_render_string.var"]
