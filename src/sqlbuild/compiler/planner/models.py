@@ -39,6 +39,7 @@ from sqlbuild.compiler.migrations.types import (
     MigrationPromotion,
     OldNameViewAction,
 )
+from sqlbuild.compiler.planner.classes.fixture_column_inferences import FixtureColumnInferences
 from sqlbuild.compiler.planner.classes.migration_fingerprint_cache import (
     MigrationFingerprintCache,
 )
@@ -147,6 +148,9 @@ class RelationFixturePlanningContext:
     relations: dict[FixtureKey, FixtureRelationMetadata]
     authoritative_columns: dict[FixtureKey, frozenset[str]]
     expected_types: dict[FixtureKey, dict[str, str]]
+    fixture_inferences: FixtureColumnInferences = field(
+        default_factory=FixtureColumnInferences, compare=False
+    )
 
 
 @dataclass(frozen=True)

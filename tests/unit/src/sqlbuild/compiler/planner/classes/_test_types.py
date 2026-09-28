@@ -25,3 +25,10 @@ class PersistedMigrationFingerprintTestCase:
     description: str
     between_runs: Callable[[Path, pytest.MonkeyPatch], None]
     expected_second_run_computations: int
+
+
+@dataclass(frozen=True)
+class FixtureColumnInferencesTestCase:
+    description: str
+    requests: tuple[tuple[str, str], ...]
+    expected_inferences: int

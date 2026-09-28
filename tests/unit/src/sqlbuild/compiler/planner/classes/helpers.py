@@ -9,7 +9,11 @@ from pathlib import Path
 
 import pytest
 
+import sqlbuild.compiler.planner.classes.fixture_column_inferences as fixture_inferences
 import sqlbuild.compiler.planner.classes.migration_fingerprint_cache as fingerprint_cache
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.compile.main._infer_fixture_columns import infer_fixture_column_facts
+from sqlbuild.compiler.compile.models import FixtureColumnInference
 from sqlbuild.compiler.planner._helpers.migrations.fingerprint import build_migration_fingerprint
 
 ORDERS_SQL: str = 'SELECT o.order_id, o.amount_cents FROM __ref("stg_orders") AS o'
@@ -81,3 +85,30 @@ def upgrade_sqlbuild(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
     del root
     monkeypatch.setattr(fingerprint_cache, "_package_version", lambda package: f"{package}-next")
+
+
+FIXTURE_PROFILES: dict[str, ExpressionInferenceProfile] = {
+    "duckdb": ExpressionInferenceProfile(sql_analysis_dialect="duckdb"),
+    "duckdb_again": ExpressionInferenceProfile(sql_analysis_dialect="duckdb"),
+    "snowflake": ExpressionInferenceProfile(sql_analysis_dialect="snowflake"),
+    "catalog": ExpressionInferenceProfile(sql_analysis_dialect="duckdb", binding_catalog=object()),
+}
+FIXTURE_QUERIES: dict[str, str] = {
+    "orders": "SELECT 1 AS order_id, 'open' AS status UNION ALL SELECT 2, 'closed'",
+    "customers": "SELECT 7 AS customer_id, NULL AS segment",
+}
+
+
+def count_fixture_inferences(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Count every fixture inference computed instead of reused."""
+
+    inferences: list[int] = []
+
+    def counting(
+        *, query_sql: str, inference_profile: ExpressionInferenceProfile
+    ) -> FixtureColumnInference | None:
+        inferences.append(1)
+        return infer_fixture_column_facts(query_sql=query_sql, inference_profile=inference_profile)
+
+    monkeypatch.setattr(fixture_inferences, "infer_fixture_column_facts", counting)
+    return inferences

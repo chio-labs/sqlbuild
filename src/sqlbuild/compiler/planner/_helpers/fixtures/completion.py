@@ -11,7 +11,6 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.main._analyze_columns_and_lineage import (
     analyze_resolved_column_reads,
 )
-from sqlbuild.compiler.compile.main._infer_fixture_columns import infer_fixture_column_facts
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
@@ -28,6 +27,7 @@ from sqlbuild.compiler.lineage.types import (
     ColumnTransformKind,
 )
 from sqlbuild.compiler.planner._helpers.fixtures.empty_fixture import is_empty_fixture_query
+from sqlbuild.compiler.planner.classes.fixture_column_inferences import FixtureColumnInferences
 from sqlbuild.compiler.planner.models import (
     FixtureColumnMetadata,
     FixtureRelationMetadata,
@@ -74,6 +74,7 @@ def build_relation_fixture_completion(
         fixture_groups=fixture_groups,
         relations=relations,
         adapter=adapter,
+        inferences=context.fixture_inferences,
     )
 
     fixture_keys_requiring_analysis: frozenset[FixtureKey] = _fixture_keys_requiring_analysis(
@@ -217,6 +218,7 @@ def _prepare_fixture_inputs(
     fixture_groups: FixtureGroups,
     relations: dict[FixtureKey, FixtureRelationMetadata],
     adapter: BaseAdapter,
+    inferences: FixtureColumnInferences,
 ) -> tuple[
     dict[FixtureKey, str],
     dict[FixtureKey, tuple[InferredColumn, ...]],
@@ -250,7 +252,7 @@ def _prepare_fixture_inputs(
                     continue
                 fixture_sql = empty_sql
             fixture_sql_by_key[key] = fixture_sql
-            inference: FixtureColumnInference | None = infer_fixture_column_facts(
+            inference: FixtureColumnInference | None = inferences.infer(
                 query_sql=fixture_sql,
                 inference_profile=adapter.expression_inference_profile(),
             )
