@@ -8,8 +8,8 @@ from typing import Any
 
 import duckdb
 
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.migrations.main.deterministic_column_event_id import (
     deterministic_column_migration_event_id,
@@ -102,12 +102,16 @@ def column_rename(*, origin: str, destination: str, day: int) -> ColumnMigration
     )
 
 
-def snowflake_location(*, adapter: SnowflakeAdapter, name: str) -> CompiledRelationLocation:
-    """Return an analytics relation rendered the way Snowflake qualifies it."""
+def adapter_location(
+    *, adapter: BaseAdapter, database: str | None, name: str
+) -> CompiledRelationLocation:
+    """Return an analytics relation rendered the way the adapter qualifies it."""
 
     return CompiledRelationLocation(
-        database=None,
+        database=database,
         schema="analytics",
         name=name,
-        qualified_name=adapter.render_qualified_name(database=None, schema="analytics", name=name),
+        qualified_name=adapter.render_qualified_name(
+            database=database, schema="analytics", name=name
+        ),
     )

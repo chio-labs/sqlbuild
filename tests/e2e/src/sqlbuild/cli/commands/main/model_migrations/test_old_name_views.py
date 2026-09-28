@@ -173,7 +173,7 @@ def test_given_renamed_column_when_building_then_old_name_view_uses_old_column_n
             expected_old_name_type="VIEW",
             expected_facts=_ALL_FACTS,
             expected_retention=("30d",),
-            expected_plan_fragment="archive analytics.revenue, then view until",
+            expected_plan_fragment=("└── old name  analytics.revenue\n        ├── view  until "),
         ),
         OldNameViewConfigE2ETestCase(
             description="model header overrides the project retention",
@@ -182,7 +182,7 @@ def test_given_renamed_column_when_building_then_old_name_view_uses_old_column_n
             expected_old_name_type="VIEW",
             expected_facts=_ALL_FACTS,
             expected_retention=("7d",),
-            expected_plan_fragment="archive analytics.revenue, then view until",
+            expected_plan_fragment=("└── old name  analytics.revenue\n        ├── view  until "),
         ),
         OldNameViewConfigE2ETestCase(
             description="project false keeps the old relation untouched",
@@ -191,7 +191,9 @@ def test_given_renamed_column_when_building_then_old_name_view_uses_old_column_n
             expected_old_name_type="BASE TABLE",
             expected_facts=(),
             expected_retention=(),
-            expected_plan_fragment="left for janitor (old_name_view false)",
+            expected_plan_fragment=(
+                "└── old name  analytics.revenue\n        └── left for janitor  old_name_view false"
+            ),
         ),
         OldNameViewConfigE2ETestCase(
             description="model header false overrides the project default",
@@ -200,7 +202,9 @@ def test_given_renamed_column_when_building_then_old_name_view_uses_old_column_n
             expected_old_name_type="BASE TABLE",
             expected_facts=(),
             expected_retention=(),
-            expected_plan_fragment="left for janitor (old_name_view false)",
+            expected_plan_fragment=(
+                "└── old name  analytics.revenue\n        └── left for janitor  old_name_view false"
+            ),
         ),
     ],
     ids=lambda case: case.description,
@@ -281,7 +285,9 @@ def test_given_move_recorded_without_old_name_view_when_enabling_then_old_name_i
             extra_config="",
             janitor_args=(),
             wait_seconds=0,
-            expected_janitor_fragment="analytics.revenue  for model:daily_revenue, kept until",
+            expected_janitor_fragment=(
+                "└── analytics.revenue  -> model:daily_revenue\n    └── expires  "
+            ),
             expected_old_name_type="VIEW",
             expected_drop_reasons=(),
         ),
@@ -290,7 +296,9 @@ def test_given_move_recorded_without_old_name_view_when_enabling_then_old_name_i
             extra_config="  old_name_view 1s,\n",
             janitor_args=(),
             wait_seconds=1.5,
-            expected_janitor_fragment="analytics.revenue  for model:daily_revenue, drop now (expired",
+            expected_janitor_fragment=(
+                "└── analytics.revenue  -> model:daily_revenue\n    └── drop  now  (expired "
+            ),
             expected_old_name_type=None,
             expected_drop_reasons=("expired",),
         ),
@@ -299,7 +307,7 @@ def test_given_move_recorded_without_old_name_view_when_enabling_then_old_name_i
             extra_config="",
             janitor_args=("--drop-old-name-view", "analytics.revenue"),
             wait_seconds=0,
-            expected_janitor_fragment="drop now (requested; expires",
+            expected_janitor_fragment="    └── drop  now  (requested; would expire ",
             expected_old_name_type=None,
             expected_drop_reasons=("early",),
         ),

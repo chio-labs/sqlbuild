@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+
 
 @dataclass(frozen=True)
 class OverlappingColumnRenameTestCase:
@@ -21,7 +23,11 @@ class ComposeColumnAliasesTestCase:
 
 
 @dataclass(frozen=True)
-class SnowflakeOldNameSqlTestCase:
+class AdapterOldNameSqlTestCase:
     description: str
+    adapter: BaseAdapter
+    database: str | None
     column_aliases: tuple[tuple[str, str], ...]
     expected_statements: tuple[str, ...]
+    expected_state_table_prefix: str
+    expected_transactional: bool

@@ -31,7 +31,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.old_name_views.helpers imp
             description="early drop interrupted before its record",
             early_drop=("janitor", "--auto-approve", "--drop-old-name-view", "dev.revenue"),
             expected_facts_after_crash=("required", "origin_archived", "view_created"),
-            expected_retry_fragment="record as dropped (the view no longer exists)",
+            expected_retry_fragment="└── record  dropped  (the view no longer exists)",
             expected_final_facts=("required", "origin_archived", "view_created", "view_dropped"),
         )
     ],

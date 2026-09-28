@@ -96,3 +96,14 @@ class DatabricksColumnMappingTestCase:
     description: str
     property_rows: list[tuple[str, str]]
     expected_available: bool
+
+
+@dataclass(frozen=True)
+class RelationGrantCaptureTestCase:
+    description: str
+    adapter: BaseAdapter
+    relation_type: str
+    rows: list[tuple[object, ...]]
+    destination: str
+    expected_query_fragment: str
+    expected_statements: tuple[str, ...]

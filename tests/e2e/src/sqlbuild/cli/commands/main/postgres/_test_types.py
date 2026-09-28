@@ -195,3 +195,13 @@ class PostgresBoundViewCrashE2ETestCase:
     expected_crash_exit_code: int
     expected_view_ids_after_crash: tuple[tuple[object, ...], ...]
     expected_view_ids_after_retry: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class PostgresOldNameGrantsE2ETestCase:
+    description: str
+    reader_role: str
+    expected_reader_ids: tuple[tuple[object, ...], ...]
+    expected_grants: tuple[str, ...]
+    expected_new_table_error: str
+    expected_plan_fragment: str

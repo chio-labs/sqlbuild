@@ -6,8 +6,12 @@ from typing import Any
 
 import pytest
 
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
+from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
+from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.migrations.models import ColumnMigrationEvent
 from sqlbuild.executor.migrations._helpers.old_name_views import (
     compose_column_aliases,
@@ -15,12 +19,12 @@ from sqlbuild.executor.migrations._helpers.old_name_views import (
 )
 from sqlbuild.executor.migrations.models import OldNameViewSource
 from tests.unit.src.sqlbuild.executor.migrations._helpers._test_types import (
+    AdapterOldNameSqlTestCase,
     ComposeColumnAliasesTestCase,
-    SnowflakeOldNameSqlTestCase,
 )
 from tests.unit.src.sqlbuild.executor.migrations._helpers.helpers import (
+    adapter_location,
     column_rename,
-    snowflake_location,
 )
 
 
@@ -59,28 +63,77 @@ def test_given_recorded_column_renames_when_composing_then_old_names_map_to_curr
 @pytest.mark.parametrize(
     "test_case",
     [
-        SnowflakeOldNameSqlTestCase(
-            description="view without aliases selects every column",
+        AdapterOldNameSqlTestCase(
+            description="snowflake view without aliases selects every column",
+            adapter=SnowflakeAdapter(),
+            database=None,
             column_aliases=(),
             expected_statements=(
                 "CREATE OR REPLACE VIEW analytics.revenue AS SELECT * FROM analytics.daily_revenue",
             ),
+            expected_state_table_prefix="CREATE TRANSIENT TABLE IF NOT EXISTS",
+            expected_transactional=False,
         ),
-        SnowflakeOldNameSqlTestCase(
-            description="aliased column keeps its exact name and exposes the old one",
+        AdapterOldNameSqlTestCase(
+            description="snowflake aliased column keeps its exact name and exposes the old one",
+            adapter=SnowflakeAdapter(),
+            database=None,
             column_aliases=(("amount", "revenue"),),
             expected_statements=(
                 "CREATE OR REPLACE VIEW analytics.revenue AS "
                 'SELECT "ORDER_ID", "REVENUE" AS "AMOUNT" FROM analytics.daily_revenue',
             ),
+            expected_state_table_prefix="CREATE TRANSIENT TABLE IF NOT EXISTS",
+            expected_transactional=False,
+        ),
+        AdapterOldNameSqlTestCase(
+            description="bigquery view reads the new table by name",
+            adapter=BigQueryAdapter(),
+            database="orders-project",
+            column_aliases=(("amount", "revenue"),),
+            expected_statements=(
+                "CREATE OR REPLACE VIEW `orders-project.analytics.revenue` AS SELECT `ORDER_ID`, "
+                "`REVENUE` AS `amount` FROM `orders-project.analytics.daily_revenue`",
+            ),
+            expected_state_table_prefix=(
+                "CREATE TABLE IF NOT EXISTS `orders-project.analytics._sqlbuild_old_name_views`"
+            ),
+            expected_transactional=False,
+        ),
+        AdapterOldNameSqlTestCase(
+            description="databricks view reads the new table by name",
+            adapter=DatabricksAdapter(),
+            database="main",
+            column_aliases=(("amount", "revenue"),),
+            expected_statements=(
+                "CREATE OR REPLACE VIEW `main`.`analytics`.`revenue` AS SELECT `ORDER_ID`, "
+                "`REVENUE` AS `amount` FROM `main`.`analytics`.`daily_revenue`",
+            ),
+            expected_state_table_prefix=(
+                "CREATE TABLE IF NOT EXISTS `main`.`analytics`.`_sqlbuild_old_name_views`"
+            ),
+            expected_transactional=False,
+        ),
+        AdapterOldNameSqlTestCase(
+            description="sql server re-creates the view inside a transaction",
+            adapter=SqlServerAdapter(),
+            database=None,
+            column_aliases=(("amount", "revenue"),),
+            expected_statements=(
+                "DROP VIEW IF EXISTS analytics.revenue",
+                "CREATE VIEW analytics.revenue AS SELECT [ORDER_ID], [REVENUE] AS [amount] "
+                "FROM analytics.daily_revenue",
+            ),
+            expected_state_table_prefix="IF NOT EXISTS (SELECT 1 FROM information_schema.tables",
+            expected_transactional=True,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_snowflake_compatibility_view_when_rendering_then_sql_uses_snowflake_names(
-    test_case: SnowflakeOldNameSqlTestCase, monkeypatch: pytest.MonkeyPatch
+def test_given_adapter_compatibility_view_when_rendering_then_sql_reads_new_relation_by_name(
+    test_case: AdapterOldNameSqlTestCase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    adapter: SnowflakeAdapter = SnowflakeAdapter()
+    adapter: BaseAdapter = test_case.adapter
 
     def columns(**_: Any) -> tuple[ColumnInfo, ...]:
         return (
@@ -90,8 +143,8 @@ def test_given_snowflake_compatibility_view_when_rendering_then_sql_uses_snowfla
 
     monkeypatch.setattr(adapter, "get_columns", columns)
     source: OldNameViewSource = OldNameViewSource(
-        old=snowflake_location(adapter=adapter, name="revenue"),
-        new=snowflake_location(adapter=adapter, name="daily_revenue"),
+        old=adapter_location(adapter=adapter, database=test_case.database, name="revenue"),
+        new=adapter_location(adapter=adapter, database=test_case.database, name="daily_revenue"),
         column_aliases=test_case.column_aliases,
     )
 
@@ -101,8 +154,8 @@ def test_given_snowflake_compatibility_view_when_rendering_then_sql_uses_snowfla
     )
 
     assert statements == test_case.expected_statements
-    assert adapter.supports_old_name_views()
     assert not adapter.views_bind_to_relation_identity()
+    assert adapter.supports_transactional_ddl() == test_case.expected_transactional
     assert adapter.render_create_old_name_view_state_table_sql(
-        database=None, schema="analytics"
-    ).startswith("CREATE TRANSIENT TABLE IF NOT EXISTS")
+        database=test_case.database, schema="analytics"
+    ).startswith(test_case.expected_state_table_prefix)

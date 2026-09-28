@@ -732,53 +732,75 @@ def build_ok(project_dir: Path) -> subprocess.CompletedProcess[str]:
     return result
 
 
-def _raise_interruption(*_: object, **__: object) -> None:
-    raise RuntimeError("simulated interruption")
+def _crash(connection: Any) -> None:
+    """Die like a killed process: the session ends, so nothing after this point runs or commits."""
+
+    connection.close()
+    raise RuntimeError("simulated crash")
+
+
+def _crashing_execute(
+    monkeypatch: pytest.MonkeyPatch, *, crashes_at: Callable[[str, list[str]], bool]
+) -> None:
+    original: Callable[..., Any] = PostgresAdapter.execute
+    executed: list[str] = []
+
+    def crash(self: PostgresAdapter, *, connection: Any, sql: str) -> Any:
+        del self, sql
+        _crash(connection)
+
+    outcomes: dict[bool, Callable[..., Any]] = {True: crash, False: original}
+
+    def execute(self: PostgresAdapter, *, connection: Any, sql: str) -> Any:
+        executed.append(sql)
+        return outcomes[crashes_at(sql, executed)](self, connection=connection, sql=sql)
+
+    monkeypatch.setattr(PostgresAdapter, "execute", execute)
+
+
+def _is_second_swap_rename(sql: str, executed: list[str]) -> bool:
+    swap_renames: list[str] = [*filter(lambda statement: "__swap_staging" in statement, executed)]
+    return swap_renames[1:2] == [sql]
+
+
+def _is_compatibility_view_rebind(sql: str, executed: list[str]) -> bool:
+    del executed
+    target: str = sql.split(" AS ")[0].replace('"', "")
+    return target.startswith("CREATE OR REPLACE VIEW") and target.endswith(".revenue")
+
+
+def _is_displaced_drop(sql: str, executed: list[str]) -> bool:
+    del executed
+    return sql.startswith("DROP TABLE") and "__staging" in sql
+
+
+def _is_column_drop(sql: str, executed: list[str]) -> bool:
+    del executed
+    return "DROP COLUMN" in sql
+
+
+def fail_mid_swap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Crash on the second rename of a swap, after the new relation already holds the name."""
+
+    _crashing_execute(monkeypatch, crashes_at=_is_second_swap_rename)
 
 
 def fail_bound_view_rebind(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Crash after the new relation is in place but before compatibility views follow it."""
+    """Crash while the compatibility view is being pointed at the new relation."""
 
-    monkeypatch.setattr(
-        "sqlbuild.executor.migrations.main._bound_old_name_view_guard.rebind_old_name_views",
-        _raise_interruption,
-    )
+    _crashing_execute(monkeypatch, crashes_at=_is_compatibility_view_rebind)
 
 
 def fail_displaced_drop(monkeypatch: pytest.MonkeyPatch) -> None:
     """Crash after compatibility views follow the new relation, before the old one is dropped."""
 
-    original: Callable[..., None] = PostgresAdapter.drop
-    outcomes: dict[bool, Callable[..., None]] = {True: _raise_interruption, False: original}
-    monkeypatch.setattr(
-        PostgresAdapter,
-        "drop",
-        lambda self, *, destination, **kwargs: outcomes["__staging" in destination](
-            self, destination=destination, **kwargs
-        ),
-    )
-
-
-def fail_mid_swap(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Crash on the last rename of a swap, after the new relation already holds the name."""
-
-    original: Callable[..., Any] = PostgresAdapter.execute
-    swap_renames: list[str] = []
-    outcomes: dict[bool, Callable[..., Any]] = {True: _raise_interruption, False: original}
-
-    def execute(self: PostgresAdapter, *, connection: Any, sql: str) -> Any:
-        swap_renames.extend(sql for _ in range("__swap_staging" in sql))
-        return outcomes[len(swap_renames) == 2 and swap_renames[-1] == sql](  # noqa: PLR2004
-            self, connection=connection, sql=sql
-        )
-
-    monkeypatch.setattr(PostgresAdapter, "execute", execute)
+    _crashing_execute(monkeypatch, crashes_at=_is_displaced_drop)
 
 
 def fail_column_drop(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Crash after compatibility views are released for a dropped column."""
+    """Crash on the column drop of an incremental schema change."""
 
-    monkeypatch.setattr(PostgresAdapter, "drop_columns", _raise_interruption)
+    _crashing_execute(monkeypatch, crashes_at=_is_column_drop)
 
 
 def no_postgres_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -797,3 +819,22 @@ def build_in_process(*, project_dir: Path, capsys: pytest.CaptureFixture[str]) -
     output: str = "".join(capsys.readouterr())
     assert exit_code in (0, 1), output
     return exit_code
+
+
+def reader_rows(
+    *, config: dict[str, object], role: str, sql: str
+) -> tuple[tuple[object, ...], ...]:
+    """Run one query as a login role that holds only the privileges granted to it."""
+
+    reader: dict[str, object] = {**config, "user": role, "password": role}
+    return fetch_postgres_rows(sql=sql, config=reader)
+
+
+def reader_error(*, config: dict[str, object], role: str, sql: str) -> str:
+    """Return the error a login role gets for one query, or an empty string."""
+
+    try:
+        _ = reader_rows(config=config, role=role, sql=sql)
+    except Exception as error:
+        return str(error).splitlines()[0]
+    return ""
