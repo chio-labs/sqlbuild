@@ -44,6 +44,7 @@ class OldNameResumeSkipTestCase:
 class OldNameJanitorClaimTestCase:
     description: str
     janitor_args: tuple[str, ...]
+    install_build_fault: Callable[[pytest.MonkeyPatch], None]
     expected_janitor_fragment: str
     expected_old_name_type: str
     expected_final_facts: tuple[str, ...]
@@ -55,3 +56,11 @@ class OldNameAliasResumeTestCase:
     install_failure: Callable[[pytest.MonkeyPatch], None]
     expected_facts_after_failure: tuple[str, ...]
     expected_plan_fragment: str
+
+
+@dataclass(frozen=True)
+class OldNameRefreshSkipTestCase:
+    description: str
+    renamed_sql: str
+    rebuilt_sql: str
+    expected_view_statements: int

@@ -36,6 +36,7 @@ from sqlbuild.adapter.contract.constants import (
 )
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
+from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     ExpressionInferenceProfile,
@@ -91,6 +92,7 @@ from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.adapters.snowflake._helpers.grants import (
     render_snowflake_view_grants,
+    render_snowflake_view_revokes,
     show_grants_object_kind,
     snowflake_relation_grants,
 )
@@ -2365,6 +2367,43 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         self, *, destination: str, sql: str
     ) -> tuple[str, ...] | None:
         return (f"CREATE OR REPLACE VIEW {destination} COPY GRANTS AS {sql}",)
+
+    def read_view_definition(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> str | None:
+        views: str = (
+            "INFORMATION_SCHEMA.VIEWS"
+            if database is None
+            else (f"{database}.INFORMATION_SCHEMA.VIEWS")
+        )
+        rows: list[tuple[Any, ...]] = self.execute(
+            connection=connection,
+            sql=(
+                f"SELECT VIEW_DEFINITION FROM {views} WHERE UPPER(TABLE_SCHEMA) = UPPER("
+                + "'"
+                + schema.replace("'", "''")
+                + "'"
+                + ") AND UPPER(TABLE_NAME) = UPPER("
+                + "'"
+                + name.replace("'", "''")
+                + "'"
+                + ")"
+            ),
+        ).fetchall()
+        return None if not rows else str(rows[0][0])
+
+    def view_definition_matches(
+        self, *, connection: Any, database: str | None, schema: str, name: str, sql: str
+    ) -> bool:
+        definition: str | None = self.read_view_definition(
+            connection=connection, database=database, schema=schema, name=name
+        )
+        return definition is not None and same_view_definition(definition=definition, sql=sql)
+
+    def render_relation_revokes(
+        self, *, grants: tuple[RelationGrant, ...], destination: str
+    ) -> tuple[str, ...]:
+        return render_snowflake_view_revokes(grants=grants, destination=destination)
 
     def rename_view(
         self,

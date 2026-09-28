@@ -14,6 +14,7 @@ from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapt
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from tests.unit.src.sqlbuild.adapters._test_types import (
     RelationGrantCaptureTestCase,
+    RelationRevokeTestCase,
     ViewReplaceTestCase,
 )
 from tests.unit.src.sqlbuild.adapters.helpers import GrantConnection, grant_execute
@@ -290,6 +291,85 @@ def test_given_existing_view_when_redefining_then_adapter_keeps_its_privileges(
 ) -> None:
     statements: tuple[str, ...] | None = test_case.adapter.render_replace_view_keeping_grants(
         destination="analytics.revenue", sql="SELECT 1"
+    )
+
+    assert statements == test_case.expected_statements
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RelationRevokeTestCase(
+            description="duckdb has nothing to revoke",
+            adapter=DuckDbAdapter(),
+            grants=(RelationGrant(privilege="SELECT", grantee="reporting"),),
+            destination="analytics.revenue",
+            expected_statements=(),
+        ),
+        RelationRevokeTestCase(
+            description="postgres revokes table, column, and public privileges",
+            adapter=PostgresAdapter(),
+            grants=(
+                RelationGrant(privilege="SELECT", grantee="reporting", grantable=True),
+                RelationGrant(privilege="UPDATE", grantee=None, column="amount"),
+            ),
+            destination="analytics.revenue",
+            expected_statements=(
+                'REVOKE SELECT ON analytics.revenue FROM "reporting"',
+                'REVOKE UPDATE ("amount") ON analytics.revenue FROM PUBLIC',
+            ),
+        ),
+        RelationRevokeTestCase(
+            description="snowflake revokes a future grant from a role",
+            adapter=SnowflakeAdapter(),
+            grants=(RelationGrant(privilege="SELECT", grantee="REPORTING", grantee_kind="ROLE"),),
+            destination="analytics.revenue",
+            expected_statements=('REVOKE SELECT ON VIEW analytics.revenue FROM ROLE "REPORTING"',),
+        ),
+        RelationRevokeTestCase(
+            description="databricks revokes from a principal",
+            adapter=DatabricksAdapter(),
+            grants=(RelationGrant(privilege="SELECT", grantee="analysts"),),
+            destination="`main`.`analytics`.`revenue`",
+            expected_statements=(
+                "REVOKE SELECT ON VIEW `main`.`analytics`.`revenue` FROM `analysts`",
+            ),
+        ),
+        RelationRevokeTestCase(
+            description="sql server revokes grants and denies, cascading grant options",
+            adapter=SqlServerAdapter(),
+            grants=(
+                RelationGrant(privilege="SELECT", grantee="leads", grantable=True),
+                RelationGrant(
+                    privilege="SELECT", grantee="reporting", column="amount", denied=True
+                ),
+            ),
+            destination="[analytics].[revenue]",
+            expected_statements=(
+                "REVOKE SELECT ON OBJECT::[analytics].[revenue] FROM [leads] CASCADE",
+                "REVOKE SELECT ON OBJECT::[analytics].[revenue] ([amount]) FROM [reporting]",
+            ),
+        ),
+        RelationRevokeTestCase(
+            description="bigquery removes a role binding",
+            adapter=BigQueryAdapter(),
+            grants=(
+                RelationGrant(privilege="roles/bigquery.dataViewer", grantee="group:a@example.com"),
+            ),
+            destination="orders-project.analytics.revenue",
+            expected_statements=(
+                "REVOKE `roles/bigquery.dataViewer` ON VIEW `orders-project.analytics.revenue` "
+                'FROM "group:a@example.com"',
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_added_grants_when_reconciling_then_adapter_renders_revokes(
+    test_case: RelationRevokeTestCase,
+) -> None:
+    statements: tuple[str, ...] = test_case.adapter.render_relation_revokes(
+        grants=test_case.grants, destination=test_case.destination
     )
 
     assert statements == test_case.expected_statements

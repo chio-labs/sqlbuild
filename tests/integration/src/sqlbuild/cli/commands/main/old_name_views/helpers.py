@@ -239,3 +239,53 @@ def aliased_orders_sql(*, alias: str, migrate_from: str | None = None) -> str:
         f"MODEL (materialized table, alias {alias}{migration});\n"
         'SELECT order_id, amount_cents FROM __source("raw_orders")\n'
     )
+
+
+def _failed_fingerprint_write(**_: object) -> tuple[str, ...]:
+    return ("fingerprint write failed",)
+
+
+def fail_view_fingerprint_write(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let view builds succeed while their best-effort fingerprint write fails."""
+
+    monkeypatch.setattr(
+        "sqlbuild.executor.run._helpers.materializations.view.try_write_fingerprint",
+        _failed_fingerprint_write,
+    )
+
+
+def no_build_fault(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Install nothing."""
+
+    del monkeypatch
+
+
+def aliased_table_sql(*, extra_column: str = "") -> str:
+    """Return the renamed table model with ``amount`` renamed to ``revenue`` in its old view."""
+
+    return (
+        f"MODEL (materialized table, migrate_from {ORIGIN_MODEL}, "
+        "columns (revenue (migrate_from amount_cents)));\n"
+        f'SELECT order_id, amount_cents AS revenue{extra_column} FROM __source("raw_orders")\n'
+    )
+
+
+def record_old_name_view_ddl(monkeypatch: pytest.MonkeyPatch, statements: list[str]) -> None:
+    """Record every DDL statement that creates or replaces the view at the old name."""
+
+    from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+
+    original: Callable[..., Any] = DuckDbAdapter.execute
+
+    def execute(self: DuckDbAdapter, *, connection: Any, sql: str) -> Any:
+        statements.extend(
+            sql
+            for _ in range(
+                sql.lstrip().upper().startswith("CREATE")
+                and "VIEW" in sql.upper()
+                and f"{ORIGIN_MODEL} AS" in sql
+            )
+        )
+        return original(self, connection=connection, sql=sql)
+
+    monkeypatch.setattr(DuckDbAdapter, "execute", execute)

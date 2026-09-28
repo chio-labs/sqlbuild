@@ -17,12 +17,14 @@ from sqlbuild.compiler.migrations.models import ColumnMigrationEvent
 from sqlbuild.executor.migrations._helpers.old_name_views import (
     compose_column_aliases,
     reader_access_warning,
+    reconcile_view_grants,
     render_old_name_view_select,
 )
 from sqlbuild.executor.migrations.models import OldNameViewSource
 from tests.unit.src.sqlbuild.executor.migrations._helpers._test_types import (
     AdapterOldNameSqlTestCase,
     ComposeColumnAliasesTestCase,
+    GrantReconcileTestCase,
     ReaderAccessWarningTestCase,
 )
 from tests.unit.src.sqlbuild.executor.migrations._helpers.helpers import (
@@ -30,6 +32,9 @@ from tests.unit.src.sqlbuild.executor.migrations._helpers.helpers import (
     column_rename,
     old_name_plan_entry,
 )
+
+_ANALYSTS: RelationGrant = RelationGrant(privilege="SELECT", grantee="analysts")
+_FUTURE: RelationGrant = RelationGrant(privilege="SELECT", grantee="reporting")
 
 
 @pytest.mark.parametrize(
@@ -207,3 +212,89 @@ def test_given_copied_grants_when_views_read_with_reader_access_then_m118_names_
     )
 
     assert warnings == test_case.expected_warnings
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        GrantReconcileTestCase(
+            description="postgres revokes a default privilege the re-create added",
+            adapter=PostgresAdapter(),
+            current=(_ANALYSTS, _FUTURE),
+            target=(_ANALYSTS,),
+            expected_statements=('REVOKE SELECT ON analytics.revenue FROM "reporting"',),
+        ),
+        GrantReconcileTestCase(
+            description="postgres grants what the drop removed, on exposed columns only",
+            adapter=PostgresAdapter(),
+            current=(),
+            target=(
+                _ANALYSTS,
+                RelationGrant(privilege="SELECT", grantee="leads", column="amount"),
+                RelationGrant(privilege="SELECT", grantee="leads", column="discount"),
+            ),
+            expected_statements=(
+                'GRANT SELECT ON analytics.revenue TO "analysts"',
+                'GRANT SELECT ("amount") ON analytics.revenue TO "leads"',
+            ),
+        ),
+        GrantReconcileTestCase(
+            description="postgres replaces a grant whose grant option changed",
+            adapter=PostgresAdapter(),
+            current=(RelationGrant(privilege="SELECT", grantee="analysts", grantable=True),),
+            target=(_ANALYSTS,),
+            expected_statements=(
+                'REVOKE SELECT ON analytics.revenue FROM "analysts"',
+                'GRANT SELECT ON analytics.revenue TO "analysts"',
+            ),
+        ),
+        GrantReconcileTestCase(
+            description="snowflake revokes a future grant copy grants reapplied",
+            adapter=SnowflakeAdapter(),
+            current=(RelationGrant(privilege="SELECT", grantee="REPORTING", grantee_kind="ROLE"),),
+            target=(),
+            expected_statements=('REVOKE SELECT ON VIEW analytics.revenue FROM ROLE "REPORTING"',),
+        ),
+        GrantReconcileTestCase(
+            description="unchanged privileges issue nothing",
+            adapter=PostgresAdapter(),
+            current=(_ANALYSTS,),
+            target=(_ANALYSTS,),
+            expected_statements=(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_view_grants_after_refresh_when_reconciling_then_they_equal_the_grants_before(
+    test_case: GrantReconcileTestCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    adapter: BaseAdapter = test_case.adapter
+    executed: list[str] = []
+
+    def columns(**_: Any) -> tuple[ColumnInfo, ...]:
+        return (
+            ColumnInfo(name="order_id", type="INTEGER"),
+            ColumnInfo(name="amount", type="INTEGER"),
+        )
+
+    def current(**_: Any) -> tuple[RelationGrant, ...]:
+        return test_case.current
+
+    def execute(*, connection: Any, sql: str) -> None:
+        del connection
+        executed.append(sql)
+
+    monkeypatch.setattr(adapter, "get_columns", columns)
+    monkeypatch.setattr(adapter, "read_relation_grants", current)
+    monkeypatch.setattr(adapter, "execute", execute)
+    source: OldNameViewSource = OldNameViewSource(
+        old=adapter_location(adapter=adapter, database=None, name="revenue"),
+        new=adapter_location(adapter=adapter, database=None, name="daily_revenue"),
+        column_aliases=(),
+    )
+
+    _ = reconcile_view_grants(
+        adapter=adapter, connection=None, source=source, target=test_case.target
+    )
+
+    assert tuple(executed) == test_case.expected_statements

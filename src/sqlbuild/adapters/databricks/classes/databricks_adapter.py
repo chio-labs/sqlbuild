@@ -38,6 +38,7 @@ from sqlbuild.adapter.contract.constants import (
 )
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
+from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
@@ -99,6 +100,7 @@ from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.adapters.databricks._helpers.grants import (
     databricks_relation_grants,
     render_databricks_view_grants,
+    render_databricks_view_revokes,
     show_grants_object_kind,
 )
 from sqlbuild.adapters.databricks.classes.databricks_connection import _DatabricksConnection
@@ -1835,6 +1837,43 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         self, *, destination: str, sql: str
     ) -> tuple[str, ...] | None:
         return (f"ALTER VIEW {destination} AS {sql}",)
+
+    def read_view_definition(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> str | None:
+        views: str = (
+            "information_schema.views"
+            if database is None
+            else (f"{database}.information_schema.views")
+        )
+        rows: list[tuple[Any, ...]] = self.execute(
+            connection=connection,
+            sql=(
+                f"SELECT view_definition FROM {views} WHERE lower(table_schema) = lower("
+                + "'"
+                + schema.replace("'", "''")
+                + "'"
+                + ") AND lower(table_name) = lower("
+                + "'"
+                + name.replace("'", "''")
+                + "'"
+                + ")"
+            ),
+        ).fetchall()
+        return None if not rows else str(rows[0][0])
+
+    def view_definition_matches(
+        self, *, connection: Any, database: str | None, schema: str, name: str, sql: str
+    ) -> bool:
+        definition: str | None = self.read_view_definition(
+            connection=connection, database=database, schema=schema, name=name
+        )
+        return definition is not None and same_view_definition(definition=definition, sql=sql)
+
+    def render_relation_revokes(
+        self, *, grants: tuple[RelationGrant, ...], destination: str
+    ) -> tuple[str, ...]:
+        return render_databricks_view_revokes(grants=grants, destination=destination)
 
     def rename_view(
         self,

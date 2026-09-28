@@ -40,6 +40,7 @@ from sqlbuild.adapter.contract.exceptions import (
     AdapterUserError,
     UnsupportedTypedSqlRenderingError,
 )
+from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
@@ -102,6 +103,7 @@ from sqlbuild.adapters.bigquery._helpers.grants import (
     bigquery_relation_grants,
     render_bigquery_view_grants,
     render_bigquery_view_move,
+    render_bigquery_view_revokes,
 )
 from sqlbuild.adapters.bigquery._helpers.statement_telemetry import affected_rows
 from sqlbuild.adapters.bigquery.classes.bigquery_connection import _BigQueryConnection
@@ -1875,6 +1877,35 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     ) -> tuple[str, ...] | None:
         del destination, sql
         return None
+
+    def read_view_definition(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> str | None:
+        dataset: str = self._build_dataset_id(database=database, schema=schema)
+        view_name: str = self._escape_sql_string(self._strip_identifier_quotes(name))
+        rows: list[tuple[Any, ...]] = self.execute(
+            connection=connection,
+            sql=(
+                f"SELECT view_definition FROM `{dataset}`.INFORMATION_SCHEMA.VIEWS "
+                f"WHERE table_name = '{view_name}'"
+            ),
+        ).fetchall()
+        return None if not rows else str(rows[0][0])
+
+    def view_definition_matches(
+        self, *, connection: Any, database: str | None, schema: str, name: str, sql: str
+    ) -> bool:
+        definition: str | None = self.read_view_definition(
+            connection=connection, database=database, schema=schema, name=name
+        )
+        return definition is not None and same_view_definition(definition=definition, sql=sql)
+
+    def render_relation_revokes(
+        self, *, grants: tuple[RelationGrant, ...], destination: str
+    ) -> tuple[str, ...]:
+        return render_bigquery_view_revokes(
+            grants=grants, destination=self._quote_identifier_path(destination)
+        )
 
     def rename_view(
         self,

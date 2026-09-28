@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
+    PostgresDefaultPrivilegesE2ETestCase,
     PostgresOldNameGrantsE2ETestCase,
     PostgresOldNameRevokeE2ETestCase,
 )
@@ -24,6 +25,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
     old_name_model_sql,
     reader_error,
     reader_rows,
+    revoke_view_select,
     write_migration_project,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
@@ -234,3 +236,106 @@ def test_given_view_privileges_changed_when_destination_rebuilds_then_current_pr
 
     assert revoked_error == test_case.expected_revoked_error
     assert granted_ids == test_case.expected_granted_ids
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresDefaultPrivilegesE2ETestCase(
+            description="default privileges do not reach a new compatibility view",
+            materialized="table",
+            rebuilt_columns="order_id, order_date, amount_cents",
+            role="orders_default_create",
+            revoke_before_rebuild=False,
+            expected_error="permission denied for view revenue",
+        ),
+        PostgresDefaultPrivilegesE2ETestCase(
+            description="drop and re-create does not restore a revoked default privilege",
+            materialized="incremental_sync",
+            rebuilt_columns="order_id, order_date",
+            role="orders_default_recreate",
+            revoke_before_rebuild=True,
+            expected_error="permission denied for view revenue",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_default_privileges_when_view_is_recreated_then_grants_match_before(
+    tmp_path: Path,
+    test_case: PostgresDefaultPrivilegesE2ETestCase,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    """Schema default privileges applied by a re-create are revoked again."""
+
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_old_name_defaults")
+    raw_schema_name: str = f"{schema_name}_raw"
+    view: str = f"{schema_name}.revenue"
+    role: str = test_case.role
+    ensure_postgres_schema_ready(schema_name=schema_name, config=postgres_e2e_config)
+    load_raw_orders(raw_schema_name=raw_schema_name, config=postgres_e2e_config)
+    create_login_role(role=role, config=postgres_e2e_config)
+    try:
+        project_dir: Path = write_migration_project(
+            tmp_path=tmp_path,
+            schema_name=schema_name,
+            raw_schema_name=raw_schema_name,
+            config=postgres_e2e_config,
+            models={"revenue": old_name_model_sql(materialized=test_case.materialized)},
+        )
+        _ = build_ok(project_dir)
+        execute_postgres_sql(
+            sql=f"GRANT USAGE ON SCHEMA {schema_name} TO {role}", config=postgres_e2e_config
+        )
+        execute_postgres_sql(
+            sql=(
+                f"ALTER DEFAULT PRIVILEGES IN SCHEMA {schema_name} GRANT SELECT ON TABLES TO {role}"
+            ),
+            config=postgres_e2e_config,
+        )
+        project_dir = write_migration_project(
+            tmp_path=tmp_path,
+            schema_name=schema_name,
+            raw_schema_name=raw_schema_name,
+            config=postgres_e2e_config,
+            models={
+                "daily_revenue": old_name_model_sql(
+                    materialized=test_case.materialized, migrate_from="revenue"
+                )
+            },
+        )
+        _ = build_ok(project_dir)
+        revoke_view_select(
+            view=view,
+            role=role,
+            revoke=test_case.revoke_before_rebuild,
+            config=postgres_e2e_config,
+        )
+        project_dir = write_migration_project(
+            tmp_path=tmp_path,
+            schema_name=schema_name,
+            raw_schema_name=raw_schema_name,
+            config=postgres_e2e_config,
+            models={
+                "daily_revenue": old_name_model_sql(
+                    materialized=test_case.materialized,
+                    migrate_from="revenue",
+                    columns=test_case.rebuilt_columns,
+                )
+            },
+        )
+        _ = build_ok(project_dir)
+        error: str = reader_error(
+            config=postgres_e2e_config, role=role, sql=f"SELECT order_id FROM {view}"
+        )
+    finally:
+        execute_postgres_sql(
+            sql=(
+                f"ALTER DEFAULT PRIVILEGES IN SCHEMA {schema_name} "
+                f"REVOKE SELECT ON TABLES FROM {role}"
+            ),
+            config=postgres_e2e_config,
+        )
+        cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
+        cleanup_postgres_schema(schema_name=raw_schema_name, config=postgres_e2e_config)
+
+    assert error == test_case.expected_error

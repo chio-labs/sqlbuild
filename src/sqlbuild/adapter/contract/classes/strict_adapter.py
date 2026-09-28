@@ -399,6 +399,27 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def read_view_definition(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> str | None:
+        """Return the stored definition of a view, or None when unknown."""
+        ...
+
+    @abstractmethod
+    def view_definition_matches(
+        self, *, connection: Any, database: str | None, schema: str, name: str, sql: str
+    ) -> bool:
+        """Return whether the view's stored definition is ``sql`` as this warehouse stores it."""
+        ...
+
+    @abstractmethod
+    def render_relation_revokes(
+        self, *, grants: tuple[RelationGrant, ...], destination: str
+    ) -> tuple[str, ...]:
+        """Render statements that remove grants from ``destination``."""
+        ...
+
+    @abstractmethod
     def rename_view(
         self,
         *,

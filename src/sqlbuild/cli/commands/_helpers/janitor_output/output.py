@@ -187,8 +187,9 @@ def _old_name_view_detail(view: JanitorOldNameView) -> tuple[str, str]:
         return "drop", f"now  (requested; would expire {expiry})"
     if view.drop_reason == OldNameViewDropReason.EXPIRED:
         return "drop", f"now  (expired {expiry})"
-    if view.claimed_by is not None:
-        return "record", f"dropped  (name now built by model:{view.claimed_by})"
+    if view.occupied:
+        owner: str = "" if view.claimed_by is None else f", model:{view.claimed_by}"
+        return "record", f"dropped  (name now used by another relation{owner})"
     if view.drop_reason == OldNameViewDropReason.MISSING:
         return "record", "dropped  (the view no longer exists)"
     return "expires", f"{expiry}  (live; drop early with --drop-old-name-view {name})"

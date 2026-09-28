@@ -52,6 +52,18 @@ def render_snowflake_view_grants(
     )
 
 
+def render_snowflake_view_revokes(
+    *, grants: tuple[RelationGrant, ...], destination: str
+) -> tuple[str, ...]:
+    """Render role and database-role grants to remove from ``destination``."""
+
+    return tuple(
+        f"REVOKE {grant.privilege} ON VIEW {destination} FROM {grant.grantee_kind} "
+        + _quoted_grantee(grant.grantee or "")
+        for grant in grants
+    )
+
+
 def _quoted_grantee(grantee: str) -> str:
     return ".".join('"' + part.replace('"', '""') + '"' for part in grantee.split("."))
 

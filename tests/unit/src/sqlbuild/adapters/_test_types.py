@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
+from sqlbuild.adapter.contract.models import RelationGrant
 from sqlbuild.adapter.contract.types import MigrationTransfer
 
 
@@ -115,3 +116,12 @@ class ViewReplaceTestCase:
     description: str
     adapter: BaseAdapter
     expected_statements: tuple[str, ...] | None
+
+
+@dataclass(frozen=True)
+class RelationRevokeTestCase:
+    description: str
+    adapter: BaseAdapter
+    grants: tuple[RelationGrant, ...]
+    destination: str
+    expected_statements: tuple[str, ...]

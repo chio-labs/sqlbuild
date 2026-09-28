@@ -74,3 +74,19 @@ def render_sqlserver_view_grants(
         + (" WITH GRANT OPTION" if grant.grantable else "")
         for grant in grants_for_columns(grants=grants, columns=columns)
     )
+
+
+def render_sqlserver_view_revokes(
+    *, grants: tuple[RelationGrant, ...], destination: str
+) -> tuple[str, ...]:
+    """Render grants or denies to remove from ``destination``, cascading grant options."""
+
+    return tuple(
+        f"REVOKE {grant.privilege} ON OBJECT::{destination}"
+        + ("" if grant.column is None else " ([" + grant.column.replace("]", "]]") + "])")
+        + " FROM ["
+        + (grant.grantee or "").replace("]", "]]")
+        + "]"
+        + (" CASCADE" if grant.grantable else "")
+        for grant in grants
+    )

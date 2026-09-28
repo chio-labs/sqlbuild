@@ -91,6 +91,7 @@ class JanitorOldNameView:
     history: OldNameViewHistory
     expires_at: datetime | None
     drop_reason: OldNameViewDropReason | None = None
+    occupied: bool = False
     claimed_by: str | None = None
 
     @property

@@ -35,6 +35,7 @@ from sqlbuild.adapter.contract.constants import (
     QUALIFIED_NAME_SEPARATOR,
 )
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
@@ -1588,6 +1589,36 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         self, *, destination: str, sql: str
     ) -> tuple[str, ...] | None:
         return self.render_create_view_as(destination=destination, sql=sql)
+
+    def read_view_definition(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> str | None:
+        database_filter: str = (
+            "" if database is None else f" AND database_name = {_duckdb_string_literal(database)}"
+        )
+        rows: list[tuple[Any, ...]] = self.execute(
+            connection=connection,
+            sql=(
+                "SELECT sql FROM duckdb_views() WHERE schema_name = "
+                f"{_duckdb_string_literal(schema)} AND view_name = {_duckdb_string_literal(name)}"
+                + database_filter
+            ),
+        ).fetchall()
+        return None if not rows else str(rows[0][0])
+
+    def view_definition_matches(
+        self, *, connection: Any, database: str | None, schema: str, name: str, sql: str
+    ) -> bool:
+        definition: str | None = self.read_view_definition(
+            connection=connection, database=database, schema=schema, name=name
+        )
+        return definition is not None and same_view_definition(definition=definition, sql=sql)
+
+    def render_relation_revokes(
+        self, *, grants: tuple[RelationGrant, ...], destination: str
+    ) -> tuple[str, ...]:
+        del grants, destination
+        return ()
 
     def rename_view(
         self,

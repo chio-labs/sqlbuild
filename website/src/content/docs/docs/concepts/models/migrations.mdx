@@ -89,15 +89,19 @@ On DuckDB, MotherDuck, PostgreSQL, and SQL Server these steps and their records 
 
 Column privileges are copied to the view's column of the same name, which is the old name when the view aliases a renamed column. A column privilege on a column the view no longer exposes is not copied; the view shows nothing of that column.
 
-The copied grants are recorded on the view's creation. After that, the view's own privileges are what counts: when SQLBuild redefines the view after a rebuild, it keeps the privileges the view has at that moment, so a privilege you revoke from the view stays revoked and one you grant on the view is kept. SQLBuild uses `CREATE OR REPLACE VIEW` on PostgreSQL, `COPY GRANTS` on Snowflake, and `ALTER VIEW` on SQL Server and Databricks. On BigQuery, and on PostgreSQL when the view must be dropped and re-created, it reads the view's current grants just before and reapplies them.
+The copied grants are recorded on the view's creation. After that, the view's own privileges are what counts: when SQLBuild redefines the view after a rebuild, the view ends up with exactly the privileges it had just before, so a privilege you revoke from the view stays revoked and one you grant on the view is kept. SQLBuild uses `CREATE OR REPLACE VIEW` on PostgreSQL, `COPY GRANTS` on Snowflake, and `ALTER VIEW` on SQL Server and Databricks.
+
+Creating or replacing a view can also apply privileges you did not give it: PostgreSQL applies `ALTER DEFAULT PRIVILEGES` when it re-creates a view, and Snowflake applies the schema's future grants for views on `CREATE OR REPLACE VIEW … COPY GRANTS`. SQLBuild reads the view's privileges before every create or redefinition and reconciles afterwards: it grants what went missing and revokes what was added. A new compatibility view likewise ends up with only the privileges copied from the old relation. Ownership and the owner's own privileges are never changed.
 
 A recorded view that no longer exists at the old name is not re-created by a build; [janitor](/docs/cli/janitor) records it as dropped.
+
+On Snowflake, BigQuery, Databricks, DuckDB, and MotherDuck, views read their tables by name when queried, so a build redefines a compatibility view only when its SQL would change, for example when the view lists columns and the new relation's columns changed. PostgreSQL views are bound to the table itself, so they are redefined whenever the table is replaced.
 
 BigQuery cannot rename views, so an old view model is re-created under the archive name with its IAM bindings, and then dropped.
 
 On BigQuery, a view reads its tables with the permissions of whoever queries it. A principal that could read the old table keeps access to the old name through the copied bindings, but also needs read access on the new table. SQLBuild does not grant that and does not create authorized views; the build warns with `M118` and names the principals.
 
-If columns were renamed, the view presents them under their old names, for example `SELECT order_id, revenue AS amount FROM analytics.daily_revenue`. Incremental and snapshot models alias every recorded [column migration](/docs/concepts/models/column-migrations). A table or view model that declares `migrate_from` can declare old column names the same way, as `revenue (migrate_from amount)`; this only aliases the column in the compatibility view, since the table is rebuilt with the new name anyway. The view is updated to the new relation's current columns after every build of the model.
+If columns were renamed, the view presents them under their old names, for example `SELECT order_id, revenue AS amount FROM analytics.daily_revenue`. Incremental and snapshot models alias every recorded [column migration](/docs/concepts/models/column-migrations). A table or view model that declares `migrate_from` can declare old column names the same way, as `revenue (migrate_from amount)`; this only aliases the column in the compatibility view, since the table is rebuilt with the new name anyway. The view follows the new relation's current columns after every build of the model.
 
 `sqb plan` shows what happens at the old name:
 

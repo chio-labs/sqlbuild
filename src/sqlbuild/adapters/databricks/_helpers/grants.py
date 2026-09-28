@@ -43,6 +43,20 @@ def render_databricks_view_grants(
     )
 
 
+def render_databricks_view_revokes(
+    *, grants: tuple[RelationGrant, ...], destination: str
+) -> tuple[str, ...]:
+    """Render Unity Catalog grants to remove from ``destination``."""
+
+    return tuple(
+        f"REVOKE {grant.privilege} ON VIEW {destination} FROM "
+        + "`"
+        + (grant.grantee or "").replace("`", "``")
+        + "`"
+        for grant in grants
+    )
+
+
 def show_grants_object_kind(relation_type: str) -> str:
     """Return the SHOW GRANTS object keyword for a listed relation type."""
 

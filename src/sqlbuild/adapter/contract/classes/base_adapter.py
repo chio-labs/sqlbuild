@@ -30,6 +30,7 @@ from sqlbuild.adapter.contract.exceptions import (
     AdapterUserError,
     UnsupportedTypedSqlRenderingError,
 )
+from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
@@ -752,6 +753,32 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
 
         del destination, sql
         return None
+
+    def read_view_definition(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> str | None:
+        """Return the stored definition of a view, or None when unknown."""
+
+        del connection, database, schema, name
+        return None
+
+    def view_definition_matches(
+        self, *, connection: Any, database: str | None, schema: str, name: str, sql: str
+    ) -> bool:
+        """Return whether the view's stored definition is ``sql`` as this warehouse stores it."""
+
+        definition: str | None = self.read_view_definition(
+            connection=connection, database=database, schema=schema, name=name
+        )
+        return definition is not None and same_view_definition(definition=definition, sql=sql)
+
+    def render_relation_revokes(
+        self, *, grants: tuple[RelationGrant, ...], destination: str
+    ) -> tuple[str, ...]:
+        """Render statements that remove grants from ``destination``."""
+
+        del grants, destination
+        return ()
 
     def rename_view(
         self,

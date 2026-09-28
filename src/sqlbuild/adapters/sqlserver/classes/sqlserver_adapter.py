@@ -42,6 +42,7 @@ from sqlbuild.adapter.contract.exceptions import (
     UnsupportedTypedSqlRenderingError,
 )
 from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
+from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
@@ -89,6 +90,7 @@ from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql 
 )
 from sqlbuild.adapters.sqlserver._helpers.grants import (
     render_sqlserver_view_grants,
+    render_sqlserver_view_revokes,
     sqlserver_relation_grants,
 )
 from sqlbuild.adapters.sqlserver.classes.sqlserver_connection import _SqlServerConnection
@@ -1889,6 +1891,31 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         self, *, destination: str, sql: str
     ) -> tuple[str, ...] | None:
         return (f"ALTER VIEW {destination} AS {sql}",)
+
+    def read_view_definition(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> str | None:
+        relation: str = ".".join(
+            self.render_identifier(part) for part in (database, schema, name) if part
+        ).replace("'", "''")
+        rows: list[tuple[Any, ...]] = self.execute(
+            connection=connection,
+            sql=f"SELECT OBJECT_DEFINITION(OBJECT_ID(N'{relation}', N'V'))",
+        ).fetchall()
+        return None if not rows or rows[0][0] is None else str(rows[0][0])
+
+    def view_definition_matches(
+        self, *, connection: Any, database: str | None, schema: str, name: str, sql: str
+    ) -> bool:
+        definition: str | None = self.read_view_definition(
+            connection=connection, database=database, schema=schema, name=name
+        )
+        return definition is not None and same_view_definition(definition=definition, sql=sql)
+
+    def render_relation_revokes(
+        self, *, grants: tuple[RelationGrant, ...], destination: str
+    ) -> tuple[str, ...]:
+        return render_sqlserver_view_revokes(grants=grants, destination=destination)
 
     def rename_view(
         self,

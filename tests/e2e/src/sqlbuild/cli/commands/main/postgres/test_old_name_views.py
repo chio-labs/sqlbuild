@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.postgres._test_types import (
+    PostgresOldNameJanitorE2ETestCase,
     PostgresOldNameViewE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
@@ -20,8 +21,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.postgres.helpers import (
     load_raw_orders,
     old_name_model_sql,
     ordered_ids,
+    replace_view,
     write_migration_project,
 )
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
 _ORIGIN: str = "revenue"
 _DESTINATION: str = "daily_revenue"
@@ -112,3 +115,72 @@ def test_given_renamed_model_when_rebuilding_on_postgres_then_old_name_view_foll
     assert test_case.expected_warning_fragment in migrated.stdout, migrated.stdout
     assert external in migrated.stdout, migrated.stdout
     assert external_ids == test_case.expected_external_ids
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PostgresOldNameJanitorE2ETestCase(
+            description="sqlbuild's own view is dropped early",
+            replacement_sql="",
+            expected_janitor_fragment="└── drop  now  (requested; would expire ",
+            expected_old_name_kinds=(),
+        ),
+        PostgresOldNameJanitorE2ETestCase(
+            description="another view at the old name is left alone",
+            replacement_sql="SELECT 1 AS order_id",
+            expected_janitor_fragment="└── record  dropped  (name now used by another relation)",
+            expected_old_name_kinds=(("v",),),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_postgres_old_name_when_dropping_early_then_only_sqlbuilds_view_is_dropped(
+    tmp_path: Path,
+    test_case: PostgresOldNameJanitorE2ETestCase,
+    postgres_e2e_config: dict[str, object],
+) -> None:
+    """Janitor compares the view's definition with SQLBuild's before dropping it."""
+
+    schema_name: str = build_unique_schema_name(prefix="sqlbuild_old_name_janitor")
+    raw_schema_name: str = f"{schema_name}_raw"
+    view: str = f"{schema_name}.{_ORIGIN}"
+    ensure_postgres_schema_ready(schema_name=schema_name, config=postgres_e2e_config)
+    load_raw_orders(raw_schema_name=raw_schema_name, config=postgres_e2e_config)
+    try:
+        project_dir: Path = write_migration_project(
+            tmp_path=tmp_path,
+            schema_name=schema_name,
+            raw_schema_name=raw_schema_name,
+            config=postgres_e2e_config,
+            models={_ORIGIN: old_name_model_sql(materialized="table")},
+        )
+        _ = build_ok(project_dir)
+        project_dir = write_migration_project(
+            tmp_path=tmp_path,
+            schema_name=schema_name,
+            raw_schema_name=raw_schema_name,
+            config=postgres_e2e_config,
+            models={_DESTINATION: old_name_model_sql(materialized="table", migrate_from=_ORIGIN)},
+        )
+        _ = build_ok(project_dir)
+        replace_view(view=view, sql=test_case.replacement_sql, config=postgres_e2e_config)
+        janitor: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "janitor", "--auto-approve", "--drop-old-name-view", view),
+            project_dir=project_dir,
+        )
+        kinds: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
+            sql=(
+                "SELECT relation.relkind FROM pg_class AS relation JOIN pg_namespace AS "
+                "namespace ON namespace.oid = relation.relnamespace WHERE namespace.nspname = "
+                f"'{schema_name}' AND relation.relname = '{_ORIGIN}'"
+            ),
+            config=postgres_e2e_config,
+        )
+    finally:
+        cleanup_postgres_schema(schema_name=schema_name, config=postgres_e2e_config)
+        cleanup_postgres_schema(schema_name=raw_schema_name, config=postgres_e2e_config)
+
+    assert janitor.returncode == 0, janitor.stdout + janitor.stderr
+    assert kinds == test_case.expected_old_name_kinds
+    assert test_case.expected_janitor_fragment in janitor.stdout, janitor.stdout

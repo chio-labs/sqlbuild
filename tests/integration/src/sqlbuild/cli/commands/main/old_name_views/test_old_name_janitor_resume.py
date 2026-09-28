@@ -24,10 +24,14 @@ from tests.integration.src.sqlbuild.cli.commands.main.old_name_views.helpers imp
     ORIGIN_MODEL,
     claiming_view_models,
     fail_janitor_drop_fact,
+    fail_view_fingerprint_write,
+    no_build_fault,
     old_name_facts,
     prepare_table_rename,
     relation_type_in,
 )
+
+_CLAIMED: str = "└── record  dropped  (name now used by another relation, model:revenue)"
 
 
 @pytest.mark.parametrize(
@@ -89,14 +93,24 @@ def test_given_janitor_crash_after_drop_when_rerunning_then_drop_is_recorded_as_
         OldNameJanitorClaimTestCase(
             description="plain janitor run records the claimed name without touching it",
             janitor_args=("janitor", "--auto-approve"),
-            expected_janitor_fragment="└── record  dropped  (name now built by model:revenue)",
+            install_build_fault=no_build_fault,
+            expected_janitor_fragment=_CLAIMED,
             expected_old_name_type="VIEW",
             expected_final_facts=("required", "origin_archived", "view_created", "view_dropped"),
         ),
         OldNameJanitorClaimTestCase(
             description="repeated early drop leaves the project's view in place",
             janitor_args=("janitor", "--auto-approve", "--drop-old-name-view", "dev.revenue"),
-            expected_janitor_fragment="└── record  dropped  (name now built by model:revenue)",
+            install_build_fault=no_build_fault,
+            expected_janitor_fragment=_CLAIMED,
+            expected_old_name_type="VIEW",
+            expected_final_facts=("required", "origin_archived", "view_created", "view_dropped"),
+        ),
+        OldNameJanitorClaimTestCase(
+            description="repeated early drop spares a project view built without a fingerprint",
+            janitor_args=("janitor", "--auto-approve", "--drop-old-name-view", "dev.revenue"),
+            install_build_fault=fail_view_fingerprint_write,
+            expected_janitor_fragment=_CLAIMED,
             expected_old_name_type="VIEW",
             expected_final_facts=("required", "origin_archived", "view_created", "view_dropped"),
         ),
@@ -124,7 +138,9 @@ def test_given_interrupted_early_drop_when_project_builds_the_name_then_janitor_
     write_project(
         project_dir=tmp_path, models=claiming_view_models(), project_toml=JANITOR_PROJECT_TOML
     )
-    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+    with monkeypatch.context() as patch:
+        test_case.install_build_fault(patch)
+        _ = build_ok(project_dir=tmp_path, capsys=capsys)
 
     janitor: CliRun = run_sqb(project_dir=tmp_path, args=test_case.janitor_args, capsys=capsys)
     old_name_type: str | None = relation_type_in(

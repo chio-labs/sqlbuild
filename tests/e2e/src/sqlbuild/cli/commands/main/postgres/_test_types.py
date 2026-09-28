@@ -216,3 +216,21 @@ class PostgresOldNameRevokeE2ETestCase:
     granted_role: str
     expected_revoked_error: str
     expected_granted_ids: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class PostgresOldNameJanitorE2ETestCase:
+    description: str
+    replacement_sql: str
+    expected_janitor_fragment: str
+    expected_old_name_kinds: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class PostgresDefaultPrivilegesE2ETestCase:
+    description: str
+    materialized: str
+    rebuilt_columns: str
+    role: str
+    revoke_before_rebuild: bool
+    expected_error: str

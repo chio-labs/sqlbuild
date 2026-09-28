@@ -40,3 +40,12 @@ class ReaderAccessWarningTestCase:
     adapter: BaseAdapter
     grants: tuple[RelationGrant, ...]
     expected_warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class GrantReconcileTestCase:
+    description: str
+    adapter: BaseAdapter
+    current: tuple[RelationGrant, ...]
+    target: tuple[RelationGrant, ...]
+    expected_statements: tuple[str, ...]

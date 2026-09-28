@@ -31,6 +31,18 @@ def render_bigquery_view_grants(
     )
 
 
+def render_bigquery_view_revokes(
+    *, grants: tuple[RelationGrant, ...], destination: str
+) -> tuple[str, ...]:
+    """Render role bindings to remove from ``destination``."""
+
+    return tuple(
+        f"REVOKE `{grant.privilege.replace('`', '')}` ON VIEW {destination} "
+        f'FROM "{(grant.grantee or "").replace(chr(34), "")}"'
+        for grant in grants
+    )
+
+
 def render_bigquery_view_move(
     *, origin: str, destination: str, definition: str, grants: tuple[str, ...]
 ) -> tuple[str, ...]:

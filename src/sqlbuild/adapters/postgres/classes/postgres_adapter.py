@@ -40,6 +40,7 @@ from sqlbuild.adapter.contract.constants import (
 )
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
+from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
@@ -90,6 +91,7 @@ from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.adapters.postgres._helpers.grants import (
     postgres_relation_grants,
     render_postgres_grants,
+    render_postgres_revokes,
 )
 from sqlbuild.adapters.postgres._helpers.view_rebind import render_postgres_view_rebind
 from sqlbuild.adapters.postgres.classes.postgres_connection import _PostgresConnection
@@ -696,6 +698,45 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         self, *, destination: str, sql: str
     ) -> tuple[str, ...] | None:
         return self.render_create_view_as(destination=destination, sql=sql)
+
+    def read_view_definition(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> str | None:
+        del database
+        rows: list[tuple[Any, ...]] = connection.execute(
+            "SELECT pg_get_viewdef(relation.oid) FROM pg_class AS relation "
+            "JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace "
+            f"WHERE relation.relkind = 'v' AND namespace.nspname = {_quote_sql_string(schema)} "
+            f"AND relation.relname = {_quote_sql_string(name)}"
+        ).fetchall()
+        return None if not rows else str(rows[0][0])
+
+    def view_definition_matches(
+        self, *, connection: Any, database: str | None, schema: str, name: str, sql: str
+    ) -> bool:
+        definition: str | None = self.read_view_definition(
+            connection=connection, database=database, schema=schema, name=name
+        )
+        if definition is None:
+            return False
+        connection.execute("BEGIN")
+        try:
+            connection.execute(f"CREATE TEMPORARY VIEW _sqb_view_probe AS {sql}")
+            probe: str = str(
+                connection.execute("SELECT pg_get_viewdef('_sqb_view_probe'::regclass)").fetchone()[
+                    0
+                ]
+            )
+        finally:
+            connection.execute("ROLLBACK")
+        return same_view_definition(definition=definition, sql=probe)
+
+    def render_relation_revokes(
+        self, *, grants: tuple[RelationGrant, ...], destination: str
+    ) -> tuple[str, ...]:
+        return render_postgres_revokes(
+            grants=grants, destination=destination, render_identifier=self.render_identifier
+        )
 
     def rename_view(
         self,

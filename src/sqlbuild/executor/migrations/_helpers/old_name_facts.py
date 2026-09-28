@@ -34,6 +34,7 @@ def old_name_fact(
     column_aliases: tuple[tuple[str, str], ...] = (),
     expires_at: datetime | None = None,
     grants_copied: tuple[str, ...] | None = None,
+    view_sql: str | None = None,
 ) -> OldNameViewEvent:
     """Build one old-name fact for a planned old-name step."""
 
@@ -54,6 +55,7 @@ def old_name_fact(
         column_aliases=column_aliases,
         expires_at=expires_at,
         grants_copied=grants_copied,
+        view_sql=view_sql,
     )
 
 

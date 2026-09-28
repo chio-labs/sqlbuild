@@ -115,6 +115,7 @@ class OldNameViewEvent:
     expires_at: datetime | None = None
     drop_reason: OldNameViewDropReason | None = None
     grants_copied: tuple[str, ...] | None = None
+    view_sql: str | None = None
 
 
 @dataclass(frozen=True)

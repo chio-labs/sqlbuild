@@ -89,6 +89,7 @@ def build_old_name_insert_sql(
             event.archive_name,
             _encode_aliases(event.column_aliases) if event.column_aliases else None,
             None if event.grants_copied is None else json.dumps(list(event.grants_copied)),
+            event.view_sql,
             event.expires_at,
             None if event.drop_reason is None else event.drop_reason.value,
             event.run_id,
@@ -153,6 +154,7 @@ def decode_old_name_event_row(
         expires_at=None if raw_expires is None else decode_event_timestamp(raw_expires),
         drop_reason=_decode_reason(raw_reason),
         grants_copied=_decode_grants(optional_text(values.get("grants_copied"))),
+        view_sql=optional_text(values.get("view_sql")),
     )
 
 

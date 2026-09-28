@@ -850,3 +850,27 @@ def create_login_role(*, role: str, config: dict[str, object]) -> None:
         ),
         config=config,
     )
+
+
+def replace_view(*, view: str, sql: str, config: dict[str, object]) -> None:
+    """Replace a view with one defined by ``sql``; an empty ``sql`` leaves it alone."""
+
+    statements: dict[bool, tuple[str, ...]] = {
+        True: (),
+        False: (f"DROP VIEW {view}", f"CREATE VIEW {view} AS {sql}"),
+    }
+    statement: str
+    for statement in statements[not sql]:
+        execute_postgres_sql(sql=statement, config=config)
+
+
+def revoke_view_select(*, view: str, role: str, revoke: bool, config: dict[str, object]) -> None:
+    """Revoke a role's SELECT on a view when ``revoke`` is set."""
+
+    statements: dict[bool, tuple[str, ...]] = {
+        True: (f"REVOKE SELECT ON {view} FROM {role}",),
+        False: (),
+    }
+    statement: str
+    for statement in statements[revoke]:
+        execute_postgres_sql(sql=statement, config=config)

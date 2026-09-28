@@ -10,6 +10,7 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.main.grants_for_columns import grants_for_columns
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationGrant, RelationInfo
 from sqlbuild.adapter.contract.types import RelationType
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
@@ -140,6 +141,7 @@ def run_old_name_steps(
                 column_aliases=aliases,
                 expires_at=None if duration is None else duration.add_to(now),
                 grants_copied=grants,
+                view_sql=select_sql,
             ),
             create_table=False,
             attempts=attempts,
@@ -201,26 +203,38 @@ def present_old_name_views(
 def refresh_old_name_views(
     *, adapter: BaseAdapter, connection: Any, sources: tuple[OldNameViewSource, ...]
 ) -> int:
-    """Redefine existing compatibility views in order, keeping each view's current privileges."""
+    """Redefine changed compatibility views in order, keeping their privileges as they were."""
 
+    refreshed: int = 0
     source: OldNameViewSource
     for source in sources:
         destination: str = _qualified(adapter=adapter, location=source.old)
         sql: str = render_old_name_view_select(
             adapter=adapter, connection=connection, source=source
         )
+        if not adapter.views_bind_to_relation_identity() and adapter.view_definition_matches(
+            connection=connection,
+            database=source.old.database,
+            schema=source.old.schema or "",
+            name=source.old.name,
+            sql=sql,
+        ):
+            continue
+        before: tuple[RelationGrant, ...] = _view_grants(
+            adapter=adapter, connection=connection, location=source.old
+        )
         native: tuple[str, ...] | None = adapter.render_replace_view_keeping_grants(
             destination=destination, sql=sql
         )
-        if native is not None:
+        if native is None:
+            _create_view(adapter=adapter, connection=connection, old=source.old, sql=sql)
+        else:
             _execute_all(adapter=adapter, connection=connection, statements=native)
-            continue
-        current: tuple[RelationGrant, ...] = _view_grants(
-            adapter=adapter, connection=connection, location=source.old
+        _ = reconcile_view_grants(
+            adapter=adapter, connection=connection, source=source, target=before
         )
-        _create_view(adapter=adapter, connection=connection, old=source.old, sql=sql)
-        _reapply(adapter=adapter, connection=connection, source=source, grants=current)
-    return len(sources)
+        refreshed += 1
+    return refreshed
 
 
 def release_old_name_views(
@@ -252,7 +266,9 @@ def recreate_old_name_views(
             old=source.old,
             sql=render_old_name_view_select(adapter=adapter, connection=connection, source=source),
         )
-        _reapply(adapter=adapter, connection=connection, source=source, grants=source.grants)
+        _ = reconcile_view_grants(
+            adapter=adapter, connection=connection, source=source, target=source.grants
+        )
     return len(sources)
 
 
@@ -315,24 +331,39 @@ def _view_grants(
     )
 
 
-def _reapply(
+def reconcile_view_grants(
     *,
     adapter: BaseAdapter,
     connection: Any,
     source: OldNameViewSource,
-    grants: tuple[RelationGrant, ...],
-) -> None:
-    if not grants:
-        return
+    target: tuple[RelationGrant, ...],
+) -> tuple[str, ...]:
+    """Revoke view privileges not in ``target`` and grant missing ones; return ``target`` SQL."""
+
+    destination: str = _qualified(adapter=adapter, location=source.old)
+    columns: tuple[str, ...] = exposed_columns(
+        adapter=adapter, connection=connection, source=source
+    )
+    wanted: tuple[RelationGrant, ...] = grants_for_columns(grants=target, columns=columns)
+    current: tuple[RelationGrant, ...] = _view_grants(
+        adapter=adapter, connection=connection, location=source.old
+    )
     _execute_all(
         adapter=adapter,
         connection=connection,
-        statements=adapter.render_relation_grants(
-            grants=grants,
-            destination=_qualified(adapter=adapter, location=source.old),
-            columns=exposed_columns(adapter=adapter, connection=connection, source=source),
+        statements=(
+            *adapter.render_relation_revokes(
+                grants=tuple(grant for grant in current if grant not in wanted),
+                destination=destination,
+            ),
+            *adapter.render_relation_grants(
+                grants=tuple(grant for grant in wanted if grant not in current),
+                destination=destination,
+                columns=columns,
+            ),
         ),
     )
+    return adapter.render_relation_grants(grants=wanted, destination=destination, columns=columns)
 
 
 def _replaceable(*, adapter: BaseAdapter, connection: Any, source: OldNameViewSource) -> bool:
@@ -624,8 +655,26 @@ def _create_compatibility_view(
     """Publish the view at the old name with the archived relation's grants; return them."""
 
     _create_view(adapter=adapter, connection=connection, old=entry.origin, sql=sql)
+    grants: tuple[RelationGrant, ...] = _archive_grants(
+        adapter=adapter, connection=connection, entry=entry, archive_name=archive_name
+    )
+    statements: tuple[str, ...] = reconcile_view_grants(
+        adapter=adapter, connection=connection, source=source, target=grants
+    )
+    return statements, grants
+
+
+def _archive_grants(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    entry: OldNameViewPlanEntry,
+    archive_name: str | None,
+) -> tuple[RelationGrant, ...]:
+    """Return the grants of the archived old relation; none when no archive is found."""
+
     if archive_name is None:
-        return (), ()
+        return ()
     archive: RelationInfo | None = _listed(
         adapter=adapter,
         connection=connection,
@@ -637,21 +686,14 @@ def _create_compatibility_view(
         ),
     )
     if archive is None:
-        return (), ()
-    grants: tuple[RelationGrant, ...] = adapter.read_relation_grants(
+        return ()
+    return adapter.read_relation_grants(
         connection=connection,
         database=archive.database,
         schema=archive.schema or entry.origin.schema or "",
         name=archive.name,
         relation_type=normalize_relation_type(archive.relation_type).value,
     )
-    statements: tuple[str, ...] = adapter.render_relation_grants(
-        grants=grants,
-        destination=_qualified(adapter=adapter, location=entry.origin),
-        columns=exposed_columns(adapter=adapter, connection=connection, source=source),
-    )
-    _execute_all(adapter=adapter, connection=connection, statements=statements)
-    return statements, grants
 
 
 def reader_access_warning(

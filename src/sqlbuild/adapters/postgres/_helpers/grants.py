@@ -52,3 +52,20 @@ def render_postgres_grants(
         + (" WITH GRANT OPTION" if grant.grantable else "")
         for grant in grants_for_columns(grants=grants, columns=columns)
     )
+
+
+def render_postgres_revokes(
+    *,
+    grants: tuple[RelationGrant, ...],
+    destination: str,
+    render_identifier: Callable[[str], str],
+) -> tuple[str, ...]:
+    """Render grants to remove from ``destination``, grant option included."""
+
+    return tuple(
+        f"REVOKE {grant.privilege}"
+        + ("" if grant.column is None else f" ({render_identifier(grant.column)})")
+        + f" ON {destination} FROM "
+        + ("PUBLIC" if grant.grantee is None else render_identifier(grant.grantee))
+        for grant in grants
+    )
