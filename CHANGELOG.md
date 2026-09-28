@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.125.1](https://github.com/chio-labs/sqlbuild/compare/v0.125.0...v0.125.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* **lineage:** expand each shared node once when rendering lineage trees ([#870](https://github.com/chio-labs/sqlbuild/issues/870)) ([78b4626](https://github.com/chio-labs/sqlbuild/commit/78b46264d9bf2e31d7294ef34694c1eb9b25f4ee))
+
 ## [0.125.0](https://github.com/chio-labs/sqlbuild/compare/v0.124.2...v0.125.0) (2026-09-28)
 
 
