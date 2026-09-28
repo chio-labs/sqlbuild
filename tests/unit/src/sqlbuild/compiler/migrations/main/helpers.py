@@ -88,6 +88,8 @@ def old_name_fact(
     event_type: OldNameViewEventType,
     expires_at: datetime | None = None,
     column_aliases: tuple[tuple[str, str], ...] = (),
+    archive_name: str | None = None,
+    grants_copied: tuple[str, ...] | None = None,
 ) -> OldNameViewEvent:
     """Return one old-name fact of a move from main.revenue to main.daily_revenue."""
 
@@ -106,4 +108,6 @@ def old_name_fact(
         view_retention="30d",
         column_aliases=column_aliases,
         expires_at=expires_at,
+        archive_name=archive_name,
+        grants_copied=grants_copied,
     )

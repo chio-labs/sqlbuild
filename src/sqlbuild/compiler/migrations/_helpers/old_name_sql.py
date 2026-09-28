@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any
 
 from sqlbuild.adapter.contract.types import FrameworkType
@@ -97,19 +97,32 @@ def build_old_name_insert_sql(
     )
 
 
+def readable_old_name_columns(stored_columns: Iterable[str]) -> tuple[str, ...]:
+    """Return the known columns a stored table has; columns added later may be absent."""
+
+    stored: frozenset[str] = frozenset(column.lower() for column in stored_columns)
+    return tuple(column for column in OLD_NAME_VIEW_COLUMNS if column in stored)
+
+
 def build_old_name_read_sql(
-    *, database: str | None, schema: str, render_qualified_name: Callable[..., str | None]
+    *,
+    database: str | None,
+    schema: str,
+    columns: tuple[str, ...],
+    render_qualified_name: Callable[..., str | None],
 ) -> str:
     table: str = qualified_old_name_view_table(
         database=database, schema=schema, render_qualified_name=render_qualified_name
     )
-    return f"SELECT {', '.join(OLD_NAME_VIEW_COLUMNS)} FROM {table} ORDER BY created_at, event_id"
+    return f"SELECT {', '.join(columns)} FROM {table} ORDER BY created_at, event_id"
 
 
-def decode_old_name_event_row(row: tuple[Any, ...]) -> OldNameViewEvent | None:
-    """Decode one row, returning None for event types this version does not know."""
+def decode_old_name_event_row(
+    row: tuple[Any, ...], *, columns: tuple[str, ...] = OLD_NAME_VIEW_COLUMNS
+) -> OldNameViewEvent | None:
+    """Decode one row of ``columns``, reading absent ones as NULL; skip unknown event types."""
 
-    values: dict[str, Any] = dict(zip(OLD_NAME_VIEW_COLUMNS, row, strict=False))
+    values: dict[str, Any] = dict(zip(columns, row, strict=False))
     try:
         event_type: OldNameViewEventType = OldNameViewEventType(str(values.get("event_type")))
     except ValueError:

@@ -14,6 +14,9 @@ from sqlbuild.compiler.migrations.main.read_old_name_view_events import (
     read_old_name_view_events,
 )
 from sqlbuild.compiler.migrations.main.relation_for_location import migration_relation_for_location
+from sqlbuild.compiler.migrations.main.stored_old_name_view_columns import (
+    stored_old_name_view_columns,
+)
 from sqlbuild.compiler.migrations.main.write_old_name_view_event import write_old_name_view_event
 from sqlbuild.compiler.migrations.models import MigrationRelation, OldNameViewEvent
 from sqlbuild.compiler.migrations.types import OldNameViewEventType
@@ -100,6 +103,12 @@ def recorded_old_name_facts(
         execute=adapter.execute,
         database=relation.database,
         schema=relation.schema or "",
+        stored_columns=stored_old_name_view_columns(
+            adapter=adapter,
+            connection=connection,
+            database=relation.database,
+            schema=relation.schema or "",
+        ),
         render_qualified_name=adapter.render_qualified_name,
     ):
         if event.migration_event_id == migration_event_id:

@@ -21,6 +21,9 @@ from sqlbuild.compiler.migrations.main._read_events import read_migration_events
 from sqlbuild.compiler.migrations.main.read_old_name_view_events import (
     read_old_name_view_events,
 )
+from sqlbuild.compiler.migrations.main.stored_old_name_view_columns import (
+    stored_old_name_view_columns,
+)
 from sqlbuild.compiler.migrations.models import (
     ColumnMigrationEvent,
     MigrationEvent,
@@ -136,6 +139,12 @@ class MigrationStateInspection:
                     execute=self._adapter.execute,
                     database=self._database,
                     schema=schema,
+                    stored_columns=stored_old_name_view_columns(
+                        adapter=self._adapter,
+                        connection=self._connection,
+                        database=self._database,
+                        schema=schema,
+                    ),
                     render_qualified_name=self._adapter.render_qualified_name,
                 )
             )

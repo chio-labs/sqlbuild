@@ -24,6 +24,9 @@ from sqlbuild.compiler.migrations.main.deterministic_old_name_view_event_id impo
 from sqlbuild.compiler.migrations.main.read_old_name_view_histories import (
     read_old_name_view_histories,
 )
+from sqlbuild.compiler.migrations.main.stored_old_name_view_columns import (
+    stored_old_name_view_columns,
+)
 from sqlbuild.compiler.migrations.main.write_old_name_view_event import write_old_name_view_event
 from sqlbuild.compiler.migrations.models import OldNameViewEvent, OldNameViewHistory
 from sqlbuild.compiler.migrations.types import (
@@ -201,6 +204,9 @@ def _read_histories(
                 execute=adapter.execute,
                 database=database,
                 schema=schema,
+                stored_columns=stored_old_name_view_columns(
+                    adapter=adapter, connection=connection, database=database, schema=schema
+                ),
                 render_qualified_name=adapter.render_qualified_name,
             )
         )

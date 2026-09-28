@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any
 
 from sqlbuild.adapter.contract.types import AdapterExecute
@@ -20,6 +20,7 @@ def read_old_name_view_histories(
     execute: AdapterExecute[Any, Any],
     database: str | None,
     schema: str,
+    stored_columns: Iterable[str],
     render_qualified_name: Callable[..., str | None],
 ) -> tuple[OldNameViewHistory, ...]:
     """Read moves and old-name facts from a schema that holds both state tables."""
@@ -37,6 +38,7 @@ def read_old_name_view_histories(
             execute=execute,
             database=database,
             schema=schema,
+            stored_columns=stored_columns,
             render_qualified_name=render_qualified_name,
         ),
     )

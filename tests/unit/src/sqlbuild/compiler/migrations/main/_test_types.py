@@ -52,3 +52,11 @@ class OldNameViewProjectionTestCase:
     recorded_moves: int
     expires_in_days: int
     expected_statuses: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class OldNameViewAbsentColumnsTestCase:
+    description: str
+    absent_columns: tuple[str, ...]
+    expected_statuses: tuple[str, ...]
+    expected_archive_name: str | None
