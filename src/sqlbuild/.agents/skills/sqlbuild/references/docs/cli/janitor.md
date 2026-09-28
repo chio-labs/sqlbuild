@@ -62,7 +62,15 @@ Setting both `retention_days` and `archive_retention_days` to `0` archives and d
 
 ## Compatibility views
 
-When a model is renamed, SQLBuild keeps a [compatibility view](../concepts/models/migrations.md#old-names) at its old name. The janitor lists each one with the model it reads and its expiry. It is never archived as a stale relation. Once it expires, or when it is named with `--drop-old-name-view`, the janitor drops it and records the drop in `_sqlbuild_old_name_views`. A compatibility view that no longer exists is recorded as dropped.
+When a model is renamed, SQLBuild keeps a [compatibility view](../concepts/models/migrations.md#old-names) at its old name. The janitor lists each one with the model it reads and its expiry:
+
+```
+Old name views (1)
+└── prod.revenue  -> model:daily_revenue
+    └── expires  2026-10-28  (live; drop early with --drop-old-name-view prod.revenue)
+```
+
+A compatibility view is never archived as a stale relation. Once it expires, or when it is named with `--drop-old-name-view`, the janitor drops it and records the drop in `_sqlbuild_old_name_views`. A compatibility view that no longer exists is recorded as dropped.
 
 Run the same SQLBuild version for `sqb janitor` as for builds. An older janitor does not know compatibility views and archives them as stale relations.
 

@@ -74,10 +74,22 @@ A rename breaks every query outside the project that still reads the old name: d
 
 1. The old relation is renamed to `_sqb_archive__<UTC timestamp>__migration_origin__<name>`.
 2. A view is created at the old name that selects from the new relation.
+3. The view gets the privileges that were granted on the old relation, read from the archive. Only existing grants are copied; nothing new is granted.
 
-On DuckDB, MotherDuck, and PostgreSQL both steps and their records commit in one transaction. On Snowflake each step is recorded after it runs, and a re-run resumes from the first unrecorded step without repeating one. A failure is reported as `M117`; re-run the build.
+On DuckDB, MotherDuck, PostgreSQL, and SQL Server these steps and their records commit in one transaction. On Snowflake, BigQuery, and Databricks each step is recorded after it runs, and a re-run resumes from the first unrecorded step without repeating one. A failure is reported as `M117`; re-run the build.
 
-If columns were renamed, the view presents them under their old names, for example `SELECT order_id, revenue AS amount FROM analytics.daily_revenue`. Incremental and snapshot models alias every recorded [column migration](/docs/concepts/models/column-migrations). A table or view model that declares `migrate_from` can declare old column names the same way, as `revenue (migrate_from amount)`; this only aliases the column in the compatibility view, since the table is rebuilt with the new name anyway. The view is re-created against the new relation's current columns after every build of the model.
+| Adapter | Privileges copied to the view |
+|---------|-------------------------------|
+| Snowflake | `SHOW GRANTS` on the archive, replayed to roles and database roles, keeping `WITH GRANT OPTION`. `OWNERSHIP`, grants to shares, and privileges that don't apply to views are skipped |
+| PostgreSQL | Table privileges from the catalog, including grants to `PUBLIC` and `WITH GRANT OPTION`. The owner's own privileges are not copied |
+| BigQuery | Table IAM role bindings from `INFORMATION_SCHEMA.OBJECT_PRIVILEGES`, replayed with `GRANT` |
+| Databricks | Unity Catalog grants on the table itself that apply to views, such as `SELECT`. `OWN`, `MODIFY`, and inherited catalog or schema grants are skipped |
+| SQL Server | Object permissions, including `DENY` and `WITH GRANT OPTION`, that apply to views. Column-level permissions are not copied |
+| DuckDB, MotherDuck | No object privileges exist |
+
+The copied grants are recorded with the view and reapplied whenever SQLBuild re-creates it, even after janitor has deleted the archive. BigQuery cannot rename views, so an old view model is re-created under the archive name and then dropped.
+
+If columns were renamed, the view presents them under their old names, for example `SELECT order_id, revenue AS amount FROM analytics.daily_revenue`. Incremental and snapshot models alias every recorded [column migration](/docs/concepts/models/column-migrations). A table or view model that declares `migrate_from` can declare old column names the same way, as `revenue (migrate_from amount)`; this only aliases the column in the compatibility view, since the table is rebuilt with the new name anyway. The view is updated to the new relation's current columns after every build of the model.
 
 `sqb plan` shows what happens at the old name:
 
@@ -85,10 +97,16 @@ If columns were renamed, the view presents them under their old names, for examp
 Migrations (1)
 └── daily_revenue  migrate  analytics.revenue -> analytics.daily_revenue
     ├── transfer  rebuild (table)
-    └── old name  archive analytics.revenue, then view until 2026-10-28 (amount <- revenue)
+    └── old name  analytics.revenue
+        ├── view  until 2026-10-28
+        ├── columns  amount <- revenue
+        ├── grants  copied from the old table
+        └── old table  archived
 ```
 
-In `sqb plan --json`, each migration has an `old_name` object with `action` (`archive_and_view`, `view_only`, `live`, or `none`), `view`, `reads`, `expires_at`, `column_aliases`, and `reason`. The top-level `old_names` list also includes steps that resume an earlier move.
+A move resumed after the archive shows `old table  already archived`. Once the view exists it shows `view  live until 2026-10-28` and how many grants were copied. When no view is kept, the block shows `left for janitor` and the reason, such as `old_name_view false` or `name reused by model:revenue`.
+
+In `sqb plan --json`, each migration has an `old_name` object with `action` (`archive_and_view`, `view_only`, `live`, or `none`), `view`, `reads`, `expires_at`, `column_aliases`, `grants_copied` (the number of grants copied once the view exists, otherwise `null`), and `reason`. The top-level `old_names` list also includes steps that resume an earlier move.
 
 The view expires after 30 days by default. After that, [janitor](/docs/cli/janitor) drops it; `sqb janitor --drop-old-name-view analytics.revenue` drops it earlier. Change the default for the project, or turn the views off with `false`:
 
@@ -103,8 +121,7 @@ With views off, or when a view can't be kept, the old relation is left in place 
 
 - the old relation was not built by SQLBuild;
 - another model in the project builds at the old name;
-- the old name is itself a compatibility view of an earlier rename;
-- the adapter is BigQuery, Databricks, or SQL Server (`sqb plan` says so).
+- the old name is itself a compatibility view of an earlier rename.
 
 Moves recorded before a SQLBuild version that supports old-name views never gain a view later.
 
@@ -117,7 +134,9 @@ The compatibility view is for consumers outside the project. Project code must u
 
 ### PostgreSQL views
 
-PostgreSQL views are bound to the table they read, not its name. SQLBuild drops and re-creates its compatibility views around every rebuild of the renamed model. Views outside SQLBuild that read the old relation follow it into the archive and keep reading its old data; the build warns with `M115` and names them. Re-create them against the old name or the new relation.
+PostgreSQL views are bound to the table they read, not its name. When a build replaces the renamed model's table, or drops or retypes its columns, SQLBuild points its compatibility views at the new table in the same transaction, so they are never missing, even if the build is interrupted. A view is replaced in place when its columns allow it, so views you build on top of the compatibility view keep working; otherwise it is dropped and re-created with its grants, which fails if another view depends on it.
+
+Views outside SQLBuild that read the old relation follow it into the archive and keep reading its old data; the build warns with `M115` and names them. Re-create them against the old name or the new relation. On the other adapters, views read relations by name, so no rebinding is needed.
 
 ### Upgrading
 
