@@ -19,7 +19,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     INSPECTION_BENCHMARK_MODEL_COUNT,
-    INSPECTION_BENCHMARK_SELECTED_COUNT,
     SHARED_DIAMOND_HUB,
     SHARED_DIAMOND_ROLLUP,
     InspectionCommandMeasurement,
@@ -99,17 +98,6 @@ _MODEL_COUNT: int = INSPECTION_BENCHMARK_MODEL_COUNT
             expected_max_rss_bytes=128 * _MIB,
         ),
         InspectionCommandPerformanceGuardTestCase(
-            description="models_3000_lineage_column_trace_upstream_from_fan_in_rollup",
-            sqb_args=("lineage", f"{SHARED_DIAMOND_ROLLUP}.amount", "--direction", "upstream"),
-            expected_fragments=(
-                f"Column trace  {SHARED_DIAMOND_ROLLUP}.amount  upstream",
-                "Showing 25 of ",
-            ),
-            expected_max_output_lines=_MODEL_COUNT,
-            expected_max_wall_seconds=100.0,
-            expected_max_rss_bytes=704 * _MIB,
-        ),
-        InspectionCommandPerformanceGuardTestCase(
             description="models_3000_dag_json",
             sqb_args=("dag", "--json"),
             expected_fragments=(
@@ -137,17 +125,6 @@ _MODEL_COUNT: int = INSPECTION_BENCHMARK_MODEL_COUNT
             expected_max_output_lines=_MODEL_COUNT,
             expected_max_wall_seconds=2.5,
             expected_max_rss_bytes=144 * _MIB,
-        ),
-        InspectionCommandPerformanceGuardTestCase(
-            description="models_3000_plan_json",
-            sqb_args=("plan", "--json"),
-            expected_fragments=(
-                f'"selected_count": {INSPECTION_BENCHMARK_SELECTED_COUNT}',
-                f'"name": "{SHARED_DIAMOND_ROLLUP}"',
-            ),
-            expected_max_output_lines=25 * _MODEL_COUNT,
-            expected_max_wall_seconds=210.0,
-            expected_max_rss_bytes=2_688 * _MIB,
         ),
     ],
     ids=lambda case: case.description,

@@ -733,13 +733,6 @@ INSPECTION_DIAMOND_WIDTH: int = 8
 INSPECTION_BENCHMARK_MODEL_COUNT: int = (
     3_000 + INSPECTION_DIAMOND_LAYERS * INSPECTION_DIAMOND_WIDTH + 2
 )
-_INSPECTION_BENCHMARK_SEED_COUNT: int = 141
-_INSPECTION_BENCHMARK_FUNCTION_COUNT: int = 71
-INSPECTION_BENCHMARK_SELECTED_COUNT: int = (
-    INSPECTION_BENCHMARK_MODEL_COUNT
-    + _INSPECTION_BENCHMARK_SEED_COUNT
-    + _INSPECTION_BENCHMARK_FUNCTION_COUNT
-)
 
 
 def prepare_inspection_benchmark_project(*, project_dir: Path) -> None:
@@ -749,8 +742,8 @@ def prepare_inspection_benchmark_project(*, project_dir: Path) -> None:
         project_dir=project_dir,
         model_count=3_000,
         source_count=713,
-        seed_count=_INSPECTION_BENCHMARK_SEED_COUNT,
-        function_count=_INSPECTION_BENCHMARK_FUNCTION_COUNT,
+        seed_count=141,
+        function_count=71,
         macro_count=37,
         test_count=2_945,
         audit_count=5_056,

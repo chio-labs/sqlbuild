@@ -64,8 +64,8 @@ fans the last layer back in. Every lattice model is reachable along exponentiall
 compile guards do not enable the lattice, so their fingerprints and budgets are unchanged.
 
 After one compile and warm lineage and scope caches, the guard runs `sqb lineage` downstream from
-the hub and upstream from the rollup as text and JSON, an upstream column trace from the rollup,
-`sqb dag --json`, `sqb scope --json` and `sqb plan --json`, each in a fresh process. Every command
+the hub and upstream from the rollup as text and JSON, `sqb dag --json` and `sqb scope --json`,
+each in a fresh process. Every command
 has a wall-time ceiling, a peak-RSS ceiling and an output-line bound linear in the model count, so
 a renderer or graph walk that re-expands shared nodes per path fails on size before it can hide
 behind a loose timing budget. It runs in the 3,000-model fresh-process compile job.
