@@ -86,6 +86,7 @@ from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql 
 )
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
+from sqlbuild.adapters.postgres._helpers.grants import render_postgres_grant
 from sqlbuild.adapters.postgres._helpers.view_rebind import render_postgres_view_rebind
 from sqlbuild.adapters.postgres.classes.postgres_connection import _PostgresConnection
 from sqlbuild.adapters.postgres.constants import TABLE_FUNCTION_RETURN_TYPE
@@ -611,9 +612,6 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             for row in cursor.fetchall()
         )
 
-    def supports_old_name_views(self) -> bool:
-        return True
-
     def views_bind_to_relation_identity(self) -> bool:
         return True
 
@@ -641,6 +639,56 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
         cursor: Any = connection.execute(query)
         return tuple(f"{row[0]}.{row[1]}" for row in cursor.fetchall())
+
+    def capture_relation_grants(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str,
+        name: str,
+        relation_type: str,
+        destination: str,
+    ) -> tuple[str, ...]:
+        del database, relation_type
+        query: str = (
+            "SELECT acl.privilege_type, "
+            "CASE WHEN acl.grantee = 0 THEN NULL ELSE pg_get_userbyid(acl.grantee) END, "
+            "acl.is_grantable "
+            "FROM pg_class AS relation "
+            "JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace "
+            "CROSS JOIN LATERAL aclexplode(relation.relacl) AS acl "
+            f"WHERE namespace.nspname = {_quote_sql_string(schema)} "
+            f"AND relation.relname = {_quote_sql_string(name)} "
+            "AND acl.grantee <> relation.relowner "
+            "ORDER BY 2 NULLS FIRST, 1"
+        )
+        rows: list[tuple[Any, ...]] = connection.execute(query).fetchall()
+        return tuple(
+            render_postgres_grant(
+                privilege=str(row[0]),
+                grantee=None if row[1] is None else self.render_identifier(str(row[1])),
+                grantable=bool(row[2]),
+                destination=destination,
+            )
+            for row in rows
+        )
+
+    def rename_view(
+        self,
+        *,
+        connection: Any,
+        origin: str,
+        destination: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_rename_view(
+            origin=origin, destination=destination
+        )
+        statement_recorder.record_many(statements)
+        statement: str
+        for statement in statements:
+            self.execute(connection=connection, sql=statement)
 
     def supports_transactional_ddl(self) -> bool:
         return True

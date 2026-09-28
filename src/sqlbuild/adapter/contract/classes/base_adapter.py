@@ -101,6 +101,7 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     sql_analysis_dialect_name: ClassVar[str | None] = None
     max_identifier_length: ClassVar[int] = 63
     state_tables_transient: ClassVar[bool] = False
+    relation_grants_supported: ClassVar[bool] = True
     allows_implicit_managed_write_schema: ClassVar[bool] = False
     execution_duration_limit_seconds: ClassVar[int | None] = None
     _snapshot_sql_dialect: ClassVar[SnapshotSqlDialect] = SnapshotSqlDialect(
@@ -707,11 +708,6 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         del connection, database, schema, name
         return ()
 
-    def supports_old_name_views(self) -> bool:
-        """Return whether migrations may keep old names working through compatibility views."""
-
-        return False
-
     def views_bind_to_relation_identity(self) -> bool:
         """Return whether views follow a renamed relation instead of re-resolving its name."""
 
@@ -724,6 +720,39 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
 
         del connection, database, schema, name
         return ()
+
+    def capture_relation_grants(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str,
+        name: str,
+        relation_type: str,
+        destination: str,
+    ) -> tuple[str, ...]:
+        """Return statements that give ``destination`` the privileges granted on the relation."""
+
+        del connection, database, schema, name, relation_type, destination
+        return ()
+
+    def rename_view(
+        self,
+        *,
+        connection: Any,
+        origin: str,
+        destination: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        """Rename a view in place, keeping its privileges."""
+
+        statements: tuple[str, ...] = self.render_rename_view(
+            origin=origin, destination=destination
+        )
+        statement_recorder.record_many(statements)
+        statement: str
+        for statement in statements:
+            self.execute(connection=connection, sql=statement)
 
     def supports_transactional_ddl(self) -> bool:
         return False

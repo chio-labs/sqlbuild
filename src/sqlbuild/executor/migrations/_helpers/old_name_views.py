@@ -97,8 +97,11 @@ def run_old_name_steps(
     duration: Duration | None = Duration.parse(required.view_retention or "")
     with _ddl_transaction(adapter=adapter, connection=connection) as transactional:
         attempts: int = 1 if transactional else 3
+        archive_name: str | None = (
+            facts[OldNameViewEventType.ORIGIN_ARCHIVED].archive_name if archived else None
+        )
         if not archived:
-            archive_name: str | None = _archive_old_relation(
+            archive_name = _archive_old_relation(
                 adapter=adapter, connection=connection, entry=entry, old_relation=old_relation
             )
             record_old_name_fact(
@@ -115,8 +118,12 @@ def run_old_name_steps(
                 create_table=False,
                 attempts=attempts,
             )
-        _create_compatibility_view(
-            adapter=adapter, connection=connection, entry=entry, sql=select_sql
+        grants: tuple[str, ...] = _create_compatibility_view(
+            adapter=adapter,
+            connection=connection,
+            entry=entry,
+            sql=select_sql,
+            archive_name=archive_name,
         )
         record_old_name_fact(
             adapter=adapter,
@@ -129,6 +136,7 @@ def run_old_name_steps(
                 created_at=now,
                 column_aliases=aliases,
                 expires_at=None if duration is None else duration.add_to(now),
+                grants_copied=grants,
             ),
             create_table=False,
             attempts=attempts,
@@ -184,6 +192,7 @@ def refresh_old_name_views(
             old=source.old,
             sql=render_old_name_view_select(adapter=adapter, connection=connection, source=source),
         )
+        _apply_grants(adapter=adapter, connection=connection, statements=source.grant_statements)
     return len(sources)
 
 
@@ -281,7 +290,12 @@ def views_reading(
                 continue
             seen.add(identity)
             ordered.append(
-                OldNameViewSource(old=view.old, new=view.new, column_aliases=view.column_aliases)
+                OldNameViewSource(
+                    old=view.old,
+                    new=view.new,
+                    column_aliases=view.column_aliases,
+                    grant_statements=view.grant_statements,
+                )
             )
             frontier.append(view.old)
     return tuple(ordered)
@@ -375,9 +389,12 @@ def _archive_old_relation(
         name=archive_name,
     )
     if _is_view(old_relation):
-        statement: str
-        for statement in adapter.render_rename_view(origin=origin, destination=destination):
-            _ = adapter.execute(connection=connection, sql=statement)
+        adapter.rename_view(
+            connection=connection,
+            origin=origin,
+            destination=destination,
+            statement_recorder=StatementRecorder(),
+        )
     else:
         adapter.rename(
             connection=connection,
@@ -485,11 +502,46 @@ def _direct_readers(
 
 
 def _create_compatibility_view(
-    *, adapter: BaseAdapter, connection: Any, entry: OldNameViewPlanEntry, sql: str
-) -> None:
-    """Publish the view at the old name inside the step that records ``view_created``."""
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    entry: OldNameViewPlanEntry,
+    sql: str,
+    archive_name: str | None,
+) -> tuple[str, ...]:
+    """Publish the view at the old name with the archived relation's grants; return them."""
 
     _create_view(adapter=adapter, connection=connection, old=entry.origin, sql=sql)
+    if archive_name is None:
+        return ()
+    archive: RelationInfo | None = _listed(
+        adapter=adapter,
+        connection=connection,
+        location=CompiledRelationLocation(
+            database=entry.origin.database,
+            schema=entry.origin.schema,
+            name=archive_name,
+            qualified_name=None,
+        ),
+    )
+    if archive is None:
+        return ()
+    grants: tuple[str, ...] = adapter.capture_relation_grants(
+        connection=connection,
+        database=archive.database,
+        schema=archive.schema or entry.origin.schema or "",
+        name=archive.name,
+        relation_type=normalize_relation_type(archive.relation_type).value,
+        destination=_qualified(adapter=adapter, location=entry.origin),
+    )
+    _apply_grants(adapter=adapter, connection=connection, statements=grants)
+    return grants
+
+
+def _apply_grants(*, adapter: BaseAdapter, connection: Any, statements: tuple[str, ...]) -> None:
+    statement: str
+    for statement in statements:
+        _ = adapter.execute(connection=connection, sql=statement)
 
 
 def _create_view(

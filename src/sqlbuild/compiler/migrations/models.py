@@ -114,6 +114,7 @@ class OldNameViewEvent:
     column_aliases: tuple[tuple[str, str], ...] = ()
     expires_at: datetime | None = None
     drop_reason: OldNameViewDropReason | None = None
+    grants_copied: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)

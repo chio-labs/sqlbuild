@@ -97,6 +97,10 @@ from sqlbuild.adapter.type_system.main.first_arg_nullability import first_arg_nu
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.adapters.bigquery._helpers.clone_refusal import is_bigquery_clone_refusal
+from sqlbuild.adapters.bigquery._helpers.grants import (
+    render_bigquery_view_grants,
+    render_bigquery_view_move,
+)
 from sqlbuild.adapters.bigquery._helpers.statement_telemetry import affected_rows
 from sqlbuild.adapters.bigquery.classes.bigquery_connection import _BigQueryConnection
 from sqlbuild.adapters.bigquery.classes.bigquery_cursor import _BigQueryCursor
@@ -1817,9 +1821,6 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         del connection, database, schema, name
         return ()
 
-    def supports_old_name_views(self) -> bool:
-        return False
-
     def views_bind_to_relation_identity(self) -> bool:
         return False
 
@@ -1828,6 +1829,67 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     ) -> tuple[str, ...]:
         del connection, database, schema, name
         return ()
+
+    def capture_relation_grants(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str,
+        name: str,
+        relation_type: str,
+        destination: str,
+    ) -> tuple[str, ...]:
+        del relation_type
+        location: str = self._metadata_location(
+            connection=connection,
+            request=TableFreshnessRequest(database=database, schema=schema, name=name),
+        )
+        region: str = location.strip().lower()
+        region = region if region.startswith("region-") else f"region-{region}"
+        project: str = self._strip_identifier_quotes(database or str(connection.client.project))
+        rows: list[tuple[Any, ...]] = self.execute(
+            connection=connection,
+            sql=(
+                f"SELECT privilege_type, grantee FROM `{project}.{region}`"
+                ".INFORMATION_SCHEMA.OBJECT_PRIVILEGES "
+                f"WHERE object_schema = '{self._escape_sql_string(schema)}' "
+                f"AND object_name = '{self._escape_sql_string(name)}' "
+                "ORDER BY grantee, privilege_type"
+            ),
+        ).fetchall()
+        return render_bigquery_view_grants(
+            rows=rows, destination=self._quote_identifier_path(destination)
+        )
+
+    def rename_view(
+        self,
+        *,
+        connection: Any,
+        origin: str,
+        destination: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        parts: list[str] = self._strip_identifier_quotes(origin).split(".")
+        dataset: str = ".".join(parts[:-1])
+        rows: list[tuple[Any, ...]] = self.execute(
+            connection=connection,
+            sql=(
+                f"SELECT view_definition FROM `{dataset}`.INFORMATION_SCHEMA.VIEWS "
+                f"WHERE table_name = '{self._escape_sql_string(parts[-1])}'"
+            ),
+        ).fetchall()
+        if not rows:
+            raise AdapterUserError(message=f"BigQuery view {origin} does not exist")
+        statements: tuple[str, ...] = render_bigquery_view_move(
+            origin=self._quote_identifier_path(origin),
+            destination=self._quote_identifier_path(destination),
+            definition=str(rows[0][0]),
+        )
+        statement_recorder.record_many(statements)
+        statement: str
+        for statement in statements:
+            self.execute(connection=connection, sql=statement)
 
     def supports_transactional_ddl(self) -> bool:
         return False

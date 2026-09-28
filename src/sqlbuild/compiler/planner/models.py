@@ -965,6 +965,9 @@ class OldNameViewPlanEntry:
     migration_event_id: str | None = None
     records_requirement: bool = False
     reason: str | None = None
+    grants_copied: int | None = None
+    grants_supported: bool = False
+    archived: bool = False
 
     @property
     def runs_steps(self) -> bool:
@@ -984,6 +987,7 @@ class OldNameView:
     column_aliases: tuple[tuple[str, str], ...]
     migration_event_id: str
     target_name: str | None
+    grant_statements: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

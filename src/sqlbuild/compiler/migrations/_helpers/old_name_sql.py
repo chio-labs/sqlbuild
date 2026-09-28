@@ -88,6 +88,7 @@ def build_old_name_insert_sql(
             event.view_retention,
             event.archive_name,
             _encode_aliases(event.column_aliases) if event.column_aliases else None,
+            None if event.grants_copied is None else json.dumps(list(event.grants_copied)),
             event.expires_at,
             None if event.drop_reason is None else event.drop_reason.value,
             event.run_id,
@@ -138,6 +139,7 @@ def decode_old_name_event_row(row: tuple[Any, ...]) -> OldNameViewEvent | None:
         column_aliases=_decode_aliases(optional_text(values.get("column_aliases"))),
         expires_at=None if raw_expires is None else decode_event_timestamp(raw_expires),
         drop_reason=_decode_reason(raw_reason),
+        grants_copied=_decode_grants(optional_text(values.get("grants_copied"))),
     )
 
 
@@ -148,6 +150,18 @@ def _decode_reason(raw: str | None) -> OldNameViewDropReason | None:
         return OldNameViewDropReason(raw)
     except ValueError:
         return None
+
+
+def _decode_grants(raw: str | None) -> tuple[str, ...] | None:
+    if raw is None:
+        return None
+    try:
+        payload: object = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, list):
+        return None
+    return tuple(str(statement) for statement in payload)
 
 
 def _encode_aliases(aliases: tuple[tuple[str, str], ...]) -> str:

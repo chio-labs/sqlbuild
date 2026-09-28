@@ -86,6 +86,7 @@ from sqlbuild.adapter.relations.main.get_columns_for_relations import (
 from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql import (
     render_insert_source_freshness_records_sql,
 )
+from sqlbuild.adapters.sqlserver._helpers.grants import render_sqlserver_view_grants
 from sqlbuild.adapters.sqlserver.classes.sqlserver_connection import _SqlServerConnection
 from sqlbuild.adapters.sqlserver.constants import (
     BOOLEAN_RETURN_TYPE,
@@ -1840,9 +1841,6 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         del connection, database, schema, name
         return ()
 
-    def supports_old_name_views(self) -> bool:
-        return False
-
     def views_bind_to_relation_identity(self) -> bool:
         return False
 
@@ -1851,6 +1849,48 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     ) -> tuple[str, ...]:
         del connection, database, schema, name
         return ()
+
+    def capture_relation_grants(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str,
+        name: str,
+        relation_type: str,
+        destination: str,
+    ) -> tuple[str, ...]:
+        del relation_type
+        relation: str = ".".join(
+            self.render_identifier(part) for part in (database, schema, name) if part
+        ).replace("'", "''")
+        query: str = (
+            "SELECT permission.state_desc, permission.permission_name, grantee.name "
+            "FROM sys.database_permissions AS permission "
+            "JOIN sys.database_principals AS grantee "
+            "ON grantee.principal_id = permission.grantee_principal_id "
+            "WHERE permission.class = 1 AND permission.minor_id = 0 "
+            f"AND permission.major_id = OBJECT_ID(N'{relation}') "
+            "ORDER BY grantee.name, permission.permission_name"
+        )
+        rows: list[tuple[Any, ...]] = self.execute(connection=connection, sql=query).fetchall()
+        return render_sqlserver_view_grants(rows=rows, destination=destination)
+
+    def rename_view(
+        self,
+        *,
+        connection: Any,
+        origin: str,
+        destination: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_rename_view(
+            origin=origin, destination=destination
+        )
+        statement_recorder.record_many(statements)
+        statement: str
+        for statement in statements:
+            self.execute(connection=connection, sql=statement)
 
     def supports_transactional_ddl(self) -> bool:
         return True

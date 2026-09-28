@@ -352,11 +352,6 @@ class StrictAdapter(
         ...
 
     @abstractmethod
-    def supports_old_name_views(self) -> bool:
-        """Return whether migrations may keep old names working through compatibility views."""
-        ...
-
-    @abstractmethod
     def views_bind_to_relation_identity(self) -> bool:
         """Return whether views follow a renamed relation instead of re-resolving its name."""
         ...
@@ -373,6 +368,32 @@ class StrictAdapter(
         self, *, database: str | None, schema: str
     ) -> str:
         """Render DDL that creates the old-name view fact table when it is missing."""
+        ...
+
+    @abstractmethod
+    def capture_relation_grants(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str,
+        name: str,
+        relation_type: str,
+        destination: str,
+    ) -> tuple[str, ...]:
+        """Return statements that give ``destination`` the privileges granted on the relation."""
+        ...
+
+    @abstractmethod
+    def rename_view(
+        self,
+        *,
+        connection: Any,
+        origin: str,
+        destination: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        """Rename a view in place, keeping its privileges."""
         ...
 
     @abstractmethod

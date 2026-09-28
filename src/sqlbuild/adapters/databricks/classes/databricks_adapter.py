@@ -95,6 +95,10 @@ from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
 from sqlbuild.adapter.type_system.main.first_arg_nullability import first_arg_nullability
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
+from sqlbuild.adapters.databricks._helpers.grants import (
+    render_databricks_view_grants,
+    show_grants_object_kind,
+)
 from sqlbuild.adapters.databricks.classes.databricks_connection import _DatabricksConnection
 from sqlbuild.adapters.databricks.constants import (
     DELTA_COLUMN_MAPPING_NAME_MODE,
@@ -1792,9 +1796,6 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         del connection, database, schema, name
         return ()
 
-    def supports_old_name_views(self) -> bool:
-        return False
-
     def views_bind_to_relation_identity(self) -> bool:
         return False
 
@@ -1803,6 +1804,41 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     ) -> tuple[str, ...]:
         del connection, database, schema, name
         return ()
+
+    def capture_relation_grants(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str,
+        name: str,
+        relation_type: str,
+        destination: str,
+    ) -> tuple[str, ...]:
+        relation: str | None = self.render_qualified_name(
+            database=database, schema=schema, name=name
+        )
+        kind: str = show_grants_object_kind(relation_type)
+        rows: list[tuple[Any, ...]] = self.execute(
+            connection=connection, sql=f"SHOW GRANTS ON {kind} {relation}"
+        ).fetchall()
+        return render_databricks_view_grants(rows=rows, destination=destination)
+
+    def rename_view(
+        self,
+        *,
+        connection: Any,
+        origin: str,
+        destination: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_rename_view(
+            origin=origin, destination=destination
+        )
+        statement_recorder.record_many(statements)
+        statement: str
+        for statement in statements:
+            self.execute(connection=connection, sql=statement)
 
     def supports_transactional_ddl(self) -> bool:
         return False

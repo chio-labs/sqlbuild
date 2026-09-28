@@ -86,15 +86,6 @@ def plan_old_name_views(
     models_by_name: dict[str, CompiledModel] = {
         model.name: model for model in runtime.project.models
     }
-    if not runtime.adapter.supports_old_name_views():
-        reason: str = f"not supported on {runtime.adapter.adapter_name}"
-        return OldNameViewPlanning(
-            entries=tuple(
-                _skipped_entry(entry=entry, reason=reason)
-                for entry in migration_entries
-                if _starts_move(entry)
-            )
-        )
     selected: tuple[CompiledModel, ...] = tuple(
         models_by_name[key.name]
         for key in scope.execution_order
@@ -234,6 +225,7 @@ class _OldNamePlanner:
             column_aliases=self._planned_aliases(model),
             stores_history=_stores_history(model),
             records_requirement=True,
+            grants_supported=self._runtime.adapter.relation_grants_supported,
         )
 
     def _skip_reason(self, *, entry: ModelMigrationPlanEntry, retention: str | None) -> str | None:
@@ -283,6 +275,13 @@ class _OldNamePlanner:
             ),
             stores_history=_stores_history(model),
             migration_event_id=history.move.event_id,
+            grants_copied=(
+                None
+                if history.created is None or history.created.grants_copied is None
+                else len(history.created.grants_copied)
+            ),
+            grants_supported=self._runtime.adapter.relation_grants_supported,
+            archived=history.archived is not None,
         )
 
     def _newest_history(
@@ -526,6 +525,11 @@ def _recorded_view(*, runtime: PlannerRuntime, history: OldNameViewHistory) -> O
         column_aliases=() if history.created is None else history.created.column_aliases,
         migration_event_id=history.move.event_id,
         target_name=history.move.target_name,
+        grant_statements=(
+            ()
+            if history.created is None or history.created.grants_copied is None
+            else history.created.grants_copied
+        ),
     )
 
 

@@ -98,6 +98,7 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         )
 
     sql_analysis_dialect_name: ClassVar[str | None] = "duckdb"
+    relation_grants_supported: ClassVar[bool] = False
 
     def supports_zero_copy_clone(self) -> bool:
         return False
@@ -1555,9 +1556,6 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         del connection, database, schema, name
         return ()
 
-    def supports_old_name_views(self) -> bool:
-        return True
-
     def views_bind_to_relation_identity(self) -> bool:
         return False
 
@@ -1566,6 +1564,35 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
     ) -> tuple[str, ...]:
         del connection, database, schema, name
         return ()
+
+    def capture_relation_grants(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str,
+        name: str,
+        relation_type: str,
+        destination: str,
+    ) -> tuple[str, ...]:
+        del connection, database, schema, name, relation_type, destination
+        return ()
+
+    def rename_view(
+        self,
+        *,
+        connection: Any,
+        origin: str,
+        destination: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_rename_view(
+            origin=origin, destination=destination
+        )
+        statement_recorder.record_many(statements)
+        statement: str
+        for statement in statements:
+            self.execute(connection=connection, sql=statement)
 
     def supports_transactional_ddl(self) -> bool:
         return True

@@ -71,6 +71,7 @@ OLD_NAME_VIEW_COLUMNS: tuple[str, ...] = (
     "view_retention",
     "archive_name",
     "column_aliases",
+    "grants_copied",
     "expires_at",
     "drop_reason",
     "run_id",

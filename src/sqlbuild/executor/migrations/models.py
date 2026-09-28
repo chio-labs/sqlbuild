@@ -26,3 +26,4 @@ class OldNameViewSource:
     old: CompiledRelationLocation
     new: CompiledRelationLocation
     column_aliases: tuple[tuple[str, str], ...]
+    grant_statements: tuple[str, ...] = ()
