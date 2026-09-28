@@ -797,6 +797,21 @@ class DagJsonBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DiamondDagE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_fragments: tuple[str, ...]
+    expected_max_lines_per_node: int
+
+
+@dataclass(frozen=True)
+class DiamondDagJsonE2ETestCase:
+    description: str
+    expected_node_ids: tuple[str, ...]
+    expected_edge_count: int
+
+
+@dataclass(frozen=True)
 class PlanCommandBuildE2ETestCase:
     """Test case for plan command surface behavior."""
 

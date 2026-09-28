@@ -1,0 +1,91 @@
+"""E2E coverage for plan output over layered shared dependencies."""
+
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from tests.e2e.src.sqlbuild.cli.commands.main.lineage.helpers import (
+    DIAMOND_LAYERS,
+    diamond_model_names,
+)
+from tests.e2e.src.sqlbuild.cli.commands.main.plan._test_types import (
+    DiamondPlanE2ETestCase,
+    DiamondPlanJsonE2ETestCase,
+)
+from tests.e2e.src.sqlbuild.cli.commands.main.plan.helpers import (
+    prepare_changed_incremental_diamond_project,
+)
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
+
+_PLAN_ENTRY: re.Pattern[str] = re.compile(r"^[├└]── (orders_\w+)\s", re.MULTILINE)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DiamondPlanE2ETestCase(
+            description="plan tree lists each diamond model once with its cascade cause",
+            expected_fragments=(
+                "Query changed (1)",
+                f"Upstream changed ({len(diamond_model_names()) - 1})",
+                f"└── orders_{DIAMOND_LAYERS} ",
+                "cause  orders_0 (query changed)",
+            ),
+            expected_max_lines_per_model=4,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_changed_diamond_root_when_planning_then_tree_lists_each_model_once(
+    test_case: DiamondPlanE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_changed_incremental_diamond_project(tmp_path=tmp_path)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan"), project_dir=project_dir
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    for fragment in test_case.expected_fragments:
+        assert fragment in result.stdout, result.stdout
+    plan_output: str = result.stdout[result.stdout.index("Plan ready") :]
+    assert sorted(_PLAN_ENTRY.findall(plan_output)) == sorted(diamond_model_names())
+    assert len(plan_output.splitlines()) <= test_case.expected_max_lines_per_model * len(
+        diamond_model_names()
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DiamondPlanJsonE2ETestCase(
+            description="plan json lists each diamond model once with its cascade reason",
+            expected_reasons={
+                "orders_0": "query_changed",
+                **{name: "upstream_changed" for name in diamond_model_names()[1:]},
+            },
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_changed_diamond_root_when_planning_json_then_lists_each_model_once(
+    test_case: DiamondPlanJsonE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_changed_incremental_diamond_project(tmp_path=tmp_path)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "plan", "--json"), project_dir=project_dir
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    models: list[dict[str, object]] = json.loads(result.stdout)["models"]
+    reasons: dict[str, object] = {str(model["name"]): model["reason"] for model in models}
+    assert len(models) == len(reasons)
+    assert reasons == test_case.expected_reasons

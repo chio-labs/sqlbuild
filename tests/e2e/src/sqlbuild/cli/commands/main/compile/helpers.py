@@ -602,8 +602,48 @@ def _run_fresh_process_compile_benchmark(
     expected_max_wall_seconds: float,
     compile_args: tuple[str, ...],
 ) -> FreshProcessCompileBenchmarkResult:
+    run: _TimedSqbRun = _run_timed_sqb(
+        project_dir=project_dir,
+        label=label,
+        sqb_args=("compile", "--json", *compile_args),
+        expected_max_wall_seconds=expected_max_wall_seconds,
+    )
+    assert isinstance(run.payload, dict)
+    payload: dict[str, object] = cast(dict[str, object], run.payload)
+    compiled_dir: Path = project_dir / "target" / "compiled"
+    semantic_fingerprint: str = semantic_compile_fingerprint(
+        payload=payload, compiled_dir=compiled_dir
+    )
+    return FreshProcessCompileBenchmarkResult(
+        elapsed_seconds=run.elapsed_seconds,
+        peak_rss_bytes=run.peak_rss_bytes,
+        semantic_fingerprint=semantic_fingerprint,
+        payload=payload,
+        cpu_seconds=run.cpu_seconds,
+        major_page_faults=run.major_page_faults,
+        minor_page_faults=run.minor_page_faults,
+    )
+
+
+class _TimedSqbRun(NamedTuple):
+    elapsed_seconds: float
+    peak_rss_bytes: int
+    cpu_seconds: float
+    major_page_faults: int
+    minor_page_faults: int
+    payload: object
+    output_path: Path
+
+
+def _run_timed_sqb(
+    *,
+    project_dir: Path,
+    label: str,
+    sqb_args: tuple[str, ...],
+    expected_max_wall_seconds: float,
+) -> _TimedSqbRun:
     measurement_path: Path = project_dir.parent / f"{label}-measurement.txt"
-    output_path: Path = project_dir.parent / f"{label}.json"
+    output_path: Path = project_dir.parent / f"{label}.out"
     stderr_path: Path = project_dir.parent / f"{label}.stderr"
     command: list[str] = [
         "/usr/bin/time",
@@ -616,9 +656,7 @@ def _run_fresh_process_compile_benchmark(
         "--project-dir",
         str(project_dir),
         "--no-color",
-        "compile",
-        "--json",
-        *compile_args,
+        *sqb_args,
     ]
     started: float = time.monotonic()
     try:
@@ -639,7 +677,7 @@ def _run_fresh_process_compile_benchmark(
                     process.wait()
                     raise
     finally:
-        payload_object, measurement = read_compile_measurement(
+        payload, measurement = read_compile_measurement(
             label=label,
             measurement_path=measurement_path,
             output_path=output_path,
@@ -647,23 +685,99 @@ def _run_fresh_process_compile_benchmark(
         )
     assert returncode == 0, stderr_path.read_text(encoding="utf-8")
     elapsed_text, peak_rss_kib_text, user_text, system_text, major_text, minor_text = measurement
-    elapsed_seconds: float = float(elapsed_text)
-    assert isinstance(payload_object, dict)
-    payload: dict[str, object] = cast(dict[str, object], payload_object)
-    peak_rss_bytes: int = int(peak_rss_kib_text) * 1024
-    compiled_dir: Path = project_dir / "target" / "compiled"
-    semantic_fingerprint: str = semantic_compile_fingerprint(
-        payload=payload, compiled_dir=compiled_dir
-    )
-    return FreshProcessCompileBenchmarkResult(
-        elapsed_seconds=elapsed_seconds,
-        peak_rss_bytes=peak_rss_bytes,
-        semantic_fingerprint=semantic_fingerprint,
-        payload=payload,
+    return _TimedSqbRun(
+        elapsed_seconds=float(elapsed_text),
+        peak_rss_bytes=int(peak_rss_kib_text) * 1024,
         cpu_seconds=float(user_text) + float(system_text),
         major_page_faults=int(major_text),
         minor_page_faults=int(minor_text),
+        payload=payload,
+        output_path=output_path,
     )
+
+
+class InspectionCommandMeasurement(NamedTuple):
+    elapsed_seconds: float
+    peak_rss_bytes: int
+    cpu_seconds: float
+    payload: object
+    output: str
+
+
+def run_fresh_process_inspection_command(
+    *,
+    project_dir: Path,
+    label: str,
+    sqb_args: tuple[str, ...],
+    expected_max_wall_seconds: float,
+) -> InspectionCommandMeasurement:
+    """Run one read-only inspection command in a fresh measured process."""
+
+    run: _TimedSqbRun = _run_timed_sqb(
+        project_dir=project_dir,
+        label=label,
+        sqb_args=sqb_args,
+        expected_max_wall_seconds=expected_max_wall_seconds,
+    )
+    return InspectionCommandMeasurement(
+        elapsed_seconds=run.elapsed_seconds,
+        peak_rss_bytes=run.peak_rss_bytes,
+        cpu_seconds=run.cpu_seconds,
+        payload=run.payload,
+        output=run.output_path.read_text(encoding="utf-8"),
+    )
+
+
+INSPECTION_DIAMOND_LAYERS: int = 16
+INSPECTION_DIAMOND_WIDTH: int = 8
+INSPECTION_BENCHMARK_MODEL_COUNT: int = (
+    3_000 + INSPECTION_DIAMOND_LAYERS * INSPECTION_DIAMOND_WIDTH + 2
+)
+_INSPECTION_BENCHMARK_SEED_COUNT: int = 141
+_INSPECTION_BENCHMARK_FUNCTION_COUNT: int = 71
+INSPECTION_BENCHMARK_SELECTED_COUNT: int = (
+    INSPECTION_BENCHMARK_MODEL_COUNT
+    + _INSPECTION_BENCHMARK_SEED_COUNT
+    + _INSPECTION_BENCHMARK_FUNCTION_COUNT
+)
+
+
+def prepare_inspection_benchmark_project(*, project_dir: Path) -> None:
+    """Write and compile the shared-dependency benchmark, then warm lineage and scope caches."""
+
+    write_semantic_compile_project(
+        project_dir=project_dir,
+        model_count=3_000,
+        source_count=713,
+        seed_count=_INSPECTION_BENCHMARK_SEED_COUNT,
+        function_count=_INSPECTION_BENCHMARK_FUNCTION_COUNT,
+        macro_count=37,
+        test_count=2_945,
+        audit_count=5_056,
+        shared_diamond_layers=INSPECTION_DIAMOND_LAYERS,
+        shared_diamond_width=INSPECTION_DIAMOND_WIDTH,
+    )
+    compiled: InspectionCommandMeasurement = run_fresh_process_inspection_command(
+        project_dir=project_dir,
+        label="inspection-compile",
+        sqb_args=("compile", "--json"),
+        expected_max_wall_seconds=60.0,
+    )
+    payload: dict[str, Any] = cast(dict[str, Any], compiled.payload)
+    assert payload["diagnostics"] == []
+    assert payload["summary"]["models"] == INSPECTION_BENCHMARK_MODEL_COUNT
+    assert payload["summary"]["execution_layers"] == _SPINE_DEPTH + INSPECTION_DIAMOND_LAYERS + 2
+    warmups: tuple[tuple[str, ...], ...] = (
+        ("lineage", SHARED_DIAMOND_HUB, "--depth", "1"),
+        ("scope", f"model:{SHARED_DIAMOND_ROLLUP}", "--json"),
+    )
+    for index, warmup_args in enumerate(warmups):
+        run_fresh_process_inspection_command(
+            project_dir=project_dir,
+            label=f"inspection-warmup-{index}",
+            sqb_args=warmup_args,
+            expected_max_wall_seconds=60.0,
+        )
 
 
 def _append_benchmark_edit(path: Path, label: str) -> None:
@@ -1158,8 +1272,14 @@ def write_semantic_compile_project(
     audit_count: int,
     macro_call_interval: int = _MACRO_INTERVAL,
     scoped_macros: bool = False,
+    shared_diamond_layers: int = 0,
+    shared_diamond_width: int = 0,
 ) -> None:
-    """Write a neutral project with broad resources and dense SQL semantics."""
+    """Write a neutral project with broad resources and dense SQL semantics.
+
+    A positive `shared_diamond_layers` adds the shared-dependency lattice from
+    `write_shared_diamond_models`; the default leaves the compile guard fixtures unchanged.
+    """
 
     _layered_write_project_config(project_dir=project_dir)
     _layered_write_sources(project_dir=project_dir, source_count=source_count)
@@ -1176,6 +1296,15 @@ def write_semantic_compile_project(
         audit_count=audit_count,
         macro_call_interval=macro_call_interval,
     )
+    diamond_writers: dict[bool, Callable[[], None]] = {
+        True: lambda: write_shared_diamond_models(
+            project_dir=project_dir,
+            layer_count=shared_diamond_layers,
+            width=shared_diamond_width,
+        ),
+        False: lambda: None,
+    }
+    diamond_writers[shared_diamond_layers > 0]()
     {True: _scope_single_folder_macros, False: _keep_project_macros}[scoped_macros](
         project_dir=project_dir
     )
@@ -1710,6 +1839,79 @@ SELECT
   CAST(MAX(amount) AS DOUBLE) AS amount,
   CAST(MAX(status) AS VARCHAR) AS status{metrics}
 FROM measurements
+"""
+
+
+SHARED_DIAMOND_HUB: str = "shared_orders_hub"
+SHARED_DIAMOND_ROLLUP: str = "shared_orders_rollup"
+_SHARED_DIAMOND_FOLDER: str = "intermediate/shared_orders"
+_SHARED_DIAMOND_UPSTREAM_MODEL: str = f"model_{_SPINE_DEPTH - 1:05d}"
+_SHARED_DIAMOND_HEADER: str = """MODEL (
+  columns (
+    id (type INTEGER, nullable false),
+    amount (type DOUBLE),
+    status (type VARCHAR)
+  ),
+);"""
+
+
+def shared_diamond_model_name(*, layer: int, slot: int) -> str:
+    """Return the lattice model name for one layer and slot."""
+
+    return f"shared_orders_l{layer:02d}_s{slot:02d}"
+
+
+def write_shared_diamond_models(*, project_dir: Path, layer_count: int, width: int) -> None:
+    """Write a shared-dependency lattice with repeated fan-out and fan-in.
+
+    The hub reads the end of the spine and fans out to `width` first-layer models. Every later
+    slot joins the two neighbouring slots of the previous layer, so each model is reachable along
+    exponentially many paths, and the rollup fans the final layer back in.
+    """
+
+    model_dir: Path = project_dir / "models" / _SHARED_DIAMOND_FOLDER
+    model_dir.mkdir(parents=True)
+    files: dict[str, str] = {
+        SHARED_DIAMOND_HUB: _shared_diamond_sql(inputs=(_SHARED_DIAMOND_UPSTREAM_MODEL,)),
+        SHARED_DIAMOND_ROLLUP: _shared_diamond_sql(
+            inputs=tuple(
+                shared_diamond_model_name(layer=layer_count - 1, slot=slot) for slot in range(width)
+            )
+        ),
+    }
+    for layer in range(layer_count):
+        for slot in range(width):
+            files[shared_diamond_model_name(layer=layer, slot=slot)] = _shared_diamond_sql(
+                inputs=_shared_diamond_inputs(layer=layer, slot=slot, width=width)
+            )
+    for name, sql in files.items():
+        (model_dir / f"{name}.sql").write_text(sql, encoding="utf-8")
+
+
+def _shared_diamond_inputs(*, layer: int, slot: int, width: int) -> tuple[str, ...]:
+    builders: dict[bool, Callable[[], tuple[str, ...]]] = {
+        True: lambda: (SHARED_DIAMOND_HUB,),
+        False: lambda: (
+            shared_diamond_model_name(layer=layer - 1, slot=slot),
+            shared_diamond_model_name(layer=layer - 1, slot=(slot + 1) % width),
+        ),
+    }
+    return builders[layer == 0]()
+
+
+def _shared_diamond_sql(*, inputs: tuple[str, ...]) -> str:
+    amount: str = " + ".join(f"input_{index:02d}.amount" for index in range(len(inputs)))
+    joins: str = "".join(
+        f'\nJOIN __ref("{name}") AS input_{index:02d} ON input_{index:02d}.id = input_00.id'
+        for index, name in enumerate(inputs[1:], start=1)
+    )
+    return f"""{_SHARED_DIAMOND_HEADER}
+
+SELECT
+  CAST(input_00.id AS INTEGER) AS id,
+  CAST({amount} AS DOUBLE) AS amount,
+  CAST(input_00.status AS VARCHAR) AS status
+FROM __ref("{inputs[0]}") AS input_00{joins}
 """
 
 
