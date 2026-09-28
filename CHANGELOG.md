@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.123.0](https://github.com/chio-labs/sqlbuild/compare/v0.122.0...v0.123.0) (2026-09-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* macros that emit __ref(), __source() or __seed() in their output now fail compile; pass the reference in as a typed argument.
+
+### Features
+
+* require explicit, typed references in macros, hooks and Python nodes ([#858](https://github.com/chio-labs/sqlbuild/issues/858)) ([3b34bce](https://github.com/chio-labs/sqlbuild/commit/3b34bce3ff6c0e38b865cddd696147f687d5a5e3))
+
 ## [0.122.0](https://github.com/chio-labs/sqlbuild/compare/v0.121.0...v0.122.0) (2026-09-27)
 
 
