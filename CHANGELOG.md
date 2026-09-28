@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.124.2](https://github.com/chio-labs/sqlbuild/compare/v0.124.1...v0.124.2) (2026-09-28)
+
+
+### Bug Fixes
+
+* run selected Python nodes against upstreams outside the run ([#864](https://github.com/chio-labs/sqlbuild/issues/864)) ([0d1a8b4](https://github.com/chio-labs/sqlbuild/commit/0d1a8b41b96e12a73d50d74397c5edb85b4fb0ae))
+
 ## [0.124.1](https://github.com/chio-labs/sqlbuild/compare/v0.124.0...v0.124.1) (2026-09-28)
 
 
