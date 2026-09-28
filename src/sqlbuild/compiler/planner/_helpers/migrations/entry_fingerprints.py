@@ -44,4 +44,5 @@ def with_migration_fingerprints(
                 ),
             )
         )
+    fingerprints.persist()
     return tuple(attached)

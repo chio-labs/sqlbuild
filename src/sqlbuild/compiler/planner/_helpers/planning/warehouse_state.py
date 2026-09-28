@@ -40,7 +40,9 @@ def gather_planner_warehouse_state(
     """Gather the warehouse snapshot and inspection relations in one pass."""
 
     warehouse_start: float = time.monotonic()
-    fingerprints: MigrationFingerprintCache = MigrationFingerprintCache()
+    fingerprints: MigrationFingerprintCache = MigrationFingerprintCache(
+        root=runtime.project.compile_cache_dir
+    )
     if runtime.on_progress is not None:
         runtime.on_progress("Inspecting warehouse state...")
     snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
@@ -73,6 +75,7 @@ def gather_planner_warehouse_state(
         deferral=deferral,
         fingerprints=fingerprints,
     )
+    fingerprints.persist()
     inspection_relations: PlannerRelationsContext = build_planner_relations_context(
         project=runtime.project,
         adapter=runtime.adapter,

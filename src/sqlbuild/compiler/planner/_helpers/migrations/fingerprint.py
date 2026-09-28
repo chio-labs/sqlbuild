@@ -130,9 +130,9 @@ def _normalized_query_sql(
     except polyglot.PolyglotError:
         return None
     stripped: Any = strip_ast_formatting(parsed)
-    if not _has_unambiguous_local_scopes(stripped):
-        return None
     definitions: list[tuple[str, bool]] = _local_names(stripped)
+    if not _has_unambiguous_local_scopes(root=stripped, definitions=definitions):
+        return None
     ordered_names: list[str] = list(dict.fromkeys(name for name, _ in definitions))
     local_names: dict[str, str] = {
         name: f"{MIGRATION_LOCAL_NAME_PREFIX}{index}"
@@ -163,7 +163,7 @@ def strip_ast_formatting(node: Any) -> Any:
     return node
 
 
-def _has_unambiguous_local_scopes(root: Any) -> bool:
+def _has_unambiguous_local_scopes(*, root: Any, definitions: list[tuple[str, bool]]) -> bool:
     """Accept one top-level WITH whose names never shadow physical relations."""
 
     statements: list[Any] = list(root.values()) if isinstance(root, dict) else []
@@ -185,7 +185,7 @@ def _has_unambiguous_local_scopes(root: Any) -> bool:
         if set(_relation_names(cte.get(_CTE_BODY_KEY))) & set(cte_names[index:]):
             return False
     physical: set[str] = set(_relation_names(root)) - set(cte_names)
-    aliases: set[str] = {name for name, is_cte in _local_names(root) if not is_cte}
+    aliases: set[str] = {name for name, is_cte in definitions if not is_cte}
     return not physical & aliases
 
 

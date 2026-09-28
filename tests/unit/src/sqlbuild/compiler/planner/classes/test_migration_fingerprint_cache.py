@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from pathlib import Path
 
 import pytest
 
@@ -14,6 +15,17 @@ from sqlbuild.compiler.planner.classes.migration_fingerprint_cache import (
 )
 from tests.unit.src.sqlbuild.compiler.planner.classes._test_types import (
     MigrationFingerprintCacheTestCase,
+    PersistedMigrationFingerprintTestCase,
+)
+from tests.unit.src.sqlbuild.compiler.planner.classes.helpers import (
+    CURSOR_METADATA,
+    ORDERS_SQL,
+    PLAIN_METADATA,
+    corrupt_database,
+    count_fingerprint_computations,
+    keep_cache,
+    tamper_entries,
+    upgrade_sqlbuild,
 )
 
 _ORDERS_SQL: str = 'SELECT o.order_id, o.amount_cents FROM __ref("stg_orders") AS o'
@@ -117,6 +129,63 @@ def test_given_fingerprint_requests_when_cached_then_matches_direct_build_with_m
     ]
     assert all(result is not None for result in results)
     assert len(computations) == test_case.expected_computations
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PersistedMigrationFingerprintTestCase(
+            description="a warm cache computes nothing",
+            between_runs=keep_cache,
+            expected_second_run_computations=0,
+        ),
+        PersistedMigrationFingerprintTestCase(
+            description="a corrupt database is recomputed",
+            between_runs=corrupt_database,
+            expected_second_run_computations=2,
+        ),
+        PersistedMigrationFingerprintTestCase(
+            description="tampered entries are recomputed",
+            between_runs=tamper_entries,
+            expected_second_run_computations=2,
+        ),
+        PersistedMigrationFingerprintTestCase(
+            description="a new sqlbuild version is recomputed",
+            between_runs=upgrade_sqlbuild,
+            expected_second_run_computations=2,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_persisted_fingerprints_when_planning_again_then_reuses_only_valid_entries(
+    test_case: PersistedMigrationFingerprintTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: tuple[str, ...] = (PLAIN_METADATA, CURSOR_METADATA)
+    first: MigrationFingerprintCache = MigrationFingerprintCache(root=tmp_path)
+    expected: list[str | None] = [
+        first.fingerprint(
+            query_sql=ORDERS_SQL, metadata_json=metadata, ref_identities={}, dialect="duckdb"
+        )
+        for metadata in requests
+    ]
+    first.persist()
+    test_case.between_runs(tmp_path, monkeypatch)
+    computations: list[int] = count_fingerprint_computations(monkeypatch)
+    second: MigrationFingerprintCache = MigrationFingerprintCache(root=tmp_path)
+
+    results: list[str | None] = [
+        second.fingerprint(
+            query_sql=ORDERS_SQL, metadata_json=metadata, ref_identities={}, dialect="duckdb"
+        )
+        for metadata in requests
+    ]
+    second.persist()
+
+    assert results == expected
+    assert all(result is not None for result in results)
+    assert len(computations) == test_case.expected_second_run_computations
 
 
 if __name__ == "__main__":

@@ -62,6 +62,7 @@ MIGRATION_MODEL_NAME_METADATA_KEY: str = "model_name"
 MIGRATION_FINGERPRINT_METADATA_KEY: str = "migration_fingerprint"
 MIGRATION_REF_PLACEHOLDER_PREFIX: str = "__sqb_migration_ref__"
 MIGRATION_LOCAL_NAME_PREFIX: str = "__sqb_local_"
+MIGRATION_FINGERPRINT_ALGORITHM: str = "migration-fingerprint-v1"
 MIGRATION_FINGERPRINT_EXCLUDED_CONFIG_KEYS: frozenset[str] = frozenset(
     {
         "batch_size",
