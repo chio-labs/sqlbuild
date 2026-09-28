@@ -43,6 +43,7 @@ def build_planner_scope(
     exclude: tuple[str, ...],
     auto_load_sources: bool,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
+    python_read_source_names: frozenset[str] = frozenset(),
 ) -> PlannerScope:
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
         build_execution_upstream_deps(project)
@@ -100,6 +101,7 @@ def build_planner_scope(
             injected_edge_origins=build_execution_edge_origins(project),
         ),
         user_selected_keys=resolved_selected_keys,
+        python_read_source_names=python_read_source_names,
     )
 
 

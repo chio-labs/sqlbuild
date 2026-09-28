@@ -10,6 +10,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     PythonSourceDeferralE2ETestCase,
+    PythonSourceTaskOnlyE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     execute_duckdb,
@@ -73,6 +74,9 @@ _ENVIRONMENT_ROWS: str = (
     "INSERT INTO raw_prod.raw_orders VALUES (1), (2);"
 )
 _CHECK_PASSED: str = r"check\s+two_raw_orders\s+PASS"
+_TASK_WAITS_FOR_SOURCE: str = (
+    r"count_task\s+SKIP\s+Upstream SQL resource did not complete: raw_orders"
+)
 
 
 @pytest.mark.parametrize(
@@ -117,6 +121,46 @@ def test_given_deferred_source_reads_when_python_reads_the_source_then_it_reads_
     } == test_case.expected_counts
     assert checked.returncode == 0, checked.stdout + checked.stderr
     assert re.search(test_case.expected_check_pattern, checked.stdout), checked.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonSourceTaskOnlyE2ETestCase(
+            description="with source deferral",
+            target_config='defer_sources_to = "prod"\n',
+            expected_task_pattern=_TASK_WAITS_FOR_SOURCE,
+        ),
+        PythonSourceTaskOnlyE2ETestCase(
+            description="without source deferral",
+            target_config="",
+            expected_task_pattern=_TASK_WAITS_FOR_SOURCE,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_only_a_task_selected_when_building_then_its_declared_source_is_planned(
+    test_case: PythonSourceTaskOnlyE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    files: dict[str, str] = dict(_PROJECT_FILES)
+    files["sqlbuild_project.toml"] = files["sqlbuild_project.toml"].replace(
+        'defer_sources_to = "prod"\n', test_case.target_config
+    )
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path, project_name="deferred_sources", repo_files=files
+    )
+    execute_duckdb(db_path=project_dir / _DATABASE, sql=_ENVIRONMENT_ROWS)
+
+    build: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "task:count_task"), project_dir=project_dir
+    )
+
+    output: str = build.stdout + build.stderr
+    assert build.returncode == 0, output
+    assert "G000" not in output
+    assert "missing from the resolved plan source map" not in output
+    assert re.search(test_case.expected_task_pattern, output), output
 
 
 if __name__ == "__main__":

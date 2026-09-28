@@ -70,7 +70,10 @@ from sqlbuild.compiler.planner._helpers.resolve.resolve import (
 from sqlbuild.compiler.planner._helpers.warehouse.semantic_sources import (
     get_semantic_source_columns,
 )
-from sqlbuild.compiler.planner._helpers.warehouse.source_deferral import build_source_read_map
+from sqlbuild.compiler.planner._helpers.warehouse.source_deferral import (
+    build_source_read_map,
+    with_declared_source_reads,
+)
 from sqlbuild.compiler.planner.constants import (
     METADATA_NAME_FILTER_LIMIT,
 )
@@ -249,18 +252,21 @@ def build_planner_relations_context(
         if effective_deferral.source_deferral_enabled
         else source_map
     )
+    python_source_map: dict[str, SourceEntry] = with_declared_source_reads(
+        project=project, source_map=source_map, source_names=scope.python_read_source_names
+    )
     python_source_read_map: dict[str, SourceEntry] = (
         build_source_read_map(
             project=project,
-            source_map=source_map,
+            source_map=python_source_map,
             selected_keys=scope.selected_keys,
             project_config=project_config,
             local_config=local_config,
             defer_sources_to=effective_deferral.defer_sources_to,
-            read_source_names=frozenset(source_map),
+            read_source_names=frozenset(python_source_map),
         )
         if effective_deferral.source_deferral_enabled
-        else source_map
+        else python_source_map
     )
     return PlannerRelationsContext(
         model_locations=model_locations,

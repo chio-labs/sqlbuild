@@ -1099,6 +1099,15 @@ class PythonSourceDeferralE2ETestCase:
 
 
 @dataclass(frozen=True)
+class PythonSourceTaskOnlyE2ETestCase:
+    """A task selected alone whose declared source no selected SQL resource reads."""
+
+    description: str
+    target_config: str
+    expected_task_pattern: str
+
+
+@dataclass(frozen=True)
 class UnrenderedMacroArgumentE2ETestCase:
     """A model passing typed references its macro does not render."""
 

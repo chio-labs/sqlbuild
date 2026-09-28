@@ -373,3 +373,10 @@ class SingularAuditAttachmentIntegrationTestCase:
     orders_header: str
     generic_audit_files: dict[str, str]
     expected_attachment: tuple[str, str | None]
+
+
+@dataclass(frozen=True)
+class PythonSourceReadPlanTestCase:
+    description: str
+    target_config: str
+    expected_schema: str

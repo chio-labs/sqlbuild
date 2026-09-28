@@ -29,6 +29,7 @@ def resolve_planner_scopes(
         exclude=selection.exclude,
         auto_load_sources=policies.auto_load_sources,
         selected_keys=selection.selected_keys,
+        python_read_source_names=selection.python_read_source_names,
     )
     full_scope: PlannerScope = build_planner_scope(
         project=project,

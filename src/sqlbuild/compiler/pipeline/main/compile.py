@@ -32,7 +32,10 @@ from sqlbuild.compiler.pipeline._helpers.deferred_locations import (
 )
 from sqlbuild.compiler.pipeline._helpers.graph import build_static_all_keys
 from sqlbuild.compiler.pipeline._helpers.materializations import load_custom_materializations
-from sqlbuild.compiler.pipeline._helpers.python_plan_entries import build_python_run_plan_outputs
+from sqlbuild.compiler.pipeline._helpers.python_plan_entries import (
+    build_python_run_plan_outputs,
+    python_read_source_names_for,
+)
 from sqlbuild.compiler.pipeline.main._compile_phase import compile_project_phase
 from sqlbuild.compiler.pipeline.models import (
     CompiledProjectPhaseResult,
@@ -203,6 +206,7 @@ def _build_result(
 
     selected_sql_keys: frozenset[CompiledObjectKey] | None = None
     selected_python_node_names: frozenset[str] = frozenset()
+    python_read_source_names: frozenset[str] = frozenset()
     run_selection: PythonSqlRunSelection | None = None
     if options.resolve_python_run_selectors:
         run_selection = resolve_python_sql_run_selection_from_inputs(
@@ -213,6 +217,9 @@ def _build_result(
         )
         selected_sql_keys = run_selection.sql_keys
         selected_python_node_names = run_selection.python_node_names
+        python_read_source_names = python_read_source_names_for(
+            discovered_inputs=discovered_inputs, python_node_names=selected_python_node_names
+        )
 
     plan_output: PlanOutput = build_execution_plan(
         project=project,
@@ -222,6 +229,7 @@ def _build_result(
             select=select,
             exclude=exclude,
             selected_keys=selected_sql_keys,
+            python_read_source_names=python_read_source_names,
         ),
         overrides=PlannerOverrides(
             cursor_overrides=options.cursor_overrides,

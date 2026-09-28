@@ -729,6 +729,7 @@ class PlannerScope:
     selected_keys: frozenset[CompiledObjectKey]
     execution_order: tuple[CompiledObjectKey, ...]
     user_selected_keys: frozenset[CompiledObjectKey] = frozenset()
+    python_read_source_names: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -1458,6 +1459,7 @@ class PlannerSelection:
     select: tuple[str, ...] = ()
     exclude: tuple[str, ...] = ()
     selected_keys: frozenset[CompiledObjectKey] | None = None
+    python_read_source_names: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
