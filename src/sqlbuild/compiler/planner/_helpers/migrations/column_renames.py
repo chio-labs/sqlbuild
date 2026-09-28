@@ -1,14 +1,21 @@
-"""Recognize renamed output columns by comparing formatting-insensitive expressions."""
+"""Recognize renamed output columns only when the rest of the query is provably unchanged."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
+from sqlbuild.compiler.planner._helpers.migrations.projections import renames_explain_change
 from sqlbuild.compiler.planner.models import ColumnRenameHint, QueryProjection, QueryShape
 
 
 def identical_renames(
-    *, previous: QueryShape, current: QueryShape, excluded: frozenset[str]
+    *,
+    previous: QueryShape,
+    current: QueryShape,
+    excluded: frozenset[str],
+    declared: Mapping[str, str],
 ) -> tuple[tuple[str, str], ...]:
-    """Return (old, new) pairs where exactly one removed and one added expression are equal."""
+    """Return same-expression (old, new) pairs only when renaming is the whole change."""
 
     removed: tuple[QueryProjection, ...]
     added: tuple[QueryProjection, ...]
@@ -24,6 +31,10 @@ def identical_renames(
         claims: int = sum(1 for other in added if other.expression == matches[0].expression)
         if claims == 1:
             pairs.append((matches[0].name, column.name))
+    if not pairs or not renames_explain_change(
+        previous=previous, current=current, renames={**declared, **dict(pairs)}
+    ):
+        return ()
     return tuple(pairs)
 
 
@@ -43,13 +54,16 @@ def rename_hints(
     live_removed: tuple[QueryProjection, ...] = tuple(
         origin for origin in removed if origin.key in live_columns
     )
+    same_binding: bool = previous.body == current.body
     hints: list[ColumnRenameHint] = []
     column: QueryProjection
     for column in added:
         if column.key in live_columns:
             continue
         identical: tuple[str, ...] = tuple(
-            origin.name for origin in live_removed if origin.expression == column.expression
+            origin.name
+            for origin in live_removed
+            if same_binding and origin.expression == column.expression
         )
         similar: tuple[str, ...] = tuple(
             origin.name

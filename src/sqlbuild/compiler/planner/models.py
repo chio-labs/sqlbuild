@@ -1001,6 +1001,8 @@ class QueryShape:
 
     projections: tuple[QueryProjection, ...]
     body: str
+    alias_clauses: str = "{}"
+    positional: bool = False
 
 
 @dataclass(frozen=True)

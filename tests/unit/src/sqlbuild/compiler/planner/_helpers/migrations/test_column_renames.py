@@ -79,6 +79,44 @@ _ORDERS: str = 'FROM __source("raw_orders")'
             excluded=frozenset({"revenue"}),
             expected_renames=(),
         ),
+        IdenticalRenameTestCase(
+            description="a changed CTE rebinding the same expression is not a rename",
+            previous_sql=f"SELECT order_id, order_date, amount {_ORDERS}",
+            current_sql=(
+                f"WITH changed AS (SELECT order_id, order_date, tax AS amount {_ORDERS}) "
+                "SELECT order_id, order_date, amount AS revenue FROM changed"
+            ),
+            expected_renames=(),
+        ),
+        IdenticalRenameTestCase(
+            description="a new join alongside the rename is not a rename",
+            previous_sql=f"SELECT order_id, amount {_ORDERS}",
+            current_sql=(
+                f"SELECT order_id, amount AS revenue {_ORDERS} "
+                'JOIN __source("raw_refunds") USING (order_id)'
+            ),
+            expected_renames=(),
+        ),
+        IdenticalRenameTestCase(
+            description="another projection change alongside the rename is not automatic",
+            previous_sql=f"SELECT order_id, amount {_ORDERS}",
+            current_sql=f"SELECT order_id, amount AS revenue, tax {_ORDERS}",
+            expected_renames=(),
+        ),
+        IdenticalRenameTestCase(
+            description="an ORDER BY that follows the renamed alias is still a rename",
+            previous_sql=f"SELECT order_id, amount {_ORDERS} ORDER BY amount",
+            current_sql=f"SELECT order_id, amount AS revenue {_ORDERS} ORDER BY revenue",
+            expected_renames=(("amount", "revenue"),),
+        ),
+        IdenticalRenameTestCase(
+            description="a declared rename is part of the proof for a detected one",
+            previous_sql=f"SELECT order_id, amount, tax {_ORDERS}",
+            current_sql=f"SELECT order_id, amount AS revenue, tax AS levy {_ORDERS}",
+            excluded=frozenset({"tax", "levy"}),
+            declared={"tax": "levy"},
+            expected_renames=(("amount", "revenue"),),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -89,6 +127,7 @@ def test_given_previous_and_current_queries_when_detecting_renames_then_returns_
         previous=query_shape(test_case.previous_sql),
         current=query_shape(test_case.current_sql),
         excluded=test_case.excluded,
+        declared=test_case.declared,
     )
 
     assert renames == test_case.expected_renames
@@ -130,6 +169,18 @@ def test_given_previous_and_current_queries_when_detecting_renames_then_returns_
             live_columns=frozenset({"order_id", "amount"}),
             expected_hints=(),
         ),
+        RenameHintTestCase(
+            description="a rebound expression is only similar, never the same",
+            previous_sql=f"SELECT order_id, amount {_ORDERS}",
+            current_sql=(
+                f"WITH changed AS (SELECT order_id, tax AS amount {_ORDERS}) "
+                "SELECT order_id, amount AS revenue FROM changed"
+            ),
+            live_columns=frozenset({"order_id", "amount"}),
+            expected_hints=(
+                "similar to amount; if this is a rename, add revenue (migrate_from amount)",
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -168,6 +219,42 @@ def test_given_changed_columns_when_building_hints_then_suggests_explicit_migrat
             description="a filter change is more than a rename",
             previous_sql=f"SELECT order_id, amount {_ORDERS}",
             current_sql=f"SELECT order_id, amount AS revenue {_ORDERS} WHERE amount > 0",
+            renames={"amount": "revenue"},
+            expected_explained=False,
+        ),
+        RenameExplainsChangeTestCase(
+            description="ORDER BY and QUALIFY references to the renamed alias are equivalent",
+            previous_sql=(
+                f"SELECT order_id, amount {_ORDERS} "
+                "QUALIFY row_number() OVER (PARTITION BY order_id ORDER BY amount) = 1 "
+                "ORDER BY amount"
+            ),
+            current_sql=(
+                f"SELECT order_id, amount AS revenue {_ORDERS} "
+                "QUALIFY row_number() OVER (PARTITION BY order_id ORDER BY revenue) = 1 "
+                "ORDER BY revenue"
+            ),
+            renames={"amount": "revenue"},
+            expected_explained=True,
+        ),
+        RenameExplainsChangeTestCase(
+            description="reordering projections while renaming matches by name",
+            previous_sql=f"SELECT order_id, order_date, amount {_ORDERS}",
+            current_sql=f"SELECT amount AS revenue, order_id, order_date {_ORDERS}",
+            renames={"amount": "revenue"},
+            expected_explained=True,
+        ),
+        RenameExplainsChangeTestCase(
+            description="reordering under positional grouping changes the result",
+            previous_sql=f"SELECT order_id, sum(amount) AS amount {_ORDERS} GROUP BY 1",
+            current_sql=f"SELECT sum(amount) AS revenue, order_id {_ORDERS} GROUP BY 1",
+            renames={"amount": "revenue"},
+            expected_explained=False,
+        ),
+        RenameExplainsChangeTestCase(
+            description="a WHERE on a renamed alias is not treated as an alias reference",
+            previous_sql=f"SELECT order_id, amount {_ORDERS} WHERE amount > 0",
+            current_sql=f"SELECT order_id, amount AS revenue {_ORDERS} WHERE revenue > 0",
             renames={"amount": "revenue"},
             expected_explained=False,
         ),

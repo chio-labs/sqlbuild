@@ -111,3 +111,32 @@ class MaintenanceNoticeOrderTestCase:
     command: tuple[str, ...]
     expected_notices: tuple[str, ...]
     expected_final_line: str
+
+
+@dataclass(frozen=True)
+class RebindingRenameTestCase:
+    description: str
+    rebound_sql: str
+    expected_build_succeeds: bool
+    expected_columns: tuple[str, ...]
+    expected_hint: str
+
+
+@dataclass(frozen=True)
+class EquivalentRenameTestCase:
+    description: str
+    initial_sql: str
+    renamed_sql: str
+    expected_planned: tuple[tuple[str, str, str, str], ...]
+    expected_backfill: str
+    expected_columns: tuple[str, ...]
+    expected_values: tuple[tuple[int, Any], ...]
+
+
+@dataclass(frozen=True)
+class UnprovenRenameReplayTestCase:
+    description: str
+    undeclared_sql: str
+    declared_sql: str
+    expected_backfill: dict[str, Any]
+    expected_values: tuple[tuple[int, Any], ...]

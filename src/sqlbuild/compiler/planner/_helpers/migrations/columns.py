@@ -222,12 +222,16 @@ def _declared_pairs(candidate: _ModelColumns) -> tuple[_Pair, ...]:
 def _detected_pairs(candidate: _ModelColumns) -> tuple[_Pair, ...]:
     if candidate.previous is None or candidate.current is None:
         return ()
+    declared: dict[str, str] = {
+        origin: destination for destination, origin in candidate.declared.items()
+    }
     return tuple(
         _Pair(origin=origin, destination=destination, discovery=MigrationDiscovery.AUTOMATIC)
         for origin, destination in identical_renames(
             previous=candidate.previous,
             current=candidate.current,
             excluded=_declared_names(candidate),
+            declared=declared,
         )
     )
 

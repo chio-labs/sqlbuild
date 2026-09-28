@@ -32,6 +32,7 @@ class IdenticalRenameTestCase:
     current_sql: str
     expected_renames: tuple[tuple[str, str], ...]
     excluded: frozenset[str] = frozenset()
+    declared: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

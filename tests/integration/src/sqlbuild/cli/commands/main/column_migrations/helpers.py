@@ -77,6 +77,18 @@ def orders_sql(
     )
 
 
+def incremental_sql(*, body: str, extra_config: str = "") -> str:
+    """Return a delete_insert orders model with an arbitrary query body."""
+
+    return (
+        _INCREMENTAL_HEADER.format(
+            strategy="delete_insert", cursor="order_date", extra_config=extra_config
+        )
+        + body
+        + "\n"
+    )
+
+
 MICROBATCH_CONFIG: str = (
     "  incremental_mode microbatch,\n"
     "  microbatch_strategy watermark,\n"

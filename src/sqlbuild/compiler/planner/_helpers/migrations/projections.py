@@ -1,4 +1,4 @@
-"""Formatting-insensitive top-level projections used to recognize column renames."""
+"""Formatting-insensitive query shapes used to prove that a change is only a column rename."""
 
 from __future__ import annotations
 
@@ -18,6 +18,14 @@ _THIS_KEY: str = "this"
 _COLUMN_KEY: str = "column"
 _NAME_KEY: str = "name"
 _QUOTED_KEY: str = "quoted"
+_TABLE_KEY: str = "table"
+_LITERAL_KEY: str = "literal"
+_LITERAL_TYPE_KEY: str = "literal_type"
+_NUMBER_LITERAL: str = "number"
+_GROUP_BY_KEY: str = "group_by"
+_ORDER_BY_KEY: str = "order_by"
+_DISTINCT_ON_KEY: str = "distinct_on"
+_ALIAS_SCOPED_KEYS: tuple[str, ...] = (_ORDER_BY_KEY, "qualify")
 
 
 def parse_query_shape(*, query_sql: str, dialect: str | None) -> QueryShape | None:
@@ -43,22 +51,95 @@ def parse_query_shape(*, query_sql: str, dialect: str | None) -> QueryShape | No
         projections.append(projection)
     if len({projection.key for projection in projections}) != len(projections):
         return None
-    body: dict[str, Any] = {key: value for key, value in select.items() if key != _EXPRESSIONS_KEY}
-    return QueryShape(projections=tuple(projections), body=_encode(_canonical(body)))
+    canonical: dict[str, Any] = _canonical(select)
+    body: dict[str, Any] = {
+        key: value
+        for key, value in canonical.items()
+        if key != _EXPRESSIONS_KEY and key not in _ALIAS_SCOPED_KEYS
+    }
+    return QueryShape(
+        projections=tuple(projections),
+        body=_encode(body),
+        alias_clauses=_encode({key: canonical.get(key) for key in _ALIAS_SCOPED_KEYS}),
+        positional=_has_positional_reference(canonical),
+    )
 
 
 def renames_explain_change(
     *, previous: QueryShape, current: QueryShape, renames: Mapping[str, str]
 ) -> bool:
-    """Return whether renaming previous output columns alone turns previous into current."""
+    """Return whether renaming output columns, matched by name, is the whole query change."""
 
-    if previous.body != current.body or len(previous.projections) != len(current.projections):
+    if not renames or previous.body != current.body:
         return False
     lowered: dict[str, str] = {old.lower(): new.lower() for old, new in renames.items()}
-    return all(
-        lowered.get(before.key, before.key) == after.key and before.expression == after.expression
-        for before, after in zip(previous.projections, current.projections, strict=True)
+    renamed_previous: dict[str, str] = {
+        lowered.get(item.key, item.key): item.expression for item in previous.projections
+    }
+    current_projections: dict[str, str] = {
+        item.key: item.expression for item in current.projections
+    }
+    if (
+        len(renamed_previous) != len(previous.projections)
+        or renamed_previous != current_projections
+    ):
+        return False
+    reordered: bool = tuple(lowered.get(item.key, item.key) for item in previous.projections) != (
+        tuple(item.key for item in current.projections)
     )
+    if reordered and (previous.positional or current.positional):
+        return False
+    restored: Any = _substitute_alias_references(
+        node=json.loads(current.alias_clauses),
+        names={new: old for old, new in lowered.items()},
+    )
+    return _encode(restored) == previous.alias_clauses
+
+
+def _substitute_alias_references(*, node: Any, names: Mapping[str, str]) -> Any:
+    """Rename unqualified references to output aliases, leaving nested queries untouched."""
+
+    if isinstance(node, list):
+        return [_substitute_alias_references(node=value, names=names) for value in node]
+    if not isinstance(node, dict) or _SELECT_KEY in node:
+        return node
+    column: Any = node.get(_COLUMN_KEY)
+    if isinstance(column, dict) and column.get(_TABLE_KEY) is None:
+        identifier: Any = column.get(_NAME_KEY)
+        name: str | None = _identifier_name(identifier)
+        if name is not None and identifier.get(_QUOTED_KEY) is False and name in names:
+            return {
+                **node,
+                _COLUMN_KEY: {**column, _NAME_KEY: {**identifier, _NAME_KEY: names[name]}},
+            }
+    return {
+        key: _substitute_alias_references(node=value, names=names) for key, value in node.items()
+    }
+
+
+def _has_positional_reference(select: Mapping[str, Any]) -> bool:
+    """Return whether grouping, ordering, or DISTINCT ON refer to output columns by position."""
+
+    items: list[Any] = [*_clause_items(select.get(_GROUP_BY_KEY))]
+    items.extend(
+        item.get(_THIS_KEY) if isinstance(item, dict) else item
+        for item in _clause_items(select.get(_ORDER_BY_KEY))
+    )
+    items.extend(_clause_items(select.get(_DISTINCT_ON_KEY)))
+    return any(
+        isinstance(item, dict)
+        and isinstance(item.get(_LITERAL_KEY), dict)
+        and item[_LITERAL_KEY].get(_LITERAL_TYPE_KEY) == _NUMBER_LITERAL
+        for item in items
+    )
+
+
+def _clause_items(clause: Any) -> list[Any]:
+    if isinstance(clause, list):
+        return clause
+    if isinstance(clause, dict) and isinstance(clause.get(_EXPRESSIONS_KEY), list):
+        return list(clause[_EXPRESSIONS_KEY])
+    return []
 
 
 def _projection(expression: Any) -> QueryProjection | None:

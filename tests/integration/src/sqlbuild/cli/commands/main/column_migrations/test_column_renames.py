@@ -150,7 +150,10 @@ def test_given_pure_rename_with_replay_policy_when_planning_then_model_continues
     [
         RenameWithPolicyTestCase(
             description="append_new_columns renames first, then adds the new column",
-            renamed_sql=orders_sql(columns="amount AS revenue, tax * 2 AS double_tax"),
+            renamed_sql=orders_sql(
+                columns="amount AS revenue, tax * 2 AS double_tax",
+                extra_config=migrate_columns("revenue (migrate_from amount)"),
+            ),
             expected_columns=("order_id", "order_date", "revenue", "double_tax"),
             expected_values=_HISTORY,
             added_column="double_tax",
