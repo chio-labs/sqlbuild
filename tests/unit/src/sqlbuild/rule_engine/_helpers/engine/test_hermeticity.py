@@ -168,6 +168,15 @@ def test_given_closure_with_allowed_imports_when_verifying_then_accepts_rule(
             expected_error_pattern=r"non-hermetic custom rule at .*rules/order_clock.py:1: import 'time' is not allowed",
         ),
         CustomRuleImportTestCase(
+            description="helper package takes precedence over a same-named module",
+            module_import="from . import order_clock",
+            extra_files=(
+                ("rules/order_clock.py", "VALUE = 1\n"),
+                ("rules/order_clock/__init__.py", "import time\n\nVALUE = time.time()\n"),
+            ),
+            expected_error_pattern=r"non-hermetic custom rule at .*rules/order_clock/__init__.py:1: import 'time' is not allowed",
+        ),
+        CustomRuleImportTestCase(
             description="function-local helper import is checked",
             module_import="from rules.order_names import names",
             extra_files=(
@@ -208,3 +217,30 @@ def test_given_closure_with_disallowed_import_when_verifying_then_raises_locatio
 
     with pytest.raises(NonHermeticRuleError, match=test_case.expected_error_pattern):
         verify_custom_rules(rules=rules, project_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CustomRuleImportTestCase(
+            description="package initializer symlinked outside rules is not part of the closure",
+            module_import="import re",
+            extra_files=(("shared/__init__.py", "import time\n"),),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_rules_package_initializer_outside_rules_when_verifying_then_accepts_rule(
+    tmp_path: Path, test_case: CustomRuleImportTestCase
+) -> None:
+    (tmp_path / "rules").mkdir()
+    (tmp_path / "rules" / "__init__.py").symlink_to(tmp_path / "shared" / "__init__.py")
+    rules: tuple[Rule, ...] = custom_rules_with_imports(
+        project_dir=tmp_path,
+        module_import=test_case.module_import,
+        extra_files=test_case.extra_files,
+    )
+
+    verify_custom_rules(rules=rules, project_dir=tmp_path)
+
+    assert tuple(rule.code for rule in rules) == test_case.expected_rule_codes

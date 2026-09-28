@@ -183,7 +183,7 @@ def _local_import_paths(*, node: ast.AST, source_path: Path, rules_root: Path) -
 
 def _module_file(*, base: Path, parts: tuple[str, ...], rules_root: Path) -> Path | None:
     candidate: Path = base.joinpath(*parts)
-    for path in (candidate.with_suffix(".py") if parts else None, candidate / "__init__.py"):
+    for path in (candidate / "__init__.py", candidate.with_suffix(".py") if parts else None):
         if path is not None and path.is_file():
             resolved: Path = path.resolve()
             return resolved if resolved.is_relative_to(rules_root) else None
@@ -198,8 +198,11 @@ def _package_inits(*, path: Path, rules_root: Path) -> tuple[Path, ...]:
         if not parent.is_relative_to(rules_root):
             break
         init: Path = parent / "__init__.py"
-        if init.is_file() and init.resolve() != path:
-            inits.append(init.resolve())
+        if not init.is_file():
+            continue
+        resolved: Path = init.resolve()
+        if resolved != path and resolved.is_relative_to(rules_root):
+            inits.append(resolved)
     return tuple(inits)
 
 
