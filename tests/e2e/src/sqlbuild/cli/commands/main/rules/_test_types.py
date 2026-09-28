@@ -101,3 +101,22 @@ class ProjectTreeCacheCase:
     added_model_path: str
     expected_paths_after_glob_change: tuple[str, ...]
     expected_minimum_cache_hits: int
+
+
+@dataclass(frozen=True)
+class ModuleStatementEditCase:
+    description: str
+    code: str
+    source: str
+    appended_statement: str
+    expected_rule_codes_before_edit: tuple[str, ...]
+    expected_rule_codes_after_edit: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class WorkingDirectoryCase:
+    description: str
+    code: str
+    source: str
+    invocation_directories: tuple[str, ...]
+    expected_working_directory: str

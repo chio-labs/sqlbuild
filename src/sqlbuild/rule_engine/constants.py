@@ -14,8 +14,7 @@ CUSTOM_HOST_MODULE: str = "sqlbuild.rule_engine._helpers.host.custom_host"
 CUSTOM_HOST_LAUNCH_MODULE: str = "sqlbuild.rule_engine._helpers.host.custom_host_launch"
 CUSTOM_HOST_HASH_SEED: str = "0"
 CUSTOM_HOST_EXEC_OS_NAME: str = "posix"
-# Interpreter start-up only: the host clears os.environ before it loads any Rule.
-CUSTOM_HOST_INHERITED_ENVIRONMENT: tuple[str, ...] = (
+CUSTOM_HOST_STARTUP_ENVIRONMENT: tuple[str, ...] = (
     "APPDATA",
     "HOME",
     "PYTHONHOME",

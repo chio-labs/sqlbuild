@@ -59,6 +59,7 @@ def main() -> int:
             else None
         )
         os.environ.clear()
+        os.chdir(project_dir)
         guard = RuntimeGuard(project_dir=project_dir)
         sys.addaudithook(guard)
         messages: io.StringIO = io.StringIO()

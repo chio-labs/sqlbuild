@@ -59,13 +59,17 @@ def run_unevaluated_rules_cli(project_dir: Path, *args: str) -> subprocess.Compl
 
 
 def write_custom_rule_project(
-    *, project_dir: Path, selected_rules: tuple[str, ...], files: tuple[tuple[str, str], ...]
+    *,
+    project_dir: Path,
+    selected_rules: tuple[str, ...],
+    files: tuple[tuple[str, str], ...],
+    configuration: str = "",
 ) -> None:
     """Write a DuckDB project whose selected custom Rules live in the given files."""
 
     (project_dir / "sqlbuild_project.toml").write_text(
         f'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = {json.dumps(selected_rules)}\n'
-        "\n[rules.thresholds]\nmin_custom_rule_test_cases = 0\n",
+        "\n[rules.thresholds]\nmin_custom_rule_test_cases = 0\n" + configuration,
         encoding="utf-8",
     )
     orders: Path = project_dir / "models" / "orders.sql"
@@ -96,9 +100,12 @@ def custom_rule_source(*, code: str, body: str, header: str = CUSTOM_RULE_HEADER
 
 
 def run_compile_cli(
-    project_dir: Path, *, environment: tuple[tuple[str, str], ...] = ()
+    project_dir: Path,
+    *,
+    environment: tuple[tuple[str, str], ...] = (),
+    working_directory: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run the real `sqb compile --json` command with extra parent environment variables."""
+    """Run the real `sqb compile --json` command from an optional invocation directory."""
 
     return subprocess.run(
         [
@@ -113,6 +120,7 @@ def run_compile_cli(
         text=True,
         check=False,
         env={**os.environ, **dict(environment)},
+        cwd=working_directory,
     )
 
 
@@ -151,3 +159,9 @@ def string_set_order(*, names: tuple[str, ...], hash_seed: str) -> str:
         check=True,
         env={"PYTHONHASHSEED": hash_seed},
     ).stdout.strip()
+
+
+def custom_rule_messages(result: subprocess.CompletedProcess[str]) -> tuple[str, ...]:
+    """Return custom-rule diagnostic messages from one JSON compile result."""
+
+    return tuple(str(item["message"]) for item in custom_rule_diagnostics(result))

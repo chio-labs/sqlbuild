@@ -8,13 +8,16 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.rules._test_types import (
     HashSeedCase,
     HermeticRuleCase,
+    ModuleStatementEditCase,
     NonHermeticRuleCase,
     ProjectTreeCacheCase,
     ScrubbedEnvironmentCase,
+    WorkingDirectoryCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import (
     custom_rule_codes,
     custom_rule_diagnostics,
+    custom_rule_messages,
     custom_rule_paths,
     custom_rule_source,
     rule_cache_hits,
@@ -304,3 +307,81 @@ def test_given_project_tree_rule_when_inputs_change_then_reads_work_and_cache_in
     assert relaxed.returncode == 0, relaxed.stdout + relaxed.stderr
     assert custom_rule_paths(relaxed) == ()
     assert rule_cache_hits(repeated) >= test_case.expected_minimum_cache_hits
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ModuleStatementEditCase(
+            description="appended module statement invalidates the cached rule result",
+            code="XSQBRSTMT001",
+            source=custom_rule_source(
+                code="XSQBRSTMT001",
+                header=(
+                    "from sqlbuild.rules import Finding, Model, RuleContext, rule\n\n"
+                    "_NAMES: set[str] = set()\n"
+                ),
+                body="    return [ctx.finding(subject=model)] * int(model.name in _NAMES)\n",
+            ),
+            appended_statement='\n_NAMES.add("orders")\n',
+            expected_rule_codes_before_edit=(),
+            expected_rule_codes_after_edit=("XSQBRSTMT001",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cached_rule_when_module_statement_is_appended_then_rule_is_reevaluated(
+    tmp_path: Path, test_case: ModuleStatementEditCase
+) -> None:
+    write_custom_rule_project(
+        project_dir=tmp_path,
+        selected_rules=(test_case.code,),
+        files=(("rules/orders.py", test_case.source),),
+    )
+    before: subprocess.CompletedProcess[str] = run_compile_cli(tmp_path)
+    rule_file: Path = tmp_path / "rules" / "orders.py"
+    rule_file.write_text(test_case.source + test_case.appended_statement, encoding="utf-8")
+
+    after: subprocess.CompletedProcess[str] = run_compile_cli(tmp_path)
+
+    assert custom_rule_codes(before) == test_case.expected_rule_codes_before_edit
+    assert custom_rule_codes(after) == test_case.expected_rule_codes_after_edit, after.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        WorkingDirectoryCase(
+            description="rules observe the project directory wherever sqb is invoked",
+            code="XSQBRCWD001",
+            source=custom_rule_source(
+                code="XSQBRCWD001",
+                body="    return [ctx.finding(subject=model, message=str(pathlib.Path.cwd()))]\n",
+            ),
+            invocation_directories=("invoked/first", "invoked/second"),
+            expected_working_directory="project",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_rule_observing_cwd_when_invoked_from_different_directories_then_value_is_fixed(
+    tmp_path: Path, test_case: WorkingDirectoryCase
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    project_dir.mkdir()
+    write_custom_rule_project(
+        project_dir=project_dir,
+        selected_rules=(test_case.code,),
+        files=(("rules/orders.py", test_case.source),),
+        configuration="\n[rules.cache]\nenabled = false\n",
+    )
+    messages: list[tuple[str, ...]] = []
+    for directory in test_case.invocation_directories:
+        invocation: Path = tmp_path / directory
+        invocation.mkdir(parents=True)
+        messages.append(
+            custom_rule_messages(run_compile_cli(project_dir, working_directory=invocation))
+        )
+
+    expected: str = str((tmp_path / test_case.expected_working_directory).resolve())
+    assert messages == [(expected,)] * len(test_case.invocation_directories)

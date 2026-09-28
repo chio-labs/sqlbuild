@@ -69,13 +69,18 @@ custom Rules in a separate host process and enforces that at runtime:
   an allowed module, for example `pathlib.os.environ`.
 - The host starts with `PYTHONHASHSEED=0`, so iterating over a set of strings gives the same order
   on every run.
+- The working directory is the resolved project directory, wherever `sqb` was invoked, so
+  `Path.cwd()` and relative paths do not vary between runs.
 - While Rule code runs, opening files, listing directories, running commands, forking, network
   access, and `ctypes` are rejected, however they are reached. Loading a module outside the
   allowed list for the first time is rejected too.
 
 A rejected operation fails the command with `non-hermetic custom rule <code> at <file>:<line>`, even
-if the Rule catches the exception. These checks keep cached results correct. They are not a
-security sandbox.
+if the Rule catches the exception.
+
+The guard exists for cache correctness: it stops Rules from depending on inputs the cache cannot
+track by accident. It is not a security sandbox. Deliberately evasive code can bypass it, so only
+run Rules you trust.
 
 Read supported project text and structure through `ctx.project.tree`:
 
@@ -89,7 +94,8 @@ path invalidates the cached result.
 
 ## Cache granularity
 
-Cache identity incorporates the Rule implementation, imported helper closure, configured options,
-subject, accessed compiler facts, tracked project observations, dialect, and compatibility
-versions. Prefer model subjects for independent per-model checks and project subjects for genuine
+Cache identity incorporates the whole Rule source file, imported helper closure, configured
+options, subject, accessed compiler facts, tracked project observations, dialect, and
+compatibility versions. Editing any statement in a Rule file invalidates cached results for every
+Rule defined in that file, so keep unrelated Rules in separate files. Prefer model subjects for independent per-model checks and project subjects for genuine
 cross-project invariants.
