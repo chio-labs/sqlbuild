@@ -237,6 +237,7 @@ test-e2e-cold-compile-performance:
 	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=4 uv run pytest \
 		tests/e2e/src/sqlbuild/cli/commands/main/compile/test_fresh_process_compile_performance.py \
 		tests/e2e/src/sqlbuild/cli/commands/main/compile/test_inspection_command_performance.py \
+		tests/e2e/src/sqlbuild/cli/commands/main/compile/test_build_performance.py \
 		-m cold_compile_performance -k "models_$(SQLBUILD_BENCHMARK_MODELS)" \
 		-vv --log-cli-level=INFO --color=yes
 

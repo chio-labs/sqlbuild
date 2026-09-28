@@ -69,3 +69,17 @@ each in a fresh process. Every command
 has a wall-time ceiling, a peak-RSS ceiling and an output-line bound linear in the model count, so
 a renderer or graph walk that re-expands shared nodes per path fails on size before it can hide
 behind a loose timing budget. It runs in the 3,000-model fresh-process compile job.
+
+## Plan and build guards
+
+The same inspection project also bounds `sqb plan --json` against an empty DuckDB warehouse. The
+plan budget is a ratio to a warm `sqb compile --json` measured in the same test on the same runner,
+plus a peak-RSS cap. A second case plans a 300-model copy of the benchmark and fails when the
+planning CPU of the large project (plan CPU minus compile CPU) exceeds twice its linear projection
+from the small one, so super-linear planning work fails on any runner.
+
+`test_build_performance.py` builds a 1,000-model DuckDB benchmark without tests or audits from an
+empty warehouse once per module, with wall and peak-RSS limits. Its existing-state cases copy the
+built project, change the queries of a few models (and rename one table in the second case so
+rename discovery matches it against stored fingerprints), and bound the next `sqb plan --json`.
+All cases carry `models_3000` identifiers so they run only in the 3,000-model fresh-process job.

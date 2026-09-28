@@ -84,8 +84,8 @@ jobs:
                 broad=true
                 performance=true
                 ;;
-              src/sqlbuild/cli/commands/_helpers/lineage/*|src/sqlbuild/cli/commands/_helpers/plan/*|src/sqlbuild/cli/commands/_helpers/scope/*|src/sqlbuild/cli/commands/main/inspection/*|src/sqlbuild/cli/commands/main/project/*|src/sqlbuild/cli/output/*|src/sqlbuild/presentation/*)
-                # Inspection command guards run inside the fresh-process compile jobs.
+              src/sqlbuild/cli/commands/_helpers/lineage/*|src/sqlbuild/cli/commands/_helpers/plan/*|src/sqlbuild/cli/commands/_helpers/scope/*|src/sqlbuild/cli/commands/_helpers/build_planning/*|src/sqlbuild/cli/commands/main/inspection/*|src/sqlbuild/cli/commands/main/project/*|src/sqlbuild/cli/output/*|src/sqlbuild/executor/build/*|src/sqlbuild/executor/run/*|src/sqlbuild/presentation/*)
+                # Inspection, plan, and build guards run inside the fresh-process compile jobs.
                 broad=true
                 performance=true
                 ;;

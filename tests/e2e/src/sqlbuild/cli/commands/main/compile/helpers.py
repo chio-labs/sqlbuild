@@ -773,6 +773,28 @@ def prepare_inspection_benchmark_project(*, project_dir: Path) -> None:
         )
 
 
+def prepare_small_inspection_project(*, project_dir: Path, model_count: int) -> None:
+    """Write and compile the semantic benchmark scaled down to model_count models."""
+
+    scale: float = model_count / 3_000
+    write_semantic_compile_project(
+        project_dir=project_dir,
+        model_count=model_count,
+        source_count=max(1, round(713 * scale)),
+        seed_count=max(1, round(141 * scale)),
+        function_count=max(1, round(71 * scale)),
+        macro_count=max(1, round(37 * scale)),
+        test_count=max(1, round(2_945 * scale)),
+        audit_count=max(1, round(5_056 * scale)),
+    )
+    _ = run_fresh_process_inspection_command(
+        project_dir=project_dir,
+        label="small-inspection-compile",
+        sqb_args=("compile", "--json"),
+        expected_max_wall_seconds=60.0,
+    )
+
+
 def _append_benchmark_edit(path: Path, label: str) -> None:
     path.write_text(
         path.read_text(encoding="utf-8") + f"\n-- one {label} edit\n",
@@ -2156,3 +2178,85 @@ def build_empty_input_test_project_files(
             ")\nSELECT 1\n"
         ),
     }
+
+
+class BuiltBenchmark(NamedTuple):
+    project_dir: Path
+    build: InspectionCommandMeasurement
+
+
+BUILD_BENCHMARK_MODEL_COUNT: int = 1_000
+_BUILD_BENCHMARK_CONNECTION: str = '\n[connection]\ndatabase = "benchmark.duckdb"\n'
+_BUILD_BENCHMARK_EDIT: tuple[str, str] = ("amount + 0 WHEN", "amount + 100 WHEN")
+
+
+def prepare_build_benchmark_project(*, project_dir: Path) -> None:
+    """Write a 1,000-model benchmark without tests or audits and warm its compile cache."""
+
+    write_semantic_compile_project(
+        project_dir=project_dir,
+        model_count=BUILD_BENCHMARK_MODEL_COUNT,
+        source_count=238,
+        seed_count=47,
+        function_count=24,
+        macro_count=12,
+        test_count=0,
+        audit_count=0,
+    )
+    config: Path = project_dir / "sqlbuild_project.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8") + _BUILD_BENCHMARK_CONNECTION, encoding="utf-8"
+    )
+    _ = run_fresh_process_inspection_command(
+        project_dir=project_dir,
+        label="build-benchmark-compile",
+        sqb_args=("compile", "--json"),
+        expected_max_wall_seconds=60.0,
+    )
+
+
+def change_benchmark_models(
+    *,
+    project_dir: Path,
+    edited_models: tuple[str, ...],
+    renamed_models: tuple[tuple[str, str], ...],
+) -> None:
+    """Change the query of each edited model and rename each renamed model file."""
+
+    name: str
+    for name in edited_models:
+        _replace_benchmark_text(
+            path=_benchmark_model_path(project_dir=project_dir, name=name),
+            old=_BUILD_BENCHMARK_EDIT[0],
+            new=_BUILD_BENCHMARK_EDIT[1],
+        )
+    old_name: str
+    new_name: str
+    for old_name, new_name in renamed_models:
+        path: Path = _benchmark_model_path(project_dir=project_dir, name=old_name)
+        _ = path.rename(path.with_name(f"{new_name}.sql"))
+
+
+def _benchmark_model_path(*, project_dir: Path, name: str) -> Path:
+    return next((project_dir / "models").rglob(f"{name}.sql"))
+
+
+def plan_reasons_and_migrations(
+    payload: object,
+) -> tuple[tuple[str, ...], tuple[tuple[str, str, str], ...]]:
+    """Return query-changed model names and (origin, destination, decision) migrations."""
+
+    plan: dict[str, Any] = cast(dict[str, Any], payload)
+    return (
+        tuple(sorted(model["name"] for model in filter(_query_changed, plan["models"]))),
+        tuple(
+            sorted(
+                (migration["origin_model"], migration["model"], migration["decision"])
+                for migration in plan["migrations"]
+            )
+        ),
+    )
+
+
+def _query_changed(model: dict[str, Any]) -> bool:
+    return model["reason"] == "query_changed"
