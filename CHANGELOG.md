@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.124.1](https://github.com/chio-labs/sqlbuild/compare/v0.124.0...v0.124.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* small fixes for audits, selection, loads, microbatch cursors, headers and clones ([#862](https://github.com/chio-labs/sqlbuild/issues/862)) ([685e846](https://github.com/chio-labs/sqlbuild/commit/685e846f87822582931f69496512adaaadf12902))
+
 ## [0.124.0](https://github.com/chio-labs/sqlbuild/compare/v0.123.0...v0.124.0) (2026-09-28)
 
 
