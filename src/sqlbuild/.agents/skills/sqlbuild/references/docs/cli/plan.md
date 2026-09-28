@@ -62,6 +62,8 @@ First run (12)
 
 Seeds (1)
   waffle_types
+
+✓ Plan complete  13 selected
 ```
 
 Steady state:
@@ -79,9 +81,13 @@ Normal (12)
 
 Seeds (1)
   waffle_types
+
+✓ Plan complete  13 selected
 ```
 
 When query or schema changes are detected, the plan shows the affected models with backfill actions and cascade information.
+
+Warnings and maintenance notices, such as `migrate_from can be removed`, are listed in a `Warnings` section before the final `Plan complete` line. `sqb plan --json` output is unchanged.
 
 Work that runs before models build is listed first. [Model migrations](../concepts/models/migrations.md) appear under `Migrations`, and in-place [column renames](../concepts/models/column-migrations.md) under `Column migrations`:
 

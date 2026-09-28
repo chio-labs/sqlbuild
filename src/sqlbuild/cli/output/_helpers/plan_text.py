@@ -50,12 +50,14 @@ from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.aligned_name_value import format_aligned_name_value
 from sqlbuild.presentation.main.append_overflow_line import append_overflow_line
+from sqlbuild.presentation.main.completion_line import format_completion_line
 from sqlbuild.presentation.main.count_header import count_header_style
 from sqlbuild.presentation.main.resolve_name_column_width import resolve_name_column_width
 from sqlbuild.presentation.main.surface_header import format_surface_header
 from sqlbuild.presentation.main.tree_connector import tree_connector
 from sqlbuild.presentation.main.visible_entries import visible_entries
 from sqlbuild.presentation.models import DisplayOptions
+from sqlbuild.presentation.types import CompletionState
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 
 _DIFF_HEADER_MARKER: str = "# "
@@ -405,6 +407,36 @@ def _format_full_refresh(
         section_header_style=section_header_style,
     )
     return lines
+
+
+def format_plan_completion(
+    *,
+    plan: PlanOutput,
+    full_refresh: bool,
+    use_color: bool,
+    python_plan_entries: tuple[PythonPlanEntry, ...],
+) -> str:
+    """Render the terminal completion line that closes text plan output."""
+
+    has_errors: bool = any(warning.severity == WarningSeverity.ERROR for warning in plan.warnings)
+    active_model_entries: tuple[ModelPlanEntry, ...] = tuple(
+        entry for entry in plan.model_entries if entry.action != PlanAction.SKIP
+    )
+    all_active_models_full_refresh: bool = bool(active_model_entries) and all(
+        entry.reason == PlanReason.FULL_REFRESH for entry in active_model_entries
+    )
+    return format_completion_line(
+        style=CliStyle(use_color=use_color),
+        state=CompletionState.WARN if has_errors else CompletionState.OK,
+        label="Plan complete with errors" if has_errors else "Plan complete",
+        summary=_plan_ready_header(
+            selected_count=_selected_count(plan),
+            source_load_entries=plan.source_load_entries,
+            python_plan_entries=python_plan_entries,
+            full_refresh=all_active_models_full_refresh
+            or (full_refresh and not active_model_entries),
+        ),
+    )
 
 
 def _selected_count(plan: PlanOutput) -> int:
