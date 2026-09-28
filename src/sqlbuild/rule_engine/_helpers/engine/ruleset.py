@@ -19,7 +19,12 @@ from sqlbuild.rule_engine.models import ResolvedRuleset, Rule, RulesConfig, Rule
 
 
 def evaluate_project(
-    *, project: CompiledProject, config: RulesConfig, project_dir: Path, dialect: str = "generic"
+    *,
+    project: CompiledProject,
+    config: RulesConfig,
+    project_dir: Path,
+    dialect: str = "generic",
+    verify_determinism: bool = False,
 ) -> RulesResult:
     """Evaluate selected rules through one native project boundary."""
 
@@ -40,6 +45,7 @@ def evaluate_project(
         project_dir=project_dir,
         catalogue=catalogue,
         dialect=dialect,
+        verify_determinism=verify_determinism,
     )
 
 

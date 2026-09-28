@@ -10,6 +10,52 @@ RULES_NATIVE_API_VERSION: int = 1
 CUSTOM_HOST_PROTOCOL_VERSION: int = 1
 CUSTOM_HOST_RUNTIME_VERSION: str = "sqlbuild-rules-custom-v1"
 CUSTOM_HOST_INPUT_TUPLE_SIZE: int = 2
+CUSTOM_HOST_MODULE: str = "sqlbuild.rule_engine._helpers.host.custom_host"
+CUSTOM_HOST_LAUNCH_MODULE: str = "sqlbuild.rule_engine._helpers.host.custom_host_launch"
+CUSTOM_HOST_HASH_SEED: str = "0"
+CUSTOM_HOST_EXEC_OS_NAME: str = "posix"
+CUSTOM_HOST_STARTUP_ENVIRONMENT: tuple[str, ...] = (
+    "APPDATA",
+    "HOME",
+    "PYTHONHOME",
+    "PYTHONNOUSERSITE",
+    "PYTHONPATH",
+    "PYTHONUSERBASE",
+    "SYSTEMROOT",
+)
+CUSTOM_RULE_IMPORT_ROOTS: frozenset[str] = frozenset(
+    {
+        "__future__",
+        "abc",
+        "bisect",
+        "collections",
+        "copy",
+        "dataclasses",
+        "decimal",
+        "difflib",
+        "enum",
+        "fnmatch",
+        "fractions",
+        "functools",
+        "graphlib",
+        "hashlib",
+        "heapq",
+        "itertools",
+        "json",
+        "math",
+        "operator",
+        "pathlib",
+        "re",
+        "rules",
+        "sqlbuild.rules",
+        "statistics",
+        "string",
+        "textwrap",
+        "types",
+        "typing",
+        "unicodedata",
+    }
+)
 SKILL_FRESH: str = "fresh"
 SKILL_MISSING: str = "missing"
 SKILL_STALE: str = "stale"

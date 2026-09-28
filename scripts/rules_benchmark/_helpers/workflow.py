@@ -39,6 +39,21 @@ _COMPILE_TIMEOUT_SECONDS: int = 120
 _CI_THRESHOLDS_PATH: Path = Path(__file__).parents[1] / "ci_thresholds.json"
 _GNU_TIME_PATH: Path = Path("/usr/bin/time")
 _PEAK_RSS_MARKER: str = "__SQLBUILD_BENCHMARK_PEAK_RSS_KIB__="
+_NON_CACHEABLE_PROBE_RULE: str = """
+import pathlib
+
+
+@rule(
+    code="XSQBRB999",
+    slug="non-cacheable-probe",
+    message="Non-cacheable probe observed the rules directory",
+    remediation="Remove the non-cacheable probe.",
+    enabled_by_default=True,
+)
+def non_cacheable_probe(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    listed = pathlib.os.listdir(pathlib.Path(__file__).parent)
+    return [ctx.finding(subject=model)] * int(not listed)
+"""
 
 
 @dataclass(frozen=True)
@@ -890,7 +905,7 @@ def _extract_peak_rss(stderr: str) -> tuple[str, int | None]:
 def _measure_rejection(*, project_dir: Path, iterations: int) -> BenchmarkResult:
     rule_file: Path = project_dir / "rules" / "benchmark_rules.py"
     with rule_file.open("a", encoding="utf-8") as handle:
-        handle.write("\ndef non_cacheable_probe():\n    return open('untracked.txt')\n")
+        handle.write(_NON_CACHEABLE_PROBE_RULE)
     elapsed: list[float] = []
     peak_rss_bytes: list[int] = []
     for _ in range(iterations):

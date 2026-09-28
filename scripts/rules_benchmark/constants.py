@@ -8,5 +8,5 @@ CI_STRESS_RULE_COUNT: int = 100
 CI_STRESS_WARM_ITERATIONS: int = 3
 BENCHMARK_HELPER_RULE_INDEX: int = 14
 MAX_CUSTOM_RULE_COUNT: int = 999
-NON_CACHEABLE_REJECTION: str = "call to open must go through RuleContext"
+NON_CACHEABLE_REJECTION: str = "listing a directory is not allowed"
 SQL_SUFFIX: str = ".sql"

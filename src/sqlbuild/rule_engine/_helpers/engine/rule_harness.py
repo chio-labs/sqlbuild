@@ -45,6 +45,7 @@ def run_rule_case(*, rule: RuleCheck | Rule, test_case: RuleCase) -> RuleResult:
             project=project,
             config=config,
             project_dir=root,
+            verify_determinism=True,
         )
     if len(result.findings) != test_case.expected_finding_count:
         raise RuleAssertionError(

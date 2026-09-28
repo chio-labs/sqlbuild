@@ -14,6 +14,7 @@ from sqlbuild.rule_engine.models import Rule
 _PUBLIC_HARNESS_MODULES: frozenset[str] = frozenset({"sqlbuild.rules", "sqlbuild.rules.testing"})
 _INIT_MODULE_NAME: str = "__init__"
 _RULES_DIRECTORY_NAME: str = "rules"
+_STAR_IMPORT_NAME: str = "*"
 _MIN_PARAMETRIZE_ARGUMENTS: int = 2
 _PARAMETRIZE_ATTRIBUTE: str = "parametrize"
 _PYTEST_MARK_ATTRIBUTE: str = "mark"
@@ -29,26 +30,6 @@ class _RuleTestEvidence:
     line: int
     column: int
     owner: str
-
-
-class _ModuleBindingVisitor(ast.NodeVisitor):
-    """Collect names bound in module control flow without entering local scopes."""
-
-    def __init__(self) -> None:
-        self.names: set[str] = set()
-
-    def visit_Name(self, node: ast.Name) -> None:
-        if isinstance(node.ctx, ast.Store):
-            self.names.add(node.id)
-
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        self.names.add(node.name)
-
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        self.names.add(node.name)
-
-    def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        self.names.add(node.name)
 
 
 def custom_rule_test_evidence(*, rule: Rule, project_dir: Path) -> tuple[_RuleTestEvidence, ...]:
@@ -87,66 +68,28 @@ def custom_rule_import_closure(*, rule: Rule, project_dir: Path) -> tuple[Path, 
 def custom_rule_implementation_fingerprint(
     *, rule: Rule, project_dir: Path, import_closure: tuple[Path, ...] | None = None
 ) -> str:
-    """Fingerprint one rule function and its repository-owned imported helper closure."""
+    """Fingerprint one rule's whole source file and its repository-owned imported helper closure."""
 
     digest: Any = hashlib.sha256()
     if rule.source is None:
         digest.update(inspect.getsource(rule.check).encode())
         return digest.hexdigest()
-    digest.update(inspect.getsource(rule.check).encode())
-    digest.update(_module_binding_fingerprint(rule=rule))
     root: Path = project_dir.resolve()
+    source_path: Path = Path(rule.source).resolve()
     closure: tuple[Path, ...] = (
         custom_rule_import_closure(rule=rule, project_dir=root)
         if import_closure is None
         else import_closure
     )
-    for path in closure:
-        digest.update(path.relative_to(root).as_posix().encode())
+    for path in (source_path, *closure):
+        digest.update(_fingerprint_label(path=path, root=root).encode())
+        digest.update(b"\0")
         digest.update(path.read_bytes())
     return digest.hexdigest()
 
 
-def _module_binding_fingerprint(*, rule: Rule) -> bytes:
-    if rule.source is None:
-        return b""
-    source_path: Path = Path(rule.source).resolve()
-    try:
-        source: str = source_path.read_text(encoding="utf-8")
-        tree: ast.Module = ast.parse(source, filename=str(source_path))
-    except (OSError, UnicodeError, SyntaxError):
-        return b""
-    definitions: dict[str, ast.AST] = {}
-    for statement in tree.body:
-        visitor: _ModuleBindingVisitor = _ModuleBindingVisitor()
-        visitor.visit(statement)
-        for name in visitor.names:
-            definitions[name] = statement
-    check_name: str = getattr(rule.check, "__name__", "")
-    check_node: ast.AST | None = definitions.get(check_name)
-    pending: list[str] = [] if check_node is None else list(_loaded_names(check_node))
-    visited: set[str] = {check_name}
-    parts: list[bytes] = []
-    while pending:
-        name: str = pending.pop()
-        if name in visited:
-            continue
-        visited.add(name)
-        definition: ast.AST | None = definitions.get(name)
-        if definition is None:
-            continue
-        parts.append(name.encode())
-        parts.append(ast.dump(definition, include_attributes=False).encode())
-        pending.extend(_loaded_names(definition))
-    return b"\0".join(parts)
-
-
-def _loaded_names(node: ast.AST) -> tuple[str, ...]:
-    return tuple(
-        child.id
-        for child in ast.walk(node)
-        if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load)
-    )
+def _fingerprint_label(*, path: Path, root: Path) -> str:
+    return path.relative_to(root).as_posix() if path.is_relative_to(root) else path.as_posix()
 
 
 def custom_rule_project_fact_attributes(
@@ -182,62 +125,85 @@ def custom_rule_project_fact_attributes(
 
 
 def _import_closure(*, source_path: Path, project_dir: Path) -> tuple[Path, ...]:
+    rules_root: Path = (project_dir / _RULES_DIRECTORY_NAME).resolve()
     pending: list[Path] = [source_path]
     visited: set[Path] = {source_path}
     helpers: set[Path] = set()
     while pending:
         current: Path = pending.pop()
+        candidates: set[Path] = set(_package_inits(path=current, rules_root=rules_root))
         try:
             tree: ast.Module = ast.parse(current.read_text(encoding="utf-8"), filename=str(current))
         except (OSError, UnicodeError, SyntaxError):
-            continue
-        for node in tree.body:
-            candidate: Path | None = _local_import_path(
-                node=node,
-                source_path=current,
-                project_dir=project_dir,
+            tree = ast.Module(body=[], type_ignores=[])
+        for node in ast.walk(tree):
+            candidates.update(
+                _local_import_paths(node=node, source_path=current, rules_root=rules_root)
             )
-            if candidate is None or candidate in visited:
-                continue
+        for candidate in candidates - visited:
             visited.add(candidate)
             helpers.add(candidate)
             pending.append(candidate)
     return tuple(sorted(helpers))
 
 
-def _local_import_path(*, node: ast.stmt, source_path: Path, project_dir: Path) -> Path | None:
-    module: str | None = None
-    base: Path
-    level: int = 0
-    if isinstance(node, ast.ImportFrom):
-        module = node.module
-        level = node.level
+def _local_import_paths(*, node: ast.AST, source_path: Path, rules_root: Path) -> tuple[Path, ...]:
+    """Resolve every repository-owned rules module one import statement can execute."""
+
+    targets: list[tuple[Path, tuple[str, ...]]] = []
+    if isinstance(node, ast.Import):
+        targets.extend(
+            (rules_root.parent, tuple(alias.name.split(".")))
+            for alias in node.names
+            if alias.name.split(".")[0] == _RULES_DIRECTORY_NAME
+        )
+    elif isinstance(node, ast.ImportFrom):
+        base: Path = rules_root.parent
+        module_parts: tuple[str, ...] = tuple((node.module or "").split(".")) if node.module else ()
         if node.level:
             base = source_path.parent
             for _ in range(node.level - 1):
                 base = base.parent
-        else:
-            base = project_dir
-    elif isinstance(node, ast.Import) and len(node.names) == 1:
-        module = node.names[0].name
-        base = project_dir
-    else:
-        return None
-    if module is None:
-        return None
-    parts: tuple[str, ...] = tuple(module.split("."))
-    if not level and (not parts or parts[0] != _RULES_DIRECTORY_NAME):
-        return None
+        elif not module_parts or module_parts[0] != _RULES_DIRECTORY_NAME:
+            return ()
+        targets.append((base, module_parts))
+        targets.extend(
+            (base, (*module_parts, alias.name))
+            for alias in node.names
+            if alias.name != _STAR_IMPORT_NAME
+        )
+    resolved: list[Path] = []
+    for base, parts in targets:
+        module: Path | None = _module_file(base=base, parts=parts, rules_root=rules_root)
+        if module is not None:
+            resolved.append(module)
+            resolved.extend(_package_inits(path=module, rules_root=rules_root))
+    return tuple(resolved)
+
+
+def _module_file(*, base: Path, parts: tuple[str, ...], rules_root: Path) -> Path | None:
     candidate: Path = base.joinpath(*parts)
-    file_candidate: Path = candidate.with_suffix(".py")
-    package_candidate: Path = candidate / "__init__.py"
-    resolved: Path | None = file_candidate if file_candidate.is_file() else None
-    if resolved is None and package_candidate.is_file():
-        resolved = package_candidate
-    if resolved is None:
-        return None
-    resolved = resolved.resolve()
-    return resolved if resolved.is_relative_to(project_dir) else None
+    for path in (candidate / "__init__.py", candidate.with_suffix(".py") if parts else None):
+        if path is not None and path.is_file():
+            resolved: Path = path.resolve()
+            return resolved if resolved.is_relative_to(rules_root) else None
+    return None
+
+
+def _package_inits(*, path: Path, rules_root: Path) -> tuple[Path, ...]:
+    """Return package initializers executed before one module under the rules root."""
+
+    inits: list[Path] = []
+    for parent in path.parents:
+        if not parent.is_relative_to(rules_root):
+            break
+        init: Path = parent / "__init__.py"
+        if not init.is_file():
+            continue
+        resolved: Path = init.resolve()
+        if resolved != path and resolved.is_relative_to(rules_root):
+            inits.append(resolved)
+    return tuple(inits)
 
 
 def _file_evidence(

@@ -41,6 +41,7 @@ from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
     custom_rule_test_evidence,
 )
 from sqlbuild.rule_engine.constants import (
+    CUSTOM_HOST_LAUNCH_MODULE,
     CUSTOM_HOST_RUNTIME_VERSION,
     RULE_CONTEXT_AUDITS_FACT,
     RULE_CONTEXT_DECLARATIONS_FACT,
@@ -73,6 +74,7 @@ def evaluate_native(
     dialect: str = "generic",
     initial_findings: tuple[Finding, ...] = (),
     defer_suppressions: bool = False,
+    verify_determinism: bool = False,
 ) -> RulesResult:
     """Evaluate one compiled model batch through the native engine."""
 
@@ -122,6 +124,7 @@ def evaluate_native(
                 project_dir=project_dir,
                 catalogue=tuple(selected_catalogue),
                 dialect=dialect,
+                verify_determinism=verify_determinism,
             )
             request["custom_host"] = custom_host
         try:
@@ -137,6 +140,7 @@ def evaluate_native(
                 project_dir=project_dir,
                 catalogue=tuple(selected_catalogue),
                 dialect=dialect,
+                verify_determinism=verify_determinism,
             )
             request["custom_host"] = custom_host
             response_json = _evaluate_request(request)
@@ -731,6 +735,7 @@ def _custom_host_payload(
     project_dir: Path,
     catalogue: tuple[Rule, ...],
     dialect: str,
+    verify_determinism: bool,
 ) -> tuple[dict[str, object] | None, Path | None]:
     if not any(rule.custom for rule in catalogue):
         return None, None
@@ -765,13 +770,14 @@ def _custom_host_payload(
     return (
         {
             "program": sys.executable,
-            "arguments": ["-m", "sqlbuild.rule_engine._helpers.engine.custom_host"],
+            "arguments": ["-m", CUSTOM_HOST_LAUNCH_MODULE],
             "timeout_millis": 120_000,
             "runtime_version": CUSTOM_HOST_RUNTIME_VERSION,
             "payload": {
                 "project_pickle_path": str(input_path.resolve()),
                 "project_dir": str(project_dir.resolve()),
                 "dialect": dialect,
+                "verify_determinism": verify_determinism,
             },
         },
         input_path,

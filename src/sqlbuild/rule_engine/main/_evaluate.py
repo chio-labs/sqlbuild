@@ -13,6 +13,7 @@ def evaluate(
     config: RulesConfig,
     project_dir: Path,
     dialect: str = "generic",
+    verify_determinism: bool = False,
 ) -> RulesResult:
     """Evaluate the selected compiler rules over compiled models."""
 
@@ -21,4 +22,5 @@ def evaluate(
         config=config,
         project_dir=project_dir,
         dialect=dialect,
+        verify_determinism=verify_determinism,
     )

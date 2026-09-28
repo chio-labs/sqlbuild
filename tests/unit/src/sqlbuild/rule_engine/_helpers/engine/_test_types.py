@@ -144,3 +144,14 @@ class PolicyLayoutConfigTestCase:
     source: str
     expected_levels: tuple[str, ...]
     expected_thresholds: dict[str, int]
+
+
+@dataclass(frozen=True)
+class CustomRuleImportTestCase:
+    """One static import-allowlist expectation over the fingerprinted rule closure."""
+
+    description: str
+    module_import: str
+    extra_files: tuple[tuple[str, str], ...] = ()
+    expected_rule_codes: tuple[str, ...] = ("XSQBRT101",)
+    expected_error_pattern: str = ""
