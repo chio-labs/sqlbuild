@@ -2,13 +2,24 @@
 
 # Model migrations
 
-> Keep the history of an incremental or snapshot model when you rename it.
+> Keep a renamed model's history, and keep its old name working for a while.
 
 Online: https://sqlbuild.com/docs/concepts/models/migrations/
 
+## Contents
+
+- Declaring a migration
+- Decisions
+- Automatic discovery
+- How a move runs
+- Old names
+- State
+- Adapter support
+- Previewing another target
+
 Renaming an incremental or snapshot model normally means rebuilding it from scratch under the new name, which loses any history the source data can no longer reproduce. A model migration moves the existing relation's data to the new name instead, then continues building incrementally.
 
-Migrations apply to incremental and snapshot models. To keep a column's history when you rename the column, see [Column migrations](column-migrations.md).
+Table and view models can declare a migration too. They hold no history, so they are rebuilt under the new name, but they keep their identity for change detection. For every materialization, the old name keeps working for a while through a [compatibility view](#old-names). To keep a column's history when you rename the column, see [Column migrations](column-migrations.md).
 
 ## Declaring a migration
 
@@ -25,7 +36,7 @@ MODEL (
 
 Use `schema.name` when the old relation is in a different schema of the same database.
 
-On the next build, SQLBuild copies the old relation's data to the new name through a staging table (see [How a move runs](#how-a-move-runs)), records the move, and builds the model incrementally from the migrated state. There is no first-run rebuild, and no `replay_on_change` replay caused by the rename. The old relation is never modified or dropped. Once it is no longer part of the project, [janitor](../../cli/janitor.md) archives it like any other stale relation.
+On the next build, SQLBuild copies the old relation's data to the new name through a staging table (see [How a move runs](#how-a-move-runs)), records the move, and builds the model incrementally from the migrated state. There is no first-run rebuild, and no `replay_on_change` replay caused by the rename. After the model builds, the old relation is archived and a compatibility view takes its name (see [Old names](#old-names)).
 
 After the move is recorded, `migrate_from` has no further effect, and SQLBuild tells you it can be removed. Keep it until every target that needs the move has built.
 
@@ -47,11 +58,13 @@ The origin and destination must be compatible under the model's normal `on_schem
 
 `migrate_force true` only affects the `conflict` case and is safe to leave in the header.
 
+Table and view models only ever see `migrate`, `done`, and `origin missing`: nothing is replaced, so there is no conflict. `migrate_force` on a table or view model is a compile error. In `sqb plan --json`, their decision is `renamed`.
+
 ## Automatic discovery
 
 If a selected model has never been built, SQLBuild compares it with models that were removed from the project but whose relations still exist. When exactly one removed model has equivalent logic, it is migrated automatically. Equivalent means the same query and configuration, ignoring the model's own name, CTE and table alias names, comments, formatting, and storage-only settings. Renamed upstream models are matched first, so a renamed chain of models is migrated together. Removed models whose data was already moved on by a recorded migration are not candidates, so a model renamed several times matches its latest table.
 
-Renamed tables and views are matched the same way. They are still rebuilt under the new name, since they hold no history, but they keep their identity for change detection, so incremental models downstream of a renamed view are not replayed or rebuilt. These renames are recorded as `renamed` events.
+Renamed tables and views are matched the same way. They are rebuilt under the new name, since they hold no history, but they keep their identity for change detection, so incremental models downstream of a renamed view are not replayed or rebuilt. These renames are recorded as `renamed` events.
 
 Automatic discovery never guesses. If a match is ambiguous, SQLBuild warns (`M107`) and builds from scratch; declare `migrate_from` to choose. An explicit `migrate_from` always wins. Automatic discovery covers renames within the project's schemas; use `migrate_from` to move a model to another schema. Relations last built before this feature carry no stored fingerprint and aren't matched automatically.
 
@@ -63,14 +76,72 @@ A move never overwrites the destination directly:
 2. The staging table is checked: it must exist, have the expected columns and table type, and, for a physical copy, the same row count as the old relation.
 3. The staging table is swapped in as the destination. If a destination already existed, for example after `superseded replace` or `forced replace`, it is kept as `_sqb_archive__<UTC timestamp>__migration_previous__<name>` rather than dropped.
 4. The move is recorded, then the model builds as usual.
+5. After the model builds successfully, the old relation is archived and a compatibility view is created at its name (see [Old names](#old-names)).
 
-The old relation is never modified. Staging and replaced tables use the [janitor](../../cli/janitor.md) archive format, so an abandoned staging table or a replaced destination is deleted by janitor after `archive_retention_days`. A staging table left by an interrupted run is never reused; the next run stages again. Don't run janitor at the same time as a build in the same schema.
+Until step 5, the old relation is not modified. Staging and replaced tables use the [janitor](../../cli/janitor.md) archive format, so an abandoned staging table or a replaced destination is deleted by janitor after `archive_retention_days`. A staging table left by an interrupted run is never reused; the next run stages again. Don't run janitor at the same time as a build in the same schema.
 
 `sqb plan` shows how each move will run, for example `physical copy, transient -> permanent, promote by swap`.
+
+## Old names
+
+A rename breaks every query outside the project that still reads the old name: dashboards, notebooks, other teams' jobs. After the renamed model builds successfully, SQLBuild keeps the old name working for a while:
+
+1. The old relation is renamed to `_sqb_archive__<UTC timestamp>__migration_origin__<name>`.
+2. A view is created at the old name that selects from the new relation.
+
+On DuckDB, MotherDuck, and PostgreSQL both steps and their records commit in one transaction. On Snowflake each step is recorded after it runs, and a re-run resumes from the first unrecorded step without repeating one. A failure is reported as `M117`; re-run the build.
+
+If columns were renamed, the view presents them under their old names, for example `SELECT order_id, revenue AS amount FROM analytics.daily_revenue`. Incremental and snapshot models alias every recorded [column migration](column-migrations.md). A table or view model that declares `migrate_from` can declare old column names the same way, as `revenue (migrate_from amount)`; this only aliases the column in the compatibility view, since the table is rebuilt with the new name anyway. The view is re-created against the new relation's current columns after every build of the model.
+
+`sqb plan` shows what happens at the old name:
+
+```
+Migrations (1)
+└── daily_revenue  migrate  analytics.revenue -> analytics.daily_revenue
+    ├── transfer  rebuild (table)
+    └── old name  archive analytics.revenue, then view until 2026-10-28 (amount <- revenue)
+```
+
+In `sqb plan --json`, each migration has an `old_name` object with `action` (`archive_and_view`, `view_only`, `live`, or `none`), `view`, `reads`, `expires_at`, `column_aliases`, and `reason`. The top-level `old_names` list also includes steps that resume an earlier move.
+
+The view expires after 30 days by default. After that, [janitor](../../cli/janitor.md) drops it; `sqb janitor --drop-old-name-view analytics.revenue` drops it earlier. Change the default for the project, or turn the views off with `false`:
+
+```toml
+[migrations]
+old_name_views = "7d"
+```
+
+A model header overrides the project setting with `old_name_view 7d` or `old_name_view false`. The retention of a move is fixed when the move is recorded.
+
+With views off, or when a view can't be kept, the old relation is left in place and janitor archives it once it is no longer part of the project, as before. No view is created when:
+
+- the old relation was not built by SQLBuild;
+- another model in the project builds at the old name;
+- the old name is itself a compatibility view of an earlier rename;
+- the adapter is BigQuery, Databricks, or SQL Server (`sqb plan` says so).
+
+Moves recorded before a SQLBuild version that supports old-name views never gain a view later.
+
+### Code inside the project
+
+The compatibility view is for consumers outside the project. Project code must use the new model:
+
+- Python nodes, hooks, and loaders whose literal SQL names the old name fail with `P008`, at compile time for a declared `migrate_from` and at plan time for an automatically discovered rename. SQL models reading it through `__ref` are unaffected, since `__ref` resolves the new name.
+- A new model whose name is a live compatibility view stops the build with `M114`, which names the view and its expiry. Drop the view early with janitor, or choose another name.
+
+### PostgreSQL views
+
+PostgreSQL views are bound to the table they read, not its name. SQLBuild drops and re-creates its compatibility views around every rebuild of the renamed model. Views outside SQLBuild that read the old relation follow it into the archive and keep reading its old data; the build warns with `M115` and names them. Re-create them against the old name or the new relation.
+
+### Upgrading
+
+Upgrade the SQLBuild version that runs `sqb janitor` together with the one that runs builds. An older janitor does not know compatibility views and archives them as stale relations.
 
 ## State
 
 Each move is recorded in an append-only `_sqlbuild_migrations` table in the destination schema. A missing record means completion is unrecorded; staging or promotion may already have happened. Re-running after an interruption recovers through the migration decisions above.
+
+What happens at the old name is recorded in an append-only `_sqlbuild_old_name_views` table next to it, one row per step: `required` (with the move), `origin_archived`, `view_created`, and `view_dropped`. Rows are never updated.
 
 ## Adapter support
 

@@ -38,7 +38,7 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [Schemas](concepts/models/schemas.md) (`concepts/models/schemas`) - Declare model columns inline or reuse canonical inherited schemas.
 - [Type Enforcement](concepts/models/type-enforcement.md) (`concepts/models/type-enforcement`) - Understand declared model types, static checks, and runtime casting.
 - [Contracts](concepts/models/contracts.md) (`concepts/models/contracts`) - Validate required or exact model output schemas.
-- [Model migrations](concepts/models/migrations.md) (`concepts/models/migrations`) - Keep the history of an incremental or snapshot model when you rename it.
+- [Model migrations](concepts/models/migrations.md) (`concepts/models/migrations`) - Keep a renamed model's history, and keep its old name working for a while.
 - [Column migrations](concepts/models/column-migrations.md) (`concepts/models/column-migrations`) - Keep a column's history when you rename it in an incremental or snapshot model.
 - [Hooks](concepts/models/hooks.md) (`concepts/models/hooks`) - Run SQL or Python lifecycle hooks around model materialization.
 - [SQL Hooks](concepts/models/hooks/sql.md) (`concepts/models/hooks/sql`) - Define, parameterize, compile, and invoke reusable or inline SQL lifecycle hooks.

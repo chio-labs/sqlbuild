@@ -20,6 +20,7 @@ sqb --project-dir <path> janitor [flags]
 | `--auto-approve` | Skip the confirmation prompt and run the planned actions immediately |
 | `--retention-days` | Override the configured retention period (days) before a stale relation is archived |
 | `--direct-state-history-versions` | Override how many state-history versions are kept per identity |
+| `--drop-old-name-view <name>` | Drop the [compatibility view](/docs/concepts/models/migrations#old-names) at a renamed model's old name before it expires. Repeat for several views. Fails with `C503` if no compatibility view is recorded at the name |
 
 ## Lifecycle
 
@@ -43,6 +44,12 @@ Archive names are written as unquoted lowercase identifiers, so warehouses that 
 Long names are shortened with a short hash so they fit the adapter's identifier limit. The prefix and timestamp are never shortened.
 
 Setting both `retention_days` and `archive_retention_days` to `0` archives and deletes stale relations in the same run.
+
+## Compatibility views
+
+When a model is renamed, SQLBuild keeps a [compatibility view](/docs/concepts/models/migrations#old-names) at its old name. The janitor lists each one with the model it reads and its expiry. It is never archived as a stale relation. Once it expires, or when it is named with `--drop-old-name-view`, the janitor drops it and records the drop in `_sqlbuild_old_name_views`. A compatibility view that no longer exists is recorded as dropped.
+
+Run the same SQLBuild version for `sqb janitor` as for builds. An older janitor does not know compatibility views and archives them as stale relations.
 
 ## Relation age
 

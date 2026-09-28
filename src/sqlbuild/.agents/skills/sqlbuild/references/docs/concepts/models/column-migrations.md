@@ -46,7 +46,7 @@ After the rename is recorded, `migrate_from` has no further effect, and SQLBuild
 
 A declaration is rejected when compiling if:
 
-- the model is not incremental or snapshot;
+- the model is not incremental or snapshot, unless it is a table or view model that declares its own `migrate_from`; there the column's `migrate_from` only names the old column in the [compatibility view](migrations.md#old-names) at the model's old name;
 - `migrate_from` names the column itself, or a qualified name instead of one column;
 - two columns declare the same `migrate_from`;
 - a declared column migrates from another column that itself declares `migrate_from`. Chains and swaps can't be renamed in place safely; rename through a name no other column uses, or rebuild with `--full-refresh`.
