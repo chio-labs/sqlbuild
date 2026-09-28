@@ -95,6 +95,8 @@ def with_storage_policies(
         ),
         migration_entries=warehouse.migration_entries,
         column_migration_entries=warehouse.column_migration_entries,
+        old_name_view_entries=warehouse.old_name_view_entries,
+        old_name_views=warehouse.old_name_views,
         warnings=(*warehouse.migration_warnings, *plan_output.warnings),
         table_type_entries=plan_table_types(
             runtime=runtime, warehouse=warehouse, scope=scopes.selected_scope

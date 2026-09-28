@@ -17,6 +17,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 DATABASE_FILE: str = "orders.duckdb"
 _PROJECT_TOML: str = (
     f'name = "orders_project"\nadapter = "duckdb"\n\n[connection]\ndatabase = "{DATABASE_FILE}"\n'
+    "\n[migrations]\nold_name_views = false\n"
 )
 _SOURCES_YML: str = "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
 

@@ -352,6 +352,30 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def supports_old_name_views(self) -> bool:
+        """Return whether migrations may keep old names working through compatibility views."""
+        ...
+
+    @abstractmethod
+    def views_bind_to_relation_identity(self) -> bool:
+        """Return whether views follow a renamed relation instead of re-resolving its name."""
+        ...
+
+    @abstractmethod
+    def list_dependent_view_names(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        """Return qualified names of views bound to this relation."""
+        ...
+
+    @abstractmethod
+    def render_create_old_name_view_state_table_sql(
+        self, *, database: str | None, schema: str
+    ) -> str:
+        """Render DDL that creates the old-name view fact table when it is missing."""
+        ...
+
+    @abstractmethod
     def supports_transactional_ddl(self) -> bool:
         """Return whether renames and state inserts can commit or roll back together."""
         ...

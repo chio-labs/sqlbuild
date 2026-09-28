@@ -10,20 +10,23 @@ from sqlbuild.cli.output._helpers.cursor_plan import build_cursor_plan_details
 from sqlbuild.cli.output._helpers.future_cursor_safety import serialize_future_cursor_safety
 from sqlbuild.cli.output._helpers.maximum_start_safety import serialize_maximum_start_safety
 from sqlbuild.cli.output.models import CursorPlanDetails
+from sqlbuild.compiler.migrations.types import MigrationDecision
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
     FunctionPlanEntry,
     FutureCursorSafetyEvidence,
     MaximumStartSafetyEvidence,
+    ModelMigrationPlanEntry,
     ModelPlanEntry,
+    OldNameViewPlanEntry,
     PlanOutput,
     PlanProviderUsage,
     PlanWarning,
     SeedPlanEntry,
     SourceLoadPlanEntry,
 )
-from sqlbuild.compiler.planner.types import IncrementalMode, PlanReason
+from sqlbuild.compiler.planner.types import IncrementalMode, MaterializationType, PlanReason
 from sqlbuild.compiler.python_nodes.types import PythonIdentityStatus
 from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 
@@ -99,6 +102,7 @@ def format_plan_json(
         "table_type_conversions": table_type_conversions,
         "migrations": _serialize_model_migrations(plan),
         "column_migrations": _serialize_column_migrations(plan),
+        "old_names": [_serialize_old_name(entry) for entry in plan.old_name_view_entries],
     }
     if plan.metadata:
         result["metadata"] = plan.metadata
@@ -496,7 +500,25 @@ def _serialize_column_migrations(plan: PlanOutput) -> list[dict[str, object]]:
     ]
 
 
+def _serialize_old_name(entry: OldNameViewPlanEntry) -> dict[str, object]:
+    return {
+        "model": entry.model_name,
+        "action": entry.action.value,
+        "view": entry.origin.qualified_name or entry.origin.name,
+        "reads": entry.destination.qualified_name or entry.destination.name,
+        "expires_at": entry.expires_at.isoformat() if entry.expires_at is not None else None,
+        "column_aliases": dict(entry.column_aliases),
+        "reason": entry.reason,
+    }
+
+
 def _serialize_model_migrations(plan: PlanOutput) -> list[dict[str, object]]:
+    old_names: dict[str, OldNameViewPlanEntry] = {
+        entry.model_name: entry for entry in plan.old_name_view_entries
+    }
+    materializations: dict[str, str] = {
+        entry.name: str(entry.materialization_type) for entry in plan.model_entries
+    }
     return [
         {
             "kind": "model_migration",
@@ -510,7 +532,9 @@ def _serialize_model_migrations(plan: PlanOutput) -> list[dict[str, object]]:
             "destination": entry.destination.qualified_name or entry.destination.name,
             "target": entry.target_name,
             "origin_version_hash": entry.origin_version_hash,
-            "transfer": entry.transfer.value if entry.transfer is not None else None,
+            "transfer": _migration_transfer(
+                entry=entry, materialization=materializations.get(entry.model_name)
+            ),
             "transfer_fallback": (
                 entry.transfer_fallback.value if entry.transfer_fallback is not None else None
             ),
@@ -519,6 +543,21 @@ def _serialize_model_migrations(plan: PlanOutput) -> list[dict[str, object]]:
             "completed_at": (
                 entry.completed_at.isoformat() if entry.completed_at is not None else None
             ),
+            "old_name": (
+                _serialize_old_name(old_names[entry.model_name])
+                if entry.model_name in old_names
+                else None
+            ),
         }
         for entry in plan.migration_entries
     ]
+
+
+def _migration_transfer(
+    *, entry: ModelMigrationPlanEntry, materialization: str | None
+) -> str | None:
+    if entry.transfer is not None:
+        return entry.transfer.value
+    if entry.decision != MigrationDecision.RENAMED or entry.completed_at is not None:
+        return None
+    return "recreate" if materialization == MaterializationType.VIEW else "rebuild"

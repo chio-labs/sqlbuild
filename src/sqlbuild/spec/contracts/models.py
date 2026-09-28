@@ -299,6 +299,13 @@ class JanitorConfig:
 
 
 @dataclass(frozen=True)
+class MigrationsConfig:
+    """Model migration defaults."""
+
+    old_name_views: str | None = "30d"
+
+
+@dataclass(frozen=True)
 class SnapshotsConfig:
     """Snapshot materialization safety defaults."""
 
@@ -398,6 +405,7 @@ class ProjectConfig:
     vars: dict[str, str] = field(default_factory=dict)
     targets: dict[str, TargetConfig] = field(default_factory=dict)
     janitor: JanitorConfig = field(default_factory=JanitorConfig)
+    migrations: MigrationsConfig = field(default_factory=MigrationsConfig)
     snapshots: SnapshotsConfig = field(default_factory=SnapshotsConfig)
     scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
     dbt: DbtConfig = field(default_factory=DbtConfig)

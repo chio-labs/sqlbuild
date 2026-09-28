@@ -432,6 +432,21 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             render_framework_type=self.render_framework_type,
         )
 
+    def render_create_old_name_view_state_table_sql(
+        self, *, database: str | None, schema: str
+    ) -> str:
+        from sqlbuild.compiler.migrations.main.old_name_view_create_table_sql import (
+            build_old_name_view_state_create_table_sql,
+        )
+
+        return build_old_name_view_state_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+            transient=self.state_tables_transient,
+        )
+
     def render_create_column_migration_state_table_sql(
         self, *, database: str | None, schema: str
     ) -> str:
@@ -1772,6 +1787,18 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
 
     def capture_dependent_view_rebinds(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        del connection, database, schema, name
+        return ()
+
+    def supports_old_name_views(self) -> bool:
+        return False
+
+    def views_bind_to_relation_identity(self) -> bool:
+        return False
+
+    def list_dependent_view_names(
         self, *, connection: Any, database: str | None, schema: str, name: str
     ) -> tuple[str, ...]:
         del connection, database, schema, name

@@ -611,6 +611,37 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             for row in cursor.fetchall()
         )
 
+    def supports_old_name_views(self) -> bool:
+        return True
+
+    def views_bind_to_relation_identity(self) -> bool:
+        return True
+
+    def list_dependent_view_names(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        del database
+        query: str = (
+            "SELECT DISTINCT dependent_namespace.nspname, dependent.relname "
+            "FROM pg_depend AS dependency "
+            "JOIN pg_rewrite AS rewrite ON rewrite.oid = dependency.objid "
+            "JOIN pg_class AS dependent ON dependent.oid = rewrite.ev_class "
+            "JOIN pg_namespace AS dependent_namespace "
+            "ON dependent_namespace.oid = dependent.relnamespace "
+            "JOIN pg_class AS referenced ON referenced.oid = dependency.refobjid "
+            "JOIN pg_namespace AS referenced_namespace "
+            "ON referenced_namespace.oid = referenced.relnamespace "
+            "WHERE dependency.classid = 'pg_rewrite'::regclass "
+            "AND dependency.refclassid = 'pg_class'::regclass "
+            "AND dependent.relkind IN ('v', 'm') "
+            "AND dependent.oid <> referenced.oid "
+            f"AND referenced_namespace.nspname = {_quote_sql_string(schema)} "
+            f"AND referenced.relname = {_quote_sql_string(name)} "
+            "ORDER BY 1, 2"
+        )
+        cursor: Any = connection.execute(query)
+        return tuple(f"{row[0]}.{row[1]}" for row in cursor.fetchall())
+
     def supports_transactional_ddl(self) -> bool:
         return True
 
@@ -1542,6 +1573,21 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             schema=schema,
             render_qualified_name=self.render_qualified_name,
             render_framework_type=self.render_framework_type,
+        )
+
+    def render_create_old_name_view_state_table_sql(
+        self, *, database: str | None, schema: str
+    ) -> str:
+        from sqlbuild.compiler.migrations.main.old_name_view_create_table_sql import (
+            build_old_name_view_state_create_table_sql,
+        )
+
+        return build_old_name_view_state_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+            transient=self.state_tables_transient,
         )
 
     def render_create_column_migration_state_table_sql(

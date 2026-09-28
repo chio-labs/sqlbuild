@@ -278,3 +278,9 @@ contract = "src/sqlbuild/adapter/contract/classes/strict_adapter.py:StrictAdapte
 forbidden_owners = ["src/sqlbuild/adapter/contract/classes/base_adapter.py:BaseAdapter"]
 paths = ["src/sqlbuild/adapter/contract/classes/*", "src/sqlbuild/adapters/*/classes/*"]
 reason = "tests/unit/src/sqlbuild/adapter/contract/classes/strict_adapter/test_strict_adapter.py requires every first-class adapter to define each StrictAdapter method itself instead of inheriting it from BaseAdapter."
+
+[[targets.python.rule_exceptions]]
+rule = "XSB051"
+path = "src/sqlbuild/executor/migrations/_helpers/old_name_views.py"
+symbols = ["refresh_old_name_views", "run_planned_old_name_steps"]
+reason = "Old-name steps re-read facts and physical state per move so a retry never repeats a completed step, and compatibility views are re-created in dependency order, so a chained view must read the columns of the view it selects from after that view is re-created."

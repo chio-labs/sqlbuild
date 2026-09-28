@@ -707,6 +707,24 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         del connection, database, schema, name
         return ()
 
+    def supports_old_name_views(self) -> bool:
+        """Return whether migrations may keep old names working through compatibility views."""
+
+        return False
+
+    def views_bind_to_relation_identity(self) -> bool:
+        """Return whether views follow a renamed relation instead of re-resolving its name."""
+
+        return False
+
+    def list_dependent_view_names(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        """Return qualified names of views bound to this relation."""
+
+        del connection, database, schema, name
+        return ()
+
     def supports_transactional_ddl(self) -> bool:
         return False
 
@@ -2153,6 +2171,23 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         )
 
         return build_migration_state_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+            transient=self.state_tables_transient,
+        )
+
+    def render_create_old_name_view_state_table_sql(
+        self, *, database: str | None, schema: str
+    ) -> str:
+        """Render DDL that creates the old-name view fact table when it is missing."""
+
+        from sqlbuild.compiler.migrations.main.old_name_view_create_table_sql import (
+            build_old_name_view_state_create_table_sql,
+        )
+
+        return build_old_name_view_state_create_table_sql(
             database=database,
             schema=schema,
             render_qualified_name=self.render_qualified_name,

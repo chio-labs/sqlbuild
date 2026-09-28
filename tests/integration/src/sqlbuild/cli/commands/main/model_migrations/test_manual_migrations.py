@@ -455,14 +455,25 @@ def test_given_replay_on_change_full_when_migrating_then_destination_is_not_repl
     "test_case",
     [
         MigrationCompileErrorTestCase(
-            description="table materialization",
-            model_sql='MODEL (materialized table, migrate_from "stg_orders");\nSELECT 1 AS id\n',
-            expected_fragment="migrate_from is only valid for incremental and snapshot models",
+            description="force on a table",
+            model_sql=(
+                'MODEL (materialized table, migrate_from "stg_orders", migrate_force true);\n'
+                "SELECT 1 AS id\n"
+            ),
+            expected_fragment="migrate_force is only valid for incremental and snapshot models",
         ),
         MigrationCompileErrorTestCase(
-            description="view materialization",
-            model_sql='MODEL (materialized view, migrate_from "stg_orders");\nSELECT 1 AS id\n',
-            expected_fragment="migrate_from is only valid for incremental and snapshot models",
+            description="force on a view",
+            model_sql=(
+                'MODEL (materialized view, migrate_from "stg_orders", migrate_force true);\n'
+                "SELECT 1 AS id\n"
+            ),
+            expected_fragment="migrate_force is only valid for incremental and snapshot models",
+        ),
+        MigrationCompileErrorTestCase(
+            description="invalid old name view retention",
+            model_sql=incremental_orders_sql(extra_config="  old_name_view soon,\n"),
+            expected_fragment="old_name_view must be a positive duration",
         ),
         MigrationCompileErrorTestCase(
             description="force without origin",

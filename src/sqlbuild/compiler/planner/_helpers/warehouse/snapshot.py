@@ -33,6 +33,7 @@ from sqlbuild.compiler.fingerprints.constants import (
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
+from sqlbuild.compiler.migrations.constants import OLD_NAME_VIEW_TABLE_NAME
 from sqlbuild.compiler.planner._helpers.graph.buildability import (
     check_buildability,
     missing_upstream_message,
@@ -159,6 +160,15 @@ class _CursorGatherInputs:
     existing_columns: dict[str, tuple[ColumnInfo, ...]] | None = None
 
 
+@dataclass(frozen=True)
+class _StateTableSchemas:
+    """Lower-cased schemas where each planner-read state table exists."""
+
+    fingerprints: frozenset[str]
+    source_freshness: frozenset[str]
+    old_name_views: frozenset[str]
+
+
 def build_warehouse_snapshot(
     *,
     project: CompiledProject,
@@ -232,9 +242,8 @@ def gather_warehouse_snapshot(
     query_schemas: tuple[str, ...] | None = schemas or None
 
     relations: dict[str, RelationInfo]
-    fingerprint_state_schemas: frozenset[str]
-    freshness_state_schemas: frozenset[str]
-    relations, fingerprint_state_schemas, freshness_state_schemas = _gather_relations(
+    state_schemas: _StateTableSchemas
+    relations, state_schemas = _gather_relations(
         project=project,
         adapter=adapter,
         connection=connection,
@@ -242,6 +251,8 @@ def gather_warehouse_snapshot(
         schemas=query_schemas,
         names=metadata_names,
     )
+    fingerprint_state_schemas: frozenset[str] = state_schemas.fingerprints
+    freshness_state_schemas: frozenset[str] = state_schemas.source_freshness
     columns: dict[str, tuple[ColumnInfo, ...]] = _gather_columns(
         adapter=adapter,
         connection=connection,
@@ -295,6 +306,12 @@ def gather_warehouse_snapshot(
         cursor_snapshots=cursor_snapshots,
         source_freshness_state_schemas=freshness_state_schemas,
         column_dialect=adapter.sql_analysis_dialect(),
+        old_name_view_state_schemas=state_schemas.old_name_views,
+        listed_state_schemas=(
+            frozenset(schema.lower() for schema in query_schemas)
+            if query_schemas is not None
+            else None
+        ),
     )
 
 
@@ -471,6 +488,7 @@ def _build_metadata_name_filter(
         return None
     names.add(FINGERPRINT_TABLE_NAME)
     names.add(SOURCE_FRESHNESS_TABLE_NAME)
+    names.add(OLD_NAME_VIEW_TABLE_NAME)
     return tuple(sorted(names))
 
 
@@ -514,8 +532,8 @@ def _gather_relations(
     database: str | None,
     schemas: tuple[str, ...] | None,
     names: tuple[str, ...] | None,
-) -> tuple[dict[str, RelationInfo], frozenset[str], frozenset[str]]:
-    """Fetch relations and the schemas where the fingerprint/freshness state tables exist."""
+) -> tuple[dict[str, RelationInfo], _StateTableSchemas]:
+    """Fetch relations and the schemas where fingerprint, freshness and old-name state live."""
 
     relations: tuple[RelationInfo, ...] = adapter.list_relations(
         connection=connection, database=database, schemas=schemas, names=names
@@ -533,8 +551,13 @@ def _gather_relations(
         logical_names_by_identity[_location_identity(function.destination)] = function.name
     fingerprint_schemas: set[str] = set()
     freshness_schemas: set[str] = set()
+    old_name_schemas: set[str] = set()
     relation: RelationInfo
     for relation in relations:
+        if relation.name == OLD_NAME_VIEW_TABLE_NAME:
+            if relation.schema is not None:
+                old_name_schemas.add(relation.schema.lower())
+            continue
         if relation.name == FINGERPRINT_TABLE_NAME:
             if relation.schema is not None:
                 fingerprint_schemas.add(relation.schema.lower())
@@ -544,7 +567,11 @@ def _gather_relations(
                 freshness_schemas.add(relation.schema.lower())
             continue
         result[logical_names_by_identity.get(relation.identity, relation.name)] = relation
-    return result, frozenset(fingerprint_schemas), frozenset(freshness_schemas)
+    return result, _StateTableSchemas(
+        fingerprints=frozenset(fingerprint_schemas),
+        source_freshness=frozenset(freshness_schemas),
+        old_name_views=frozenset(old_name_schemas),
+    )
 
 
 def _location_identity(

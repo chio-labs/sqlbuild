@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 
 from sqlbuild.compiler.planner._helpers.migrations.columns import plan_column_migrations
+from sqlbuild.compiler.planner._helpers.migrations.old_names import plan_old_name_views
 from sqlbuild.compiler.planner._helpers.migrations.planning import plan_model_migrations
 from sqlbuild.compiler.planner._helpers.output.plan_entry import build_planner_relations_context
 from sqlbuild.compiler.planner._helpers.planning.full_refresh import (
@@ -16,6 +17,7 @@ from sqlbuild.compiler.planner.models import (
     CursorSnapshotScope,
     DeferralInputs,
     ModelMigrationPlanning,
+    OldNameViewPlanning,
     PlannerOverrides,
     PlannerRelationsContext,
     PlannerRuntime,
@@ -92,6 +94,13 @@ def gather_planner_warehouse_state(
         deferral=deferral,
         source_columns=inspection_relations.source_warehouse_columns,
     )
+    old_names: OldNameViewPlanning = plan_old_name_views(
+        runtime=runtime,
+        scope=scopes.selected_scope,
+        snapshot=snapshot,
+        migration_entries=migrations.entries,
+        column_entries=columns.entries,
+    )
     if runtime.on_progress is not None:
         runtime.on_progress(
             f"Inspected warehouse state. ({time.monotonic() - warehouse_start:.2f}s)"
@@ -101,7 +110,9 @@ def gather_planner_warehouse_state(
         snapshot=columns.snapshot,
         inspection_relations=inspection_relations,
         migration_entries=migrations.entries,
-        migration_warnings=(*migrations.warnings, *columns.warnings),
+        migration_warnings=(*migrations.warnings, *columns.warnings, *old_names.warnings),
         column_migration_entries=columns.entries,
         column_rename_hints=columns.hints,
+        old_name_view_entries=old_names.entries,
+        old_name_views=old_names.views,
     )

@@ -24,8 +24,11 @@ from sqlbuild.compiler.planner.models import (
     ColumnMigrationPlanEntry,
     ModelMigrationPlanEntry,
     PlanOutput,
+    PlanWarning,
 )
+from sqlbuild.compiler.planner.types import WarningSeverity
 
+_OLD_NAME_CODES: frozenset[str] = frozenset({"M114", "P008"})
 _COLUMN_BLOCK_CODES: dict[ColumnMigrationDecision, str] = {
     ColumnMigrationDecision.SOURCE_MISSING: "M109",
     ColumnMigrationDecision.CONFLICT: "M110",
@@ -41,6 +44,7 @@ def enforce_build_plan_policies(
 
     _enforce_model_migration_policy(plan=plan)
     _enforce_column_migration_policy(plan=plan)
+    _enforce_old_name_policy(plan=plan)
     enforce_model_execution_limit(
         model_count=executable_model_count(plan=plan),
         target_name=invocation.effective_target_name,
@@ -129,4 +133,21 @@ def _enforce_column_migration_policy(*, plan: PlanOutput) -> None:
         ),
         code=_COLUMN_BLOCK_CODES.get(blocked[0].decision, "M109"),
         help="Run sqb plan to see why each column rename cannot be applied.",
+    )
+
+
+def _enforce_old_name_policy(*, plan: PlanOutput) -> None:
+    """Refuse to build over a compatibility view or while code reads an old name."""
+
+    errors: tuple[PlanWarning, ...] = tuple(
+        warning
+        for warning in plan.warnings
+        if warning.severity == WarningSeverity.ERROR and warning.code in _OLD_NAME_CODES
+    )
+    if not errors:
+        return
+    raise CliUserError(
+        "; ".join(warning.message for warning in errors),
+        code=errors[0].code or "M114",
+        help="Run sqb plan to see every compatibility view and old-name reference.",
     )

@@ -88,6 +88,10 @@ from sqlbuild.executor.load.main._build_execution_indexes import build_load_exec
 from sqlbuild.executor.load.main._resource_kind import load_resource_kind
 from sqlbuild.executor.load.main._skipped_result import skipped_load_result
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.migrations.main._complete_old_name_views import complete_old_name_views
+from sqlbuild.executor.migrations.main._release_old_name_views import release_old_name_views
+from sqlbuild.executor.migrations.main._restore_old_name_views import restore_old_name_views
+from sqlbuild.executor.migrations.models import OldNameViewSource
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.classes.runtime_watermark_resolver import RuntimeWatermarkResolver
 from sqlbuild.executor.run.models import (
@@ -1040,54 +1044,59 @@ class BuildScheduler:
                         ),
                         entry=model_entry,
                     )
-                result: ModelExecutionResult = _dispatch_model(
-                    context=ModelMaterializationContext(
-                        entry=model_entry,
-                        adapter=self._adapter,
-                        connection=connection,
-                        model_locations=self._plan.model_locations,
-                        seed_locations=self._plan.seed_locations,
-                        source_map=self._plan.source_map,
-                        python_source_read_map=self._plan.python_source_entries,
-                        model_audits=model_audits,
-                        run_id=self._run_id,
-                        query_change_tracking=self._query_change_tracking,
-                        schema_prepared=self._schema_prepared,
-                        hook_functions=self._plan.hook_functions,
-                        enforce_explicit_references=self._plan.enforce_explicit_references,
-                        effective_target_name=self._target,
-                        effective_vars=self._effective_vars,
-                        providers=self._providers,
-                        python_identity_recorder=self._python_identity_recorder,
-                        microbatch_event_store=microbatch_event_store,
-                        microbatch_event_store_resolver=microbatch_event_store_resolver,
-                        microbatch_scope=microbatch_scope,
-                        microbatch_model_version_hash=model_entry.fingerprint_version_hash,
-                        microbatch_unaccounted_partition_policy=(
-                            model_entry.unaccounted_partition_policy
-                            or self._runtime.microbatch_unaccounted_partition_policy
+                released_old_names: tuple[OldNameViewSource, ...] = release_old_name_views(
+                    plan=self._plan,
+                    adapter=self._adapter,
+                    connection=connection,
+                    destination=model_entry.destination,
+                )
+                result: ModelExecutionResult = self._dispatch_releasing_old_names(
+                    released=released_old_names,
+                    model_entry=model_entry,
+                    connection=connection,
+                    dispatch=lambda: _dispatch_model(
+                        context=ModelMaterializationContext(
+                            entry=model_entry,
+                            adapter=self._adapter,
+                            connection=connection,
+                            model_locations=self._plan.model_locations,
+                            seed_locations=self._plan.seed_locations,
+                            source_map=self._plan.source_map,
+                            python_source_read_map=self._plan.python_source_entries,
+                            model_audits=model_audits,
+                            run_id=self._run_id,
+                            query_change_tracking=self._query_change_tracking,
+                            schema_prepared=self._schema_prepared,
+                            hook_functions=self._plan.hook_functions,
+                            enforce_explicit_references=self._plan.enforce_explicit_references,
+                            effective_target_name=self._target,
+                            effective_vars=self._effective_vars,
+                            providers=self._providers,
+                            python_identity_recorder=self._python_identity_recorder,
+                            microbatch_event_store=microbatch_event_store,
+                            microbatch_event_store_resolver=microbatch_event_store_resolver,
+                            microbatch_scope=microbatch_scope,
+                            microbatch_model_version_hash=model_entry.fingerprint_version_hash,
+                            microbatch_unaccounted_partition_policy=(
+                                model_entry.unaccounted_partition_policy
+                                or self._runtime.microbatch_unaccounted_partition_policy
+                            ),
+                            microbatch_lease_check=self._runtime.microbatch_lease_check,
+                            microbatch_global_concurrency=self._max_concurrency,
+                            microbatch_batch_runner=microbatch_batch_runner,
+                            watermark_resolver=self._watermark_resolver,
                         ),
-                        microbatch_lease_check=self._runtime.microbatch_lease_check,
-                        microbatch_global_concurrency=self._max_concurrency,
-                        microbatch_batch_runner=microbatch_batch_runner,
-                        watermark_resolver=self._watermark_resolver,
+                        promotion_mode=self._promotion_mode,
+                        snapshots=self._snapshots,
+                        allow_snapshot_schema_change=self._allow_snapshot_schema_change,
+                        custom_materializations=self._custom_materializations,
+                        target=self._target,
+                        effective_vars=self._effective_vars,
+                        warehouse_relations=self._warehouse_relations,
+                        on_progress=self._on_sub_progress,
                     ),
-                    promotion_mode=self._promotion_mode,
-                    snapshots=self._snapshots,
-                    allow_snapshot_schema_change=self._allow_snapshot_schema_change,
-                    custom_materializations=self._custom_materializations,
-                    target=self._target,
-                    effective_vars=self._effective_vars,
-                    warehouse_relations=self._warehouse_relations,
-                    on_progress=self._on_sub_progress,
                 )
                 if result.status == ExecutionStatus.SUCCESS:
-                    reconcile_model_retention(
-                        plan=self._plan,
-                        adapter=self._adapter,
-                        connection=connection,
-                        model_name=model_entry.name,
-                    )
                     if microbatch_event_store is not None and microbatch_scope is not None:
                         result = dataclasses.replace(
                             result,
@@ -1114,6 +1123,47 @@ class BuildScheduler:
             sqlbuild_duration_ms=duration,
         )
         return completed_result
+
+    def _dispatch_releasing_old_names(
+        self,
+        *,
+        released: tuple[OldNameViewSource, ...],
+        model_entry: ModelPlanEntry,
+        connection: Any,
+        dispatch: Callable[[], ModelExecutionResult],
+    ) -> ModelExecutionResult:
+        """Materialize, reconcile retention, then keep old names working around the build."""
+
+        restore: tuple[OldNameViewSource, ...] = released
+        try:
+            result: ModelExecutionResult = dispatch()
+            if result.status != ExecutionStatus.SUCCESS:
+                return result
+            reconcile_model_retention(
+                plan=self._plan,
+                adapter=self._adapter,
+                connection=connection,
+                model_name=model_entry.name,
+            )
+            warnings: tuple[str, ...] = complete_old_name_views(
+                plan=self._plan,
+                adapter=self._adapter,
+                connection=connection,
+                model_name=model_entry.name,
+                destination=model_entry.destination,
+                run_id=self._run_id,
+            )
+            restore = ()
+            if not warnings:
+                return result
+            return dataclasses.replace(
+                result, warning_messages=(*result.warning_messages, *warnings)
+            )
+        finally:
+            if restore:
+                restore_old_name_views(
+                    adapter=self._adapter, connection=connection, sources=restore
+                )
 
     def _resolve_microbatch_state(
         self, *, model_entry: ModelPlanEntry, connection: Any
