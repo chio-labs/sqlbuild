@@ -45,6 +45,9 @@ from sqlbuild.compiler.planner.main.clone.resolve_skipped_view_chain import (
 from sqlbuild.compiler.planner.main.selection.scope import build_planner_scope
 from sqlbuild.compiler.planner.models import PlannerScope
 from sqlbuild.compiler.planner.types import MaterializationType
+from sqlbuild.executor.clone.main.build_destination_transient_models import (
+    build_destination_transient_models,
+)
 from sqlbuild.executor.clone.main.build_retention_requests import (
     build_destination_retention_requests,
 )
@@ -293,6 +296,9 @@ def run_defer_clone_prephase(
                     hard_copy=False,
                     run_id=clone_pipeline.destination_project.run_id,
                     query_change_tracking=clone_pipeline.destination_project.settings.query_change_tracking,
+                    destination_transient_models=build_destination_transient_models(
+                        project=clone_pipeline.destination_project
+                    ),
                     destination_retention_requests=build_destination_retention_requests(
                         project=clone_pipeline.destination_project,
                         adapter_name=adapter.adapter_name,

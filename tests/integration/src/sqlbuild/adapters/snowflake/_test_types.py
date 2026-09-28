@@ -130,3 +130,11 @@ class SnowflakeFunctionDiscoveryTestCase:
     description: str
     function_name: str
     expected_function_count: int
+
+
+@dataclass(frozen=True)
+class SnowflakeCloneTableTypeTestCase:
+    description: str
+    origin_table_kind: str
+    clone_as_transient: bool
+    expected_is_transient: bool

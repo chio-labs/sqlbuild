@@ -21,6 +21,7 @@ from tests.unit.src.sqlbuild.executor.clone._helpers.helpers import (
     build_clone_model_entry,
 )
 from tests.unit.src.sqlbuild.executor.clone.main._test_types import (
+    CloneDestinationTableTypeTestCase,
     CloneFunctionDependencyTestCase,
     CloneRunIdentityTestCase,
     CloneSchemaPreparationTestCase,
@@ -94,6 +95,57 @@ def test_given_clone_entries_when_executing_then_streams_each_item(
     assert len(result.item_results) == len(test_case.model_names)
     assert adapter.used_connections
     assert all(connection is destination_connection for connection in adapter.used_connections)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CloneDestinationTableTypeTestCase(
+            description="permanent origins clone as transient only for transient destination models",
+            model_names=("orders", "payments"),
+            transient_model_names=frozenset({"orders"}),
+            expected_clone_statements=(
+                "CREATE SCHEMA IF NOT EXISTS dev",
+                "DROP TABLE IF EXISTS dev.orders",
+                "CREATE TRANSIENT TABLE dev.orders CLONE prod.orders",
+                "DROP TABLE IF EXISTS dev.payments",
+                "CREATE TABLE dev.payments CLONE prod.payments",
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_transient_destination_models_when_cloning_then_clone_uses_destination_table_type(
+    test_case: CloneDestinationTableTypeTestCase,
+) -> None:
+    adapter: FakeCloneAdapter = FakeCloneAdapter(
+        supports_zero_copy=True, origin_names=test_case.model_names
+    )
+    destination_entries: tuple[ModelPlanEntry, ...] = tuple(
+        build_clone_model_entry(schema="dev", name=name) for name in test_case.model_names
+    )
+
+    execute_clone(
+        inputs=CloneExecutionInput(
+            source_entries=CloneSourceEntries(),
+            origin_model_entries=tuple(
+                build_clone_model_entry(schema="prod", name=name) for name in test_case.model_names
+            ),
+            destination_model_entries=destination_entries,
+            origin_seed_entries=(),
+            destination_seed_entries=(),
+            destination_function_entries=(),
+            execution_order=tuple(entry.key for entry in destination_entries),
+            adapter=adapter,
+            destination_connection=object(),
+            hard_copy=False,
+            run_id="clone-run",
+            query_change_tracking=False,
+            destination_transient_models=test_case.transient_model_names,
+        )
+    )
+
+    assert tuple(adapter.executed_statements) == test_case.expected_clone_statements
 
 
 @pytest.mark.parametrize(

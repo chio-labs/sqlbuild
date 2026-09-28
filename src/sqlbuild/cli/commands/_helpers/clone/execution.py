@@ -29,6 +29,9 @@ from sqlbuild.compiler.planner.models import (
     ModelPlanEntry,
     SeedPlanEntry,
 )
+from sqlbuild.executor.clone.main.build_destination_transient_models import (
+    build_destination_transient_models,
+)
 from sqlbuild.executor.clone.main.build_retention_requests import (
     build_destination_retention_requests,
 )
@@ -89,6 +92,9 @@ def execute_clone_plan(
                 dependency_locations=_clone_dependency_locations(
                     preparation=preparation,
                     adapter=invocation.adapter,
+                ),
+                destination_transient_models=build_destination_transient_models(
+                    project=preparation.pipeline_result.destination_project
                 ),
                 destination_retention_requests=build_destination_retention_requests(
                     project=preparation.pipeline_result.destination_project,

@@ -11,8 +11,10 @@ from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.planner._helpers.planning.retention import table_type_copy_name
 from sqlbuild.compiler.planner.models import TableTypePlanEntry
 from sqlbuild.executor.build._helpers.retention import apply_table_type_conversion
+from sqlbuild.executor.clone.main._clone_relation_operation import clone_relation_by_names
 from sqlbuild.spec.contracts.types import TableType
 from tests.integration.src.sqlbuild.adapters.snowflake._test_types import (
+    SnowflakeCloneTableTypeTestCase,
     SnowflakeTableTypeConversionTestCase,
 )
 from tests.integration.src.sqlbuild.adapters.snowflake.helpers import (
@@ -118,6 +120,75 @@ def test_given_existing_snowflake_table_when_applying_table_type_then_metadata_a
     assert copy_name not in relation_by_name
     assert rows == ((1, "ready"), (2, "complete"))
     assert conversion_statement_count == test_case.expected_conversion_statement_count
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeCloneTableTypeTestCase(
+            description="permanent origin clones as transient for a transient destination",
+            origin_table_kind="TABLE",
+            clone_as_transient=True,
+            expected_is_transient=True,
+        ),
+        SnowflakeCloneTableTypeTestCase(
+            description="permanent origin clones as permanent for a permanent destination",
+            origin_table_kind="TABLE",
+            clone_as_transient=False,
+            expected_is_transient=False,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_permanent_snowflake_origin_when_cloning_then_clone_has_requested_type_and_rows(
+    test_case: SnowflakeCloneTableTypeTestCase,
+    recording_adapter: RecordingSnowflakeAdapter,
+    recording_connection: Any,
+    snowflake_database: str,
+    snowflake_schema: str,
+) -> None:
+    adapter: RecordingSnowflakeAdapter = recording_adapter
+    connection: Any = recording_connection
+    origin: str = qualified_name(
+        database=snowflake_database, schema=snowflake_schema, name="clone_type_orders_origin"
+    )
+    destination_name: str = "clone_type_orders_clone"
+    destination: str = qualified_name(
+        database=snowflake_database, schema=snowflake_schema, name=destination_name
+    )
+    adapter.execute(
+        connection=connection,
+        sql=f"CREATE OR REPLACE {test_case.origin_table_kind} {origin} (id NUMBER, status VARCHAR)",
+    )
+    adapter.execute(
+        connection=connection,
+        sql=f"INSERT INTO {origin} VALUES (1, 'ready'), (2, 'complete')",
+    )
+
+    clone_relation_by_names(
+        name=destination_name,
+        origin_relation=origin,
+        destination_relation=destination,
+        origin_exists=True,
+        adapter=adapter,
+        connection=connection,
+        hard_copy=False,
+        origin_is_transient=test_case.clone_as_transient,
+    )
+    relations: tuple[RelationInfo, ...] = adapter.list_relations(
+        connection=connection,
+        database=snowflake_database,
+        schemas=(snowflake_schema,),
+        names=(destination_name,),
+    )
+    rows: tuple[tuple[object, ...], ...] = fetch_rows(
+        adapter=adapter,
+        connection=connection,
+        sql=f"SELECT id, status FROM {destination} ORDER BY id",
+    )
+
+    assert relations[0].is_transient is test_case.expected_is_transient
+    assert rows == ((1, "ready"), (2, "complete"))
 
 
 if __name__ == "__main__":
