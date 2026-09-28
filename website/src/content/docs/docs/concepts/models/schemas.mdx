@@ -26,6 +26,8 @@ MODEL (
 
 See [Audits](/docs/concepts/audits) for built-in audits, custom audits, arguments, severity, and incremental run scope.
 
+In incremental and snapshot models, an inline column can also declare `migrate_from <old column>` to rename the existing warehouse column in place and keep its history. See [Column migrations](/docs/concepts/models/column-migrations). Reusable `SCHEMA()` declarations don't accept `migrate_from`; a bound model adds it to an inherited column in its own header.
+
 ## Reusable schemas
 
 When multiple models implement the same relation shape, declare it once in a schema role. SQLBuild discovers schema files recursively in each role.
@@ -134,6 +136,6 @@ Reusable schemas intentionally support a narrow ownership model:
 
 - One optional parent, with transitive inheritance.
 - Additive child and model-local output columns.
-- Audit-only model augmentation of inherited columns.
+- Audit-only model augmentation of inherited columns, plus `migrate_from` column renames.
 - No general column overrides, multiple inheritance, composition, mixins, parameters, or generated projections.
 - No physical output ordinal enforcement.

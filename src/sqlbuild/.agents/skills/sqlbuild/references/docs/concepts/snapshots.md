@@ -200,6 +200,9 @@ Reappearing keys create a new active version.
 | `valid_to_column` | No | Override generated column name. Default `valid_to`. |
 | `initial_valid_from` | No | First-version start time: `updated_at`, `observed_at`, or `execution_time`. See defaults below. |
 | `snapshot_full_refresh` | No | Model-level full-refresh safety: `deny`, `require_confirmation`, or `allow`. |
+| `columns (<new> (migrate_from <old>))` | No | Rename a snapshot column in place so every version keeps its value. See [Column migrations](models/column-migrations.md). |
+
+Renaming a column in the snapshot query, such as `amount` becoming `amount AS revenue`, renames the existing snapshot column in place, so earlier versions keep their values under the new name. Renames are detected automatically when the expression is unchanged; declare `migrate_from` for anything else. See [Column migrations](models/column-migrations.md).
 
 ### Initial valid_from defaults
 

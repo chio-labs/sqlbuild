@@ -49,6 +49,7 @@
 					"docs/concepts/models/type-enforcement",
 					"docs/concepts/models/contracts",
 					"docs/concepts/models/migrations",
+					"docs/concepts/models/column-migrations",
 					{
 						"label": "Hooks",
 						"collapsed": true,

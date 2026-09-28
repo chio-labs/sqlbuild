@@ -75,6 +75,16 @@ Seeds (1)
 
 When query or schema changes are detected, the plan shows the affected models with backfill actions and cascade information.
 
+Work that runs before models build is listed first. [Model migrations](/docs/concepts/models/migrations) appear under `Migrations`, and in-place [column renames](/docs/concepts/models/column-migrations) under `Column migrations`:
+
+```
+Column migrations (1)
+└── fact_orders  migrate columns
+    └── amount -> revenue  rename in place
+```
+
+When a removed column and an added column look related but are not an exact rename, the schema diff shows a hint such as `similar to amount; if this is a rename, add revenue (migrate_from amount)` until the change is built.
+
 ## Missing upstream dependencies
 
 Planning a scoped selection whose upstream inputs were never built in the target fails with `S301` rather than producing a plan that would break at build time:
