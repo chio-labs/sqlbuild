@@ -18,3 +18,10 @@ class EvaluateRuleParityTestCase:
     description: str
     rule_case: RuleCase
     expected_finding_count: int
+
+
+@dataclass(frozen=True)
+class EvaluateRuleDeterminismTestCase:
+    description: str
+    rule_case: RuleCase
+    expected_error_pattern: str

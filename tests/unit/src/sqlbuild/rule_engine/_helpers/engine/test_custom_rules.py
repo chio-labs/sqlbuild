@@ -213,7 +213,10 @@ def test_given_project_file_change_when_repeating_custom_rule_then_dependencies_
         CustomRuleTestCase(
             description="nonhermetic cacheable rule fails",
             body='open("policy.txt")\n    return []',
-            expected_error_pattern=r"custom.py:\d+: call to open",
+            expected_error_pattern=(
+                r"non-hermetic custom rule XSQBRT101 at rules/custom.py:\d+: "
+                r"opening 'policy.txt' is not allowed"
+            ),
         ),
         CustomRuleTestCase(
             description="project-wide cacheable rule rejects untracked file types",

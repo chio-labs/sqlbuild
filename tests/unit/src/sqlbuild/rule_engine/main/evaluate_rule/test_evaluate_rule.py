@@ -8,16 +8,21 @@ import pytest
 
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES
+from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.main._evaluate import evaluate
 from sqlbuild.rule_engine.models import RulesCacheConfig, RulesConfig, RulesResult
 from sqlbuild.rule_engine.types import RuleOptionValue
 from sqlbuild.rules.testing import RuleCase, RuleResult, evaluate_rule
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate_rule._test_types import (
+    EvaluateRuleDeterminismTestCase,
     EvaluateRuleParityTestCase,
     EvaluateRuleTestCase,
 )
-from tests.unit.src.sqlbuild.rule_engine.main.evaluate_rule.helpers import required_domain
+from tests.unit.src.sqlbuild.rule_engine.main.evaluate_rule.helpers import (
+    first_evaluation_only,
+    required_domain,
+)
 
 
 @pytest.mark.parametrize(
@@ -115,3 +120,29 @@ def test_given_same_custom_rule_when_using_public_and_native_paths_then_faults_h
     assert native_result.findings == public_result.findings
     assert repeated_native_result.findings == native_result.findings
     assert native_result.findings[0] == public_result.findings[0]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        EvaluateRuleDeterminismTestCase(
+            description="module-level state leaking between evaluations fails the harness",
+            rule_case=RuleCase(
+                description="first evaluation reports nothing",
+                source="MODEL (materialized table);\n\nSELECT 1 AS id\n",
+                path="models/mart/commerce__mart__orders.sql",
+                expected_finding_count=0,
+            ),
+            expected_error_pattern=(
+                r"custom rule XSQBRS001 is not deterministic: evaluating every subject again "
+                r"after the others changed its findings from 0 to 1"
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_rule_with_module_state_when_evaluating_case_then_determinism_check_fails(
+    test_case: EvaluateRuleDeterminismTestCase,
+) -> None:
+    with pytest.raises(RulesError, match=test_case.expected_error_pattern):
+        evaluate_rule(rule=first_evaluation_only, test_case=test_case.rule_case)

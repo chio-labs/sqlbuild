@@ -208,3 +208,21 @@ def custom_rule_inputs(
         cache=RulesCacheConfig(enabled=True),
     )
     return project, config
+
+
+def custom_rules_with_imports(
+    *, project_dir: Path, module_import: str, extra_files: tuple[tuple[str, str], ...]
+) -> tuple[Rule, ...]:
+    """Write one custom rule with an import line plus extra files and load its catalogue."""
+
+    _ = write_rule(
+        root=project_dir, body="del model, ctx\n    return []", module_import=module_import
+    )
+    for relative_path, source in extra_files:
+        path: Path = project_dir / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source, encoding="utf-8")
+    catalogue: tuple[Rule, ...] = build_catalogue(
+        config=RulesConfig(select=("XSQBRT101",)), project_dir=project_dir
+    )
+    return tuple(filter(lambda rule: rule.custom, catalogue))
