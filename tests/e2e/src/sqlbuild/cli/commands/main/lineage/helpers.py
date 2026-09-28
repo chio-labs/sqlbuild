@@ -31,6 +31,7 @@ def lineage_node_ids(*, payload: dict[str, object]) -> tuple[str, ...]:
 
 
 DIAMOND_LAYERS: int = 14
+DIAMOND_EDGE_COUNT: int = 4 * DIAMOND_LAYERS
 
 
 def diamond_model_names() -> tuple[str, ...]:

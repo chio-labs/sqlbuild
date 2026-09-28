@@ -15,6 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.lineage._test_types import (
     LineageErrorCliTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.lineage.helpers import (
+    DIAMOND_EDGE_COUNT,
     DIAMOND_LAYERS,
     diamond_model_names,
     lineage_node_ids,
@@ -458,7 +459,7 @@ def test_given_invalid_lineage_target_when_running_then_explains_the_error(
             description="downstream tree expands each shared model once",
             command=("--no-color", "lineage", "orders_0", "--direction", "downstream"),
             expected_expanded_names=diamond_model_names()[1:],
-            expected_max_lines=4 * len(diamond_model_names()),
+            expected_max_lines=DIAMOND_EDGE_COUNT,
         ),
         DiamondLineageTreeCliTestCase(
             description="upstream tree expands each shared model once",
@@ -470,10 +471,25 @@ def test_given_invalid_lineage_target_when_running_then_explains_the_error(
                 "upstream",
             ),
             expected_expanded_names=diamond_model_names()[:-1],
-            expected_max_lines=4 * len(diamond_model_names()),
+            expected_max_lines=DIAMOND_EDGE_COUNT,
         ),
         DiamondLineageTreeCliTestCase(
-            description="column trace expands each shared column once",
+            description="both-direction tree expands each shared model once",
+            command=(
+                "--no-color",
+                "lineage",
+                f"orders_{DIAMOND_LAYERS // 2}",
+                "--direction",
+                "both",
+            ),
+            expected_expanded_names=(
+                diamond_model_names()[: 3 * (DIAMOND_LAYERS // 2)]
+                + diamond_model_names()[3 * (DIAMOND_LAYERS // 2) + 1 :]
+            ),
+            expected_max_lines=DIAMOND_EDGE_COUNT,
+        ),
+        DiamondLineageTreeCliTestCase(
+            description="upstream column trace expands each shared column once",
             command=(
                 "--no-color",
                 "lineage",
@@ -486,7 +502,23 @@ def test_given_invalid_lineage_target_when_running_then_explains_the_error(
                 f"orders_right_{DIAMOND_LAYERS}.amount",
                 f"orders_{DIAMOND_LAYERS - 1}.amount",
             ),
-            expected_max_lines=4 * len(diamond_model_names()),
+            expected_max_lines=DIAMOND_EDGE_COUNT,
+        ),
+        DiamondLineageTreeCliTestCase(
+            description="downstream column trace expands each shared column once",
+            command=(
+                "--no-color",
+                "lineage",
+                "orders_0.amount",
+                "--direction",
+                "downstream",
+            ),
+            expected_expanded_names=(
+                "orders_left_1.amount",
+                "orders_right_1.amount",
+                "orders_1.amount",
+            ),
+            expected_max_lines=DIAMOND_EDGE_COUNT,
         ),
     ),
     ids=lambda case: case.description,

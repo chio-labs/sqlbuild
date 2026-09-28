@@ -33,3 +33,16 @@ class TerminalPlanProgressE2ETestCase:
     columns: int
     expected_screen_fragments: tuple[str, ...]
     expected_raw_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DiamondPlanE2ETestCase:
+    description: str
+    expected_fragments: tuple[str, ...]
+    expected_max_lines_per_model: int
+
+
+@dataclass(frozen=True)
+class DiamondPlanJsonE2ETestCase:
+    description: str
+    expected_reasons: dict[str, str]

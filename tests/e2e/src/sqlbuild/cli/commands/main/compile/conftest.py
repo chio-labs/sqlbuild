@@ -5,6 +5,12 @@ from pathlib import Path
 
 import pytest
 
+from scripts.cold_compile_performance.main.assert_required_cgroup_memory_limit import (
+    assert_required_cgroup_memory_limit,
+)
+from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
+    prepare_inspection_benchmark_project,
+)
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
 
@@ -21,3 +27,11 @@ def semantic_playground(tmp_path_factory: pytest.TempPathFactory) -> Path:
         typed.read_text(encoding="utf-8"), encoding="utf-8"
     )
     return project
+
+
+@pytest.fixture(scope="module")
+def inspection_benchmark_project(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    assert_required_cgroup_memory_limit()
+    project_dir: Path = tmp_path_factory.mktemp("inspection") / "semantic_inspection"
+    prepare_inspection_benchmark_project(project_dir=project_dir)
+    return project_dir

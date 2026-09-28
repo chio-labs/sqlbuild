@@ -279,3 +279,13 @@ class DiagnosticPerformanceCase:
     expected_max_wall_seconds: float = 20.0
     expected_timeout_seconds: float = 65.0
     diagnostic_count: int = 100
+
+
+@dataclass(frozen=True)
+class InspectionCommandPerformanceGuardTestCase:
+    description: str
+    sqb_args: tuple[str, ...]
+    expected_fragments: tuple[str, ...]
+    expected_max_output_lines: int
+    expected_max_wall_seconds: float
+    expected_max_rss_bytes: int
