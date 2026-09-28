@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, cast
@@ -267,6 +268,15 @@ class AuditGateMetadataParseFailureDetail:
 
 
 @dataclass(frozen=True)
+class BoundViewGuard:
+    """Keeps views bound to a model's relation valid inside the DDL that replaces or alters it."""
+
+    transaction: Callable[[], AbstractContextManager[object]] = nullcontext
+    release: Callable[[], int] = int
+    rebind: Callable[[], int] = int
+
+
+@dataclass(frozen=True)
 class ModelMaterializationContext:
     """Shared runtime inputs for one model's materialization lifecycle."""
 
@@ -296,6 +306,7 @@ class ModelMaterializationContext:
     microbatch_batch_runner: MicrobatchBatchRunner | None = None
     watermark_resolver: WatermarkResolver | None = None
     enforce_explicit_references: bool = False
+    bound_views: BoundViewGuard = field(default_factory=BoundViewGuard)
 
 
 @dataclass(frozen=True, kw_only=True, init=False)

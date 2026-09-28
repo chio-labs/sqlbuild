@@ -47,6 +47,7 @@ from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
 )
 from sqlbuild.executor.run._helpers.validation.type_enforcement import enforce_types_staged
 from sqlbuild.executor.run.models import (
+    BoundViewGuard,
     FinalAuditRun,
     HookExecutionResult,
     ModelExecutionResult,
@@ -228,6 +229,7 @@ def execute_incremental_entry(
                     delta_columns=delta_columns,
                     on_schema_change=entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
                     statement_recorder=statement_recorder,
+                    bound_views=context.bound_views,
                 )
             )
             target_columns = inspect_runtime_relation_schema(
@@ -589,8 +591,11 @@ def _apply_schema_change(
     delta_columns: tuple[ColumnInfo, ...],
     on_schema_change: OnSchemaChange,
     statement_recorder: StatementRecorder,
+    bound_views: BoundViewGuard | None = None,
 ) -> tuple[str, ...]:
     """Inspect runtime schema diff, apply on_schema_change policy, return new warnings."""
+
+    guard: BoundViewGuard = bound_views or BoundViewGuard()
 
     target_map: dict[str, str] = {col.name.lower(): col.type for col in target_columns}
     delta_map: dict[str, str] = {col.name.lower(): col.type for col in delta_columns}
@@ -677,16 +682,21 @@ def _apply_schema_change(
         return ()
 
     if on_schema_change == OnSchemaChange.SYNC_ALL_COLUMNS:
-        with OperationLifecycle(
-            operation_kind="warehouse",
-            operation_name="schema_synchronization",
-            attributes=OperationAttributes(
-                phase="apply",
-                strategy="sync_all_columns",
-                adapter=canonicalize_operation_adapter(adapter.adapter_name),
-                target_kind="relation",
-            ),
-        ) as lifecycle:
+        with (
+            OperationLifecycle(
+                operation_kind="warehouse",
+                operation_name="schema_synchronization",
+                attributes=OperationAttributes(
+                    phase="apply",
+                    strategy="sync_all_columns",
+                    adapter=canonicalize_operation_adapter(adapter.adapter_name),
+                    target_kind="relation",
+                ),
+            ) as lifecycle,
+            guard.transaction(),
+        ):
+            if removed or type_changed:
+                _ = guard.release()
             if added:
                 adapter.add_columns(
                     connection=connection,
@@ -708,6 +718,7 @@ def _apply_schema_change(
                     columns=tuple(type_changed),
                     statement_recorder=statement_recorder,
                 )
+            _ = guard.rebind()
             lifecycle.completed(
                 metadata={
                     "changed_count": len(added) + len(removed) + len(type_changed),

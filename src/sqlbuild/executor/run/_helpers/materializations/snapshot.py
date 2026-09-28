@@ -556,6 +556,7 @@ def _snapshot_promotion_failure(
             relations=relations,
             target_exists=target_exists,
             statement_recorder=statement_recorder,
+            bound_views=context.bound_views,
         )
     except Exception as exc:
         return build_failed_result(

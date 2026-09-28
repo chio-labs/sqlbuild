@@ -8,6 +8,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.types import PromotionStrategy
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.run.models import BoundViewGuard
 from sqlbuild.runtime.observability.classes.operation_lifecycle import (
     OperationAttributes,
     OperationLifecycle,
@@ -31,8 +32,11 @@ def promote_relation_to_destination(
     destination_schema: str | None,
     destination_name: str,
     statement_recorder: StatementRecorder,
+    bound_views: BoundViewGuard | None = None,
 ) -> None:
     """Promote an already-created relation into its final destination."""
+
+    guard: BoundViewGuard = bound_views or BoundViewGuard()
 
     with OperationLifecycle(
         operation_kind="warehouse",
@@ -57,31 +61,35 @@ def promote_relation_to_destination(
         )
         try:
             if strategy == PromotionStrategy.ATOMIC_SWAP:
-                adapter.swap(
-                    connection=connection,
-                    left=destination_relation,
-                    right=origin_relation,
-                    statement_recorder=statement_recorder,
-                )
-                adapter.drop(
-                    connection=connection,
-                    destination=origin_relation,
-                    if_exists=True,
-                    statement_recorder=statement_recorder,
-                )
+                with guard.transaction():
+                    adapter.swap(
+                        connection=connection,
+                        left=destination_relation,
+                        right=origin_relation,
+                        statement_recorder=statement_recorder,
+                    )
+                    _ = guard.rebind()
+                    adapter.drop(
+                        connection=connection,
+                        destination=origin_relation,
+                        if_exists=True,
+                        statement_recorder=statement_recorder,
+                    )
             elif strategy == PromotionStrategy.ATOMIC_REPLACE:
-                adapter.replace_table_from_relation(
-                    connection=connection,
-                    destination=destination_relation,
-                    origin=origin_relation,
-                    statement_recorder=statement_recorder,
-                )
-                adapter.drop(
-                    connection=connection,
-                    destination=origin_relation,
-                    if_exists=True,
-                    statement_recorder=statement_recorder,
-                )
+                with guard.transaction():
+                    adapter.replace_table_from_relation(
+                        connection=connection,
+                        destination=destination_relation,
+                        origin=origin_relation,
+                        statement_recorder=statement_recorder,
+                    )
+                    _ = guard.rebind()
+                    adapter.drop(
+                        connection=connection,
+                        destination=origin_relation,
+                        if_exists=True,
+                        statement_recorder=statement_recorder,
+                    )
             elif strategy == RENAME_OPERATION_STRATEGY:
                 adapter.rename(
                     connection=connection,

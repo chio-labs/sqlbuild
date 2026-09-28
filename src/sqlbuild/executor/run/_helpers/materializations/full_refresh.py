@@ -11,7 +11,7 @@ from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
-from sqlbuild.executor.run.models import FullRefreshRelations
+from sqlbuild.executor.run.models import BoundViewGuard, FullRefreshRelations
 from sqlbuild.runtime.observability.classes.operation_lifecycle import (
     OperationAttributes,
     OperationLifecycle,
@@ -82,8 +82,11 @@ def promote_full_refresh_rebuild(
     relations: FullRefreshRelations,
     target_exists: bool,
     statement_recorder: StatementRecorder,
+    bound_views: BoundViewGuard | None = None,
 ) -> None:
     """Promote a rebuild; dropping prev at the next swap is retention pruning only."""
+
+    guard: BoundViewGuard = bound_views or BoundViewGuard()
 
     with OperationLifecycle(
         operation_kind="warehouse",
@@ -95,22 +98,24 @@ def promote_full_refresh_rebuild(
             target_kind="relation",
         ),
     ) as lifecycle:
-        if target_exists:
-            adapter.drop(
+        with guard.transaction():
+            if target_exists:
+                adapter.drop(
+                    connection=connection,
+                    destination=relations.previous_qualified,
+                    if_exists=True,
+                    statement_recorder=statement_recorder,
+                )
+            promote_staged_relation(
+                adapter=adapter,
                 connection=connection,
-                destination=relations.previous_qualified,
-                if_exists=True,
+                target_qualified=relations.target_qualified,
+                staged_qualified=relations.rebuild_qualified,
+                displaced_qualified=relations.previous_qualified,
+                target_exists=target_exists,
                 statement_recorder=statement_recorder,
             )
-        promote_staged_relation(
-            adapter=adapter,
-            connection=connection,
-            target_qualified=relations.target_qualified,
-            staged_qualified=relations.rebuild_qualified,
-            displaced_qualified=relations.previous_qualified,
-            target_exists=target_exists,
-            statement_recorder=statement_recorder,
-        )
+            _ = guard.rebind()
         lifecycle.completed(metadata={"changed_count": 1})
 
 

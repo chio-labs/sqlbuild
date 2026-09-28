@@ -88,14 +88,15 @@ from sqlbuild.executor.load.main._build_execution_indexes import build_load_exec
 from sqlbuild.executor.load.main._resource_kind import load_resource_kind
 from sqlbuild.executor.load.main._skipped_result import skipped_load_result
 from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.migrations.main._bound_old_name_view_guard import (
+    bound_old_name_view_guard,
+)
 from sqlbuild.executor.migrations.main._complete_old_name_views import complete_old_name_views
-from sqlbuild.executor.migrations.main._release_old_name_views import release_old_name_views
-from sqlbuild.executor.migrations.main._restore_old_name_views import restore_old_name_views
-from sqlbuild.executor.migrations.models import OldNameViewSource
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
 from sqlbuild.executor.run.classes.runtime_watermark_resolver import RuntimeWatermarkResolver
 from sqlbuild.executor.run.models import (
     BatchWindow,
+    BoundViewGuard,
     MicrobatchPhaseOutcome,
     ModelExecutionResult,
     ModelMaterializationContext,
@@ -1044,14 +1045,13 @@ class BuildScheduler:
                         ),
                         entry=model_entry,
                     )
-                released_old_names: tuple[OldNameViewSource, ...] = release_old_name_views(
+                bound_views: BoundViewGuard = bound_old_name_view_guard(
                     plan=self._plan,
                     adapter=self._adapter,
                     connection=connection,
                     destination=model_entry.destination,
                 )
-                result: ModelExecutionResult = self._dispatch_releasing_old_names(
-                    released=released_old_names,
+                result: ModelExecutionResult = self._dispatch_keeping_old_names(
                     model_entry=model_entry,
                     connection=connection,
                     dispatch=lambda: _dispatch_model(
@@ -1085,6 +1085,7 @@ class BuildScheduler:
                             microbatch_global_concurrency=self._max_concurrency,
                             microbatch_batch_runner=microbatch_batch_runner,
                             watermark_resolver=self._watermark_resolver,
+                            bound_views=bound_views,
                         ),
                         promotion_mode=self._promotion_mode,
                         snapshots=self._snapshots,
@@ -1124,55 +1125,44 @@ class BuildScheduler:
         )
         return completed_result
 
-    def _dispatch_releasing_old_names(
+    def _dispatch_keeping_old_names(
         self,
         *,
-        released: tuple[OldNameViewSource, ...],
         model_entry: ModelPlanEntry,
         connection: Any,
         dispatch: Callable[[], ModelExecutionResult],
     ) -> ModelExecutionResult:
-        """Materialize, reconcile retention, then keep old names working around the build."""
+        """Materialize, reconcile retention, then keep old names working after the build."""
 
-        restore: tuple[OldNameViewSource, ...] = released
+        result: ModelExecutionResult = dispatch()
+        if result.status != ExecutionStatus.SUCCESS:
+            return result
+        reconcile_model_retention(
+            plan=self._plan,
+            adapter=self._adapter,
+            connection=connection,
+            model_name=model_entry.name,
+        )
         try:
-            result: ModelExecutionResult = dispatch()
-            if result.status != ExecutionStatus.SUCCESS:
-                return result
-            reconcile_model_retention(
+            warnings: tuple[str, ...] = complete_old_name_views(
                 plan=self._plan,
                 adapter=self._adapter,
                 connection=connection,
                 model_name=model_entry.name,
+                destination=model_entry.destination,
+                run_id=self._run_id,
             )
-            try:
-                warnings: tuple[str, ...] = complete_old_name_views(
-                    plan=self._plan,
-                    adapter=self._adapter,
-                    connection=connection,
-                    model_name=model_entry.name,
-                    destination=model_entry.destination,
-                    run_id=self._run_id,
-                )
-            except ExecutorInputError as error:
-                return dataclasses.replace(
-                    result,
-                    status=ExecutionStatus.FAILED,
-                    error_code=error.code,
-                    error_help=error.help,
-                    error_message=error.message,
-                )
-            restore = ()
-            if not warnings:
-                return result
+        except ExecutorInputError as error:
             return dataclasses.replace(
-                result, warning_messages=(*result.warning_messages, *warnings)
+                result,
+                status=ExecutionStatus.FAILED,
+                error_code=error.code,
+                error_help=error.help,
+                error_message=error.message,
             )
-        finally:
-            if restore:
-                restore_old_name_views(
-                    adapter=self._adapter, connection=connection, sources=restore
-                )
+        if not warnings:
+            return result
+        return dataclasses.replace(result, warning_messages=(*result.warning_messages, *warnings))
 
     def _resolve_microbatch_state(
         self, *, model_entry: ModelPlanEntry, connection: Any

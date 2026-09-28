@@ -694,16 +694,31 @@ _OLD_NAME_HEADERS: dict[str, str] = {
         "  cursor_grain day,\n"
         '  cursor_start "2026-01-01",\n'
     ),
+    "incremental_sync": (
+        "  materialized incremental,\n"
+        "  incremental_strategy delete_insert,\n"
+        "  unique_key order_id,\n"
+        "  cursor order_date,\n"
+        "  cursor_type timestamp,\n"
+        "  cursor_grain day,\n"
+        '  cursor_start "2026-01-01",\n'
+        "  on_schema_change sync_all_columns,\n"
+    ),
 }
 
 
-def old_name_model_sql(*, materialized: str, migrate_from: str = "") -> str:
+def old_name_model_sql(
+    *,
+    materialized: str,
+    migrate_from: str = "",
+    columns: str = "order_id, order_date, amount_cents",
+) -> str:
     """Return a table or incremental orders model with an optional migrate_from header."""
 
     migration: str = {"": ""}.get(migrate_from, f"  migrate_from {migrate_from},\n")
     return (
         f"MODEL (\n{_OLD_NAME_HEADERS[materialized]}{migration});\n\n"
-        'SELECT order_id, order_date, amount_cents FROM __source("raw_orders")\n'
+        f'SELECT {columns} FROM __source("raw_orders")\n'
     )
 
 
@@ -715,3 +730,70 @@ def build_ok(project_dir: Path) -> subprocess.CompletedProcess[str]:
     )
     assert result.returncode == 0, result.stdout + result.stderr
     return result
+
+
+def _raise_interruption(*_: object, **__: object) -> None:
+    raise RuntimeError("simulated interruption")
+
+
+def fail_bound_view_rebind(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Crash after the new relation is in place but before compatibility views follow it."""
+
+    monkeypatch.setattr(
+        "sqlbuild.executor.migrations.main._bound_old_name_view_guard.rebind_old_name_views",
+        _raise_interruption,
+    )
+
+
+def fail_displaced_drop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Crash after compatibility views follow the new relation, before the old one is dropped."""
+
+    original: Callable[..., None] = PostgresAdapter.drop
+    outcomes: dict[bool, Callable[..., None]] = {True: _raise_interruption, False: original}
+    monkeypatch.setattr(
+        PostgresAdapter,
+        "drop",
+        lambda self, *, destination, **kwargs: outcomes["__staging" in destination](
+            self, destination=destination, **kwargs
+        ),
+    )
+
+
+def fail_mid_swap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Crash on the last rename of a swap, after the new relation already holds the name."""
+
+    original: Callable[..., Any] = PostgresAdapter.execute
+    swap_renames: list[str] = []
+    outcomes: dict[bool, Callable[..., Any]] = {True: _raise_interruption, False: original}
+
+    def execute(self: PostgresAdapter, *, connection: Any, sql: str) -> Any:
+        swap_renames.extend(sql for _ in range("__swap_staging" in sql))
+        return outcomes[len(swap_renames) == 2 and swap_renames[-1] == sql](  # noqa: PLR2004
+            self, connection=connection, sql=sql
+        )
+
+    monkeypatch.setattr(PostgresAdapter, "execute", execute)
+
+
+def fail_column_drop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Crash after compatibility views are released for a dropped column."""
+
+    monkeypatch.setattr(PostgresAdapter, "drop_columns", _raise_interruption)
+
+
+def no_postgres_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Install nothing."""
+
+    del monkeypatch
+
+
+def build_in_process(*, project_dir: Path, capsys: pytest.CaptureFixture[str]) -> int:
+    """Run sqb build in-process so faults can be injected, returning its exit code."""
+
+    from sqlbuild.cli.commands.main.entrypoint.entry import main
+
+    _ = capsys.readouterr()
+    exit_code: int = main(["--project-dir", str(project_dir), "--no-color", "build"])
+    output: str = "".join(capsys.readouterr())
+    assert exit_code in (0, 1), output
+    return exit_code

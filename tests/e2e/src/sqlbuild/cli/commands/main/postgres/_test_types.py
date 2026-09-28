@@ -1,4 +1,7 @@
+from collections.abc import Callable
 from dataclasses import dataclass, field
+
+import pytest
 
 
 @dataclass(frozen=True)
@@ -181,3 +184,14 @@ class PostgresOldNameViewE2ETestCase:
     expected_ids_after_rebuild: tuple[tuple[object, ...], ...]
     expected_warning_fragment: str
     expected_external_ids: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class PostgresBoundViewCrashE2ETestCase:
+    description: str
+    materialized: str
+    changed_columns: str
+    install_failure: Callable[[pytest.MonkeyPatch], None]
+    expected_crash_exit_code: int
+    expected_view_ids_after_crash: tuple[tuple[object, ...], ...]
+    expected_view_ids_after_retry: tuple[tuple[object, ...], ...]

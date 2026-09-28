@@ -133,7 +133,7 @@ def run_old_name_steps(
             create_table=False,
             attempts=attempts,
         )
-        _ = refresh_old_name_views(adapter=adapter, connection=connection, sources=chained)
+        _ = rebind_old_name_views(adapter=adapter, connection=connection, sources=chained)
     return warnings
 
 
@@ -185,6 +185,54 @@ def refresh_old_name_views(
             sql=render_old_name_view_select(adapter=adapter, connection=connection, source=source),
         )
     return len(sources)
+
+
+def rebind_old_name_views(
+    *, adapter: BaseAdapter, connection: Any, sources: tuple[OldNameViewSource, ...]
+) -> int:
+    """Point compatibility views at their relations' current columns, in dependency order."""
+
+    if not sources:
+        return 0
+    if adapter.views_bind_to_relation_identity() and not all(
+        _replaceable(adapter=adapter, connection=connection, source=source) for source in sources
+    ):
+        _ = drop_old_name_views(adapter=adapter, connection=connection, sources=sources)
+    return refresh_old_name_views(adapter=adapter, connection=connection, sources=sources)
+
+
+def rebind_old_name_views_atomically(
+    *, adapter: BaseAdapter, connection: Any, sources: tuple[OldNameViewSource, ...]
+) -> int:
+    """Rebind compatibility views in one transaction where views bind to relation identity."""
+
+    with _ddl_transaction(adapter=adapter, connection=connection):
+        return rebind_old_name_views(adapter=adapter, connection=connection, sources=sources)
+
+
+def _replaceable(*, adapter: BaseAdapter, connection: Any, source: OldNameViewSource) -> bool:
+    """Return whether CREATE OR REPLACE VIEW can keep the view, which only allows appending."""
+
+    current: tuple[ColumnInfo, ...] = adapter.get_columns(
+        connection=connection,
+        database=source.old.database,
+        schema=source.old.schema,
+        name=source.old.name,
+    )
+    old_by_new: dict[str, str] = {new.lower(): old for old, new in source.column_aliases}
+    projected: list[tuple[str, str]] = [
+        (old_by_new.get(column.name.lower(), column.name).lower(), column.type.lower())
+        for column in adapter.get_columns(
+            connection=connection,
+            database=source.new.database,
+            schema=source.new.schema,
+            name=source.new.name,
+        )
+    ]
+    existing: list[tuple[str, str]] = [
+        (column.name.lower(), column.type.lower()) for column in current
+    ]
+    return projected[: len(existing)] == existing
 
 
 def drop_old_name_views(

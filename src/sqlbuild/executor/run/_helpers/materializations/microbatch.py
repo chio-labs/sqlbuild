@@ -2845,6 +2845,7 @@ def _apply_microbatch_schema_change(
                 delta_columns=delta_columns,
                 on_schema_change=context.entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
                 statement_recorder=state.statement_recorder,
+                bound_views=context.bound_views,
             )
     except Exception as exc:
         return MicrobatchSchemaPhaseOutcome(
@@ -3129,6 +3130,7 @@ def _promote_microbatch_full_refresh(
             relations=relations,
             target_exists=live_exists,
             statement_recorder=state.statement_recorder,
+            bound_views=context.bound_views,
         )
     except Exception as exc:
         return build_failed_result(

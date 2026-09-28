@@ -82,15 +82,19 @@ class ConnectionMixin(ABC):
 
     @contextlib.contextmanager
     def transaction(self, connection: Any) -> Generator[None]:
-        """Context manager for a begin/commit/rollback boundary."""
-        if not self.supports_transactions():
+        """Context manager for a begin/commit/rollback boundary; nested use joins the outer one."""
+        open_transactions: set[int] = self.__dict__.setdefault("_open_transaction_ids", set())
+        if not self.supports_transactions() or id(connection) in open_transactions:
             yield
             return
         self.begin(connection)
+        open_transactions.add(id(connection))
         try:
             yield
+            open_transactions.discard(id(connection))
             self.commit(connection)
         except BaseException:
+            open_transactions.discard(id(connection))
             self.rollback(connection)
             raise
 
