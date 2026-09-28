@@ -436,6 +436,7 @@ def test_given_python_pre_hook_returns_skip_when_executing_view_then_model_is_sk
             model_locations={},
             seed_locations={},
             source_map={},
+            python_source_read_map={},
             model_audits=(),
             run_id="run-1",
             query_change_tracking=False,

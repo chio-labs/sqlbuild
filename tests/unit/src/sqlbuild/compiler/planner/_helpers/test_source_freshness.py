@@ -75,6 +75,7 @@ def test_given_source_deferral_context_when_building_source_freshness_then_uses_
                         ),
                     )
                 },
+                python_source_read_map={},
                 source_warehouse_columns={},
                 star_exclude_keyword="EXCLUDE",
             ),

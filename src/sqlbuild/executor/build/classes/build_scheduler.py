@@ -1048,6 +1048,7 @@ class BuildScheduler:
                         model_locations=self._plan.model_locations,
                         seed_locations=self._plan.seed_locations,
                         source_map=self._plan.source_map,
+                        python_source_read_map=self._plan.python_source_entries,
                         model_audits=model_audits,
                         run_id=self._run_id,
                         query_change_tracking=self._query_change_tracking,

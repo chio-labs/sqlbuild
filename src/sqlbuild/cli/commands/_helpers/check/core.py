@@ -502,9 +502,9 @@ def _validate_check_sql_ref_exists(
         )
         relation = resolve_relation_location_qualified_name(adapter=adapter, location=seed_target)
     elif ref.kind == SqlResourceRefKind.SOURCE:
-        source: SourceEntry | None = (
-            pipeline_result.plan_output.source_read_map or pipeline_result.plan_output.source_map
-        ).get(ref.name)
+        source: SourceEntry | None = (pipeline_result.plan_output.python_source_entries).get(
+            ref.name
+        )
         if source is None or source.expression is not None or source.table is None:
             return
         exists = relation_lookup.exists(
@@ -540,9 +540,9 @@ def _check_sql_ref_location(
             return None
         return (seed_target.database, seed_target.schema, seed_target.name)
     if ref.kind == SqlResourceRefKind.SOURCE:
-        source: SourceEntry | None = (
-            pipeline_result.plan_output.source_read_map or pipeline_result.plan_output.source_map
-        ).get(ref.name)
+        source: SourceEntry | None = (pipeline_result.plan_output.python_source_entries).get(
+            ref.name
+        )
         if source is None or source.expression is not None or source.table is None:
             return None
         return (source.database, source.schema, source.table)

@@ -137,6 +137,7 @@ def run_custom_entry(
             model_locations=model_locations or {},
             seed_locations={},
             source_map={},
+            python_source_read_map={},
             model_audits=model_audits,
             run_id="test_run",
             query_change_tracking=True,

@@ -276,6 +276,7 @@ class ModelMaterializationContext:
     model_locations: dict[str, CompiledRelationLocation]
     seed_locations: dict[str, CompiledRelationLocation]
     source_map: dict[str, SourceEntry]
+    python_source_read_map: dict[str, SourceEntry]
     model_audits: tuple[AuditPlanEntry, ...]
     run_id: str
     query_change_tracking: bool

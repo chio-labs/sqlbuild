@@ -1077,3 +1077,13 @@ class CrossBoundarySelectionE2ETestCase:
     select: tuple[str, ...]
     expected_ran: tuple[str, ...]
     expected_not_ran: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PythonSourceDeferralE2ETestCase:
+    """Python reads of a managed source under a target that defers source reads."""
+
+    description: str
+    select: tuple[str, ...]
+    expected_counts: dict[str, int]
+    expected_check_pattern: str

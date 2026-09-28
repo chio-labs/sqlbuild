@@ -69,7 +69,7 @@ def _planned_relation_refs(*, plan_output: PlanOutput) -> frozenset[SqlResourceR
         for name in plan_output.seed_locations
     )
     source_name: str
-    for source_name in plan_output.source_read_map or plan_output.source_map:
+    for source_name in plan_output.python_source_entries:
         refs.add(SqlResourceRef(kind=SqlResourceRefKind.SOURCE, name=source_name))
     return frozenset(refs)
 
@@ -107,9 +107,7 @@ def _planned_relation(
     *, adapter: BaseAdapter, plan_output: PlanOutput, ref: SqlResourceRef
 ) -> str | None:
     if ref.kind == SqlResourceRefKind.SOURCE:
-        planned_sources: dict[str, SourceEntry] = (
-            plan_output.source_read_map or plan_output.source_map
-        )
+        planned_sources: dict[str, SourceEntry] = plan_output.python_source_entries
         planned_source: SourceEntry | None = planned_sources.get(ref.name)
         if planned_source is None:
             return None

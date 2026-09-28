@@ -246,12 +246,26 @@ def build_planner_relations_context(
         if effective_deferral.source_deferral_enabled
         else source_map
     )
+    python_source_read_map: dict[str, SourceEntry] = (
+        build_source_read_map(
+            project=project,
+            source_map=source_map,
+            selected_keys=scope.selected_keys,
+            project_config=project_config,
+            local_config=local_config,
+            defer_sources_to=effective_deferral.defer_sources_to,
+            read_source_names=frozenset(source_map),
+        )
+        if effective_deferral.source_deferral_enabled
+        else source_map
+    )
     return PlannerRelationsContext(
         model_locations=model_locations,
         seed_locations=seed_locations,
         function_locations=function_locations,
         source_map=source_map,
         source_read_map=source_read_map,
+        python_source_read_map=python_source_read_map,
         source_warehouse_columns=get_semantic_source_columns(
             project=project,
             adapter=adapter,

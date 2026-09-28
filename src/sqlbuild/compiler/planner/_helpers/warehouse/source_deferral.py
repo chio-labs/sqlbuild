@@ -36,18 +36,23 @@ def build_source_read_map(
     project_config: ProjectConfig | None,
     local_config: LocalConfig | None,
     defer_sources_to: str | None,
+    read_source_names: frozenset[str] | None = None,
 ) -> dict[str, SourceEntry]:
-    """Resolve the source relation map used when selected SQL reads managed sources."""
+    """Resolve source reads for selected SQL, or for ``read_source_names`` when given."""
 
     managed_source_names: frozenset[str] = frozenset(
         source.source_entry.name
         for source in project.sources
         if source.source_entry.loader is not None
     )
-    selected_managed_sources: tuple[str, ...] = _selected_managed_source_refs(
-        project=project,
-        selected_keys=selected_keys,
-        managed_source_names=managed_source_names,
+    selected_managed_sources: tuple[str, ...] = (
+        tuple(sorted(read_source_names & managed_source_names))
+        if read_source_names is not None
+        else _selected_managed_source_refs(
+            project=project,
+            selected_keys=selected_keys,
+            managed_source_names=managed_source_names,
+        )
     )
     if not selected_managed_sources:
         return source_map

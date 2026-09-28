@@ -139,7 +139,7 @@ def build_model_hook_run(
         relation_lookup=HookRelationLookup(
             model_locations=context.model_locations,
             seed_locations=context.seed_locations,
-            source_map=context.source_map,
+            source_map=context.python_source_read_map,
         ),
         warnings=warnings,
         enforce_explicit_references=context.enforce_explicit_references,

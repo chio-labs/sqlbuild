@@ -247,6 +247,7 @@ def _base_plan_output(
         function_locations=relations.function_locations,
         source_map=relations.source_map,
         source_read_map=relations.source_read_map,
+        python_source_read_map=relations.python_source_read_map,
         hook_functions=project.hook_functions,
         enforce_explicit_references=project.enforce_explicit_references,
     )

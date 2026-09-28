@@ -67,7 +67,6 @@ def compile_check_plan(
         options=CompilePipelineOptions(
             selected_target=request.selected_target,
             no_sql_validation=request.no_sql_validation,
-            source_deferral_enabled=False,
             connection_config=invocation.connection_config,
             cli_vars=request.cli_vars,
             external_sql_reference_resolver=resolve_external_sql_reference_resolver(
