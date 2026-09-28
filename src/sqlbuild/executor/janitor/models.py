@@ -91,6 +91,7 @@ class JanitorOldNameView:
     history: OldNameViewHistory
     expires_at: datetime | None
     drop_reason: OldNameViewDropReason | None = None
+    claimed_by: str | None = None
 
     @property
     def destination_model(self) -> str:
@@ -107,6 +108,7 @@ class JanitorOldNameViewPlanning:
     drops: tuple[JanitorOldNameView, ...] = ()
     missing: tuple[JanitorOldNameView, ...] = ()
     unknown_requests: tuple[str, ...] = ()
+    project_destinations: dict[JanitorRelationKey, str] = field(default_factory=dict)
 
     @property
     def keys(self) -> frozenset[JanitorRelationKey]:

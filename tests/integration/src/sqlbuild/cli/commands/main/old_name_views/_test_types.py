@@ -38,3 +38,12 @@ class OldNameResumeSkipTestCase:
     expected_facts: tuple[str, ...]
     expected_old_name_type: str | None
     expected_old_name_ids: tuple[int, ...] | None
+
+
+@dataclass(frozen=True)
+class OldNameJanitorClaimTestCase:
+    description: str
+    janitor_args: tuple[str, ...]
+    expected_janitor_fragment: str
+    expected_old_name_type: str
+    expected_final_facts: tuple[str, ...]

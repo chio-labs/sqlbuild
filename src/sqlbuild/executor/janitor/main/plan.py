@@ -114,6 +114,7 @@ def build_janitor_plan(
         relations_by_schema=facts.relations_by_schema,
         target_name=project.effective_target_name,
         early_drops=early_old_name_view_drops,
+        project=project,
         scope=scope,
         now=now,
     )

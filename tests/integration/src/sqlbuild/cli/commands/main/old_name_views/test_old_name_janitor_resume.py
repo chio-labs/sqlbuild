@@ -2,25 +2,31 @@
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 import pytest
 
 from tests.integration.src.sqlbuild.cli.commands.main.model_migrations.helpers import (
     CliRun,
+    build,
     build_ok,
     relation_names,
     run_sqb,
+    write_project,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.old_name_views._test_types import (
+    OldNameJanitorClaimTestCase,
     OldNameJanitorResumeTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.old_name_views.helpers import (
     JANITOR_PROJECT_TOML,
     ORIGIN_MODEL,
+    claiming_view_models,
     fail_janitor_drop_fact,
     old_name_facts,
     prepare_table_rename,
+    relation_type_in,
 )
 
 
@@ -75,3 +81,60 @@ def test_given_janitor_crash_after_drop_when_rerunning_then_drop_is_recorded_as_
     assert retry.exit_code == 0, retry.output
     assert test_case.expected_retry_fragment in retry.output
     assert old_name_facts(project_dir=tmp_path, schema="dev") == test_case.expected_final_facts
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        OldNameJanitorClaimTestCase(
+            description="plain janitor run records the claimed name without touching it",
+            janitor_args=("janitor", "--auto-approve"),
+            expected_janitor_fragment="└── record  dropped  (name now built by model:revenue)",
+            expected_old_name_type="VIEW",
+            expected_final_facts=("required", "origin_archived", "view_created", "view_dropped"),
+        ),
+        OldNameJanitorClaimTestCase(
+            description="repeated early drop leaves the project's view in place",
+            janitor_args=("janitor", "--auto-approve", "--drop-old-name-view", "dev.revenue"),
+            expected_janitor_fragment="└── record  dropped  (name now built by model:revenue)",
+            expected_old_name_type="VIEW",
+            expected_final_facts=("required", "origin_archived", "view_created", "view_dropped"),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_interrupted_early_drop_when_project_builds_the_name_then_janitor_leaves_it(
+    test_case: OldNameJanitorClaimTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Janitor never drops a relation the project built at a recorded view's name."""
+
+    prepare_table_rename(project_dir=tmp_path, capsys=capsys, project_toml=JANITOR_PROJECT_TOML)
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+    with monkeypatch.context() as patch:
+        fail_janitor_drop_fact(patch)
+        with contextlib.suppress(RuntimeError):
+            _ = run_sqb(
+                project_dir=tmp_path,
+                args=("janitor", "--auto-approve", "--drop-old-name-view", "dev.revenue"),
+                capsys=capsys,
+            )
+    write_project(
+        project_dir=tmp_path, models=claiming_view_models(), project_toml=JANITOR_PROJECT_TOML
+    )
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+
+    janitor: CliRun = run_sqb(project_dir=tmp_path, args=test_case.janitor_args, capsys=capsys)
+    old_name_type: str | None = relation_type_in(
+        project_dir=tmp_path, schema="dev", name=ORIGIN_MODEL
+    )
+    facts: tuple[str, ...] = old_name_facts(project_dir=tmp_path, schema="dev")
+    rebuild: CliRun = build(project_dir=tmp_path, capsys=capsys)
+
+    assert old_name_type == test_case.expected_old_name_type
+    assert facts == test_case.expected_final_facts
+    assert janitor.exit_code == 0, janitor.output
+    assert test_case.expected_janitor_fragment in janitor.output, janitor.output
+    assert rebuild.exit_code == 0, rebuild.output

@@ -81,11 +81,17 @@ def old_name_facts(*, project_dir: Path, schema: str = "main") -> tuple[str, ...
 def relation_type(*, project_dir: Path, name: str) -> str | None:
     """Return the information_schema type of one relation in main, or None."""
 
+    return relation_type_in(project_dir=project_dir, schema="main", name=name)
+
+
+def relation_type_in(*, project_dir: Path, schema: str, name: str) -> str | None:
+    """Return the information_schema type of one relation, or None."""
+
     rows: list[tuple[Any, ...]] = query(
         project_dir=project_dir,
         sql=(
             "SELECT table_type FROM information_schema.tables "
-            f"WHERE table_schema = 'main' AND table_name = '{name}'"
+            f"WHERE table_schema = '{schema}' AND table_name = '{name}'"
         ),
     )
     return next((str(row[0]) for row in rows), None)
@@ -211,3 +217,15 @@ def plan_text(*, project_dir: Path, capsys: pytest.CaptureFixture[str]) -> str:
     from tests.integration.src.sqlbuild.cli.commands.main.model_migrations.helpers import run_sqb
 
     return run_sqb(project_dir=project_dir, args=("plan",), capsys=capsys).output
+
+
+def claiming_view_models() -> dict[str, str]:
+    """Return the renamed model plus a new view model built at the old name."""
+
+    return {
+        DESTINATION_MODEL: table_sql(migrate_from=ORIGIN_MODEL),
+        ORIGIN_MODEL: (
+            "MODEL (materialized view);\n"
+            'SELECT order_id, amount_cents * 2 AS doubled FROM __source("raw_orders")\n'
+        ),
+    }

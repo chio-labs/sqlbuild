@@ -14,6 +14,10 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
 from sqlbuild.adapter.type_system.main.normalize_relation_type import normalize_relation_type
+from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
+from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
+from sqlbuild.compiler.fingerprints.models import FingerprintSet
 from sqlbuild.compiler.migrations.constants import (
     MIGRATION_TABLE_NAME,
     OLD_NAME_VIEW_TABLE_NAME,
@@ -50,9 +54,10 @@ def plan_old_name_views(
     relations_by_schema: dict[tuple[str | None, str | None], tuple[RelationInfo, ...]],
     target_name: str | None,
     early_drops: tuple[str, ...],
+    project_destinations: dict[JanitorRelationKey, str],
     now: datetime,
 ) -> JanitorOldNameViewPlanning:
-    """Split recorded compatibility views into live, droppable, and already gone."""
+    """Split recorded views into live, droppable, and gone, including names the project built."""
 
     histories: tuple[OldNameViewHistory, ...] = tuple(
         history
@@ -73,6 +78,12 @@ def plan_old_name_views(
         histories=histories,
         relations_by_schema=relations_by_schema,
     )
+    claims: dict[JanitorRelationKey, str] = project_claims(
+        adapter=adapter,
+        connection=connection,
+        views=tuple(_view(history) for history in histories),
+        project_destinations=project_destinations,
+    )
     requested: dict[str, JanitorOldNameView | None] = dict.fromkeys(early_drops)
     live: list[JanitorOldNameView] = []
     drops: list[JanitorOldNameView] = []
@@ -80,15 +91,16 @@ def plan_old_name_views(
     history: OldNameViewHistory
     for history in histories:
         key: JanitorRelationKey = _old_key(history)
-        view: JanitorOldNameView = JanitorOldNameView(
-            key=key,
-            history=history,
-            expires_at=None if history.created is None else history.created.expires_at,
-        )
+        view: JanitorOldNameView = _view(history)
         matched: tuple[str, ...] = tuple(name for name in requested if _names(name=name, key=key))
         requested.update(dict.fromkeys(matched, view))
         relation: RelationInfo | None = physical.get(key)
-        if relation is None or not _is_view(relation):
+        claimed_by: str | None = claims.get(key)
+        if claimed_by is not None:
+            missing.append(
+                _with_reason(view=view, reason=OldNameViewDropReason.MISSING, claimed_by=claimed_by)
+            )
+        elif relation is None or not _is_view(relation):
             missing.append(_with_reason(view=view, reason=OldNameViewDropReason.MISSING))
         elif matched:
             drops.append(_with_reason(view=view, reason=OldNameViewDropReason.EARLY))
@@ -101,6 +113,7 @@ def plan_old_name_views(
         drops=tuple(drops),
         missing=tuple(missing),
         unknown_requests=tuple(name for name, view in requested.items() if view is None),
+        project_destinations=project_destinations,
     )
 
 
@@ -131,8 +144,22 @@ def apply_old_name_view_drops(
     """Drop expired or requested views, then record every drop and every vanished view."""
 
     dropped: list[JanitorOldNameView] = []
+    claims: dict[JanitorRelationKey, str] = project_claims(
+        adapter=adapter,
+        connection=connection,
+        views=plan.drops,
+        project_destinations=plan.project_destinations,
+    )
     view: JanitorOldNameView
     for view in plan.drops:
+        if view.key in claims:
+            _record_drop(
+                adapter=adapter,
+                connection=connection,
+                view=_with_reason(view=view, reason=OldNameViewDropReason.MISSING),
+                run_id=run_id,
+            )
+            continue
         adapter.drop_view(
             connection=connection,
             destination=resolve_qualified_name_parts(
@@ -261,6 +288,27 @@ def _physical_old_names(
     return physical
 
 
+def _view(history: OldNameViewHistory) -> JanitorOldNameView:
+    return JanitorOldNameView(
+        key=_old_key(history),
+        history=history,
+        expires_at=None if history.created is None else history.created.expires_at,
+    )
+
+
+def project_destinations(project: CompiledProject) -> dict[JanitorRelationKey, str]:
+    """Map each project model's destination to the model's name."""
+
+    return {
+        JanitorRelationKey(
+            database=model.destination.database,
+            schema=model.destination.schema,
+            name=model.destination.name,
+        ): model.name
+        for model in project.models
+    }
+
+
 def _old_key(history: OldNameViewHistory) -> JanitorRelationKey:
     return JanitorRelationKey(
         database=history.old.database, schema=history.old.schema, name=history.old.name
@@ -292,10 +340,127 @@ def _names(*, name: str, key: JanitorRelationKey) -> bool:
     return spelled[-len(parts) :] == parts
 
 
-def _with_reason(*, view: JanitorOldNameView, reason: OldNameViewDropReason) -> JanitorOldNameView:
+def _with_reason(
+    *, view: JanitorOldNameView, reason: OldNameViewDropReason, claimed_by: str | None = None
+) -> JanitorOldNameView:
     return JanitorOldNameView(
-        key=view.key, history=view.history, expires_at=view.expires_at, drop_reason=reason
+        key=view.key,
+        history=view.history,
+        expires_at=view.expires_at,
+        drop_reason=reason,
+        claimed_by=claimed_by,
     )
+
+
+def project_claims(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    views: tuple[JanitorOldNameView, ...],
+    project_destinations: dict[JanitorRelationKey, str],
+) -> dict[JanitorRelationKey, str]:
+    """Map each view's name to the project model that has built there since the view existed."""
+
+    candidates: dict[JanitorRelationKey, tuple[JanitorOldNameView, str]] = {}
+    view: JanitorOldNameView
+    for view in views:
+        model_name: str | None = _claiming_model(
+            key=view.key, project_destinations=project_destinations
+        )
+        if model_name is not None and view.history.created is not None and view.key.schema:
+            candidates[view.key] = (view, model_name)
+    if not candidates:
+        return {}
+    built: dict[tuple[str, str, str], datetime] = _latest_builds(
+        adapter=adapter, connection=connection, candidates=tuple(candidates.values())
+    )
+    claims: dict[JanitorRelationKey, str] = {}
+    key: JanitorRelationKey
+    claimer: str
+    for key, (view, claimer) in candidates.items():
+        created: OldNameViewEvent | None = view.history.created
+        built_at: datetime | None = built.get(
+            ((key.schema or "").lower(), key.name.lower(), claimer)
+        )
+        if created is not None and built_at is not None and built_at > _utc(created.created_at):
+            claims[key] = claimer
+    return claims
+
+
+def _latest_builds(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    candidates: tuple[tuple[JanitorOldNameView, str], ...],
+) -> dict[tuple[str, str, str], datetime]:
+    """Read the latest fingerprint of each claiming model once per schema."""
+
+    by_schema: dict[tuple[str | None, str], set[str]] = {}
+    view: JanitorOldNameView
+    model_name: str
+    for view, model_name in candidates:
+        by_schema.setdefault((view.key.database, view.key.schema or ""), set()).add(model_name)
+    schemas: tuple[str, ...] = tuple(sorted(schema for _, schema in by_schema))
+    listed: tuple[RelationInfo, ...] = adapter.list_relations(
+        connection=connection,
+        database=candidates[0][0].key.database,
+        schemas=schemas,
+        names=(FINGERPRINT_TABLE_NAME,),
+    )
+    states: frozenset[tuple[str, str]] = frozenset(
+        ((relation.schema or "").lower(), relation.name.lower()) for relation in listed
+    )
+    built: dict[tuple[str, str, str], datetime] = {}
+    database: str | None
+    schema: str
+    names: set[str]
+    for (database, schema), names in by_schema.items():
+        if (schema.lower(), FINGERPRINT_TABLE_NAME) not in states:
+            continue
+        fingerprints: FingerprintSet = read_latest_fingerprints(
+            connection=connection,
+            execute=adapter.execute,
+            table_exists=True,
+            database=database,
+            schema=schema,
+            render_qualified_name=adapter.render_qualified_name,
+            render_read_latest_sql=adapter.render_read_latest_fingerprints_sql,
+            node_names=tuple(sorted(names)),
+        )
+        built.update(
+            {
+                (
+                    (fingerprint.target_schema or "").lower(),
+                    (fingerprint.target_name or "").lower(),
+                    fingerprint.node_name,
+                ): _utc(fingerprint.ts)
+                for fingerprint in fingerprints.fingerprints.values()
+            }
+        )
+    return built
+
+
+def _claiming_model(
+    *, key: JanitorRelationKey, project_destinations: dict[JanitorRelationKey, str]
+) -> str | None:
+    return next(
+        (
+            model_name
+            for destination, model_name in project_destinations.items()
+            if (destination.schema or "").lower() == (key.schema or "").lower()
+            and destination.name.lower() == key.name.lower()
+            and (
+                destination.database is None
+                or key.database is None
+                or destination.database.lower() == key.database.lower()
+            )
+        ),
+        None,
+    )
+
+
+def _utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 def _is_view(relation: RelationInfo) -> bool:

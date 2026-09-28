@@ -70,7 +70,7 @@ Old name views (1)
     └── expires  2026-10-28  (live; drop early with --drop-old-name-view prod.revenue)
 ```
 
-A compatibility view is never archived as a stale relation. Once it expires, or when it is named with `--drop-old-name-view`, the janitor drops it and records the drop in `_sqlbuild_old_name_views`. A compatibility view that no longer exists is recorded as dropped.
+A compatibility view is never archived as a stale relation. Once it expires, or when it is named with `--drop-old-name-view`, the janitor drops it and records the drop in `_sqlbuild_old_name_views`. A compatibility view that no longer exists is recorded as dropped. So is one whose name a project model has built since the view was created, for example after an interrupted early drop: janitor leaves the model's relation alone and lists it as `record  dropped  (name now built by model:revenue)`.
 
 Run the same SQLBuild version for `sqb janitor` as for builds. An older janitor does not know compatibility views and archives them as stale relations.
 
