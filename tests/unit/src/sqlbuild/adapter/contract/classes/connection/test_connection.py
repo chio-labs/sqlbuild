@@ -1,13 +1,22 @@
+import contextlib
 import inspect
+from collections.abc import Callable
 from typing import Any, ClassVar
 
+import duckdb
 import pytest
 
 from sqlbuild.adapter.contract.classes.connection import ConnectionMixin
 from sqlbuild.adapter.contract.models import QueryResult
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from tests.unit.src.sqlbuild.adapter.contract.classes.connection._test_types import (
     ConnectionContractCase,
+    NestedTransactionCase,
     SqlExecutionFailureCase,
+)
+from tests.unit.src.sqlbuild.adapter.contract.classes.connection.helpers import (
+    carry_on,
+    interrupt,
 )
 
 
@@ -111,3 +120,41 @@ def test_given_warehouse_failure_when_executing_then_exact_sql_is_attributed(
 
     assert vars(exc_info.value)["failed_sql"] == test_case.sql
     assert str(exc_info.value) == test_case.expected_error
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NestedTransactionCase(
+            description="nested transaction commits with the outer one",
+            fail_after_inner=False,
+            expected_tables=("inner_orders", "outer_orders"),
+        ),
+        NestedTransactionCase(
+            description="failure after a nested transaction rolls both back",
+            fail_after_inner=True,
+            expected_tables=(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_nested_transactions_when_outer_ends_then_one_boundary_decides(
+    test_case: NestedTransactionCase,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
+    failures: dict[bool, Callable[[], None]] = {True: interrupt, False: carry_on}
+
+    with contextlib.suppress(RuntimeError), adapter.transaction(connection):
+        _ = adapter.execute(connection=connection, sql="CREATE TABLE outer_orders (id INTEGER)")
+        with adapter.transaction(connection):
+            _ = adapter.execute(connection=connection, sql="CREATE TABLE inner_orders (id INTEGER)")
+        failures[test_case.fail_after_inner]()
+
+    tables: tuple[str, ...] = tuple(
+        str(row[0])
+        for row in connection.execute(
+            "SELECT table_name FROM information_schema.tables ORDER BY 1"
+        ).fetchall()
+    )
+    assert tables == test_case.expected_tables

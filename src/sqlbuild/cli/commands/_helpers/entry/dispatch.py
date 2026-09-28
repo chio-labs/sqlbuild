@@ -404,6 +404,7 @@ def dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers)
                 auto_approve=args.auto_approve,
                 retention_days=args.retention_days,
                 direct_state_history_versions=args.direct_state_history_versions,
+                drop_old_name_views=tuple(args.drop_old_name_views),
             )
         )
     return _dispatch_local_command(

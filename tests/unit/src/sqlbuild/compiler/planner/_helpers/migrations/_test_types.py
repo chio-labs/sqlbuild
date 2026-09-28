@@ -67,3 +67,14 @@ class UnreadableQueryShapeTestCase:
     description: str
     query_sql: str
     expected_shape: None = None
+
+
+@dataclass(frozen=True)
+class OldNameRowsTestCase:
+    description: str
+    action: str
+    column_aliases: tuple[tuple[str, str], ...]
+    grants_supported: bool
+    grants_copied: int | None
+    reason: str | None
+    expected_rows: tuple[str, ...]

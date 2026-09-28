@@ -13,9 +13,14 @@ from sqlbuild.compiler.migrations.main.deterministic_event_id import (
 )
 from sqlbuild.compiler.migrations.main.relation_for_location import migration_relation_for_location
 from sqlbuild.compiler.migrations.main.write_event import write_migration_event
-from sqlbuild.compiler.migrations.models import MigrationEvent, MigrationRelation
-from sqlbuild.compiler.migrations.types import MigrationDecision
-from sqlbuild.compiler.planner.models import ModelMigrationPlanEntry
+from sqlbuild.compiler.migrations.models import MigrationEvent, MigrationRelation, OldNameViewEvent
+from sqlbuild.compiler.migrations.types import MigrationDecision, OldNameViewEventType
+from sqlbuild.compiler.planner.models import ModelMigrationPlanEntry, OldNameViewPlanEntry
+from sqlbuild.executor.migrations._helpers.old_name_facts import (
+    old_name_fact,
+    old_name_state_table_sql,
+    record_old_name_fact,
+)
 from sqlbuild.executor.migrations.models import MigrationArtifactNames
 from sqlbuild.executor.run.main.promote_staged_relation import promote_staged_relation
 
@@ -27,10 +32,13 @@ def promote_and_record(
     entry: ModelMigrationPlanEntry,
     names: MigrationArtifactNames,
     event: MigrationEvent,
+    requirement: OldNameViewEvent | None = None,
 ) -> None:
     """Promote the stage, keeping a displaced destination, then append the migration event."""
 
     if not adapter.supports_transactional_ddl():
+        if requirement is not None:
+            record_old_name_fact(adapter=adapter, connection=connection, event=requirement)
         _promote(adapter=adapter, connection=connection, names=names)
         record_event(adapter=adapter, connection=connection, event=event)
         return
@@ -40,6 +48,11 @@ def promote_and_record(
             database=event.destination.database, schema=event.destination.schema or ""
         ),
     )
+    if requirement is not None:
+        _ = adapter.execute(
+            connection=connection,
+            sql=old_name_state_table_sql(adapter=adapter, relation=requirement.new),
+        )
     with adapter.transaction(connection):
         rebinds: tuple[str, ...] = (
             adapter.capture_dependent_view_rebinds(
@@ -55,6 +68,14 @@ def promote_and_record(
         statement: str
         for statement in rebinds:
             _ = adapter.execute(connection=connection, sql=statement)
+        if requirement is not None:
+            record_old_name_fact(
+                adapter=adapter,
+                connection=connection,
+                event=requirement,
+                create_table=False,
+                attempts=1,
+            )
         record_event(
             adapter=adapter, connection=connection, event=event, create_table=False, attempts=1
         )
@@ -129,6 +150,7 @@ def record_renames(
     connection: Any,
     entries: tuple[ModelMigrationPlanEntry, ...],
     run_id: str,
+    old_name_entries: tuple[OldNameViewPlanEntry, ...] = (),
 ) -> None:
     """Record each newly handed-over table or view rename so retries keep the identity."""
 
@@ -142,8 +164,30 @@ def record_renames(
             schema=entry.destination.schema,
             statement_recorder=StatementRecorder(),
         )
-        record_event(
-            adapter=adapter,
-            connection=connection,
-            event=migration_event(entry=entry, run_id=run_id),
+        event: MigrationEvent = migration_event(entry=entry, run_id=run_id)
+        requirement: OldNameViewEvent | None = old_name_requirement(
+            entries=old_name_entries, model_name=entry.model_name, event=event
         )
+        if requirement is not None:
+            record_old_name_fact(adapter=adapter, connection=connection, event=requirement)
+        record_event(adapter=adapter, connection=connection, event=event)
+
+
+def old_name_requirement(
+    *, entries: tuple[OldNameViewPlanEntry, ...], model_name: str, event: MigrationEvent
+) -> OldNameViewEvent | None:
+    """Build the ``required`` fact a move records when its model keeps an old-name view."""
+
+    entry: OldNameViewPlanEntry | None = next(
+        (item for item in entries if item.model_name == model_name and item.records_requirement),
+        None,
+    )
+    if entry is None:
+        return None
+    return old_name_fact(
+        entry=entry,
+        event_type=OldNameViewEventType.REQUIRED,
+        migration_event_id=event.event_id,
+        run_id=event.run_id,
+        created_at=event.created_at,
+    )

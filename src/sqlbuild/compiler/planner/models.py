@@ -37,6 +37,7 @@ from sqlbuild.compiler.migrations.types import (
     MigrationDecision,
     MigrationDiscovery,
     MigrationPromotion,
+    OldNameViewAction,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import (
@@ -626,6 +627,8 @@ class WarehouseSnapshot:
     source_freshness_state_schemas: frozenset[str] = field(default_factory=frozenset)
     column_dialect: str | None = None
     renamed_models: frozenset[str] = field(default_factory=frozenset)
+    old_name_view_state_schemas: frozenset[str] = field(default_factory=frozenset)
+    listed_state_schemas: frozenset[str] | None = field(default_factory=frozenset)
 
 
 @dataclass(frozen=True)
@@ -920,6 +923,7 @@ class ModelMigrationPlanEntry:
     completed_at: datetime | None = None
     compatibility_findings: tuple[str, ...] = ()
     message: str | None = None
+    origin_tracked: bool = False
 
     @property
     def storage_transition(self) -> str | None:
@@ -943,6 +947,47 @@ class ModelMigrationPlanEntry:
         return self.decision.blocks_build or (
             self.decision.moves_data and self.compatibility == MigrationCompatibility.INCOMPATIBLE
         )
+
+
+@dataclass(frozen=True)
+class OldNameViewPlanEntry:
+    """What one build does at the old name of one migrated model."""
+
+    model_name: str
+    origin: CompiledRelationLocation
+    destination: CompiledRelationLocation
+    action: OldNameViewAction
+    target_name: str | None
+    retention: str | None = None
+    expires_at: datetime | None = None
+    column_aliases: tuple[tuple[str, str], ...] = ()
+    stores_history: bool = False
+    migration_event_id: str | None = None
+    records_requirement: bool = False
+    reason: str | None = None
+    grants_copied: int | None = None
+    grants_supported: bool = False
+    archived: bool = False
+
+    @property
+    def runs_steps(self) -> bool:
+        """Return whether this build archives the old relation or creates the view."""
+
+        return self.action in (OldNameViewAction.ARCHIVE_AND_VIEW, OldNameViewAction.VIEW_ONLY)
+
+
+@dataclass(frozen=True)
+class OldNameView:
+    """One compatibility view recorded at an old name and not recorded as dropped."""
+
+    destination_model: str
+    old: CompiledRelationLocation
+    new: CompiledRelationLocation
+    expires_at: datetime | None
+    column_aliases: tuple[tuple[str, str], ...]
+    migration_event_id: str
+    target_name: str | None
+    name_reused_by: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1426,6 +1471,8 @@ class PlanOutput:
     table_type_entries: tuple[TableTypePlanEntry, ...] = field(default_factory=tuple)
     migration_entries: tuple[ModelMigrationPlanEntry, ...] = field(default_factory=tuple)
     column_migration_entries: tuple[ColumnMigrationPlanEntry, ...] = field(default_factory=tuple)
+    old_name_view_entries: tuple[OldNameViewPlanEntry, ...] = field(default_factory=tuple)
+    old_name_views: tuple[OldNameView, ...] = field(default_factory=tuple)
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = field(
         default_factory=dict
     )
@@ -1525,6 +1572,8 @@ class PlannerWarehouseState:
     migration_warnings: tuple[PlanWarning, ...] = ()
     column_migration_entries: tuple[ColumnMigrationPlanEntry, ...] = ()
     column_rename_hints: tuple[ColumnRenameHint, ...] = ()
+    old_name_view_entries: tuple[OldNameViewPlanEntry, ...] = ()
+    old_name_views: tuple[OldNameView, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1572,6 +1621,15 @@ class ModelMigrationPlanning:
 
     snapshot: WarehouseSnapshot
     entries: tuple[ModelMigrationPlanEntry, ...] = ()
+    warnings: tuple[PlanWarning, ...] = ()
+
+
+@dataclass(frozen=True)
+class OldNameViewPlanning:
+    """Old-name steps for this build plus every compatibility view still recorded."""
+
+    entries: tuple[OldNameViewPlanEntry, ...] = ()
+    views: tuple[OldNameView, ...] = ()
     warnings: tuple[PlanWarning, ...] = ()
 
 

@@ -40,6 +40,7 @@ from sqlbuild.adapter.contract.constants import (
 )
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
+from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
@@ -48,6 +49,7 @@ from sqlbuild.adapter.contract.models import (
     FunctionInfo,
     MigrationStagePlan,
     QueryResult,
+    RelationGrant,
     RelationInfo,
     RowDiffColumnResult,
     RowDiffCoverage,
@@ -86,6 +88,11 @@ from sqlbuild.adapter.state_sql.main.render_insert_source_freshness_records_sql 
 )
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
+from sqlbuild.adapters.postgres._helpers.grants import (
+    postgres_relation_grants,
+    render_postgres_grants,
+    render_postgres_revokes,
+)
 from sqlbuild.adapters.postgres._helpers.view_rebind import render_postgres_view_rebind
 from sqlbuild.adapters.postgres.classes.postgres_connection import _PostgresConnection
 from sqlbuild.adapters.postgres.constants import TABLE_FUNCTION_RETURN_TYPE
@@ -610,6 +617,142 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             )
             for row in cursor.fetchall()
         )
+
+    def views_bind_to_relation_identity(self) -> bool:
+        return True
+
+    def list_dependent_view_names(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        del database
+        query: str = (
+            "SELECT DISTINCT dependent_namespace.nspname, dependent.relname "
+            "FROM pg_depend AS dependency "
+            "JOIN pg_rewrite AS rewrite ON rewrite.oid = dependency.objid "
+            "JOIN pg_class AS dependent ON dependent.oid = rewrite.ev_class "
+            "JOIN pg_namespace AS dependent_namespace "
+            "ON dependent_namespace.oid = dependent.relnamespace "
+            "JOIN pg_class AS referenced ON referenced.oid = dependency.refobjid "
+            "JOIN pg_namespace AS referenced_namespace "
+            "ON referenced_namespace.oid = referenced.relnamespace "
+            "WHERE dependency.classid = 'pg_rewrite'::regclass "
+            "AND dependency.refclassid = 'pg_class'::regclass "
+            "AND dependent.relkind IN ('v', 'm') "
+            "AND dependent.oid <> referenced.oid "
+            f"AND referenced_namespace.nspname = {_quote_sql_string(schema)} "
+            f"AND referenced.relname = {_quote_sql_string(name)} "
+            "ORDER BY 1, 2"
+        )
+        cursor: Any = connection.execute(query)
+        return tuple(f"{row[0]}.{row[1]}" for row in cursor.fetchall())
+
+    def read_relation_grants(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str,
+        name: str,
+        relation_type: str,
+    ) -> tuple[RelationGrant, ...]:
+        del database, relation_type
+        relation_filter: str = (
+            "FROM pg_class AS relation "
+            "JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace "
+        )
+        where: str = (
+            f"WHERE namespace.nspname = {_quote_sql_string(schema)} "
+            f"AND relation.relname = {_quote_sql_string(name)} "
+            "AND acl.grantee <> relation.relowner "
+        )
+        grantee: str = "CASE WHEN acl.grantee = 0 THEN NULL ELSE pg_get_userbyid(acl.grantee) END"
+        relation_rows: list[tuple[Any, ...]] = connection.execute(
+            f"SELECT acl.privilege_type, {grantee}, acl.is_grantable "
+            + relation_filter
+            + "CROSS JOIN LATERAL aclexplode(relation.relacl) AS acl "
+            + where
+            + "ORDER BY 2 NULLS FIRST, 1"
+        ).fetchall()
+        column_rows: list[tuple[Any, ...]] = connection.execute(
+            f"SELECT attribute.attname, acl.privilege_type, {grantee}, acl.is_grantable "
+            + relation_filter
+            + "JOIN pg_attribute AS attribute ON attribute.attrelid = relation.oid "
+            "AND attribute.attnum > 0 AND NOT attribute.attisdropped "
+            "CROSS JOIN LATERAL aclexplode(attribute.attacl) AS acl "
+            + where
+            + "ORDER BY attribute.attnum, 3 NULLS FIRST, 2"
+        ).fetchall()
+        return postgres_relation_grants(relation_rows=relation_rows, column_rows=column_rows)
+
+    def render_relation_grants(
+        self, *, grants: tuple[RelationGrant, ...], destination: str, columns: tuple[str, ...]
+    ) -> tuple[str, ...]:
+        return render_postgres_grants(
+            grants=grants,
+            destination=destination,
+            columns=columns,
+            render_identifier=self.render_identifier,
+        )
+
+    def render_replace_view_keeping_grants(
+        self, *, destination: str, sql: str
+    ) -> tuple[str, ...] | None:
+        return self.render_create_view_as(destination=destination, sql=sql)
+
+    def read_view_definition(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> str | None:
+        del database
+        rows: list[tuple[Any, ...]] = connection.execute(
+            "SELECT pg_get_viewdef(relation.oid) FROM pg_class AS relation "
+            "JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace "
+            f"WHERE relation.relkind = 'v' AND namespace.nspname = {_quote_sql_string(schema)} "
+            f"AND relation.relname = {_quote_sql_string(name)}"
+        ).fetchall()
+        return None if not rows else str(rows[0][0])
+
+    def view_definition_matches(
+        self, *, connection: Any, database: str | None, schema: str, name: str, sql: str
+    ) -> bool:
+        definition: str | None = self.read_view_definition(
+            connection=connection, database=database, schema=schema, name=name
+        )
+        if definition is None:
+            return False
+        connection.execute("BEGIN")
+        try:
+            connection.execute(f"CREATE TEMPORARY VIEW _sqb_view_probe AS {sql}")
+            probe: str = str(
+                connection.execute("SELECT pg_get_viewdef('_sqb_view_probe'::regclass)").fetchone()[
+                    0
+                ]
+            )
+        finally:
+            connection.execute("ROLLBACK")
+        return same_view_definition(definition=definition, sql=probe)
+
+    def render_relation_revokes(
+        self, *, grants: tuple[RelationGrant, ...], destination: str
+    ) -> tuple[str, ...]:
+        return render_postgres_revokes(
+            grants=grants, destination=destination, render_identifier=self.render_identifier
+        )
+
+    def rename_view(
+        self,
+        *,
+        connection: Any,
+        origin: str,
+        destination: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_rename_view(
+            origin=origin, destination=destination
+        )
+        statement_recorder.record_many(statements)
+        statement: str
+        for statement in statements:
+            self.execute(connection=connection, sql=statement)
 
     def supports_transactional_ddl(self) -> bool:
         return True
@@ -1542,6 +1685,21 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             schema=schema,
             render_qualified_name=self.render_qualified_name,
             render_framework_type=self.render_framework_type,
+        )
+
+    def render_create_old_name_view_state_table_sql(
+        self, *, database: str | None, schema: str
+    ) -> str:
+        from sqlbuild.compiler.migrations.main.old_name_view_create_table_sql import (
+            build_old_name_view_state_create_table_sql,
+        )
+
+        return build_old_name_view_state_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+            transient=self.state_tables_transient,
         )
 
     def render_create_column_migration_state_table_sql(

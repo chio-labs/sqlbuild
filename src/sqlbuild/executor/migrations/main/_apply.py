@@ -10,11 +10,17 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.types import MigrationTransfer
-from sqlbuild.compiler.planner.models import ModelMigrationPlanEntry, PlanOutput
+from sqlbuild.compiler.migrations.models import MigrationEvent
+from sqlbuild.compiler.planner.models import (
+    ModelMigrationPlanEntry,
+    OldNameViewPlanEntry,
+    PlanOutput,
+)
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.migrations._helpers.naming import resolve_artifact_names
 from sqlbuild.executor.migrations._helpers.promotion import (
     migration_event,
+    old_name_requirement,
     promote_and_record,
     record_renames,
 )
@@ -52,9 +58,14 @@ def apply_model_migrations(
             connection=connection,
             run_id=run_id,
             on_progress=on_progress,
+            old_name_entries=plan.old_name_view_entries,
         )
     _ = record_renames(
-        adapter=adapter, connection=connection, entries=plan.migration_entries, run_id=run_id
+        adapter=adapter,
+        connection=connection,
+        entries=plan.migration_entries,
+        run_id=run_id,
+        old_name_entries=plan.old_name_view_entries,
     )
 
 
@@ -65,6 +76,7 @@ def _apply_one(
     connection: Any,
     run_id: str,
     on_progress: Callable[[str], None] | None,
+    old_name_entries: tuple[OldNameViewPlanEntry, ...],
 ) -> None:
     origin_label: str = entry.origin.qualified_name or entry.origin.name
     destination_label: str = entry.destination.qualified_name or entry.destination.name
@@ -73,7 +85,11 @@ def _apply_one(
     started: float = time.monotonic()
     try:
         transfer: MigrationTransfer = _stage_promote_and_record(
-            entry=entry, adapter=adapter, connection=connection, run_id=run_id
+            entry=entry,
+            adapter=adapter,
+            connection=connection,
+            run_id=run_id,
+            old_name_entries=old_name_entries,
         )
     except Exception as error:
         raise ExecutorInputError(
@@ -93,7 +109,12 @@ def _apply_one(
 
 
 def _stage_promote_and_record(
-    *, entry: ModelMigrationPlanEntry, adapter: BaseAdapter, connection: Any, run_id: str
+    *,
+    entry: ModelMigrationPlanEntry,
+    adapter: BaseAdapter,
+    connection: Any,
+    run_id: str,
+    old_name_entries: tuple[OldNameViewPlanEntry, ...],
 ) -> MigrationTransfer:
     adapter.ensure_schema(
         connection=connection,
@@ -110,11 +131,15 @@ def _stage_promote_and_record(
     _ = verify_stage(
         adapter=adapter, connection=connection, entry=entry, names=names, transfer=transfer
     )
+    event: MigrationEvent = migration_event(entry=entry, run_id=run_id)
     _ = promote_and_record(
         adapter=adapter,
         connection=connection,
         entry=entry,
         names=names,
-        event=migration_event(entry=entry, run_id=run_id),
+        event=event,
+        requirement=old_name_requirement(
+            entries=old_name_entries, model_name=entry.model_name, event=event
+        ),
     )
     return transfer

@@ -10,15 +10,20 @@ from sqlbuild.compiler.migrations.main.deterministic_column_event_id import (
 from sqlbuild.compiler.migrations.main.deterministic_event_id import (
     deterministic_migration_event_id,
 )
+from sqlbuild.compiler.migrations.main.deterministic_old_name_view_event_id import (
+    deterministic_old_name_view_event_id,
+)
 from sqlbuild.compiler.migrations.models import (
     ColumnMigrationEvent,
     MigrationEvent,
     MigrationRelation,
+    OldNameViewEvent,
 )
 from sqlbuild.compiler.migrations.types import (
     ColumnMigrationDecision,
     MigrationDecision,
     MigrationDiscovery,
+    OldNameViewEventType,
 )
 
 _STARTED_AT: datetime = datetime(2026, 1, 1, tzinfo=UTC)
@@ -74,4 +79,35 @@ def column_migration_event(*, origin: str, destination: str, day: int) -> Column
         decision=ColumnMigrationDecision.RENAME,
         run_id=f"run-{day}",
         created_at=_STARTED_AT + timedelta(days=day),
+    )
+
+
+def old_name_fact(
+    *,
+    move: MigrationEvent,
+    event_type: OldNameViewEventType,
+    expires_at: datetime | None = None,
+    column_aliases: tuple[tuple[str, str], ...] = (),
+    archive_name: str | None = None,
+    grants_copied: tuple[str, ...] | None = None,
+) -> OldNameViewEvent:
+    """Return one old-name fact of a move from main.revenue to main.daily_revenue."""
+
+    return OldNameViewEvent(
+        event_id=deterministic_old_name_view_event_id(
+            event_type=event_type, migration_event_id=move.event_id
+        ),
+        target_name="dev",
+        event_type=event_type,
+        migration_event_id=move.event_id,
+        destination_model=move.destination_model,
+        old=main_relation("revenue"),
+        new=main_relation("daily_revenue"),
+        run_id=move.run_id,
+        created_at=move.created_at,
+        view_retention="30d",
+        column_aliases=column_aliases,
+        expires_at=expires_at,
+        archive_name=archive_name,
+        grants_copied=grants_copied,
     )

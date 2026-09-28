@@ -11,6 +11,7 @@ Online: https://sqlbuild.com/docs/cli/janitor/
 - Usage
 - Flags
 - Lifecycle
+- Compatibility views
 - Relation age
 - Audit record
 - Restoring an archive
@@ -34,6 +35,7 @@ sqb --project-dir <path> janitor [flags]
 | `--auto-approve` | Skip the confirmation prompt and run the planned actions immediately |
 | `--retention-days` | Override the configured retention period (days) before a stale relation is archived |
 | `--direct-state-history-versions` | Override how many state-history versions are kept per identity |
+| `--drop-old-name-view <name>` | Drop the [compatibility view](../concepts/models/migrations.md#old-names) at a renamed model's old name before it expires. Repeat for several views. Fails with `C503` if no compatibility view is recorded at the name |
 
 ## Lifecycle
 
@@ -57,6 +59,20 @@ Archive names are written as unquoted lowercase identifiers, so warehouses that 
 Long names are shortened with a short hash so they fit the adapter's identifier limit. The prefix and timestamp are never shortened.
 
 Setting both `retention_days` and `archive_retention_days` to `0` archives and deletes stale relations in the same run.
+
+## Compatibility views
+
+When a model is renamed, SQLBuild keeps a [compatibility view](../concepts/models/migrations.md#old-names) at its old name. The janitor lists each one with the model it reads and its expiry:
+
+```
+Old name views (1)
+└── prod.revenue  -> model:daily_revenue
+    └── expires  2026-10-28  (live; drop early with --drop-old-name-view prod.revenue)
+```
+
+A compatibility view is never archived as a stale relation. Once it expires, or when it is named with `--drop-old-name-view`, the janitor drops it and records the drop in `_sqlbuild_old_name_views`. Before dropping, the janitor checks that the relation at the old name is still the view SQLBuild created there, by comparing its stored definition with the view's SQL. Any other relation at that name, such as a view a project model built after an interrupted early drop, is left alone: the janitor records the compatibility view as dropped and lists it as `record  dropped  (name now used by another relation, model:revenue)`, naming the model when the name is a project destination. A compatibility view that no longer exists is recorded as dropped too.
+
+Run the same SQLBuild version for `sqb janitor` as for builds. An older janitor does not know compatibility views and archives them as stale relations.
 
 ## Relation age
 

@@ -581,6 +581,13 @@ def _add_maintenance_parsers(
     janitor_parser.add_argument("--auto-approve", action="store_true", default=False)
     janitor_parser.add_argument("--retention-days", type=int, default=None)
     janitor_parser.add_argument("--direct-state-history-versions", type=int, default=None)
+    janitor_parser.add_argument(
+        "--drop-old-name-view",
+        action="append",
+        default=[],
+        metavar="NAME",
+        dest="drop_old_name_views",
+    )
 
 
 def _add_workspace_parsers(

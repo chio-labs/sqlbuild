@@ -87,6 +87,12 @@ Loaders run before models and seeds, so a loader naming a model or seed fails wi
 cannot read them. A loader naming a source is told to use `ctx.source("name")`, or
 `ctx.loader(upstream_loader)` when the source is populated by a loader it depends on.
 
+The old name of a [renamed model](../models/migrations.md#old-names) counts as a project
+relation while a compatibility view is kept there, so literal SQL still reading it fails with
+`P008` and names the new model. A declared `migrate_from` is checked at compile time; an
+automatically discovered rename is checked when planning, and stops the build. A hook's own model
+does not exempt its old name.
+
 **At run time**, SQL built dynamically cannot be checked earlier. Before sending it,
 `ctx.query()` and `ctx.execute_sql()` parse it in the adapter's dialect, resolve unqualified names
 against the current schema, and compare them with the project relations resolved for the run. A

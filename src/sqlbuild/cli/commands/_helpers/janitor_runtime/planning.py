@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import time
 
+from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import (
     JanitorCompileContext,
     JanitorConnectionContext,
@@ -48,12 +49,20 @@ def build_janitor_execution_plan(
                 state_history_versions=settings.direct_state_history_versions,
                 archive_retention_days=settings.archive_retention_days,
             ),
+            early_old_name_view_drops=settings.drop_old_name_views,
         )
         lifecycle.completed(metadata={"item_count": _janitor_candidate_count(plan)})
     status.complete(
         message=f"Inspected warehouse state. ({time.perf_counter() - inspect_start:.2f}s)",
         blank_line_after=True,
     )
+    if plan.old_name_views.unknown_requests:
+        raise CliUserError(
+            "no compatibility view is recorded at "
+            + ", ".join(plan.old_name_views.unknown_requests),
+            code="C503",
+            help="Run sqb janitor without --drop-old-name-view to list compatibility views.",
+        )
     return JanitorPlanningResult(plan=plan)
 
 
@@ -65,5 +74,6 @@ def _janitor_candidate_count(plan: JanitorPlan) -> int:
             plan.archive_deletion_candidates,
             plan.query_diff_artifact_candidates,
             plan.direct_state_prune_candidates,
+            plan.old_name_views.drops,
         )
     )

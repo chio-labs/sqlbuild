@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
+from sqlbuild.adapter.contract.models import RelationGrant
 from sqlbuild.adapter.contract.types import MigrationTransfer
 
 
@@ -96,3 +97,31 @@ class DatabricksColumnMappingTestCase:
     description: str
     property_rows: list[tuple[str, str]]
     expected_available: bool
+
+
+@dataclass(frozen=True)
+class RelationGrantCaptureTestCase:
+    description: str
+    adapter: BaseAdapter
+    relation_type: str
+    answers: tuple[list[tuple[object, ...]], ...]
+    destination: str
+    columns: tuple[str, ...]
+    expected_query_fragment: str
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ViewReplaceTestCase:
+    description: str
+    adapter: BaseAdapter
+    expected_statements: tuple[str, ...] | None
+
+
+@dataclass(frozen=True)
+class RelationRevokeTestCase:
+    description: str
+    adapter: BaseAdapter
+    grants: tuple[RelationGrant, ...]
+    destination: str
+    expected_statements: tuple[str, ...]

@@ -17,6 +17,7 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileModelConfig
+from sqlbuild.compiler.migrations.constants import OLD_NAME_VIEW_CONFIG_KEY
 from sqlbuild.compiler.planner.types import (
     ContractPolicy,
     CursorGrain,
@@ -117,6 +118,18 @@ _CUSTOM_MATERIALIZATION_DISALLOWED_KEYS: tuple[str, ...] = (
     "max_microbatches",
     "microbatch_limit",
     "lookback",
+)
+
+_HISTORY_MATERIALIZATIONS: frozenset[str] = frozenset(
+    {MaterializationType.INCREMENTAL, MaterializationType.SNAPSHOT}
+)
+_MIGRATABLE_MATERIALIZATIONS: frozenset[str] = frozenset(
+    {
+        MaterializationType.TABLE,
+        MaterializationType.VIEW,
+        MaterializationType.INCREMENTAL,
+        MaterializationType.SNAPSHOT,
+    }
 )
 
 
@@ -953,17 +966,25 @@ def validate_non_incremental_config(
 
 
 def validate_model_migration_config(*, config: CompileModelConfig, model_name: str) -> None:
-    """Validate migrate_from and migrate_force on history-bearing materializations."""
+    """Validate migrate_from, migrate_force, and old_name_view on model headers."""
 
+    _validate_old_name_view_config(config=config, model_name=model_name)
     migrate_from: object | None = config.values.get(MIGRATE_FROM_CONFIG_KEY)
     migrate_force: object | None = config.values.get(MIGRATE_FORCE_CONFIG_KEY)
     if migrate_from is None and migrate_force is None:
         return
     materialized: str | None = get_config_str(values=config.values, key="materialized")
-    if materialized not in {MaterializationType.INCREMENTAL, MaterializationType.SNAPSHOT}:
+    if materialized not in _MIGRATABLE_MATERIALIZATIONS:
         raise CompileInputError(
-            f"model '{model_name}': migrate_from is only valid for incremental and snapshot "
-            f"models; '{materialized}' models are rebuilt under their new name"
+            f"model '{model_name}': migrate_from is only valid for table, view, incremental "
+            f"and snapshot models"
+        )
+    if migrate_force is not None and materialized not in _HISTORY_MATERIALIZATIONS:
+        raise CompileInputError(
+            f"model '{model_name}': migrate_force is only valid for incremental and snapshot "
+            f"models; nothing is replaced when a '{materialized}' model migrates, because "
+            "tables and views are rebuilt under their new name",
+            help="remove migrate_force from the model header",
         )
     if migrate_from is None:
         raise CompileInputError(f"model '{model_name}': migrate_force requires migrate_from")
@@ -977,6 +998,21 @@ def validate_model_migration_config(*, config: CompileModelConfig, model_name: s
         raise CompileInputError(f"model '{model_name}': migrate_force must be true or false")
 
 
+def _validate_old_name_view_config(*, config: CompileModelConfig, model_name: str) -> None:
+    if OLD_NAME_VIEW_CONFIG_KEY not in config.values:
+        return
+    value: object = config.values[OLD_NAME_VIEW_CONFIG_KEY]
+    if value is False:
+        return
+    if isinstance(value, str) and Duration.parse(value.strip()) is not None:
+        return
+    raise CompileInputError(
+        f"model '{model_name}': old_name_view must be a positive duration such as 7d, or "
+        f"false; got {value!r}",
+        help="write for example old_name_view 7d, or old_name_view false",
+    )
+
+
 def validate_column_migration_config(
     *, config_values: dict[str, object], model_name: str, columns: tuple[SchemaColumn, ...]
 ) -> None:
@@ -988,12 +1024,17 @@ def validate_column_migration_config(
     if not declared:
         return
     materialized: str | None = get_config_str(values=config_values, key="materialized")
-    if materialized not in {MaterializationType.INCREMENTAL, MaterializationType.SNAPSHOT}:
+    if materialized not in _HISTORY_MATERIALIZATIONS and (
+        materialized not in _MIGRATABLE_MATERIALIZATIONS
+        or config_values.get(MIGRATE_FROM_CONFIG_KEY) is None
+    ):
         raise CompileInputError(
             f"model '{model_name}': column '{declared[0].name}' declares migrate_from, which is "
-            f"only valid for incremental and snapshot models; '{materialized}' models are "
-            "rebuilt with their new columns",
-            help="remove migrate_from from the column",
+            "only valid for incremental and snapshot models, or for table and view models "
+            "that declare migrate_from themselves (the old name's compatibility view then "
+            f"presents the column under its old name); '{materialized}' models are rebuilt "
+            "with their new columns",
+            help="remove migrate_from from the column, or declare the model's own migrate_from",
         )
     sources: dict[str, str] = {}
     column: SchemaColumn

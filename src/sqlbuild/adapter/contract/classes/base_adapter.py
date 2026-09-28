@@ -30,6 +30,7 @@ from sqlbuild.adapter.contract.exceptions import (
     AdapterUserError,
     UnsupportedTypedSqlRenderingError,
 )
+from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
@@ -38,6 +39,7 @@ from sqlbuild.adapter.contract.models import (
     FunctionInfo,
     MigrationStagePlan,
     QueryResult,
+    RelationGrant,
     RelationInfo,
     RowDiffCoverage,
     RowDiffPreparedRelations,
@@ -101,6 +103,8 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     sql_analysis_dialect_name: ClassVar[str | None] = None
     max_identifier_length: ClassVar[int] = 63
     state_tables_transient: ClassVar[bool] = False
+    relation_grants_supported: ClassVar[bool] = True
+    views_read_with_reader_access: ClassVar[bool] = False
     allows_implicit_managed_write_schema: ClassVar[bool] = False
     execution_duration_limit_seconds: ClassVar[int | None] = None
     _snapshot_sql_dialect: ClassVar[SnapshotSqlDialect] = SnapshotSqlDialect(
@@ -706,6 +710,93 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     ) -> tuple[str, ...]:
         del connection, database, schema, name
         return ()
+
+    def views_bind_to_relation_identity(self) -> bool:
+        """Return whether views follow a renamed relation instead of re-resolving its name."""
+
+        return False
+
+    def list_dependent_view_names(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        """Return qualified names of views bound to this relation."""
+
+        del connection, database, schema, name
+        return ()
+
+    def read_relation_grants(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str,
+        name: str,
+        relation_type: str,
+    ) -> tuple[RelationGrant, ...]:
+        """Return the privileges granted or denied on a relation and its columns."""
+
+        del connection, database, schema, name, relation_type
+        return ()
+
+    def render_relation_grants(
+        self, *, grants: tuple[RelationGrant, ...], destination: str, columns: tuple[str, ...]
+    ) -> tuple[str, ...]:
+        """Render grants onto ``destination``, keeping column grants only for ``columns``."""
+
+        del grants, destination, columns
+        return ()
+
+    def render_replace_view_keeping_grants(
+        self, *, destination: str, sql: str
+    ) -> tuple[str, ...] | None:
+        """Return statements that redefine an existing view keeping its privileges, if any."""
+
+        del destination, sql
+        return None
+
+    def read_view_definition(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> str | None:
+        """Return the stored definition of a view, or None when unknown."""
+
+        del connection, database, schema, name
+        return None
+
+    def view_definition_matches(
+        self, *, connection: Any, database: str | None, schema: str, name: str, sql: str
+    ) -> bool:
+        """Return whether the view's stored definition is ``sql`` as this warehouse stores it."""
+
+        definition: str | None = self.read_view_definition(
+            connection=connection, database=database, schema=schema, name=name
+        )
+        return definition is not None and same_view_definition(definition=definition, sql=sql)
+
+    def render_relation_revokes(
+        self, *, grants: tuple[RelationGrant, ...], destination: str
+    ) -> tuple[str, ...]:
+        """Render statements that remove grants from ``destination``."""
+
+        del grants, destination
+        return ()
+
+    def rename_view(
+        self,
+        *,
+        connection: Any,
+        origin: str,
+        destination: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        """Rename a view in place, keeping its privileges."""
+
+        statements: tuple[str, ...] = self.render_rename_view(
+            origin=origin, destination=destination
+        )
+        statement_recorder.record_many(statements)
+        statement: str
+        for statement in statements:
+            self.execute(connection=connection, sql=statement)
 
     def supports_transactional_ddl(self) -> bool:
         return False
@@ -2153,6 +2244,23 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         )
 
         return build_migration_state_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+            transient=self.state_tables_transient,
+        )
+
+    def render_create_old_name_view_state_table_sql(
+        self, *, database: str | None, schema: str
+    ) -> str:
+        """Render DDL that creates the old-name view fact table when it is missing."""
+
+        from sqlbuild.compiler.migrations.main.old_name_view_create_table_sql import (
+            build_old_name_view_state_create_table_sql,
+        )
+
+        return build_old_name_view_state_create_table_sql(
             database=database,
             schema=schema,
             render_qualified_name=self.render_qualified_name,

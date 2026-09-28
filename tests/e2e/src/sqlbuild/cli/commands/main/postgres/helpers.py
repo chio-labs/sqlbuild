@@ -16,6 +16,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     prepare_source_loader_strategies,
     prepare_waffle_shop,
+    run_sqb,
     stringify_warehouse_rows,
 )
 
@@ -680,3 +681,196 @@ def create_unwritable_column_migration_table(
         ),
         config=config,
     )
+
+
+_OLD_NAME_HEADERS: dict[str, str] = {
+    "table": "  materialized table,\n",
+    "incremental": (
+        "  materialized incremental,\n"
+        "  incremental_strategy delete_insert,\n"
+        "  unique_key order_id,\n"
+        "  cursor order_date,\n"
+        "  cursor_type timestamp,\n"
+        "  cursor_grain day,\n"
+        '  cursor_start "2026-01-01",\n'
+    ),
+    "incremental_sync": (
+        "  materialized incremental,\n"
+        "  incremental_strategy delete_insert,\n"
+        "  unique_key order_id,\n"
+        "  cursor order_date,\n"
+        "  cursor_type timestamp,\n"
+        "  cursor_grain day,\n"
+        '  cursor_start "2026-01-01",\n'
+        "  on_schema_change sync_all_columns,\n"
+    ),
+}
+
+
+def old_name_model_sql(
+    *,
+    materialized: str,
+    migrate_from: str = "",
+    columns: str = "order_id, order_date, amount_cents",
+) -> str:
+    """Return a table or incremental orders model with an optional migrate_from header."""
+
+    migration: str = {"": ""}.get(migrate_from, f"  migrate_from {migrate_from},\n")
+    return (
+        f"MODEL (\n{_OLD_NAME_HEADERS[materialized]}{migration});\n\n"
+        f'SELECT {columns} FROM __source("raw_orders")\n'
+    )
+
+
+def build_ok(project_dir: Path) -> subprocess.CompletedProcess[str]:
+    """Run sqb build and require success."""
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return result
+
+
+def _crash(connection: Any) -> None:
+    """Die like a killed process: the session ends, so nothing after this point runs or commits."""
+
+    connection.close()
+    raise RuntimeError("simulated crash")
+
+
+def _crashing_execute(
+    monkeypatch: pytest.MonkeyPatch, *, crashes_at: Callable[[str, list[str]], bool]
+) -> None:
+    original: Callable[..., Any] = PostgresAdapter.execute
+    executed: list[str] = []
+
+    def crash(self: PostgresAdapter, *, connection: Any, sql: str) -> Any:
+        del self, sql
+        _crash(connection)
+
+    outcomes: dict[bool, Callable[..., Any]] = {True: crash, False: original}
+
+    def execute(self: PostgresAdapter, *, connection: Any, sql: str) -> Any:
+        executed.append(sql)
+        return outcomes[crashes_at(sql, executed)](self, connection=connection, sql=sql)
+
+    monkeypatch.setattr(PostgresAdapter, "execute", execute)
+
+
+def _is_second_swap_rename(sql: str, executed: list[str]) -> bool:
+    swap_renames: list[str] = [*filter(lambda statement: "__swap_staging" in statement, executed)]
+    return swap_renames[1:2] == [sql]
+
+
+def _is_compatibility_view_rebind(sql: str, executed: list[str]) -> bool:
+    del executed
+    target: str = sql.split(" AS ")[0].replace('"', "")
+    return target.startswith("CREATE OR REPLACE VIEW") and target.endswith(".revenue")
+
+
+def _is_displaced_drop(sql: str, executed: list[str]) -> bool:
+    del executed
+    return sql.startswith("DROP TABLE") and "__staging" in sql
+
+
+def _is_column_drop(sql: str, executed: list[str]) -> bool:
+    del executed
+    return "DROP COLUMN" in sql
+
+
+def fail_mid_swap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Crash on the second rename of a swap, after the new relation already holds the name."""
+
+    _crashing_execute(monkeypatch, crashes_at=_is_second_swap_rename)
+
+
+def fail_bound_view_rebind(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Crash while the compatibility view is being pointed at the new relation."""
+
+    _crashing_execute(monkeypatch, crashes_at=_is_compatibility_view_rebind)
+
+
+def fail_displaced_drop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Crash after compatibility views follow the new relation, before the old one is dropped."""
+
+    _crashing_execute(monkeypatch, crashes_at=_is_displaced_drop)
+
+
+def fail_column_drop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Crash on the column drop of an incremental schema change."""
+
+    _crashing_execute(monkeypatch, crashes_at=_is_column_drop)
+
+
+def no_postgres_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Install nothing."""
+
+    del monkeypatch
+
+
+def build_in_process(*, project_dir: Path, capsys: pytest.CaptureFixture[str]) -> int:
+    """Run sqb build in-process so faults can be injected, returning its exit code."""
+
+    from sqlbuild.cli.commands.main.entrypoint.entry import main
+
+    _ = capsys.readouterr()
+    exit_code: int = main(["--project-dir", str(project_dir), "--no-color", "build"])
+    output: str = "".join(capsys.readouterr())
+    assert exit_code in (0, 1), output
+    return exit_code
+
+
+def reader_rows(
+    *, config: dict[str, object], role: str, sql: str
+) -> tuple[tuple[object, ...], ...]:
+    """Run one query as a login role that holds only the privileges granted to it."""
+
+    reader: dict[str, object] = {**config, "user": role, "password": role}
+    return fetch_postgres_rows(sql=sql, config=reader)
+
+
+def reader_error(*, config: dict[str, object], role: str, sql: str) -> str:
+    """Return the error a login role gets for one query, or an empty string."""
+
+    try:
+        _ = reader_rows(config=config, role=role, sql=sql)
+    except Exception as error:
+        return str(error).splitlines()[0]
+    return ""
+
+
+def create_login_role(*, role: str, config: dict[str, object]) -> None:
+    """Create a login role whose password is its name, unless it exists."""
+
+    execute_postgres_sql(
+        sql=(
+            f"DO $$ BEGIN CREATE ROLE {role} LOGIN PASSWORD '{role}'; "
+            "EXCEPTION WHEN duplicate_object THEN NULL; END $$"
+        ),
+        config=config,
+    )
+
+
+def replace_view(*, view: str, sql: str, config: dict[str, object]) -> None:
+    """Replace a view with one defined by ``sql``; an empty ``sql`` leaves it alone."""
+
+    statements: dict[bool, tuple[str, ...]] = {
+        True: (),
+        False: (f"DROP VIEW {view}", f"CREATE VIEW {view} AS {sql}"),
+    }
+    statement: str
+    for statement in statements[not sql]:
+        execute_postgres_sql(sql=statement, config=config)
+
+
+def revoke_view_select(*, view: str, role: str, revoke: bool, config: dict[str, object]) -> None:
+    """Revoke a role's SELECT on a view when ``revoke`` is set."""
+
+    statements: dict[bool, tuple[str, ...]] = {
+        True: (f"REVOKE SELECT ON {view} FROM {role}",),
+        False: (),
+    }
+    statement: str
+    for statement in statements[revoke]:
+        execute_postgres_sql(sql=statement, config=config)

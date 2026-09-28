@@ -128,7 +128,7 @@ def test_given_forced_replace_when_interrupted_then_retry_converges_without_losi
             expected_transfer="copy",
             expected_promotion="transactional_rename",
             expected_storage_transition=None,
-            expected_text_fragment="└── transfer  physical copy, promote by transactional rename",
+            expected_text_fragment="├── transfer  physical copy, promote by transactional rename",
         ),
         StagedPlanOutputTestCase(
             description="refused clone plans its copy fallback and builds by copy",
@@ -139,7 +139,7 @@ def test_given_forced_replace_when_interrupted_then_retry_converges_without_losi
             expected_promotion="transactional_rename",
             expected_storage_transition=None,
             expected_text_fragment=(
-                "└── transfer  zero-copy clone (physical copy if refused), "
+                "├── transfer  zero-copy clone (physical copy if refused), "
                 "promote by transactional rename"
             ),
         ),

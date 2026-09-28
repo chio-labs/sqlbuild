@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
+from sqlbuild.compiler.migrations.models import OldNameViewHistory
+from sqlbuild.compiler.migrations.types import OldNameViewDropReason
 
 
 @dataclass(frozen=True, eq=False)
@@ -79,6 +81,41 @@ class JanitorArchivedRelation:
     archived_at: datetime
     expires_at: datetime
     original_key: JanitorRelationKey | None = None
+
+
+@dataclass(frozen=True)
+class JanitorOldNameView:
+    """One compatibility view recorded at a migrated model's old name."""
+
+    key: JanitorRelationKey
+    history: OldNameViewHistory
+    expires_at: datetime | None
+    drop_reason: OldNameViewDropReason | None = None
+    occupied: bool = False
+    claimed_by: str | None = None
+
+    @property
+    def destination_model(self) -> str:
+        """Return the model whose relation the view reads."""
+
+        return self.history.move.destination_model
+
+
+@dataclass(frozen=True)
+class JanitorOldNameViewPlanning:
+    """Compatibility views to keep, drop, or record as already gone."""
+
+    live: tuple[JanitorOldNameView, ...] = ()
+    drops: tuple[JanitorOldNameView, ...] = ()
+    missing: tuple[JanitorOldNameView, ...] = ()
+    unknown_requests: tuple[str, ...] = ()
+    project_destinations: dict[JanitorRelationKey, str] = field(default_factory=dict)
+
+    @property
+    def keys(self) -> frozenset[JanitorRelationKey]:
+        """Return every old name this planning owns, so general cleanup leaves it alone."""
+
+        return frozenset(view.key for view in (*self.live, *self.drops, *self.missing))
 
 
 @dataclass(frozen=True)
@@ -237,6 +274,7 @@ class JanitorPlan:
     skipped_relations: tuple[JanitorSkippedRelation, ...] = field(default_factory=tuple)
     skipped_schemas: tuple[JanitorSkippedSchema, ...] = field(default_factory=tuple)
     blocked_schemas: tuple[JanitorBlockedSchema, ...] = field(default_factory=tuple)
+    old_name_views: JanitorOldNameViewPlanning = field(default_factory=JanitorOldNameViewPlanning)
     scanned_schema_count: int = 0
     age_metadata_supported: bool = False
     planned_at: datetime | None = None
@@ -253,3 +291,4 @@ class JanitorExecutionResult:
         default_factory=tuple
     )
     pruned_direct_state: tuple[JanitorDirectStatePruneCandidate, ...] = field(default_factory=tuple)
+    dropped_old_name_views: tuple[JanitorOldNameView, ...] = field(default_factory=tuple)

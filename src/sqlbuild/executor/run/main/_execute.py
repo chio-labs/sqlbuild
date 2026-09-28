@@ -304,6 +304,7 @@ def _staged_lifecycle(
                 destination_schema=targets.target_schema,
                 destination_name=targets.target_table,
                 statement_recorder=statement_recorder,
+                bound_views=context.bound_views,
             )
     except Exception as exc:
         return build_failed_result(

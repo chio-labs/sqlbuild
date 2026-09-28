@@ -23,7 +23,7 @@ Online: https://sqlbuild.com/docs/concepts/models/configuration/
 | `materialized` | `view`, `table`, `incremental`, `snapshot`, or a custom materialization name |
 | `tags` | Tags used by selectors |
 | `description` | Human-readable model description |
-| `columns` | Model-local column declarations, inherited-column audit augmentation, or column renames with `migrate_from` (incremental and snapshot models; see [Column migrations](column-migrations.md)) |
+| `columns` | Model-local column declarations, inherited-column audit augmentation, or column renames with `migrate_from` (incremental and snapshot models; see [Column migrations](column-migrations.md)). On a table or view model that declares its own `migrate_from`, a column `migrate_from` only names the old column in the [compatibility view](migrations.md#old-names) |
 | `model_schema` | Reusable column schema name |
 | `audits` | Model-level audit instances |
 | `enums` | Model-local enum declarations; names must begin with `_` |
@@ -81,8 +81,9 @@ Table promotion mode is a project setting rather than a `MODEL()` field. Staged 
 | `full_refresh` | Optional model execution override: `false` always runs incrementally, `true` always full-refreshes, and omission follows the command |
 | `on_schema_change` | `append_new_columns`, `sync_all_columns`, `ignore`, or `fail` |
 | `replay_on_change` | `forward`, `full`, or `bounded-<duration>` |
-| `migrate_from` | Old model name (or `schema.name`) whose data this model takes over; see [Model migrations](migrations.md). Also valid on snapshot models |
-| `migrate_force` | `true` replaces a destination that already has its own build history during a migration |
+| `migrate_from` | Old model name (or `schema.name`) whose data this model takes over; see [Model migrations](migrations.md). Also valid on snapshot, table, and view models |
+| `migrate_force` | `true` replaces a destination that already has its own build history during a migration. Incremental and snapshot models only |
+| `old_name_view` | How long a [compatibility view](migrations.md#old-names) keeps the old name working after a migration, such as `7d`, or `false` for none. Overrides `[migrations] old_name_views`; valid on every model |
 
 See [Incremental](../incremental.md) for full semantics.
 

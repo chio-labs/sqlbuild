@@ -65,6 +65,7 @@ from sqlbuild.spec.contracts.models import (
     MaterializationRetentionDefaults,
     MicrobatchesConfig,
     MicrobatchLimitsConfig,
+    MigrationsConfig,
     ProjectConfig,
     ReferencesConfig,
     ScenarioConfig,
@@ -109,6 +110,7 @@ _EVENT_EXPORTER_KEYS: frozenset[str] = _EVENT_EXPORTER_FILTER_KEYS | frozenset(
     {"named", _LIFECYCLE_SHUTDOWN_TIMEOUT_CONFIG_KEY}
 )
 _LEGACY_EVENT_EXPORTERS_CONFIG_KEY: str = "event_exporters"
+_OLD_NAME_VIEWS_CONFIG_KEY: str = "old_name_views"
 
 
 def load_project_config(*, project_dir: Path) -> ProjectConfig:
@@ -156,6 +158,9 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         file_path=file_path,
     )
     janitor: JanitorConfig = _load_janitor(payload=payload.get("janitor"), file_path=file_path)
+    migrations: MigrationsConfig = _load_migrations(
+        payload=payload.get("migrations"), file_path=file_path
+    )
     snapshots: SnapshotsConfig = _load_snapshots(
         payload=payload.get("snapshots"), file_path=file_path
     )
@@ -188,6 +193,7 @@ def load_project_config(*, project_dir: Path) -> ProjectConfig:
         vars=vars_map,
         targets=targets,
         janitor=janitor,
+        migrations=migrations,
         snapshots=snapshots,
         scenario=scenario,
         dbt=dbt,
@@ -675,6 +681,29 @@ def _load_microbatches(*, payload: object, file_path: Path) -> MicrobatchesConfi
     if action not in {MicrobatchLimitAction.ERROR, MicrobatchLimitAction.WARN}:
         raise ProjectConfigError("microbatches.limits.action must be one of: error, warn")
     return MicrobatchesConfig(limits=MicrobatchLimitsConfig(max_batches=max_batches, action=action))
+
+
+def _load_migrations(*, payload: object, file_path: Path) -> MigrationsConfig:
+    mapping: dict[str, object] = _coerce_mapping(
+        payload=payload, label="migrations", file_path=file_path
+    )
+    _validate_allowed_keys(
+        mapping=mapping,
+        allowed_keys=frozenset({_OLD_NAME_VIEWS_CONFIG_KEY}),
+        label="migrations",
+        file_path=file_path,
+    )
+    if _OLD_NAME_VIEWS_CONFIG_KEY not in mapping:
+        return MigrationsConfig()
+    value: object = mapping[_OLD_NAME_VIEWS_CONFIG_KEY]
+    if value is False:
+        return MigrationsConfig(old_name_views=None)
+    if isinstance(value, str) and Duration.parse(value.strip()) is not None:
+        return MigrationsConfig(old_name_views=value.strip())
+    raise ProjectConfigError(
+        f"{file_path} migrations.old_name_views must be a positive duration such as '30d', "
+        "or false to disable compatibility views at old model names"
+    )
 
 
 def _load_scopes(*, payload: object, file_path: Path) -> ScopesConfig:

@@ -648,6 +648,7 @@ class JanitorCommandRequest:
     auto_approve: bool = False
     retention_days: int | None = None
     direct_state_history_versions: int | None = None
+    drop_old_name_views: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -666,6 +667,7 @@ class JanitorSettings:
     retention_days: int
     direct_state_history_versions: int
     archive_retention_days: int = 14
+    drop_old_name_views: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

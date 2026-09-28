@@ -65,6 +65,10 @@ from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 from sqlbuild.spec.contracts.models import SnapshotsConfig
 from sqlbuild.spec.contracts.types import TableType
 
+_IDENTITY_MATERIALIZATIONS: frozenset[str] = frozenset(
+    {MaterializationType.TABLE, MaterializationType.VIEW}
+)
+
 
 def manual_migration_requests(*, scope: PlannerScope) -> tuple[ModelMigrationRequest, ...]:
     """Collect selected models that declare migrate_from."""
@@ -92,6 +96,8 @@ def _declared_request(model: CompiledModel) -> ModelMigrationRequest | None:
         discovery=MigrationDiscovery.MANUAL,
         raw_origin=raw_origin.strip(),
         force=model.config.values.get(MIGRATE_FORCE_CONFIG_KEY) is True,
+        identity_only=get_config_str(values=model.config.values, key="materialized")
+        in _IDENTITY_MATERIALIZATIONS,
     )
 
 
@@ -416,6 +422,7 @@ def _decide(
             origin_fingerprint.version_hash if origin_fingerprint is not None else ""
         ),
         origin_is_transient=bool(origin_relation is not None and origin_relation.is_transient),
+        origin_tracked=origin_fingerprint is not None,
     )
     if request.identity_only:
         return _decide_rename(
@@ -424,6 +431,8 @@ def _decide(
             newest=newest,
             origin=origin,
             origin_fingerprint=origin_fingerprint,
+            origin_exists=origin_relation is not None,
+            manual=request.discovery == MigrationDiscovery.MANUAL,
         )
     if (
         newest is not None
@@ -493,8 +502,10 @@ def _decide_rename(
     newest: MigrationEvent | None,
     origin: CompiledRelationLocation,
     origin_fingerprint: Fingerprint | None,
+    origin_exists: bool,
+    manual: bool,
 ) -> tuple[ModelMigrationPlanEntry, Fingerprint | None, bool]:
-    """Hand a renamed table or view's identity to its unbuilt successor; no data moves."""
+    """Hand a renamed table or view's identity to its successor; no data moves."""
 
     recorded: bool = (
         newest is not None
@@ -502,6 +513,8 @@ def _decide_rename(
         and newest.destination.matches(migration_relation_for_location(model.destination))
         and newest.origin.matches(migration_relation_for_location(origin))
     )
+    if manual and not recorded and not origin_exists:
+        return replace(base, decision=MigrationDecision.ORIGIN_MISSING), None, False
     return (
         replace(
             base,
@@ -722,7 +735,9 @@ def _has_cursor(*, runtime: PlannerRuntime, model_name: str) -> bool:
 def _entry_warning(entry: ModelMigrationPlanEntry) -> PlanWarning | None:
     origin: str = entry.origin.qualified_name or entry.origin.name
     destination: str = entry.destination.qualified_name or entry.destination.name
-    if entry.decision == MigrationDecision.DONE:
+    if entry.decision == MigrationDecision.DONE or (
+        entry.decision == MigrationDecision.RENAMED and entry.completed_at is not None
+    ):
         if entry.discovery != MigrationDiscovery.MANUAL:
             return None
         completed: str = entry.completed_at.isoformat() if entry.completed_at else "unknown time"

@@ -13,13 +13,23 @@ from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.migrations.constants import (
     COLUMN_MIGRATION_TABLE_NAME,
     MIGRATION_TABLE_NAME,
+    OLD_NAME_VIEW_TABLE_NAME,
 )
+from sqlbuild.compiler.migrations.main._project_old_name_views import project_old_name_views
 from sqlbuild.compiler.migrations.main._read_column_events import read_column_migration_events
 from sqlbuild.compiler.migrations.main._read_events import read_migration_events
+from sqlbuild.compiler.migrations.main.read_old_name_view_events import (
+    read_old_name_view_events,
+)
+from sqlbuild.compiler.migrations.main.stored_old_name_view_columns import (
+    stored_old_name_view_columns,
+)
 from sqlbuild.compiler.migrations.models import (
     ColumnMigrationEvent,
     MigrationEvent,
     MigrationRelation,
+    OldNameViewEvent,
+    OldNameViewHistory,
 )
 
 
@@ -37,6 +47,9 @@ class MigrationStateInspection:
         self._columns: dict[tuple[str, str], tuple[ColumnInfo, ...]] = {}
         self._column_event_schemas: set[str] = set()
         self._column_events: list[ColumnMigrationEvent] = []
+        self._old_name_schemas: set[str] = set()
+        self._old_name_moves: list[MigrationEvent] = []
+        self._old_name_facts: list[OldNameViewEvent] = []
 
     @property
     def database(self) -> str | None:
@@ -88,6 +101,62 @@ class MigrationStateInspection:
                         render_qualified_name=self._adapter.render_qualified_name,
                     )
                 )
+
+    @property
+    def old_name_histories(self) -> tuple[OldNameViewHistory, ...]:
+        """Return the old-name history of every move read by ``inspect_old_name_views``."""
+
+        return project_old_name_views(moves=self._old_name_moves, facts=self._old_name_facts)
+
+    def inspect_old_name_views(self, *, schemas: set[str]) -> None:
+        """Read moves and old-name facts once for every schema not inspected yet."""
+
+        pending: tuple[str, ...] = tuple(
+            sorted(schema for schema in schemas if schema.lower() not in self._old_name_schemas)
+        )
+        if not pending:
+            return
+        self._old_name_schemas.update(schema.lower() for schema in pending)
+        listed: tuple[RelationInfo, ...] = self._adapter.list_relations(
+            connection=self._connection,
+            database=self._database,
+            schemas=pending,
+            names=(MIGRATION_TABLE_NAME, OLD_NAME_VIEW_TABLE_NAME),
+        )
+        state_tables: set[tuple[str, str]] = {
+            ((relation.schema or "").lower(), relation.name.lower()) for relation in listed
+        }
+        schema: str
+        for schema in pending:
+            if (schema.lower(), OLD_NAME_VIEW_TABLE_NAME) not in state_tables or (
+                schema.lower(),
+                MIGRATION_TABLE_NAME,
+            ) not in state_tables:
+                continue
+            self._old_name_facts.extend(
+                read_old_name_view_events(
+                    connection=self._connection,
+                    execute=self._adapter.execute,
+                    database=self._database,
+                    schema=schema,
+                    stored_columns=stored_old_name_view_columns(
+                        adapter=self._adapter,
+                        connection=self._connection,
+                        database=self._database,
+                        schema=schema,
+                    ),
+                    render_qualified_name=self._adapter.render_qualified_name,
+                )
+            )
+            self._old_name_moves.extend(
+                read_migration_events(
+                    connection=self._connection,
+                    execute=self._adapter.execute,
+                    database=self._database,
+                    schema=schema,
+                    render_qualified_name=self._adapter.render_qualified_name,
+                )
+            )
 
     def inspect_schemas(self, *, schemas: set[str]) -> None:
         """Read state tables once for every schema not inspected yet."""

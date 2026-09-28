@@ -19,6 +19,7 @@ Online: https://sqlbuild.com/docs/concepts/project-configuration/
 - References
 - Project variables
 - Janitor
+- Migrations
 - Scenario
 - dbt
 - Skills
@@ -501,6 +502,19 @@ exclude_patterns = ["audit_*", "tmp_*"]
 | `direct_state_history_versions` | `20` | How many state-history rows to keep per identity in `_sqlbuild_fingerprints` and `_sqlbuild_source_freshness` |
 
 See [janitor](../cli/janitor.md) for the archive and delete lifecycle.
+
+## Migrations
+
+Defaults for [model migrations](models/migrations.md):
+
+```toml
+[migrations]
+old_name_views = "30d"
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `old_name_views` | `"30d"` | How long a renamed model's old name keeps working through a [compatibility view](models/migrations.md#old-names) before janitor drops it. `false` keeps the old relation in place instead, as before. A model's `old_name_view` header overrides it. |
 
 ## Scenario
 

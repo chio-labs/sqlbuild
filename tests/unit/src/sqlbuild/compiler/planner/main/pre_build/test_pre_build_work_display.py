@@ -99,14 +99,15 @@ _RESET: str = "\033[0m"
             expected_fragments=(f"{_BOLD_RED}origin missing{_RESET}",),
         ),
         MigrationDecisionStyleTestCase(
-            description="renamed hands over identity with dim origin and note",
+            description="renamed table is listed as a bold blue migration that rebuilds it",
             decision=MigrationDecision.RENAMED,
             compatibility=MigrationCompatibility.NOT_CHECKED,
             findings=(),
             expected_fragments=(
-                f"\033[1mRenamed{_RESET} {_DIM}(1){_RESET}",
-                f"  daily_revenue  {_DIM}prod.revenue ->{_RESET} prod.daily_revenue  "
-                f"{_DIM}(identity handed over){_RESET}",
+                f"\033[1mMigrations{_RESET} {_DIM}(1){_RESET}",
+                f"  daily_revenue  {_BOLD_BLUE}migrate{_RESET}  {_DIM}prod.revenue ->{_RESET} "
+                "prod.daily_revenue",
+                f"    {_DIM}transfer{_RESET}  rebuild (table)",
             ),
         ),
     ),

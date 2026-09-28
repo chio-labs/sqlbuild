@@ -27,6 +27,9 @@ PROJECT_TOML: str = dedent(
 
     [connection]
     database = "{DATABASE_FILE}"
+
+    [migrations]
+    old_name_views = false
     """
 ).lstrip()
 TARGETS_PROJECT_TOML: str = dedent(
@@ -43,6 +46,9 @@ TARGETS_PROJECT_TOML: str = dedent(
 
     [targets.prod]
     schema = "prod"
+
+    [migrations]
+    old_name_views = false
     """
 ).lstrip()
 JANITOR_PROJECT_TOML: str = dedent(
@@ -62,6 +68,9 @@ JANITOR_PROJECT_TOML: str = dedent(
     enabled = true
     archive_retention_days = 0
     delete_tracked_only = false
+
+    [migrations]
+    old_name_views = false
     """
 ).lstrip()
 RAW_SOURCES_YML: str = dedent(

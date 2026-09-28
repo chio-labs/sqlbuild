@@ -120,6 +120,42 @@ class ColumnMigrationDecision(StrEnum):
         return _COLUMN_DECISION_LABELS[self]
 
 
+class OldNameViewEventType(StrEnum):
+    """Immutable facts about what happened at a migrated relation's old name."""
+
+    REQUIRED = "required"
+    ORIGIN_ARCHIVED = "origin_archived"
+    VIEW_CREATED = "view_created"
+    VIEW_DROPPED = "view_dropped"
+
+
+class OldNameViewDropReason(StrEnum):
+    """Why a compatibility view at an old name was dropped."""
+
+    EXPIRED = "expired"
+    EARLY = "early"
+    MISSING = "missing"
+
+
+class OldNameViewStatus(StrEnum):
+    """Projected state of the old-name steps of one recorded move."""
+
+    PENDING_ARCHIVE = "pending_archive"
+    PENDING_VIEW = "pending_view"
+    LIVE = "live"
+    EXPIRED = "expired"
+    DROPPED = "dropped"
+
+
+class OldNameViewAction(StrEnum):
+    """What a build does at a migrated model's old name."""
+
+    ARCHIVE_AND_VIEW = "archive_and_view"
+    VIEW_ONLY = "view_only"
+    LIVE = "live"
+    NONE = "none"
+
+
 _RECORDING_COLUMN_DECISIONS: frozenset[ColumnMigrationDecision] = frozenset(
     {ColumnMigrationDecision.RENAME, ColumnMigrationDecision.RECORD}
 )

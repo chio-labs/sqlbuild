@@ -49,6 +49,7 @@ from sqlbuild.compiler.lineage.types import (
     ColumnTransformKind,
     InferredNullability,
 )
+from sqlbuild.compiler.references.models import LiteralSqlRelation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
@@ -1027,6 +1028,14 @@ class CompiledSqlScenario:
 
 
 @dataclass(frozen=True)
+class PythonSqlReferenceReport:
+    """P008 diagnostics plus literal SQL relations that named no project relation."""
+
+    diagnostics: tuple[CompilerDiagnostic, ...] = ()
+    unmatched: tuple[LiteralSqlRelation, ...] = ()
+
+
+@dataclass(frozen=True)
 class CompiledProject:
     """Planner-ready whole-project compile output."""
 
@@ -1057,6 +1066,7 @@ class CompiledProject:
     public_constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
     loaded_macros: dict[str, LoadedMacro] = field(default_factory=dict)
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
+    unmatched_literal_sql_relations: tuple[LiteralSqlRelation, ...] = field(default_factory=tuple)
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
     scope_index: ScopeIndex = field(default_factory=ScopeIndex)
     sql_expansions: dict[Path, CompiledSqlExpansion] = field(

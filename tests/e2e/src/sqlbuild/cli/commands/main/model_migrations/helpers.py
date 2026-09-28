@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 DATABASE_FILE: str = "orders.duckdb"
 _PROJECT_TOML: str = (
     f'name = "orders_project"\nadapter = "duckdb"\n\n[connection]\ndatabase = "{DATABASE_FILE}"\n'
+    "\n[migrations]\nold_name_views = false\n"
 )
 _SOURCES_YML: str = "sources:\n  - name: raw_orders\n    schema: main\n    table: raw_orders\n"
 
@@ -246,4 +248,219 @@ def column_migration_events(*, project_dir: Path) -> tuple[tuple[str, str, str, 
                 "FROM main._sqlbuild_column_migrations ORDER BY created_at, event_id"
             ),
         )
+    )
+
+
+OLD_NAME_ORIGIN: str = "revenue"
+OLD_NAME_DESTINATION: str = "daily_revenue"
+OLD_NAME_SCHEMA: str = "analytics"
+_OLD_NAME_PROJECT_TOML: str = (
+    'name = "orders_project"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
+    f'[connection]\ndatabase = "{DATABASE_FILE}"\n\n'
+    f'[targets.dev]\nschema = "{OLD_NAME_SCHEMA}"\n\n'
+    "[janitor]\nenabled = true\n"
+)
+_OLD_NAME_HEADERS: dict[str, str] = {
+    "table": "  materialized table,\n",
+    "view": "  materialized view,\n",
+    "incremental": (
+        "  materialized incremental,\n"
+        "  incremental_strategy delete_insert,\n"
+        "  unique_key order_id,\n"
+        "  cursor order_date,\n"
+        "  cursor_type timestamp,\n"
+        "  cursor_grain day,\n"
+        '  cursor_start "2026-01-01",\n'
+    ),
+    "snapshot": (
+        "  materialized snapshot,\n"
+        "  unique_key [order_id],\n"
+        "  snapshot_strategy timestamp,\n"
+        "  updated_at order_date,\n"
+    ),
+}
+_OLD_NAME_FACT_ORDER: tuple[str, ...] = (
+    "required",
+    "origin_archived",
+    "view_created",
+    "view_dropped",
+)
+
+
+def old_name_model_sql(
+    *, materialized: str, columns: str = "amount_cents", extra_config: str = ""
+) -> str:
+    """Return a model of the given materialization over raw orders."""
+
+    return (
+        "MODEL (\n"
+        f"{_OLD_NAME_HEADERS[materialized]}"
+        f"{extra_config}"
+        ");\n\n"
+        f'SELECT order_id, order_date, {columns} FROM __source("raw_orders")\n'
+    )
+
+
+def write_old_name_project(
+    *,
+    tmp_path: Path,
+    models: dict[str, str],
+    project_toml_extra: str = "",
+    python_files: dict[str, str] | None = None,
+) -> Path:
+    """Write a project with exactly the given models and optional Python files."""
+
+    project_dir: Path = tmp_path / "orders_project"
+    stale: Path
+    for stale in (project_dir / "models").glob("*.sql"):
+        stale.unlink()
+    for stale in (project_dir / "python").glob("*.py"):
+        stale.unlink()
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": _OLD_NAME_PROJECT_TOML + project_toml_extra,
+        "sources/raw.yml": _SOURCES_YML,
+        **{f"models/{name}.sql": sql for name, sql in models.items()},
+        **{f"python/{name}": source for name, source in (python_files or {}).items()},
+    }
+    return prepare_inline_project(
+        tmp_path=tmp_path, project_name="orders_project", repo_files=files
+    )
+
+
+def old_name_facts(*, project_dir: Path) -> tuple[str, ...]:
+    """Return old-name fact types in lifecycle order, or () when the table is absent."""
+
+    readers: dict[bool, Callable[[Path], tuple[str, ...]]] = {
+        True: _read_old_name_facts,
+        False: _no_old_name_facts,
+    }
+    exists: bool = (
+        relation_type(project_dir=project_dir, name="_sqlbuild_old_name_views") is not None
+    )
+    return readers[exists](project_dir)
+
+
+def _read_old_name_facts(project_dir: Path) -> tuple[str, ...]:
+    return tuple(
+        str(row[0])
+        for row in query_duckdb(
+            db_path=project_dir / DATABASE_FILE,
+            sql=(
+                f"SELECT event_type FROM {OLD_NAME_SCHEMA}._sqlbuild_old_name_views ORDER BY "
+                f"list_position({list(_OLD_NAME_FACT_ORDER)}, event_type), created_at"
+            ),
+        )
+    )
+
+
+def _no_old_name_facts(project_dir: Path) -> tuple[str, ...]:
+    del project_dir
+    return ()
+
+
+def old_name_fact_values(*, project_dir: Path, event_type: str, column: str) -> tuple[Any, ...]:
+    """Return one column of every old-name fact of one type, or () when the table is absent."""
+
+    sql: str = (
+        f"SELECT {column} FROM {OLD_NAME_SCHEMA}._sqlbuild_old_name_views "
+        f"WHERE event_type = '{event_type}' ORDER BY created_at"
+    )
+    readers: dict[bool, Callable[[], tuple[Any, ...]]] = {
+        True: lambda: tuple(
+            row[0] for row in query_duckdb(db_path=project_dir / DATABASE_FILE, sql=sql)
+        ),
+        False: tuple,
+    }
+    table_type: str | None = relation_type(project_dir=project_dir, name="_sqlbuild_old_name_views")
+    return readers[table_type is not None]()
+
+
+def relation_type(*, project_dir: Path, name: str) -> str | None:
+    """Return the information_schema table type of one relation in main, or None."""
+
+    rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / DATABASE_FILE,
+        sql=(
+            "SELECT table_type FROM information_schema.tables "
+            f"WHERE table_schema = '{OLD_NAME_SCHEMA}' AND table_name = '{name}'"
+        ),
+    )
+    return next((str(row[0]) for row in rows), None)
+
+
+def relation_rows(*, project_dir: Path, relation: str, columns: str) -> tuple[tuple[Any, ...], ...]:
+    """Return the given columns of one relation ordered by order_id."""
+
+    return tuple(
+        tuple(row)
+        for row in query_duckdb(
+            db_path=project_dir / DATABASE_FILE,
+            sql=f"SELECT {columns} FROM {relation} ORDER BY order_id",
+        )
+    )
+
+
+def origin_archive_count(*, project_dir: Path) -> int:
+    """Return how many migration_origin archives exist in main."""
+
+    return int(
+        query_duckdb(
+            db_path=project_dir / DATABASE_FILE,
+            sql=(
+                "SELECT count(*) FROM information_schema.tables "
+                f"WHERE table_schema = '{OLD_NAME_SCHEMA}' "
+                "AND contains(table_name, '__migration_origin__')"
+            ),
+        )[0][0]
+    )
+
+
+def sqb(*, project_dir: Path, args: tuple[str, ...]) -> subprocess.CompletedProcess[str]:
+    """Run one sqb command without colour in a subprocess."""
+
+    return run_sqb(command=("--no-color", *args), project_dir=project_dir)
+
+
+OLD_NAME_MIGRATE_FROM: str = f"  migrate_from {OLD_NAME_ORIGIN},\n"
+
+
+def build_old_name_project(project_dir: Path) -> subprocess.CompletedProcess[str]:
+    """Run sqb build and require success."""
+
+    result: subprocess.CompletedProcess[str] = sqb(project_dir=project_dir, args=("build",))
+    assert result.returncode == 0, result.stdout + result.stderr
+    return result
+
+
+def prepare_old_name_rename(
+    *,
+    tmp_path: Path,
+    materialized: str,
+    origin_columns: str = "amount_cents",
+    destination_columns: str = "amount_cents",
+    destination_schema: str = "",
+    extra_config: str = "",
+    project_toml_extra: str = "",
+) -> Path:
+    """Build the origin model, then declare its rename to the destination."""
+
+    project_dir: Path = write_old_name_project(
+        tmp_path=tmp_path,
+        models={
+            OLD_NAME_ORIGIN: old_name_model_sql(materialized=materialized, columns=origin_columns)
+        },
+        project_toml_extra=project_toml_extra,
+    )
+    load_raw_orders(project_dir=project_dir, last_day=3)
+    _ = build_old_name_project(project_dir)
+    return write_old_name_project(
+        tmp_path=tmp_path,
+        models={
+            OLD_NAME_DESTINATION: old_name_model_sql(
+                materialized=materialized,
+                columns=destination_columns,
+                extra_config=OLD_NAME_MIGRATE_FROM + destination_schema + extra_config,
+            )
+        },
+        project_toml_extra=project_toml_extra,
     )

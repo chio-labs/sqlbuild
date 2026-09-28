@@ -35,6 +35,7 @@ from sqlbuild.adapter.contract.constants import (
     QUALIFIED_NAME_SEPARATOR,
 )
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
@@ -43,6 +44,7 @@ from sqlbuild.adapter.contract.models import (
     FunctionInfo,
     MigrationStagePlan,
     QueryResult,
+    RelationGrant,
     RelationInfo,
     RowDiffColumnResult,
     RowDiffCoverage,
@@ -98,6 +100,7 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         )
 
     sql_analysis_dialect_name: ClassVar[str | None] = "duckdb"
+    relation_grants_supported: ClassVar[bool] = False
 
     def supports_zero_copy_clone(self) -> bool:
         return False
@@ -866,6 +869,21 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
             render_framework_type=self.render_framework_type,
         )
 
+    def render_create_old_name_view_state_table_sql(
+        self, *, database: str | None, schema: str
+    ) -> str:
+        from sqlbuild.compiler.migrations.main.old_name_view_create_table_sql import (
+            build_old_name_view_state_create_table_sql,
+        )
+
+        return build_old_name_view_state_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+            transient=self.state_tables_transient,
+        )
+
     def render_create_column_migration_state_table_sql(
         self, *, database: str | None, schema: str
     ) -> str:
@@ -1539,6 +1557,84 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
     ) -> tuple[str, ...]:
         del connection, database, schema, name
         return ()
+
+    def views_bind_to_relation_identity(self) -> bool:
+        return False
+
+    def list_dependent_view_names(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        del connection, database, schema, name
+        return ()
+
+    def read_relation_grants(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str,
+        name: str,
+        relation_type: str,
+    ) -> tuple[RelationGrant, ...]:
+        del connection, database, schema, name, relation_type
+        return ()
+
+    def render_relation_grants(
+        self, *, grants: tuple[RelationGrant, ...], destination: str, columns: tuple[str, ...]
+    ) -> tuple[str, ...]:
+        del grants, destination, columns
+        return ()
+
+    def render_replace_view_keeping_grants(
+        self, *, destination: str, sql: str
+    ) -> tuple[str, ...] | None:
+        return self.render_create_view_as(destination=destination, sql=sql)
+
+    def read_view_definition(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> str | None:
+        database_filter: str = (
+            "" if database is None else f" AND database_name = {_duckdb_string_literal(database)}"
+        )
+        rows: list[tuple[Any, ...]] = self.execute(
+            connection=connection,
+            sql=(
+                "SELECT sql FROM duckdb_views() WHERE schema_name = "
+                f"{_duckdb_string_literal(schema)} AND view_name = {_duckdb_string_literal(name)}"
+                + database_filter
+            ),
+        ).fetchall()
+        return None if not rows else str(rows[0][0])
+
+    def view_definition_matches(
+        self, *, connection: Any, database: str | None, schema: str, name: str, sql: str
+    ) -> bool:
+        definition: str | None = self.read_view_definition(
+            connection=connection, database=database, schema=schema, name=name
+        )
+        return definition is not None and same_view_definition(definition=definition, sql=sql)
+
+    def render_relation_revokes(
+        self, *, grants: tuple[RelationGrant, ...], destination: str
+    ) -> tuple[str, ...]:
+        del grants, destination
+        return ()
+
+    def rename_view(
+        self,
+        *,
+        connection: Any,
+        origin: str,
+        destination: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_rename_view(
+            origin=origin, destination=destination
+        )
+        statement_recorder.record_many(statements)
+        statement: str
+        for statement in statements:
+            self.execute(connection=connection, sql=statement)
 
     def supports_transactional_ddl(self) -> bool:
         return True

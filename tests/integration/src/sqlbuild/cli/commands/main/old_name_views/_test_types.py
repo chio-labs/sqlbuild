@@ -1,0 +1,67 @@
+"""Test case types for old-name compatibility view integration tests."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+
+import pytest
+
+
+@dataclass(frozen=True)
+class OldNameResumeTestCase:
+    description: str
+    install_failure: Callable[[pytest.MonkeyPatch], None]
+    expected_first_exit_code: int
+    expected_facts_after_failure: tuple[str, ...]
+    expected_old_name_type_after_failure: str | None
+    expected_final_facts: tuple[str, ...]
+    expected_archive_count: int
+
+
+@dataclass(frozen=True)
+class OldNameJanitorResumeTestCase:
+    description: str
+    early_drop: tuple[str, ...]
+    builds_after_crash: int
+    expected_facts_after_crash: tuple[str, ...]
+    expected_retry_fragment: str
+    expected_final_facts: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class OldNameResumeSkipTestCase:
+    description: str
+    install_failure: Callable[[pytest.MonkeyPatch], None]
+    retry_models: dict[str, str]
+    expected_plan_fragment: str
+    expected_facts: tuple[str, ...]
+    expected_old_name_type: str | None
+    expected_old_name_ids: tuple[int, ...] | None
+
+
+@dataclass(frozen=True)
+class OldNameJanitorClaimTestCase:
+    description: str
+    janitor_args: tuple[str, ...]
+    install_build_fault: Callable[[pytest.MonkeyPatch], None]
+    claiming_builds: tuple[tuple[str, ...], ...]
+    expected_janitor_fragment: str
+    expected_old_name_type: str
+    expected_final_facts: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class OldNameAliasResumeTestCase:
+    description: str
+    install_failure: Callable[[pytest.MonkeyPatch], None]
+    expected_facts_after_failure: tuple[str, ...]
+    expected_plan_fragment: str
+
+
+@dataclass(frozen=True)
+class OldNameRefreshSkipTestCase:
+    description: str
+    renamed_sql: str
+    rebuilt_sql: str
+    expected_view_statements: int

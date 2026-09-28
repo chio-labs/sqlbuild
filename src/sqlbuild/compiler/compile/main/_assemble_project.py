@@ -21,6 +21,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompileProjectInputs,
     CompilerDiagnostic,
+    PythonSqlReferenceReport,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 
@@ -45,17 +46,22 @@ def assemble_project(
         analysis_cache_dir=analysis_cache_dir,
         analysis_model_names=analysis_model_names,
     )
+    python_sql: PythonSqlReferenceReport = (
+        python_sql_reference_diagnostics(
+            project=project, discovered_inputs=inputs.discovered_inputs
+        )
+        if inputs.project_config.references.enforce_explicit
+        else PythonSqlReferenceReport()
+    )
     reference_diagnostics: tuple[CompilerDiagnostic, ...] = (
         *attached_audit_gate_diagnostics(project=project),
         *hook_read_diagnostics(project=project),
-        *(
-            python_sql_reference_diagnostics(
-                project=project, discovered_inputs=inputs.discovered_inputs
-            )
-            if inputs.project_config.references.enforce_explicit
-            else ()
-        ),
+        *python_sql.diagnostics,
     )
-    if not reference_diagnostics:
+    if not reference_diagnostics and not python_sql.unmatched:
         return project
-    return replace(project, diagnostics=(*project.diagnostics, *reference_diagnostics))
+    return replace(
+        project,
+        diagnostics=(*project.diagnostics, *reference_diagnostics),
+        unmatched_literal_sql_relations=python_sql.unmatched,
+    )

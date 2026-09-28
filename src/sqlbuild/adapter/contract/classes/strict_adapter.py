@@ -16,6 +16,7 @@ from sqlbuild.adapter.contract.models import (
     CursorValue,
     ExpressionInferenceProfile,
     MigrationStagePlan,
+    RelationGrant,
     RowDiffTolerance,
     RowDiffTolerances,
     SnapshotChangeTarget,
@@ -349,6 +350,85 @@ class StrictAdapter(
         self, *, connection: Any, database: str | None, schema: str, name: str
     ) -> tuple[str, ...]:
         """Capture statements that re-point identity-bound dependent views at this table name."""
+        ...
+
+    @abstractmethod
+    def views_bind_to_relation_identity(self) -> bool:
+        """Return whether views follow a renamed relation instead of re-resolving its name."""
+        ...
+
+    @abstractmethod
+    def list_dependent_view_names(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> tuple[str, ...]:
+        """Return qualified names of views bound to this relation."""
+        ...
+
+    @abstractmethod
+    def render_create_old_name_view_state_table_sql(
+        self, *, database: str | None, schema: str
+    ) -> str:
+        """Render DDL that creates the old-name view fact table when it is missing."""
+        ...
+
+    @abstractmethod
+    def read_relation_grants(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str,
+        name: str,
+        relation_type: str,
+    ) -> tuple[RelationGrant, ...]:
+        """Return the privileges granted or denied on a relation and its columns."""
+        ...
+
+    @abstractmethod
+    def render_relation_grants(
+        self, *, grants: tuple[RelationGrant, ...], destination: str, columns: tuple[str, ...]
+    ) -> tuple[str, ...]:
+        """Render grants onto ``destination``, keeping column grants only for ``columns``."""
+        ...
+
+    @abstractmethod
+    def render_replace_view_keeping_grants(
+        self, *, destination: str, sql: str
+    ) -> tuple[str, ...] | None:
+        """Return statements that redefine an existing view keeping its privileges, if any."""
+        ...
+
+    @abstractmethod
+    def read_view_definition(
+        self, *, connection: Any, database: str | None, schema: str, name: str
+    ) -> str | None:
+        """Return the stored definition of a view, or None when unknown."""
+        ...
+
+    @abstractmethod
+    def view_definition_matches(
+        self, *, connection: Any, database: str | None, schema: str, name: str, sql: str
+    ) -> bool:
+        """Return whether the view's stored definition is ``sql`` as this warehouse stores it."""
+        ...
+
+    @abstractmethod
+    def render_relation_revokes(
+        self, *, grants: tuple[RelationGrant, ...], destination: str
+    ) -> tuple[str, ...]:
+        """Render statements that remove grants from ``destination``."""
+        ...
+
+    @abstractmethod
+    def rename_view(
+        self,
+        *,
+        connection: Any,
+        origin: str,
+        destination: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        """Rename a view in place, keeping its privileges."""
         ...
 
     @abstractmethod

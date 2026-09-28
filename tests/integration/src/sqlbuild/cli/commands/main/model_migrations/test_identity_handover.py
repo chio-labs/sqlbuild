@@ -148,19 +148,22 @@ def test_given_renamed_chain_with_full_replay_when_building_then_migrated_histor
     "test_case",
     [
         RenamedPlanTextTestCase(
-            description="plan lists renamed views separately from data migrations",
+            description="plan lists a renamed view as a migration that recreates it",
             expected_fragment=(
-                "Renamed (1)\n└── customer_orders_enriched  main.orders_enriched -> "
-                "main.customer_orders_enriched  (identity handed over)"
+                "├── customer_orders_enriched  migrate  main.orders_enriched -> "
+                "main.customer_orders_enriched\n    ├── transfer  recreate (view)\n"
+                "    ├── discovery  automatic\n"
+                "    └── old name  main.orders_enriched\n"
+                "        └── left for janitor  old_name_view false"
             ),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_renamed_view_when_planning_then_text_lists_it_under_renamed(
+def test_given_renamed_view_when_planning_then_text_lists_it_as_a_migration(
     test_case: RenamedPlanTextTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Renamed tables and views move no data and appear in their own plan section."""
+    """Renamed tables and views move no data and are listed with the other migrations."""
 
     write_project(project_dir=tmp_path, models=original_replay_order_models(middle="view"))
     load_raw_orders(project_dir=tmp_path, first_day=1, last_day=5)
