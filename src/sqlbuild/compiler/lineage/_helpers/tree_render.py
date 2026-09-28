@@ -27,30 +27,29 @@ def render_dependency_branch[Node: Hashable](
     branch_style: Callable[[str], str],
     already_shown: Callable[[], str],
 ) -> list[str]:
-    """Render a box-drawing dependency branch for opaque node values."""
+    """Render a box-drawing dependency branch, expanding each node once across the tree."""
 
     lines: list[str] = []
-    children: list[Node] = sorted(deps.get(node, ()), key=sort_key)
-    index: int
-    child: Node
-    for index, child in enumerate(children):
-        is_last: bool = index == len(children) - 1
+    shown: set[Node] = set(seen)
+    pending: list[tuple[Node, str, bool]] = _pending_children(
+        children=sorted(deps.get(node, ()), key=sort_key), prefix=prefix
+    )
+    while pending:
+        child: Node
+        child_prefix: str
+        is_last: bool
+        child, child_prefix, is_last = pending.pop()
         branch: str = _BRANCH_LAST if is_last else _BRANCH_MID
-        continuation: str = _CONTINUATION_LAST if is_last else _CONTINUATION_MID
-        suffix: str = already_shown() if child in seen else ""
-        lines.append(f"{branch_style(prefix + branch)}{format_node(child)}{suffix}")
-        if child in seen:
+        suffix: str = already_shown() if child in shown else ""
+        lines.append(f"{branch_style(child_prefix + branch)}{format_node(child)}{suffix}")
+        if child in shown:
             continue
-        lines.extend(
-            render_dependency_branch(
-                node=child,
-                deps=deps,
-                prefix=prefix + continuation,
-                seen=seen | {child},
-                format_node=format_node,
-                sort_key=sort_key,
-                branch_style=branch_style,
-                already_shown=already_shown,
+        shown.add(child)
+        continuation: str = _CONTINUATION_LAST if is_last else _CONTINUATION_MID
+        pending.extend(
+            _pending_children(
+                children=sorted(deps.get(child, ()), key=sort_key),
+                prefix=child_prefix + continuation,
             )
         )
     return lines
@@ -68,39 +67,57 @@ def render_column_trace_branch[Column, Edge](
     branch_style: Callable[[str], str],
     already_shown: Callable[[], str],
 ) -> list[str]:
-    """Render a box-drawing column-trace branch for opaque column/edge values."""
+    """Render a box-drawing column-trace branch, expanding each column once across the tree."""
 
     lines: list[str] = []
-    edges: list[Edge] = sorted(
-        deps.get(column_id(column), ()),
-        key=lambda edge: column_id(related_column(edge)),
+    shown: set[str] = set(seen)
+    pending: list[tuple[Edge, str, bool]] = _pending_children(
+        children=_sorted_edges(
+            edges=deps.get(column_id(column), ()),
+            column_id=column_id,
+            related_column=related_column,
+        ),
+        prefix=prefix,
     )
-    index: int
-    edge: Edge
-    for index, edge in enumerate(edges):
-        is_last: bool = index == len(edges) - 1
+    while pending:
+        edge: Edge
+        edge_prefix: str
+        is_last: bool
+        edge, edge_prefix, is_last = pending.pop()
         branch: str = _BRANCH_LAST if is_last else _BRANCH_MID
-        continuation: str = _CONTINUATION_LAST if is_last else _CONTINUATION_MID
         related: Column = related_column(edge)
         related_id: str = column_id(related)
-        suffix: str = already_shown() if related_id in seen else ""
-        lines.append(f"{prefix}{branch_style(branch)}{format_related(edge)}{suffix}")
-        if related_id in seen:
+        suffix: str = already_shown() if related_id in shown else ""
+        lines.append(f"{edge_prefix}{branch_style(branch)}{format_related(edge)}{suffix}")
+        if related_id in shown:
             continue
-        lines.extend(
-            render_column_trace_branch(
-                column=related,
-                deps=deps,
-                prefix=prefix + continuation,
-                seen=seen | {related_id},
-                column_id=column_id,
-                related_column=related_column,
-                format_related=format_related,
-                branch_style=branch_style,
-                already_shown=already_shown,
+        shown.add(related_id)
+        continuation: str = _CONTINUATION_LAST if is_last else _CONTINUATION_MID
+        pending.extend(
+            _pending_children(
+                children=_sorted_edges(
+                    edges=deps.get(related_id, ()),
+                    column_id=column_id,
+                    related_column=related_column,
+                ),
+                prefix=edge_prefix + continuation,
             )
         )
     return lines
+
+
+def _pending_children[Item](*, children: list[Item], prefix: str) -> list[tuple[Item, str, bool]]:
+    last: int = len(children) - 1
+    return [(child, prefix, index == last) for index, child in reversed(list(enumerate(children)))]
+
+
+def _sorted_edges[Column, Edge](
+    *,
+    edges: list[Edge] | tuple[()],
+    column_id: Callable[[Column], str],
+    related_column: Callable[[Edge], Column],
+) -> list[Edge]:
+    return sorted(edges, key=lambda edge: column_id(related_column(edge)))
 
 
 def render_column_trace_limit_note(

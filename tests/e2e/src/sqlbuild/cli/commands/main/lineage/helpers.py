@@ -28,3 +28,40 @@ def prepare_lineage_cache_project(*, tmp_path: Path) -> Path:
 def lineage_node_ids(*, payload: dict[str, object]) -> tuple[str, ...]:
     nodes: list[dict[str, object]] = cast(list[dict[str, object]], payload["nodes"])
     return tuple(str(node["id"]) for node in nodes)
+
+
+DIAMOND_LAYERS: int = 14
+
+
+def diamond_model_names() -> tuple[str, ...]:
+    """Return every model in the layered diamond project, in layer order."""
+
+    layer_names: tuple[tuple[str, str, str], ...] = tuple(
+        (f"orders_left_{layer}", f"orders_right_{layer}", f"orders_{layer}")
+        for layer in range(1, DIAMOND_LAYERS + 1)
+    )
+    return ("orders_0", *sum(layer_names, ()))
+
+
+def prepare_diamond_lineage_project(*, tmp_path: Path) -> Path:
+    """Write a project whose layers each fork into two models and join again."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": 'name = "diamond_lineage"\nadapter = "duckdb"\n',
+        "models/orders_0.sql": "MODEL (materialized view);\n\nSELECT 1 AS order_id, 10 AS amount\n",
+    }
+    for layer in range(1, DIAMOND_LAYERS + 1):
+        previous: str = f"orders_{layer - 1}"
+        for side in ("left", "right"):
+            files[f"models/orders_{side}_{layer}.sql"] = (
+                f'MODEL (materialized view);\n\nSELECT order_id, amount FROM __ref("{previous}")\n'
+            )
+        files[f"models/orders_{layer}.sql"] = (
+            "MODEL (materialized view);\n\n"
+            "SELECT l.order_id, l.amount + r.amount AS amount\n"
+            f'FROM __ref("orders_left_{layer}") AS l\n'
+            f'JOIN __ref("orders_right_{layer}") AS r ON l.order_id = r.order_id\n'
+        )
+    return prepare_inline_project(
+        tmp_path=tmp_path, project_name="diamond_lineage", repo_files=files
+    )
