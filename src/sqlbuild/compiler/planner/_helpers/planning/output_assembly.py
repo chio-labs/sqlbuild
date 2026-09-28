@@ -12,6 +12,8 @@ from sqlbuild.compiler.planner._helpers.pruning.selection_staleness import (
     build_stale_out_of_selection_warnings,
 )
 from sqlbuild.compiler.planner.models import (
+    ColumnRenameHint,
+    ModelPlanEntry,
     PlannedSqlTests,
     PlannerChangeReconciliation,
     PlannerChangeResults,
@@ -83,12 +85,16 @@ def with_storage_policies(
 
     return replace(
         plan_output,
-        model_entries=with_migration_fingerprints(
-            entries=plan_output.model_entries,
-            models_by_name={model.name: model for model in runtime.project.models},
-            dialect=runtime.adapter.sql_analysis_dialect(),
+        model_entries=with_column_rename_hints(
+            entries=with_migration_fingerprints(
+                entries=plan_output.model_entries,
+                models_by_name={model.name: model for model in runtime.project.models},
+                dialect=runtime.adapter.sql_analysis_dialect(),
+            ),
+            hints=warehouse.column_rename_hints,
         ),
         migration_entries=warehouse.migration_entries,
+        column_migration_entries=warehouse.column_migration_entries,
         warnings=(*warehouse.migration_warnings, *plan_output.warnings),
         table_type_entries=plan_table_types(
             runtime=runtime, warehouse=warehouse, scope=scopes.selected_scope
@@ -96,6 +102,23 @@ def with_storage_policies(
         retention_entries=plan_retention(
             runtime=runtime, warehouse=warehouse, scope=scopes.selected_scope
         ),
+    )
+
+
+def with_column_rename_hints(
+    *, entries: tuple[ModelPlanEntry, ...], hints: tuple[ColumnRenameHint, ...]
+) -> tuple[ModelPlanEntry, ...]:
+    """Attach near-match column rename hints to the model entries they describe."""
+
+    by_model: dict[str, list[ColumnRenameHint]] = {}
+    hint: ColumnRenameHint
+    for hint in hints:
+        by_model.setdefault(hint.model_name, []).append(hint)
+    return tuple(
+        replace(entry, column_rename_hints=tuple(by_model[entry.name]))
+        if entry.name in by_model
+        else entry
+        for entry in entries
     )
 
 

@@ -15,6 +15,9 @@ from sqlbuild.compiler.compile._helpers.audit_factories.core import (
 from sqlbuild.compiler.compile._helpers.config.dynamic_columns import (
     parse_dynamic_column_families,
 )
+from sqlbuild.compiler.compile._helpers.config.model_validation import (
+    validate_column_migration_config,
+)
 from sqlbuild.compiler.compile._helpers.render.templating import (
     contains_template_data,
 )
@@ -318,6 +321,9 @@ def build_model_header_schema_entry(
         model_name=model_name,
         file_path=file_path,
     )
+    validate_column_migration_config(
+        config_values=model_header_values, model_name=model_name, columns=columns
+    )
     type_enforcement: bool | None = (
         True if any(column.type is not None for column in columns) or dynamic_columns else None
     )
@@ -366,6 +372,7 @@ def _parse_model_header_columns(
             label="model",
             error_class=CompileInputError,
             column_locations=column_locations,
+            allow_migrate_from=True,
         )
     cached: CachedModelHeaderColumns | None = column_cache.get(raw_columns)
     if cached is None:
@@ -375,6 +382,7 @@ def _parse_model_header_columns(
             label="model",
             error_class=CompileInputError,
             column_locations=column_locations,
+            allow_migrate_from=True,
         )
         cached = CachedModelHeaderColumns(
             raw_columns=raw_columns,
@@ -405,6 +413,7 @@ def _schema_column_at_location(
         nullable=column.nullable,
         description=column.description,
         meta=column.meta,
+        migrate_from=column.migrate_from,
         audits=tuple(
             SchemaAuditInstance(
                 definition_name=audit.definition_name,
@@ -458,6 +467,7 @@ def _merge_model_schema_columns(
                 inherited_audits=named_column.audits,
                 local_audits=local_column.audits,
             ),
+            migrate_from=local_column.migrate_from,
         )
     return (*merged_named_columns, *additional_columns)
 
@@ -500,11 +510,11 @@ def _validate_model_schema_audit_augmentation(
             f"{', '.join(overridden_fields)} for named-schema column '{local_column.name}' from "
             f"{named_origin}; only audit augmentation is supported"
         )
-    if not local_column.audits:
+    if not local_column.audits and local_column.migrate_from is None:
         raise CompileInputError(
             f"model '{model_name}' in {file_path} redeclares named-schema column "
-            f"'{local_column.name}' from {named_origin} without audits; only audit augmentation "
-            "is supported"
+            f"'{local_column.name}' from {named_origin} without audits or migrate_from; only "
+            "audit augmentation and column migrations are supported"
         )
 
 

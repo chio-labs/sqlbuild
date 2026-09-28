@@ -5,11 +5,16 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 
 from sqlbuild.compiler.migrations.types import (
+    ColumnMigrationDecision,
     MigrationCompatibility,
     MigrationDecision,
     MigrationDiscovery,
 )
-from sqlbuild.compiler.planner.models import ModelMigrationPlanEntry, PlanOutput
+from sqlbuild.compiler.planner.models import (
+    ColumnMigrationPlanEntry,
+    ModelMigrationPlanEntry,
+    PlanOutput,
+)
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.append_overflow_line import append_overflow_line
 from sqlbuild.presentation.main.count_header import count_header_style
@@ -51,7 +56,52 @@ def format_model_migrations(
             indent="  ",
             options=display_options,
         )
+    return _format_column_migrations(
+        lines=result, plan=plan, style=style, header_style=header_style
+    )
+
+
+def _format_column_migrations(
+    *,
+    lines: list[str],
+    plan: PlanOutput,
+    style: CliStyle,
+    header_style: Callable[[str], str],
+) -> list[str]:
+    """Format in-place column renames grouped under the model whose table they change."""
+
+    entries: tuple[ColumnMigrationPlanEntry, ...] = plan.column_migration_entries
+    if not entries:
+        return lines
+    result: list[str] = list(lines)
+    result.append(header_style(f"Column migrations ({len(entries)})"))
+    model_names: tuple[str, ...] = tuple(dict.fromkeys(entry.model_name for entry in entries))
+    model_name: str
+    for model_name in model_names:
+        result.append(f"  {style.object_name(model_name)}  {style.muted('migrate columns')}")
+        entry: ColumnMigrationPlanEntry
+        for entry in entries:
+            if entry.model_name == model_name:
+                result.append(f"    {_column_migration_text(entry=entry, style=style)}")
     return result
+
+
+def _column_migration_text(*, entry: ColumnMigrationPlanEntry, style: CliStyle) -> str:
+    rename: str = f"{entry.origin_column} -> {entry.destination_column}"
+    decision: str
+    if entry.decision.blocks_build:
+        decision = style.error_strong(entry.decision.label)
+    elif entry.decision == ColumnMigrationDecision.DONE:
+        decision = style.muted(entry.decision.label)
+    else:
+        decision = style.accent_strong(entry.decision.label)
+    details: list[str] = []
+    if entry.discovery != MigrationDiscovery.MANUAL:
+        details.append(entry.discovery.value)
+    if entry.decision == ColumnMigrationDecision.DONE and entry.completed_at is not None:
+        details.append(f"completed {entry.completed_at.isoformat()}")
+    suffix: str = f"  {style.muted(f'({", ".join(details)})')}" if details else ""
+    return f"{rename}  {decision}{suffix}"
 
 
 def _migration_lines(*, entry: ModelMigrationPlanEntry, style: CliStyle) -> list[str]:

@@ -27,6 +27,7 @@ from sqlbuild.compiler.planner.main.pre_build.pre_build_work_display import (
 )
 from sqlbuild.compiler.planner.models import (
     CascadeResult,
+    ColumnRenameHint,
     CursorBounds,
     FunctionPlanEntry,
     ModelPlanEntry,
@@ -1024,11 +1025,28 @@ def _append_policy_line(*, lines: list[str], entry: ModelPlanEntry) -> list[str]
 def _append_schema_diff(*, lines: list[str], entry: ModelPlanEntry) -> list[str]:
     """Append schema diff lines if findings exist."""
 
-    if not entry.schema_findings:
+    if not entry.schema_findings and not entry.column_rename_hints:
         return lines
     style: CliStyle = CliStyle(use_color=True)
     lines.append(style.label("    schema diff:"))
-    lines.extend(_format_schema_findings(entry.schema_findings))
+    finding_lines: list[str] = _format_schema_findings(entry.schema_findings)
+    hinted: set[str] = set()
+    finding: SchemaFinding
+    line: str
+    for finding, line in zip(entry.schema_findings, finding_lines, strict=True):
+        lines.append(line)
+        if finding.kind != SchemaChangeKind.COLUMN_ADDED:
+            continue
+        hint: ColumnRenameHint
+        for hint in entry.column_rename_hints:
+            if hint.added_column.lower() == finding.column_name.lower():
+                lines.append(f"        {style.warning(hint.message)}")
+                hinted.add(hint.added_column.lower())
+    lines.extend(
+        f"      {style.warning(f'{hint.added_column}: {hint.message}')}"
+        for hint in entry.column_rename_hints
+        if hint.added_column.lower() not in hinted
+    )
     return lines
 
 

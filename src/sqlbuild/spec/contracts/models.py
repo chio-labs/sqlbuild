@@ -474,6 +474,7 @@ class SchemaColumn:
     meta: dict[str, object] = field(default_factory=dict)
     audits: tuple[SchemaAuditInstance, ...] = field(default_factory=tuple)
     location: SourceLocation | None = None
+    migrate_from: str | None = None
 
 
 @dataclass(frozen=True)

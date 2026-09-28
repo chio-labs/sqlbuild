@@ -428,6 +428,13 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def render_rename_column(
+        self, *, destination: str, old_name: str, new_name: str
+    ) -> tuple[str, ...]:
+        """Render SQL that renames one table column in place, keeping its data."""
+        ...
+
+    @abstractmethod
     def render_merge(
         self,
         *,
@@ -878,6 +885,13 @@ class StrictAdapter(
     @abstractmethod
     def render_create_migration_state_table_sql(self, *, database: str | None, schema: str) -> str:
         """Render DDL that creates the model migration event table when it is missing."""
+        ...
+
+    @abstractmethod
+    def render_create_column_migration_state_table_sql(
+        self, *, database: str | None, schema: str
+    ) -> str:
+        """Render DDL that creates the column migration event table when it is missing."""
         ...
 
     @abstractmethod

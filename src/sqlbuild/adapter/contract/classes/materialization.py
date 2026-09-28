@@ -213,6 +213,24 @@ class MaterializationMixin(ABC):
         ...
 
     @abstractmethod
+    def rename_column(
+        self,
+        *,
+        connection: Any,
+        destination: str,
+        old_name: str,
+        new_name: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        """Rename one column of an existing table in place, keeping its data."""
+        ...
+
+    @abstractmethod
+    def column_rename_unavailable_reason(self, *, connection: Any, destination: str) -> str | None:
+        """Return why this table cannot rename a column in place, or None when it can."""
+        ...
+
+    @abstractmethod
     def alter_column_types(
         self,
         *,

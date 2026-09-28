@@ -635,6 +635,27 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             table_name=MIGRATION_TABLE_NAME,
         )
 
+    def render_create_column_migration_state_table_sql(
+        self, *, database: str | None, schema: str
+    ) -> str:
+        from sqlbuild.compiler.migrations.constants import COLUMN_MIGRATION_TABLE_NAME
+        from sqlbuild.compiler.migrations.main.column_create_table_sql import (
+            build_column_migration_state_create_table_sql,
+        )
+
+        create_sql: str = build_column_migration_state_create_table_sql(
+            database=database,
+            schema=schema,
+            render_qualified_name=self.render_qualified_name,
+            render_framework_type=self.render_framework_type,
+        ).replace("CREATE TABLE IF NOT EXISTS", "CREATE TABLE", 1)
+        return self._create_table_if_missing_sql(
+            create_sql=create_sql,
+            database=database,
+            schema=schema,
+            table_name=COLUMN_MIGRATION_TABLE_NAME,
+        )
+
     def render_read_latest_source_freshness_sql(
         self,
         *,
@@ -1408,6 +1429,27 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     ) -> None:
         raise AdapterUserError(message="drop_columns requires an engine-specific implementation")
 
+    def rename_column(
+        self,
+        *,
+        connection: Any,
+        destination: str,
+        old_name: str,
+        new_name: str,
+        statement_recorder: StatementRecorder,
+    ) -> None:
+        statements: tuple[str, ...] = self.render_rename_column(
+            destination=destination, old_name=old_name, new_name=new_name
+        )
+        statement_recorder.record_many(statements)
+        statement: str
+        for statement in statements:
+            self.execute(connection=connection, sql=statement)
+
+    def column_rename_unavailable_reason(self, *, connection: Any, destination: str) -> str | None:
+        del connection, destination
+        return None
+
     def drop_view(
         self,
         *,
@@ -2024,6 +2066,16 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"ALTER TABLE {destination} DROP COLUMN {self.render_identifier(col_name)}"
             for col_name in column_names
         )
+
+    def render_rename_column(
+        self, *, destination: str, old_name: str, new_name: str
+    ) -> tuple[str, ...]:
+        column: str = (
+            f"{self._sp_rename_relation_name(destination)}.{self.render_identifier(old_name)}"
+        )
+        escaped_column: str = column.replace("'", "''")
+        escaped_name: str = new_name.replace("'", "''")
+        return (f"EXEC sp_rename N'{escaped_column}', N'{escaped_name}', 'COLUMN'",)
 
     def render_loader_rows_select(
         self,

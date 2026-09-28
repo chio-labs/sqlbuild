@@ -48,6 +48,7 @@ from sqlbuild.spec.contracts.models import (
 )
 from sqlbuild.spec.contracts.types import FutureCursorAction, MicrobatchLimitAction
 
+_QUALIFIED_NAME_SEPARATOR: str = "."
 _VALID_STRATEGIES: frozenset[str] = frozenset(s.value for s in IncrementalStrategy)
 _VALID_CURSOR_TYPES: frozenset[str] = frozenset(ct.value for ct in CursorType)
 _VALID_CURSOR_GRAINS: frozenset[str] = frozenset(cg.value for cg in CursorGrain)
@@ -974,6 +975,62 @@ def validate_model_migration_config(*, config: CompileModelConfig, model_name: s
         raise CompileInputError(f"model '{model_name}': migrate_from cannot name the model itself")
     if migrate_force is not None and not isinstance(migrate_force, bool):
         raise CompileInputError(f"model '{model_name}': migrate_force must be true or false")
+
+
+def validate_column_migration_config(
+    *, config_values: dict[str, object], model_name: str, columns: tuple[SchemaColumn, ...]
+) -> None:
+    """Validate column-level migrate_from declarations as one rename set."""
+
+    declared: tuple[SchemaColumn, ...] = tuple(
+        column for column in columns if column.migrate_from is not None
+    )
+    if not declared:
+        return
+    materialized: str | None = get_config_str(values=config_values, key="materialized")
+    if materialized not in {MaterializationType.INCREMENTAL, MaterializationType.SNAPSHOT}:
+        raise CompileInputError(
+            f"model '{model_name}': column '{declared[0].name}' declares migrate_from, which is "
+            f"only valid for incremental and snapshot models; '{materialized}' models are "
+            "rebuilt with their new columns",
+            help="remove migrate_from from the column",
+        )
+    sources: dict[str, str] = {}
+    column: SchemaColumn
+    for column in declared:
+        origin: str = (column.migrate_from or "").strip()
+        if not origin or _QUALIFIED_NAME_SEPARATOR in origin:
+            raise CompileInputError(
+                f"model '{model_name}': column '{column.name}' migrate_from must name one "
+                "column of the model's existing table",
+                help="write the old column name, for example revenue (migrate_from amount)",
+            )
+        if origin.lower() == column.name.lower():
+            raise CompileInputError(
+                f"model '{model_name}': column '{column.name}' migrate_from cannot name the "
+                "column itself"
+            )
+        claimed_by: str | None = sources.get(origin.lower())
+        if claimed_by is not None:
+            raise CompileInputError(
+                f"model '{model_name}': columns '{claimed_by}' and '{column.name}' both "
+                f"declare migrate_from {origin}; a column can be renamed to only one new name",
+                help="keep migrate_from on the column that should receive the existing data",
+            )
+        sources[origin.lower()] = column.name
+    destinations: dict[str, str] = {column.name.lower(): column.name for column in declared}
+    for column in declared:
+        chained: str | None = destinations.get((column.migrate_from or "").strip().lower())
+        if chained is not None:
+            raise CompileInputError(
+                f"model '{model_name}': column '{column.name}' migrates from "
+                f"'{column.migrate_from}', which itself declares migrate_from; chained or "
+                "swapped column renames are not supported",
+                help=(
+                    "a chain or swap cannot be renamed in place safely; give the new column a "
+                    "name no other renamed column uses, or rebuild the model with --full-refresh"
+                ),
+            )
 
 
 def validate_snapshot_config(

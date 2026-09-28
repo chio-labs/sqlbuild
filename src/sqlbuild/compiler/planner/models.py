@@ -32,6 +32,7 @@ from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, FunctionLan
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, SqlTestParameterDeclaration
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.migrations.types import (
+    ColumnMigrationDecision,
     MigrationCompatibility,
     MigrationDecision,
     MigrationDiscovery,
@@ -938,6 +939,71 @@ class ModelMigrationPlanEntry:
 
 
 @dataclass(frozen=True)
+class ColumnMigrationPlanEntry:
+    """One declared or detected in-place column rename and its per-run decision."""
+
+    model_name: str
+    destination: CompiledRelationLocation
+    origin_column: str
+    destination_column: str
+    discovery: MigrationDiscovery
+    decision: ColumnMigrationDecision
+    target_name: str | None
+    completed_at: datetime | None = None
+    message: str | None = None
+
+    @property
+    def blocks_build(self) -> bool:
+        """Return whether this column migration must stop a build before any execution."""
+
+        return self.decision.blocks_build
+
+
+@dataclass(frozen=True)
+class ColumnRenameHint:
+    """A removed column that an added column may have been renamed from."""
+
+    model_name: str
+    added_column: str
+    candidate_columns: tuple[str, ...]
+    identical: bool = False
+
+    @property
+    def message(self) -> str:
+        """Return the one-line hint shown beside the added column."""
+
+        relation: str = "same expression as" if self.identical else "similar to"
+        origin: str = self.candidate_columns[0] if len(self.candidate_columns) == 1 else "<column>"
+        return (
+            f"{relation} {', '.join(self.candidate_columns)}; if this is a rename, add "
+            f"{self.added_column} (migrate_from {origin})"
+        )
+
+
+@dataclass(frozen=True)
+class QueryProjection:
+    """One named top-level output column of a query and its canonical expression."""
+
+    name: str
+    expression: str
+    references: frozenset[str]
+
+    @property
+    def key(self) -> str:
+        """Return the case-insensitive output name."""
+
+        return self.name.lower()
+
+
+@dataclass(frozen=True)
+class QueryShape:
+    """Canonical top-level projections and the rest of one query, ignoring formatting."""
+
+    projections: tuple[QueryProjection, ...]
+    body: str
+
+
+@dataclass(frozen=True)
 class PlanOutputExtras:
     """Optional supplemental seed fingerprints and precomputed SQL tests for plan assembly."""
 
@@ -1037,6 +1103,7 @@ class ModelPlanEntry:
     custom_materialization_name: str | None = None
     custom_config: dict[str, object] = field(default_factory=dict)
     custom_placeholders: dict[str, str] = field(default_factory=dict)
+    column_rename_hints: tuple[ColumnRenameHint, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -1345,6 +1412,7 @@ class PlanOutput:
     retention_entries: tuple[RetentionPlanEntry, ...] = field(default_factory=tuple)
     table_type_entries: tuple[TableTypePlanEntry, ...] = field(default_factory=tuple)
     migration_entries: tuple[ModelMigrationPlanEntry, ...] = field(default_factory=tuple)
+    column_migration_entries: tuple[ColumnMigrationPlanEntry, ...] = field(default_factory=tuple)
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = field(
         default_factory=dict
     )
@@ -1441,6 +1509,8 @@ class PlannerWarehouseState:
     inspection_relations: PlannerRelationsContext
     migration_entries: tuple[ModelMigrationPlanEntry, ...] = ()
     migration_warnings: tuple[PlanWarning, ...] = ()
+    column_migration_entries: tuple[ColumnMigrationPlanEntry, ...] = ()
+    column_rename_hints: tuple[ColumnRenameHint, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1488,6 +1558,16 @@ class ModelMigrationPlanning:
 
     snapshot: WarehouseSnapshot
     entries: tuple[ModelMigrationPlanEntry, ...] = ()
+    warnings: tuple[PlanWarning, ...] = ()
+
+
+@dataclass(frozen=True)
+class ColumnMigrationPlanning:
+    """Column rename decisions plus the warehouse snapshot as it will look after renames."""
+
+    snapshot: WarehouseSnapshot
+    entries: tuple[ColumnMigrationPlanEntry, ...] = ()
+    hints: tuple[ColumnRenameHint, ...] = ()
     warnings: tuple[PlanWarning, ...] = ()
 
 

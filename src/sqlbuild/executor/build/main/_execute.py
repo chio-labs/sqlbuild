@@ -34,6 +34,7 @@ from sqlbuild.executor.build.models import (
 from sqlbuild.executor.build.types import BuildStatus
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.migrations.main._apply import apply_model_migrations
+from sqlbuild.executor.migrations.main._apply_columns import apply_column_migrations
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 
@@ -74,6 +75,13 @@ def execute_build_plan(
     )
 
     _ = apply_model_migrations(
+        plan=plan,
+        adapter=adapter,
+        connection=scheduler_connection,
+        run_id=runtime.run_id,
+        on_progress=resolved_callbacks.on_migration_progress,
+    )
+    _ = apply_column_migrations(
         plan=plan,
         adapter=adapter,
         connection=scheduler_connection,

@@ -19,8 +19,19 @@ from sqlbuild.cli.commands._helpers.build_planning.table_type import (
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import BuildCommandRequest, BuildInvocation
-from sqlbuild.compiler.migrations.types import MigrationDecision
-from sqlbuild.compiler.planner.models import ModelMigrationPlanEntry, PlanOutput
+from sqlbuild.compiler.migrations.types import ColumnMigrationDecision, MigrationDecision
+from sqlbuild.compiler.planner.models import (
+    ColumnMigrationPlanEntry,
+    ModelMigrationPlanEntry,
+    PlanOutput,
+)
+
+_COLUMN_BLOCK_CODES: dict[ColumnMigrationDecision, str] = {
+    ColumnMigrationDecision.SOURCE_MISSING: "M109",
+    ColumnMigrationDecision.CONFLICT: "M110",
+    ColumnMigrationDecision.STILL_PRODUCED: "M111",
+    ColumnMigrationDecision.UNSUPPORTED: "M112",
+}
 
 
 def enforce_build_plan_policies(
@@ -29,6 +40,7 @@ def enforce_build_plan_policies(
     """Apply migration, execution-limit, and storage safety gates in their required order."""
 
     _enforce_model_migration_policy(plan=plan)
+    _enforce_column_migration_policy(plan=plan)
     enforce_model_execution_limit(
         model_count=executable_model_count(plan=plan),
         target_name=invocation.effective_target_name,
@@ -97,4 +109,24 @@ def _enforce_model_migration_policy(*, plan: PlanOutput) -> None:
         f"model migration source is incompatible with {names}",
         code="M104",
         help="Run sqb plan to see the blocking schema differences.",
+    )
+
+
+def _enforce_column_migration_policy(*, plan: PlanOutput) -> None:
+    """Refuse to build while any declared column rename cannot be applied safely."""
+
+    blocked: tuple[ColumnMigrationPlanEntry, ...] = tuple(
+        entry for entry in plan.column_migration_entries if entry.blocks_build
+    )
+    if not blocked:
+        return
+    raise CliUserError(
+        "column migrations are blocked for "
+        + ", ".join(
+            f"'{entry.model_name}' ({entry.destination_column} migrate_from "
+            f"{entry.origin_column}: {entry.decision.label})"
+            for entry in blocked
+        ),
+        code=_COLUMN_BLOCK_CODES.get(blocked[0].decision, "M109"),
+        help="Run sqb plan to see why each column rename cannot be applied.",
     )

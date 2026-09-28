@@ -178,6 +178,7 @@ def _fixture_relations(
             label="model",
             error_class=CompileInputError,
             column_locations=model_file.header_column_locations,
+            allow_migrate_from=True,
         )
         if not columns:
             continue
