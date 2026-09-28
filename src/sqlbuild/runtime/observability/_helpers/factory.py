@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from functools import cache
 from importlib.metadata import version
 from types import MappingProxyType
 from uuid import uuid4
@@ -41,9 +42,7 @@ def create_lifecycle_event(
         event_type=event_type,
         schema_version=CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION,
         producer=producer,
-        producer_version=(
-            version(_DEFAULT_PRODUCER) if producer_version is None else producer_version
-        ),
+        producer_version=(_sqlbuild_version() if producer_version is None else producer_version),
         occurred_at=datetime.now(UTC) if occurred_at is None else occurred_at,
         invocation_id=identity.invocation_id,
         invocation_sequence=0,
@@ -55,3 +54,8 @@ def create_lifecycle_event(
         external_context=current_invocation_external_context(),
         payload=payload,
     )
+
+
+@cache
+def _sqlbuild_version() -> str:
+    return version(_DEFAULT_PRODUCER)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
+from functools import cache
 from importlib.metadata import PackageNotFoundError, version
 from typing import cast
 
@@ -146,6 +147,7 @@ def _severity(level: int) -> str:
     return "debug"
 
 
+@cache
 def _sqlbuild_version() -> str:
     try:
         return version("sqlbuild")

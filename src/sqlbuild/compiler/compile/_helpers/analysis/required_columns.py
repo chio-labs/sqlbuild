@@ -217,7 +217,7 @@ def _resolve_set_operation_reads(
     branches: list[_RelationReads] = []
     required: list[CompiledLineageSourceFact] = []
     for side in ("left", "right"):
-        branch: Any | None = getattr(operation, "args", {}).get(side)
+        branch: Any | None = operation.arg(side)
         if branch is None:
             return _RelationReads(), _deduplicated_sources(required)
         branch_reads, branch_required = _resolve_query_reads(
@@ -228,7 +228,7 @@ def _resolve_set_operation_reads(
         branches.append(branch_reads)
         required.extend(branch_required)
     left, right = branches
-    if bool(getattr(operation, "args", {}).get("by_name")):
+    if bool(operation.arg("by_name")):
         right_by_name: dict[str, tuple[CompiledLineageSourceFact, ...]] = {
             name.casefold(): leaves for name, leaves in right.slots
         }

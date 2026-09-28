@@ -558,6 +558,13 @@ class RequiredExternalColumnsTestCase:
 
 
 @dataclass(frozen=True)
+class LongUnionRequiredColumnsTestCase:
+    description: str
+    branch_count: int
+    expected_max_seconds: float
+
+
+@dataclass(frozen=True)
 class ValidateSqlSyntaxTestCase:
     description: str
     query_sql: str
