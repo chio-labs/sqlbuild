@@ -132,6 +132,54 @@ def test_given_closure_with_allowed_imports_when_verifying_then_accepts_rule(
             ),
         ),
         CustomRuleImportTestCase(
+            description="second name of a relative multi-name import is checked",
+            module_import="from . import order_names, order_clock",
+            extra_files=(
+                ("rules/order_names.py", "NAMES = ('orders',)\n"),
+                ("rules/order_clock.py", "import time\n"),
+            ),
+            expected_error_pattern=r"non-hermetic custom rule at .*rules/order_clock.py:1: import 'time' is not allowed",
+        ),
+        CustomRuleImportTestCase(
+            description="relative submodule of a helper package is checked",
+            module_import="from .order_pkg import clock",
+            extra_files=(
+                ("rules/order_pkg/__init__.py", ""),
+                ("rules/order_pkg/clock.py", "import time\n"),
+            ),
+            expected_error_pattern=r"non-hermetic custom rule at .*rules/order_pkg/clock.py:1: import 'time' is not allowed",
+        ),
+        CustomRuleImportTestCase(
+            description="helper package initializer is checked",
+            module_import="from .order_pkg import clock",
+            extra_files=(
+                ("rules/order_pkg/__init__.py", "import random\n"),
+                ("rules/order_pkg/clock.py", "VALUE = 1\n"),
+            ),
+            expected_error_pattern=r"non-hermetic custom rule at .*rules/order_pkg/__init__.py:1: import 'random' is not allowed",
+        ),
+        CustomRuleImportTestCase(
+            description="second absolute module of a multi-name import is checked",
+            module_import="import rules.order_names, rules.order_clock",
+            extra_files=(
+                ("rules/order_names.py", "NAMES = ('orders',)\n"),
+                ("rules/order_clock.py", "import time\n"),
+            ),
+            expected_error_pattern=r"non-hermetic custom rule at .*rules/order_clock.py:1: import 'time' is not allowed",
+        ),
+        CustomRuleImportTestCase(
+            description="function-local helper import is checked",
+            module_import="from rules.order_names import names",
+            extra_files=(
+                (
+                    "rules/order_names.py",
+                    "def names() -> tuple[str, ...]:\n    from rules import order_clock\n\n    return order_clock.NAMES\n",
+                ),
+                ("rules/order_clock.py", "import uuid\n\nNAMES = ('orders',)\n"),
+            ),
+            expected_error_pattern=r"non-hermetic custom rule at .*rules/order_clock.py:1: import 'uuid' is not allowed",
+        ),
+        CustomRuleImportTestCase(
             description="imported helper in the closure is checked",
             module_import="from rules.order_clock import today",
             extra_files=(

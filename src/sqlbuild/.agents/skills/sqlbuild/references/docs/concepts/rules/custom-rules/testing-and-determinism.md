@@ -51,8 +51,9 @@ library modules:
 
 Modules that expose the clock, randomness, the process, or the network are rejected, including
 `time`, `datetime`, `random`, `uuid`, `secrets`, `os`, `sys`, `subprocess`, `socket`, and
-`importlib`. SQLBuild checks the `import` statements in each selected Rule's file and in the
-helpers it imports, which are the files the Rules cache fingerprints. Other Python files under
+`importlib`. SQLBuild checks the `import` statements in each selected Rule's file and in every
+helper under `rules/` it imports, directly or through other helpers, with absolute or relative
+imports anywhere in the module. These are the files the Rules cache fingerprints. Other Python files under
 `rules/`, such as tests or scratch scripts, are not checked.
 
 Changing an imported helper invalidates the Rules that depend on it.
@@ -71,8 +72,9 @@ custom Rules in a separate host process and enforces that at runtime:
   on every run.
 - The working directory is the resolved project directory, wherever `sqb` was invoked, so
   `Path.cwd()` and relative paths do not vary between runs.
-- While Rule code runs, opening files, listing directories, running commands, forking, network
-  access, and `ctypes` are rejected, however they are reached. Loading a module outside the
+- While Rule code runs, opening files, reading file metadata such as `Path.exists()` or
+  `Path.stat()`, listing directories, running commands, forking, network access, and `ctypes` are
+  rejected, however they are reached. Loading a module outside the
   allowed list for the first time is rejected too.
 
 A rejected operation fails the command with `non-hermetic custom rule <code> at <file>:<line>`, even

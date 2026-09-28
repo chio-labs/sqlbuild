@@ -120,3 +120,13 @@ class WorkingDirectoryCase:
     source: str
     invocation_directories: tuple[str, ...]
     expected_working_directory: str
+
+
+@dataclass(frozen=True)
+class HelperImportCase:
+    description: str
+    code: str
+    rule_source: str
+    helper_path: str
+    helper_source: str
+    expected_error: str

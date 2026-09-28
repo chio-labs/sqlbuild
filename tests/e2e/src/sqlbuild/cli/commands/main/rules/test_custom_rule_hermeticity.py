@@ -7,6 +7,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.rules._test_types import (
     HashSeedCase,
+    HelperImportCase,
     HermeticRuleCase,
     ModuleStatementEditCase,
     NonHermeticRuleCase,
@@ -35,6 +36,19 @@ _ENTITY_NAMES: tuple[str, ...] = (
     "support_tickets",
     "shipments",
     "returns",
+)
+
+
+_RELATIVE_HELPER_RULE: str = custom_rule_source(
+    code="XSQBRHELP001",
+    header=(
+        "from sqlbuild.rules import Finding, Model, RuleContext, rule\n\n"
+        "from . import order_limits\n"
+    ),
+    body=(
+        "    over_limit = len(model.name) > order_limits.MAX_NAME_LENGTH\n"
+        "    return [ctx.finding(subject=model)] * int(over_limit)\n"
+    ),
 )
 
 
@@ -145,6 +159,32 @@ def test_given_hermetic_rule_when_compiling_then_rule_is_evaluated(
             ),
             expected_line=10,
             expected_action="opening 'models/orders.sql'",
+        ),
+        NonHermeticRuleCase(
+            description="file existence probe through pathlib is rejected",
+            code="XSQBRMETA001",
+            source=custom_rule_source(
+                code="XSQBRMETA001",
+                body=(
+                    '    ready = pathlib.Path("target/orders_ready").exists()\n'
+                    "    return [ctx.finding(subject=model)] * int(ready)\n"
+                ),
+            ),
+            expected_line=8,
+            expected_action="reading file metadata for 'target/orders_ready'",
+        ),
+        NonHermeticRuleCase(
+            description="file modification time through pathlib is rejected",
+            code="XSQBRMETA002",
+            source=custom_rule_source(
+                code="XSQBRMETA002",
+                body=(
+                    '    modified = pathlib.Path("models/orders.sql").stat().st_mtime\n'
+                    "    return [ctx.finding(subject=model)] * int(modified < 0)\n"
+                ),
+            ),
+            expected_line=8,
+            expected_action="reading file metadata for 'models/orders.sql'",
         ),
         NonHermeticRuleCase(
             description="command run through an allowed module is rejected",
@@ -385,3 +425,69 @@ def test_given_rule_observing_cwd_when_invoked_from_different_directories_then_v
 
     expected: str = str((tmp_path / test_case.expected_working_directory).resolve())
     assert messages == [(expected,)] * len(test_case.invocation_directories)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        HelperImportCase(
+            description="relative helper importing time is rejected statically",
+            code="XSQBRHELP001",
+            rule_source=_RELATIVE_HELPER_RULE,
+            helper_path="rules/order_limits.py",
+            helper_source="import time\n\nMAX_NAME_LENGTH = 100\n",
+            expected_error="rules/order_limits.py:1: import 'time' is not allowed",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_relative_helper_with_disallowed_import_when_compiling_then_fails_import_check(
+    tmp_path: Path, test_case: HelperImportCase
+) -> None:
+    write_custom_rule_project(
+        project_dir=tmp_path,
+        selected_rules=(test_case.code,),
+        files=(
+            ("rules/orders.py", test_case.rule_source),
+            (test_case.helper_path, test_case.helper_source),
+        ),
+    )
+
+    result: subprocess.CompletedProcess[str] = run_compile_cli(tmp_path)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "non-hermetic custom rule at" in result.stderr, result.stderr
+    assert test_case.expected_error in result.stderr, result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ModuleStatementEditCase(
+            description="editing a relatively imported helper invalidates the cached result",
+            code="XSQBRHELP001",
+            source=_RELATIVE_HELPER_RULE,
+            appended_statement="\nMAX_NAME_LENGTH = 3\n",
+            expected_rule_codes_before_edit=(),
+            expected_rule_codes_after_edit=("XSQBRHELP001",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cached_rule_when_relative_helper_is_edited_then_rule_is_reevaluated(
+    tmp_path: Path, test_case: ModuleStatementEditCase
+) -> None:
+    helper_source: str = "MAX_NAME_LENGTH = 100\n"
+    write_custom_rule_project(
+        project_dir=tmp_path,
+        selected_rules=(test_case.code,),
+        files=(("rules/orders.py", test_case.source), ("rules/order_limits.py", helper_source)),
+    )
+    before: subprocess.CompletedProcess[str] = run_compile_cli(tmp_path)
+    helper: Path = tmp_path / "rules" / "order_limits.py"
+    helper.write_text(helper_source + test_case.appended_statement, encoding="utf-8")
+
+    after: subprocess.CompletedProcess[str] = run_compile_cli(tmp_path)
+
+    assert custom_rule_codes(before) == test_case.expected_rule_codes_before_edit, before.stderr
+    assert custom_rule_codes(after) == test_case.expected_rule_codes_after_edit, after.stderr

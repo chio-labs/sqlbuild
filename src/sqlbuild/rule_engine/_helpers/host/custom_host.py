@@ -62,6 +62,7 @@ def main() -> int:
         os.chdir(project_dir)
         guard = RuntimeGuard(project_dir=project_dir)
         sys.addaudithook(guard)
+        guard.guard_filesystem_metadata()
         messages: io.StringIO = io.StringIO()
         with contextlib.redirect_stdout(messages):
             catalogue: tuple[Rule, ...] = build_catalogue(config=config, project_dir=project_dir)
