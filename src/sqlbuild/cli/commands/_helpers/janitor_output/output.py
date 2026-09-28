@@ -18,6 +18,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorSkippedSchema,
 )
 from sqlbuild.presentation.classes.cli_style import CliStyle
+from sqlbuild.presentation.main.tree_connector import tree_connector
 
 
 def write_disabled(*, stream: TextIO, use_color: bool = False) -> None:
@@ -159,27 +160,36 @@ def _write_archive_sections(*, plan: JanitorPlan, stream: TextIO, style: CliStyl
 
 def _write_old_name_views(*, plan: JanitorPlan, stream: TextIO, style: CliStyle) -> None:
     views: JanitorOldNameViewPlanning = plan.old_name_views
-    if not (views.live or views.drops or views.missing):
+    listed: tuple[JanitorOldNameView, ...] = (*views.drops, *views.live, *views.missing)
+    if not listed:
         return
-    stream.write(f"\n{style.success('Old name views')}\n")
+    stream.write(f"\n{style.success('Old name views')} {style.muted(f'({len(listed)})')}\n")
+    index: int
     view: JanitorOldNameView
-    for view in (*views.drops, *views.live, *views.missing):
+    for index, view in enumerate(listed):
+        last: bool = index == len(listed) - 1
         stream.write(
-            f"  {style.object_name(view.key.display_name())}  "
-            f"{style.muted(_old_name_view_detail(view))}\n"
+            f"{tree_connector(style=style, last=last)} "
+            f"{style.object_name(view.key.display_name())}  "
+            f"{style.muted(f'-> model:{view.destination_model}')}\n"
+        )
+        label, detail = _old_name_view_detail(view)
+        stream.write(
+            f"{'    ' if last else style.muted('│   ')}{tree_connector(style=style, last=True)} "
+            f"{style.muted(label)}  {detail}\n"
         )
 
 
-def _old_name_view_detail(view: JanitorOldNameView) -> str:
-    target: str = f"for model:{view.destination_model}"
-    expiry: str = "" if view.expires_at is None else _utc(view.expires_at)
+def _old_name_view_detail(view: JanitorOldNameView) -> tuple[str, str]:
+    expiry: str = "" if view.expires_at is None else f"{view.expires_at:%Y-%m-%d}"
+    name: str = view.key.display_name()
     if view.drop_reason == OldNameViewDropReason.EARLY:
-        return f"{target}, drop now (requested; expires {expiry})"
+        return "drop", f"now  (requested; would expire {expiry})"
     if view.drop_reason == OldNameViewDropReason.EXPIRED:
-        return f"{target}, drop now (expired {expiry})"
+        return "drop", f"now  (expired {expiry})"
     if view.drop_reason == OldNameViewDropReason.MISSING:
-        return f"{target}, record as dropped (the view no longer exists)"
-    return f"{target}, kept until {expiry}"
+        return "record", "dropped  (the view no longer exists)"
+    return "expires", f"{expiry}  (live; drop early with --drop-old-name-view {name})"
 
 
 def _utc(value: datetime) -> str:

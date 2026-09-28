@@ -21,6 +21,7 @@ from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.append_overflow_line import append_overflow_line
 from sqlbuild.presentation.main.count_header import count_header_style
+from sqlbuild.presentation.main.tree_connector import tree_connector
 from sqlbuild.presentation.main.visible_entries import visible_entries
 from sqlbuild.presentation.models import DisplayOptions
 
@@ -99,27 +100,48 @@ def _format_resumed_old_names(
         result.append(
             f"  {style.object_name(entry.model_name)}  {style.muted(f'{origin} ->')} {destination}"
         )
-        result.append(_property_row(label="old name", value=old_name_text(entry), style=style))
+        result.extend(old_name_rows(entry=entry, style=style))
     return result
 
 
-def old_name_text(entry: OldNameViewPlanEntry) -> str:
-    """Describe what a build does at one migrated model's old name."""
+def old_name_rows(*, entry: OldNameViewPlanEntry, style: CliStyle) -> list[str]:
+    """Render the old name of a migration as a leaf with one fact per nested row."""
 
     origin: str = entry.origin.qualified_name or entry.origin.name
-    until: str = "" if entry.expires_at is None else f" until {entry.expires_at:%Y-%m-%d}"
-    aliases: str = (
-        ""
-        if not entry.column_aliases
-        else " (" + ", ".join(f"{old} <- {new}" for old, new in entry.column_aliases) + ")"
+    facts: list[tuple[str, str]] = old_name_facts(entry)
+    rows: list[str] = [_property_row(label="old name", value=origin, style=style)]
+    index: int
+    label: str
+    value: str
+    for index, (label, value) in enumerate(facts):
+        connector: str = tree_connector(style=style, last=index == len(facts) - 1)
+        rows.append(f"        {connector} {style.muted(label)}  {value}")
+    return rows
+
+
+def old_name_facts(entry: OldNameViewPlanEntry) -> list[tuple[str, str]]:
+    """Return what happens at a migrated model's old name, one labelled fact per row."""
+
+    if entry.action == OldNameViewAction.NONE:
+        return [("left for janitor", entry.reason or "no compatibility view")]
+    until: str = "" if entry.expires_at is None else f"until {entry.expires_at:%Y-%m-%d}"
+    view: str = f"live {until}".strip() if entry.action == OldNameViewAction.LIVE else until
+    facts: list[tuple[str, str]] = [("view", view)]
+    if entry.column_aliases:
+        facts.append(("columns", ", ".join(f"{old} <- {new}" for old, new in entry.column_aliases)))
+    if entry.grants_supported:
+        facts.append(("grants", _grants_text(entry)))
+    archived: str = (
+        "already archived" if entry.action == OldNameViewAction.VIEW_ONLY else "archived"
     )
-    if entry.action == OldNameViewAction.ARCHIVE_AND_VIEW:
-        return f"archive {origin}, then view{until}{aliases}"
-    if entry.action == OldNameViewAction.VIEW_ONLY:
-        return f"view only{until}{aliases} ({origin} already archived)"
-    if entry.action == OldNameViewAction.LIVE:
-        return f"view live{until}{aliases}"
-    return f"left for janitor ({entry.reason or 'no compatibility view'})"
+    facts.append(("old table", archived))
+    return facts
+
+
+def _grants_text(entry: OldNameViewPlanEntry) -> str:
+    if entry.grants_copied is None:
+        return "copied from the old table"
+    return f"{entry.grants_copied} copied from the old table"
 
 
 def _format_column_migrations(
@@ -227,7 +249,7 @@ def _migration_lines(
             )
         )
     if old_name is not None:
-        rows.append(_property_row(label="old name", value=old_name_text(old_name), style=style))
+        rows.extend(old_name_rows(entry=old_name, style=style))
     blocking: bool = (
         entry.decision.blocks_build or entry.compatibility == MigrationCompatibility.INCOMPATIBLE
     )

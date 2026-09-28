@@ -508,6 +508,7 @@ def _serialize_old_name(entry: OldNameViewPlanEntry) -> dict[str, object]:
         "reads": entry.destination.qualified_name or entry.destination.name,
         "expires_at": entry.expires_at.isoformat() if entry.expires_at is not None else None,
         "column_aliases": dict(entry.column_aliases),
+        "grants_copied": entry.grants_copied,
         "reason": entry.reason,
     }
 
