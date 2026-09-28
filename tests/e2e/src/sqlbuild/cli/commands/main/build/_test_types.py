@@ -951,6 +951,15 @@ class AttachedAuditGateBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class AttachedAuditGateSummaryE2ETestCase:
+    description: str
+    target_kind: str
+    order_code: str
+    expected_exit_code: int
+    expected_summary: str
+
+
+@dataclass(frozen=True)
 class AttachedAuditGateCycleE2ETestCase:
     description: str
     target_kind: str
@@ -1090,6 +1099,15 @@ class PythonSourceDeferralE2ETestCase:
 
 
 @dataclass(frozen=True)
+class PythonSourceTaskOnlyE2ETestCase:
+    """A task selected alone whose declared source no selected SQL resource reads."""
+
+    description: str
+    target_config: str
+    expected_task_pattern: str
+
+
+@dataclass(frozen=True)
 class UnrenderedMacroArgumentE2ETestCase:
     """A model passing typed references its macro does not render."""
 
@@ -1116,3 +1134,11 @@ class SqlHookReadCycleE2ETestCase:
     description: str
     overrides: dict[str, str]
     expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AwareCursorDateWatermarkE2ETestCase:
+    description: str
+    plan_args: tuple[str, ...]
+    expected_plan_fragment: str
+    expected_event_ids: tuple[int, ...]

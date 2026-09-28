@@ -66,6 +66,18 @@ from tests.unit.src.sqlbuild.executor.clone._helpers.helpers import (
                 "CREATE TRANSIENT TABLE dev.fact_orders CLONE prod.fact_orders",
             ),
         ),
+        CloneRelationExecutionTestCase(
+            description="clones a permanent origin as transient for a transient destination model",
+            hard_copy=False,
+            supports_zero_copy_clone=True,
+            destination_is_transient=True,
+            expected_action=CloneAction.CLONED,
+            expected_status=CloneStatus.SUCCESS,
+            expected_statements=(
+                "DROP TABLE IF EXISTS dev.fact_orders",
+                "CREATE TRANSIENT TABLE dev.fact_orders CLONE prod.fact_orders",
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -91,6 +103,7 @@ def test_given_clone_relation_when_executing_then_records_sql_and_reports_copy_m
         destination_connection=object(),
         hard_copy=test_case.hard_copy,
         origin_lookup=origin_lookup,
+        destination_is_transient=test_case.destination_is_transient,
     )
 
     assert result.action == test_case.expected_action

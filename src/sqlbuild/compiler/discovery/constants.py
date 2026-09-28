@@ -68,3 +68,11 @@ SQL_HOOK_OUTPUT_FIELDS: tuple[str, ...] = (
     "description",
 )
 SQL_HOOK_IDENTITY_FIELDS: tuple[str, ...] = ("statement", "name", "definition_sql", "kwargs")
+
+STATEMENT_HEADER_BODY_PATTERN: str = (
+    r"(?P<header>(?>(?:[^\"')\\]|\\.)++"
+    r"|\"(?:[^\"\\]|\\.)*+\""
+    r"|'(?:[^'\\]|\\.)*+'"
+    r"|[\"'](?:[^\\)]|\\.)*+"
+    r"|\)(?!\s*;))*+)"
+)

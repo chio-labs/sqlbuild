@@ -731,7 +731,7 @@ def _entry_warning(entry: ModelMigrationPlanEntry) -> PlanWarning | None:
             severity=WarningSeverity.WARNING,
             message=(
                 f"migration from {origin} completed at {completed} on target "
-                f"'{entry.target_name}'; migrate_from can be removed from '{entry.model_name}'"
+                f"'{entry.target_label}'; migrate_from can be removed from '{entry.model_name}'"
             ),
             code="M101",
         )

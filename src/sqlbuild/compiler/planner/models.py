@@ -729,6 +729,7 @@ class PlannerScope:
     selected_keys: frozenset[CompiledObjectKey]
     execution_order: tuple[CompiledObjectKey, ...]
     user_selected_keys: frozenset[CompiledObjectKey] = frozenset()
+    python_read_source_names: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -928,6 +929,12 @@ class ModelMigrationPlanEntry:
             return None
         labels: tuple[str, str] = ("permanent", "transient")
         return f"{labels[self.origin_is_transient]} -> {labels[self.stage_is_transient]}"
+
+    @property
+    def target_label(self) -> str:
+        """Return the target name shown in migration text, naming the unnamed target 'default'."""
+
+        return self.target_name or "default"
 
     @property
     def blocks_build(self) -> bool:
@@ -1452,6 +1459,7 @@ class PlannerSelection:
     select: tuple[str, ...] = ()
     exclude: tuple[str, ...] = ()
     selected_keys: frozenset[CompiledObjectKey] | None = None
+    python_read_source_names: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)

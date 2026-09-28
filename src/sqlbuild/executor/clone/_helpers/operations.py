@@ -23,7 +23,13 @@ def clone_relation(
     destination_connection: Any,
     hard_copy: bool,
     origin_lookup: RelationLookup,
+    destination_is_transient: bool = False,
 ) -> CloneItemResult:
+    clone_as_transient: bool = destination_is_transient or origin_lookup.is_transient(
+        database=origin_entry.destination.database,
+        schema=origin_entry.destination.schema,
+        name=origin_entry.destination.name,
+    )
     return clone_relation_by_names(
         name=destination_entry.name,
         origin_relation=qualified_name(adapter=adapter, entry=origin_entry),
@@ -36,11 +42,7 @@ def clone_relation(
         adapter=adapter,
         connection=destination_connection,
         hard_copy=hard_copy,
-        origin_is_transient=origin_lookup.is_transient(
-            database=origin_entry.destination.database,
-            schema=origin_entry.destination.schema,
-            name=origin_entry.destination.name,
-        ),
+        origin_is_transient=clone_as_transient,
     )
 
 

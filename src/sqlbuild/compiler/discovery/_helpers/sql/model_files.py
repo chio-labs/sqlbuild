@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import cast
 
 import sqlbuild._native as _native
+from sqlbuild.compiler.discovery.constants import STATEMENT_HEADER_BODY_PATTERN
 from sqlbuild.compiler.discovery.exceptions import (
     DiscoveryError,
     ModelHeaderSyntaxError,
@@ -66,7 +67,7 @@ _MODEL_HEADER_TOKEN_KIND_BY_NATIVE: dict[int, str] = {
     _NATIVE_MODEL_HEADER_SYMBOL_TOKEN: _MODEL_HEADER_SYMBOL_TOKEN,
 }
 _MODEL_HEADER_PATTERN: re.Pattern[str] = re.compile(
-    r"^\s*MODEL\s*\((?P<header>.*?)\)\s*;\s*(?P<sql>.*)\Z",
+    r"^\s*MODEL\s*\(" + STATEMENT_HEADER_BODY_PATTERN + r"\)\s*;\s*(?P<sql>.*)\Z",
     re.DOTALL,
 )
 _SELECT_SCAN_SPECIAL: re.Pattern[str] = re.compile(r"['\"`()sSfFuU]")

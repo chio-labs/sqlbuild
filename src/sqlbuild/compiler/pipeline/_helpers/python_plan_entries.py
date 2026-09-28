@@ -23,6 +23,24 @@ from sqlbuild.compiler.python_nodes.types import (
     PythonNodeKind,
     PythonRunPhase,
 )
+from sqlbuild.python_nodes.types import SqlResourceRefKind
+
+
+def python_read_source_names_for(
+    *, discovered_inputs: DiscoveredProjectInputs, python_node_names: frozenset[str]
+) -> frozenset[str]:
+    """Return sources declared by the selected Python nodes and their Python upstreams."""
+
+    if not python_node_names:
+        return frozenset()
+    python_graph: PythonNodeGraph = build_discovered_python_node_graph(
+        discovered_inputs=discovered_inputs
+    )
+    return frozenset(
+        ref.name
+        for ref in python_graph.selected_sql_refs(selected_names=python_node_names)
+        if ref.kind == SqlResourceRefKind.SOURCE
+    )
 
 
 def build_python_run_plan_outputs(

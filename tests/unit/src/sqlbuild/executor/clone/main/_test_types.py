@@ -65,3 +65,11 @@ class CloneRunIdentityTestCase:
     expected_run_id: str
     expected_operation_names: tuple[str, ...]
     expected_resource_terminal: str
+
+
+@dataclass(frozen=True)
+class CloneDestinationTableTypeTestCase:
+    description: str
+    model_names: tuple[str, ...]
+    transient_model_names: frozenset[str]
+    expected_clone_statements: tuple[str, ...]

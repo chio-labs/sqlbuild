@@ -10,6 +10,7 @@ from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.cli.commands._helpers.load.selection import (
     select_load_entries,
     select_load_reference_entries,
+    select_load_relation_entries,
 )
 from sqlbuild.cli.commands.models import LoadCommandRequest, LoadInvocation
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
@@ -65,6 +66,9 @@ def resolve_load_invocation(*, request: LoadCommandRequest) -> LoadInvocation:
         discovered_inputs=discovered_inputs,
         selected_sources=selected_sources,
         reference_sources=reference_sources,
+        relation_sources=select_load_relation_entries(
+            discovered_inputs=discovered_inputs, target_config=target_config
+        ),
         use_color=use_color,
         progress_stream=progress_stream,
     )

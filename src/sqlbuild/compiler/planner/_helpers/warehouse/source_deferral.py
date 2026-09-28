@@ -96,6 +96,22 @@ def build_source_read_map(
     return result
 
 
+def with_declared_source_reads(
+    *, project: CompiledProject, source_map: dict[str, SourceEntry], source_names: frozenset[str]
+) -> dict[str, SourceEntry]:
+    """Add declared project sources that no selected SQL resource reads to a source map."""
+
+    missing: frozenset[str] = source_names - frozenset(source_map)
+    if not missing:
+        return source_map
+    result: dict[str, SourceEntry] = dict(source_map)
+    source: CompiledSource
+    for source in project.sources:
+        if source.source_entry.name in missing:
+            result[source.source_entry.name] = source.source_entry
+    return result
+
+
 def _sql_hook_source_reads(model: CompiledModel) -> tuple[str, ...]:
     names: list[str] = []
     for hook_key in (MODEL_PRE_HOOKS_CONFIG_KEY, MODEL_POST_HOOKS_CONFIG_KEY):

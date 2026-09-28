@@ -125,3 +125,10 @@ class IdentityHandoverTestCase:
 class RenamedPlanTextTestCase:
     description: str
     expected_fragment: str
+
+
+@dataclass(frozen=True)
+class CompletedMigrationPlanTextTestCase:
+    description: str
+    project_toml: str
+    expected_target_label: str

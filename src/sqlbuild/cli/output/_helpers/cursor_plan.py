@@ -6,6 +6,9 @@ from datetime import datetime
 
 from sqlbuild.cli.output.models import CursorPlanDetails
 from sqlbuild.cli.output.types import CursorBoundsOwner, CursorResolutionStatus
+from sqlbuild.compiler.planner.main.execution.aligned_timestamp_bounds import (
+    aligned_timestamp_bounds,
+)
 from sqlbuild.compiler.planner.main.execution.effective_microbatch_batch_size import (
     resolve_effective_microbatch_batch_size,
 )
@@ -110,16 +113,9 @@ def _count_batches(*, bounds: CursorBounds, batch_size: str, cursor_type: str) -
             bounds.end, DateValue | TimestampValue
         ):
             return None
-        current: datetime = (
-            bounds.start.value
-            if isinstance(bounds.start, TimestampValue)
-            else datetime.combine(bounds.start.value, datetime.min.time())
-        )
-        end: datetime = (
-            bounds.end.value
-            if isinstance(bounds.end, TimestampValue)
-            else datetime.combine(bounds.end.value, datetime.min.time())
-        )
+        current: datetime
+        end: datetime
+        current, end = aligned_timestamp_bounds(start=bounds.start, end=bounds.end)
         count: int = 0
         while current < end:
             current = min(duration.add_to(current), end)

@@ -792,6 +792,7 @@ class LoadInvocation:
     reference_sources: tuple[SourceEntry, ...]
     use_color: bool
     progress_stream: TextIO
+    relation_sources: tuple[SourceEntry, ...]
 
 
 @dataclass(frozen=True)
@@ -807,6 +808,7 @@ class LoadExecutionPreparation:
     effective_cursor_overrides: CursorOverrides
     effective_concurrency: int
     provider_session: Any
+    project_relations: dict[SqlResourceRef, str] | None
 
 
 @dataclass(frozen=True)
@@ -818,6 +820,7 @@ class LoadRunOutcome:
     success_count: int
     fail_count: int
     skip_count: int
+    warn_count: int
 
 
 @dataclass(frozen=True)

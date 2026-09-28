@@ -16,10 +16,14 @@ from sqlbuild.cli.commands.models import (
 from sqlbuild.compiler.compile.main.effective_runtime import build_effective_runtime_config
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
 from sqlbuild.compiler.planner.models import CursorOverrides
+from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
 from sqlbuild.provider.main.session import build_provider_session
+from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.python_nodes.types import SqlResourceRefKind
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
+from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def prepare_load_execution(
@@ -75,4 +79,29 @@ def prepare_load_execution(
         provider_session=build_provider_session(
             discovered_providers=invocation.discovered_inputs.providers
         ),
+        project_relations=_load_project_relations(adapter=adapter, invocation=invocation),
     )
+
+
+def _load_project_relations(
+    *, adapter: BaseAdapter, invocation: LoadInvocation
+) -> dict[SqlResourceRef, str] | None:
+    """Return the source relations loaders must not hard-code, or None when enforcement is off."""
+
+    if not invocation.discovered_inputs.project_config.references.enforce_explicit:
+        return None
+    sources: dict[str, SourceEntry] = {
+        source.name: source
+        for source in (
+            *invocation.relation_sources,
+            *invocation.reference_sources,
+            *invocation.selected_sources,
+        )
+        if source.expression is None
+    }
+    return {
+        SqlResourceRef(kind=SqlResourceRefKind.SOURCE, name=name): render_source_relation(
+            entry=source, adapter=adapter
+        )
+        for name, source in sources.items()
+    }

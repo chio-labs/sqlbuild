@@ -94,6 +94,10 @@ def execute_clone_relation_item(
             destination_connection=inputs.destination_connection,
             hard_copy=inputs.hard_copy,
             origin_lookup=relation_lookup,
+            destination_is_transient=(
+                isinstance(destination_entry, ModelPlanEntry)
+                and destination_entry.name in inputs.destination_transient_models
+            ),
         )
         return _with_destination_retention(result=result, inputs=inputs)
     missing_dependencies: tuple[CompiledObjectKey, ...] = _missing_destination_dependencies(

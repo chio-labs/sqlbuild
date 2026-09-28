@@ -574,6 +574,34 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
             },
             expected_query="SELECT 1",
         ),
+        ParseModelSqlHeaderTestCase(
+            description="keeps a closing parenthesis and semicolon inside a quoted description",
+            contents="""
+        MODEL (
+          description "Orders (online, store or phone); one row per order.",
+          materialized table,
+        );
+
+        SELECT 1
+        """,
+            expected_header_values={
+                "description": "Orders (online, store or phone); one row per order.",
+                "materialized": "table",
+            },
+            expected_query="SELECT 1",
+        ),
+        ParseModelSqlHeaderTestCase(
+            description="keeps a closing parenthesis and semicolon inside a single quoted value",
+            contents="""
+        MODEL (
+          tags ['orders);archive'],
+        );
+
+        SELECT 1
+        """,
+            expected_header_values={"tags": ["orders);archive"]},
+            expected_query="SELECT 1",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -593,6 +621,16 @@ def test_given_sql_model_header_variants_when_parsing_then_it_returns_expected_h
 @pytest.mark.parametrize(
     "test_case",
     [
+        ParseModelSqlErrorTestCase(
+            description="reports an unterminated string with escaped quotes before parentheses",
+            contents='MODEL (description "' + '\\")' * 20000 + "); SELECT 1",
+            expected_error_fragment="unterminated double-quoted string",
+        ),
+        ParseModelSqlErrorTestCase(
+            description="reports an unterminated string with many escaped quotes",
+            contents='MODEL (description "' + '\\"' * 20000 + "); SELECT 1",
+            expected_error_fragment="unterminated double-quoted string",
+        ),
         ParseModelSqlErrorTestCase(
             description="raises when the model header is missing",
             contents="SELECT 1\n",

@@ -108,10 +108,11 @@ def write_load_completion_output(
 
     invocation.progress_stream.write(
         format_load_footer(
+            results=outcome.results,
             success_count=outcome.success_count,
+            warn_count=outcome.warn_count,
             fail_count=outcome.fail_count,
             skip_count=outcome.skip_count,
-            total_count=len(outcome.results),
             elapsed=outcome.elapsed,
             use_color=invocation.use_color,
         )
