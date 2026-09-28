@@ -75,6 +75,9 @@ separate build from the resources it reads, the hook reads their existing relati
 Declaring reads does not change who may call the hook: the model must still see the hook under the
 usual [scope rules](../hooks.md#project-layout).
 
+SQL hooks declare reads by referencing resources in their SQL; see
+[Read models, sources, and seeds](sql.md#read-models-sources-and-seeds).
+
 Literal project relation names in `ctx.query()` and `ctx.execute_sql()` SQL fail to compile, and
 dynamically built names produce run-time warnings; see
 [Hard-coded relation names](../../python-nodes/sql-references.md#hard-coded-relation-names).

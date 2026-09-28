@@ -1097,3 +1097,22 @@ class UnrenderedMacroArgumentE2ETestCase:
     model_sql: str
     expected_dag_edges: tuple[tuple[str, str], ...]
     expected_built: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SqlHookReadBuildE2ETestCase:
+    """SQL hooks whose references a build must resolve and order like model SQL."""
+
+    description: str
+    select: tuple[str, ...]
+    expected_counts: dict[str, int]
+    expected_order_before: tuple[str, str]
+
+
+@dataclass(frozen=True)
+class SqlHookReadCycleE2ETestCase:
+    """A SQL hook that reads a model built from the model running the hook."""
+
+    description: str
+    overrides: dict[str, str]
+    expected_output_fragments: tuple[str, ...]

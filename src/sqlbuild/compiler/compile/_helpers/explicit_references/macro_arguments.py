@@ -82,6 +82,19 @@ def call_site_sql_references(
     return extract_sql_references(" ".join(reference_call_text(ref) for ref in refs))
 
 
+def resource_references(
+    references: tuple[CompileSqlReference, ...],
+) -> tuple[SqlResourceRef, ...]:
+    """Return the model, source, and seed references among SQL references, once each."""
+
+    resources: dict[SqlResourceRef, None] = {}
+    for reference in references:
+        kind: SqlResourceRefKind | None = _EXPLICIT_REFERENCE_KINDS.get(str(reference.ref_kind))
+        if kind is not None:
+            resources[SqlResourceRef(kind=kind, name=reference.ref_name)] = None
+    return tuple(resources)
+
+
 def merge_call_site_references(
     *,
     references: tuple[CompileSqlReference, ...],

@@ -90,8 +90,7 @@ def build_execution_edge_origins(
             continue
         origins.setdefault(
             (hook_edge.gated, hook_edge.read),
-            f"hook '{hook_edge.hook_name}' on '{hook_edge.gated.name}' reads "
-            f"'{hook_edge.read.name}'",
+            f"{hook_edge.label} on '{hook_edge.gated.name}' reads '{hook_edge.read.name}'",
         )
     return origins
 

@@ -125,3 +125,12 @@ class ApplyDeferredTargetsTestCase:
     selected_names: tuple[str, ...]
     expected_model_qualified: dict[str, str | None]
     expected_seed_qualified: dict[str, str | None] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class HookSqlResolutionTestCase:
+    description: str
+    pre_hooks: object
+    post_hooks: object
+    expected_pre_hooks: object
+    expected_post_hooks: object

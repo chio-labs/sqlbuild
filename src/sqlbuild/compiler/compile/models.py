@@ -401,6 +401,7 @@ class HookExpansionResult:
 
     values: dict[str, object]
     usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+    references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

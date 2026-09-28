@@ -44,6 +44,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
+from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import build_lineage_upstream_deps
 from sqlbuild.compiler.lineage.types import ColumnLineageConfidence, ColumnTransformKind
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.planner._helpers.graph.core import build_execution_upstream_deps
@@ -303,6 +304,23 @@ def execution_edge_names(*, project: CompiledProject) -> frozenset[tuple[str, st
     key: CompiledObjectKey
     deps: tuple[CompiledObjectKey, ...]
     for key, deps in build_execution_upstream_deps(project).items():
+        edges.update((key.name, dep.name) for dep in deps)
+    return frozenset(edges)
+
+
+def inline_sql_hook_header(sql: str) -> str:
+    """Return a MODEL header running one inline SQL pre-hook."""
+
+    return f"MODEL (pre_hooks [inline_sql('{sql}')]);"
+
+
+def lineage_edge_names(*, project: CompiledProject) -> frozenset[tuple[str, str]]:
+    """Return (node, upstream) name pairs of the project's lineage graph used for selection."""
+
+    edges: set[tuple[str, str]] = set()
+    key: CompiledObjectKey
+    deps: tuple[CompiledObjectKey, ...]
+    for key, deps in build_lineage_upstream_deps(project).items():
         edges.update((key.name, dep.name) for dep in deps)
     return frozenset(edges)
 

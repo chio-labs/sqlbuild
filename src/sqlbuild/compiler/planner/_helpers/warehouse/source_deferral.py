@@ -14,12 +14,18 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledSource,
 )
-from sqlbuild.compiler.planner.constants import SOURCE_DEFERRAL_CONTEXT_FIELDS
+from sqlbuild.compiler.discovery.models import SqlHookEntry
+from sqlbuild.compiler.planner.constants import (
+    MODEL_POST_HOOKS_CONFIG_KEY,
+    MODEL_PRE_HOOKS_CONFIG_KEY,
+    SOURCE_DEFERRAL_CONTEXT_FIELDS,
+)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.references.main._quoted_reference_call_pattern import (
     quoted_reference_call_pattern,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.python_nodes.types import SqlResourceRefKind
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceEntry, TargetConfig
 
@@ -90,6 +96,19 @@ def build_source_read_map(
     return result
 
 
+def _sql_hook_source_reads(model: CompiledModel) -> tuple[str, ...]:
+    names: list[str] = []
+    for hook_key in (MODEL_PRE_HOOKS_CONFIG_KEY, MODEL_POST_HOOKS_CONFIG_KEY):
+        value: object = model.config.values.get(hook_key)
+        entries: tuple[object, ...] = tuple(value) if isinstance(value, list | tuple) else (value,)
+        for entry in entries:
+            if isinstance(entry, SqlHookEntry):
+                names.extend(
+                    ref.name for ref in entry.reads if ref.kind is SqlResourceRefKind.SOURCE
+                )
+    return tuple(names)
+
+
 def _selected_managed_source_refs(
     *,
     project: CompiledProject,
@@ -106,6 +125,7 @@ def _selected_managed_source_refs(
                 sql=model.query_sql, managed_source_names=managed_source_names
             )
         )
+        names.update(name for name in _sql_hook_source_reads(model) if name in managed_source_names)
     function: CompiledFunction
     for function in project.functions:
         if function.key not in selected_keys:

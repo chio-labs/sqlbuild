@@ -13,6 +13,7 @@ Online: https://sqlbuild.com/docs/concepts/models/hooks/sql/
 - SQL hook arguments
 - Inline SQL hooks
 - Compile-time context
+- Read models, sources, and seeds
 - Validation and diagnostics
 
 SQL hooks submit one rendered SQL payload to the adapter before or after model materialization. Use a named SQL hook for reusable behavior and `inline_sql(...)` for short model-specific payloads.
@@ -162,6 +163,46 @@ RETURNS INTEGER
 LANGUAGE SQL
 AS 'SELECT 1'
 ```
+
+## Read models, sources, and seeds
+
+SQL hooks reference other resources the same way model SQL does, with `__ref("...")`,
+`__source("...")`, and `__seed("...")`, written directly or passed as typed macro arguments:
+
+```sql
+MODEL (
+  materialized table,
+  pre_hooks [
+    inline_sql('DELETE FROM @@CTX:destination.qualified WHERE order_id IN (SELECT order_id FROM __ref("cancelled_orders"))'),
+  ],
+  post_hooks [sql("record_counts")],
+);
+
+SELECT order_id FROM __ref("stg_orders")
+```
+
+**`models/marts/_sqlbuild/_hooks/sql/record_counts.sql`**
+
+```sql
+HOOK ();
+
+@count_rows(__ref("stg_orders"))
+```
+
+At plan time each reference resolves exactly like one in model SQL: adapter quoting, source
+deferral, `--defer`, and target overrides all apply. Every reference is also a hook read, with the
+same rules as [declared Python hook reads](python.md#declared-reads):
+
+- The model that runs the hook waits for the resources it reads when both are in the build. Reads
+  do not change selection; in a partial build the hook reads the existing relations.
+- A hook cannot read a resource built from its own model; that fails to compile with `P007`. Use
+  `@@CTX:destination.qualified` for the hook's own model.
+- Referencing an unknown model, source, or seed fails to compile.
+- A reference passed to a macro is a read even when the macro does not render it. A reference a
+  macro writes into its output instead fails with `P006`, as in model SQL.
+
+The model must still see a named hook under the usual
+[scope rules](../hooks.md#project-layout).
 
 ## Validation and diagnostics
 

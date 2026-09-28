@@ -46,6 +46,7 @@ class SqlHookEntry:
     definition_sql: str | None = None
     kwargs: dict[str, object] | None = None
     description: str | None = None
+    reads: tuple[SqlResourceRef, ...] = ()
 
 
 @dataclass(frozen=True)

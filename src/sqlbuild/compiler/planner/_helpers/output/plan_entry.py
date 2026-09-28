@@ -63,7 +63,10 @@ from sqlbuild.compiler.planner._helpers.resolve.refs import (
     build_model_locations,
     build_seed_locations,
 )
-from sqlbuild.compiler.planner._helpers.resolve.resolve import resolve_model_sql
+from sqlbuild.compiler.planner._helpers.resolve.resolve import (
+    resolve_model_hook_entries,
+    resolve_model_sql,
+)
 from sqlbuild.compiler.planner._helpers.warehouse.semantic_sources import (
     get_semantic_source_columns,
 )
@@ -746,9 +749,11 @@ def plan_model_from_change(
         type_enforcement=type_enforcement,
     )
 
-    pre_hooks, post_hooks = (
-        model.config.values.get("pre_hooks"),
-        model.config.values.get("post_hooks"),
+    pre_hooks, post_hooks = resolve_model_hook_entries(
+        model=model,
+        adapter=adapter,
+        context=context,
+        external_sql_reference_resolver=external_sql_reference_resolver,
     )
     cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
     cursor_grain: str | None = get_config_str(values=model.config.values, key="cursor_grain")
