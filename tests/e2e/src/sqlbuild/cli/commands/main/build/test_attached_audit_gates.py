@@ -12,6 +12,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     AttachedAuditGateCycleE2ETestCase,
     AttachedAuditGateNoAuditsE2ETestCase,
     AttachedAuditGatePartialBuildE2ETestCase,
+    AttachedAuditGateSummaryE2ETestCase,
     AuditReadPlanE2ETestCase,
     NestedSourceGateE2ETestCase,
 )
@@ -161,6 +162,50 @@ def test_given_attached_audit_reading_another_resource_when_building_then_it_gat
     assert query_duckdb(db_path=db_path, sql=test_case.target_query) == list(
         test_case.expected_target_rows
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AttachedAuditGateSummaryE2ETestCase(
+            description="passing source audit counts as a pass",
+            target_kind="source",
+            order_code="A",
+            expected_exit_code=0,
+            expected_summary="PASS=3  WARN=0  FAIL=0  INSUFFICIENT=0  SKIP=0  TOTAL=3",
+        ),
+        AttachedAuditGateSummaryE2ETestCase(
+            description="failing source audit counts as a failure",
+            target_kind="source",
+            order_code="Z",
+            expected_exit_code=1,
+            expected_summary="PASS=1  WARN=0  FAIL=1  INSUFFICIENT=0  SKIP=1  TOTAL=3",
+        ),
+        AttachedAuditGateSummaryE2ETestCase(
+            description="failing seed audit counts as a failure",
+            target_kind="seed",
+            order_code="Z",
+            expected_exit_code=1,
+            expected_summary="PASS=2  WARN=0  FAIL=1  INSUFFICIENT=0  SKIP=1  TOTAL=4",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_attached_audit_outcome_when_building_in_terminal_then_summary_counts_it(
+    test_case: AttachedAuditGateSummaryE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_attached_audit_gate_project(
+        tmp_path=tmp_path, target_kind=test_case.target_kind, order_code=test_case.order_code
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+
+    output: str = result.stdout + result.stderr
+    assert result.returncode == test_case.expected_exit_code, output
+    assert test_case.expected_summary in output
 
 
 @pytest.mark.parametrize(

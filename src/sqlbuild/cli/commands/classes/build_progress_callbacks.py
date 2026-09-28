@@ -804,6 +804,14 @@ class BuildProgressCallbacks:
                 self._stream.write(f"{continuation_pad}{line}\n")
 
 
+def _build_audit_results(result: BuildExecutionResult) -> tuple[AuditExecutionResult, ...]:
+    audits: list[AuditExecutionResult] = []
+    model_result: ModelExecutionResult
+    for model_result in result.model_results:
+        audits.extend(model_result.audit_results)
+    return (*audits, *result.source_audit_results, *result.end_audit_results)
+
+
 def _count_build_footer_results(
     *,
     result: BuildExecutionResult,
@@ -824,14 +832,14 @@ def _count_build_footer_results(
             fail_count += 1
         elif model_result.status == ExecutionStatus.SKIPPED:
             skip_count += 1
-        audit_r: AuditExecutionResult
-        for audit_r in model_result.audit_results:
-            if audit_r.outcome == AuditOutcome.PASS:
-                pass_count += 1
-            elif audit_r.outcome == AuditOutcome.WARN:
-                warn_count += 1
-            elif audit_r.outcome == AuditOutcome.ERROR:
-                fail_count += 1
+    audit_r: AuditExecutionResult
+    for audit_r in _build_audit_results(result):
+        if audit_r.outcome == AuditOutcome.PASS:
+            pass_count += 1
+        elif audit_r.outcome == AuditOutcome.WARN:
+            warn_count += 1
+        elif audit_r.outcome == AuditOutcome.ERROR:
+            fail_count += 1
 
     seed_result: SeedExecutionResult
     for seed_result in result.seed_results:

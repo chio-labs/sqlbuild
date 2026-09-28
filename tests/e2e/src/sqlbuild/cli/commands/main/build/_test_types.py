@@ -951,6 +951,15 @@ class AttachedAuditGateBuildE2ETestCase:
 
 
 @dataclass(frozen=True)
+class AttachedAuditGateSummaryE2ETestCase:
+    description: str
+    target_kind: str
+    order_code: str
+    expected_exit_code: int
+    expected_summary: str
+
+
+@dataclass(frozen=True)
 class AttachedAuditGateCycleE2ETestCase:
     description: str
     target_kind: str
