@@ -1145,14 +1145,23 @@ class BuildScheduler:
                 connection=connection,
                 model_name=model_entry.name,
             )
-            warnings: tuple[str, ...] = complete_old_name_views(
-                plan=self._plan,
-                adapter=self._adapter,
-                connection=connection,
-                model_name=model_entry.name,
-                destination=model_entry.destination,
-                run_id=self._run_id,
-            )
+            try:
+                warnings: tuple[str, ...] = complete_old_name_views(
+                    plan=self._plan,
+                    adapter=self._adapter,
+                    connection=connection,
+                    model_name=model_entry.name,
+                    destination=model_entry.destination,
+                    run_id=self._run_id,
+                )
+            except ExecutorInputError as error:
+                return dataclasses.replace(
+                    result,
+                    status=ExecutionStatus.FAILED,
+                    error_code=error.code,
+                    error_help=error.help,
+                    error_message=error.message,
+                )
             restore = ()
             if not warnings:
                 return result

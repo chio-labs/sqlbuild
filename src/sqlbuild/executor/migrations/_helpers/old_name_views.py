@@ -115,7 +115,9 @@ def run_old_name_steps(
                 create_table=False,
                 attempts=attempts,
             )
-        _create_view(adapter=adapter, connection=connection, old=entry.origin, sql=select_sql)
+        _create_compatibility_view(
+            adapter=adapter, connection=connection, entry=entry, sql=select_sql
+        )
         record_old_name_fact(
             adapter=adapter,
             connection=connection,
@@ -432,6 +434,14 @@ def _direct_readers(
         for view in recorded_views
         if migration_relation_for_location(view.new).matches(relation)
     )
+
+
+def _create_compatibility_view(
+    *, adapter: BaseAdapter, connection: Any, entry: OldNameViewPlanEntry, sql: str
+) -> None:
+    """Publish the view at the old name inside the step that records ``view_created``."""
+
+    _create_view(adapter=adapter, connection=connection, old=entry.origin, sql=sql)
 
 
 def _create_view(
