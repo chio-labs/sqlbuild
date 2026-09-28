@@ -63,6 +63,7 @@ _DEFAULT_VALUES: dict[str, object] = {
     "auto_approve": False,
     "retention_days": None,
     "direct_state_history_versions": None,
+    "drop_old_name_views": [],
     "bounded": None,
     "max_column_examples": None,
     "max_row_only_examples": None,
@@ -222,6 +223,7 @@ class CliNamespace:
     auto_approve: bool
     retention_days: int | None
     direct_state_history_versions: int | None
+    drop_old_name_views: list[str]
     bounded: str | None
     max_column_examples: int | None
     max_row_only_examples: int | None

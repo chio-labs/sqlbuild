@@ -5,10 +5,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TextIO
 
+from sqlbuild.compiler.migrations.types import OldNameViewDropReason
 from sqlbuild.executor.janitor.models import (
     JanitorArchiveCandidate,
     JanitorArchivedRelation,
     JanitorDeleteCandidate,
+    JanitorOldNameView,
+    JanitorOldNameViewPlanning,
     JanitorPlan,
     JanitorQueryDiffArtifactCandidate,
     JanitorSkippedRelation,
@@ -64,6 +67,15 @@ def _write_plan_summary(*, plan: JanitorPlan, stream: TextIO, style: CliStyle) -
         )
         stream.write(
             f"  {'archives retained':<22} {style.accent(str(len(plan.retained_archives)))}\n"
+        )
+        stream.write(
+            f"  {'old name views':<22} {style.accent(str(len(plan.old_name_views.live)))}\n"
+        )
+        _write_count_row(
+            stream=stream,
+            style=style,
+            label="old name views to drop",
+            items=plan.old_name_views.drops,
         )
     else:
         _write_count_row(
@@ -145,6 +157,31 @@ def _write_archive_sections(*, plan: JanitorPlan, stream: TextIO, style: CliStyl
             )
 
 
+def _write_old_name_views(*, plan: JanitorPlan, stream: TextIO, style: CliStyle) -> None:
+    views: JanitorOldNameViewPlanning = plan.old_name_views
+    if not (views.live or views.drops or views.missing):
+        return
+    stream.write(f"\n{style.success('Old name views')}\n")
+    view: JanitorOldNameView
+    for view in (*views.drops, *views.live, *views.missing):
+        stream.write(
+            f"  {style.object_name(view.key.display_name())}  "
+            f"{style.muted(_old_name_view_detail(view))}\n"
+        )
+
+
+def _old_name_view_detail(view: JanitorOldNameView) -> str:
+    target: str = f"for model:{view.destination_model}"
+    expiry: str = "" if view.expires_at is None else _utc(view.expires_at)
+    if view.drop_reason == OldNameViewDropReason.EARLY:
+        return f"{target}, drop now (requested; expires {expiry})"
+    if view.drop_reason == OldNameViewDropReason.EXPIRED:
+        return f"{target}, drop now (expired {expiry})"
+    if view.drop_reason == OldNameViewDropReason.MISSING:
+        return f"{target}, record as dropped (the view no longer exists)"
+    return f"{target}, kept until {expiry}"
+
+
 def _utc(value: datetime) -> str:
     return f"{value:%Y-%m-%d %H:%M:%S} UTC"
 
@@ -205,6 +242,8 @@ def write_plan(*, plan: JanitorPlan, stream: TextIO, use_color: bool = False) ->
 
     _write_archive_sections(plan=plan, stream=stream, style=style)
 
+    _write_old_name_views(plan=plan, stream=stream, style=style)
+
     _write_query_artifact_candidates(plan=plan, stream=stream, style=style)
 
     if plan.direct_state_prune_candidates:
@@ -249,7 +288,9 @@ def physical_janitor_deletion_count(plan: JanitorPlan) -> int:
     relation_count: int = (
         len(plan.archive_deletion_candidates) if plan.direct_mode else len(plan.candidates)
     )
-    return relation_count + len(plan.query_diff_artifact_candidates)
+    return (
+        relation_count + len(plan.query_diff_artifact_candidates) + len(plan.old_name_views.drops)
+    )
 
 
 def environment_label(plan: JanitorPlan) -> str:

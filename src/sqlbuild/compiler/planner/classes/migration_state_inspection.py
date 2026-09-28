@@ -15,9 +15,9 @@ from sqlbuild.compiler.migrations.constants import (
     MIGRATION_TABLE_NAME,
     OLD_NAME_VIEW_TABLE_NAME,
 )
+from sqlbuild.compiler.migrations.main._project_old_name_views import project_old_name_views
 from sqlbuild.compiler.migrations.main._read_column_events import read_column_migration_events
 from sqlbuild.compiler.migrations.main._read_events import read_migration_events
-from sqlbuild.compiler.migrations.main.project_old_name_views import project_old_name_views
 from sqlbuild.compiler.migrations.main.read_old_name_view_events import (
     read_old_name_view_events,
 )

@@ -44,6 +44,8 @@ def janitor_plan_has_work(planning_result: JanitorPlanningResult) -> bool:
         or plan.archive_deletion_candidates
         or plan.query_diff_artifact_candidates
         or plan.direct_state_prune_candidates
+        or plan.old_name_views.drops
+        or plan.old_name_views.missing
     )
 
 
@@ -119,6 +121,7 @@ def _deletion_summary(*, result: JanitorExecutionResult) -> str:
         len(result.deleted)
         + len(result.deleted_archives)
         + len(result.deleted_query_diff_artifacts)
+        + len(result.dropped_old_name_views)
     )
     objects: str = format_count_noun(count=deleted_object_count, singular="object")
     pruned_state_count: int = len(result.pruned_direct_state)

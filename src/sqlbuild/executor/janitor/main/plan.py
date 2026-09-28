@@ -21,10 +21,14 @@ from sqlbuild.executor.janitor.models import (
     JanitorArchivePlanning,
     JanitorDirectModeSettings,
     JanitorDirectStatePruneCandidate,
+    JanitorOldNameViewPlanning,
     JanitorPlan,
     JanitorRelationScope,
     JanitorSchemaClassification,
     JanitorWarehouseFacts,
+)
+from sqlbuild.executor.old_name_views.main._plan_old_name_view_cleanup import (
+    plan_old_name_view_cleanup,
 )
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
@@ -39,6 +43,7 @@ def build_janitor_plan(
     exclude_patterns: tuple[str, ...] = (),
     relation_scope: JanitorRelationScope | None = None,
     direct_settings: JanitorDirectModeSettings | None = None,
+    early_old_name_view_drops: tuple[str, ...] = (),
 ) -> JanitorPlan:
     """Build a desired-vs-warehouse cleanup plan for target schemas."""
 
@@ -101,6 +106,17 @@ def build_janitor_plan(
             )
         )
         inspection.completed(metadata={"item_count": len(target_schemas)})
+    old_names: JanitorOldNameViewPlanning
+    old_names, scope = plan_old_name_view_cleanup(
+        adapter=adapter,
+        connection=connection,
+        managed_target_schemas=managed_target_schemas,
+        relations_by_schema=facts.relations_by_schema,
+        target_name=project.effective_target_name,
+        early_drops=early_old_name_view_drops,
+        scope=scope,
+        now=now,
+    )
     age_reader: JanitorRelationAgeReader = JanitorRelationAgeReader(
         adapter=adapter, connection=connection
     )
@@ -144,12 +160,14 @@ def build_janitor_plan(
                 skipped
                 for skipped in schemas.skipped_relations
                 if not QueryDiffArtifactLifecycle.is_artifact_name(skipped.key.name)
+                and skipped.key not in old_names.keys
             ),
             *archives.skipped_relations,
             *query_diff_artifact_skipped,
         ),
         skipped_schemas=schemas.skipped_schemas,
         blocked_schemas=archives.blocked_schemas,
+        old_name_views=old_names,
         scanned_schema_count=len(target_schemas | set(query_artifact_schemas)),
         age_metadata_supported=age_supported,
         planned_at=now,

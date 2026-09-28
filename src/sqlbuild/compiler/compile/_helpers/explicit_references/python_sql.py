@@ -10,12 +10,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild.compiler.compile.constants import HARD_CODED_PROJECT_RELATION_CODE
-from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
+from sqlbuild.compiler.compile.models import (
+    CompiledProject,
+    CompilerDiagnostic,
+    PythonSqlReferenceReport,
+)
 from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.graph.main._model_python_hook_names import model_python_hook_names
 from sqlbuild.compiler.references.main._compiled_project_relations import (
     compiled_project_relations,
+)
+from sqlbuild.compiler.references.main._old_name_reference_message import (
+    old_name_reference_message,
 )
 from sqlbuild.compiler.references.main.extract_relation_names import extract_relation_names
 from sqlbuild.compiler.references.main.hard_coded_relation_remedy import (
@@ -23,6 +30,7 @@ from sqlbuild.compiler.references.main.hard_coded_relation_remedy import (
 )
 from sqlbuild.compiler.references.main.match_project_relation import match_project_relation
 from sqlbuild.compiler.references.models import (
+    LiteralSqlRelation,
     ProjectRelation,
     ProjectRelationIndex,
     RelationName,
@@ -58,37 +66,44 @@ class _LiteralSql:
 
 def python_sql_reference_diagnostics(
     *, project: CompiledProject, discovered_inputs: DiscoveredProjectInputs
-) -> tuple[CompilerDiagnostic, ...]:
-    """Return a P008 error for each project relation literal SQL in Python code names."""
+) -> PythonSqlReferenceReport:
+    """Return P008 errors for project relations literal SQL in Python code names."""
 
     owners: tuple[_PythonSqlOwner, ...] = _owners(
         project=project, discovered_inputs=discovered_inputs
     )
     if not owners:
-        return ()
-    index: ProjectRelationIndex = compiled_project_relations(project=project)
-    if not index.relations:
-        return ()
+        return PythonSqlReferenceReport()
+    index: ProjectRelationIndex = compiled_project_relations(
+        project=project,
+        old_name_retention=discovered_inputs.project_config.migrations.old_name_views,
+    )
     diagnostics: dict[tuple[str, int, str, str], CompilerDiagnostic] = {}
+    unmatched: list[LiteralSqlRelation] = []
     for owner in owners:
         temporary: frozenset[str] = frozenset()
         for literal in sorted(_literal_sql_calls(owner.function), key=lambda item: item.line):
             found: dict[tuple[str, int, str, str], CompilerDiagnostic]
-            temporary, found = _hard_coded_relations(
+            unnamed: tuple[LiteralSqlRelation, ...]
+            temporary, found, unnamed = _hard_coded_relations(
                 owner=owner,
                 literal=literal,
                 index=index,
                 dialect=project.sql_analysis_dialect,
                 temporary=temporary,
             )
+            unmatched.extend(unnamed)
             for key, diagnostic in found.items():
                 diagnostics.setdefault(key, diagnostic)
-    return tuple(
-        diagnostics[key]
-        for key in sorted(
-            diagnostics,
-            key=lambda key: (diagnostics[key].path or Path(), key[1], key[0], key[2], key[3]),
-        )
+    return PythonSqlReferenceReport(
+        diagnostics=tuple(
+            diagnostics[key]
+            for key in sorted(
+                diagnostics,
+                key=lambda key: (diagnostics[key].path or Path(), key[1], key[0], key[2], key[3]),
+            )
+        ),
+        unmatched=tuple(dict.fromkeys(unmatched)),
     )
 
 
@@ -240,13 +255,18 @@ def _hard_coded_relations(
     index: ProjectRelationIndex,
     dialect: str | None,
     temporary: frozenset[str],
-) -> tuple[frozenset[str], dict[tuple[str, int, str, str], CompilerDiagnostic]]:
+) -> tuple[
+    frozenset[str],
+    dict[tuple[str, int, str, str], CompilerDiagnostic],
+    tuple[LiteralSqlRelation, ...],
+]:
     extracted: tuple[tuple[RelationName, ...], frozenset[str]] | None = extract_relation_names(
         sql=literal.sql, dialect=dialect
     )
     found: dict[tuple[str, int, str, str], CompilerDiagnostic] = {}
+    unmatched: list[LiteralSqlRelation] = []
     if extracted is None:
-        return temporary, found
+        return temporary, found, ()
     relations, created = extracted
     temporary = temporary | created
     for relation in relations:
@@ -257,7 +277,19 @@ def _hard_coded_relations(
         if relation.schema is None and relation.name.casefold() in temporary:
             continue
         match: ProjectRelation | None = match_project_relation(index=index, relation=relation)
-        if match is None or match.ref in owner.own_refs:
+        if match is None:
+            unmatched.append(
+                LiteralSqlRelation(
+                    owner_label=owner.label,
+                    owner_kind=owner.kind,
+                    relative_path=owner.relative_path,
+                    line=literal.line,
+                    method=literal.method,
+                    relation=relation,
+                )
+            )
+            continue
+        if match.ref in owner.own_refs and match.compatibility_for is None:
             continue
         key: tuple[str, int, str, str] = (
             owner.label,
@@ -271,7 +303,7 @@ def _hard_coded_relations(
                 owner=owner, literal=literal, relation=relation, match=match
             ),
         )
-    return temporary, found
+    return temporary, found, tuple(unmatched)
 
 
 def _hard_coded_relation_diagnostic(
@@ -300,8 +332,15 @@ def _hard_coded_relation_diagnostic(
         severity=DiagnosticSeverity.ERROR,
         code=HARD_CODED_PROJECT_RELATION_CODE,
         message=(
-            f"{owner.label} names {match.ref.kind.value}:{match.ref.name} as '{written}' in SQL "
-            f"passed to ctx.{literal.method}()"
+            old_name_reference_message(
+                owner_label=owner.label,
+                written=written,
+                method=literal.method,
+                model_name=match.compatibility_for,
+            )
+            if match.compatibility_for is not None
+            else f"{owner.label} names {match.ref.kind.value}:{match.ref.name} as '{written}' "
+            f"in SQL passed to ctx.{literal.method}()"
         ),
         location=SourceLocation(path=owner.relative_path, line=literal.line, column=1),
         help=(

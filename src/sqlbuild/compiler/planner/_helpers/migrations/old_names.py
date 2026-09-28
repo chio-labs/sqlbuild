@@ -40,7 +40,22 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import MaterializationType, WarningSeverity
+from sqlbuild.compiler.references.main._old_name_reference_message import (
+    old_name_reference_message,
+)
+from sqlbuild.compiler.references.main.hard_coded_relation_remedy import (
+    hard_coded_relation_remedy,
+)
+from sqlbuild.compiler.references.main.match_project_relation import match_project_relation
+from sqlbuild.compiler.references.models import (
+    LiteralSqlRelation,
+    ProjectRelation,
+    ProjectRelationIndex,
+    RelationName,
+)
 from sqlbuild.cursor_algebra.models import Duration
+from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.python_nodes.types import SqlResourceRefKind
 from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 from sqlbuild.spec.contracts.models import MigrationsConfig, SchemaColumn
 
@@ -139,8 +154,11 @@ def plan_old_name_views(
     return OldNameViewPlanning(
         entries=tuple(entries),
         views=views,
-        warnings=_claim_errors(
-            selected=selected, snapshot=snapshot, views=views, now=runtime.invocation_time
+        warnings=(
+            *_claim_errors(
+                selected=selected, snapshot=snapshot, views=views, now=runtime.invocation_time
+            ),
+            *_old_name_reference_errors(runtime=runtime, views=views, entries=tuple(entries)),
         ),
     )
 
@@ -347,7 +365,9 @@ def _needed_schemas(
     schemas.update(
         entry.origin.schema for entry in migration_entries if entry.origin.schema is not None
     )
-    if any(_may_claim_view(model=model, snapshot=snapshot) for model in selected):
+    if runtime.project.unmatched_literal_sql_relations or any(
+        _may_claim_view(model=model, snapshot=snapshot) for model in selected
+    ):
         schemas.update(project_schemas(runtime=runtime))
     return schemas
 
@@ -407,6 +427,76 @@ def _claim_errors(
                 )
             )
     return tuple(errors)
+
+
+def _old_name_reference_errors(
+    *,
+    runtime: PlannerRuntime,
+    views: tuple[OldNameView, ...],
+    entries: tuple[OldNameViewPlanEntry, ...],
+) -> tuple[PlanWarning, ...]:
+    """Refuse literal Python SQL that reads a name kept only as a compatibility view."""
+
+    literals: tuple[LiteralSqlRelation, ...] = runtime.project.unmatched_literal_sql_relations
+    if not literals:
+        return ()
+    index: ProjectRelationIndex = ProjectRelationIndex(
+        relations=tuple(
+            dict.fromkeys(
+                (
+                    *(
+                        _old_name_relation(old=view.old, model_name=view.destination_model)
+                        for view in views
+                    ),
+                    *(
+                        _old_name_relation(old=entry.origin, model_name=entry.model_name)
+                        for entry in entries
+                        if entry.runs_steps
+                    ),
+                )
+            )
+        )
+    )
+    errors: list[PlanWarning] = []
+    literal: LiteralSqlRelation
+    for literal in literals:
+        match: ProjectRelation | None = match_project_relation(
+            index=index, relation=literal.relation
+        )
+        if match is None or match.compatibility_for is None:
+            continue
+        written: str = ".".join(
+            part
+            for part in (literal.relation.database, literal.relation.schema, literal.relation.name)
+            if part
+        )
+        errors.append(
+            PlanWarning(
+                model_name=None,
+                severity=WarningSeverity.ERROR,
+                message=(
+                    f"{literal.relative_path}:{literal.line}: "
+                    + old_name_reference_message(
+                        owner_label=literal.owner_label,
+                        written=written,
+                        method=literal.method,
+                        model_name=match.compatibility_for,
+                    )
+                    + "; "
+                    + hard_coded_relation_remedy(owner_kind=literal.owner_kind, ref=match.ref)
+                ),
+                code="P008",
+            )
+        )
+    return tuple(errors)
+
+
+def _old_name_relation(*, old: CompiledRelationLocation, model_name: str) -> ProjectRelation:
+    return ProjectRelation(
+        ref=SqlResourceRef(kind=SqlResourceRefKind.MODEL, name=model_name),
+        relation=RelationName(name=old.name, schema=old.schema, database=old.database),
+        compatibility_for=model_name,
+    )
 
 
 def claim_message(*, model_name: str, view: OldNameView, now: datetime) -> str:

@@ -56,4 +56,5 @@ def resolve_janitor_settings(
         archive_retention_days=(
             invocation.discovered_inputs.project_config.janitor.archive_retention_days
         ),
+        drop_old_name_views=request.drop_old_name_views,
     )
