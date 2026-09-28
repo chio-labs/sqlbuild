@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.compiler.python_nodes._helpers.unified_selectors import (
     resolve_python_sql_selectors,
     validate_python_sql_boundaries,
@@ -14,12 +16,14 @@ from sqlbuild.refs import seed
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers._test_types import (
     PythonSqlSelectorErrorTestCase,
     PythonSqlSelectorTestCase,
+    SqlOnlySelectorParityTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers.helpers import (
     build_model_depends_on_intermediate_loader_project_graph,
     build_orders_project_graph,
     build_orders_python_node_graph,
     build_python_node_graph_for_case,
+    build_sibling_sql_ref_python_node_graph,
     build_sql_downstream_task_to_loader_python_node_graph,
     build_sql_ref_python_node_graph,
     build_terminal_loader_python_node_graph,
@@ -251,6 +255,122 @@ def test_given_python_sql_dependency_when_expanding_selectors_then_crosses_the_b
 
     assert frozenset(key.name for key in result.sql_keys) == test_case.expected_sql_names
     assert result.python_node_names == test_case.expected_python_node_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonSqlSelectorTestCase(
+            description="both-way expansion of a task skips siblings of its upstream",
+            select=("+export_orders+",),
+            exclude=(),
+            expected_sql_names=frozenset({"orders", "raw_orders"}),
+            expected_python_node_names=frozenset({"export_orders"}),
+        ),
+        PythonSqlSelectorTestCase(
+            description="both-way expansion of a model skips tasks of its upstream",
+            select=("+orders+",),
+            exclude=(),
+            expected_sql_names=frozenset({"orders", "raw_orders"}),
+            expected_python_node_names=frozenset({"export_orders"}),
+        ),
+        PythonSqlSelectorTestCase(
+            description="downstream expansion of the upstream source keeps both tasks",
+            select=("raw_orders+",),
+            exclude=(),
+            expected_sql_names=frozenset({"orders", "raw_orders"}),
+            expected_python_node_names=frozenset({"export_orders", "export_raw_orders"}),
+        ),
+        PythonSqlSelectorTestCase(
+            description="excluding a both-way expansion leaves the sibling task",
+            select=(),
+            exclude=("+export_orders+",),
+            expected_sql_names=frozenset(),
+            expected_python_node_names=frozenset({"export_raw_orders"}),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_sibling_python_nodes_when_expanding_both_ways_then_starts_from_the_roots(
+    test_case: PythonSqlSelectorTestCase,
+) -> None:
+    result: PythonSqlSelection = resolve_python_sql_selectors(
+        select=test_case.select,
+        exclude=test_case.exclude,
+        project_graph=build_orders_project_graph(),
+        python_graph=build_sibling_sql_ref_python_node_graph(),
+        validate_dependencies=False,
+    )
+
+    assert frozenset(key.name for key in result.sql_keys) == test_case.expected_sql_names
+    assert result.python_node_names == test_case.expected_python_node_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlOnlySelectorParityTestCase(
+            description="orders",
+            selector="orders",
+            expected_sql_names=frozenset({"orders"}),
+        ),
+        SqlOnlySelectorParityTestCase(
+            description="upstream of a model",
+            selector="+orders",
+            expected_sql_names=frozenset({"orders", "raw_orders"}),
+        ),
+        SqlOnlySelectorParityTestCase(
+            description="downstream of a model",
+            selector="orders+",
+            expected_sql_names=frozenset({"orders"}),
+        ),
+        SqlOnlySelectorParityTestCase(
+            description="both ways from a model",
+            selector="+orders+",
+            expected_sql_names=frozenset({"orders", "raw_orders"}),
+        ),
+        SqlOnlySelectorParityTestCase(
+            description="downstream of a source",
+            selector="raw_orders+",
+            expected_sql_names=frozenset({"orders", "raw_orders"}),
+        ),
+        SqlOnlySelectorParityTestCase(
+            description="both ways from a source",
+            selector="+raw_orders+",
+            expected_sql_names=frozenset({"orders", "raw_orders"}),
+        ),
+        SqlOnlySelectorParityTestCase(
+            description="downstream of a tag",
+            selector="tag:daily+",
+            expected_sql_names=frozenset({"orders"}),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_sql_only_selector_when_resolving_unified_then_sql_keys_match_sql_selection(
+    test_case: SqlOnlySelectorParityTestCase,
+) -> None:
+    project_graph: ProjectGraph = build_orders_project_graph()
+
+    result: PythonSqlSelection = resolve_python_sql_selectors(
+        select=(test_case.selector,),
+        exclude=(),
+        project_graph=project_graph,
+        python_graph=build_sibling_sql_ref_python_node_graph(),
+        validate_dependencies=False,
+    )
+    sql_only: frozenset[CompiledObjectKey] = resolve_project_selectors(
+        select=(test_case.selector,),
+        exclude=(),
+        all_keys=project_graph.all_keys,
+        upstream_deps=project_graph.upstream_deps,
+        downstream_deps=project_graph.downstream_deps,
+        tag_index=project_graph.tag_index,
+        path_index=project_graph.path_index,
+    )
+
+    assert frozenset(key.name for key in result.sql_keys) == test_case.expected_sql_names
+    assert frozenset(key.name for key in sql_only) == test_case.expected_sql_names
 
 
 @pytest.mark.parametrize(

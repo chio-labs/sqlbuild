@@ -11,12 +11,16 @@ from sqlbuild.compiler.graph.main.sql_ref_key import sql_ref_key
 from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.planner.constants import PATH_SELECTOR_EXPLICIT_ROOT_ERROR
+from sqlbuild.compiler.planner.constants import (
+    PATH_SELECTOR_EXPLICIT_ROOT_ERROR,
+    SELECTOR_EXPANSION_MARKER,
+)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection._build_resources import (
     expand_build_resource_selection,
 )
 from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
+from sqlbuild.compiler.planner.main.selection.selector_expansion import split_selector_expansion
 from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
 from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.planner.types import SelectorKind
@@ -258,18 +262,35 @@ def _resolve_token(
 def _resolve_single(
     *, raw: str, project_graph: ProjectGraph, python_graph: PythonNodeGraph
 ) -> frozenset[_SelectionAtom]:
-    atoms: frozenset[_SelectionAtom] = _resolve_single_side(
-        raw=raw, project_graph=project_graph, python_graph=python_graph
-    )
     parsed: ParsedSelector | PathSelector = parse_project_selector(raw)
-    if isinstance(parsed, PathSelector):
-        return atoms
+    if isinstance(parsed, PathSelector) or not (parsed.upstream or parsed.downstream):
+        return _resolve_single_side(raw=raw, project_graph=project_graph, python_graph=python_graph)
+    core: str = split_selector_expansion(raw).core
+    atoms: frozenset[_SelectionAtom] = frozenset()
     if parsed.upstream:
-        atoms = atoms | _sql_dependency_upstream_atoms(
-            atoms=atoms, project_graph=project_graph, python_graph=python_graph
+        upstream: frozenset[_SelectionAtom] = _resolve_single_side(
+            raw=f"{SELECTOR_EXPANSION_MARKER}{core}",
+            project_graph=project_graph,
+            python_graph=python_graph,
+        )
+        atoms = (
+            atoms
+            | upstream
+            | _sql_dependency_upstream_atoms(
+                atoms=upstream, project_graph=project_graph, python_graph=python_graph
+            )
         )
     if parsed.downstream:
-        atoms = atoms | _sql_dependent_python_atoms(atoms=atoms, python_graph=python_graph)
+        downstream: frozenset[_SelectionAtom] = _resolve_single_side(
+            raw=f"{core}{SELECTOR_EXPANSION_MARKER}",
+            project_graph=project_graph,
+            python_graph=python_graph,
+        )
+        atoms = (
+            atoms
+            | downstream
+            | _sql_dependent_python_atoms(atoms=downstream, python_graph=python_graph)
+        )
     return atoms
 
 

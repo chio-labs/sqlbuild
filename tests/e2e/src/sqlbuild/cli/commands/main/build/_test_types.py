@@ -1067,3 +1067,13 @@ class ExplicitReferenceRuntimeWarningE2ETestCase:
     expected_exit_code: int
     expected_warning_fragments: tuple[str, ...]
     expected_final_line_prefix: str
+
+
+@dataclass(frozen=True)
+class CrossBoundarySelectionE2ETestCase:
+    """A both-way selector over tasks that read a model and, separately, its upstream."""
+
+    description: str
+    select: tuple[str, ...]
+    expected_ran: tuple[str, ...]
+    expected_not_ran: tuple[str, ...]

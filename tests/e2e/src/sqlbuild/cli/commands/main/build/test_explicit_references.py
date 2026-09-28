@@ -13,6 +13,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     CollectedCompileDiagnosticsE2ETestCase,
+    CrossBoundarySelectionE2ETestCase,
     ExplicitReferenceBuildE2ETestCase,
     ExplicitReferenceFailureE2ETestCase,
     ExplicitReferencePythonDependencyE2ETestCase,
@@ -31,6 +32,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     query_duckdb,
     run_sqb,
+    table_exists,
 )
 
 _EMITTING_MACROS: str = (
@@ -179,6 +181,71 @@ def test_given_python_seed_and_model_dependencies_when_building_then_graph_selec
     assert checked.returncode == 0, checked.stdout + checked.stderr
     assert re.search(test_case.expected_check_row_pattern, full.stdout), full.stdout
     assert re.search(test_case.expected_check_row_pattern, checked.stdout), checked.stdout
+
+
+_SIBLING_TASKS: str = (
+    "from sqlbuild.refs import model\n"
+    "from sqlbuild.tasks import task\n\n\n"
+    '@task(depends_on=model("all_orders"))\n'
+    "def export_summary(ctx):\n"
+    '    ctx.execute_sql("CREATE OR REPLACE TABLE export_summary_ran AS SELECT 1 AS n")\n\n\n'
+    '@task(depends_on=model("stg_orders_eu"))\n'
+    "def export_eu(ctx):\n"
+    '    ctx.execute_sql("CREATE OR REPLACE TABLE export_eu_ran AS SELECT 1 AS n")\n'
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CrossBoundarySelectionE2ETestCase(
+            description="both-way task selection skips a task reading its upstream",
+            select=("+task:export_summary+",),
+            expected_ran=("export_summary_ran",),
+            expected_not_ran=("export_eu_ran",),
+        ),
+        CrossBoundarySelectionE2ETestCase(
+            description="both-way model selection skips a task reading its upstream",
+            select=("+all_orders+",),
+            expected_ran=("export_summary_ran",),
+            expected_not_ran=("export_eu_ran",),
+        ),
+        CrossBoundarySelectionE2ETestCase(
+            description="downstream selection of the upstream model runs both tasks",
+            select=("stg_orders_eu+",),
+            expected_ran=("export_summary_ran", "export_eu_ran"),
+            expected_not_ran=(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_both_way_selector_when_building_then_it_expands_from_the_selected_roots(
+    test_case: CrossBoundarySelectionE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="explicit_refs",
+        repo_files=explicit_reference_project_files(
+            overrides={"python/tasks/exports.py": _SIBLING_TASKS}
+        ),
+    )
+
+    prepared: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", "stg_orders_us", "stg_customers"),
+        project_dir=project_dir,
+    )
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--select", *test_case.select), project_dir=project_dir
+    )
+
+    assert prepared.returncode == 0, prepared.stdout + prepared.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
+    database: Path = project_dir / "warehouse.duckdb"
+    assert all(table_exists(db_path=database, table_name=table) for table in test_case.expected_ran)
+    assert not any(
+        table_exists(db_path=database, table_name=table) for table in test_case.expected_not_ran
+    )
 
 
 @pytest.mark.parametrize(

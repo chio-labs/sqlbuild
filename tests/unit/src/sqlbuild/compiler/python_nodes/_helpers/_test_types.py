@@ -110,3 +110,12 @@ class PythonNodeIdentityChangeTestCase:
 class PythonNodeIdentityConfigTestCase:
     description: str
     expected_decorator_config_keys_by_selector: dict[str, tuple[str, ...]]
+
+
+@dataclass(frozen=True)
+class SqlOnlySelectorParityTestCase:
+    """A SQL-only selector whose unified SQL keys must match the SQL-only selection."""
+
+    description: str
+    selector: str
+    expected_sql_names: frozenset[str]
