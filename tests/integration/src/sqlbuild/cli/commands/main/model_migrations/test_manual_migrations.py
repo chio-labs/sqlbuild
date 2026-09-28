@@ -9,6 +9,7 @@ import pytest
 
 from tests.integration.src.sqlbuild.cli.commands.main.model_migrations._test_types import (
     BackAndForthMigrationTestCase,
+    CompletedMigrationPlanTextTestCase,
     MigrationCompatibilityTestCase,
     MigrationCompileErrorTestCase,
     MigrationInterruptionTestCase,
@@ -17,6 +18,8 @@ from tests.integration.src.sqlbuild.cli.commands.main.model_migrations._test_typ
 from tests.integration.src.sqlbuild.cli.commands.main.model_migrations.helpers import (
     DESTINATION_MODEL,
     ORIGIN_MODEL,
+    PROJECT_TOML,
+    TARGETS_PROJECT_TOML,
     CliRun,
     build,
     build_ok,
@@ -116,6 +119,52 @@ def test_given_completed_migration_when_rebuilding_then_warns_and_skips(
         order_ids(project_dir=tmp_path, relation=f"main.{DESTINATION_MODEL}")
         == test_case.expected_destination_ids
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompletedMigrationPlanTextTestCase(
+            description="unnamed target",
+            project_toml=PROJECT_TOML,
+            expected_target_label="default",
+        ),
+        CompletedMigrationPlanTextTestCase(
+            description="named default target",
+            project_toml=TARGETS_PROJECT_TOML,
+            expected_target_label="dev",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_completed_migration_when_planning_then_removal_notice_names_the_target(
+    test_case: CompletedMigrationPlanTextTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write_project(
+        project_dir=tmp_path,
+        models={ORIGIN_MODEL: incremental_orders_sql()},
+        project_toml=test_case.project_toml,
+    )
+    load_raw_orders(project_dir=tmp_path, first_day=1, last_day=5)
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+    write_project(
+        project_dir=tmp_path,
+        models={DESTINATION_MODEL: incremental_orders_sql(migrate_from=ORIGIN_MODEL)},
+        project_toml=test_case.project_toml,
+    )
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+
+    result: CliRun = run_sqb(project_dir=tmp_path, args=("plan",), capsys=capsys)
+
+    assert result.exit_code == 0, result.output
+    assert f"on target '{test_case.expected_target_label}'\n" in result.output
+    assert (
+        f"on target '{test_case.expected_target_label}'; "
+        f"migrate_from can be removed from '{DESTINATION_MODEL}'"
+    ) in result.output
+    assert "'None'" not in result.output
 
 
 @pytest.mark.parametrize(

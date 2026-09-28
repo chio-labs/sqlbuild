@@ -930,6 +930,12 @@ class ModelMigrationPlanEntry:
         return f"{labels[self.origin_is_transient]} -> {labels[self.stage_is_transient]}"
 
     @property
+    def target_label(self) -> str:
+        """Return the target name shown in migration text, naming the unnamed target 'default'."""
+
+        return self.target_name or "default"
+
+    @property
     def blocks_build(self) -> bool:
         """Return whether this migration must stop a build before any execution."""
 

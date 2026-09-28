@@ -145,9 +145,7 @@ def _migration_lines(*, entry: ModelMigrationPlanEntry, style: CliStyle) -> list
         rows.append(
             _property_row(
                 label="completed",
-                value=(
-                    f"{entry.completed_at.isoformat()} on target '{entry.target_name or 'default'}'"
-                ),
+                value=f"{entry.completed_at.isoformat()} on target '{entry.target_label}'",
                 style=style,
             )
         )
