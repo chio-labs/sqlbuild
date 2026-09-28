@@ -47,3 +47,11 @@ class OldNameJanitorClaimTestCase:
     expected_janitor_fragment: str
     expected_old_name_type: str
     expected_final_facts: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class OldNameAliasResumeTestCase:
+    description: str
+    install_failure: Callable[[pytest.MonkeyPatch], None]
+    expected_facts_after_failure: tuple[str, ...]
+    expected_plan_fragment: str

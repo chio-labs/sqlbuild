@@ -195,13 +195,7 @@ class _OldNamePlanner:
                 destination=migration_relation_for_location(entry.destination),
                 origin=migration_relation_for_location(entry.origin),
             )
-            return (
-                None
-                if history is None
-                else self._from_history(
-                    history=history, model=model, origin_tracked=entry.origin_tracked
-                )
-            )
+            return None if history is None else self._from_history(history=history, model=model)
         return None
 
     def pending_for(self, model: CompiledModel) -> OldNameViewPlanEntry | None:
@@ -210,9 +204,7 @@ class _OldNamePlanner:
         )
         if history is None or history.move.destination_model != model.name:
             return None
-        planned: OldNameViewPlanEntry | None = self._from_history(
-            history=history, model=model, origin_tracked=None
-        )
+        planned: OldNameViewPlanEntry | None = self._from_history(history=history, model=model)
         if planned is None or not (planned.runs_steps or _skips_pending(planned)):
             return None
         return planned
@@ -272,8 +264,10 @@ class _OldNamePlanner:
         return None
 
     def _from_history(
-        self, *, history: OldNameViewHistory, model: CompiledModel, origin_tracked: bool | None
+        self, *, history: OldNameViewHistory, model: CompiledModel
     ) -> OldNameViewPlanEntry | None:
+        """Resume a recorded move; its record proves SQLBuild owned the origin when it moved."""
+
         status: OldNameViewStatus = history.status(now=self._now)
         action: OldNameViewAction | None = _PENDING_ACTIONS.get(status)
         if action is None:
@@ -281,9 +275,7 @@ class _OldNamePlanner:
         if status in _RESUMED_STATUSES:
             reason: str | None = self._skip_reason(
                 origin=_location(runtime=self._runtime, relation=history.old),
-                origin_tracked=(
-                    origin_tracked if status == OldNameViewStatus.PENDING_ARCHIVE else None
-                ),
+                origin_tracked=None,
                 retention=resolve_old_name_view_retention(
                     config_values=model.config.values, project_retention=self._project_retention
                 ),

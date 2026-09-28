@@ -229,3 +229,13 @@ def claiming_view_models() -> dict[str, str]:
             'SELECT order_id, amount_cents * 2 AS doubled FROM __source("raw_orders")\n'
         ),
     }
+
+
+def aliased_orders_sql(*, alias: str, migrate_from: str | None = None) -> str:
+    """Return one table model whose relation name comes from ``alias``."""
+
+    migration: str = {None: ""}.get(migrate_from, f", migrate_from {migrate_from}")
+    return (
+        f"MODEL (materialized table, alias {alias}{migration});\n"
+        'SELECT order_id, amount_cents FROM __source("raw_orders")\n'
+    )
