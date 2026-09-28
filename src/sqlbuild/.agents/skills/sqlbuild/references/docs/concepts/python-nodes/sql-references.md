@@ -104,8 +104,9 @@ Both checks ignore:
 - SQL that cannot be parsed; it is never blocked, only logged at debug level
 
 This is a guard against accidental hard-coding, not a sandbox. SQL sent directly through
-`ctx.connection` or `ctx.adapter` is not checked. Run-time checks apply to `sqb build` and
-`sqb check`. To turn both checks off while migrating a project,
+`ctx.connection` or `ctx.adapter` is not checked. Run-time checks apply to `sqb build`,
+`sqb check`, and `sqb load`. `sqb load` does not compile models, so it checks loaders against
+the project's sources. To turn both checks off while migrating a project,
 set [`[references] enforce_explicit = false`](../project-configuration.md#references).
 
 ## model vs source

@@ -165,6 +165,17 @@ def select_load_reference_entries(
     )
 
 
+def select_load_relation_entries(
+    *, discovered_inputs: DiscoveredProjectInputs, target_config: TargetConfig | None
+) -> tuple[SourceEntry, ...]:
+    """Return every declared source resolved for the target, for hard-coded name warnings."""
+
+    discovered_sources: list[SourceEntry] = []
+    for source_file in discovered_inputs.source_files:
+        discovered_sources.extend(source_file.source_entries)
+    return _environment_sources(sources=tuple(discovered_sources), target_config=target_config)
+
+
 def sources_order(
     *, sources: tuple[SourceEntry, ...], selected_sources: set[str]
 ) -> tuple[str, ...]:

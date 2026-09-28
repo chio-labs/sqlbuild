@@ -220,10 +220,11 @@ class LoadProgressReporter:
 
 def format_load_footer(
     *,
+    results: tuple[LoadExecutionResult, ...],
     success_count: int,
+    warn_count: int,
     fail_count: int,
     skip_count: int,
-    total_count: int,
     elapsed: float,
     use_color: bool,
 ) -> str:
@@ -231,18 +232,34 @@ def format_load_footer(
     counts_summary: str = format_summary_footer(
         counts=(
             ("PASS", success_count),
-            ("WARN", 0),
+            ("WARN", warn_count),
             ("FAIL", fail_count),
             ("SKIP", skip_count),
-            ("TOTAL", total_count),
+            ("TOTAL", len(results)),
         ),
         use_color=use_color,
         elapsed=f"{elapsed:.2f}s",
     )
+    state: CompletionState = CompletionState.OK
+    label: str = "Completed successfully"
+    if fail_count:
+        state, label = CompletionState.FAIL, "Completed with errors"
+    elif warn_count:
+        state, label = CompletionState.WARN, "Completed with warnings"
     completion_message: str = format_completion_line(
-        style=style,
-        state=CompletionState.OK if fail_count == 0 else CompletionState.FAIL,
-        label="Completed successfully" if fail_count == 0 else "Completed with errors",
-        summary=counts_summary,
+        style=style, state=state, label=label, summary=counts_summary
     )
-    return f"\n{completion_message}\n"
+    return "".join(_load_warning_lines(results=results, style=style)) + f"\n{completion_message}\n"
+
+
+def _load_warning_lines(*, results: tuple[LoadExecutionResult, ...], style: CliStyle) -> list[str]:
+    lines: list[str] = []
+    result: LoadExecutionResult
+    for result in results:
+        if not result.warning_messages:
+            continue
+        if not lines:
+            lines.append(f"\n{style.warning_strong('Warnings:')}\n\n")
+        lines.append(f"  {result.source_name}  (loader {result.loader_name})\n")
+        lines.extend(f"    {message}\n" for message in result.warning_messages)
+    return lines

@@ -79,6 +79,7 @@ def execute_load_plan(
                 end_cursor_int=parse_cursor_integer(preparation.effective_cursor_overrides.end_int),
                 use_color=invocation.use_color,
                 providers=preparation.provider_session.providers,
+                project_relations=preparation.project_relations,
             ),
             callbacks=LoadCallbacks(
                 on_load_start=load_progress.on_start,
@@ -104,7 +105,16 @@ def execute_load_plan(
     return LoadRunOutcome(
         results=results,
         elapsed=time.monotonic() - start,
-        success_count=sum(1 for result in results if result.status == ExecutionStatus.SUCCESS),
+        success_count=sum(
+            1
+            for result in results
+            if result.status == ExecutionStatus.SUCCESS and not result.warning_messages
+        ),
         fail_count=sum(1 for result in results if result.status == ExecutionStatus.FAILED),
         skip_count=sum(1 for result in results if result.status == ExecutionStatus.SKIPPED),
+        warn_count=sum(
+            1
+            for result in results
+            if result.status == ExecutionStatus.SUCCESS and result.warning_messages
+        ),
     )
