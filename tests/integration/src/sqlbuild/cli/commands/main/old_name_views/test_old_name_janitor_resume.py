@@ -20,6 +20,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.old_name_views._test_types
     OldNameJanitorResumeTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.old_name_views.helpers import (
+    DESTINATION_MODEL,
     JANITOR_PROJECT_TOML,
     ORIGIN_MODEL,
     claiming_view_models,
@@ -31,6 +32,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.old_name_views.helpers imp
     relation_type_in,
 )
 
+_ONE_BUILD: tuple[tuple[str, ...], ...] = (("build",),)
 _CLAIMED: str = "└── record  dropped  (name now used by another relation, model:revenue)"
 
 
@@ -94,6 +96,7 @@ def test_given_janitor_crash_after_drop_when_rerunning_then_drop_is_recorded_as_
             description="plain janitor run records the claimed name without touching it",
             janitor_args=("janitor", "--auto-approve"),
             install_build_fault=no_build_fault,
+            claiming_builds=_ONE_BUILD,
             expected_janitor_fragment=_CLAIMED,
             expected_old_name_type="VIEW",
             expected_final_facts=("required", "origin_archived", "view_created", "view_dropped"),
@@ -102,6 +105,7 @@ def test_given_janitor_crash_after_drop_when_rerunning_then_drop_is_recorded_as_
             description="repeated early drop leaves the project's view in place",
             janitor_args=("janitor", "--auto-approve", "--drop-old-name-view", "dev.revenue"),
             install_build_fault=no_build_fault,
+            claiming_builds=_ONE_BUILD,
             expected_janitor_fragment=_CLAIMED,
             expected_old_name_type="VIEW",
             expected_final_facts=("required", "origin_archived", "view_created", "view_dropped"),
@@ -110,6 +114,19 @@ def test_given_janitor_crash_after_drop_when_rerunning_then_drop_is_recorded_as_
             description="repeated early drop spares a project view built without a fingerprint",
             janitor_args=("janitor", "--auto-approve", "--drop-old-name-view", "dev.revenue"),
             install_build_fault=fail_view_fingerprint_write,
+            claiming_builds=_ONE_BUILD,
+            expected_janitor_fragment=_CLAIMED,
+            expected_old_name_type="VIEW",
+            expected_final_facts=("required", "origin_archived", "view_created", "view_dropped"),
+        ),
+        OldNameJanitorClaimTestCase(
+            description="destination built after the project's view leaves that view alone",
+            janitor_args=("janitor", "--auto-approve", "--drop-old-name-view", "dev.revenue"),
+            install_build_fault=no_build_fault,
+            claiming_builds=(
+                ("build", "--select", ORIGIN_MODEL),
+                ("build", "--select", DESTINATION_MODEL),
+            ),
             expected_janitor_fragment=_CLAIMED,
             expected_old_name_type="VIEW",
             expected_final_facts=("required", "origin_archived", "view_created", "view_dropped"),
@@ -140,7 +157,9 @@ def test_given_interrupted_early_drop_when_project_builds_the_name_then_janitor_
     )
     with monkeypatch.context() as patch:
         test_case.install_build_fault(patch)
-        _ = build_ok(project_dir=tmp_path, capsys=capsys)
+        for args in test_case.claiming_builds:
+            claiming: CliRun = run_sqb(project_dir=tmp_path, args=args, capsys=capsys)
+            assert claiming.exit_code == 0, claiming.output
 
     janitor: CliRun = run_sqb(project_dir=tmp_path, args=test_case.janitor_args, capsys=capsys)
     old_name_type: str | None = relation_type_in(

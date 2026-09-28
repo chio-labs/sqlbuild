@@ -45,6 +45,7 @@ class OldNameJanitorClaimTestCase:
     description: str
     janitor_args: tuple[str, ...]
     install_build_fault: Callable[[pytest.MonkeyPatch], None]
+    claiming_builds: tuple[tuple[str, ...], ...]
     expected_janitor_fragment: str
     expected_old_name_type: str
     expected_final_facts: tuple[str, ...]

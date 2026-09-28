@@ -119,7 +119,7 @@ def plan_old_name_views(
         if history.move.target_name in (None, target_name)
     )
     views: tuple[OldNameView, ...] = tuple(
-        _recorded_view(runtime=runtime, history=history)
+        _recorded_view(runtime=runtime, history=history, models=runtime.project.models)
         for history in histories
         if history.created is not None and history.dropped is None
     )
@@ -562,7 +562,9 @@ def claim_message(*, model_name: str, view: OldNameView, now: datetime) -> str:
     )
 
 
-def _recorded_view(*, runtime: PlannerRuntime, history: OldNameViewHistory) -> OldNameView:
+def _recorded_view(
+    *, runtime: PlannerRuntime, history: OldNameViewHistory, models: Iterable[CompiledModel]
+) -> OldNameView:
     return OldNameView(
         destination_model=history.move.destination_model,
         old=_location(runtime=runtime, relation=history.old),
@@ -571,6 +573,14 @@ def _recorded_view(*, runtime: PlannerRuntime, history: OldNameViewHistory) -> O
         column_aliases=() if history.created is None else history.created.column_aliases,
         migration_event_id=history.move.event_id,
         target_name=history.move.target_name,
+        name_reused_by=next(
+            (
+                model.name
+                for model in models
+                if migration_relation_for_location(model.destination).matches(history.old)
+            ),
+            None,
+        ),
     )
 
 

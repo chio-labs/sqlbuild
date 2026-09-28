@@ -421,7 +421,7 @@ def _migration_event_id(*, entry: OldNameViewPlanEntry, run_id: str) -> str:
 def views_reading(
     *, location: CompiledRelationLocation, recorded_views: tuple[OldNameView, ...]
 ) -> tuple[OldNameViewSource, ...]:
-    """Return recorded views that read one relation, then views chained onto those, in order."""
+    """Return recorded views reading one relation, then chained views; reused names are skipped."""
 
     ordered: list[OldNameViewSource] = []
     seen: set[tuple[str | None, str, str]] = set()
@@ -639,7 +639,8 @@ def _direct_readers(
     return tuple(
         view
         for view in recorded_views
-        if migration_relation_for_location(view.new).matches(relation)
+        if view.name_reused_by is None
+        and migration_relation_for_location(view.new).matches(relation)
     )
 
 
