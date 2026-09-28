@@ -31,3 +31,11 @@ class LineageErrorCliTestCase:
     description: str
     command: tuple[str, ...]
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DiamondLineageTreeCliTestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_expanded_names: tuple[str, ...]
+    expected_max_lines: int

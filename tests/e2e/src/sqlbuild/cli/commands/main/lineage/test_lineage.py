@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -8,12 +9,16 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.lineage._test_types import (
     ColumnLineageCacheCliTestCase,
+    DiamondLineageTreeCliTestCase,
     LineageCacheCliTestCase,
     LineageCliTestCase,
     LineageErrorCliTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.lineage.helpers import (
+    DIAMOND_LAYERS,
+    diamond_model_names,
     lineage_node_ids,
+    prepare_diamond_lineage_project,
     prepare_lineage_cache_project,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
@@ -21,6 +26,11 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 
+_TREE_LINE: re.Pattern[str] = re.compile(r"^[│ ]*[├└]── .*$", re.MULTILINE)
+_EXPANDED_DIAMOND_NODE: re.Pattern[str] = re.compile(
+    r"^[│ ]*[├└]── (?![^\n]*\(already shown\))[^\n]*?(orders_(?:left_|right_)?\d+(?:\.amount)?)",
+    re.MULTILINE,
+)
 _LINEAGE_CACHE_RELATIVE_PATH: Path = Path("target/cache/lineage/v1/structural-graph.sqlite3")
 
 
@@ -439,3 +449,61 @@ def test_given_invalid_lineage_target_when_running_then_explains_the_error(
     assert result.returncode == 1, result.stdout + result.stderr
     for fragment in test_case.expected_fragments:
         assert fragment in result.stderr, result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DiamondLineageTreeCliTestCase(
+            description="downstream tree expands each shared model once",
+            command=("--no-color", "lineage", "orders_0", "--direction", "downstream"),
+            expected_expanded_names=diamond_model_names()[1:],
+            expected_max_lines=4 * len(diamond_model_names()),
+        ),
+        DiamondLineageTreeCliTestCase(
+            description="upstream tree expands each shared model once",
+            command=(
+                "--no-color",
+                "lineage",
+                f"orders_{DIAMOND_LAYERS}",
+                "--direction",
+                "upstream",
+            ),
+            expected_expanded_names=diamond_model_names()[:-1],
+            expected_max_lines=4 * len(diamond_model_names()),
+        ),
+        DiamondLineageTreeCliTestCase(
+            description="column trace expands each shared column once",
+            command=(
+                "--no-color",
+                "lineage",
+                f"orders_{DIAMOND_LAYERS}.amount",
+                "--direction",
+                "upstream",
+            ),
+            expected_expanded_names=(
+                f"orders_left_{DIAMOND_LAYERS}.amount",
+                f"orders_right_{DIAMOND_LAYERS}.amount",
+                f"orders_{DIAMOND_LAYERS - 1}.amount",
+            ),
+            expected_max_lines=4 * len(diamond_model_names()),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_diamond_dependencies_when_rendering_lineage_tree_then_output_stays_linear(
+    test_case: DiamondLineageTreeCliTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_diamond_lineage_project(tmp_path=tmp_path)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command, project_dir=project_dir
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    tree_lines: list[str] = _TREE_LINE.findall(result.stdout)
+    expanded_nodes: list[str] = _EXPANDED_DIAMOND_NODE.findall(result.stdout)
+    assert len(tree_lines) <= test_case.expected_max_lines
+    assert len(expanded_nodes) == len(set(expanded_nodes))
+    assert set(test_case.expected_expanded_names) <= set(expanded_nodes)
