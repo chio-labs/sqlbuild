@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.124.0](https://github.com/chio-labs/sqlbuild/compare/v0.123.0...v0.124.0) (2026-09-28)
+
+
+### Features
+
+* **migrations:** preserve column data on renames in incremental models ([#860](https://github.com/chio-labs/sqlbuild/issues/860)) ([730d640](https://github.com/chio-labs/sqlbuild/commit/730d6401cc2d6ac952f8251c6700c12dc6bcc86a))
+
 ## [0.123.0](https://github.com/chio-labs/sqlbuild/compare/v0.122.0...v0.123.0) (2026-09-28)
 
 
