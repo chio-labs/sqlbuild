@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.126.0](https://github.com/chio-labs/sqlbuild/compare/v0.125.1...v0.126.0) (2026-09-28)
+
+
+### Features
+
+* **migrations:** keep old model names working with expiring compatibility views ([#871](https://github.com/chio-labs/sqlbuild/issues/871)) ([b67bea0](https://github.com/chio-labs/sqlbuild/commit/b67bea0914cb17772ed2002ca4b6cc14954c5c8f))
+
 ## [0.125.1](https://github.com/chio-labs/sqlbuild/compare/v0.125.0...v0.125.1) (2026-09-28)
 
 
