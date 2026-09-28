@@ -43,11 +43,13 @@ A declaration is rejected when compiling if:
 
 A pure rename is detected without a declaration: exactly one column that disappeared from the model has exactly the same expression as exactly one new column, for example `amount` becoming `amount AS revenue`, or `ROUND(amount, 2) AS revenue` becoming `ROUND(amount, 2) AS net_revenue`. Expressions are compared ignoring formatting, comments, and keyword and unquoted identifier case. Detection compares the query the table was last built from with the current query, so it applies to the build that makes the change.
 
+A rename is only automatic when it is the whole change. Apart from the renamed output names, the query must be the same: the same CTEs, `FROM`, joins, filters, grouping, and other columns. References to the new name in `ORDER BY` or `QUALIFY` count as references to the old name, and the output columns may be reordered unless the query groups, orders, or uses `DISTINCT ON` by position. If anything else changed, an unchanged expression such as `amount` may now read different data, for example from a CTE that redefines `amount`, so nothing is renamed automatically and the change follows `on_schema_change`. Declare `migrate_from` to rename the column anyway.
+
 Detection never guesses:
 
 - Columns are matched by expression, not by position. Two columns renamed at once each pair with the column whose expression they kept; two columns that swap names keep their names and are not renamed.
 - If more than one removed column has the same expression, or more than one new column does, nothing is migrated automatically.
-- A near match, where the expressions reference the same columns but differ, for example `amount` becoming `ROUND(amount, 2) AS revenue`, is not a rename. It follows the model's `on_schema_change` policy, and `sqb plan` shows a hint next to the added column until the change has been built:
+- A near match, where the expressions reference the same columns but differ or the rest of the query changed, for example `amount` becoming `ROUND(amount, 2) AS revenue`, is not a rename. It follows the model's `on_schema_change` policy, and `sqb plan` shows a hint next to the added column until the change has been built:
 
 ```text
     ├── schema diff:
@@ -56,7 +58,7 @@ Detection never guesses:
       - amount   (removed)
 ```
 
-Add the suggested `migrate_from` to keep the history. A declared rename with a changed expression is still renamed in place, but it is a query change, so `replay_on_change` decides how much history is rebuilt with the new expression.
+Add the suggested `migrate_from` to keep the history. A declared rename with a changed expression or other query changes is still renamed in place, but it is a query change, so `replay_on_change` decides how much history is rebuilt, exactly as it would without the rename.
 
 ## Decisions
 
@@ -94,7 +96,7 @@ On adapters with transactional DDL (PostgreSQL, SQL Server, DuckDB, MotherDuck),
 
 After the rename, the remaining differences follow `on_schema_change`: `append_new_columns` adds any other new columns, `sync_all_columns` also drops removed ones and changes types, and `fail` only fails when a difference other than the rename remains.
 
-A pure rename is not a query change. It doesn't trigger `replay_on_change` for the model, and it doesn't cascade a replay to downstream models. Downstream models that you edit to use the new name have query changes of their own and follow their own `replay_on_change`. If the renamed column is the model's cursor, the next delta starts from the watermark stored under the old name.
+A pure rename is not a query change. This applies to declared renames too, as long as the rename is the whole change by the rule above. It doesn't trigger `replay_on_change` for the model, and it doesn't cascade a replay to downstream models. Downstream models that you edit to use the new name have query changes of their own and follow their own `replay_on_change`. If the renamed column is the model's cursor, the next delta starts from the watermark stored under the old name.
 
 ## State
 
