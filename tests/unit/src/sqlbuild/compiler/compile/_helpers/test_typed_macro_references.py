@@ -133,6 +133,37 @@ def test_given_typed_reference_arguments_when_expanding_then_renders_call_site_r
             expected_error_fragments=("depends on source:raw_orders through macro raw_orders()",),
         ),
         MacroGeneratedReferenceErrorTestCase(
+            description="macro formatting a reference it constructs itself",
+            macro_file_contents=(
+                "from sqlbuild.refs import model\n\n"
+                "def orders_base():\n    return f'SELECT * FROM {model(\"stg_orders\")}'\n"
+            ),
+            sql="@orders_base()",
+            expected_error_fragments=(
+                "model:order_summary depends on model:stg_orders through macro orders_base()",
+            ),
+        ),
+        MacroGeneratedReferenceErrorTestCase(
+            description="macro formatting a constructed reference beside a passed one",
+            macro_file_contents=(
+                "from sqlbuild.refs import source\n\n"
+                "def enrich(relation):\n"
+                "    return f'SELECT * FROM {relation} JOIN {source(\"raw_orders\")} ON true'\n"
+            ),
+            sql='@enrich(__ref("stg_orders"))',
+            expected_error_fragments=("depends on source:raw_orders through macro enrich()",),
+        ),
+        MacroGeneratedReferenceErrorTestCase(
+            description="nested macro returning a reference it constructs itself",
+            macro_file_contents=(
+                "from sqlbuild.refs import seed\n\n"
+                "def countries():\n    return seed('country_codes')\n\n"
+                "def base(relation):\n    return f'SELECT * FROM {relation}'\n"
+            ),
+            sql="@base(@countries())",
+            expected_error_fragments=("depends on seed:country_codes through macro base()",),
+        ),
+        MacroGeneratedReferenceErrorTestCase(
             description="nested macro that emits a seed reference",
             macro_file_contents=(
                 "def countries():\n    return '__seed(\"country_codes\")'\n\n"
@@ -202,6 +233,15 @@ def test_given_several_macro_output_references_when_collecting_then_reports_each
             description="quoted string argument smuggling a reference",
             macro_file_contents="def wrap(sql):\n    return f'SELECT * FROM {sql}'\n",
             sql="@wrap('__ref(\"stg_orders\")')",
+            expected_sql='SELECT * FROM __ref("stg_orders")',
+        ),
+        MacroGeneratedReferenceSwitchTestCase(
+            description="macro formatting a reference it constructs itself",
+            macro_file_contents=(
+                "from sqlbuild.refs import model\n\n"
+                "def orders_base():\n    return f'SELECT * FROM {model(\"stg_orders\")}'\n"
+            ),
+            sql="@orders_base()",
             expected_sql='SELECT * FROM __ref("stg_orders")',
         ),
     ],

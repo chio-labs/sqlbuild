@@ -62,12 +62,24 @@ def render_relation_placeholders(*, sql: str, relations: dict[SqlResourceRef, in
         return sql
     ordered: tuple[SqlResourceRef, ...] = tuple(relations)
     return _RELATION_PLACEHOLDER_PATTERN.sub(
-        lambda match: _reference_call_text(ordered[int(match.group(1))]), sql
+        lambda match: reference_call_text(ordered[int(match.group(1))]), sql
     )
 
 
-def _reference_call_text(ref: SqlResourceRef) -> str:
+def reference_call_text(ref: SqlResourceRef) -> str:
+    """Return the SQL reference call that names ``ref``, such as ``__ref("orders")``."""
+
     return f'{_REFERENCE_FUNCTION_BY_KIND[ref.kind]}("{ref.name}")'
+
+
+def call_site_sql_references(
+    refs: tuple[SqlResourceRef, ...],
+) -> tuple[CompileSqlReference, ...]:
+    """Return the SQL references written as typed macro arguments, as SQL extraction sees them."""
+
+    if not refs:
+        return ()
+    return extract_sql_references(" ".join(reference_call_text(ref) for ref in refs))
 
 
 def reject_macro_generated_references(
@@ -118,7 +130,7 @@ def reject_macro_generated_references(
                 path=loaded_macro.relative_path,
                 help=(
                     f"write the reference in {location}, or pass it in: "
-                    f"@{loaded_macro.name}({_reference_call_text(generated)})\n"
+                    f"@{loaded_macro.name}({reference_call_text(generated)})\n"
                     "  = help: while migrating a project, allow macro-generated references with "
                     "[references] enforce_explicit = false in sqlbuild_project.toml"
                 ),

@@ -18,6 +18,7 @@ from typing import cast
 
 from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
     evaluate_typed_reference,
+    reference_call_text,
     reject_macro_generated_references,
     relation_placeholder_text,
     render_relation_placeholders,
@@ -106,6 +107,9 @@ class _ExpansionFacts:
     dependencies: list[DeclarationIdentity] = field(default_factory=list)
     usages: list[UsageRecord] = field(default_factory=list)
     relations: dict[SqlResourceRef, int] = field(default_factory=dict)
+    argument_references: dict[SqlResourceRef, None] = field(default_factory=dict)
+    call_site_refs: list[set[SqlResourceRef]] = field(default_factory=list)
+    rendering_approved: list[frozenset[SqlResourceRef]] = field(default_factory=list)
 
     def add_dependency(self, identity: DeclarationIdentity) -> _ExpansionFacts:
         """Record a resolved dependency in encounter order."""
@@ -119,11 +123,43 @@ class _ExpansionFacts:
         self.usages.append(usage)
         return self
 
-    def relation_placeholder(self, ref: object) -> str:
-        """Return the stable in-expansion placeholder for one typed reference argument."""
+    def record_call_site_refs(self, refs: tuple[SqlResourceRef, ...]) -> None:
+        """Record references written as arguments of every macro call being expanded."""
+
+        self.argument_references.update(dict.fromkeys(refs))
+        for approved in self.call_site_refs:
+            approved.update(refs)
+
+    def open_call_site(self) -> _ExpansionFacts:
+        """Start collecting the references written as one macro call's arguments."""
+
+        self.call_site_refs.append(set())
+        return self
+
+    def close_call_site(self) -> frozenset[SqlResourceRef]:
+        """Stop collecting for the innermost macro call and return its argument references."""
+
+        return frozenset(self.call_site_refs.pop())
+
+    def begin_rendering(self, approved: frozenset[SqlResourceRef]) -> _ExpansionFacts:
+        """Approve the call-site argument references of the macro about to run."""
+
+        self.rendering_approved.append(approved)
+        return self
+
+    def end_rendering(self) -> _ExpansionFacts:
+        """Restore the approvals of the enclosing macro after one macro returns."""
+
+        self.rendering_approved.pop()
+        return self
+
+    def render_relation(self, ref: object) -> str:
+        """Render a reference a macro formats; only call-site arguments become placeholders."""
 
         if not isinstance(ref, SqlResourceRef):
             raise CompileInputError("Only typed resource references render as relations")
+        if not self.rendering_approved or ref not in self.rendering_approved[-1]:
+            return reference_call_text(ref)
         return relation_placeholder_text(self.relations.setdefault(ref, len(self.relations)))
 
     def render_relation_placeholders(self, sql: str) -> str:
@@ -1439,13 +1475,17 @@ def _evaluate_macro_call(
     args_source: str = sql[opening_paren_index + 1 : closing_paren_index]
     args: tuple[object, ...]
     kwargs: dict[str, object]
-    args, kwargs = _parse_macro_arguments(
-        args_source=args_source,
-        file_path=file_path,
-        state=state,
-        declarations=declarations,
-        stack=stack,
-    )
+    _ = state.facts.open_call_site()
+    try:
+        args, kwargs = _parse_macro_arguments(
+            args_source=args_source,
+            file_path=file_path,
+            state=state,
+            declarations=declarations,
+            stack=stack,
+        )
+    finally:
+        approved: frozenset[SqlResourceRef] = state.facts.close_call_site()
     try:
         invocation_context: MacroContext = _build_macro_invocation_context(
             macro_context=state.macro_context,
@@ -1454,7 +1494,7 @@ def _evaluate_macro_call(
             state=state,
         )
         renderer_token: Token[Callable[[object], str] | None] = RELATION_RENDERER.set(
-            state.facts.relation_placeholder
+            state.facts.begin_rendering(approved).render_relation
         )
         try:
             macro_result: object = _call_loaded_macro(
@@ -1465,6 +1505,7 @@ def _evaluate_macro_call(
             )
         finally:
             RELATION_RENDERER.reset(renderer_token)
+            _ = state.facts.end_rendering()
     except CompileInputError:
         raise
     except TypeError as error:
@@ -1739,6 +1780,13 @@ def _parse_macro_arguments(
             placeholder_values=placeholder_values,
             file_path=file_path,
         )
+    state.facts.record_call_site_refs(
+        tuple(
+            evaluate_typed_reference(node=node, file_path=file_path)
+            for node in ast.walk(call_expression)
+            if isinstance(node, ast.Call) and node is not call_expression
+        )
+    )
     return args, kwargs
 
 
